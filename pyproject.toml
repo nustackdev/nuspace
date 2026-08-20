@@ -1,0 +1,190 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "nuspace-py"
+version = "0.0.0"
+description = "Nu runtime built on Nu. A self-hosted programmable space that runs Nu apps in a tree of containers and applications."
+readme = "README.md"
+license = "AGPL-3.0-or-later"
+authors = [{ name = "Gor Arakelyan", email = "gorarkln@gmail.com" }]
+requires-python = ">=3.10"
+dependencies = [
+    "nustack-py>=0.1.17",
+    "typing-extensions>=4.7.0",
+    "click>=8.0",
+    "rich>=10.7",
+    "rich-click>=1.6",
+]
+keywords = [
+    "nu",
+    "nustack",
+    "nuspace",
+    "runtime",
+    "self-hosted",
+    "python",
+    "ai-agents",
+    "ui",
+]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "License :: OSI Approved :: GNU Affero General Public License v3 or later (AGPLv3+)",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+]
+
+[project.optional-dependencies]
+ui = [
+    "nustack-py[ui]>=0.1.17",
+    "nuspace-ui>=0.0.0",
+]
+all = [
+    "nuspace-py[ui]",
+    "nustack-py[all]>=0.1.17",
+]
+
+[project.urls]
+Repository = "https://github.com/nustackdev/nuspace"
+
+[project.scripts]
+nuspace = "nuspace.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/nuspace"]
+exclude = [
+    "src/nuspace/ui/**",
+]
+
+[tool.hatch.build.targets.sdist]
+exclude = [
+    "src/nuspace/ui/node_modules",
+    "src/nuspace/ui/dist",
+]
+
+[tool.uv.sources]
+nuspace-ui = { path = "./src/nuspace/ui", editable = true }
+
+[tool.uv]
+default-groups = ["dev"]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.8.0",
+    "pre-commit>=3.0.0",
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "pytest-xdist>=3.0.0",
+    "pytest-timeout>=2.1.0",
+    "pytest-asyncio>=1.3.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = [
+    "tests",
+]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = ["-ra", "--strict-markers", "--strict-config", "--import-mode=importlib"]
+asyncio_mode = "auto"
+xfail_strict = true
+
+[tool.coverage.run]
+source = [
+    "src/nuspace",
+]
+omit = ["*/tests/*", "*/__pycache__/*"]
+branch = true
+parallel = true
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "def __str__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "if typing.TYPE_CHECKING:",
+    "@abstractmethod",
+    "@abc.abstractmethod",
+]
+precision = 2
+show_missing = true
+skip_covered = true
+
+[tool.coverage.html]
+directory = "reports/coverage"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+src = [
+    "src",
+]
+extend-exclude = [".venv", "build", "dist", "*.egg-info"]
+
+[tool.ruff.lint]
+select = [
+    "E",
+    "W",
+    "F",
+    "I",
+    "B",
+    "C4",
+    "UP",
+    "N",
+    "YTT",
+    "S",
+    "T20",
+    "D",
+    "ANN",
+    "TC",
+    "RUF",
+    "PTH",
+]
+ignore = [
+    "E501",
+    "D105",
+    "D107",
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.per-file-ignores]
+"**/tests/**/*.py" = [
+    "S101", "S108", "T20", "D", "E711", "E712", "ANN", "N806",
+]
+"examples/**/*.py" = [
+    "S101", "T20", "D", "ANN",
+]
+
+[tool.ruff.lint.isort]
+known-first-party = [
+    "nuspace",
+    "nu",
+]
+force-single-line = false
+lines-after-imports = 2
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+ignore_missing_imports = true
+exclude = [
+    "build/",
+    "dist/",
+    ".venv/",
+]

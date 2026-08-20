@@ -1,0 +1,26 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# npm workspaces
+node_modules
+**/node_modules
+
+# vite build outputs
+**/dist/*
+!**/dist/.gitkeep
+dist-ssr
+
+# python wheel output
+**/wheel-dist
+*.local
+
+# Editor
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store

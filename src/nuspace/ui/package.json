@@ -1,0 +1,28 @@
+{
+	"name": "nuspace-ui",
+	"private": true,
+	"description": "The nuspace app: hosted web shell for the nuspace runtime. Bundled by vite; served by the nuspace core.",
+	"version": "0.0.0",
+	"type": "module",
+	"scripts": {
+		"dev": "vite",
+		"build": "tsc -b && vite build",
+		"preview": "vite preview",
+		"typecheck": "tsc --noEmit",
+		"check": "biome check .",
+		"check:fix": "biome check --write ."
+	},
+	"dependencies": {
+		"react": "^19.2.0",
+		"react-dom": "^19.2.0"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "^2.3.15",
+		"@types/node": "^24.10.1",
+		"@types/react": "^19.2.7",
+		"@types/react-dom": "^19.2.3",
+		"@vitejs/plugin-react": "^5.1.1",
+		"typescript": "~5.9.3",
+		"vite": "^7.3.1"
+	}
+}
