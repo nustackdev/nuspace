@@ -98,7 +98,6 @@ def _get_state(host: str, port: int) -> dict:
 def _run_primitive_direct(dir_: Path, op: str, args: dict) -> None:
     """No server running: open the db in-process and run one primitive."""
     import nu
-
     from nuspace.control import build_primitive_term
 
     term = build_primitive_term(op, args)
@@ -137,7 +136,6 @@ def init(dir: str) -> None:
 def run(dir: str, host: str, port: int, open_browser: bool) -> None:
     """Start the nuspace runtime backed by rocksdb at ``dir``."""
     import nu
-
     from nuspace.app import build_space_app
 
     path = Path(dir)
@@ -169,28 +167,44 @@ def add_page(slug: str, title: str | None, dir_: str, host: str, port: int) -> N
 
 @cli.command("add-block")
 @click.argument("page_slug")
-@click.argument("kind", type=click.Choice(["text"]))
-@click.option("--initial", default="", help="Initial text value.")
+@click.argument("template", type=click.Choice(["text", "stat"]))
+@click.option("--source", "source_app_id", default="", help="Stat template: source block id.")
+@click.option("--label", default="", help="Stat template: display label.")
 @click.option("--dir", "dir_", default=".db", show_default=True, type=click.Path())
 @click.option("--host", default=DEFAULT_HOST, show_default=True)
 @click.option("--port", default=DEFAULT_PORT, show_default=True, type=int)
 def add_block(
     page_slug: str,
-    kind: str,
-    initial: str,
+    template: str,
+    source_app_id: str,
+    label: str,
     dir_: str,
     host: str,
     port: int,
 ) -> None:
-    """Add a block on a page."""
+    """Add a block on a page from a named snippet template."""
+    from nuspace.core.primitives import mint_app_id
+    from nuspace.snippets import stat_snippet, text_snippet
+
+    app_id = mint_app_id()
+    if template == "text":
+        snippet = text_snippet(app_id)
+    elif template == "stat":
+        if not source_app_id:
+            click.echo("stat template requires --source <block_id>", err=True)
+            sys.exit(1)
+        snippet = stat_snippet(app_id, source_app_id, label)
+    else:  # click already validates; belt + braces
+        click.echo(f"unknown template {template!r}", err=True)
+        sys.exit(1)
     _dispatch(
         Path(dir_),
         host,
         port,
         "add_block",
-        {"page_slug": page_slug, "kind": kind, "initial": initial},
+        {"page_slug": page_slug, "snippet": snippet, "app_id": app_id},
     )
-    click.echo(f"added {kind} block on page {page_slug}")
+    click.echo(f"added block {app_id} on page {page_slug}")
 
 
 @cli.command("ls")
@@ -238,12 +252,8 @@ def _ls_blocks(page_slug: str, dir_: str, host: str, port: int) -> None:
     else:
         blocks = _read_blocks_direct(Path(dir_), page_slug)
     for b in blocks:
-        val = ""
-        for f in b["fields"]:
-            if f["type"] == "InputRef":
-                val = (f.get("props") or {}).get("value", "")
-                break
-        click.echo(f"{b['id']}  {b['kind']}  {val!r}")
+        fields = ", ".join(f"{f['type']}({f['path']})" for f in b["fields"]) or "-"
+        click.echo(f"{b['id']}  {fields}")
 
 
 def _count_blocks_via_switch(host: str, port: int, slug: str) -> int:
@@ -259,9 +269,7 @@ def _count_blocks_via_switch(host: str, port: int, slug: str) -> int:
 def _read_pages_listing_direct(dir_: Path) -> list[dict]:
     """Direct-db listing with block counts per page."""
     import nu
-
     from nu.context.fabric import Provide
-
     from nuspace.core.shapes import ACTIVE_PAGE, Space
 
     captured: dict = {"rows": []}
@@ -313,11 +321,10 @@ def _read_pages_listing_direct(dir_: Path) -> list[dict]:
 def _read_blocks_direct(dir_: Path, page_slug: str) -> list[dict]:
     """Direct-db read of block entries for a page (matches mount payload shape)."""
     import nu
-
     from nu.context.fabric import Provide
-
     from nuspace.core.shapes import Space
-    from nuspace.ui.page import block_entry, field_entry
+    from nuspace.snippets import parse_snippet
+    from nuspace.ui.page import _enumerate_ui_refs, block_entry
 
     captured: dict = {"blocks": []}
 
@@ -335,26 +342,17 @@ def _read_blocks_direct(dir_: Path, page_slug: str) -> list[dict]:
             for bid in list(bl_v or []):
                 bid = str(bid)
                 try:
-                    kind, _ = await nu.arun(nu.kv.Snapshot(Space.apps[bid].kind), ctx)
+                    snip_v, _ = await nu.arun(nu.kv.Snapshot(Space.apps[bid].snippet), ctx)
+                    snippet = str(snip_v) if snip_v is not None else ""
                 except Exception:
-                    kind = "text"
-                try:
-                    val, _ = await nu.arun(nu.kv.Snapshot(Space.apps[bid].value), ctx)
-                except Exception:
-                    val = ""
-                out.append(
-                    block_entry(
-                        bid,
-                        kind=str(kind),
-                        fields=[
-                            field_entry(
-                                f"blocks.{bid}.input",
-                                "InputRef",
-                                props={"value": str(val)},
-                            ),
-                        ],
-                    ),
-                )
+                    snippet = ""
+                fields = []
+                if snippet:
+                    try:
+                        fields = _enumerate_ui_refs(parse_snippet(snippet, f"apps/{bid}"))
+                    except Exception:
+                        fields = []
+                out.append(block_entry(bid, snippet=snippet, fields=fields))
             captured["blocks"] = out
 
         async def acleanup(self) -> None:
@@ -379,9 +377,7 @@ def _read_state_direct(dir_: Path) -> dict:
     navigator bound) and reads the mount payload inside its ``asetup``.
     """
     import nu
-
     from nu.context.fabric import Provide
-
     from nuspace.ui.page import build_mount_payload_from_kv
 
     captured: dict = {}

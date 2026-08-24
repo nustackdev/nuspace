@@ -93,7 +93,7 @@ def build_fastapi_app(
     ctx: Context,
     get_mount_payload: MountFactory,
     get_body: BodyFactory,
-    build_primitive: Callable[[str, dict], "Nu"],
+    build_primitive: Callable[[str, dict], Nu],
 ) -> FastAPI:
     """Build the FastAPI app.
 
@@ -109,7 +109,7 @@ def build_fastapi_app(
     async def _spawn_body(conn: _Conn) -> None:
         try:
             body = await get_body(conn.ctx)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             warnings.warn(f"nuspace: build body failed: {exc}", stacklevel=2)
             return
         if body is None:
@@ -124,7 +124,7 @@ def build_fastapi_app(
         task.cancel()
         try:
             await task
-        except (asyncio.CancelledError, Exception):  # noqa: BLE001
+        except (asyncio.CancelledError, Exception):
             pass
 
     async def _refresh_conn(conn: _Conn) -> None:
@@ -133,7 +133,7 @@ def build_fastapi_app(
         try:
             payload = await get_mount_payload(conn.ctx)
             await conn.session.mount(payload)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             warnings.warn(f"nuspace: mount push failed: {exc}", stacklevel=2)
             return
         await _cancel_body(conn)
@@ -180,7 +180,7 @@ def build_fastapi_app(
             import nu
 
             await arun(nu.kv.Transaction(term), ctx)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             raise HTTPException(status_code=500, detail=f"primitive failed: {exc}") from exc
         await _broadcast_refresh()
         return {"ok": True}

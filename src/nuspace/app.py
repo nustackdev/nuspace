@@ -18,7 +18,6 @@ from typing import TYPE_CHECKING
 
 import nu
 import nu.prog
-
 from nuspace.control import build_primitive_term
 from nuspace.core.shapes import ACTIVE_PAGE, Space
 from nuspace.snippets import parse_snippet
@@ -73,7 +72,7 @@ async def _build_body(ctx: Context) -> nu.Nu | None:
             continue
         try:
             terms.append(parse_snippet(snippet_src, f"apps/{bid}"))
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             import warnings
 
             warnings.warn(f"parse_snippet failed for {bid}: {exc}", stacklevel=1)

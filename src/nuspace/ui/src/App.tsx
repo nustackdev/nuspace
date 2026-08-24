@@ -26,13 +26,20 @@ async function postPrimitive(op: string, args: Record<string, unknown>): Promise
 }
 
 function BlockCard({ block }: { block: NuspaceBlock }) {
-	const [mode, setMode] = useState<BlockMode>("display");
+	const isEmpty = !block.snippet;
+	const [mode, setMode] = useState<BlockMode>(isEmpty ? "code" : "display");
+	const [draft, setDraft] = useState<string>(block.snippet);
+	const dirty = draft !== block.snippet;
+
+	const save = () => {
+		if (!dirty) return;
+		void postPrimitive("update_snippet", { app_id: block.id, snippet: draft });
+	};
+
 	return (
 		<section className="rounded-md border border-border-default bg-bg-canvas p-4">
 			<div className="mb-2 flex items-center justify-between">
-				<div className="text-xs text-text-muted font-mono">
-					{block.id} / {block.kind}
-				</div>
+				<div className="text-xs text-text-muted font-mono">{block.id}</div>
 				<div className="flex items-center gap-2 text-xs font-mono">
 					<button
 						type="button"
@@ -59,9 +66,37 @@ function BlockCard({ block }: { block: NuspaceBlock }) {
 				</div>
 			</div>
 			{mode === "code" ? (
-				<pre className="text-xs font-mono whitespace-pre-wrap p-2 rounded bg-bg-sunken border border-border-default">
-					{block.snippet}
-				</pre>
+				<div className="flex flex-col gap-2">
+					<textarea
+						value={draft}
+						onChange={(e) => setDraft(e.target.value)}
+						onKeyDown={(e) => {
+							if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+								e.preventDefault();
+								save();
+							}
+						}}
+						spellCheck={false}
+						rows={Math.max(4, draft.split("\n").length)}
+						placeholder="nu.ui.InputRef(...) >> nu.ReactForever(...)"
+						className="text-xs font-mono whitespace-pre-wrap p-2 rounded bg-bg-sunken border border-border-default resize-y focus:outline-none focus:ring-1 focus:ring-border-strong"
+					/>
+					<div className="flex items-center justify-end gap-2 text-xs font-mono">
+						{dirty && <span className="text-text-muted">unsaved</span>}
+						<button
+							type="button"
+							onClick={save}
+							disabled={!dirty}
+							className="px-2 py-1 rounded border border-border-default hover:bg-bg-sunken disabled:opacity-40 disabled:cursor-not-allowed"
+						>
+							save (⌘⏎)
+						</button>
+					</div>
+				</div>
+			) : block.fields.length === 0 ? (
+				<div className="text-xs text-text-muted font-mono py-4 text-center">
+					empty block -- switch to code to write a snippet
+				</div>
 			) : (
 				<div className="flex flex-col gap-3">
 					{block.fields.map((f) => (
@@ -105,32 +140,10 @@ function App() {
 	}
 
 	const onAddBlock = () => {
-		const kind = window.prompt("kind? (text/stat)", "text");
-		if (kind === null) return;
-		if (kind === "text") {
-			const v = window.prompt("initial text?", "");
-			if (v === null) return;
-			void postPrimitive("add_block", {
-				page_slug: active_page.slug,
-				kind: "text",
-				initial: v,
-			});
-			return;
-		}
-		if (kind === "stat") {
-			const source = window.prompt("source block id?", "");
-			if (source === null || source === "") return;
-			const label = window.prompt("label?", "");
-			if (label === null) return;
-			void postPrimitive("add_block", {
-				page_slug: active_page.slug,
-				kind: "stat",
-				source_app_id: source,
-				label,
-			});
-			return;
-		}
-		console.warn(`unknown block kind: ${kind}`);
+		void postPrimitive("add_block", {
+			page_slug: active_page.slug,
+			snippet: "",
+		});
 	};
 
 	return (

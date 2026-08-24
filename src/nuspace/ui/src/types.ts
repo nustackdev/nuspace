@@ -9,7 +9,6 @@ export type NuspacePage = {
 
 export type NuspaceBlock = {
 	id: string;
-	kind: string;
 	snippet: string;
 	fields: MountField[];
 };

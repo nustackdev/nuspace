@@ -10,9 +10,9 @@ from __future__ import annotations
 import tempfile
 from pathlib import Path
 
-import nu
 import pytest
 
+import nu
 from nuspace.core.primitives import AddBlock, AddPage, RemoveBlock, RemovePage
 from nuspace.core.shapes import ACTIVE_PAGE, Space
 
@@ -24,7 +24,7 @@ async def test_add_page_add_block_kv_layout():
         nu.kv.rocksdb_navigator(str(d)),
         body=nu.kv.auto_flow_atomic(
             AddPage("home", "Home")
-            >> AddBlock("home", "text", "SNIP", "hi", app_id="b_xyz")
+            >> AddBlock("home", "SNIP", app_id="b_xyz")
             >> ACTIVE_PAGE.set("home"),
         ),
     )
@@ -38,9 +38,7 @@ async def test_add_page_add_block_kv_layout():
     assert list(await snap(Space.pages_index, list_of=True)) == ["home"]
     assert str(await snap(Space.pages["home"].title)) == "Home"
     assert list(await snap(Space.pages["home"].blocks, list_of=True)) == ["b_xyz"]
-    assert str(await snap(Space.apps["b_xyz"].kind)) == "text"
     assert str(await snap(Space.apps["b_xyz"].snippet)) == "SNIP"
-    assert str(await snap(Space.apps["b_xyz"].value)) == "hi"
     assert str(await snap(ACTIVE_PAGE)) == "home"
 
 
@@ -51,8 +49,8 @@ async def test_remove_block_unlinks_and_deletes():
         nu.kv.rocksdb_navigator(str(d)),
         body=nu.kv.auto_flow_atomic(
             AddPage("p", "P")
-            >> AddBlock("p", "text", "S", "", app_id="b_1")
-            >> AddBlock("p", "text", "S", "", app_id="b_2"),
+            >> AddBlock("p", "S", app_id="b_1")
+            >> AddBlock("p", "S", app_id="b_2"),
         ),
     )
     await nu.arun(setup)

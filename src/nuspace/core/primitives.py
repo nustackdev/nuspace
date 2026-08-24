@@ -24,6 +24,7 @@ __all__ = [
     "List",
     "RemoveBlock",
     "RemovePage",
+    "UpdateSnippet",
     "mint_app_id",
 ]
 
@@ -60,32 +61,29 @@ class RemovePage(nu.Sequential):
 
 
 class AddBlock(nu.Sequential):
-    """Mint an app id, write its ``kind``/``snippet``/``value``, link it to a page."""
+    """Store an app's snippet under a minted id, link it to a page."""
 
     def __init__(
         self,
         page_slug: str,
-        kind: str,
         snippet: str,
-        init_value: str = "",
         app_id: str | None = None,
-        label: str = "",
-        source_app_id: str = "",
     ) -> None:
         self.app_id = app_id or mint_app_id()
         super().__init__(
             Space.apps.set_item(
                 self.app_id,
-                nu.Dict.of(
-                    kind=kind,
-                    snippet=snippet,
-                    value=init_value,
-                    label=label,
-                    source_app_id=source_app_id,
-                ),
+                nu.Dict.of(snippet=snippet),
             ),
             Space.pages[page_slug].blocks.append(self.app_id),
         )
+
+
+class UpdateSnippet(nu.Sequential):
+    """Overwrite an app's snippet in place. Fields re-enumerate on next mount."""
+
+    def __init__(self, app_id: str, snippet: str) -> None:
+        super().__init__(Space.apps[app_id].snippet.set(snippet))
 
 
 class RemoveBlock(nu.Sequential):

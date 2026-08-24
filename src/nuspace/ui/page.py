@@ -3,6 +3,10 @@
 The nuspace MOUNT payload differs from nudle's: pages listing +
 ``active_page`` with a stack of blocks, each block a bordered container
 around a small set of fields.
+
+Blocks are kind-blind. Every block is just a snippet; its fields are
+enumerated by walking the parsed Nu term and collecting each
+``nu.ui.Ref`` instance in the tree.
 """
 
 from __future__ import annotations
@@ -10,8 +14,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import nu
-
+import nu.ui
 from nuspace.core.shapes import ACTIVE_PAGE, Space
+from nuspace.snippets import parse_snippet
 
 
 if TYPE_CHECKING:
@@ -34,8 +39,8 @@ def field_entry(path: str, ref_type: str, props: dict | None = None) -> dict:
     return entry
 
 
-def block_entry(block_id: str, kind: str, snippet: str, fields: list[dict]) -> dict:
-    return {"id": block_id, "kind": kind, "snippet": snippet, "fields": fields}
+def block_entry(block_id: str, snippet: str, fields: list[dict]) -> dict:
+    return {"id": block_id, "snippet": snippet, "fields": fields}
 
 
 def page_entry(slug: str, title: str) -> dict:
@@ -56,6 +61,32 @@ def build_mount_payload(
             "blocks": blocks,
         },
     }
+
+
+def _enumerate_ui_refs(term: nu.Nu) -> list[dict]:
+    """Walk a Nu term, return one field entry per unique ``nu.ui.Ref`` inside.
+
+    Deduplicated by ``(type, path)`` -- a snippet that references the
+    same InputRef twice (read + write) should still produce one field.
+    """
+    seen: set[tuple[str, str]] = set()
+    fields: list[dict] = []
+
+    def visit(node: object) -> None:
+        if isinstance(node, nu.ui.Ref):
+            segment = node._payload.get("segment")
+            if isinstance(segment, str):
+                key = (type(node).__name__, segment)
+                if key not in seen:
+                    seen.add(key)
+                    fields.append(field_entry(segment, type(node).__name__))
+        children = getattr(node, "_children", None)
+        if children:
+            for c in children:
+                visit(c)
+
+    visit(term)
+    return fields
 
 
 async def _snap(ref: nu.Nu, ctx: Context) -> object:
@@ -100,50 +131,24 @@ async def build_mount_payload_from_kv(ctx: Context) -> dict:
     blocks_out: list[dict] = []
     for bid in block_ids:
         try:
-            kind = str(await _snap(Space.apps[bid].kind, ctx))
-        except Exception:
-            kind = "text"
-        try:
-            value = str(await _snap(Space.apps[bid].value, ctx))
-        except Exception:
-            value = ""
-        try:
             snippet = str(await _snap(Space.apps[bid].snippet, ctx))
         except Exception:
             snippet = ""
-        if kind == "stat":
+        # Fields are entailed by the snippet's Nu term: walk it and
+        # collect every ui.Ref. TODO(hydration): initial ref values are
+        # not seeded yet -- InputRefs mount empty, StatRefs mount empty.
+        # Fix is to evaluate the snippet once in an initial context at
+        # mount and capture the writes it produces (thesis "mount = run
+        # once"). Until then, live updates still fire from ReactForever
+        # once a value changes.
+        fields: list[dict] = []
+        if snippet:
             try:
-                label = str(await _snap(Space.apps[bid].label, ctx))
+                term = parse_snippet(snippet, f"apps/{bid}")
+                fields = _enumerate_ui_refs(term)
             except Exception:
-                label = ""
-            try:
-                source_id = str(await _snap(Space.apps[bid].source_app_id, ctx))
-            except Exception:
-                source_id = ""
-            source_value = ""
-            if source_id:
-                try:
-                    source_value = str(await _snap(Space.apps[source_id].value, ctx))
-                except Exception:
-                    source_value = ""
-            fields = [
-                field_entry(
-                    f"blocks.{bid}.stat",
-                    "StatRef",
-                    props={"label": label, "value": source_value},
-                ),
-            ]
-        else:
-            fields = [
-                field_entry(
-                    f"blocks.{bid}.input",
-                    "InputRef",
-                    props={"value": value},
-                ),
-            ]
-        blocks_out.append(
-            block_entry(bid, kind=kind, snippet=snippet, fields=fields),
-        )
+                fields = []
+        blocks_out.append(block_entry(bid, snippet=snippet, fields=fields))
     return build_mount_payload(
         pages=pages_out,
         active_page_slug=active_slug,
