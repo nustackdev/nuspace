@@ -105,13 +105,32 @@ function App() {
 	}
 
 	const onAddBlock = () => {
-		const v = window.prompt("initial text?", "");
-		if (v === null) return;
-		void postPrimitive("add_block", {
-			page_slug: active_page.slug,
-			kind: "text",
-			initial: v,
-		});
+		const kind = window.prompt("kind? (text/stat)", "text");
+		if (kind === null) return;
+		if (kind === "text") {
+			const v = window.prompt("initial text?", "");
+			if (v === null) return;
+			void postPrimitive("add_block", {
+				page_slug: active_page.slug,
+				kind: "text",
+				initial: v,
+			});
+			return;
+		}
+		if (kind === "stat") {
+			const source = window.prompt("source block id?", "");
+			if (source === null || source === "") return;
+			const label = window.prompt("label?", "");
+			if (label === null) return;
+			void postPrimitive("add_block", {
+				page_slug: active_page.slug,
+				kind: "stat",
+				source_app_id: source,
+				label,
+			});
+			return;
+		}
+		console.warn(`unknown block kind: ${kind}`);
 	};
 
 	return (

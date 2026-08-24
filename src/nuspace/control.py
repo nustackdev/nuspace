@@ -22,7 +22,7 @@ from nuspace.core.primitives import (
     mint_app_id,
 )
 from nuspace.core.shapes import ACTIVE_PAGE, Space
-from nuspace.snippets import text_snippet
+from nuspace.snippets import stat_snippet, text_snippet
 
 
 if TYPE_CHECKING:
@@ -52,12 +52,33 @@ def build_primitive_term(op: str, args: dict) -> Nu:
         slug = args["page_slug"]
         kind = args.get("kind", "text")
         app_id = args.get("app_id") or mint_app_id()
-        initial = args.get("initial", "")
-        if kind != "text":
-            msg = f"unsupported block kind {kind!r} (mvp: text only)"
-            raise ValueError(msg)
-        snippet = text_snippet(app_id)
-        return AddBlock(slug, kind, snippet, init_value=initial, app_id=app_id)
+        if kind == "text":
+            initial = args.get("initial", "") or ""
+            snippet = text_snippet(app_id)
+            return AddBlock(
+                slug,
+                kind,
+                snippet,
+                init_value=initial,
+                app_id=app_id,
+            )
+        if kind == "stat":
+            source_app_id = args.get("source_app_id") or ""
+            label = args.get("label", "") or ""
+            if not source_app_id:
+                msg = "add_block(stat): source_app_id is required"
+                raise ValueError(msg)
+            snippet = stat_snippet(app_id, source_app_id, label)
+            return AddBlock(
+                slug,
+                kind,
+                snippet,
+                app_id=app_id,
+                label=label,
+                source_app_id=source_app_id,
+            )
+        msg = f"unsupported block kind {kind!r} (mvp: text, stat)"
+        raise ValueError(msg)
 
     if op == "remove_block":
         return RemoveBlock(args["page_slug"], args["app_id"])

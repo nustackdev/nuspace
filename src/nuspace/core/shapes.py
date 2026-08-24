@@ -36,6 +36,8 @@ class AppShape(nu.Shape):
     kind: nu.kv.StrRef
     snippet: nu.kv.StrRef
     value: nu.kv.StrRef
+    label: nu.kv.StrRef
+    source_app_id: nu.kv.StrRef
 
 
 class Space(nu.Shape):

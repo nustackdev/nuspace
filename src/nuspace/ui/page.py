@@ -111,19 +111,38 @@ async def build_mount_payload_from_kv(ctx: Context) -> dict:
             snippet = str(await _snap(Space.apps[bid].snippet, ctx))
         except Exception:
             snippet = ""
+        if kind == "stat":
+            try:
+                label = str(await _snap(Space.apps[bid].label, ctx))
+            except Exception:
+                label = ""
+            try:
+                source_id = str(await _snap(Space.apps[bid].source_app_id, ctx))
+            except Exception:
+                source_id = ""
+            source_value = ""
+            if source_id:
+                try:
+                    source_value = str(await _snap(Space.apps[source_id].value, ctx))
+                except Exception:
+                    source_value = ""
+            fields = [
+                field_entry(
+                    f"blocks.{bid}.stat",
+                    "StatRef",
+                    props={"label": label, "value": source_value},
+                ),
+            ]
+        else:
+            fields = [
+                field_entry(
+                    f"blocks.{bid}.input",
+                    "InputRef",
+                    props={"value": value},
+                ),
+            ]
         blocks_out.append(
-            block_entry(
-                bid,
-                kind=kind,
-                snippet=snippet,
-                fields=[
-                    field_entry(
-                        f"blocks.{bid}.input",
-                        "InputRef",
-                        props={"value": value},
-                    ),
-                ],
-            ),
+            block_entry(bid, kind=kind, snippet=snippet, fields=fields),
         )
     return build_mount_payload(
         pages=pages_out,

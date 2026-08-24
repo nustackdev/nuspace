@@ -69,12 +69,20 @@ class AddBlock(nu.Sequential):
         snippet: str,
         init_value: str = "",
         app_id: str | None = None,
+        label: str = "",
+        source_app_id: str = "",
     ) -> None:
         self.app_id = app_id or mint_app_id()
         super().__init__(
             Space.apps.set_item(
                 self.app_id,
-                nu.Dict.of(kind=kind, snippet=snippet, value=init_value),
+                nu.Dict.of(
+                    kind=kind,
+                    snippet=snippet,
+                    value=init_value,
+                    label=label,
+                    source_app_id=source_app_id,
+                ),
             ),
             Space.pages[page_slug].blocks.append(self.app_id),
         )
