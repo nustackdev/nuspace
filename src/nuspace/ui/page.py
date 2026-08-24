@@ -34,8 +34,8 @@ def field_entry(path: str, ref_type: str, props: dict | None = None) -> dict:
     return entry
 
 
-def block_entry(block_id: str, kind: str, fields: list[dict]) -> dict:
-    return {"id": block_id, "kind": kind, "fields": fields}
+def block_entry(block_id: str, kind: str, snippet: str, fields: list[dict]) -> dict:
+    return {"id": block_id, "kind": kind, "snippet": snippet, "fields": fields}
 
 
 def page_entry(slug: str, title: str) -> dict:
@@ -107,10 +107,15 @@ async def build_mount_payload_from_kv(ctx: Context) -> dict:
             value = str(await _snap(Space.apps[bid].value, ctx))
         except Exception:
             value = ""
+        try:
+            snippet = str(await _snap(Space.apps[bid].snippet, ctx))
+        except Exception:
+            snippet = ""
         blocks_out.append(
             block_entry(
                 bid,
                 kind=kind,
+                snippet=snippet,
                 fields=[
                     field_entry(
                         f"blocks.{bid}.input",

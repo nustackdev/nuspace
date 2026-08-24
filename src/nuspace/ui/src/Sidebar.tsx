@@ -11,17 +11,27 @@ type Props = {
 	footer?: ReactNode;
 };
 
-async function switchPage(slug: string): Promise<void> {
+async function postPrimitive(op: string, args: Record<string, unknown>): Promise<void> {
 	try {
 		await fetch("/control/primitive", {
 			method: "POST",
 			headers: { "content-type": "application/json" },
-			body: JSON.stringify({ op: "switch_page", args: { slug } }),
+			body: JSON.stringify({ op, args }),
 		});
 	} catch (e) {
-		// server may be down; ignore
-		console.warn("switch_page failed", e);
+		console.warn(`${op} failed`, e);
 	}
+}
+
+async function switchPage(slug: string): Promise<void> {
+	await postPrimitive("switch_page", { slug });
+}
+
+async function addPage(): Promise<void> {
+	const slug = window.prompt("page slug?");
+	if (!slug) return;
+	const title = window.prompt("page title?", slug) ?? slug;
+	await postPrimitive("add_page", { slug, title });
 }
 
 export function Sidebar({ pages, activeSlug, footer }: Props) {
@@ -53,6 +63,13 @@ export function Sidebar({ pages, activeSlug, footer }: Props) {
 						</button>
 					);
 				})}
+				<button
+					type="button"
+					onClick={() => void addPage()}
+					className="mt-1 text-left text-sm px-3 py-1.5 rounded-md w-full text-text-secondary hover:bg-bg-canvas"
+				>
+					+ new page
+				</button>
 			</nav>
 			{footer ? (
 				<div className="px-4 py-3 border-t border-border-default">{footer}</div>
