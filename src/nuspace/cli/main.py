@@ -324,7 +324,7 @@ def _read_blocks_direct(dir_: Path, page_slug: str) -> list[dict]:
     from nu.context.fabric import Provide
     from nuspace.core.shapes import Space
     from nuspace.snippets import parse_snippet
-    from nuspace.ui.page import _enumerate_ui_refs, block_entry
+    from nuspace.web.server.page import _enumerate_ui_refs, block_entry
 
     captured: dict = {"blocks": []}
 
@@ -378,7 +378,7 @@ def _read_state_direct(dir_: Path) -> dict:
     """
     import nu
     from nu.context.fabric import Provide
-    from nuspace.ui.page import build_mount_payload_from_kv
+    from nuspace.web.server.page import build_mount_payload_from_kv
 
     captured: dict = {}
 

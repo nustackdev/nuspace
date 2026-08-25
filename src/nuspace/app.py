@@ -3,12 +3,12 @@
 One Nu tree:
 
 - ``nu.kv.rocksdb_navigator(<dir>)`` fabric opens the space's kv store.
-- ``nuspace.ui.server(...)`` fabric boots FastAPI + ws + control plane.
+- ``nuspace.web.server.server(...)`` fabric boots FastAPI + ws + control plane.
 - Body is a small idle loop (server lives inside the fabric).
 
 Per-connection dynamics (MOUNT payload + block bodies) run inside the ws
 server, driven by kv reads at connect/rebuild time. See
-``nuspace/ui/serve.py`` for the rebuild flow.
+``nuspace/web/server/serve.py`` for the rebuild flow.
 """
 
 from __future__ import annotations
@@ -21,8 +21,8 @@ import nu.prog
 from nuspace.control import build_primitive_term
 from nuspace.core.shapes import ACTIVE_PAGE, Space
 from nuspace.snippets import parse_snippet
-from nuspace.ui import server as _ui_server
-from nuspace.ui.page import build_mount_payload_from_kv
+from nuspace.web.server import server as _ui_server
+from nuspace.web.server.page import build_mount_payload_from_kv
 
 
 if TYPE_CHECKING:

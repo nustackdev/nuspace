@@ -90,6 +90,6 @@ benchmark_results/
 
 # nuspace-ui (vite / node)
 node_modules/
-!src/nuspace/ui/dist/
-src/nuspace/ui/dist/*
-!src/nuspace/ui/dist/.gitkeep
+!src/nuspace/web/ui/dist/
+src/nuspace/web/ui/dist/*
+!src/nuspace/web/ui/dist/.gitkeep

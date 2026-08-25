@@ -56,17 +56,17 @@ nuspace = "nuspace.cli:main"
 [tool.hatch.build.targets.wheel]
 packages = ["src/nuspace"]
 exclude = [
-    "src/nuspace/ui/**",
+    "src/nuspace/web/ui/**",
 ]
 
 [tool.hatch.build.targets.sdist]
 exclude = [
-    "src/nuspace/ui/node_modules",
-    "src/nuspace/ui/dist",
+    "src/nuspace/web/ui/node_modules",
+    "src/nuspace/web/ui/dist",
 ]
 
 [tool.uv.sources]
-nuspace-ui = { path = "./src/nuspace/ui", editable = true }
+nuspace-ui = { path = "./src/nuspace/web/ui", editable = true }
 
 [tool.uv]
 default-groups = ["dev"]
