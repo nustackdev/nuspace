@@ -1,45 +1,47 @@
-"""nuspace tree shapes (mvp layout).
+"""Nuspace top shapes.
 
-Keyspace:
+Two orchestration surfaces live under one ``Space``:
 
-- ``pages_index``            list[str]  -- sidebar page order.
-- ``pages/<slug>/title``     str        -- page label.
-- ``pages/<slug>/blocks``    list[str]  -- ordered app ids in this page.
-- ``apps/<app_id>/snippet``  str        -- python source that eval()s to a Nu term.
-- ``_meta/active_page``      str        -- currently active page slug.
+- ``apps``  - ops-orchestration units (reactive rules, cron jobs, wires).
+- ``pages`` - UI-orchestration units. Each page holds ``sections``.
 
-Per-block state (formerly ``apps/<id>/value`` etc.) is owned by the
-snippet. Snippets write it to whatever kv path they choose (convention:
-``state/<app_id>/<name>``). The platform does not know or care.
+An app and a section are the same substance (a Python snippet returning a
+Nu tree). They differ only in the ``policy`` string that says when to run.
+For v0 the policy is a bare string; a richer tagged form can come later
+without changing the shape layout.
 """
 
 from __future__ import annotations
 
 import nu
+from nuspace.core.refs import AppsRef, SectionsRef
 
 
-__all__ = ["ACTIVE_PAGE", "AppShape", "Page", "Space"]
+__all__ = ["App", "Page", "Section", "Space"]
+
+
+class App(nu.Shape):
+    """One ops-orchestration unit."""
+
+    snippet = nu.kv.StrRef.slot()
+    policy = nu.kv.StrRef.slot()
+
+
+class Section(nu.Shape):
+    """One UI-orchestration unit inside a page."""
+
+    snippet = nu.kv.StrRef.slot()
+    policy = nu.kv.StrRef.slot()
 
 
 class Page(nu.Shape):
-    """A page: title plus ordered app ids."""
+    """A page: a title plus a bag of sections."""
 
-    title: nu.kv.StrRef
-    blocks: nu.kv.ListRef[str]
-
-
-class AppShape(nu.Shape):
-    """An app: just its snippet source. Everything else is snippet-owned."""
-
-    snippet: nu.kv.StrRef
-
+    title = nu.kv.StrRef.slot()
+    sections = SectionsRef.slot(Section)
 
 class Space(nu.Shape):
-    """The nuspace root."""
+    """Nuspace root."""
 
-    pages_index: nu.kv.ListRef[str]
-    pages: nu.kv.ShapesDictRef[str, Page]
-    apps: nu.kv.ShapesDictRef[str, AppShape]
-
-
-ACTIVE_PAGE = nu.kv.StrRef("_meta.active_page")
+    apps = AppsRef.slot(App)
+    pages = nu.kv.ShapesDictRef.slot(Page)

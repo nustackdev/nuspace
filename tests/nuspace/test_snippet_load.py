@@ -1,27 +1,23 @@
-"""Snippet load path: text_snippet -> parse_snippet -> Nu term."""
+"""Snippet load path: source string -> Nu term via parse_snippet."""
 
 from __future__ import annotations
 
+import pytest
+
 import nu
-from nuspace.snippets import parse_snippet, text_snippet
+from nuspace.snippets import parse_snippet
 
 
-def test_text_snippet_bakes_app_id():
-    src = text_snippet("b_abc")
-    assert "b_abc" in src
-    assert "nu.ReactForever" in src
-
-
-def test_parse_snippet_returns_sequential():
-    src = text_snippet("b_xyz")
-    term = parse_snippet(src, "apps/b_xyz")
+def test_parses_minimal_snippet():
+    term = parse_snippet("nu.Str('hi')", path="test")
     assert isinstance(term, nu.Nu)
-    # Sequential(InputRef.set(seed), ReactForever(changed, StrRef.set(...)))
-    assert type(term).__name__ == "Sequential"
 
 
-def test_parse_snippet_type_error_on_non_nu():
-    import pytest
+def test_scope_exposes_nu_and_space():
+    term = parse_snippet("nu.Str(str(type(Space).__name__))", path="test")
+    assert isinstance(term, nu.Nu)
 
+
+def test_non_nu_return_raises():
     with pytest.raises(TypeError):
-        parse_snippet("42", "irrelevant")
+        parse_snippet("42", path="test")
