@@ -1,16 +1,8 @@
-// Register an out-of-tree Ref with the ui-kit runtime dispatch maps.
+// Re-export the kit's official registration API for out-of-tree Refs.
 //
-// Nuspace ships its own refs (LensRef) on top of the published
-// @nustackdev/ui-kit. The kit's `factories` map feeds the store's inbound
-// dispatch; the `renderers` map feeds FieldView. Both are module-level
-// mutable objects, so injecting an entry at boot is enough -- no fork of
-// the kit's registry needed. If a future kit release exposes a first-class
-// `registerRefEntry`, swap this for that.
+// Nuspace-shipped refs (LensRef and friends) plug into ui-kit's runtime
+// dispatch by calling this at shell boot; kit@0.1.3+ owns the maps and
+// exposes the mutator. Kept as a local re-export so shell-side call sites
+// (main.tsx) do not chase the kit's module layout.
 
-import type { RefEntry } from "@nustackdev/ui-kit";
-import { factories, renderers } from "@nustackdev/ui-kit";
-
-export function registerRefEntry(name: string, entry: RefEntry): void {
-	(factories as Record<string, unknown>)[name] = entry.factory;
-	(renderers as Record<string, unknown>)[name] = entry.component;
-}
+export { registerRefEntry } from "@nustackdev/ui-kit";
