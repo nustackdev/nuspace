@@ -44,6 +44,7 @@ seed = (
 app = InvisiblesProxy(
     Navigator,
     address=ADDRESS,
+    tag=Space,
     body=nu.kv.auto_flow_atomic(seed, scope=Space),
 )
 

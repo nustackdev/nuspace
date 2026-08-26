@@ -16,7 +16,7 @@ import nu
 from nuspace import Space
 
 
-DB_PATH = "./.nuspace-db"
+DB_PATH = "./nuspace.db"
 
 
 TEXT_SNIPPET = "nu.Str('hello from a nuspace app')"
@@ -27,10 +27,14 @@ seed = (
     Space.apps.add(TEXT_SNIPPET, policy="always", app_id="a_hello")
     >> Space.pages.set_item("home", {"title": "Home", "sections": {}})
     >> Space.pages["home"].sections.add(
-        "nu.Str('welcome section')", policy="on_navigate", section_id="s_welcome",
+        "nu.Str('welcome section')",
+        policy="on_navigate",
+        section_id="s_welcome",
     )
     >> Space.pages["home"].sections.add(
-        STAT_SNIPPET, policy="on_navigate", section_id="s_stat",
+        STAT_SNIPPET,
+        policy="on_navigate",
+        section_id="s_stat",
     )
 )
 

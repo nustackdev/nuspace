@@ -25,7 +25,7 @@ from nu.proxy import InvisiblesServer
 from nuspace import Space
 
 
-DB_PATH = "./.nuspace-db"
+DB_PATH = "./nuspace.db"
 ADDRESS = "127.0.0.1:19000"
 
 
@@ -35,13 +35,14 @@ app = nu.With(
         InvisiblesServer,
         {
             "target": Navigator,
+            "target_tag": Space,
             "address": ADDRESS,
             "transport": "tcp",
             "executor": "threaded",
             "dispatcher": "shared",
         },
-        body=nu.ForeverDo(nu.Delay(3600.0)),
     ),
+    body=nu.ForeverDo(nu.Delay(3600.0)),
 )
 
 

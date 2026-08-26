@@ -93,3 +93,5 @@ node_modules/
 !src/nuspace/web/ui/dist/
 src/nuspace/web/ui/dist/*
 !src/nuspace/web/ui/dist/.gitkeep
+
+*.db/
