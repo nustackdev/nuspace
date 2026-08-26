@@ -1,1 +1,1 @@
-"""nuspace.web -- web layer: python server + typescript ui bundle."""
+"""nuspace.web -- nuspace-ui: nudle-inspired app built on nu.ui."""
