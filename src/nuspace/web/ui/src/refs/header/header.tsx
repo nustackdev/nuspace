@@ -52,6 +52,7 @@ function HeaderView({ path }: { path: string }) {
 	const slice = useStore((s) => s.refs[path] as HeaderSlice | undefined);
 	const status = useStore((s) => s.status);
 	const currentRoute = useRoute();
+	const currentTop = `/${currentRoute.top}`;
 	const brand = slice?.brand ?? "nuspace";
 	const tabs = slice?.tabs ?? [];
 	const { label, variant } = statusConfig[status];
@@ -64,12 +65,12 @@ function HeaderView({ path }: { path: string }) {
 				</span>
 				<nav className="flex flex-1 items-center gap-1">
 					{tabs.map((t) => {
-						const active = t.route === currentRoute;
+						const active = t.route === currentTop;
 						return (
 							<button
 								key={t.route}
 								type="button"
-								onClick={() => navigate(t.route as never)}
+								onClick={() => navigate(t.route)}
 								className={
 									"px-3 py-1.5 text-sm font-mono rounded-md transition-colors " +
 									(active

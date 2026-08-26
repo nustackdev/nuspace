@@ -4,16 +4,21 @@ import { useNuspaceConnection } from "./connect";
 import { useRoute } from "./router";
 
 // Split a page's fields into (sidebar, content). Pages that carry a
-// SidebarRef slot get a two-column layout; the rest take the full width.
-// Kept flat -- v1 pages have at most one sidebar and no other structural
-// wrappers, so a first-match split is enough.
+// SidebarRef slot get a two-column layout; the rest take the full
+// width. AppsRef owns its own inner layout (tree + editor) so we do
+// NOT split it -- it renders alone at full bleed.
 function splitFields(fields: MountField[]): {
 	sidebar: MountField | null;
 	content: MountField[];
+	fullBleed: boolean;
 } {
+	const owns = fields.find((f) => f.type === "AppsRef");
+	if (owns) {
+		return { sidebar: null, content: [owns], fullBleed: true };
+	}
 	const sidebar = fields.find((f) => f.type === "SidebarRef") ?? null;
 	const content = sidebar ? fields.filter((f) => f !== sidebar) : fields;
-	return { sidebar, content };
+	return { sidebar, content, fullBleed: false };
 }
 
 function findPage(
@@ -35,7 +40,7 @@ export function App() {
 		? structural.filter((f) => f !== header)
 		: structural;
 
-	const activePage = findPage(page?.pages, route);
+	const activePage = findPage(page?.pages, `/${route.top}`);
 	const split = activePage ? splitFields(activePage.fields) : null;
 
 	if (!page) {
@@ -49,8 +54,6 @@ export function App() {
 	return (
 		<div className="min-h-screen flex flex-col bg-background text-text-primary">
 			{header ? <FieldView field={header} /> : null}
-			{/* Other structural refs (future title, nav, ...) render inline
-			    under the header. Kept as a passthrough so nothing gets lost. */}
 			{otherStructural.length > 0 ? (
 				<div className="hidden">
 					{otherStructural.map((f) => (
@@ -60,25 +63,33 @@ export function App() {
 			) : null}
 			<main className="flex-1 min-h-0 flex">
 				{split?.sidebar ? <FieldView field={split.sidebar} /> : null}
-				<section className="flex-1 min-h-0 overflow-auto p-6">
-					{split ? (
-						split.content.length > 0 ? (
-							<div className="mx-auto max-w-7xl flex flex-col gap-6">
-								{split.content.map((f) => (
-									<FieldView key={f.path} field={f} />
-								))}
-							</div>
+				{split?.fullBleed ? (
+					<section className="flex-1 min-h-0 min-w-0 flex">
+						{split.content.map((f) => (
+							<FieldView key={f.path} field={f} />
+						))}
+					</section>
+				) : (
+					<section className="flex-1 min-h-0 overflow-auto p-6">
+						{split ? (
+							split.content.length > 0 ? (
+								<div className="mx-auto max-w-7xl flex flex-col gap-6">
+									{split.content.map((f) => (
+										<FieldView key={f.path} field={f} />
+									))}
+								</div>
+							) : (
+								<div className="mx-auto max-w-7xl text-sm text-muted-foreground font-mono">
+									{activePage?.name ?? "empty page"}
+								</div>
+							)
 						) : (
 							<div className="mx-auto max-w-7xl text-sm text-muted-foreground font-mono">
-								{activePage?.name ?? "empty page"}
+								no page for /{route.top}
 							</div>
-						)
-					) : (
-						<div className="mx-auto max-w-7xl text-sm text-muted-foreground font-mono">
-							no page for {route}
-						</div>
-					)}
-				</section>
+						)}
+					</section>
+				)}
 			</main>
 		</div>
 	);

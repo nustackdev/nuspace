@@ -1,26 +1,32 @@
-// Tiny fixed-route router for nuspace.
+// Tiny nested-path router for nuspace.
 //
-// Nuspace has 3 known-at-compile-time top-level routes -- no dynamic
-// route map, no need for a full router library. We read
-// window.location.pathname, match it against the fixed set, and expose
-// a hook + a navigate() that drives History pushState. `popstate` (back
-// / forward) triggers a re-render via the same subscription list.
+// Three top-level pages -- /apps, /pages, /lens -- each with deep paths
+// (e.g. /apps/ops/cron/foo). We split window.location.pathname into
+// (top, path[]) so the header tabs pick a page and each page's ref owns
+// its own deeper navigation.
 //
-// Not part of the nu.ui bridge -- this router is purely browser-side
-// (matches the nuspace-ui model: the shell knows its own routes; the
-// server ships all pages at once and the router decides what to paint).
+// Not part of the nu.ui bridge -- purely browser-side.
 
 import { useSyncExternalStore } from "react";
 
-export const ROUTES = ["/apps", "/pages", "/lens"] as const;
-export type Route = (typeof ROUTES)[number];
-export const DEFAULT_ROUTE: Route = "/lens";
+export const TOPS = ["apps", "pages", "lens"] as const;
+export type Top = (typeof TOPS)[number];
+export const DEFAULT_TOP: Top = "apps";
 
-function matchRoute(pathname: string): Route {
-	for (const r of ROUTES) {
-		if (pathname === r || pathname.startsWith(`${r}/`)) return r;
+export type Route = { top: Top; path: string[] };
+
+function _split(pathname: string): Route {
+	const parts = pathname.split("/").filter((s) => s.length > 0);
+	const head = parts[0] ?? "";
+	if ((TOPS as readonly string[]).includes(head)) {
+		return { top: head as Top, path: parts.slice(1).map(decodeURIComponent) };
 	}
-	return DEFAULT_ROUTE;
+	return { top: DEFAULT_TOP, path: [] };
+}
+
+function _join(top: Top, path: string[]): string {
+	const encoded = path.map(encodeURIComponent).join("/");
+	return encoded.length > 0 ? `/${top}/${encoded}` : `/${top}`;
 }
 
 const subscribers = new Set<() => void>();
@@ -36,26 +42,46 @@ function subscribe(cb: () => void): () => void {
 }
 
 function getRoute(): Route {
-	return matchRoute(window.location.pathname);
+	return _split(window.location.pathname);
+}
+
+// Cache the last route object so `useSyncExternalStore` doesn't see a
+// fresh reference every render (which triggers an infinite loop).
+let _cached: Route = getRoute();
+let _cachedKey = _key(_cached);
+
+function _key(r: Route): string {
+	return `${r.top}::${r.path.join("/")}`;
+}
+
+function getSnapshot(): Route {
+	const next = getRoute();
+	const key = _key(next);
+	if (key !== _cachedKey) {
+		_cached = next;
+		_cachedKey = key;
+	}
+	return _cached;
 }
 
 export function useRoute(): Route {
-	return useSyncExternalStore(subscribe, getRoute, getRoute);
+	return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 }
 
-export function navigate(route: Route): void {
-	if (window.location.pathname === route) return;
-	window.history.pushState({}, "", route);
-	// pushState does not fire popstate; wake subscribers by hand.
+export function navigate(target: string | { top: Top; path?: string[] }): void {
+	const url =
+		typeof target === "string" ? target : _join(target.top, target.path ?? []);
+	if (window.location.pathname === url) return;
+	window.history.pushState({}, "", url);
 	for (const cb of subscribers) cb();
 }
 
-// Landing bootstrap. If the user opened `/` (or any unknown path), push
-// the default route so the URL reflects what we render.
+// Landing bootstrap. Bare "/" (or any unknown top) becomes /apps.
 export function ensureLanding(): void {
 	const p = window.location.pathname;
-	if (!ROUTES.some((r) => p === r || p.startsWith(`${r}/`))) {
-		window.history.replaceState({}, "", DEFAULT_ROUTE);
+	const head = p.split("/").filter(Boolean)[0] ?? "";
+	if (!(TOPS as readonly string[]).includes(head)) {
+		window.history.replaceState({}, "", `/${DEFAULT_TOP}`);
 		for (const cb of subscribers) cb();
 	}
 }

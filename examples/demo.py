@@ -1,9 +1,10 @@
 """Nuspace-ui v1 shell demo.
 
 Boots the full 3-page shell (Apps / Pages / Lens) on a rocksdb-backed
-Space. Seeds a couple apps and one page so the Lens has something to
-show. Open http://localhost:8080 -- the shell defaults to ``/lens`` if
-you land on ``/``.
+Space. Seeds a nested apps tree (two top-level groups, a couple apps
+per group, one loose app at root) so the Apps tab has something to
+show right away. Open http://localhost:8080 -- the shell defaults to
+``/apps``.
 
 Run:
 
@@ -29,18 +30,58 @@ DB_PATH = str(Path(__file__).parent / "nuspace_demo.db")
 
 def _seed() -> nu.Nu:
     return (
-        Space.apps.add("nu.Str('hello from nuspace')", policy="always", app_id="a_hello")
-        >> Space.apps.add("nu.Int(42)", policy="always", app_id="a_answer")
+        # Top-level Group: name + empty apps/groups. init() sets only if missing.
+        Space.apps.init({"name": "", "apps": {}, "groups": {}})
+        # Nested folder tree with a couple groups.
+        >> Space.apps.groups.set_item(
+            "g_ops",
+            {
+                "name": "ops",
+                "apps": {
+                    "a_hello": {
+                        "name": "hello",
+                        "snippet": "nu.Str('hello from nuspace')",
+                        "policy": "always",
+                    },
+                    "a_answer": {
+                        "name": "answer",
+                        "snippet": "nu.Int(42)",
+                        "policy": "always",
+                    },
+                },
+                "groups": {},
+            },
+        )
+        >> Space.apps.groups.set_item(
+            "g_ui",
+            {
+                "name": "ui",
+                "apps": {
+                    "a_ping": {
+                        "name": "ping",
+                        "snippet": "nu.Str('pong')",
+                        "policy": "always",
+                    },
+                },
+                "groups": {},
+            },
+        )
+        # One loose app at the top level so root-level rendering has content.
+        >> Space.apps.apps.set_item(
+            "a_root_note",
+            {
+                "name": "note",
+                "snippet": "nu.Str('root-level app')",
+                "policy": "always",
+            },
+        )
+        # Legacy pages seed (Pages tab still shows the sidebar stub for now).
         >> Space.pages.set_item("home", {"title": "Home", "sections": {}})
         >> Space.pages["home"].sections.add(
-            "nu.Str('welcome section')",
+            name="welcome",
+            snippet="nu.Str('welcome section')",
             policy="on_navigate",
             section_id="s_welcome",
-        )
-        >> Space.pages["home"].sections.add(
-            "nu.Str('stat body')",
-            policy="on_navigate",
-            section_id="s_stat",
         )
         >> Space.pages.set_item("about", {"title": "About", "sections": {}})
     )

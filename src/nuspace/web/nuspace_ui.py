@@ -1,33 +1,32 @@
 """Nuspace-ui python entry.
 
 Composes the 3-page nuspace shell (Apps / Pages / Lens) plus the header
-and the drivers that back the live refs. Mount payload lists all three
-pages; the browser router picks which one is visible.
+and the drivers that back the live refs.
 
-Layout convention: pages that carry a ``sidebar`` slot get a two-column
-split (left rail + content). Lens has no sidebar; it takes the full
-content region. Content-region refs are what remain after the sidebar
-is peeled off.
+- Apps page hosts one ``AppsRef`` (nested tree + code editor). It fills
+  its own content region -- no sidebar slot, ``App.tsx`` gives it the
+  full main area.
+- Pages page still carries a ``SidebarRef`` stub. Its ref lands later.
+- Lens page is a bare miller-columns component; no sidebar.
 
-Driver activation: drivers always run. All three pages mount at boot and
-their drivers sit in the app tree. The Lens driver is naturally
-quiescent when not on ``/lens`` because path notifies only fire from a
-mounted Lens component. Apps / Pages have no drivers yet. When they
-land, they will follow the same "always-on, quiescent when idle"
-pattern -- no route-based gating.
+Driver activation: drivers always run. All three pages mount at boot
+and their drivers sit in the app tree. Drivers stay quiescent when
+their page is not visible because no browser notifies flow.
 """
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
+import nu
 from nuspace.core.shapes import Space
-from nuspace.web.refs import HeaderRef, LensDriver, LensRef, SidebarRef
+from nuspace.web.refs import (
+    AppsFeedbackDriver,
+    AppsRef,
+    HeaderRef,
+    LensDriver,
+    LensRef,
+    SidebarRef,
+)
 from nuspace.web.server import Page, Pages, Shell
-
-
-if TYPE_CHECKING:
-    import nu
 
 
 __all__ = [
@@ -43,9 +42,9 @@ __all__ = [
 
 
 class AppsPage(Page):
-    """Apps section. v1: sidebar placeholder + empty content region."""
+    """Apps section. AppsRef owns the whole tab (tree + editor)."""
 
-    sidebar = SidebarRef.slot(title="Apps")
+    apps = AppsRef.slot(space_root=Space)
 
 
 class PagesPage(Page):
@@ -89,8 +88,22 @@ class Nuspace(Shell):
 def build_ui() -> nu.Nu:
     """Return the nu tree wiring all page drivers.
 
-    Every driver mounts at boot. There is no route-based gating in v1 --
-    drivers naturally idle when their page is not visible (no browser
-    notifies flow, so their loops park on their queues).
+    Every driver mounts at boot. There is no route-based gating -- each
+    driver naturally idles when its page is not visible because no
+    browser notifies flow.
+
+    Apps composition:
+      - AppsShipTree: initial paint (via AppsFeedbackDriver) plus every
+        substrate change reships the tree.
+      - AppsFeedbackDriver: one per-connection notify subscription that
+        dispatches browser events into substrate writes.
     """
-    return LensDriver(LensPage.lens)
+    apps = AppsPage.apps
+    # AppsFeedbackDriver handles the whole apps section end-to-end:
+    # initial tree paint, feedback dispatch, and an explicit tree
+    # re-ship after every write it makes. That keeps us off nu's
+    # descendants_change subscription (which needs a bounded wildcard
+    # pattern) and stays reliable for v1 -- if external code mutates
+    # the tree without going through this driver, ship a tree by
+    # sending a synthetic notify.
+    return LensDriver(LensPage.lens) | AppsFeedbackDriver(apps)
