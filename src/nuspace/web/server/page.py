@@ -1,24 +1,35 @@
-"""Nuspace-shell Page primitive.
+"""Nuspace-shell Page + Shell primitives.
 
-Minimal for now: nuspace-shell hosts a fixed set of pages (Apps / Pages /
-Lens later on). This module ships a single ``Page`` class that any nu.ui
-Ref can slot onto; ``_wire_prefix = [PageShapeName]`` keeps wire paths
-unique the same way nudle does it. No dynamic Index/Pages route map --
-routing chrome lands when the 3-tab shell does.
+Nuspace hosts a fixed set of top-level routes (Apps / Pages / Lens). This
+module ships:
+
+- ``Page``: a Shape whose slots hold nu.ui Refs. Refs rooted on a Page
+  resolve to ``<PageShapeName>.<slot>``. Section subclasses mounted under
+  a Page pick up a stamped ``_wire_prefix`` from ``_stamp_section_mount``.
+- ``Pages``: a small ordered map ``{route: PageSubclass}``.
+- ``Shell``: the top-level container. Structural Refs (HeaderRef, ...)
+  live on Shell as class-level slots; the ``pages`` class attribute
+  lists the page classes keyed by route. ``Shell._mount_payload()``
+  produces the multi-page envelope the browser mounts.
+
+We do not use nudle's ``Index`` / ``Pages`` / router because nuspace's
+routes are fixed at compile time and the browser router lives in the TS
+shell (History API, no NavRef indirection).
 
 Wire-path rule (via ``Ref._aresolve_address`` + ``_wire_prefix`` hook):
-Refs rooted on a ``Page`` resolve to ``<PageShapeName>.<slot>``; Section
-subclasses mounted under a Page pick up a stamped ``_wire_prefix`` from
-``_stamp_section_mount``.
+Refs on Shell resolve to bare slot names (no prefix); refs on a Page
+resolve to ``<PageShapeName>.<slot>``.
 """
 
 from __future__ import annotations
+
+from typing import ClassVar
 
 from nu.domains.shape import Shape
 from nu.ui.core import Ref, Section, SectionRef
 
 
-__all__ = ["Page"]
+__all__ = ["Page", "Pages", "Shell"]
 
 
 _REFS_PKG = "nu.ui.refs."
@@ -132,3 +143,85 @@ class Page(Shape):
     @classmethod
     def _mount_fields(cls) -> list[dict[str, object]]:
         return _build_fields(cls.__name__, cls)
+
+
+class Pages:
+    """Ordered ``{route: PageSubclass}`` map for a Shell.
+
+    Class-attribute holder, not a Slot. Route strings are the nuspace
+    URLs (leading slash) picked up by the browser router.
+
+        class Nuspace(Shell):
+            header = HeaderRef.slot(tabs=[...])
+            pages = Pages({
+                "/apps":  AppsPage,
+                "/pages": PagesPage,
+                "/lens":  LensPage,
+            })
+    """
+
+    __slots__ = ("routes",)
+
+    def __init__(self, routes: dict[str, type[Page]]) -> None:
+        for route, page_cls in routes.items():
+            if not isinstance(route, str) or not route.startswith("/"):
+                raise TypeError(
+                    f"Pages route must be a str starting with '/', got {route!r}",
+                )
+            if not (isinstance(page_cls, type) and issubclass(page_cls, Page)):
+                raise TypeError(
+                    f"Pages value for {route!r} must be a Page subclass, got {page_cls!r}",
+                )
+        self.routes: dict[str, type[Page]] = dict(routes)
+
+
+class Shell(Shape):
+    """Top-level nuspace container.
+
+    Structural Ref slots live at the class level (header, ...). The
+    ``pages`` class attr lists Page subclasses keyed by route. All pages
+    mount at once; the browser router picks which page's fields are
+    visible. Refs on Shell resolve to bare slot names (no prefix) --
+    same rule nudle's Index uses.
+    """
+
+    pages: ClassVar[Pages] = Pages({})
+
+    @classmethod
+    def _structural_fields(cls) -> list[dict[str, object]]:
+        """Shell-level slot list: structural Refs (HeaderRef, ...)."""
+        out: list[dict[str, object]] = []
+        for name, slot in cls._slots.items():
+            ref_cls = slot.ref_cls
+            if not issubclass(ref_cls, Ref):
+                continue
+            entry: dict[str, object] = {"path": name, "type": _wire_type(ref_cls)}
+            props = {**ref_cls._mount_props(), **slot.props}
+            if props:
+                entry["props"] = props
+            out.append(entry)
+        return out
+
+    @classmethod
+    def _pages_payload(cls) -> list[dict[str, object]]:
+        """Per-page mount info: route, shape name, label, fields list."""
+        out: list[dict[str, object]] = []
+        for route, page_cls in cls.pages.routes.items():
+            out.append(
+                {
+                    "route": route,
+                    "name": page_cls.__name__,
+                    "label": route.lstrip("/") or "home",
+                    "fields": page_cls._mount_fields(),
+                }
+            )
+        return out
+
+    @classmethod
+    def _mount_payload(cls) -> dict[str, object]:
+        """Full mount envelope: name, structural fields, page subtrees."""
+        return {
+            "name": cls.__name__,
+            "fields": cls._structural_fields(),
+            "pages": cls._pages_payload(),
+        }

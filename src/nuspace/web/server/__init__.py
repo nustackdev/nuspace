@@ -11,7 +11,7 @@ PagesRendererRef later) live under ``nuspace.web.refs`` and slot onto
 """
 
 from .fabric import NuspaceServer, server
-from .page import Page
+from .page import Page, Pages, Shell
 from .serve import build_fastapi_app
 from .session import NuspaceSession, Subscription
 
@@ -20,6 +20,8 @@ __all__ = [
     "NuspaceServer",
     "NuspaceSession",
     "Page",
+    "Pages",
+    "Shell",
     "Subscription",
     "build_fastapi_app",
     "server",

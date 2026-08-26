@@ -24,7 +24,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from nu.lang.helpers import arun
 from nu.ui.core import Session
 
-from .page import Page
+from .page import Shell
 from .session import NuspaceSession
 
 
@@ -76,7 +76,7 @@ class _SPAStatic(StaticFiles):
         return response
 
 
-def build_fastapi_app(app: Nu, ctx: Context, *, page_cls: type[Page]) -> FastAPI:
+def build_fastapi_app(app: Nu, ctx: Context, *, shell_cls: type[Shell]) -> FastAPI:
     """Build the FastAPI app for a nuspace-shell program.
 
     Static assets come from the sibling ``nuspace_ui`` wheel (packaged
@@ -84,19 +84,22 @@ def build_fastapi_app(app: Nu, ctx: Context, *, page_cls: type[Page]) -> FastAPI
     installed (or its build/ is empty), the static mount is skipped and
     only ``/ws`` is exposed -- run vite separately in that case.
     """
-    if not (isinstance(page_cls, type) and issubclass(page_cls, Page)):
+    if not (isinstance(shell_cls, type) and issubclass(shell_cls, Shell)):
         raise TypeError(
-            f"page_cls must be a nuspace shell Page subclass, got {page_cls!r}",
+            f"shell_cls must be a nuspace Shell subclass, got {shell_cls!r}",
         )
-    page_name = page_cls.__name__
-    fields = page_cls._mount_fields()
+    payload = shell_cls._mount_payload()
     fastapi_app = FastAPI(title="nuspace")
 
     @fastapi_app.websocket("/ws")
     async def ws_endpoint(ws: WebSocket) -> None:
         await ws.accept()
         session = NuspaceSession(ws)
-        await session.mount(page_name, fields)
+        await session.mount(
+            str(payload["name"]),
+            payload["fields"],  # type: ignore[arg-type]
+            pages=payload["pages"],  # type: ignore[arg-type]
+        )
         per_conn_ctx = ctx.bind(Session, session)
         intake_task = asyncio.create_task(session.run_intake())
         eval_task = asyncio.create_task(arun(app, per_conn_ctx))

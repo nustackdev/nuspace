@@ -1,6 +1,6 @@
 """LensRef -- browse any Nu Shape as cascading Miller columns."""
 
-from nuspace.web.refs.lens.lens import LensRef, LensRun
+from nuspace.web.refs.lens.lens import LensDriver, LensRef
 
 
-__all__ = ["LensRef", "LensRun"]
+__all__ = ["LensDriver", "LensRef"]

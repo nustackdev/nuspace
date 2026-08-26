@@ -1,13 +1,13 @@
-"""LensRef v1 demo -- running under nuspace-server (not nudle).
+"""Nuspace-ui v1 shell demo.
 
-Boots a rocksdb navigator, seeds a tiny Space (a couple apps + one page
-with sections) if empty, mounts the lens on a nuspace-shell Page, and
-drives it via ``LensRun``. Open the browser at http://localhost:8080 to
-browse.
+Boots the full 3-page shell (Apps / Pages / Lens) on a rocksdb-backed
+Space. Seeds a couple apps and one page so the Lens has something to
+show. Open http://localhost:8080 -- the shell defaults to ``/lens`` if
+you land on ``/``.
 
 Run:
 
-    uv run python examples/lens_demo.py
+    uv run python examples/demo.py
 """
 
 from __future__ import annotations
@@ -17,11 +17,11 @@ from pathlib import Path
 
 import nu
 from nuspace.core.shapes import Space
-from nuspace.web.nuspace_ui import LensPage, build_ui
+from nuspace.web.nuspace_ui import Nuspace, build_ui
 from nuspace.web.server import server
 
 
-DB_PATH = str(Path(__file__).parent / "lens_demo.db")
+DB_PATH = str(Path(__file__).parent / "nuspace_demo.db")
 
 
 # --- Seed (idempotent) -------------------------------------------------------
@@ -29,7 +29,7 @@ DB_PATH = str(Path(__file__).parent / "lens_demo.db")
 
 def _seed() -> nu.Nu:
     return (
-        Space.apps.add("nu.Str('hello from lens demo')", policy="always", app_id="a_hello")
+        Space.apps.add("nu.Str('hello from nuspace')", policy="always", app_id="a_hello")
         >> Space.apps.add("nu.Int(42)", policy="always", app_id="a_answer")
         >> Space.pages.set_item("home", {"title": "Home", "sections": {}})
         >> Space.pages["home"].sections.add(
@@ -54,11 +54,11 @@ ui = build_ui()
 
 app = nu.With(
     nu.kv.rocksdb_navigator(DB_PATH, tags=(Space,)),
-    server(ui, page_cls=LensPage, host="127.0.0.1", port=8080, open_browser=False),
+    server(ui, shell_cls=Nuspace, host="127.0.0.1", port=8080, open_browser=False),
     body=nu.kv.auto_flow_atomic(_seed() >> nu.ForeverDo(nu.Delay(3600.0)), scope=Space),
 )
 
 
 if __name__ == "__main__":
-    print(f"lens demo: rocksdb at {DB_PATH!r}, http://127.0.0.1:8080")
+    print(f"nuspace demo: rocksdb at {DB_PATH!r}, http://127.0.0.1:8080")
     asyncio.run(nu.arun(app))

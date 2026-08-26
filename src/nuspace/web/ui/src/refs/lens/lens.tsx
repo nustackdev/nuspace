@@ -1,12 +1,15 @@
 // LensRef -- Miller-columns browser for any Nu Shape.
 //
-// Server-owned. Every `write` frame carries a full replace:
-//   {action: "replace", path: string[], columns: Column[]}
-// The browser mirrors that into the slice and renders. Notify frames flow
-// the other way with {action: "push", segment} on click / ArrowRight,
-// {action: "pop"} on ArrowLeft / Escape, or {action: "replace", path} for
-// keyboard shortcuts we may add later. Up / Down move focus locally in
-// the active column with no wire hit.
+// Server-owned. Every `write` frame carries the full new state:
+//   {path: string[], columns: Column[]}
+// The browser mirrors that into the slice and renders.
+//
+// Notify frames flow the other way with the browser-computed full path:
+//   {path: string[]}
+// Click / ArrowRight / Enter -> push a segment, ArrowLeft / Escape ->
+// pop -- always sent as an already-resolved full path so the server
+// stays a pure "recompute columns for whatever path you're given" loop.
+// Up / Down move focus locally in the active column with no wire hit.
 //
 // Column kind palette leans on the kit chart-N categorical tokens so we
 // pick up theme colors for free (no bespoke lens tokens today).
@@ -61,33 +64,12 @@ const factory: SliceFactory = (path, ctx, props) => {
 			ctx.set((refs) => {
 				const slice = refs[path];
 				if (!slice) return;
-				const p = (v ?? {}) as { action?: unknown } & Record<string, unknown>;
-				const action = p.action;
-				if (action === "replace") {
-					slice.value = {
-						path: Array.isArray(p.path) ? p.path.map((s) => String(s)) : [],
-						columns: Array.isArray(p.columns) ? (p.columns as Column[]) : [],
-					};
-					slice.focusedIndex = {};
-				} else if (action === "append") {
-					const cur = slice.value as LensValue;
-					const seg = p.segment != null ? String(p.segment) : "";
-					const col = (p.column as Column | undefined) ?? {
-						kind: "unknown",
-						entries: [],
-						total: 0,
-					};
-					slice.value = {
-						path: [...cur.path, seg],
-						columns: [...cur.columns, col],
-					};
-				} else if (action === "pop") {
-					const cur = slice.value as LensValue;
-					slice.value = {
-						path: cur.path.slice(0, -1),
-						columns: cur.columns.slice(0, -1),
-					};
-				}
+				const p = (v ?? {}) as Record<string, unknown>;
+				slice.value = {
+					path: Array.isArray(p.path) ? p.path.map((s) => String(s)) : [],
+					columns: Array.isArray(p.columns) ? (p.columns as Column[]) : [],
+				};
+				slice.focusedIndex = {};
 			}),
 	};
 };
@@ -216,12 +198,24 @@ function LensView({ path }: { path: string }) {
 		[path],
 	);
 
-	const notify = useCallback(
-		(payload: Record<string, unknown>) => {
-			send({ op: OP_NOTIFY, ref: path, payload });
+	const sendPath = useCallback(
+		(newPath: string[]) => {
+			send({ op: OP_NOTIFY, ref: path, payload: { path: newPath } });
 		},
 		[path, send],
 	);
+
+	const drill = useCallback(
+		(segment: string) => {
+			sendPath([...cursorPath, segment]);
+		},
+		[cursorPath, sendPath],
+	);
+
+	const pop = useCallback(() => {
+		if (cursorPath.length === 0) return;
+		sendPath(cursorPath.slice(0, -1));
+	}, [cursorPath, sendPath]);
 
 	const onKeyDown = useCallback(
 		(e: React.KeyboardEvent<HTMLDivElement>) => {
@@ -238,13 +232,13 @@ function LensView({ path }: { path: string }) {
 			} else if (e.key === "ArrowRight" || e.key === "Enter") {
 				e.preventDefault();
 				const entry = col.entries[cur];
-				if (entry?.navigable) notify({ action: "push", segment: entry.key });
+				if (entry?.navigable) drill(entry.key);
 			} else if (e.key === "ArrowLeft" || e.key === "Escape") {
 				e.preventDefault();
-				notify({ action: "pop" });
+				pop();
 			}
 		},
-		[columns, focused, notify, setFocused],
+		[columns, focused, drill, pop, setFocused],
 	);
 
 	const breadcrumb = useMemo(
@@ -283,7 +277,7 @@ function LensView({ path }: { path: string }) {
 						focused={focused[i] ?? 0}
 						active={i === activeCol}
 						onFocus={(idx) => setFocused(i, idx)}
-						onDrill={(segment) => notify({ action: "push", segment })}
+						onDrill={(segment) => drill(segment)}
 						onSetActive={() => {
 							activeColRef.current = i;
 						}}

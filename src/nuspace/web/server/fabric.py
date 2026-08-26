@@ -10,7 +10,7 @@ bounded timeout, falling back to cancel.
 Per-connection ctx binding (``Session`` on ws) stays inside
 ``ws_endpoint``.
 
-Typical use goes through ``server(app, page_cls=..., ...)`` (defined
+Typical use goes through ``server(app, shell_cls=..., ...)`` (defined
 here) which wraps a ``Provide(NuspaceServer, {...})`` for you.
 """
 
@@ -37,7 +37,7 @@ if TYPE_CHECKING:
     from nu.lang import Nu
     from nu.lang.runtime import Context
 
-    from .page import Page
+    from .page import Shell
 
 
 __all__ = ["NuspaceServer", "server"]
@@ -52,7 +52,7 @@ class NuspaceServer:
         self,
         app: Nu,
         *,
-        page_cls: type[Page],
+        shell_cls: type[Shell],
         host: str = "127.0.0.1",
         port: int = 8080,
         log_level: str = "warning",
@@ -61,7 +61,7 @@ class NuspaceServer:
         shutdown_timeout: float = 5.0,
     ) -> None:
         self._app = app
-        self._page_cls = page_cls
+        self._shell_cls = shell_cls
         self._host = host
         self._port = port
         self._log_level = log_level
@@ -73,7 +73,7 @@ class NuspaceServer:
 
     async def asetup(self, ctx: Context) -> None:
         """Build the FastAPI app, boot uvicorn, wait for ``started``."""
-        fastapi_app = build_fastapi_app(self._app, ctx, page_cls=self._page_cls)
+        fastapi_app = build_fastapi_app(self._app, ctx, shell_cls=self._shell_cls)
         config = uvicorn.Config(
             fastapi_app,
             host=self._host,
@@ -151,7 +151,7 @@ class NuspaceServer:
 def server(
     app: Nu,
     *,
-    page_cls: type[Page],
+    shell_cls: type[Shell],
     host: str = "127.0.0.1",
     port: int = 8080,
     log_level: str = "warning",
@@ -164,7 +164,7 @@ def server(
     Example:
         >>> nu.With(
         ...     nu.kv.rocksdb_navigator(".db", tags=(Space,)),
-        ...     nuspace.web.server.server(ui, page_cls=LensPage, port=8080),
+        ...     nuspace.web.server.server(ui, shell_cls=Nuspace, port=8080),
         ...     body=driver,
         ... )
     """
@@ -172,7 +172,7 @@ def server(
         NuspaceServer,
         {
             "app": app,
-            "page_cls": page_cls,
+            "shell_cls": shell_cls,
             "host": host,
             "port": port,
             "log_level": log_level,

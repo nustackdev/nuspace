@@ -4,21 +4,24 @@ Product-side + protocol notes: ``go/projects/nustackdev/nuspace/lens.md``.
 
 Two moving parts:
 
-- ``LensRef``: a nu.ui Ref. Slot factory stamps the ``root`` Shape class and
-  ``max_rows`` cap on the ref payload (root is Python-only, not shipped over
-  the wire; max_rows rides in mount props so the TS slice can seed).
-  Interactions ``set_path`` / ``push_segment`` / ``pop_segment`` build the
-  outgoing wire payload directly and ship it via the ``NudleSession``.
-  ``path_changed`` returns ``Changed(self)`` so app code can subscribe.
+- ``LensRef``: a nu.ui Ref. Slot factory stamps the ``root`` Shape class
+  and ``max_rows`` cap on the ref payload (root is Python-only, not
+  shipped over the wire; max_rows rides in mount props so the TS slice
+  can seed). The current cursor lives on ``self._payload["path"]`` --
+  server-side observable state. ``set_path`` is the one host-driving
+  verb; ``path_changed()`` returns ``Changed(self)`` so drivers can
+  subscribe to browser notifies.
 
-- ``LensRun``: a Control that owns the per-connection cursor state, subscribes
-  to notifies for the ref, and drives column recomputation on every event.
-  Composed into the app tree; keeps orchestration outside the ref so the ref
-  itself stays a plain surface anyone can drive.
+- ``LensDriver``: per-connection driver. On boot it emits the root
+  column, then loops on browser notifies. Each notify carries the new
+  full path (browser-computed); the driver updates ``ref._payload["path"]``,
+  recomputes columns, and writes ``{path, columns}`` back. Adding new
+  observers (URL syncer, logger, ...) is a sibling ReactForever -- no
+  fork of the driver.
 
 Server-owned wire payload (msgpack-native, per TableRef pattern):
 
-    {"action": "replace", "path": [...segments...], "columns": [...]}
+    {"path": [...segments...], "columns": [...]}
 
 Each column:
 
@@ -26,8 +29,11 @@ Each column:
      "entries": [{"key": str, "kind": str, "preview": str, "navigable": bool}],
      "total": int}
 
-v1 skips delta shipping -- every navigation is a full replace. Delta actions
-(``append`` / ``pop``) land after v1 works end-to-end.
+Browser notify shape (client -> server):
+
+    {"path": [...full new path...]}
+
+v1 skips delta shipping -- every notify triggers a full replace.
 """
 
 from __future__ import annotations
@@ -44,7 +50,7 @@ from nu.domains.shape.refs.sequence import SequenceRef
 from nu.domains.shape.refs.shape import ShapeRef
 from nu.domains.shape.refs.shapes_mapping import ShapesMappingRef
 from nu.engine.structure import Declared
-from nu.lang import Control
+from nu.lang import Command, Control
 from nu.ui.core import Ref, Session
 from nu.ui.core.protocol import Frame
 
@@ -57,7 +63,7 @@ if TYPE_CHECKING:
     from nu.lang.runtime import Runtime
 
 
-__all__ = ["LensRef", "LensRun"]
+__all__ = ["LensDriver", "LensRef"]
 
 
 DEFAULT_MAX_ROWS = 200
@@ -69,11 +75,10 @@ DEFAULT_MAX_ROWS = 200
 class LensRef(Ref):
     """A browsable window onto a Nu Shape.
 
-    Configure once with a root Shape class. The server drives the columns
-    payload; the browser only renders and emits notify frames for user
-    navigation (click a row / press an arrow). External Nu code can drive
-    the cursor by invoking ``set_path`` / ``push_segment`` / ``pop_segment``
-    on this ref.
+    Configure once with a root Shape class. The server owns the path and
+    columns; the browser renders and emits notify frames with the full
+    new path on user navigation. External Nu code drives the cursor by
+    invoking ``set_path`` on this ref.
     """
 
     # Bind the browser factory by name -- LensRef lives outside nu.ui.refs
@@ -92,6 +97,11 @@ class LensRef(Ref):
         super().__init__(address, parent_ref=parent_ref, owner_shape=owner_shape)
         self._payload["lens_root"] = root_shape
         self._payload["lens_max_rows"] = int(max_rows)
+        # Server-side observable cursor. Driver updates this on every
+        # notify; host code updates it via ``set_path``. Stays on the
+        # payload dict (not self.__dict__) because Nu tree rewrites
+        # reuse payload but drop plain attribute assignments.
+        self._payload["path"] = ()
 
     @classmethod
     def slot(
@@ -113,15 +123,7 @@ class LensRef(Ref):
 
     def set_path(self, path: tuple[str, ...]) -> nu.Nu:
         """Replace the cursor with ``path`` and re-emit columns."""
-        return _LensDrive(self, ("replace", tuple(str(s) for s in path), None))
-
-    def push_segment(self, segment: str) -> nu.Nu:
-        """Descend one level by appending ``segment`` to the current path."""
-        return _LensDrive(self, ("push", None, str(segment)))
-
-    def pop_segment(self) -> nu.Nu:
-        """Ascend one level -- drop the last path segment."""
-        return _LensDrive(self, ("pop", None, None))
+        return _LensSetPath(self, tuple(str(s) for s in path))
 
     def path_changed(self) -> nu.Nu:
         """Subscribe to browser NOTIFY frames on this ref."""
@@ -145,14 +147,8 @@ def _slot_kind(ref_cls: type) -> str:
 
 
 def _descend(root: type[Shape], path: tuple[str, ...]) -> StructuredRef:
-    """Build the substrate ref at ``path`` from the root Shape class.
-
-    Uses the class-level SlotDescriptor for the first hop, then bracket
-    access on the resulting refs (works for ShapeRef, MappingRef, ...).
-    """
+    """Build the substrate ref at ``path`` from the root Shape class."""
     if not path:
-        # A "root column" doesn't have a substrate ref; the caller handles
-        # this case by walking the root class's slots directly.
         raise ValueError("_descend needs at least one segment")
     ref = getattr(root, path[0])
     for seg in path[1:]:
@@ -280,28 +276,32 @@ async def _all_columns(
     return out
 
 
-# -- Command: ship a payload -------------------------------------------------
+async def _emit(
+    session: Session,
+    wire_path: str,
+    root: type[Shape],
+    path: tuple[str, ...],
+    max_rows: int,
+    ctx: object,
+) -> None:
+    """Recompute columns and ship one write frame."""
+    columns = await _all_columns(root, path, max_rows, ctx)
+    payload = {"path": list(path), "columns": columns}
+    await session.send(Frame("write", ref=wire_path, payload=payload))
 
 
-class _LensDrive(nu.lang.Command):
-    """Ship one write frame for a LensRef: apply ``op`` to current path, re-emit.
+# -- Command: host-side set_path --------------------------------------------
 
-    Cursor state lives in ``rt.ctx.attrs`` keyed by wire path, so a single
-    connection sees a consistent cursor across ``set_path`` / ``push`` / ``pop``
-    invocations. External Nu code driving the cursor and browser-side notify
-    handling share this same state.
-    """
+
+class _LensSetPath(Command):
+    """Set the cursor to a specific path and re-emit."""
 
     _mutates = Declared(value=frozenset({0}), name="mutates")
     _requires_async = Declared(value=True, name="requires_async")
 
-    def __init__(
-        self,
-        ref: LensRef,
-        op: tuple[str, tuple[str, ...] | None, str | None],
-    ) -> None:
+    def __init__(self, ref: LensRef, path: tuple[str, ...]) -> None:
         super().__init__(ref)
-        self._payload["lens_op"] = op
+        self._payload["lens_target_path"] = tuple(str(s) for s in path)
 
     def _compile(self, nid: int, children: tuple[Callable, ...]) -> Callable:
         def thunk(rt: Runtime) -> None:
@@ -311,7 +311,7 @@ class _LensDrive(nu.lang.Command):
 
     def _acompile(self, nid: int, children: tuple[Callable, ...]) -> Callable:
         ref: LensRef = self._children[0]
-        op = self._payload["lens_op"]
+        target: tuple[str, ...] = self._payload["lens_target_path"]
         root: type[Shape] | None = ref._payload.get("lens_root")
         max_rows: int = ref._payload.get("lens_max_rows", DEFAULT_MAX_ROWS)
         if root is None:
@@ -321,19 +321,8 @@ class _LensDrive(nu.lang.Command):
             session = rt.ctx.get(Session)
             ref_nid = rt.program.children[nid][0]
             wire_path = await ref._aresolve_address(rt, ref_nid)
-            state_key = f"_lens_path::{wire_path}"
-            current = list(rt.ctx.attrs.get(state_key, ()))
-            action, new_path, segment = op
-            if action == "replace":
-                current = list(new_path or ())
-            elif action == "push" and segment is not None:
-                current.append(segment)
-            elif action == "pop" and current:
-                current.pop()
-            rt.ctx.attrs[state_key] = tuple(current)
-            columns = await _all_columns(root, tuple(current), max_rows, rt.ctx)
-            payload = {"action": "replace", "path": list(current), "columns": columns}
-            await session.send(Frame("write", ref=wire_path, payload=payload))
+            ref._payload["path"] = target
+            await _emit(session, wire_path, root, target, max_rows, rt.ctx)
 
         return athunk
 
@@ -341,14 +330,17 @@ class _LensDrive(nu.lang.Command):
 # -- Driver ------------------------------------------------------------------
 
 
-class LensRun(Control):
+class LensDriver(Control):
     """Per-connection driver: mount, subscribe, react.
 
-    On mount ships the initial (empty path) column so the browser paints
-    something. Then subscribes to notify frames on the ref and applies the
-    action payload to the cursor, re-emitting columns each time.
+    Ships the initial (empty path) column on mount so the browser paints
+    immediately. Then loops on notifies: each carries a browser-computed
+    full path; the driver stores it on ``ref._payload["path"]``,
+    recomputes columns, and writes back.
 
     Runs forever inside the app tree, alongside any other reactive body.
+    Adding another observer on ``ref.path_changed()`` is a sibling
+    ReactForever -- no fork here.
     """
 
     _mutates = Declared(value=frozenset(), name="mutates")
@@ -360,7 +352,7 @@ class LensRun(Control):
 
     def _compile(self, nid: int, children: tuple[Callable, ...]) -> Callable:
         def thunk(rt: Runtime) -> None:
-            raise RuntimeError("LensRun is async-only; use nu.arun")
+            raise RuntimeError("LensDriver is async-only; use nu.arun")
 
         return thunk
 
@@ -375,17 +367,10 @@ class LensRun(Control):
             session = rt.ctx.get(Session)
             ref_nid = rt.program.children[nid][0]
             wire_path = await ref._aresolve_address(rt, ref_nid)
-            state_key = f"_lens_path::{wire_path}"
-            if state_key not in rt.ctx.attrs:
-                rt.ctx.attrs[state_key] = ()
 
-            async def emit() -> None:
-                path = tuple(rt.ctx.attrs[state_key])
-                columns = await _all_columns(root, path, max_rows, rt.ctx)
-                payload = {"action": "replace", "path": list(path), "columns": columns}
-                await session.send(Frame("write", ref=wire_path, payload=payload))
-
-            await emit()
+            # initial paint
+            path = tuple(ref._payload.get("path", ()))
+            await _emit(session, wire_path, root, path, max_rows, rt.ctx)
 
             loop = asyncio.get_running_loop()
             queue: asyncio.Queue[object] = asyncio.Queue()
@@ -400,22 +385,12 @@ class LensRun(Control):
                     payload = await queue.get()
                     if not isinstance(payload, dict):
                         continue
-                    action = payload.get("action")
-                    current = list(rt.ctx.attrs[state_key])
-                    if action == "push":
-                        seg = payload.get("segment")
-                        if seg is None:
-                            continue
-                        current.append(str(seg))
-                    elif action == "pop":
-                        if current:
-                            current.pop()
-                    elif action == "replace":
-                        current = [str(s) for s in payload.get("path", [])]
-                    else:
+                    raw_path = payload.get("path")
+                    if not isinstance(raw_path, (list, tuple)):
                         continue
-                    rt.ctx.attrs[state_key] = tuple(current)
-                    await emit()
+                    new_path = tuple(str(s) for s in raw_path)
+                    ref._payload["path"] = new_path
+                    await _emit(session, wire_path, root, new_path, max_rows, rt.ctx)
             finally:
                 sub.unbind(on_notify)
                 sub.close()
