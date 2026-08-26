@@ -1,14 +1,17 @@
 // LensRef -- Miller-columns browser for any Nu Shape.
 //
-// Server-owned. Every `write` frame carries the full new state:
+// Browser owns the cursor. Slice starts with `path: []`; the server
+// ships the root column on mount (`{path: [], columns: [root]}`) and
+// the slice takes it from there. Every `write` frame carries the full
+// new state:
 //   {path: string[], columns: Column[]}
-// The browser mirrors that into the slice and renders.
 //
 // Notify frames flow the other way with the browser-computed full path:
 //   {path: string[]}
 // Click / ArrowRight / Enter -> push a segment, ArrowLeft / Escape ->
 // pop -- always sent as an already-resolved full path so the server
-// stays a pure "recompute columns for whatever path you're given" loop.
+// stays a pure "recompute columns for whatever path you're given" loop
+// with no runtime state of its own. Reload starts back at root.
 // Up / Down move focus locally in the active column with no wire hit.
 //
 // Column kind palette leans on the kit chart-N categorical tokens so we

@@ -4,20 +4,21 @@ Product-side + protocol notes: ``go/projects/nustackdev/nuspace/lens.md``.
 
 Two moving parts:
 
-- ``LensRef``: a nu.ui Ref. Slot factory stamps the ``root`` Shape class
-  and ``max_rows`` cap on the ref payload (root is Python-only, not
-  shipped over the wire; max_rows rides in mount props so the TS slice
-  can seed). The current cursor lives on ``self._payload["path"]`` --
-  server-side observable state. ``set_path`` is the one host-driving
-  verb; ``path_changed()`` returns ``Changed(self)`` so drivers can
-  subscribe to browser notifies.
+- ``LensRef``: a nu.ui Ref. Pure wire handle -- payload is stamped once
+  in ``__init__`` (root Shape class, max_rows cap) and never mutated
+  afterward. Root is Python-only, not shipped over the wire; max_rows
+  rides in mount props so the TS slice can seed. ``set_path`` is the
+  one host-driving verb; ``path_changed()`` returns ``Changed(self)``
+  so drivers can subscribe to browser notifies. The cursor itself
+  lives in the browser slice (``value.path``); server holds no runtime
+  state between notifies.
 
 - ``LensDriver``: per-connection driver. On boot it emits the root
-  column, then loops on browser notifies. Each notify carries the new
-  full path (browser-computed); the driver updates ``ref._payload["path"]``,
-  recomputes columns, and writes ``{path, columns}`` back. Adding new
-  observers (URL syncer, logger, ...) is a sibling ReactForever -- no
-  fork of the driver.
+  column with an empty path. Then loops on browser notifies: each
+  carries a browser-computed full path, driver recomputes columns for
+  that path and writes ``{path, columns}`` back. No ref-side storage.
+  Adding new observers (URL syncer, logger, ...) is a sibling
+  ReactForever -- no fork of the driver.
 
 Server-owned wire payload (msgpack-native, per TableRef pattern):
 
@@ -97,11 +98,10 @@ class LensRef(Ref):
         super().__init__(address, parent_ref=parent_ref, owner_shape=owner_shape)
         self._payload["lens_root"] = root_shape
         self._payload["lens_max_rows"] = int(max_rows)
-        # Server-side observable cursor. Driver updates this on every
-        # notify; host code updates it via ``set_path``. Stays on the
-        # payload dict (not self.__dict__) because Nu tree rewrites
-        # reuse payload but drop plain attribute assignments.
-        self._payload["path"] = ()
+        # No runtime state on the ref. Cursor lives in the browser
+        # slice; server recomputes columns from the path each notify
+        # carries. Mutating _payload after construction would bleed
+        # across Nu tree rewrites that reuse the payload reference.
 
     @classmethod
     def slot(
@@ -321,7 +321,6 @@ class _LensSetPath(Command):
             session = rt.ctx.get(Session)
             ref_nid = rt.program.children[nid][0]
             wire_path = await ref._aresolve_address(rt, ref_nid)
-            ref._payload["path"] = target
             await _emit(session, wire_path, root, target, max_rows, rt.ctx)
 
         return athunk
@@ -333,10 +332,11 @@ class _LensSetPath(Command):
 class LensDriver(Control):
     """Per-connection driver: mount, subscribe, react.
 
-    Ships the initial (empty path) column on mount so the browser paints
+    Ships the root column (empty path) on mount so the browser paints
     immediately. Then loops on notifies: each carries a browser-computed
-    full path; the driver stores it on ``ref._payload["path"]``,
-    recomputes columns, and writes back.
+    full path; the driver recomputes columns for that path and writes
+    back. Path is a loop-local variable, never stored on the ref -- the
+    browser slice owns the cursor.
 
     Runs forever inside the app tree, alongside any other reactive body.
     Adding another observer on ``ref.path_changed()`` is a sibling
@@ -368,9 +368,11 @@ class LensDriver(Control):
             ref_nid = rt.program.children[nid][0]
             wire_path = await ref._aresolve_address(rt, ref_nid)
 
-            # initial paint
-            path = tuple(ref._payload.get("path", ()))
-            await _emit(session, wire_path, root, path, max_rows, rt.ctx)
+            # initial paint: root column, empty path. Reload starts here
+            # every time -- persistence across reload is an explicit v2
+            # choice (backing the cursor with nu.mem/nu.kv), not an
+            # accidental side effect of server-held state.
+            await _emit(session, wire_path, root, (), max_rows, rt.ctx)
 
             loop = asyncio.get_running_loop()
             queue: asyncio.Queue[object] = asyncio.Queue()
@@ -389,7 +391,7 @@ class LensDriver(Control):
                     if not isinstance(raw_path, (list, tuple)):
                         continue
                     new_path = tuple(str(s) for s in raw_path)
-                    ref._payload["path"] = new_path
+                    # Loop-local; no ref-side storage.
                     await _emit(session, wire_path, root, new_path, max_rows, rt.ctx)
             finally:
                 sub.unbind(on_notify)
