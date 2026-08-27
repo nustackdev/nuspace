@@ -117,7 +117,7 @@ def test_enumerate_ui_refs_namespaces_by_section_id():
         "nu.ui.InputRef(path + '.text').set(nu.Str('x'))"
         " >> nu.ui.StatRef(path + '.echo').set_value(nu.Str('y'))"
     )
-    fields = _enumerate_ui_refs(parse_snippet(src, "sections.s_abc"))
+    fields = _enumerate_ui_refs(parse_snippet(src, "sections.s_abc"), "sections.s_abc")
     assert fields == [
         {"path": "sections.s_abc.text", "type": "InputRef"},
         {"path": "sections.s_abc.echo", "type": "StatRef"},
@@ -129,12 +129,23 @@ def test_enumerate_ui_refs_dedupes_by_type_and_path():
         "nu.ReactForever(nu.ui.InputRef(path + '.t').changed(),"
         " nu.ui.InputRef(path + '.t').set(nu.Str(nu.ui.InputRef(path + '.t'))))"
     )
-    fields = _enumerate_ui_refs(parse_snippet(src, "sections.s1"))
+    fields = _enumerate_ui_refs(parse_snippet(src, "sections.s1"), "sections.s1")
     assert fields == [{"path": "sections.s1.t", "type": "InputRef"}]
 
 
 def test_enumerate_ui_refs_ignores_pure_kv_snippets():
-    assert _enumerate_ui_refs(parse_snippet("nu.Str('no ui here')", "sections.s1")) == []
+    term = parse_snippet("nu.Str('no ui here')", "sections.s1")
+    assert _enumerate_ui_refs(term, "sections.s1") == []
+
+
+def test_enumerate_ui_refs_skips_refs_owned_by_another_section():
+    """A borrowed ref stays live but mounts only in the section that owns it."""
+    src = (
+        "nu.ui.StatRef(path + '.echo').set_value("
+        "nu.Len(nu.Str(nu.ui.InputRef('sections.s_other.text'))))"
+    )
+    fields = _enumerate_ui_refs(parse_snippet(src, "sections.s_mine"), "sections.s_mine")
+    assert fields == [{"path": "sections.s_mine.echo", "type": "StatRef"}]
 
 
 def test_fold_joins_sections_in_parallel():

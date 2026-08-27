@@ -220,22 +220,32 @@ def _page_node(data: object, pid: str | None, depth: int) -> dict[str, Any]:
 # -- Section mounting --------------------------------------------------------
 
 
-def _enumerate_ui_refs(term: nu.Nu) -> list[dict[str, Any]]:
-    """Walk a Nu term, return one mount field per unique ``nu.ui.Ref`` inside.
+def _enumerate_ui_refs(term: nu.Nu, prefix: str) -> list[dict[str, Any]]:
+    """Walk a Nu term, return one mount field per ``nu.ui.Ref`` it *owns*.
 
     Ported from the mvp. Deduplicated by ``(type, path)`` -- a snippet
     that touches the same InputRef twice (read + write) still produces
     one field. A bare ui Ref has no parent chain, so its wire path is
     exactly the segment string the snippet passed in, which is why
     ``parse_snippet`` seeds ``path = "sections.<section_id>"``.
+
+    **Path is the mounting mechanism.** Only refs under ``prefix`` mount
+    here. A snippet may freely name a ref belonging to another section
+    (to read its value, or to write into it) -- that is a live
+    cross-section wire and it keeps working, because both sections'
+    terms run in the same folded tree against the same browser slices.
+    But the section that *names* the path is the one that mounts it, so
+    a borrowed ref renders once, in its owner, not again in every
+    section that mentions it.
     """
     seen: set[tuple[str, str]] = set()
     fields: list[dict[str, Any]] = []
+    own = prefix + "."
 
     def visit(node: object) -> None:
         if isinstance(node, nu.ui.Ref):
             segment = node._payload.get("segment")
-            if isinstance(segment, str):
+            if isinstance(segment, str) and (segment == prefix or segment.startswith(own)):
                 wire_type = _wire_type(type(node))
                 key = (wire_type, segment)
                 if key not in seen:
@@ -368,8 +378,9 @@ class PagesDriver(Control):
                     if mode == "display" and snippet.strip():
                         # One bad snippet degrades its own section only.
                         try:
-                            term = parse_snippet(snippet, f"sections.{sid}")
-                            entry["fields"] = _enumerate_ui_refs(term)
+                            prefix = f"sections.{sid}"
+                            term = parse_snippet(snippet, prefix)
+                            entry["fields"] = _enumerate_ui_refs(term, prefix)
                             terms.append(term)
                         except Exception as exc:
                             entry["error"] = f"{type(exc).__name__}: {exc}"
