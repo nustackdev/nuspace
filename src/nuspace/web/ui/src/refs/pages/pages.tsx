@@ -73,6 +73,48 @@ nu.ui.StatRef(path + ".echo").set_value(nu.Str("")) >> nu.ReactForever(
     nu.ui.StatRef(path + ".echo").set_value(nu.Str(nu.ui.InputRef(path + ".text"))),
 )`;
 
+// Section templates. Each is just snippet source shipped with
+// `on_section_create` -- the platform does not know these exist, they
+// are authoring shortcuts for shapes we reach for a lot. Every ui ref
+// is named under `path`, so it mounts in the section that owns it.
+const TEXT_SNIPPET = [
+	"nu.ui.InputRef(path + '.text').set(nu.Str(Space.state[path + '.text']))",
+	" >> nu.ui.ButtonRef(path + '.submit').set('Submit')",
+	" >> nu.ui.TextRef(path + '.out').set(nu.Str(Space.state[path + '.text']))",
+	" >> (nu.ReactForever(nu.ui.InputRef(path + '.text').changed(),",
+	" Space.state[path + '.text'].set(nu.Str(nu.ui.InputRef(path + '.text'))))",
+	" | nu.ReactForever(nu.ui.ButtonRef(path + '.submit').clicked(),",
+	" nu.ui.TextRef(path + '.out').set(nu.Str(nu.ui.InputRef(path + '.text')))))",
+].join("");
+
+// Prompt and source are both inputs, so the whole call is adjustable
+// from the page. Result lands in kv and paints into a TextRef.
+//
+// `source` holds a *path*, not text: `InputRef(InputRef(path +
+// '.source'))` resolves the inner ref to a string and uses it as the
+// outer ref's segment, so typing `sections.s_echo.text` pulls that
+// ref's live value. The outer ref's segment is a term rather than a
+// str, so field enumeration skips it -- it borrows, it does not mount.
+const LLM_SNIPPET = [
+	"(lambda M: nu.With(",
+	"nu.llm.ollama(M, host='red', model='qwen2.5:7b-instruct'),",
+	" body=nu.ui.InputRef(path + '.prompt').set(nu.Str(Space.state[path + '.prompt']))",
+	" >> nu.ui.InputRef(path + '.source').set(nu.Str(Space.state[path + '.source']))",
+	" >> nu.ui.ButtonRef(path + '.go').set('Run')",
+	" >> nu.ui.TextRef(path + '.out').set(nu.Str(Space.state[path + '.out']))",
+	" >> (nu.ReactForever(nu.ui.InputRef(path + '.prompt').changed(),",
+	" Space.state[path + '.prompt'].set(nu.Str(nu.ui.InputRef(path + '.prompt'))))",
+	" | nu.ReactForever(nu.ui.InputRef(path + '.source').changed(),",
+	" Space.state[path + '.source'].set(nu.Str(nu.ui.InputRef(path + '.source'))))",
+	" | nu.ReactForever(nu.ui.ButtonRef(path + '.go').clicked(),",
+	" Space.state[path + '.out'].set(nu.Str(nu.Dict(M.chat(",
+	"prompt=nu.Str(nu.ui.InputRef(path + '.prompt')) + nu.Str(' ')",
+	" + nu.Str(nu.ui.InputRef(nu.ui.InputRef(path + '.source')))))['text']))",
+	" >> nu.ui.TextRef(path + '.out').set(nu.Str(Space.state[path + '.out']))))",
+	"))(type(nu.Service)('LLM', (nu.Service,), ",
+	"{'chat': nu.llm.ChatRef.method(temperature=0.3)}))",
+].join("");
+
 // -- Slice -------------------------------------------------------------------
 
 const factory: SliceFactory = (path, ctx, _props) => ({
@@ -355,21 +397,36 @@ function PagesView({ path }: { path: string }) {
 								/>
 							))}
 							{mode === "code" ? (
-								<button
-									type="button"
-									onClick={() => {
-										const name = window.prompt("new section name", "section");
-										if (!name) return;
-										notify({
-											op: "on_section_create",
-											page_path: pagePath,
-											name,
-										});
-									}}
-									className="text-sm text-muted-foreground hover:text-text-primary border border-dashed border-border/60 rounded-md py-2 hover:bg-muted/40"
-								>
-									+ new section
-								</button>
+								<div className="flex items-center gap-2">
+									{(
+										[
+											["+ new section", "section", ""],
+											["+ text", "text", TEXT_SNIPPET],
+											["+ llm", "llm", LLM_SNIPPET],
+										] as const
+									).map(([label, defaultName, snippet]) => (
+										<button
+											key={label}
+											type="button"
+											onClick={() => {
+												const name = window.prompt(
+													"new section name",
+													defaultName,
+												);
+												if (!name) return;
+												notify({
+													op: "on_section_create",
+													page_path: pagePath,
+													name,
+													snippet,
+												});
+											}}
+											className="flex-1 text-sm text-muted-foreground hover:text-text-primary border border-dashed border-border/60 rounded-md py-2 hover:bg-muted/40"
+										>
+											{label}
+										</button>
+									))}
+								</div>
 							) : page.sections.length === 0 ? (
 								<div className="text-sm text-muted-foreground font-mono">
 									no sections yet -- switch to code to add one
@@ -412,6 +469,24 @@ function ModeToggle({
 
 // -- Section card ------------------------------------------------------------
 
+// The section's path prefix is the mounting mechanism -- every ui ref a
+// snippet names under it mounts here, and other sections address this
+// section's state through it. Worth showing in both modes, and worth
+// making one click to copy.
+function PathTag({ section }: { section: SectionEntry }) {
+	const path = `sections.${section.id}`;
+	return (
+		<button
+			type="button"
+			title="copy section path"
+			onClick={() => void navigator.clipboard?.writeText(path)}
+			className="self-start text-[10px] text-muted-foreground font-mono px-1.5 py-0.5 rounded bg-muted/50 hover:bg-muted hover:text-text-primary"
+		>
+			{path}
+		</button>
+	);
+}
+
 function SectionCard({
 	section,
 	mode,
@@ -435,7 +510,8 @@ function SectionCard({
 
 	if (mode === "display") {
 		return (
-			<section className="rounded-md border border-border/60 bg-card p-4">
+			<section className="rounded-md border border-border/60 bg-card p-4 flex flex-col gap-2">
+				<PathTag section={section} />
 				{section.error ? (
 					<div className="text-xs font-mono text-destructive whitespace-pre-wrap">
 						{section.name}: {section.error}
@@ -467,9 +543,7 @@ function SectionCard({
 					onChange={(e) => onDraft({ ...current, name: e.target.value })}
 					className="flex-1 min-w-0 bg-transparent border border-border/60 rounded-md px-2 py-1 text-sm font-mono focus:outline-none focus:border-primary"
 				/>
-				<span className="text-[10px] text-muted-foreground font-mono">
-					{section.id}
-				</span>
+				<PathTag section={section} />
 				<button
 					type="button"
 					onClick={onDelete}
