@@ -6,7 +6,8 @@ and the drivers that back the live refs.
 - Apps page hosts one ``AppsRef`` (nested tree + code editor). It fills
   its own content region -- no sidebar slot, ``App.tsx`` gives it the
   full main area.
-- Pages page still carries a ``SidebarRef`` stub. Its ref lands later.
+- Pages page hosts one ``PagesRef`` (nested page tree + section
+  canvas). Like Apps it fills its own content region full-bleed.
 - Lens page is a bare miller-columns component; no sidebar.
 
 Driver activation: drivers always run. All three pages mount at boot
@@ -24,7 +25,8 @@ from nuspace.web.refs import (
     HeaderRef,
     LensDriver,
     LensRef,
-    SidebarRef,
+    PagesDriver,
+    PagesRef,
 )
 from nuspace.web.server import Page, Pages, Shell
 
@@ -48,9 +50,9 @@ class AppsPage(Page):
 
 
 class PagesPage(Page):
-    """Pages section. v1: sidebar placeholder + empty content region."""
+    """Pages section. PagesRef owns the whole tab (tree + canvas)."""
 
-    sidebar = SidebarRef.slot(title="Pages")
+    pages = PagesRef.slot(space_root=Space)
 
 
 class LensPage(Page):
@@ -106,4 +108,8 @@ def build_ui() -> nu.Nu:
     # pattern) and stays reliable for v1 -- if external code mutates
     # the tree without going through this driver, ship a tree by
     # sending a synthetic notify.
-    return LensDriver(LensPage.lens) | AppsFeedbackDriver(apps)
+    return (
+        LensDriver(LensPage.lens)
+        | AppsFeedbackDriver(apps)
+        | PagesDriver(PagesPage.pages)
+    )

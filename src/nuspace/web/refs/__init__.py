@@ -5,11 +5,14 @@
 - ``LensRef`` / ``LensDriver``: Miller-columns browser for any Nu Shape.
 - ``AppsRef`` / ``AppsFeedbackDriver`` / ``AppsShipTree``: nested apps
   tree + code editor over ``Space.apps``.
+- ``PagesRef`` / ``PagesDriver``: nested page tree + section canvas
+  over ``Space.pages``, with code/display modes.
 """
 
 from nuspace.web.refs.apps import AppsFeedbackDriver, AppsRef, AppsShipTree
 from nuspace.web.refs.header import HeaderRef
 from nuspace.web.refs.lens import LensDriver, LensRef
+from nuspace.web.refs.pages import PagesDriver, PagesRef
 from nuspace.web.refs.sidebar import SidebarRef
 
 
@@ -20,5 +23,7 @@ __all__ = [
     "HeaderRef",
     "LensDriver",
     "LensRef",
+    "PagesDriver",
+    "PagesRef",
     "SidebarRef",
 ]

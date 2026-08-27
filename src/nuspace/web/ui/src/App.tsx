@@ -5,14 +5,16 @@ import { useRoute } from "./router";
 
 // Split a page's fields into (sidebar, content). Pages that carry a
 // SidebarRef slot get a two-column layout; the rest take the full
-// width. AppsRef owns its own inner layout (tree + editor) so we do
-// NOT split it -- it renders alone at full bleed.
+// width. AppsRef and PagesRef own their inner layout (tree + editor /
+// canvas) so we do NOT split them -- they render alone at full bleed.
 function splitFields(fields: MountField[]): {
 	sidebar: MountField | null;
 	content: MountField[];
 	fullBleed: boolean;
 } {
-	const owns = fields.find((f) => f.type === "AppsRef");
+	const owns = fields.find(
+		(f) => f.type === "AppsRef" || f.type === "PagesRef",
+	);
 	if (owns) {
 		return { sidebar: null, content: [owns], fullBleed: true };
 	}

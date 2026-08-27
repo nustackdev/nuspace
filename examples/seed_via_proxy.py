@@ -31,12 +31,22 @@ TEXT_SNIPPET = "nu.Str('added via proxy')"
 
 
 seed = (
-    Space.apps.add(TEXT_SNIPPET, policy="always", app_id="a_proxy")
-    >> Space.pages.set_item("via-proxy", {"title": "Via Proxy", "sections": {}})
-    >> Space.pages["via-proxy"].sections.add(
-        "nu.Str('proxy-planted section')",
-        policy="on_navigate",
-        section_id="s_from_proxy",
+    Space.apps.init({"name": "", "apps": {}, "groups": {}})
+    >> Space.apps.apps.add(snippet=TEXT_SNIPPET, policy="always", app_id="a_proxy")
+    >> Space.pages.init({"title": "Space", "sections": {}, "pages": {}})
+    >> Space.pages.pages.set_item(
+        "p_via_proxy",
+        {
+            "title": "Via Proxy",
+            "sections": {
+                "s_from_proxy": {
+                    "name": "from proxy",
+                    "snippet": "nu.Str('proxy-planted section')",
+                    "policy": "on_navigate",
+                },
+            },
+            "pages": {},
+        },
     )
 )
 

@@ -27,6 +27,23 @@ DB_PATH = str(Path(__file__).parent / "nuspace_demo.db")
 
 # --- Seed (idempotent) -------------------------------------------------------
 
+# A section snippet is a python expression returning a Nu term, eval'd with
+# {nu, Space, path} in scope. `path` is "sections.<section_id>", so every ui
+# ref the snippet mints is namespaced under the section that owns it -- that
+# is how rendered elements map back to their section. State goes to
+# Space.state (a bare nu.kv.StrRef has no owner Shape and would not resolve
+# against a tags=(Space,) navigator).
+ECHO_SNIPPET = (
+    "nu.ui.InputRef(path + '.text').set(nu.Str(Space.state[path + '.text']))"
+    " >> nu.ui.StatRef(path + '.echo').set_label(nu.Str('echo'))"
+    " >> nu.ui.StatRef(path + '.echo').set_value(nu.Str(Space.state[path + '.text']))"
+    " >> nu.ReactForever("
+    "nu.ui.InputRef(path + '.text').changed(),"
+    " Space.state[path + '.text'].set(nu.Str(nu.ui.InputRef(path + '.text')))"
+    " >> nu.ui.StatRef(path + '.echo').set_value(nu.Str(nu.ui.InputRef(path + '.text')))"
+    ")"
+)
+
 
 def _seed() -> nu.Nu:
     return (
@@ -75,15 +92,26 @@ def _seed() -> nu.Nu:
                 "policy": "always",
             },
         )
-        # Legacy pages seed (Pages tab still shows the sidebar stub for now).
-        >> Space.pages.set_item("home", {"title": "Home", "sections": {}})
-        >> Space.pages["home"].sections.add(
-            name="welcome",
-            snippet="nu.Str('welcome section')",
-            policy="on_navigate",
-            section_id="s_welcome",
+        # Pages: a root Page whose children are the top-level pages, exact
+        # mirror of Space.apps / Group. The root page is real and can carry
+        # sections of its own.
+        >> Space.pages.init({"title": "Space", "sections": {}, "pages": {}})
+        >> Space.pages.pages.set_item(
+            "p_home",
+            {
+                "title": "Home",
+                "sections": {
+                    "s_echo": {
+                        "name": "echo",
+                        "snippet": ECHO_SNIPPET,
+                        "policy": "on_navigate",
+                    },
+                },
+                "pages": {
+                    "p_notes": {"title": "Notes", "sections": {}, "pages": {}},
+                },
+            },
         )
-        >> Space.pages.set_item("about", {"title": "About", "sections": {}})
     )
 
 
@@ -103,3 +131,18 @@ app = nu.With(
 if __name__ == "__main__":
     print(f"nuspace demo: rocksdb at {DB_PATH!r}, http://127.0.0.1:8080")
     asyncio.run(nu.arun(app))
+
+
+_ = (
+    nu.ui.StatRef(path + ".echo").set_label(nu.Str("echo"))
+    >> nu.ui.StatRef(path + ".echo").set_value(
+        nu.Len(nu.Str(Space.state[other_section_path + ".text"]))
+    )
+    >> nu.ReactForever(
+        nu.ui.InputRef(other_section_path + ".text").changed(),
+        Space.state[path + ".text"].set(nu.Str(nu.ui.InputRef(other_section_path + ".text")))
+        >> nu.ui.StatRef(path + ".echo").set_value(
+            nu.Len(nu.Str(nu.ui.InputRef(other_section_path + ".text")))
+        ),
+    )
+)
