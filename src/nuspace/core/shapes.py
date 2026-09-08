@@ -41,11 +41,28 @@ class App(nu.Shape):
 
 
 class Section(nu.Shape):
-    """One UI-orchestration unit inside a page."""
+    """One block on a page.
+
+    ``kind`` splits the two things a block can be:
+
+    - ``prose``   -- one prose island. ``snippet`` holds markdown.
+      Contiguous prose is one section, not one per paragraph; splitting
+      is explicit. Never compiled, never runs.
+    - ``program`` -- a Nu program. ``snippet`` holds Python source
+      evaluated with ``{nu, Space, path}``.
+
+    ``order`` is the block's position on the page. Dict-keyed sections
+    sort by ``mint_ordered_id`` (creation time) by default, which is
+    right until someone drags one; ``order`` is what makes reordering
+    expressible. The Pages driver renormalizes it to ``index * 10``
+    after every structural change.
+    """
 
     name = nu.kv.StrRef.slot()
     snippet = nu.kv.StrRef.slot()
     policy = nu.kv.StrRef.slot()
+    kind = nu.kv.StrRef.slot()
+    order = nu.kv.IntRef.slot()
 
 
 class Page(nu.Shape):

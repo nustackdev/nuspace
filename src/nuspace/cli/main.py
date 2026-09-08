@@ -31,4 +31,5 @@ def cli(ctx: click.Context) -> None:
 
 
 def main() -> None:
+    """Console-script entry point."""
     cli()

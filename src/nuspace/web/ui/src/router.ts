@@ -1,17 +1,17 @@
 // Tiny nested-path router for nuspace.
 //
-// Three top-level pages -- /apps, /pages, /lens -- each with deep paths
-// (e.g. /apps/ops/cron/foo). We split window.location.pathname into
-// (top, path[]) so the header tabs pick a page and each page's ref owns
-// its own deeper navigation.
+// Two top-level surfaces for now -- /pages and /lens -- each with deep paths
+// (e.g. /pages/p_home/p_notes). We split window.location.pathname into
+// (top, path[]) so the shell picks a surface and each surface's ref owns its
+// own deeper navigation. Apps comes back when apps do.
 //
 // Not part of the nu.ui bridge -- purely browser-side.
 
 import { useSyncExternalStore } from "react";
 
-export const TOPS = ["apps", "pages", "lens"] as const;
+export const TOPS = ["pages", "lens"] as const;
 export type Top = (typeof TOPS)[number];
-export const DEFAULT_TOP: Top = "apps";
+export const DEFAULT_TOP: Top = "pages";
 
 export type Route = { top: Top; path: string[] };
 
@@ -27,6 +27,14 @@ function _split(pathname: string): Route {
 function _join(top: Top, path: string[]): string {
 	const encoded = path.map(encodeURIComponent).join("/");
 	return encoded.length > 0 ? `/${top}/${encoded}` : `/${top}`;
+}
+
+// Per-surface deep path, remembered across tab switches. Flipping to /lens and
+// back should return you to the page you were reading, not to the root.
+const lastPath: Record<string, string[]> = {};
+
+export function rememberedPath(top: Top): string[] {
+	return lastPath[top] ?? [];
 }
 
 const subscribers = new Set<() => void>();
@@ -60,6 +68,7 @@ function getSnapshot(): Route {
 	if (key !== _cachedKey) {
 		_cached = next;
 		_cachedKey = key;
+		lastPath[next.top] = next.path;
 	}
 	return _cached;
 }
@@ -73,10 +82,12 @@ export function navigate(target: string | { top: Top; path?: string[] }): void {
 		typeof target === "string" ? target : _join(target.top, target.path ?? []);
 	if (window.location.pathname === url) return;
 	window.history.pushState({}, "", url);
+	const r = _split(url);
+	lastPath[r.top] = r.path;
 	for (const cb of subscribers) cb();
 }
 
-// Landing bootstrap. Bare "/" (or any unknown top) becomes /apps.
+// Landing bootstrap. Bare "/" (or any unknown top) becomes /pages.
 export function ensureLanding(): void {
 	const p = window.location.pathname;
 	const head = p.split("/").filter(Boolean)[0] ?? "";

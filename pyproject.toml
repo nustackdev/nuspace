@@ -11,7 +11,7 @@ license = "AGPL-3.0-or-later"
 authors = [{ name = "Gor Arakelyan", email = "gorarkln@gmail.com" }]
 requires-python = ">=3.10"
 dependencies = [
-    "nustack-py>=0.1.17",
+    "nustd[kv]>=0.2.0",
     "typing-extensions>=4.7.0",
     "click>=8.0",
     "rich>=10.7",
@@ -39,12 +39,12 @@ classifiers = [
 
 [project.optional-dependencies]
 ui = [
-    "nustack-py[ui]>=0.1.17",
+    "nustd[ui]>=0.2.0",
     "nuspace-ui>=0.0.0",
 ]
 all = [
     "nuspace-py[ui]",
-    "nustack-py[all]>=0.1.17",
+    "nustd[all]>=0.2.0",
 ]
 
 [project.urls]
@@ -67,7 +67,9 @@ exclude = [
 
 [tool.uv.sources]
 nuspace-ui = { path = "./src/nuspace/web/ui" }
-nustack-py = { path = "../nu", editable = true }
+nucore = { path = "../nu/packages/nucore", editable = true }
+nustd = { path = "../nu/packages/nustd", editable = true }
+nucli = { path = "../nu/packages/nucli", editable = true }
 
 [tool.uv]
 default-groups = ["dev"]

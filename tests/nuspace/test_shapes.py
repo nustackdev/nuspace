@@ -65,13 +65,6 @@ def test_state_slot_is_addressable():
     assert isinstance(Space.state["anything"], nu.Nu)
 
 
-def test_run_returns_eval_term():
-    run_term = Space.apps.apps["a_test"].run()
-    assert isinstance(run_term, nu.Nu)
-    # PyCall+Eval structure
-    assert type(run_term).__name__ == "Eval"
-
-
 def test_ordered_ids_sort_by_creation():
     ids = [mint_ordered_id("s") for _ in range(5)]
     assert ids == sorted(ids)

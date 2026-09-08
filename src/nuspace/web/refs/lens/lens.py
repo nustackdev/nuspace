@@ -104,7 +104,7 @@ class LensRef(Ref):
         # across Nu tree rewrites that reuse the payload reference.
 
     @classmethod
-    def slot(
+    def slot(  # noqa: D102
         cls,
         *,
         root: type[Shape],
@@ -227,7 +227,7 @@ async def _leaf_column(
     term = auto_flow_atomic(ref, scope=root)
     try:
         value, _ = await nu.arun(term, ctx)  # type: ignore[arg-type]
-    except Exception as exc:  # noqa: BLE001 -- surface any error as an entry
+    except Exception as exc:
         value = f"<error: {exc!r}>"
     entries = [
         {"key": "value", "kind": "leaf", "preview": _preview(value), "navigable": False},

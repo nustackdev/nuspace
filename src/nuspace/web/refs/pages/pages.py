@@ -1,61 +1,77 @@
-"""PagesRef -- nested page tree + section canvas over ``Space.pages``.
+"""PagesRef -- the nuspace Pages editor: page tree + block canvas.
 
-One ref owns the whole Pages tab, the way ``AppsRef`` owns the Apps tab.
+One ref owns the whole Pages surface.
 
-- ``PagesRef``: a nu.ui Ref. Pure wire handle. Payload is stamped once
-  in ``__init__`` (the ``space_root`` Shape class) and never mutated
-  after -- all runtime state lives in the browser slice or in the
-  driver's per-connection closure. Exposes two host-driven Write
-  commands (``set_tree``, ``set_page``) plus ``feedback()``.
+- ``PagesRef``: a nu.ui Ref. Pure wire handle. Payload is stamped once in
+  ``__init__`` (the ``space_root`` Shape class) and never mutated after.
+  All runtime state lives in the browser slice or in the driver's
+  per-connection closure -- mutating ``_payload`` after construction
+  bleeds across Nu tree rewrites that share the payload reference.
 
-- ``PagesDriver``: Control. Per-connection. Ships the sidebar tree on
-  mount, subscribes to this ref's wire path, dispatches each browser
-  notify into substrate writes, and explicitly re-ships tree / page
-  after every write it makes (nu has no deep-wildcard reactive
-  subscription, so the driver owns the invalidation).
+- ``PagesDriver``: Control, one per connection. Ships the page tree on
+  boot, subscribes to this ref's wire path, dispatches each browser
+  notify into substrate writes, and re-ships explicitly after every write
+  it makes (nu has no deep-wildcard reactive subscription, so the driver
+  owns invalidation).
 
-The driver also owns the *section body task*. A page's sections are Nu
-snippets; when the browser is in display mode on a page, the driver
-parses every section snippet, folds them with ``|``, and drives the
-fold as a background asyncio task. Sections contain ``ReactForever``
-so the fold never returns -- leaving the page or flipping to code mode
-cancels the task. Exactly one section task is alive at a time.
+The driver does not run sections itself. It owns a ``SectionSupervisor``
+(see ``supervise.py``) and reconciles it against the open page. In v1
+that is ``LocalSupervisor``; task-139's out-of-process executor drops in
+behind the same five methods.
 
-Server-owned wire payloads (msgpack-native):
+## Blocks
 
-    write: {"op": "set_tree", "tree": PageNode}
-    write: {"op": "set_page", "page_id": str|None, "path": [str],
-            "title": str, "mode": "code"|"display",
-            "sections": [SectionEntry]}
+A page is an ordered list of blocks. Each block is a ``Section`` in kv
+and carries a ``kind``:
 
-    PageNode     = {"id": str|None, "title": str, "pages": [PageNode]}
-    SectionEntry = {"id": str, "name": str, "snippet": str,
-                    "error": str|None, "fields": [MountField]}
-    MountField   = {"path": str, "type": str, "props"?: dict}
+- ``prose``   -- one prose island. ``source`` is markdown. Contiguous
+  prose is *one* block, not one per paragraph; splitting is explicit.
+  Never compiled, never runs, no status.
+- ``program`` -- a Nu program. ``source`` is Python evaluated with
+  ``{nu, Space, path}``; ``path`` is ``"sections.<block_id>"``.
 
-Browser feedback (client -> server, all as ``notify`` frames on one
-subscription, dispatched on ``payload["op"]``):
+Order comes from the ``order`` int slot, ties broken by id. The driver
+renormalizes orders to ``index * 10`` after any structural change, so
+gaps never close.
 
-    {"op": "on_page_select",    "path": [pid...], "mode": "code"|"display"}
-    {"op": "on_page_create",    "parent_path": [pid...], "title": str}
-    {"op": "on_page_rename",    "path": [pid...], "title": str}
-    {"op": "on_page_delete",    "path": [pid...]}
-    {"op": "on_section_create", "page_path": [pid...], "name": str}
-    {"op": "on_section_update", "page_path": [pid...], "section_id": str,
-                                "name": str, "snippet": str}
-    {"op": "on_section_delete", "page_path": [pid...], "section_id": str}
+**Path is the mounting mechanism.** Every ui ref a program block names
+under its own prefix mounts in that block. A block may name another
+block's ref to read or write it -- a live cross-block wire that keeps
+working -- but a borrowed ref renders once, in its owner. See
+``compile.enumerate_ui_refs``.
 
-Section mounting is by section id as path prefix: each snippet is
-parsed with ``path = "sections.<section_id>"`` in scope, so authors
-namespace their ui refs under the section that owns them. Walking the
-parsed term for ``nu.ui.Ref`` instances yields that section's mount
-fields, which ship nested inside its ``set_page`` entry; the browser
-slice registers them into the kit's ref map itself.
+There is no page-global code/display mode. v0 had one and it meant
+editing anything restarted everything. Mode is per block and lives in the
+browser; the server only ever hears about a *save*.
 
-Snippets are parsed in Python here, not via ``Eval(PyCall(...))``.
-``nu.prog.PyCall`` is deliberately uncommitted in nu and the mvp
-documented that the PyCall variant hits an "Eval placed off the loop"
-placement error under exactly this per-connection body path.
+## Wire
+
+Server -> browser (all ``write`` frames, dispatched on ``payload["op"]``):
+
+    {"op": "set_tree", "tree": PageNode}
+    {"op": "set_page", "page_id": str|None, "path": [str], "title": str,
+                       "blocks": [Block]}
+    {"op": "set_status", "statuses": [Status]}
+
+    PageNode = {"id": str|None, "title": str, "pages": [PageNode]}
+    Block    = {"id", "kind": "prose"|"program", "source", "order": int,
+                "fields": [MountField], "status": Status|None}
+    Status   = {"section_id", "state", "error", "started_at"}
+
+Browser -> server (``notify`` frames on one subscription):
+
+    {"op": "on_page_select",  "path": [pid...]}
+    {"op": "on_page_create",  "parent_path": [pid...], "title"}
+    {"op": "on_page_rename",  "path": [pid...], "title"}
+    {"op": "on_page_delete",  "path": [pid...]}
+    {"op": "on_block_create", "page_path", "kind", "source", "after": id|None}
+    {"op": "on_block_update", "page_path", "block_id", "source"}
+    {"op": "on_block_delete", "page_path", "block_ids": [id...]}
+    {"op": "on_block_split",  "page_path", "block_id", "head", "tail",
+                              "insert": {"kind","source"}|None}
+    {"op": "on_block_merge",  "page_path", "block_id", "into_id", "source"}
+    {"op": "on_block_reorder","page_path", "order": [id...]}
+    {"op": "on_block_restart","page_path", "block_id"}
 """
 
 from __future__ import annotations
@@ -73,12 +89,11 @@ from nu.lang import Command, Control
 from nu.ui.core import Ref, Session
 from nu.ui.core.protocol import Frame
 from nuspace.core.refs import mint_ordered_id
-from nuspace.snippets import parse_snippet
-from nuspace.web.server.page import _wire_type
+from nuspace.web.refs.pages.supervise import LocalSupervisor, SectionSpec
 
 
 if TYPE_CHECKING:
-    from collections.abc import Awaitable, Callable
+    from collections.abc import Callable
 
     from nu.domains.shape import Shape
     from nu.lang.runtime import Runtime
@@ -87,23 +102,30 @@ if TYPE_CHECKING:
 __all__ = ["PagesDriver", "PagesRef"]
 
 
-# Hard caps, LensRef-style. No pagination in v1.
 MAX_CHILD_PAGES = 200
 MAX_PAGE_DEPTH = 12
-MAX_SECTIONS = 100
+MAX_BLOCKS = 300
+ORDER_STEP = 10
+
+KIND_PROSE = "prose"
+KIND_PROGRAM = "program"
+KINDS = (KIND_PROSE, KIND_PROGRAM)
+
+# Coalesce status bursts (starting -> running lands within a tick).
+STATUS_FLUSH_S = 0.03
 
 
 # -- Ref ---------------------------------------------------------------------
 
 
 class PagesRef(Ref):
-    """Nested page tree + per-page section canvas over a Space's page root.
+    """Nested page tree + per-page block canvas over a Space's page root.
 
     Configured once with a ``space_root`` Shape class whose ``.pages``
-    slot is a ``ShapeRef`` to the root ``Page``. The server owns the
-    tree and the active-page payload; the browser owns the selection
-    cursor (via the URL router), the code/display mode, the expanded
-    set, and the per-section editor buffers.
+    slot is a ``ShapeRef`` to the root ``Page``. The server owns the tree,
+    the active page payload, and section status; the browser owns the
+    selection cursor (via the URL router), per-block edit mode, caret,
+    selection, and unsaved buffers.
     """
 
     _wire_type_override = "PagesRef"
@@ -118,9 +140,6 @@ class PagesRef(Ref):
     ) -> None:
         super().__init__(address, parent_ref=parent_ref, owner_shape=owner_shape)
         self._payload["pages_space_root"] = space_root
-        # Frozen: no runtime state ever lands on the payload. Mutating it
-        # after construction bleeds across Nu tree rewrites that share the
-        # payload reference (see the lens cursor-persistence bug).
 
     @classmethod
     def slot(cls, *, space_root: type[Shape]) -> Self:
@@ -134,7 +153,7 @@ class PagesRef(Ref):
     # -- Host-side interactions (server -> browser writes) -------------------
 
     def set_tree(self, tree: dict[str, Any]) -> nu.Nu:
-        """Ship a pre-computed sidebar tree payload to the browser."""
+        """Ship a pre-computed page-tree payload to the browser."""
         return _PagesWrite(self, {"op": "set_tree", "tree": tree})
 
     def set_page(self, page: dict[str, Any]) -> nu.Nu:
@@ -192,17 +211,14 @@ def _page_ref(space_root: type[Shape], path: list[str]) -> Any:  # noqa: ANN401
 
 
 def _parent_pages(space_root: type[Shape], path: list[str]) -> tuple[Any, str]:
-    """Split ``[pid..., pid]`` into (parent ``PagesRef``, page_id)."""
+    """Split ``[pid..., pid]`` into (parent pages container, page_id)."""
     if not path:
         raise ValueError("page path is empty; the root page has no parent")
     return _page_ref(space_root, path[:-1]).pages, str(path[-1])
 
 
-# -- Tree payload ------------------------------------------------------------
-
-
 def _page_node(data: object, pid: str | None, depth: int) -> dict[str, Any]:
-    """One sidebar node from an ``extract()`` blob. Sections are not shown."""
+    """One rail node from an ``extract()`` blob. Blocks are not shown."""
     if not isinstance(data, dict):
         return {"id": pid, "title": str(pid or ""), "pages": []}
     kids_raw = data.get("pages")
@@ -210,82 +226,46 @@ def _page_node(data: object, pid: str | None, depth: int) -> dict[str, Any]:
     if isinstance(kids_raw, dict) and depth < MAX_PAGE_DEPTH:
         for kid, blob in sorted(kids_raw.items())[:MAX_CHILD_PAGES]:
             kids.append(_page_node(blob, str(kid), depth + 1))
-    return {
-        "id": pid,
-        "title": str(data.get("title") or (pid or "")),
-        "pages": kids,
-    }
+    return {"id": pid, "title": str(data.get("title") or (pid or "")), "pages": kids}
 
 
-# -- Section mounting --------------------------------------------------------
+def _ordered_blocks(raw: object) -> list[tuple[str, dict[str, Any]]]:
+    """Sort a sections ``extract()`` blob by ``order`` then id.
 
-
-def _enumerate_ui_refs(term: nu.Nu, prefix: str) -> list[dict[str, Any]]:
-    """Walk a Nu term, return one mount field per ``nu.ui.Ref`` it *owns*.
-
-    Ported from the mvp. Deduplicated by ``(type, path)`` -- a snippet
-    that touches the same InputRef twice (read + write) still produces
-    one field. A bare ui Ref has no parent chain, so its wire path is
-    exactly the segment string the snippet passed in, which is why
-    ``parse_snippet`` seeds ``path = "sections.<section_id>"``.
-
-    **Path is the mounting mechanism.** Only refs under ``prefix`` mount
-    here. A snippet may freely name a ref belonging to another section
-    (to read its value, or to write into it) -- that is a live
-    cross-section wire and it keeps working, because both sections'
-    terms run in the same folded tree against the same browser slices.
-    But the section that *names* the path is the one that mounts it, so
-    a borrowed ref renders once, in its owner, not again in every
-    section that mentions it.
+    ``order`` may be missing (pre-``order`` stores, or a set_item that
+    skipped it) or read back as a Nu sentinel rather than an int. Both
+    fall back to id order, which is creation order because
+    ``mint_ordered_id`` is time-prefixed.
     """
-    seen: set[tuple[str, str]] = set()
-    fields: list[dict[str, Any]] = []
-    own = prefix + "."
+    if not isinstance(raw, dict):
+        return []
+    items: list[tuple[str, dict[str, Any]]] = []
+    for sid, blob in raw.items():
+        if isinstance(blob, dict):
+            items.append((str(sid), blob))
 
-    def visit(node: object) -> None:
-        if isinstance(node, nu.ui.Ref):
-            segment = node._payload.get("segment")
-            if isinstance(segment, str) and (segment == prefix or segment.startswith(own)):
-                wire_type = _wire_type(type(node))
-                key = (wire_type, segment)
-                if key not in seen:
-                    seen.add(key)
-                    entry: dict[str, Any] = {"path": segment, "type": wire_type}
-                    props = type(node)._mount_props()
-                    if props:
-                        entry["props"] = dict(props)
-                    fields.append(entry)
-        children = getattr(node, "_children", None)
-        if children:
-            for child in children:
-                visit(child)
+    def key(pair: tuple[str, dict[str, Any]]) -> tuple[int, str]:
+        order = pair[1].get("order")
+        return (int(order) if isinstance(order, int) else 1 << 30, pair[0])
 
-    visit(term)
-    return fields
+    items.sort(key=key)
+    return items
 
 
-def _fold(terms: list[nu.Nu]) -> nu.Nu:
-    """Fold section terms together with ``|`` (parallel)."""
-    folded = terms[0]
-    for term in terms[1:]:
-        folded = folded | term
-    return folded
+def _kind_of(blob: dict[str, Any]) -> str:
+    kind = blob.get("kind")
+    return kind if kind in KINDS else KIND_PROGRAM
 
 
 # -- Driver ------------------------------------------------------------------
 
 
 class PagesDriver(Control):
-    """Per-connection driver: tree paint, feedback dispatch, section task.
+    """Per-connection driver: tree paint, feedback dispatch, supervision.
 
-    On boot it ships the sidebar tree. Then it loops on browser
-    notifies, switching on ``payload["op"]``. Mutating handlers re-ship
-    the tree and/or the active page explicitly -- ``on_descendants_change``
-    needs a fixed-depth wildcard and cannot watch a recursive tree.
-
-    The active page path + mode are loop-local closure state, not ref
-    payload: they die with the connection, exactly like ``LensDriver``'s
-    cursor. Reload restarts from whatever the browser's URL says.
+    Active page path is loop-local closure state, never ref payload -- it
+    dies with the connection, exactly like ``LensDriver``'s cursor.
+    Reload restarts from whatever the browser's URL says.
     """
 
     _mutates = Declared(value=frozenset(), name="mutates")
@@ -313,9 +293,11 @@ class PagesDriver(Control):
             ref_nid = rt.program.children[nid][0]
             wire_path = await ref._aresolve_address(rt, ref_nid)
 
-            # Per-connection cursor. Closure-local, never on the payload.
-            cursor: dict[str, Any] = {"path": [], "mode": "code"}
-            section_task: asyncio.Task | None = None
+            cursor: dict[str, Any] = {"path": []}
+            supervisor = LocalSupervisor(rt.ctx, root)
+            loop = asyncio.get_running_loop()
+
+            # -- plumbing ----------------------------------------------------
 
             async def run(term: nu.Nu) -> Any:  # noqa: ANN401
                 value, _ = await nu.arun(auto_flow_atomic(term, scope=root), rt.ctx)  # type: ignore[arg-type]
@@ -324,17 +306,38 @@ class PagesDriver(Control):
             async def do_write(term: nu.Nu) -> None:
                 await run(term)
 
-            async def stop_sections() -> None:
-                nonlocal section_task
-                task = section_task
-                section_task = None
-                if task is None or task.done():
-                    return
-                task.cancel()
-                try:
-                    await task
-                except (asyncio.CancelledError, Exception):  # noqa: S110
-                    pass
+            async def send(payload: dict[str, Any]) -> None:
+                await session.send(Frame("write", ref=wire_path, payload=payload))
+
+            # -- status pump -------------------------------------------------
+            #
+            # Supervision emits from whatever task the section runs on. We
+            # funnel into one queue and coalesce, so a burst of
+            # starting/running transitions is one frame, not five.
+
+            status_q: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
+
+            def on_status(wire: dict[str, Any]) -> None:
+                loop.call_soon_threadsafe(status_q.put_nowait, wire)
+
+            supervisor.on_change(on_status)
+
+            async def status_pump() -> None:
+                while True:
+                    first = await status_q.get()
+                    batch: dict[str, dict[str, Any]] = {first["section_id"]: first}
+                    await asyncio.sleep(STATUS_FLUSH_S)
+                    while not status_q.empty():
+                        item = status_q.get_nowait()
+                        batch[item["section_id"]] = item
+                    try:
+                        await send({"op": "set_status", "statuses": list(batch.values())})
+                    except Exception:  # noqa: S110 -- ws gone; the driver's finally cleans up
+                        pass
+
+            pump = asyncio.create_task(status_pump())
+
+            # -- shipping ----------------------------------------------------
 
             async def ship_tree() -> None:
                 try:
@@ -342,13 +345,17 @@ class PagesDriver(Control):
                 except Exception:
                     data = None
                 tree = _page_node(data if isinstance(data, dict) else {}, None, 0)
-                await session.send(
-                    Frame("write", ref=wire_path, payload={"op": "set_tree", "tree": tree}),
-                )
+                await send({"op": "set_tree", "tree": tree})
 
-            async def ship_page(path: list[str], mode: str) -> None:
-                nonlocal section_task
-                await stop_sections()
+            async def read_blocks(path: list[str]) -> list[tuple[str, dict[str, Any]]]:
+                page = _page_ref(root, path)
+                try:
+                    raw = await run(page.sections.extract())
+                except Exception:
+                    raw = None
+                return _ordered_blocks(raw)[:MAX_BLOCKS]
+
+            async def ship_page(path: list[str]) -> None:
                 page = _page_ref(root, path)
                 try:
                     raw_title = await run(page.title)
@@ -356,71 +363,235 @@ class PagesDriver(Control):
                     raw_title = None
                 # An unset StrRef reads back as a Nu sentinel, not "".
                 title = raw_title if isinstance(raw_title, str) else ""
-                try:
-                    raw = await run(page.sections.extract())
-                except Exception:
-                    raw = None
-                sections = raw if isinstance(raw, dict) else {}
 
-                entries: list[dict[str, Any]] = []
-                terms: list[nu.Nu] = []
-                for sid, blob in sorted(sections.items())[:MAX_SECTIONS]:
-                    if not isinstance(blob, dict):
-                        continue
-                    snippet = str(blob.get("snippet") or "")
+                items = await read_blocks(path)
+
+                # Reconcile supervision to this page's program blocks
+                # *before* shipping, so the payload carries live fields
+                # and live status. Nothing is started yet.
+                specs = [
+                    SectionSpec(sid, str(blob.get("snippet") or ""))
+                    for sid, blob in items
+                    if _kind_of(blob) == KIND_PROGRAM
+                ]
+                supervisor.plan(specs)
+
+                blocks: list[dict[str, Any]] = []
+                for index, (sid, blob) in enumerate(items):
+                    kind = _kind_of(blob)
+                    order = blob.get("order")
                     entry: dict[str, Any] = {
-                        "id": str(sid),
-                        "name": str(blob.get("name") or sid),
-                        "snippet": snippet,
-                        "error": None,
+                        "id": sid,
+                        "kind": kind,
+                        "source": str(blob.get("snippet") or ""),
+                        "order": int(order) if isinstance(order, int) else index * ORDER_STEP,
                         "fields": [],
+                        "status": None,
                     }
-                    if mode == "display" and snippet.strip():
-                        # One bad snippet degrades its own section only.
-                        try:
-                            prefix = f"sections.{sid}"
-                            term = parse_snippet(snippet, prefix)
-                            entry["fields"] = _enumerate_ui_refs(term, prefix)
-                            terms.append(term)
-                        except Exception as exc:
-                            entry["error"] = f"{type(exc).__name__}: {exc}"
-                    entries.append(entry)
+                    if kind == KIND_PROGRAM:
+                        entry["fields"] = supervisor.fields(sid)
+                        entry["status"] = supervisor.status(sid)
+                    blocks.append(entry)
 
                 # Ship first so the browser has the field slices registered
-                # before the running fold writes to them. Frames are ordered
-                # on the ws, so this is enough.
-                await session.send(
-                    Frame(
-                        "write",
-                        ref=wire_path,
-                        payload={
-                            "op": "set_page",
-                            "page_id": str(path[-1]) if path else None,
-                            "path": list(path),
-                            "title": title,
-                            "mode": mode,
-                            "sections": entries,
+                # before a running section writes to them. ws frames are
+                # ordered, so this is enough.
+                await send(
+                    {
+                        "op": "set_page",
+                        "page_id": str(path[-1]) if path else None,
+                        "path": list(path),
+                        "title": title,
+                        "blocks": blocks,
+                    },
+                )
+                await supervisor.launch()
+
+            async def reship_page() -> None:
+                await ship_page(list(cursor["path"]))
+
+            # -- structural writes -------------------------------------------
+
+            async def renumber(path: list[str], ordered_ids: list[str]) -> None:
+                """Rewrite every block's ``order`` to ``index * ORDER_STEP``."""
+                sections = _page_ref(root, path).sections
+                for index, sid in enumerate(ordered_ids):
+                    await do_write(sections[sid].order.set(nu.Int(index * ORDER_STEP)))
+
+            async def create_block(
+                path: list[str],
+                kind: str,
+                source: str,
+                after: str | None,
+            ) -> str:
+                sections = _page_ref(root, path).sections
+                new_id = mint_ordered_id("s")
+                await do_write(
+                    sections.set_item(
+                        new_id,
+                        {
+                            "name": kind,
+                            "snippet": source,
+                            "kind": kind if kind in KINDS else KIND_PROSE,
+                            "order": 0,
+                            "policy": "on_navigate",
                         },
                     ),
                 )
-                if mode == "display" and terms:
-                    body = auto_flow_atomic(_fold(terms), scope=root)
-                    section_task = asyncio.create_task(nu.arun(body, rt.ctx))  # type: ignore[arg-type]
+                ids = [sid for sid, _ in await read_blocks(path) if sid != new_id]
+                if after is None or after not in ids:
+                    ids.append(new_id)
+                else:
+                    ids.insert(ids.index(after) + 1, new_id)
+                await renumber(path, ids)
+                return new_id
 
-            async def reship_page() -> None:
-                await ship_page(list(cursor["path"]), str(cursor["mode"]))
+            async def update_source(path: list[str], block_id: str, source: str) -> None:
+                sections = _page_ref(root, path).sections
+                await do_write(sections[block_id].snippet.set(nu.Str(source)))
+
+            async def delete_blocks(path: list[str], block_ids: list[str]) -> None:
+                sections = _page_ref(root, path).sections
+                for bid in block_ids:
+                    await do_write(sections.del_item(bid))
+                await renumber(path, [sid for sid, _ in await read_blocks(path)])
+
+            # -- dispatch ----------------------------------------------------
+
+            async def dispatch(payload: dict[str, Any]) -> None:
+                op = str(payload.get("op") or "")
+
+                if op == "on_page_select":
+                    path = _as_str_list(payload.get("path"))
+                    if path == list(cursor["path"]):
+                        return
+                    cursor["path"] = path
+                    await supervisor.stop_all()
+                    await ship_page(path)
+                    return
+
+                if op == "on_page_create":
+                    parent = _as_str_list(payload.get("parent_path"))
+                    title = str(payload.get("title") or "page")
+                    container = _page_ref(root, parent).pages
+                    await do_write(
+                        container.set_item(
+                            mint_ordered_id("p"),
+                            {"title": title, "sections": {}, "pages": {}},
+                        ),
+                    )
+                    await ship_tree()
+                    return
+
+                if op == "on_page_rename":
+                    path = _as_str_list(payload.get("path"))
+                    title = str(payload.get("title") or "page")
+                    await do_write(_page_ref(root, path).title.set(nu.Str(title)))
+                    await ship_tree()
+                    return
+
+                if op == "on_page_delete":
+                    path = _as_str_list(payload.get("path"))
+                    if not path:
+                        return  # the root page is structural
+                    container, pid = _parent_pages(root, path)
+                    await do_write(container.del_item(pid))
+                    await ship_tree()
+                    if list(cursor["path"])[: len(path)] == path:
+                        cursor["path"] = path[:-1]
+                        await supervisor.stop_all()
+                        await reship_page()
+                    return
+
+                page_path = _as_str_list(payload.get("page_path"))
+
+                if op == "on_block_create":
+                    kind = str(payload.get("kind") or KIND_PROSE)
+                    source = str(payload.get("source") or "")
+                    after = payload.get("after")
+                    await create_block(page_path, kind, source, str(after) if after else None)
+                    await reship_page()
+                    return
+
+                if op == "on_block_update":
+                    bid = str(payload.get("block_id") or "")
+                    if not bid:
+                        return
+                    await update_source(page_path, bid, str(payload.get("source") or ""))
+                    await reship_page()
+                    return
+
+                if op == "on_block_delete":
+                    ids = _as_str_list(payload.get("block_ids"))
+                    if not ids:
+                        return
+                    await delete_blocks(page_path, ids)
+                    await reship_page()
+                    return
+
+                if op == "on_block_split":
+                    # head stays in block_id; an optional `insert` block goes
+                    # next; tail becomes a fresh prose block after that. One
+                    # round trip so the page never renders a torn state.
+                    bid = str(payload.get("block_id") or "")
+                    if not bid:
+                        return
+                    await update_source(page_path, bid, str(payload.get("head") or ""))
+                    anchor = bid
+                    insert = payload.get("insert")
+                    if isinstance(insert, dict):
+                        anchor = await create_block(
+                            page_path,
+                            str(insert.get("kind") or KIND_PROGRAM),
+                            str(insert.get("source") or ""),
+                            anchor,
+                        )
+                    tail = str(payload.get("tail") or "")
+                    if tail.strip() or not isinstance(insert, dict):
+                        await create_block(page_path, KIND_PROSE, tail, anchor)
+                    await reship_page()
+                    return
+
+                if op == "on_block_merge":
+                    bid = str(payload.get("block_id") or "")
+                    into = str(payload.get("into_id") or "")
+                    if not bid or not into:
+                        return
+                    await update_source(page_path, into, str(payload.get("source") or ""))
+                    await delete_blocks(page_path, [bid])
+                    await reship_page()
+                    return
+
+                if op == "on_block_reorder":
+                    ids = _as_str_list(payload.get("order"))
+                    if not ids:
+                        return
+                    known = {sid for sid, _ in await read_blocks(page_path)}
+                    ordered = [i for i in ids if i in known]
+                    ordered += [i for i in known if i not in set(ordered)]
+                    await renumber(page_path, ordered)
+                    await reship_page()
+                    return
+
+                if op == "on_block_restart":
+                    bid = str(payload.get("block_id") or "")
+                    if not bid:
+                        return
+                    await supervisor.restart(bid)
+                    return
+
+            # -- boot --------------------------------------------------------
 
             # A virgin store has no root Page. init() only writes when the
-            # slot is missing, so this is idempotent and keeps the tab
-            # self-sufficient without a seed script.
+            # slot is missing, so this is idempotent.
             try:
                 await do_write(root.pages.init({"title": "", "sections": {}, "pages": {}}))
             except Exception:  # noqa: S110
                 pass
 
             await ship_tree()
+            await ship_page([])
 
-            loop = asyncio.get_running_loop()
             queue: asyncio.Queue[object] = asyncio.Queue()
 
             def on_notify(payload: object) -> None:
@@ -434,118 +605,16 @@ class PagesDriver(Control):
                     if not isinstance(payload, dict):
                         continue
                     try:
-                        await _dispatch(
-                            payload,
-                            space_root=root,
-                            cursor=cursor,
-                            do_write=do_write,
-                            ship_page=ship_page,
-                            reship_page=reship_page,
-                            ship_tree=ship_tree,
-                        )
-                    except Exception:  # noqa: S110 -- one bad notify shouldn't die
+                        await dispatch(payload)
+                    except Exception:  # noqa: S110 -- one bad notify must not kill the driver
                         pass
             finally:
-                await stop_sections()
+                pump.cancel()
+                await supervisor.stop_all()
                 sub.unbind(on_notify)
                 sub.close()
 
         return athunk
-
-
-async def _dispatch(
-    payload: dict[str, Any],
-    *,
-    space_root: type[Shape],
-    cursor: dict[str, Any],
-    do_write: Callable[[nu.Nu], Awaitable[None]],
-    ship_page: Callable[[list[str], str], Awaitable[None]],
-    reship_page: Callable[[], Awaitable[None]],
-    ship_tree: Callable[[], Awaitable[None]],
-) -> None:
-    """Route one browser notify into substrate writes plus explicit re-ships."""
-    op = str(payload.get("op") or "")
-
-    if op == "on_page_select":
-        path = _as_str_list(payload.get("path"))
-        mode = "display" if payload.get("mode") == "display" else "code"
-        cursor["path"] = path
-        cursor["mode"] = mode
-        await ship_page(path, mode)
-        return
-
-    if op == "on_page_create":
-        parent = _as_str_list(payload.get("parent_path"))
-        title = str(payload.get("title") or "page")
-        container = _page_ref(space_root, parent).pages
-        await do_write(container.add(title=title, page_id=mint_ordered_id("p")))
-        await ship_tree()
-        return
-
-    if op == "on_page_rename":
-        path = _as_str_list(payload.get("path"))
-        title = str(payload.get("title") or "page")
-        await do_write(_page_ref(space_root, path).title.set(nu.Str(title)))
-        await ship_tree()
-        if path == list(cursor["path"]):
-            await reship_page()
-        return
-
-    if op == "on_page_delete":
-        path = _as_str_list(payload.get("path"))
-        if not path:
-            return  # the root page is structural; it cannot be deleted
-        container, pid = _parent_pages(space_root, path)
-        await do_write(container.del_item(pid))
-        await ship_tree()
-        if list(cursor["path"])[: len(path)] == path:
-            # The active page just went away; fall back to its parent.
-            cursor["path"] = path[:-1]
-            await reship_page()
-        return
-
-    if op == "on_section_create":
-        page_path = _as_str_list(payload.get("page_path"))
-        name = str(payload.get("name") or "section")
-        sections = _page_ref(space_root, page_path).sections
-        await do_write(
-            sections.add(
-                name=name,
-                snippet=str(payload.get("snippet") or ""),
-                policy="on_navigate",
-                section_id=mint_ordered_id("s"),
-            ),
-        )
-        await reship_page()
-        return
-
-    if op == "on_section_update":
-        page_path = _as_str_list(payload.get("page_path"))
-        sid = str(payload.get("section_id") or "")
-        if not sid:
-            return
-        sections = _page_ref(space_root, page_path).sections
-        await do_write(
-            sections.set_item(
-                sid,
-                {
-                    "name": str(payload.get("name") or sid),
-                    "snippet": str(payload.get("snippet") or ""),
-                    "policy": "on_navigate",
-                },
-            ),
-        )
-        await reship_page()
-        return
-
-    if op == "on_section_delete":
-        page_path = _as_str_list(payload.get("page_path"))
-        sid = str(payload.get("section_id") or "")
-        if not sid:
-            return
-        await do_write(_page_ref(space_root, page_path).sections.del_item(sid))
-        await reship_page()
-        return
 
 
 def _as_str_list(raw: object) -> list[str]:

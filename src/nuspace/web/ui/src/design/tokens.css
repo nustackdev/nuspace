@@ -1,0 +1,177 @@
+/* =============================================================================
+ * nuspace document-surface tokens.
+ *
+ * This file adds NO colors. Every value below either points at a kit L2
+ * semantic role (which already flips per theme) or is a geometry value picked
+ * off the 4px grid in space-radius.md. Layer-1 hexes stay in
+ * @nustackdev/ui-kit/src/index.css and nowhere else.
+ *
+ * Why this file exists at all: the design system describes app chrome. nudle
+ * apps are panels. A nuspace page is a document you write in, and a document
+ * surface has vocabulary the kit has never had to name - a block gutter, a
+ * drag handle, block-level selection, a slash menu, and a reading measure
+ * instead of a panel width. Those are the tokens here.
+ *
+ * Layers, mirroring the kit:
+ *   L2.5  :root / .dark   document roles, aliased onto kit L2 roles
+ *   L3    @theme inline   exposed as Tailwind utility names (doc-*, section-*)
+ *
+ * Source docs (do not paraphrase without re-reading):
+ *   go/projects/nustackdev/design/palette.md
+ *   go/projects/nustackdev/design/space-radius.md
+ *   go/projects/nustackdev/design/typography.md
+ *   go/projects/nustackdev/design/motion.md
+ *   go/projects/nustackdev/design/a11y.md
+ * ==========================================================================*/
+
+/* ============================== L2.5: document roles (light) ===============*/
+:root {
+	/* --- interaction tiers -------------------------------------------------
+	 * The kit has an accent interaction tier (accent-wash / accent-soft) but
+	 * no NEUTRAL one. On app chrome that is fine: a list row hovers in accent
+	 * and there is nothing else competing. On a document it is not - every
+	 * paragraph would flash purple on mouse-over, and hover would then be
+	 * indistinguishable from selection, which is the higher-signal state.
+	 *
+	 * So: hover / pressed are neutral, derived by alpha off --text-primary
+	 * (an existing L2 role, so it tracks the theme). Selection keeps accent.
+	 * Flagged upstream as a missing kit tier, see the task report.
+	 * --------------------------------------------------------------------- */
+	--doc-hover: color-mix(in oklab, var(--text-primary) 4%, transparent);
+	--doc-active: color-mix(in oklab, var(--text-primary) 7%, transparent);
+
+	/* block-level selection is the accent tier, straight off the kit */
+	--doc-selected: var(--accent-wash);
+	--doc-selected-strong: var(--accent-soft);
+	--doc-selected-line: var(--accent-line);
+
+	/* drag + drop */
+	--doc-drop-line: var(--accent);
+	--doc-handle: var(--text-muted);
+	--doc-handle-hover: var(--text-secondary);
+
+	/* the caret's block: no fill, just a hairline rail in the gutter */
+	--doc-focus-rail: var(--border-strong);
+
+	/* --- section status ----------------------------------------------------
+	 * A nuspace block is a live program. Six states, all pointing at existing
+	 * status roles. No new hues.
+	 *
+	 *   invalid   warn      source never compiled. author's problem, lint
+	 *                       register. yellow, deliberately NOT red.
+	 *   idle      muted     never started. quietest thing on the page.
+	 *   starting  info      transient, pairs with a spinner.
+	 *   running   ok        live.
+	 *   stopped   secondary ran and finished cleanly. one text tier above
+	 *                       idle so "has run" reads more present than
+	 *                       "never ran", without earning a hue.
+	 *   failed    danger    ran and died. red.
+	 *
+	 * invalid vs failed is the distinction that matters to a person: one
+	 * never ran, one ran and died. Yellow vs red carries that without a
+	 * legend. Color is never the only cue - every state also ships a label
+	 * and a distinct dot shape (a11y.md §7).
+	 * --------------------------------------------------------------------- */
+	--section-invalid: var(--status-warn);
+	--section-invalid-wash: var(--status-warn-wash);
+	--section-invalid-line: var(--status-warn-line);
+
+	--section-idle: var(--text-muted);
+	--section-idle-wash: transparent;
+	--section-idle-line: var(--border-default);
+
+	--section-starting: var(--status-info);
+	--section-starting-wash: var(--status-info-wash);
+	--section-starting-line: var(--status-info-line);
+
+	--section-running: var(--status-ok);
+	--section-running-wash: var(--status-ok-wash);
+	--section-running-line: var(--status-ok-line);
+
+	--section-stopped: var(--text-secondary);
+	--section-stopped-wash: transparent;
+	--section-stopped-line: var(--border-strong);
+
+	--section-failed: var(--status-danger);
+	--section-failed-wash: var(--status-danger-wash);
+	--section-failed-line: var(--status-danger-line);
+}
+
+/* ============================== L2.5: document roles (dark) ===============
+ * Only the neutral interaction tier needs a per-theme value: the same alpha
+ * that reads on white is invisible on #0a0a0d. Everything else is an alias
+ * onto a kit role that already flipped.
+ * ==========================================================================*/
+.dark {
+	--doc-hover: color-mix(in oklab, var(--text-primary) 6%, transparent);
+	--doc-active: color-mix(in oklab, var(--text-primary) 10%, transparent);
+}
+
+/* ============================== L3: Tailwind v4 ===========================*/
+@theme inline {
+	/* --- document colors --> bg-doc-hover, bg-doc-selected, ... ---------- */
+	--color-doc-hover: var(--doc-hover);
+	--color-doc-active: var(--doc-active);
+	--color-doc-selected: var(--doc-selected);
+	--color-doc-selected-strong: var(--doc-selected-strong);
+	--color-doc-selected-line: var(--doc-selected-line);
+	--color-doc-drop-line: var(--doc-drop-line);
+	--color-doc-handle: var(--doc-handle);
+	--color-doc-handle-hover: var(--doc-handle-hover);
+	--color-doc-focus-rail: var(--doc-focus-rail);
+
+	/* --- section status --> text-section-running, bg-section-failed-wash --*/
+	--color-section-invalid: var(--section-invalid);
+	--color-section-invalid-wash: var(--section-invalid-wash);
+	--color-section-invalid-line: var(--section-invalid-line);
+
+	--color-section-idle: var(--section-idle);
+	--color-section-idle-wash: var(--section-idle-wash);
+	--color-section-idle-line: var(--section-idle-line);
+
+	--color-section-starting: var(--section-starting);
+	--color-section-starting-wash: var(--section-starting-wash);
+	--color-section-starting-line: var(--section-starting-line);
+
+	--color-section-running: var(--section-running);
+	--color-section-running-wash: var(--section-running-wash);
+	--color-section-running-line: var(--section-running-line);
+
+	--color-section-stopped: var(--section-stopped);
+	--color-section-stopped-wash: var(--section-stopped-wash);
+	--color-section-stopped-line: var(--section-stopped-line);
+
+	--color-section-failed: var(--section-failed);
+	--color-section-failed-wash: var(--section-failed-wash);
+	--color-section-failed-line: var(--section-failed-line);
+
+	/* --- document geometry -------------------------------------------------
+	 * All on the 4px grid. These are step PICKS, not a new scale - same move
+	 * space-radius.md §1 makes with its density-override table.
+	 *
+	 * Density rule for a document surface, stated once: horizontally it is
+	 * the kit's density (a block's inner chrome is panel chrome and uses the
+	 * kit's 32px rows). Vertically it is looser than a panel, because reading
+	 * rhythm is set by line-height, not by padding. So block padding stays
+	 * tiny (4px) and the air comes from the 16px/1.55 prose line box. A
+	 * document is not a place to spend spacing tokens.
+	 * --------------------------------------------------------------------- */
+
+	/* max-w-doc / max-w-doc-wide */
+	--container-doc: 40rem; /* 640, == kit container-prose  */
+	--container-doc-wide: 60rem; /* 960, == kit container-panel, for program
+	                              * blocks that opt out of the measure */
+
+	/* p-doc-*, w-doc-*, gap-doc-* */
+	--spacing-doc-pad-x: 1.5rem; /* 24, spacing 6   page side gutter        */
+	--spacing-doc-pad-y: 4rem; /* 64, spacing 16  air above the first block */
+	--spacing-doc-gutter: 2rem; /* 32              handle + status rail      */
+	--spacing-doc-handle: 1.5rem; /* 24              == kit sm icon-button     */
+	--spacing-doc-handle-icon: 0.875rem; /* 14      == kit sm icon            */
+	--spacing-doc-block-x: 0.5rem; /* 8            wash overhangs the text  */
+	--spacing-doc-block-y: 0.25rem; /* 4           prose block pad-y        */
+	--spacing-doc-block-y-program: 0.5rem; /* 8    program block pad-y      */
+	--spacing-doc-block-gap: 0.125rem; /* 2        blocks are contiguous    */
+	--spacing-doc-dot: 0.5rem; /* 8               status dot                */
+	--spacing-doc-rail: 0.125rem; /* 2            status / focus rail width */
+}

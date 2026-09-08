@@ -3,8 +3,7 @@
 Entry surface:
 
 - ``Space`` / ``App`` / ``Page`` / ``Section`` - shapes.
-- ``AppsRef`` / ``SectionsRef`` (+ their item refs) - typed collections with ``.add()`` / ``.run()``.
-- ``parse_snippet`` - source-string -> Nu term.
+- ``AppsRef`` / ``SectionsRef`` (+ their item refs) - typed collections with ``.add()``.
 
 Compose a running space in a Python script; see ``examples/run.py``.
 """
@@ -20,7 +19,6 @@ from nuspace.core import (
     Space,
     mint_id,
 )
-from nuspace.snippets import parse_snippet
 
 
 __version__ = "0.0.0"
@@ -35,5 +33,4 @@ __all__ = [
     "SectionsRef",
     "Space",
     "mint_id",
-    "parse_snippet",
 ]

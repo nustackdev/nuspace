@@ -1,95 +1,67 @@
-import type { MountField, MountPage } from "@nustackdev/ui-core";
 import { FieldView, useStore } from "@nustackdev/ui-kit";
 import { useNuspaceConnection } from "./connect";
-import { useRoute } from "./router";
+import { navigate, rememberedPath, TOPS, useRoute } from "./router";
 
-// Split a page's fields into (sidebar, content). Pages that carry a
-// SidebarRef slot get a two-column layout; the rest take the full
-// width. AppsRef and PagesRef own their inner layout (tree + editor /
-// canvas) so we do NOT split them -- they render alone at full bleed.
-function splitFields(fields: MountField[]): {
-	sidebar: MountField | null;
-	content: MountField[];
-	fullBleed: boolean;
-} {
-	const owns = fields.find(
-		(f) => f.type === "AppsRef" || f.type === "PagesRef",
-	);
-	if (owns) {
-		return { sidebar: null, content: [owns], fullBleed: true };
-	}
-	const sidebar = fields.find((f) => f.type === "SidebarRef") ?? null;
-	const content = sidebar ? fields.filter((f) => f !== sidebar) : fields;
-	return { sidebar, content, fullBleed: false };
-}
-
-function findPage(
-	pages: MountPage[] | undefined,
-	route: string,
-): MountPage | null {
-	if (!pages) return null;
-	return pages.find((p) => p.route === route) ?? null;
-}
+// The shell: a thin top strip and one full-bleed surface.
+//
+// Every page's fields are mounted at once (the server ships them all in one
+// mount envelope) and the router only decides which one renders. Switching
+// surfaces must never remount -- a remount disposes every slice, including the
+// ones a running section is writing into.
 
 export function App() {
 	useNuspaceConnection();
 	const page = useStore((s) => s.page);
+	const status = useStore((s) => s.status);
 	const route = useRoute();
-
-	const structural = page?.fields ?? [];
-	const header = structural.find((f) => f.type === "HeaderRef") ?? null;
-	const otherStructural = header
-		? structural.filter((f) => f !== header)
-		: structural;
-
-	const activePage = findPage(page?.pages, `/${route.top}`);
-	const split = activePage ? splitFields(activePage.fields) : null;
 
 	if (!page) {
 		return (
-			<div className="min-h-screen flex items-center justify-center bg-background text-muted-foreground font-mono text-sm">
+			<div className="flex min-h-screen items-center justify-center bg-bg-canvas font-mono text-sm text-text-muted">
 				waiting for mount...
 			</div>
 		);
 	}
 
+	const activePage =
+		page.pages?.find((p) => p.route === `/${route.top}`) ?? null;
+
 	return (
-		<div className="min-h-screen flex flex-col bg-background text-text-primary">
-			{header ? <FieldView field={header} /> : null}
-			{otherStructural.length > 0 ? (
-				<div className="hidden">
-					{otherStructural.map((f) => (
-						<FieldView key={f.path} field={f} />
-					))}
-				</div>
-			) : null}
-			<main className="flex-1 min-h-0 flex">
-				{split?.sidebar ? <FieldView field={split.sidebar} /> : null}
-				{split?.fullBleed ? (
-					<section className="flex-1 min-h-0 min-w-0 flex">
-						{split.content.map((f) => (
+		<div className="flex h-screen flex-col bg-bg-canvas text-text-primary">
+			<nav className="flex shrink-0 items-center gap-1 border-b border-border-subtle bg-bg-surface px-3 py-1.5">
+				{TOPS.map((top) => (
+					<button
+						key={top}
+						type="button"
+						onClick={() => navigate({ top, path: rememberedPath(top) })}
+						className={`rounded-md px-2.5 py-1 font-mono text-xs ${
+							route.top === top
+								? "bg-accent-wash text-text-primary"
+								: "text-text-muted hover:bg-bg-sunken hover:text-text-secondary"
+						}`}
+					>
+						{top}
+					</button>
+				))}
+				<span className="flex-1" />
+				<span
+					className={`font-mono text-xs ${
+						status === "connected" ? "text-text-muted" : "text-status-warn"
+					}`}
+				>
+					{status}
+				</span>
+			</nav>
+			<main className="flex min-h-0 flex-1">
+				{activePage ? (
+					<section className="flex min-h-0 min-w-0 flex-1">
+						{activePage.fields.map((f) => (
 							<FieldView key={f.path} field={f} />
 						))}
 					</section>
 				) : (
-					<section className="flex-1 min-h-0 overflow-auto p-6">
-						{split ? (
-							split.content.length > 0 ? (
-								<div className="mx-auto max-w-7xl flex flex-col gap-6">
-									{split.content.map((f) => (
-										<FieldView key={f.path} field={f} />
-									))}
-								</div>
-							) : (
-								<div className="mx-auto max-w-7xl text-sm text-muted-foreground font-mono">
-									{activePage?.name ?? "empty page"}
-								</div>
-							)
-						) : (
-							<div className="mx-auto max-w-7xl text-sm text-muted-foreground font-mono">
-								no page for /{route.top}
-							</div>
-						)}
+					<section className="min-h-0 flex-1 p-6 font-mono text-sm text-text-muted">
+						no surface for /{route.top}
 					</section>
 				)}
 			</main>

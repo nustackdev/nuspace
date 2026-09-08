@@ -24,7 +24,7 @@ import uvicorn
 from rich.console import Console
 from rich.text import Text
 
-from nu._branding import BLUE, PURPLE, render_header
+from nu._config.branding import BLUE, PURPLE, render_header
 from nu.context.fabric import Provide
 
 from .serve import build_fastapi_app
@@ -130,7 +130,8 @@ class NuspaceServer:
         return f"http://{host}:{self._port}"
 
     def _print_ready(self) -> None:
-        render_header(_console)
+        # nu's render_header takes a text stream, not a rich Console.
+        render_header()
         _console.print(
             Text.assemble(
                 ("● ", f"bold {PURPLE}"),

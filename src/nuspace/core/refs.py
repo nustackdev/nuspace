@@ -2,7 +2,7 @@
 
 Shape-container refs subclass ``nu.kv.ShapesDictRef`` to (a) return
 nuspace-typed item refs on descent and (b) add nuspace-specific
-interactions (``.add(...)``, ``.run(...)``).
+interactions (``.add(...)``).
 
 - ``AppsRef``      -> dict of ``App`` (item ref: ``AppRef``).
 - ``SectionsRef``  -> dict of ``Section`` (item ref: ``SectionRef``).
@@ -10,13 +10,15 @@ interactions (``.add(...)``, ``.run(...)``).
 - ``PagesRef``     -> dict of ``Page`` (item ref: ``PageRef``).
 
 Item refs (``AppRef``, ``SectionRef``, ``GroupRef``) subclass
-``ShapeRef``. ``AppRef``/``SectionRef`` add ``.run()`` - a Nu term that
-dynamically evaluates the stored snippet (via ``nu.prog.PyCall + Eval``)
-and drives it. ``GroupRef`` is a plain folder handle.
+``ShapeRef`` and are plain handles onto stored state.
+
+Snippets are stored as raw Python source strings. Compiling a stored
+snippet into a Nu tree is the executor's job, not a ref method -- see
+task-138 (program pipeline) and task-139 (pages v1). The v0 ``.run()``
+methods used ``nu.prog.PyCall``, which is being removed.
 
 For v0 the item id is minted by the collection (uuid hex prefix) unless
-the caller supplies one. Snippets are stored as raw Python source strings
-because Nu-term-to-source serialization does not exist yet.
+the caller supplies one.
 """
 
 from __future__ import annotations
@@ -26,8 +28,6 @@ import time
 import uuid
 from typing import TYPE_CHECKING
 
-import nu
-import nu.prog
 from nu.kv.refs.dictshape import ShapesDictRef
 from nu.kv.refs.shape import ShapeRef
 
@@ -72,29 +72,12 @@ def mint_ordered_id(prefix: str = "s") -> str:
     return f"{prefix}_{stamp}_{seq}_{uuid.uuid4().hex[:4]}"
 
 
-def _run_term(snippet_ref: Nu, path: str) -> Nu:
-    """Return a Nu term that parses ``snippet_ref``'s value and runs it."""
-    from nuspace.snippets import parse_snippet
-
-    return nu.prog.Eval(
-        nu.prog.PyCall(parse_snippet, [snippet_ref, nu.Str(path)]),
-    )
-
-
 class AppRef(ShapeRef):
-    """One app: its snippet + policy + name, plus ``.run()`` action."""
-
-    def run(self) -> Nu:
-        """Term that evaluates and runs this app's snippet."""
-        return _run_term(self.snippet, "apps")
+    """One app: its snippet + policy + name."""
 
 
 class SectionRef(ShapeRef):
-    """One section: same shape as an app, plus ``.run()`` action."""
-
-    def run(self) -> Nu:
-        """Term that evaluates and runs this section's snippet."""
-        return _run_term(self.snippet, "sections")
+    """One section: same shape as an app."""
 
 
 class GroupRef(ShapeRef):
