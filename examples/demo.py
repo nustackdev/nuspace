@@ -15,10 +15,11 @@ import asyncio
 import textwrap
 from pathlib import Path
 
+from demo_space import DemoSpace
+
 import nu
-from nuspace.core.shapes import Space
-from nuspace.web.nuspace_ui import Nuspace, build_ui
-from nuspace.web.server import server
+from nuspace.web.refs import LensDriver, LensRef, PagesDriver, PagesRef
+from nuspace.web.server import Page, Pages, Shell, server
 
 
 # Section grew `kind` + `order` slots in task-139 and `snippet` became a
@@ -38,8 +39,13 @@ DB_PATH = str(Path(__file__).parent / "nuspace_pages.db")
 #
 # Every ui ref a block mints under its own `path` is namespaced to that
 # block, which is how a rendered element maps back to the block that owns
-# it. State goes to Space.state (a bare nu.kv.StrRef has no owner Shape and
-# would not resolve against a tags=(Space,) navigator).
+# it. State goes to `DemoSpace.state` (a bare nu.kv.StrRef has no owner
+# Shape, so it never resolves against a tagged navigator).
+#
+# Note blocks name `DemoSpace`, not `Space`, even for slots `Space` declares.
+# ShapeMeta rebinds `_root_shape` on inherited slots too, so `Space.state`
+# and `DemoSpace.state` are different addresses and only one of them matches
+# this navigator's tag.
 
 
 def src(text: str) -> str:
@@ -49,7 +55,7 @@ def src(text: str) -> str:
 ECHO_SOURCE = src("""
     import nu
     import nu.ui
-    from nuspace.core.shapes import Space
+    from demo_space import DemoSpace
 
 
     def out(path):
@@ -57,14 +63,17 @@ ECHO_SOURCE = src("""
         echo = nu.ui.StatRef(path + ".echo")
         key = path + ".text"
         # An unset kv slot reads back as a sentinel, not "".
-        stored = nu.If(Space.state.contains(key), nu.ToStr(Space.state[key]), nu.Str(""))
+        stored = nu.If(
+            DemoSpace.state.contains(key), nu.ToStr(DemoSpace.state[key]), nu.Str("")
+        )
         return (
             text.set(stored)
             >> echo.set_label(nu.Str("echo"))
             >> echo.set_value(stored)
             >> nu.ReactForever(
                 text.changed(),
-                Space.state.set_item(key, nu.Str(text)) >> echo.set_value(nu.Str(text)),
+                DemoSpace.state.set_item(key, nu.Str(text))
+                >> echo.set_value(nu.Str(text)),
             )
         )
 """)
@@ -198,6 +207,142 @@ never produced a tree, so it is `invalid`, not `failed`.
 """
 
 
+# --- Ticker page -------------------------------------------------------------
+
+# A running counter and a chart of it, as two independently supervised
+# blocks. This is the nuspace shape of nu's examples/sampled.py, where a feed
+# loop and a chart live in one script under one `nu.With`.
+#
+# Each block owns its own things. The controls block owns the counter and
+# play/pause and knows nothing about a chart. The chart block owns every
+# chart call -- config, points, appends -- and knows nothing about a button.
+# Neither names a ui ref belonging to the other.
+#
+# What connects them is a kv key. The controls block writes it; the chart
+# block reacts to it changing. That is model.md's answer to cross-block
+# communication: shared kv paths, not one block reaching into another.
+#
+# Play/pause is a BoolRef the forever loop re-reads every iteration, rather
+# than a loop that gets started and stopped. The loop always runs; the button
+# only changes whether an iteration does any work. That keeps section
+# lifecycle in the supervisor's hands -- pausing is block state, not a second
+# way to stop a section.
+
+TICKER_NAME = "ticker"
+TICKER_SAMPLE = 200
+
+TICKER_CONTROLS_SOURCE = src(f"""
+    import nu
+    import nu.mem
+    import nu.ui
+    from demo_space import DemoSpace
+
+    SERIES = DemoSpace.series["{TICKER_NAME}"]
+
+
+    class Tick(nu.Shape):
+        running = nu.mem.BoolRef.slot()
+
+
+    def out(path):
+        play = nu.ui.ButtonRef(path + ".play")
+        stat = nu.ui.StatRef(path + ".count")
+
+        return nu.With(
+            # nu.mem is a Shape over a plain dict, bound on ctx under the
+            # Shape as tag. Per-section and per-run: it dies with the worker,
+            # which is right for a play/pause flag nobody else reads.
+            nu.Provide(dict, {{}}, tag=Tick),
+            body=(
+                SERIES.cursor.init(0)
+                >> Tick.running.set(nu.Bool(False))
+                >> stat.set_label(nu.Str("points"))
+                >> stat.set_value(nu.ToStr(SERIES.cursor))
+                >> play.set_label(nu.Str("play"))
+                >> (
+                    nu.ReactForever(
+                        play.clicked(),
+                        Tick.running.set(nu.Not(Tick.running))
+                        >> play.set_label(
+                            nu.If(Tick.running, nu.Str("pause"), nu.Str("play"))
+                        ),
+                    )
+                    | nu.ForeverDo(
+                        nu.IfDo(
+                            Tick.running,
+                            # Append one point and advance. Same feed loop as
+                            # nu's examples/sampled.py, gated on `running`.
+                            SERIES.points.set_item(
+                                SERIES.cursor,
+                                nu.Mod(nu.Mul(SERIES.cursor, nu.Int(7)), nu.Int(40)),
+                            )
+                            >> SERIES.cursor.inc()
+                            >> stat.set_value(nu.ToStr(SERIES.cursor)),
+                        )
+                        >> nu.Delay(0.05)
+                    )
+                )
+            ),
+        )
+""")
+
+TICKER_CHART_SOURCE = src(f"""
+    import nu
+    import nu.ui
+    from demo_space import DemoSpace
+
+    SERIES = DemoSpace.series["{TICKER_NAME}"]
+
+
+    def out(path):
+        chart = nu.ui.LineChart(path + ".series")
+
+        # The Kh57 layout is what this line buys: `sample` reads a bounded
+        # reservoir over the key range instead of the whole map, so the
+        # series can grow without bound and the repaint cost stays flat.
+        points = nu.Collect(
+            nu.Sorted(nu.Iter(SERIES.points.sample({TICKER_SAMPLE}, 0, SERIES.cursor)))
+        )
+
+        return (
+            chart.set_x_label(nu.Str("tick"))
+            >> chart.set_y_label(nu.Str("value"))
+            >> chart.set_points(nu.List.of())
+            >> nu.ReactForever(SERIES.points.on_change(), chart.set_points(points))
+        )
+""")
+
+TICKER_INTRO_PROSE = """# Ticker
+
+A growing series and a chart of it, in two separate blocks.
+
+Press **play** below. The feed starts appending points to a `Kh57Ref`; the
+chart under it repaints a reservoir sample on every write. Press again to
+pause.
+"""
+
+TICKER_WIRE_PROSE = """Neither block reaches into the other. The controls
+block owns the feed and play/pause and never mentions a chart; the chart
+block owns every chart call and never mentions a button.
+
+What connects them is one kv series. Controls appends to it, the chart
+reacts to it changing and repaints a sample. Shared state, not a direct wire.
+
+The series is a `Kh57Ref`, so it can grow without bound and the chart still
+asks for 200 sampled points over the written key range rather than reading
+the whole map.
+
+The loop itself never stops either. Play/pause is a `BoolRef` it re-reads
+every iteration, so pausing is block state rather than a second way to stop a
+section. Stopping a section is the supervisor's job.
+"""
+
+TICKER_OUTRO_PROSE = """Each block above is its own supervised section.
+Editing one restarts only that one, so you can change the chart's y label
+without resetting the counter.
+"""
+
+
 def _block(name: str, kind: str, snippet: str, order: int) -> dict[str, object]:
     return {
         "name": name,
@@ -211,8 +356,8 @@ def _block(name: str, kind: str, snippet: str, order: int) -> dict[str, object]:
 def _seed() -> nu.Nu:
     return (
         # Root Page. init() sets only if missing.
-        Space.pages.init({"title": "Space", "sections": {}, "pages": {}})
-        >> Space.pages.pages.set_item(
+        DemoSpace.pages.init({"title": "Space", "sections": {}, "pages": {}})
+        >> DemoSpace.pages.pages.set_item(
             "p_home",
             {
                 "title": "Home",
@@ -229,6 +374,27 @@ def _seed() -> nu.Nu:
                 },
                 "pages": {
                     "p_notes": {"title": "Notes", "sections": {}, "pages": {}},
+                    "p_ticker": {
+                        "title": "Ticker",
+                        "sections": {
+                            "s_00_intro": _block(
+                                "intro", "prose", TICKER_INTRO_PROSE, 0
+                            ),
+                            "s_10_controls": _block(
+                                "controls", "program", TICKER_CONTROLS_SOURCE, 10
+                            ),
+                            "s_20_chart": _block(
+                                "chart", "program", TICKER_CHART_SOURCE, 20
+                            ),
+                            "s_30_wire": _block(
+                                "wire note", "prose", TICKER_WIRE_PROSE, 30
+                            ),
+                            "s_40_outro": _block(
+                                "outro", "prose", TICKER_OUTRO_PROSE, 40
+                            ),
+                        },
+                        "pages": {},
+                    },
                 },
             },
         )
@@ -237,14 +403,39 @@ def _seed() -> nu.Nu:
 
 # --- App tree ---------------------------------------------------------------
 
+# The shell binds its root shape at class-definition time, so a space with
+# its own root defines its own shell classes rather than reusing the ones in
+# `nuspace_ui`. Fifteen lines, and it is the seam that lets a space extend
+# the shape without nuspace knowing about it.
 
-ui = build_ui()
+
+class DemoPagesPage(Page):
+    """The document editor, rooted at this space's shape."""
+
+    pages = PagesRef.slot(space_root=DemoSpace)
+
+
+class DemoLensPage(Page):
+    """Lens over the same root, so the extra slots are browsable."""
+
+    lens = LensRef.slot(root=DemoSpace, max_rows=200)
+
+
+class DemoShell(Shell):
+    """Same two routes as `Nuspace`, rooted at `DemoSpace`."""
+
+    pages = Pages({"/pages": DemoPagesPage, "/lens": DemoLensPage})
+
+
+ui = PagesDriver(DemoPagesPage.pages) | LensDriver(DemoLensPage.lens)
 
 
 app = nu.With(
-    nu.kv.rocksdb_navigator(DB_PATH, tags=(Space,)),
-    server(ui, shell_cls=Nuspace, host="127.0.0.1", port=8080, open_browser=False),
-    body=nu.kv.auto_flow_atomic(_seed() >> nu.ForeverDo(nu.Delay(3600.0)), scope=Space),
+    nu.kv.rocksdb_navigator(DB_PATH, tags=(DemoSpace,)),
+    server(ui, shell_cls=DemoShell, host="127.0.0.1", port=8080, open_browser=False),
+    body=nu.kv.auto_flow_atomic(
+        _seed() >> nu.ForeverDo(nu.Delay(3600.0)), scope=DemoSpace
+    ),
 )
 
 

@@ -32,6 +32,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import contextlib
+import importlib
 import os
 import socket
 import sys
@@ -212,7 +213,7 @@ def _wrap(term: Nu, store: Mapping[str, Any]) -> Nu:
 
     from nu.kv.tree import auto_flow_atomic
 
-    scope = _scope()
+    scope = _scope(store.get("scope"))
     tags = (scope,) if scope is not None else ()
     if kind == "memory":
         navigator = nu.kv.memory_navigator(tags=tags)
@@ -228,12 +229,33 @@ def _wrap(term: Nu, store: Mapping[str, Any]) -> Nu:
     return nu.With(navigator, body=auto_flow_atomic(term, scope=scope))
 
 
-def _scope() -> type | None:
+DEFAULT_SCOPE = "nuspace.core.shapes:Space"
+
+
+def _scope(spec: str | None = None) -> type | None:
+    """Resolve the root Shape kv addresses resolve against.
+
+    Config, not an import, because the root shape is the caller's choice.
+    A space that adds slots does it by subclassing ``Space``, and
+    ``ShapeMeta`` rebinds ``_root_shape`` on every slot including the
+    inherited ones -- so the subclass is the root for all of them, and a
+    worker that assumed ``Space`` would resolve against the wrong one and
+    silently read an empty store.
+
+    ``spec`` is ``"module:attr"``. It crosses as a string because only
+    plain data goes over the channel.
+    """
+    target = spec or DEFAULT_SCOPE
+    module_name, _, attr = target.partition(":")
+    if not attr:
+        raise ValueError(f"scope must be 'module:attr', got {target!r}")
     try:
-        from nuspace.core.shapes import Space
+        module = importlib.import_module(module_name)
     except Exception:
+        if spec:
+            raise
         return None
-    return Space
+    return getattr(module, attr)
 
 
 def _format_error(exc: BaseException, prefix: str) -> str:
