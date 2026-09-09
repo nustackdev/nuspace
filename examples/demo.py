@@ -17,6 +17,22 @@ import textwrap
 from pathlib import Path
 
 from demo_space import DemoSpace
+from movies_blocks import (
+    CONTROL_INTRO_PROSE,
+    CONTROL_PAGE_ID,
+    CONTROL_SHELF_SOURCE,
+    CONTROL_STATS_SOURCE,
+    ID_BASE,
+    MOVIE_ID_PREFIX,
+    MOVIE_PAGE_PREFIX,
+    MOVIES_FORM_SOURCE,
+    MOVIES_INTRO_PROSE,
+    MOVIES_OUTRO_PROSE,
+    MOVIES_PAGE_ID,
+    MOVIES_RAIL_PROSE,
+    SEED_MOVIES,
+    detail_parts,
+)
 
 import nu
 from nuspace.web.refs import LensDriver, LensRef, PagesDriver, PagesRef
@@ -350,6 +366,79 @@ without resetting the counter.
 """
 
 
+# --- Movies pages ------------------------------------------------------------
+
+# nu's examples/movies.py, ported. The domain is identical; the structure
+# is a page tree instead of one page with a `/detail` route:
+#
+#   Movies/          the form, and nothing else
+#   Movies/Control   stats, table, filters
+#   Movies/<title>   one page per movie, created when it is logged
+#
+# The seed builds the same four films *and their pages* the same way the
+# form block does at runtime -- same id scheme, same generated source --
+# so a seeded page and a logged page are indistinguishable. Block sources
+# live in `movies_blocks.py` because blocks import from it too, and a
+# block importing from `demo.py` would get a second copy of `__main__`.
+
+
+def _movie_key(index: int) -> str:
+    return str(ID_BASE + index)
+
+
+def _detail_source(movie_id: str) -> str:
+    head, tail = detail_parts()
+    return head + movie_id + tail
+
+
+def _movie_page(movie: dict, movie_id: str) -> dict[str, object]:
+    return {
+        "title": movie["title"],
+        "sections": {
+            "s_00_detail": _block("detail", "program", _detail_source(movie_id), 0),
+        },
+        "pages": {},
+    }
+
+
+def _seed_movies() -> nu.Nu:
+    """Seed the movie records only if the shelf has never been written."""
+    writes = DemoSpace.movie_seq.set(len(SEED_MOVIES))
+    for index, movie in enumerate(SEED_MOVIES):
+        writes = writes | DemoSpace.movies.set_item(
+            MOVIE_ID_PREFIX + _movie_key(index),
+            dict(movie),
+        )
+    return nu.IfDo(DemoSpace.movie_seq.missing(), writes)
+
+
+def _movies_page() -> dict[str, object]:
+    pages: dict[str, object] = {
+        CONTROL_PAGE_ID: {
+            "title": "Control",
+            "sections": {
+                "s_00_intro": _block("intro", "prose", CONTROL_INTRO_PROSE, 0),
+                "s_10_stats": _block("stats", "program", CONTROL_STATS_SOURCE, 10),
+                "s_20_shelf": _block("shelf", "program", CONTROL_SHELF_SOURCE, 20),
+            },
+            "pages": {},
+        },
+    }
+    for index, movie in enumerate(SEED_MOVIES):
+        key = _movie_key(index)
+        pages[MOVIE_PAGE_PREFIX + key] = _movie_page(movie, MOVIE_ID_PREFIX + key)
+    return {
+        "title": "Movies",
+        "sections": {
+            "s_00_intro": _block("intro", "prose", MOVIES_INTRO_PROSE, 0),
+            "s_10_form": _block("log", "program", MOVIES_FORM_SOURCE, 10),
+            "s_20_rail": _block("rail note", "prose", MOVIES_RAIL_PROSE, 20),
+            "s_30_outro": _block("outro", "prose", MOVIES_OUTRO_PROSE, 30),
+        },
+        "pages": pages,
+    }
+
+
 def _block(name: str, kind: str, snippet: str, order: int) -> dict[str, object]:
     return {
         "name": name,
@@ -405,6 +494,14 @@ def _seed() -> nu.Nu:
                 },
             },
         )
+        # Movies is seeded *once*. Home is rewritten on every boot because
+        # it is a fixture; Movies holds pages the user created by logging
+        # a movie, and a set_item here would delete them on restart.
+        >> nu.IfDo(
+            nu.Not(DemoSpace.pages.pages.contains(MOVIES_PAGE_ID)),
+            DemoSpace.pages.pages.set_item(MOVIES_PAGE_ID, _movies_page()),
+        )
+        >> _seed_movies()
     )
 
 

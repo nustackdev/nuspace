@@ -18,7 +18,7 @@ import nu
 from nuspace.core.shapes import Space
 
 
-__all__ = ["DemoSpace", "Series"]
+__all__ = ["DemoSpace", "Movie", "Series"]
 
 
 class Series(nu.Shape):
@@ -39,10 +39,35 @@ class Series(nu.Shape):
     cursor = nu.kv.IntRef.slot()
 
 
+class Movie(nu.Shape):
+    """One logged movie.
+
+    Keyed in a *dict*, not a list, because a movie owns a page and that
+    page's block names the movie by id in its own source. A list index
+    would be reassigned the moment anything ahead of it is deleted and
+    every page after the hole would render the wrong film.
+    """
+
+    title = nu.kv.StrRef.slot()
+    year = nu.kv.IntRef.slot()
+    genre = nu.kv.StrRef.slot()
+    rating = nu.kv.FloatRef.slot()
+    watched = nu.kv.BoolRef.slot()
+    notes = nu.kv.StrRef.slot()
+
+
 class DemoSpace(Space):
-    """Space plus this demo's own series storage."""
+    """Space plus this demo's own series and movie storage."""
 
     series = nu.kv.ShapesDictRef.slot(Series)
+    movies = nu.kv.ShapesDictRef.slot(Movie)
+
+    # The id minter for `movies`. `nuspace.core.refs.mint_ordered_id` is
+    # python and a block is source that constructs *once*, so calling it
+    # in a block would freeze one id into the tree and every submit would
+    # overwrite the same movie. An id has to be minted by the term, at
+    # click time, which means a kv counter.
+    movie_seq = nu.kv.IntRef.slot()
 
 
 # Where the worker resolves its scope from. The worker takes this as
