@@ -34,6 +34,10 @@ let current: Theme = stored() ?? DEFAULT;
 
 function paint(theme: Theme): void {
 	document.documentElement.classList.toggle("dark", theme === "dark");
+	// `color-scheme` is what the browser paints its *own* UI from: scrollbars,
+	// the overscroll gutter, form controls, caret. None of that reads our CSS,
+	// so without this line the scrollbar stays light in dark mode.
+	document.documentElement.style.colorScheme = theme;
 }
 
 paint(current);

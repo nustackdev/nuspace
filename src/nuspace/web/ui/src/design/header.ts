@@ -1,4 +1,4 @@
-// Page masthead: class recipes + the banner's generated geometry.
+// Page masthead: class recipes.
 //
 // A nuspace page opens with a masthead, not a line of text: a decorative
 // banner, a page icon that overlaps its bottom edge, the trail that says where
@@ -11,24 +11,20 @@
 //                 decoration. "When in doubt, subtract chrome, keep the
 //                 frame." No box shadows on containers - flat, hairline
 //                 borders carry every edge.
-//   svg.md        the mark grammar the banner is drawn in: Ref = small
-//                 circle (r 4-5), Interaction = small square (side 10-14),
-//                 fabric = dashed hairline rect, connectors are straight
-//                 lines and right-angle bends only, strokeWidth 1 with
-//                 vectorEffect="non-scaling-stroke", rects rx 3, at most one
-//                 accent-wash surface per mark.
+//   svg.md        the grammar the page glyph is drawn in: hairline strokes,
+//                 rects rx 3, strokeWidth ~1.25 with
+//                 vectorEffect="non-scaling-stroke".
 //   typography.md the page title is the display tier (32/1.2/-0.02), one
 //                 step above the document's own h1 (text-3xl), so the
 //                 masthead and the body never read as the same heading.
 //   space-radius  every number below is on the 4px grid.
 //   a11y.md       focus is the kit's one ring recipe (`focus-ring`).
 //
-// The banner is generated, not uploaded. v1 has no image picker and a stock
-// texture would be the one thing direction.md rules out, so the banner is a
-// schematic drawn in the SVG vocabulary above, seeded off the page id: the
-// same page always draws the same mark, and a different page draws a
-// visibly different one. When a real cover picker lands it replaces
-// `bannerScene()` and nothing else.
+// The banner is a pattern, not a picture: a dot grid, one accent wash, and a
+// fade into the canvas. It is the same on every page. A per-page generated
+// schematic was tried and read as noise -- the masthead's job is to frame the
+// title, and anything with structure in it competes with the document below.
+// When a cover picker lands it replaces the banner's body and nothing else.
 //
 // Colors here are semantic token names only (`bg-bg-canvas`,
 // `border-border-subtle`, `stroke-accent-line`, ...). No hexes, no palette.
@@ -95,7 +91,6 @@ export const docBannerFadeStyle: CSSProperties = {
 };
 
 /** The generated mark itself, stretched across the banner. */
-export const docBannerMark = "absolute inset-0 h-full w-full";
 
 /** Absolute layer helper for the substrate / wash / fade stack. */
 export const docBannerLayer = "pointer-events-none absolute inset-0";
@@ -153,123 +148,3 @@ export const docTitle = cn(
 	"empty:before:pointer-events-none empty:before:text-text-muted",
 	"empty:before:content-[attr(data-placeholder)]",
 );
-
-/* ============================== banner geometry ========================== */
-//
-// Deterministic, not random. A page's mark is a function of its id, so it is
-// stable across reloads and distinguishable between pages, and there is no
-// frame where the header renders a different picture than it did a second
-// ago.
-
-/** FNV-1a. Small, stable, and it does not need to be good, only fixed. */
-function hash(seed: string): number {
-	let h = 0x811c9dc5;
-	for (let i = 0; i < seed.length; i++) {
-		h ^= seed.charCodeAt(i);
-		h = Math.imul(h, 0x01000193);
-	}
-	return h >>> 0;
-}
-
-/** Deterministic 0..n-1 stream off the seed hash. */
-function picker(seed: string): (n: number) => number {
-	let state = hash(seed) || 1;
-	return (n: number) => {
-		state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
-		return state % n;
-	};
-}
-
-export type BannerNode = {
-	/** Ref (circle) or Interaction (square), per svg.md §Vocabulary. */
-	kind: "ref" | "interaction";
-	x: number;
-	y: number;
-	/** The one lane that carries the accent; everything else is hairline. */
-	accent: boolean;
-};
-
-export type BannerScene = {
-	/** viewBox width/height. Fixed; the banner slices it, never squashes it. */
-	width: number;
-	height: number;
-	/** Horizontal hairline lanes: [y, x0, x1]. */
-	lanes: [number, number, number][];
-	nodes: BannerNode[];
-	/** Right-angle drops between lanes: [x, y0, y1]. */
-	drops: [number, number, number][];
-	/** The dashed fabric rect: [x, y, w, h]. */
-	fabric: [number, number, number, number];
-	accentLane: number;
-};
-
-const VIEW_W = 1200;
-const VIEW_H = 160;
-const LANE_Y = [42, 80, 118];
-/** Node slots on a 120px pitch. The mark is a schematic, not a sketch. */
-const SLOTS = [96, 216, 336, 456, 576, 696, 816, 936, 1056];
-
-/**
- * Build one page's mark.
- *
- * The skeleton is fixed - three lanes, nodes on a fixed pitch, one accent
- * lane, one dashed fabric rect - and only the choices inside it vary. That is
- * on purpose: a fully generated layout is a lottery, and one bad draw is a
- * page that looks broken. This composes a schematic that is always in
- * grammar and merely never the same twice.
- */
-export function bannerScene(seed: string): BannerScene {
-	const pick = picker(seed || "space");
-	const accentLane = pick(3);
-
-	const lanes: [number, number, number][] = LANE_Y.map((y) => {
-		const start = pick(3); // 0..2 slots in from the left
-		const end = SLOTS.length - 1 - pick(2);
-		return [y, SLOTS[start] - 48, SLOTS[end] + 48] as [number, number, number];
-	});
-
-	const nodes: BannerNode[] = [];
-	for (let lane = 0; lane < LANE_Y.length; lane++) {
-		const y = LANE_Y[lane];
-		const [, x0, x1] = lanes[lane];
-		// 3 or 4 nodes per lane, spread over the lane's own extent.
-		const count = 3 + pick(2);
-		const step = Math.floor(SLOTS.length / count);
-		for (let i = 0; i < count; i++) {
-			const x = SLOTS[Math.min(SLOTS.length - 1, i * step + pick(2))];
-			if (x < x0 || x > x1) continue;
-			if (nodes.some((n) => n.y === y && Math.abs(n.x - x) < 100)) continue;
-			nodes.push({
-				kind: pick(3) === 0 ? "interaction" : "ref",
-				x,
-				y,
-				accent: lane === accentLane,
-			});
-		}
-	}
-
-	// Two right-angle drops tying adjacent lanes together. Connectors are
-	// straight lines and right-angle bends only (svg.md §Vocabulary), so a
-	// drop is exactly one vertical segment between two lanes at a shared x.
-	const drops: [number, number, number][] = [];
-	for (let i = 0; i < 2; i++) {
-		const lane = pick(2); // 0->1 or 1->2
-		const candidates = nodes.filter((n) => n.y === LANE_Y[lane]);
-		if (candidates.length === 0) continue;
-		const from = candidates[pick(candidates.length)];
-		drops.push([from.x, LANE_Y[lane], LANE_Y[lane + 1]]);
-	}
-
-	// The fabric: a dashed hairline rect around a run of the mark. It always
-	// encloses at least one full lane so it reads as a container, not a crop.
-	const fx = SLOTS[pick(3)] - 56;
-	const fw = 360 + pick(3) * 120;
-	const fabric: [number, number, number, number] = [
-		fx,
-		LANE_Y[0] - 22,
-		Math.min(fw, VIEW_W - fx - 40),
-		LANE_Y[2] - LANE_Y[0] + 44,
-	];
-
-	return { width: VIEW_W, height: VIEW_H, lanes, nodes, drops, fabric, accentLane };
-}

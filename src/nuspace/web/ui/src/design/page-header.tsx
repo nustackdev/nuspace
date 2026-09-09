@@ -10,7 +10,7 @@
 // heading without letting React and the browser fight over the text node.
 //
 // Not in scope for v1: an icon picker and a cover picker. Both are structured
-// for - `PageIcon` takes a spec and `PageBanner` takes a seed - so adding
+// for - `PageIcon` takes a spec and `PageBanner` keeps a seed - so adding
 // them later is a new trigger and a new spec variant, not a rewrite.
 
 import {
@@ -26,13 +26,10 @@ import type React from "react";
 import { Fragment, useCallback, useEffect, useRef } from "react";
 
 import {
-	type BannerScene,
-	bannerScene,
 	docBanner,
 	docBannerFadeStyle,
 	docBannerGridStyle,
 	docBannerLayer,
-	docBannerMark,
 	docBannerTrail,
 	docBannerWashStyle,
 	docMasthead,
@@ -98,108 +95,21 @@ export function PageIcon({ icon = DEFAULT_PAGE_ICON }: { icon?: PageIconSpec }) 
 
 /* ============================== banner =================================== */
 
-function Mark({ scene }: { scene: BannerScene }) {
-	const { width, height, lanes, nodes, drops, fabric } = scene;
-	return (
-		<svg
-			viewBox={`0 0 ${width} ${height}`}
-			preserveAspectRatio="xMidYMid slice"
-			role="presentation"
-			aria-hidden="true"
-			className={docBannerMark}
-		>
-			{/* fabric: a dashed hairline container (svg.md §Vocabulary) */}
-			<rect
-				x={fabric[0]}
-				y={fabric[1]}
-				width={fabric[2]}
-				height={fabric[3]}
-				rx={3}
-				fill="none"
-				strokeDasharray="3 3"
-				strokeWidth={1}
-				vectorEffect="non-scaling-stroke"
-				className="stroke-border-strong"
-			/>
-			{/* lanes */}
-			{lanes.map(([y, x0, x1], i) => (
-				<line
-					// biome-ignore lint/suspicious/noArrayIndexKey: lane index IS the identity
-					key={`lane-${i}`}
-					x1={x0}
-					y1={y}
-					x2={x1}
-					y2={y}
-					strokeWidth={i === scene.accentLane ? 1.25 : 1}
-					vectorEffect="non-scaling-stroke"
-					className={i === scene.accentLane ? "stroke-accent-line" : "stroke-border-strong"}
-				/>
-			))}
-			{/* right-angle drops */}
-			{drops.map(([x, y0, y1], i) => (
-				<line
-					// biome-ignore lint/suspicious/noArrayIndexKey: drops are positional
-					key={`drop-${i}`}
-					x1={x}
-					y1={y0}
-					x2={x}
-					y2={y1}
-					strokeWidth={1}
-					vectorEffect="non-scaling-stroke"
-					className="stroke-border-strong"
-				/>
-			))}
-			{/* refs and interactions */}
-			{nodes.map((n) =>
-				n.kind === "ref" ? (
-					<circle
-						key={`n-${n.x}-${n.y}`}
-						cx={n.x}
-						cy={n.y}
-						r={4.5}
-						strokeWidth={1}
-						vectorEffect="non-scaling-stroke"
-						className={cn(
-							"fill-bg-canvas",
-							n.accent ? "stroke-accent-line" : "stroke-border-strong",
-						)}
-					/>
-				) : (
-					<rect
-						key={`n-${n.x}-${n.y}`}
-						x={n.x - 6}
-						y={n.y - 6}
-						width={12}
-						height={12}
-						rx={3}
-						strokeWidth={1}
-						vectorEffect="non-scaling-stroke"
-						className={cn(
-							"fill-bg-canvas",
-							n.accent ? "stroke-accent-line" : "stroke-border-strong",
-						)}
-					/>
-				),
-			)}
-		</svg>
-	);
-}
-
 /**
- * The banner. A pattern, not a picture: dot-grid substrate, one generated
- * schematic in the system's SVG grammar, one accent wash, and a fade into the
- * canvas so the cover ends without a horizon.
+ * The banner. A pattern, not a picture: a dot-grid substrate, one accent
+ * wash, and a fade into the canvas so the cover ends without a horizon.
  *
- * `seed` is the page id (the root page's is empty, and gets its own mark).
- * Swap this component's body for an <img> when covers become uploadable; the
- * prop is already the right one.
+ * Deliberately the same on every page. A per-page generated mark was tried
+ * and read as noise: the masthead's job is to frame the title, and anything
+ * with structure in it competes with the document underneath.
+ *
+ * Swap this body for an <img> when covers become uploadable; `seed` is kept
+ * so a per-page cover has somewhere to key off.
  */
-export function PageBanner({ seed, children }: { seed: string; children?: React.ReactNode }) {
-	const scene = bannerScene(seed);
+export function PageBanner({ children }: { seed?: string; children?: React.ReactNode }) {
 	return (
 		<div className={docBanner} data-slot="page-banner">
 			<div className={docBannerLayer} style={docBannerGridStyle} />
-			<Mark scene={scene} />
 			<div className={docBannerLayer} style={docBannerWashStyle} />
 			<div className={docBannerLayer} style={docBannerFadeStyle} />
 			{children}

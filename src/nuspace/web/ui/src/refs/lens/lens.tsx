@@ -122,11 +122,23 @@ const factory: SliceFactory = (path, ctx, props) => {
 				const slice = refs[path];
 				if (!slice) return;
 				const p = (v ?? {}) as Record<string, unknown>;
+				const columns = Array.isArray(p.columns) ? (p.columns as Column[]) : [];
 				slice.value = {
 					path: Array.isArray(p.path) ? p.path.map((s) => String(s)) : [],
-					columns: Array.isArray(p.columns) ? (p.columns as Column[]) : [],
+					columns,
 				};
-				slice.focusedIndex = {};
+				// Keep the cursor of every column that still exists, drop the
+				// rest. Clearing this wholesale is what made popping land back
+				// on row 0 instead of on the row you came through: the cursor
+				// for column N is exactly where you were standing when you
+				// drilled out of it.
+				const prev = (slice.focusedIndex ?? {}) as Record<number, number>;
+				const kept: Record<number, number> = {};
+				for (const key of Object.keys(prev)) {
+					const i = Number(key);
+					if (i < columns.length) kept[i] = prev[i];
+				}
+				slice.focusedIndex = kept;
 				slice.pendingDepth = null;
 			}),
 	};
@@ -455,9 +467,23 @@ function LensView({ path }: { path: string }) {
 	const open = useCallback(
 		(colIdx: number, key: string) => {
 			containerRef.current?.focus();
+			// Park this column's cursor on the row being opened before the
+			// response lands, so popping back returns here. Columns to the
+			// right are about to be replaced, so their cursors go with them.
+			const idx = columns[colIdx]?.entries.findIndex((e) => e.key === key) ?? -1;
+			patch((slice) => {
+				const prev = (slice.focusedIndex ?? {}) as Record<number, number>;
+				const kept: Record<number, number> = {};
+				for (const k of Object.keys(prev)) {
+					const i = Number(k);
+					if (i < colIdx) kept[i] = prev[i];
+				}
+				if (idx >= 0) kept[colIdx] = idx;
+				return { focusedIndex: kept };
+			});
 			sendPath([...cursorPath.slice(0, colIdx), key]);
 		},
-		[cursorPath, sendPath],
+		[columns, cursorPath, patch, sendPath],
 	);
 
 	const drill = useCallback(() => {
@@ -515,12 +541,23 @@ function LensView({ path }: { path: string }) {
 		[columns, activeCol, cursorIdx, setCursor, drill, pop],
 	);
 
-	// Keep the live column in view. Without this a deep path walks off the
-	// right edge and the keyboard cursor ends up somewhere you cannot see.
-	// biome-ignore lint/correctness/useExhaustiveDependencies: the deps are the trigger (a column landed / a fetch started), not values the body reads
+	// Keep the live column in view when the path gets *deeper*. Without this a
+	// deep path walks off the right edge and the keyboard cursor ends up
+	// somewhere you cannot see.
+	//
+	// Only on the way in. Pinning to scrollWidth after a pop yanks the view
+	// left by a whole column on top of the column already vanishing, which
+	// reads as the surface dropping out from under you. On the way back the
+	// browser's own clamp is the gentler answer, and it only moves at all when
+	// the removed column was the one holding the scroll.
+	const prevCount = useRef(columns.length);
 	useLayoutEffect(() => {
 		const el = containerRef.current;
-		if (el) el.scrollLeft = el.scrollWidth;
+		const grew = columns.length > prevCount.current;
+		prevCount.current = columns.length;
+		if (el && (grew || (pendingDepth !== null && pendingDepth >= columns.length))) {
+			el.scrollLeft = el.scrollWidth;
+		}
 	}, [columns.length, pendingDepth]);
 
 	// Ensure the slice's setLocal spot isn't left stale between mounts.
