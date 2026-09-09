@@ -17,7 +17,7 @@
 import { cn } from "@nustackdev/ui-kit";
 
 import type { SectionStatus } from "./section-status";
-import { hasGutterRail, SECTION_STATUS } from "./section-status";
+import { hasGutterRail } from "./section-status";
 
 /* ============================== page + column ============================ */
 
@@ -98,14 +98,14 @@ export const docLink = "text-accent underline underline-offset-2";
 /* ============================== block ==================================== */
 
 export interface BlockStateFlags {
-	/** Pointer is over the block. Reveals the gutter affordances. */
-	hovered?: boolean;
 	/** The caret lives in this block. No fill, gutter rail only. */
 	focused?: boolean;
 	/** Block-level selection (across an island boundary). Accent fill. */
 	selected?: boolean;
-	/** Part of a multi-block selection, or being dragged. */
+	/** Part of a multi-block selection. Stronger accent fill. */
 	selectedStrong?: boolean;
+	/** This block is the one being dragged. Ghosted while it travels. */
+	dragging?: boolean;
 	/** Program block rather than a prose island. Slightly more pad-y. */
 	program?: boolean;
 }
@@ -125,12 +125,15 @@ export function docBlock(state: BlockStateFlags = {}): string {
 		"px-doc-block-x",
 		state.program ? "py-doc-block-y-program" : "py-doc-block-y",
 		"transition-colors duration-fast ease-out",
-		state.hovered && !state.selected && "bg-doc-hover",
+		// Hover is a CSS state, not a React one: tracking pointer-enter per
+		// block would rerender the document on every mouse move.
+		!state.selected && "hover:bg-doc-hover",
 		state.selected && "bg-doc-selected",
 		state.selectedStrong && "bg-doc-selected-strong",
 		// the caret's block gets no fill: it is already marked by the caret.
 		// It gets the neutral gutter rail instead, see `docFocusRail`.
 		state.focused && "z-10",
+		state.dragging && "opacity-40",
 	);
 }
 
@@ -145,17 +148,29 @@ export const docFocusRail = cn(
 );
 
 /**
- * The gutter. Hangs off the block's left edge into the page padding, holds
- * the drag handle, the add button and the status rail. Affordances are hidden
- * at rest and revealed on block hover or keyboard focus - a document at rest
- * shows text, not controls.
+ * The gutter. Hangs off the block's left edge into the page padding and holds
+ * the block's affordances: add, drag. Affordances are hidden at rest and
+ * revealed on block hover or keyboard focus - a document at rest shows text,
+ * not controls.
+ *
+ * Sized to hold exactly two `sm` IconButtons (24px each + a 2px gap), which is
+ * what makes the gutter one lane instead of two overlapping ones. The top
+ * offset centres that 24px row on the block's *first line*, which is a 25px
+ * prose line box on an island and the 32px control row a program block opens
+ * with - so the handles line up with the text either way.
  */
-export const docGutter = cn(
-	"absolute right-full top-0 w-doc-gutter",
-	"flex items-start justify-end gap-0.5 pr-1 select-none",
-);
+export function docGutter(program = false): string {
+	return cn(
+		"absolute right-full w-doc-gutter",
+		program ? "top-3" : "top-1",
+		"flex items-center justify-end gap-0.5 pr-1 select-none",
+	);
+}
 
-/** Wrapper for the hover-only affordances inside the gutter. */
+/**
+ * Wrapper for the hover-only affordances inside the gutter. One row, one
+ * reveal, so add and drag read as a pair rather than as two loose glyphs.
+ */
 export const docGutterAffordances = cn(
 	"flex items-center gap-0.5",
 	"opacity-0 transition-opacity duration-fast ease-out",
@@ -165,17 +180,11 @@ export const docGutterAffordances = cn(
 );
 
 /**
- * Drag handle and the add button. Square, 24px, same footprint as the kit's
- * `sm` IconButton so the gutter lines up with kit chrome if a block hosts it.
+ * Extra classes for the drag handle on top of a kit `IconButton ghost sm`.
+ * Only the grab cursor is ours; the box, the hover and the focus ring are the
+ * kit's, which is what keeps the gutter aligned with every other control.
  */
-export const docHandle = cn(
-	"focus-ring inline-flex size-doc-handle shrink-0 items-center justify-center",
-	"rounded-sm text-doc-handle cursor-grab",
-	"transition-colors duration-fast ease-out",
-	"hover:bg-doc-hover hover:text-doc-handle-hover",
-	"active:cursor-grabbing active:bg-doc-active",
-	"[&>svg]:size-doc-handle-icon [&>svg]:shrink-0",
-);
+export const docDragHandle = "cursor-grab active:cursor-grabbing";
 
 /** Drop indicator drawn between two blocks during a drag. 2px accent line. */
 export const docDropIndicator = cn(
@@ -204,19 +213,16 @@ export function docStatusRail(status: SectionStatus): string {
 }
 
 /**
- * The inline payload panel under a block that carries a diagnostic (invalid)
- * or a traceback (failed). Sunken well, mono, hue-tinted border only.
+ * The traceback / diagnostic body inside a block's status panel. The panel
+ * itself is the kit's `Alert` (it already owns the wash, the line, the tone
+ * icon and `role="alert"`); all that is left for the document layer is the
+ * fact that a python traceback is preformatted text and has to be able to
+ * scroll sideways without widening the reading column.
  */
-export function docStatusPayload(status: SectionStatus): string {
-	const t = SECTION_STATUS[status];
-	return cn(
-		"mt-1 rounded-md border px-3 py-2",
-		"font-mono text-sm whitespace-pre-wrap break-words",
-		t.wash,
-		t.line,
-		t.fg,
-	);
-}
+export const docStatusTrace = cn(
+	"font-mono text-sm whitespace-pre-wrap break-words",
+	"max-h-64 overflow-auto",
+);
 
 /* ============================== slash menu =============================== */
 

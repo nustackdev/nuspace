@@ -45,10 +45,9 @@
 	--doc-selected-strong: var(--accent-soft);
 	--doc-selected-line: var(--accent-line);
 
-	/* drag + drop */
+	/* drag + drop. The handles themselves are kit IconButtons and bring their
+	 * own text and hover tiers; only the drop line is ours. */
 	--doc-drop-line: var(--accent);
-	--doc-handle: var(--text-muted);
-	--doc-handle-hover: var(--text-secondary);
 
 	/* the caret's block: no fill, just a hairline rail in the gutter */
 	--doc-focus-rail: var(--border-strong);
@@ -116,8 +115,6 @@
 	--color-doc-selected-strong: var(--doc-selected-strong);
 	--color-doc-selected-line: var(--doc-selected-line);
 	--color-doc-drop-line: var(--doc-drop-line);
-	--color-doc-handle: var(--doc-handle);
-	--color-doc-handle-hover: var(--doc-handle-hover);
 	--color-doc-focus-rail: var(--doc-focus-rail);
 
 	/* --- section status --> text-section-running, bg-section-failed-wash --*/
@@ -165,9 +162,11 @@
 	/* p-doc-*, w-doc-*, gap-doc-* */
 	--spacing-doc-pad-x: 1.5rem; /* 24, spacing 6   page side gutter        */
 	--spacing-doc-pad-y: 4rem; /* 64, spacing 16  air above the first block */
-	--spacing-doc-gutter: 2rem; /* 32              handle + status rail      */
-	--spacing-doc-handle: 1.5rem; /* 24              == kit sm icon-button     */
-	--spacing-doc-handle-icon: 0.875rem; /* 14      == kit sm icon            */
+	--spacing-doc-gutter: 3.5rem; /* 56            two kit `sm` IconButtons
+	                               * (24 + 2 gap + 24) plus the 4px lane that
+	                               * separates the row from the text edge.
+	                               * Sized to the controls it holds so the
+	                               * gutter is one lane, not two that overlap. */
 	--spacing-doc-block-x: 0.5rem; /* 8            wash overhangs the text  */
 	--spacing-doc-block-y: 0.25rem; /* 4           prose block pad-y        */
 	--spacing-doc-block-y-program: 0.5rem; /* 8    program block pad-y      */

@@ -88,6 +88,15 @@ export type DragState = {
 
 export type EditorState = {
 	focus: FocusReq | null;
+	/**
+	 * The block that currently holds DOM focus, reported by the canvas.
+	 *
+	 * Distinct from `focus`, which is an *intent* ("put the caret here") and
+	 * is consumed and cleared the moment the target editor honours it. The
+	 * gutter's focus rail wants the opposite: the standing fact of where the
+	 * caret lives, for as long as it lives there.
+	 */
+	focused: string | null;
 	selected: string[];
 	/** Anchor for shift-extended block selection. */
 	anchor: string | null;
@@ -109,6 +118,7 @@ export type EditorState = {
 
 export const EMPTY_EDITOR: EditorState = {
 	focus: null,
+	focused: null,
 	selected: [],
 	anchor: null,
 	editing: [],
@@ -236,6 +246,7 @@ export const pagesSliceFactory: SliceFactory = (path, ctx, _props) =>
 				slice.editor = {
 					...ed,
 					focus: ed.focus && live.has(ed.focus.blockId) ? ed.focus : null,
+					focused: ed.focused && live.has(ed.focused) ? ed.focused : null,
 					selected: ed.selected.filter((id) => live.has(id)),
 					anchor: ed.anchor && live.has(ed.anchor) ? ed.anchor : null,
 					editing: ed.editing.filter((id) => live.has(id)),

@@ -7,6 +7,7 @@
 //
 // Not part of the nu.ui bridge -- purely browser-side.
 
+import type React from "react";
 import { useSyncExternalStore } from "react";
 
 export const TOPS = ["pages", "lens"] as const;
@@ -27,6 +28,16 @@ function _split(pathname: string): Route {
 function _join(top: Top, path: string[]): string {
 	const encoded = path.map(encodeURIComponent).join("/");
 	return encoded.length > 0 ? `/${top}/${encoded}` : `/${top}`;
+}
+
+/**
+ * The URL a nav target resolves to. Exported so nav chrome can render real
+ * anchors (kit `NavLink` is an `<a>`): middle-click, cmd-click and the status
+ * bar preview all work, and the click handler only has to suppress the
+ * default navigation.
+ */
+export function hrefFor(top: Top, path: string[] = []): string {
+	return _join(top, path);
 }
 
 // Per-surface deep path, remembered across tab switches. Flipping to /lens and
@@ -84,6 +95,20 @@ export function navigate(target: string | { top: Top; path?: string[] }): void {
 	const r = _split(url);
 	lastPath[r.top] = r.path;
 	for (const cb of subscribers) cb();
+}
+
+/**
+ * Click handler for an anchor that navigates in-app. Modified clicks (new tab,
+ * new window, download) are left to the browser -- an in-app router that eats
+ * cmd+click is a worse link than a plain one.
+ */
+export function onNavClick(target: string | { top: Top; path?: string[] }) {
+	return (e: React.MouseEvent<HTMLElement>) => {
+		if (e.defaultPrevented) return;
+		if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+		e.preventDefault();
+		navigate(target);
+	};
 }
 
 // Landing bootstrap. Bare "/" (or any unknown top) becomes /pages.

@@ -10,7 +10,7 @@
 // and Escape has to hand control back to block selection.
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { type CodeEditor, type KeyboardEvt, loadMonaco, type MonacoApi } from "./monaco";
+import { type CodeEditor, type KeyboardEvt, loadMonaco, type MonacoApi, NU_THEME } from "./monaco";
 import type { ExitDir } from "./Prose";
 import type { FocusReq } from "./slice";
 
@@ -28,10 +28,6 @@ export type CodeBoxProps = {
 	/** Live read of the buffer, for the parent's unsaved indicator. */
 	onDirty: (dirty: boolean) => void;
 };
-
-function themeName(): string {
-	return document.documentElement.classList.contains("dark") ? "nu-dark" : "nu-light";
-}
 
 export function CodeBox(props: CodeBoxProps) {
 	const { source, focusReq, onFocusConsumed, onCommit, onExit, onEscape, onDirty } = props;
@@ -56,7 +52,8 @@ export function CodeBox(props: CodeBoxProps) {
 			const editor = monaco.editor.create(host, {
 				value: sourceRef.current,
 				language: "python",
-				theme: themeName(),
+				// One theme name; `monaco.ts` restains it in place on a flip.
+				theme: NU_THEME,
 				automaticLayout: true,
 				minimap: { enabled: false },
 				lineNumbers: "on",
@@ -73,7 +70,9 @@ export function CodeBox(props: CodeBoxProps) {
 					alwaysConsumeMouseWheel: false,
 				},
 				padding: { top: 8, bottom: 8 },
-				fontSize: 12.5,
+				// Editor tier, one step under the document's 16px prose so code
+				// does not tower over the paragraph above it (typography.md §2).
+				fontSize: 13,
 				fontFamily:
 					getComputedStyle(document.documentElement).getPropertyValue("--font-mono") || "monospace",
 				tabSize: 4,
@@ -202,7 +201,7 @@ export function CodeBox(props: CodeBoxProps) {
 	return (
 		<div
 			ref={hostRef}
-			className="w-full overflow-hidden rounded-md border border-border-subtle bg-bg-sunken"
+			className="w-full overflow-hidden rounded-md border border-border-default bg-bg-sunken"
 			style={{ minHeight: MIN_HEIGHT }}
 		/>
 	);

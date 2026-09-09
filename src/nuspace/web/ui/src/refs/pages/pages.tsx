@@ -14,7 +14,7 @@
 
 import { OP_NOTIFY } from "@nustackdev/ui-core";
 import type { RefEntry } from "@nustackdev/ui-kit";
-import { useStore } from "@nustackdev/ui-kit";
+import { Heading, Spinner, useStore } from "@nustackdev/ui-kit";
 import { useCallback, useEffect, useMemo } from "react";
 import { docPage } from "../../design";
 import { useRoute } from "../../router";
@@ -75,10 +75,15 @@ function PagesView({ path }: { path: string }) {
 			/>
 			<div className={`${docPage} flex min-w-0 flex-1 flex-col`}>
 				{page == null ? (
-					<div className="p-8 font-mono text-sm text-text-muted">loading page...</div>
+					<div className="flex items-center gap-2 p-8 text-base text-text-muted">
+						<Spinner size="sm" tone="neutral" label="Loading page" />
+						loading page...
+					</div>
 				) : (
 					<>
 						<header className="mx-auto w-full max-w-doc px-doc-pad-x pt-16">
+							{/* The title is a real heading that happens to be clickable,
+							    not a button that happens to look like a heading. */}
 							<button
 								type="button"
 								onClick={() => {
@@ -86,9 +91,11 @@ function PagesView({ path }: { path: string }) {
 									const title = window.prompt("rename page", page.title);
 									if (title) notify({ op: "on_page_rename", path: page.path, title });
 								}}
-								className="w-full truncate text-left text-3xl font-semibold tracking-tight text-text-primary"
+								className="focus-ring -mx-2 block w-[calc(100%+1rem)] rounded-sm px-2 py-1 text-left transition-colors duration-fast ease-out hover:bg-doc-hover"
 							>
-								{page.title || (page.path.length === 0 ? "Space" : "Untitled")}
+								<Heading as="h1" size="3xl" className="truncate">
+									{page.title || (page.path.length === 0 ? "Space" : "Untitled")}
+								</Heading>
 							</button>
 						</header>
 						<Canvas refPath={path} page={page} notify={notify} />

@@ -15,6 +15,8 @@
 
 import * as monaco from "monaco-editor/editor/editor.api.js";
 
+import { NU_THEME } from "./monaco";
+
 import "monaco-editor/editor/contrib/bracketMatching/browser/bracketMatching.js";
 import "monaco-editor/editor/contrib/clipboard/browser/clipboard.js";
 import "monaco-editor/editor/contrib/comment/browser/comment.js";
@@ -36,20 +38,22 @@ import EditorWorker from "monaco-editor/editor/editor.worker.js?worker";
 	getWorker: () => new EditorWorker(),
 };
 
-// Two themes wired to the design tokens. Monaco cannot read CSS variables, so
-// the shell resolves them at theme-define time (see `defineNuThemes`) rather
-// than hardcoding hexes here.
-let themesDefined = false;
+// One theme, wired to the design tokens. Monaco cannot read CSS variables, so
+// the shell resolves them here, at define time.
+//
+// Deliberately NOT two themes defined once: a token only resolves to the theme
+// that is live on <html> at the moment it is read, so defining `nu-light` while
+// the shell is dark bakes dark hexes into the light theme. Instead one theme
+// named `nu` is redefined from whatever is live, every time the theme flips.
 
 function cssVar(name: string, fallback: string): string {
 	const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 	return v || fallback;
 }
 
-/** Define `nu-light` / `nu-dark` from the live design tokens. Idempotent. */
-export function defineNuThemes(): void {
-	if (themesDefined) return;
-	themesDefined = true;
+/** (Re)define `nu` from the live design tokens and make it the active theme. */
+export function applyNuTheme(): void {
+	const dark = document.documentElement.classList.contains("dark");
 
 	const bg = cssVar("--bg-sunken", "#f7f7f8");
 	const fg = cssVar("--text-primary", "#1a1a1a");
@@ -76,18 +80,13 @@ export function defineNuThemes(): void {
 		"editorCursor.foreground": accent,
 	});
 
-	monaco.editor.defineTheme("nu-light", {
-		base: "vs",
+	monaco.editor.defineTheme(NU_THEME, {
+		base: dark ? "vs-dark" : "vs",
 		inherit: true,
 		rules,
 		colors: colors(bg),
 	});
-	monaco.editor.defineTheme("nu-dark", {
-		base: "vs-dark",
-		inherit: true,
-		rules,
-		colors: colors(bg),
-	});
+	monaco.editor.setTheme(NU_THEME);
 }
 
 export { monaco };

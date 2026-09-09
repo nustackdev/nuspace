@@ -14,6 +14,20 @@
 // at the caret, which is the only way a new section is ever born out of prose.
 // Splitting is always explicit -- that is the rule the island model rests on.
 
+import {
+	Heading1,
+	Heading2,
+	Heading3,
+	List,
+	ListOrdered,
+	type LucideIcon,
+	Minus,
+	Pilcrow,
+	SeparatorHorizontal,
+	SquareTerminal,
+	TextQuote,
+	Type,
+} from "lucide-react";
 import { useEffect, useRef } from "react";
 import { docSlashMenu, docSlashMenuHint, docSlashMenuItem, docSlashMenuLabel } from "../../design";
 
@@ -44,6 +58,8 @@ export type SlashItem = {
 	hint: string;
 	group: string;
 	keywords: string;
+	/** Row glyph. A menu of eleven identical text rows scans as a wall. */
+	icon: LucideIcon;
 	action: SlashAction;
 };
 
@@ -54,6 +70,7 @@ export const SLASH_ITEMS: SlashItem[] = [
 		hint: "text",
 		group: "blocks",
 		keywords: "text paragraph prose p",
+		icon: Type,
 		action: { kind: "split", insert: "prose" },
 	},
 	{
@@ -62,6 +79,7 @@ export const SLASH_ITEMS: SlashItem[] = [
 		hint: "nu",
 		group: "blocks",
 		keywords: "program code nu python live section",
+		icon: SquareTerminal,
 		action: { kind: "split", insert: "program" },
 	},
 	{
@@ -70,6 +88,7 @@ export const SLASH_ITEMS: SlashItem[] = [
 		hint: "split",
 		group: "blocks",
 		keywords: "split break divide separate",
+		icon: SeparatorHorizontal,
 		action: { kind: "split", insert: null },
 	},
 	{
@@ -78,6 +97,7 @@ export const SLASH_ITEMS: SlashItem[] = [
 		hint: "#",
 		group: "prose",
 		keywords: "h1 heading title big",
+		icon: Heading1,
 		action: { kind: "prefix", prefix: "# " },
 	},
 	{
@@ -86,6 +106,7 @@ export const SLASH_ITEMS: SlashItem[] = [
 		hint: "##",
 		group: "prose",
 		keywords: "h2 heading subtitle",
+		icon: Heading2,
 		action: { kind: "prefix", prefix: "## " },
 	},
 	{
@@ -94,6 +115,7 @@ export const SLASH_ITEMS: SlashItem[] = [
 		hint: "###",
 		group: "prose",
 		keywords: "h3 heading small",
+		icon: Heading3,
 		action: { kind: "prefix", prefix: "### " },
 	},
 	{
@@ -102,6 +124,7 @@ export const SLASH_ITEMS: SlashItem[] = [
 		hint: "-",
 		group: "prose",
 		keywords: "bullet list ul unordered item",
+		icon: List,
 		action: { kind: "prefix", prefix: "- " },
 	},
 	{
@@ -110,6 +133,7 @@ export const SLASH_ITEMS: SlashItem[] = [
 		hint: "1.",
 		group: "prose",
 		keywords: "number ordered list ol",
+		icon: ListOrdered,
 		action: { kind: "prefix", prefix: "1. " },
 	},
 	{
@@ -118,6 +142,7 @@ export const SLASH_ITEMS: SlashItem[] = [
 		hint: ">",
 		group: "prose",
 		keywords: "quote blockquote cite",
+		icon: TextQuote,
 		action: { kind: "prefix", prefix: "> " },
 	},
 	{
@@ -126,6 +151,7 @@ export const SLASH_ITEMS: SlashItem[] = [
 		hint: "---",
 		group: "prose",
 		keywords: "divider rule hr line separator",
+		icon: Minus,
 		action: { kind: "literal", text: "---\n" },
 	},
 	{
@@ -134,6 +160,7 @@ export const SLASH_ITEMS: SlashItem[] = [
 		hint: "plain",
 		group: "prose",
 		keywords: "plain body normal clear strip",
+		icon: Pilcrow,
 		action: { kind: "prefix", prefix: "" },
 	},
 ];
@@ -228,6 +255,7 @@ export function SlashMenu({
 							data-selected={i === index}
 							className={docSlashMenuItem}
 						>
+							<item.icon aria-hidden="true" />
 							<span className="flex-1 truncate text-left">{item.label}</span>
 							<span className={`${docSlashMenuHint} font-mono`}>{item.hint}</span>
 						</button>

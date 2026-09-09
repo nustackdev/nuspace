@@ -16,9 +16,23 @@
 // died.
 
 import type { MountField } from "@nustackdev/ui-core";
-import { FieldView } from "@nustackdev/ui-kit";
+import {
+	Alert,
+	AlertDescription,
+	AlertIcon,
+	AlertTitle,
+	Button,
+	FieldView,
+	IconButton,
+	Kbd,
+	Toggle,
+	Tooltip,
+	TooltipContent,
+	TooltipTrigger,
+} from "@nustackdev/ui-kit";
+import { Check, Code, Copy, RotateCw } from "lucide-react";
 import { useCallback, useState } from "react";
-import { docStatusPayload, SECTION_STATUS, SectionStatusPill } from "../../design";
+import { docStatusTrace, SECTION_STATUS, SectionStatusPill } from "../../design";
 import { CodeBox } from "./Code";
 import type { ExitDir } from "./Prose";
 import type { FocusReq } from "./slice";
@@ -56,8 +70,19 @@ export function ProgramBlock(props: ProgramProps) {
 	} = props;
 
 	const [dirty, setDirty] = useState(false);
+	const [copied, setCopied] = useState(false);
 	const state: SectionState = status?.state ?? "idle";
 	const token = SECTION_STATUS[state];
+
+	const copyPrefix = useCallback(() => {
+		navigator.clipboard
+			?.writeText(`sections.${blockId}`)
+			.then(() => {
+				setCopied(true);
+				window.setTimeout(() => setCopied(false), 1200);
+			})
+			.catch(() => {});
+	}, [blockId]);
 
 	const leaveEditor = useCallback(() => {
 		onSetEditing(false);
@@ -74,46 +99,76 @@ export function ProgramBlock(props: ProgramProps) {
 
 	return (
 		<div className="flex flex-col gap-1">
-			<div className="flex h-8 items-center gap-2">
+			{/* The block's control row. 32px, the kit's default row, so a program
+			    block's chrome lines up with every other control in the shell. */}
+			<div className="flex h-8 items-center gap-1">
 				<SectionStatusPill status={state} />
-				<button
-					type="button"
-					title="Copy this block's mount prefix"
-					onClick={() => navigator.clipboard?.writeText(`sections.${blockId}`).catch(() => {})}
-					className="focus-ring truncate rounded-sm font-mono text-xs text-text-muted hover:text-text-secondary"
-				>
-					sections.{blockId}
-				</button>
+				<Tooltip>
+					<TooltipTrigger asChild>
+						<Button
+							variant="ghost"
+							size="sm"
+							onClick={copyPrefix}
+							className="min-w-0 gap-1.5 font-mono text-xs font-normal text-text-muted"
+						>
+							<span className="truncate">sections.{blockId}</span>
+							{copied ? <Check className="text-status-ok" /> : <Copy />}
+						</Button>
+					</TooltipTrigger>
+					<TooltipContent side="bottom">
+						{copied ? "copied" : "copy this block's mount prefix"}
+					</TooltipContent>
+				</Tooltip>
 				<span className="flex-1" />
-				{dirty ? <span className="font-mono text-xs text-text-muted">unsaved · ⌘↵</span> : null}
-				<button
-					type="button"
-					onClick={onRestart}
-					title={`${token.hint} — restart this section only`}
-					className="focus-ring rounded-sm px-1.5 py-0.5 font-mono text-xs text-text-muted hover:bg-doc-hover hover:text-text-primary"
-				>
-					restart
-				</button>
-				<button
-					type="button"
-					onClick={() => onSetEditing(!editing)}
-					className={`focus-ring rounded-sm px-1.5 py-0.5 font-mono text-xs ${
-						editing
-							? "bg-accent text-accent-fg"
-							: "text-text-muted hover:bg-doc-hover hover:text-text-primary"
-					}`}
-				>
-					code
-				</button>
+				{dirty ? (
+					<span className="flex items-center gap-1 text-xs text-text-muted">
+						unsaved
+						<Kbd>⌘</Kbd>
+						<Kbd>↵</Kbd>
+					</span>
+				) : null}
+				<Tooltip>
+					<TooltipTrigger asChild>
+						<IconButton
+							variant="ghost"
+							size="sm"
+							aria-label="Restart this section"
+							onClick={onRestart}
+						>
+							<RotateCw />
+						</IconButton>
+					</TooltipTrigger>
+					<TooltipContent side="bottom">{token.hint} — restart this section only</TooltipContent>
+				</Tooltip>
+				<Tooltip>
+					<TooltipTrigger asChild>
+						<Toggle
+							size="sm"
+							pressed={editing}
+							onPressedChange={onSetEditing}
+							aria-label="Edit this block's source"
+						>
+							<Code />
+							code
+						</Toggle>
+					</TooltipTrigger>
+					<TooltipContent side="bottom">
+						{editing ? "close the editor" : "edit source"}
+					</TooltipContent>
+				</Tooltip>
 			</div>
 
+			{/* A diagnostic and a traceback are both inline messages with a tone,
+			    an icon and a title, which is the kit's `Alert` exactly. The only
+			    document-specific part is that the body is preformatted text. */}
 			{status?.error ? (
-				<div className={docStatusPayload(state)}>
-					<div className="mb-0.5 font-medium">
-						{state === "invalid" ? "does not compile" : "ran and died"}
+				<Alert tone={token.tone}>
+					<AlertIcon />
+					<div className="min-w-0 flex-1">
+						<AlertTitle>{state === "invalid" ? "does not compile" : "ran and died"}</AlertTitle>
+						<AlertDescription className={docStatusTrace}>{status.error}</AlertDescription>
 					</div>
-					<div className="overflow-x-auto text-text-secondary">{status.error}</div>
-				</div>
+				</Alert>
 			) : null}
 
 			{editing ? (
@@ -135,9 +190,7 @@ export function ProgramBlock(props: ProgramProps) {
 					))}
 				</div>
 			) : !editing && !status?.error ? (
-				<div className="py-1 font-mono text-sm text-text-muted">
-					no ui refs — this block runs headless
-				</div>
+				<div className="py-1 text-base text-text-muted">no ui refs — this block runs headless</div>
 			) : null}
 		</div>
 	);

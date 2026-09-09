@@ -28,15 +28,17 @@
 // the server echo browser intent, the canvas records a *positional* intent
 // ("the block after X") and resolves it against the next block list.
 
+import { IconButton, Tooltip, TooltipContent, TooltipTrigger } from "@nustackdev/ui-kit";
+import { GripVertical, Plus } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import {
 	docBlock,
 	docColumn,
+	docDragHandle,
 	docDropIndicator,
 	docFocusRail,
 	docGutter,
 	docGutterAffordances,
-	docHandle,
 	docStatusRail,
 	hasGutterRail,
 } from "../../design";
@@ -471,17 +473,48 @@ export function Canvas({
 
 	const drag = editor.drag;
 
+	// -- where the caret actually is -------------------------------------------
+	//
+	// `editor.focus` is an intent and is consumed the instant a block honours
+	// it, so it cannot answer "which block is the caret in" -- which is what
+	// the gutter's focus rail needs. Focus events bubble (focusin/focusout), so
+	// one listener on the canvas root reports the standing fact for every
+	// editor inside it, including ones we do not own (ProseMirror, Monaco).
+
+	const onCanvasFocus = useCallback(
+		(e: React.FocusEvent) => {
+			const host = (e.target as HTMLElement).closest?.("[data-block]");
+			const id = host?.getAttribute("data-block") ?? null;
+			patch((ed) => (ed.focused === id ? {} : { focused: id }));
+		},
+		[patch],
+	);
+
+	const onCanvasBlur = useCallback(
+		(e: React.FocusEvent) => {
+			// Focus moving between two editors inside the canvas fires blur
+			// before focus; only a departure that leaves the canvas clears it.
+			const next = e.relatedTarget as Node | null;
+			if (next && rootRef.current?.contains(next)) return;
+			patch((ed) => (ed.focused === null ? {} : { focused: null }));
+		},
+		[patch],
+	);
+
 	return (
 		// biome-ignore lint/a11y/noStaticElementInteractions: the canvas is the keyboard owner in block-selection mode
 		<div
 			ref={rootRef}
 			tabIndex={-1}
 			onKeyDown={onCanvasKey}
+			onFocus={onCanvasFocus}
+			onBlur={onCanvasBlur}
 			className={`${docColumn} outline-none`}
 		>
 			{blocks.map((block, i) => {
 				const selected = editor.selected.includes(block.id);
 				const focusReq = editor.focus?.blockId === block.id ? editor.focus : null;
+				const focused = editor.focused === block.id;
 				const isProgram = block.kind === "program";
 				const state = block.status?.state ?? "idle";
 				return (
@@ -490,14 +523,13 @@ export function Canvas({
 						key={block.id}
 						ref={(el) => setEl(block.id, el)}
 						data-block={block.id}
-						className={`${docBlock({
+						className={docBlock({
 							selected,
 							selectedStrong: selected && editor.selected.length > 1,
-							focused: focusReq != null,
+							focused,
+							dragging: drag?.id === block.id,
 							program: isProgram,
-						})} ${selected ? "" : "hover:bg-doc-hover"} ${
-							drag?.id === block.id ? "opacity-40" : ""
-						}`}
+						})}
 						onMouseDown={(e) => {
 							// A plain click inside a block leaves block-selection mode;
 							// the block's own editor takes over from here.
@@ -511,10 +543,11 @@ export function Canvas({
 						    "you are here", because a failing block is more urgent. */}
 						{isProgram && hasGutterRail(state) ? (
 							<span className={docStatusRail(state)} />
-						) : focusReq != null ? (
+						) : focused ? (
 							<span className={docFocusRail} />
 						) : null}
 						<Gutter
+							program={isProgram}
 							onDrag={(e) => startDrag(e, block.id)}
 							onPlus={(rect) =>
 								patch({
@@ -662,35 +695,56 @@ export function Canvas({
 	);
 }
 
+/**
+ * A block's affordances, hung in the gutter outside the reading column.
+ *
+ * Two kit `IconButton`s on one row, so they share a box, a hover tier, a focus
+ * ring and a reveal. The only thing the document layer adds is the grab cursor
+ * on the handle. Both carry a tooltip: a bare glyph in a margin is not
+ * self-explanatory, and `title` is not an affordance, it is a delay.
+ */
 function Gutter({
+	program,
 	onDrag,
 	onPlus,
 	onSelect,
 }: {
+	program: boolean;
 	onDrag: (e: React.PointerEvent) => void;
 	onPlus: (rect: DOMRect) => void;
 	onSelect: () => void;
 }) {
 	return (
-		<div className={docGutter}>
+		<div className={docGutter(program)}>
 			<div className={docGutterAffordances}>
-				<button
-					type="button"
-					title="Insert block below"
-					onClick={(e) => onPlus(e.currentTarget.getBoundingClientRect())}
-					className={docHandle}
-				>
-					+
-				</button>
-				<button
-					type="button"
-					title="Drag to reorder, click to select"
-					onPointerDown={onDrag}
-					onClick={onSelect}
-					className={docHandle}
-				>
-					⠿
-				</button>
+				<Tooltip>
+					<TooltipTrigger asChild>
+						<IconButton
+							variant="ghost"
+							size="sm"
+							aria-label="Insert block below"
+							onClick={(e) => onPlus(e.currentTarget.getBoundingClientRect())}
+						>
+							<Plus />
+						</IconButton>
+					</TooltipTrigger>
+					<TooltipContent side="top">insert block below</TooltipContent>
+				</Tooltip>
+				<Tooltip>
+					<TooltipTrigger asChild>
+						<IconButton
+							variant="ghost"
+							size="sm"
+							aria-label="Drag to reorder, click to select"
+							onPointerDown={onDrag}
+							onClick={onSelect}
+							className={docDragHandle}
+						>
+							<GripVertical />
+						</IconButton>
+					</TooltipTrigger>
+					<TooltipContent side="top">drag to reorder, click to select</TooltipContent>
+				</Tooltip>
 			</div>
 		</div>
 	);
