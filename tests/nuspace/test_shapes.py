@@ -7,7 +7,6 @@ from nuspace import Space
 from nuspace.core.refs import (
     AppRef,
     AppsRef,
-    GroupRef,
     PageRef,
     PagesRef,
     SectionRef,
@@ -22,10 +21,10 @@ def test_ref_types_are_nuspace_subclasses():
     assert issubclass(PagesRef, nu.kv.ShapesDictRef)
 
 
-def test_apps_root_is_a_group():
-    assert isinstance(Space.apps, nu.kv.ShapeRef)
-    assert isinstance(Space.apps.groups["g"], GroupRef)
-    assert isinstance(Space.apps.apps["a"], AppRef)
+def test_apps_are_a_flat_dict():
+    """Single depth. No group layer, so an app id is the whole address."""
+    assert isinstance(Space.apps, AppsRef)
+    assert isinstance(Space.apps["a"], AppRef)
 
 
 def test_pages_root_is_a_page():
@@ -45,7 +44,7 @@ def test_root_page_carries_sections():
 
 
 def test_add_returns_a_nu_term():
-    t1 = Space.apps.apps.add(snippet="nu.Str('hi')", policy="always", app_id="a_test")
+    t1 = Space.apps.add(snippet="nu.Str('hi')", policy="always", app_id="a_test")
     t2 = Space.pages.pages.add(title="Home", page_id="p_home")
     t3 = Space.pages.pages["p_home"].sections.add(
         snippet="nu.Str('body')",
@@ -56,7 +55,7 @@ def test_add_returns_a_nu_term():
 
 
 def test_slot_descent_yields_nu_terms():
-    assert isinstance(Space.apps.apps["a_test"].snippet, nu.Nu)
+    assert isinstance(Space.apps["a_test"].snippet, nu.Nu)
     assert isinstance(Space.pages.pages["p_home"].sections["s1"].policy, nu.Nu)
     assert isinstance(Space.pages.pages["p_home"].title, nu.Nu)
 

@@ -12,7 +12,7 @@ import {
 	useStore,
 } from "@nustackdev/ui-kit";
 import type { LucideIcon } from "lucide-react";
-import { FileText, Moon, Sun, Telescope } from "lucide-react";
+import { Boxes, FileText, Moon, Sun, Telescope } from "lucide-react";
 import { useNuspaceConnection } from "./connect";
 import { hrefFor, onNavClick, rememberedPath, TOPS, type Top, useRoute } from "./router";
 import { toggleTheme, useTheme } from "./theme";
@@ -31,6 +31,7 @@ import { toggleTheme, useTheme } from "./theme";
 
 const SURFACE: Record<Top, { icon: LucideIcon; label: string }> = {
 	pages: { icon: FileText, label: "pages" },
+	apps: { icon: Boxes, label: "apps" },
 	lens: { icon: Telescope, label: "lens" },
 };
 

@@ -4,13 +4,13 @@ Shape-container refs subclass ``nu.kv.ShapesDictRef`` to (a) return
 nuspace-typed item refs on descent and (b) add nuspace-specific
 interactions (``.add(...)``).
 
-- ``AppsRef``      -> dict of ``App`` (item ref: ``AppRef``).
+- ``AppsRef``      -> dict of ``App`` (item ref: ``AppRef``). Flat: it
+  hangs straight off ``Space.apps``, with no group layer above it.
 - ``SectionsRef``  -> dict of ``Section`` (item ref: ``SectionRef``).
-- ``GroupsRef``    -> dict of ``Group`` (item ref: ``GroupRef``).
 - ``PagesRef``     -> dict of ``Page`` (item ref: ``PageRef``).
 
-Item refs (``AppRef``, ``SectionRef``, ``GroupRef``) subclass
-``ShapeRef`` and are plain handles onto stored state.
+Item refs (``AppRef``, ``SectionRef``) subclass ``ShapeRef`` and are
+plain handles onto stored state.
 
 Snippets are stored as raw Python source strings. Compiling a stored
 snippet into a Nu tree is the executor's job, not a ref method -- see
@@ -39,8 +39,6 @@ if TYPE_CHECKING:
 __all__ = [
     "AppRef",
     "AppsRef",
-    "GroupRef",
-    "GroupsRef",
     "PageRef",
     "PagesRef",
     "SectionRef",
@@ -80,12 +78,8 @@ class SectionRef(ShapeRef):
     """One section: same shape as an app."""
 
 
-class GroupRef(ShapeRef):
-    """One group: a folder holding sub-groups and apps."""
-
-
 class AppsRef(ShapesDictRef):
-    """Dict of apps inside a Group. ``.add(...)`` mints an id."""
+    """Flat dict of apps under ``Space``. ``.add(...)`` mints an id."""
 
     def _wrap_item_ref(self, address: object) -> ShapeRef:
         from virtuals.views import DictView
@@ -101,12 +95,16 @@ class AppsRef(ShapesDictRef):
     def add(
         self,
         name: str = "app",
-        snippet: str = "nu.Str('')",
+        snippet: str = "",
         policy: str = "always",
         app_id: str | None = None,
     ) -> Nu:
-        """Add an app with ``name``/``snippet``/``policy``; mints an id if absent."""
-        aid = app_id or mint_id("a")
+        """Add an app with ``name``/``snippet``/``policy``; mints an id if absent.
+
+        The id is time-ordered, because the rail lists apps by key and
+        creation order is the only order a flat list has.
+        """
+        aid = app_id or mint_ordered_id("a")
         return self.set_item(
             aid,
             {"name": name, "snippet": snippet, "policy": policy},
@@ -149,8 +147,8 @@ class PageRef(ShapeRef):
 class PagesRef(ShapesDictRef):
     """Dict of child pages under a ``Page``. ``.add(title)`` mints an id.
 
-    Mirrors ``GroupsRef``: pages nest recursively, so ``Page.pages`` is
-    stapled onto the class after its body (see ``core.shapes``).
+    Pages nest recursively, so ``Page.pages`` is stapled onto the class
+    after its body (see ``core.shapes``).
     """
 
     def _wrap_item_ref(self, address: object) -> ShapeRef:
@@ -168,27 +166,3 @@ class PagesRef(ShapesDictRef):
         """Add an empty child page titled ``title``; mints a page id if absent."""
         pid = page_id or mint_id("p")
         return self.set_item(pid, {"title": title, "sections": {}, "pages": {}})
-
-
-class GroupsRef(ShapesDictRef):
-    """Dict of sub-groups inside a Group. ``.add(name)`` mints an id."""
-
-    def _wrap_item_ref(self, address: object) -> ShapeRef:
-        from virtuals.views import DictView
-
-        return GroupRef(
-            address,
-            shape_type=self._payload["item_shape_type"],
-            view_type=DictView,
-            parent_ref=self,
-            owner_shape=self._owner_shape,
-        )
-
-    def add(
-        self,
-        name: str = "group",
-        group_id: str | None = None,
-    ) -> Nu:
-        """Add an empty group named ``name``; mints a group id if absent."""
-        gid = group_id or mint_id("g")
-        return self.set_item(gid, {"name": name, "apps": {}, "groups": {}})

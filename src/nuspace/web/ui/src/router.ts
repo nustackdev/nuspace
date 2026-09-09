@@ -1,16 +1,17 @@
 // Tiny nested-path router for nuspace.
 //
-// Two top-level surfaces for now -- /pages and /lens -- each with deep paths
-// (e.g. /pages/p_home/p_notes). We split window.location.pathname into
-// (top, path[]) so the shell picks a surface and each surface's ref owns its
-// own deeper navigation. Apps comes back when apps do.
+// Three top-level surfaces -- /pages, /apps and /lens -- each with deep paths
+// (e.g. /pages/p_home/p_notes, /apps/a_ticker). We split
+// window.location.pathname into (top, path[]) so the shell picks a surface and
+// each surface's ref owns its own deeper navigation. Apps is single depth, so
+// its path is at most one app id.
 //
 // Not part of the nu.ui bridge -- purely browser-side.
 
 import type React from "react";
 import { useSyncExternalStore } from "react";
 
-export const TOPS = ["pages", "lens"] as const;
+export const TOPS = ["pages", "apps", "lens"] as const;
 export type Top = (typeof TOPS)[number];
 export const DEFAULT_TOP: Top = "pages";
 
