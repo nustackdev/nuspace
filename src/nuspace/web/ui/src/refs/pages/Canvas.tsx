@@ -114,6 +114,7 @@ export function Canvas({
 				selected: [block.id],
 				anchor: block.id,
 				column: req.column ?? null,
+				x: req.x ?? null,
 			});
 			rootRef.current?.focus({ preventScroll: true });
 			elRefs.current.get(block.id)?.scrollIntoView({ block: "nearest" });
@@ -122,13 +123,13 @@ export function Canvas({
 	);
 
 	const step = useCallback(
-		(fromId: string, dir: ExitDir, column: number | undefined) => {
+		(fromId: string, dir: ExitDir, column: number | undefined, x?: number) => {
 			const i = index(fromId);
 			const j = dir === "up" ? i - 1 : i + 1;
 			if (i < 0 || j < 0 || j >= blocks.length) return;
 			focusBlock(
 				blocks[j],
-				{ place: dir === "up" ? "end" : "start", column },
+				{ place: dir === "up" ? "end" : "start", column, x },
 				editor.editing,
 			);
 		},
@@ -356,6 +357,7 @@ export function Canvas({
 					{
 						place: dir < 0 ? "end" : "start",
 						column: editor.column ?? undefined,
+						x: editor.x ?? undefined,
 					},
 					editor.editing,
 				);
@@ -367,6 +369,7 @@ export function Canvas({
 			deleteBlocks,
 			editor.anchor,
 			editor.column,
+			editor.x,
 			editor.editing,
 			editor.selected,
 			enterBlock,
@@ -588,7 +591,7 @@ export function Canvas({
 								}
 								onFocusConsumed={() => patch({ focus: null })}
 								onCommit={(src) => commitSource(block.id, src)}
-								onExit={(dir, column) => step(block.id, dir, column)}
+								onExit={(dir, column, x) => step(block.id, dir, column, x)}
 								onMergeUp={(text) => mergeUp(block.id, text)}
 								onSplit={(head, tail, insert) =>
 									splitBlock(block.id, head, tail, insert)

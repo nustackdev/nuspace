@@ -46,6 +46,58 @@ export const docProse = "text-xl text-text-primary";
 /** Code inside a block. Editor tier is 14px mono, per typography.md §1. */
 export const docCode = "font-mono text-lg text-text-primary";
 
+/* ============================== prose interior =========================== */
+//
+// The inside of a prose island. These are the *only* place the document's
+// typographic rhythm is stated, and the editor's schema hands them straight
+// to `toDOM`, so what you type is styled by the same recipe that styles what
+// you read. That is what removes the old leaf's mode-swap layout shift:
+// there is no second rendering to disagree with.
+
+/** The contenteditable host itself. */
+export const docProseEditor = cn(docProse, "nu-prose outline-none");
+
+/** A paragraph. Tight vertical rhythm; the air comes from the line box. */
+export const docParagraph = "my-2 leading-relaxed first:mt-0 last:mb-0";
+
+/** Headings. Only three levels; the slash menu offers exactly these. */
+export function docHeading(level: number): string {
+	return (
+		{
+			1: "text-3xl font-semibold tracking-tight mt-6 mb-2 first:mt-0",
+			2: "text-2xl font-semibold tracking-tight mt-5 mb-2 first:mt-0",
+			3: "text-xl font-semibold tracking-tight mt-4 mb-1.5 first:mt-0",
+		}[level] ?? "text-xl font-semibold tracking-tight mt-4 mb-1.5 first:mt-0"
+	);
+}
+
+export const docBlockquote = cn(
+	"my-2 border-l-2 border-border-strong pl-3 text-text-secondary",
+	"[&>p]:my-1 [&>p:first-child]:mt-0 [&>p:last-child]:mb-0",
+);
+
+const LIST = cn(
+	"my-2 space-y-1 pl-5 marker:text-text-muted",
+	"[&_ul]:my-1 [&_ol]:my-1",
+);
+export const docBulletList = cn(LIST, "list-disc");
+export const docOrderedList = cn(LIST, "list-decimal");
+
+/** A list item. Its paragraph loses the block margin so items stay tight. */
+export const docListItem = "[&>p]:my-0";
+
+export const docRule = "my-5 border-border-subtle";
+
+/* --- inline marks --- */
+
+export const docStrong = "font-semibold";
+export const docEm = "italic";
+export const docInlineCode = cn(
+	"rounded-sm bg-bg-sunken px-1 py-0.5",
+	"font-mono text-[0.9em] text-text-primary",
+);
+export const docLink = "text-accent underline underline-offset-2";
+
 /* ============================== block ==================================== */
 
 export interface BlockStateFlags {

@@ -52,6 +52,13 @@ export type FocusReq = {
 	 */
 	column?: number;
 	/**
+	 * Where the caret actually was on screen when it left the previous block.
+	 * A character column is a guess once text wraps or the fonts differ; a
+	 * pixel column is not, so this wins over `column` wherever the target
+	 * editor can resolve coordinates. Only prose produces it.
+	 */
+	x?: number;
+	/**
 	 * Exact character offset, used when we know it precisely -- after a merge
 	 * the caret belongs at the seam, not at either end. Wins over `place`.
 	 */
@@ -96,6 +103,8 @@ export type EditorState = {
 	 * arrowing down through a document drifts back to the left margin.
 	 */
 	column: number | null;
+	/** The pixel column, parked alongside `column` and for the same reason. */
+	x: number | null;
 };
 
 export const EMPTY_EDITOR: EditorState = {
@@ -107,6 +116,7 @@ export const EMPTY_EDITOR: EditorState = {
 	drag: null,
 	expanded: [],
 	column: null,
+	x: null,
 };
 
 type PagesSlice = RefSlice & {
