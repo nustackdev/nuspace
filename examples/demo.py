@@ -33,6 +33,14 @@ from movies_blocks import (
     SEED_MOVIES,
     detail_parts,
 )
+from taste_app import (
+    TASTE_APP_NAME,
+    TASTE_APP_SOURCE,
+    TASTE_BLOCK_SOURCE,
+    TASTE_INTRO_PROSE,
+    TASTE_PAGE_ID,
+    TASTE_WIRE_PROSE,
+)
 
 import nu
 from nuspace.web.refs import (
@@ -431,6 +439,17 @@ def _movies_page() -> dict[str, object]:
             },
             "pages": {},
         },
+        # Reads what the taste app wrote. No button, no model call, no
+        # compute -- one markdown block over slots that already exist.
+        TASTE_PAGE_ID: {
+            "title": "Taste",
+            "sections": {
+                "s_00_intro": _block("intro", "prose", TASTE_INTRO_PROSE, 0),
+                "s_10_profile": _block("profile", "program", TASTE_BLOCK_SOURCE, 10),
+                "s_20_wire": _block("wire note", "prose", TASTE_WIRE_PROSE, 20),
+            },
+            "pages": {},
+        },
     }
     for index, movie in enumerate(SEED_MOVIES):
         key = _movie_key(index)
@@ -510,6 +529,30 @@ def _seed() -> nu.Nu:
             DemoSpace.pages.pages.set_item(MOVIES_PAGE_ID, _movies_page()),
         )
         >> _seed_movies()
+        >> _seed_taste_app()
+    )
+
+
+# The taste app, seeded into `DemoSpace.apps` so it is supervised at space
+# lifetime and runs whether or not a browser ever connects. Seeded once,
+# like Movies and for the same reason: the Apps editor can rewrite this
+# source, and a `set_item` on every boot would throw that away. The source
+# itself is four lines that import `taste_app`, so it does not change --
+# editing the agent means editing that module and restarting the space.
+TASTE_APP_ID = "a_taste"
+
+
+def _seed_taste_app() -> nu.Nu:
+    return nu.IfDo(
+        nu.Not(DemoSpace.apps.contains(TASTE_APP_ID)),
+        DemoSpace.apps.set_item(
+            TASTE_APP_ID,
+            {
+                "name": TASTE_APP_NAME,
+                "snippet": TASTE_APP_SOURCE,
+                "policy": "always",
+            },
+        ),
     )
 
 

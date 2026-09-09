@@ -12,6 +12,7 @@ authors = [{ name = "Gor Arakelyan", email = "gorarkln@gmail.com" }]
 requires-python = ">=3.10"
 dependencies = [
     "nustd[kv]>=0.2.0",
+    "nuagent>=0.1.1",
     "typing-extensions>=4.7.0",
     "click>=8.0",
     "rich>=10.7",
@@ -70,6 +71,7 @@ nuspace-ui = { path = "./src/nuspace/web/ui" }
 nucore = { path = "../nu/packages/nucore", editable = true }
 nustd = { path = "../nu/packages/nustd", editable = true }
 nucli = { path = "../nu/packages/nucli", editable = true }
+nuagent = { path = "../nuagent", editable = true }
 
 [tool.uv]
 default-groups = ["dev"]

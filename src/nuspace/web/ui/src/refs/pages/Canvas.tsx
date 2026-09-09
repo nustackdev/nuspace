@@ -738,6 +738,7 @@ function Gutter({
 							aria-label="Drag to reorder, click to select"
 							onPointerDown={onDrag}
 							onClick={onSelect}
+							data-block-grip=""
 							className={docDragHandle}
 						>
 							<GripVertical />

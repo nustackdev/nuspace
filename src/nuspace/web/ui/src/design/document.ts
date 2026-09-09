@@ -118,6 +118,15 @@ export interface BlockStateFlags {
  * Hover and pressed are NEUTRAL (doc-hover / doc-active); selection is the
  * accent tier. That split is deliberate - on a document, hovering every
  * paragraph in purple would make hover indistinguishable from selection.
+ *
+ * The block does NOT tint on its own hover. Reading is the primary act on
+ * this surface and the pointer crosses every block on the way to anywhere,
+ * so a fill that follows the cursor down the page is noise against the one
+ * thing the reader is trying to do. The tint is scoped to the drag handle
+ * instead: it fires when the pointer is on the affordance that acts on the
+ * whole block, which is the only moment "this block" is the unit you mean.
+ * `:has()` rather than a React hover flag, because tracking pointer-enter
+ * per block would rerender the document on every mouse move.
  */
 export function docBlock(state: BlockStateFlags = {}): string {
 	return cn(
@@ -125,9 +134,7 @@ export function docBlock(state: BlockStateFlags = {}): string {
 		"px-doc-block-x",
 		state.program ? "py-doc-block-y-program" : "py-doc-block-y",
 		"transition-colors duration-fast ease-out",
-		// Hover is a CSS state, not a React one: tracking pointer-enter per
-		// block would rerender the document on every mouse move.
-		!state.selected && "hover:bg-doc-hover",
+		!state.selected && "has-[[data-block-grip]:hover]:bg-doc-hover",
 		state.selected && "bg-doc-selected",
 		state.selectedStrong && "bg-doc-selected-strong",
 		// the caret's block gets no fill: it is already marked by the caret.
