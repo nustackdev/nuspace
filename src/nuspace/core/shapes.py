@@ -10,8 +10,9 @@ Two orchestration surfaces live under one ``Space``:
   mirror of the ``apps`` / ``Group`` layout. The root page is a real
   page: it may carry sections of its own.
 
-An app and a section are the same substance (a Python snippet returning a
-Nu tree). They differ only in the ``policy`` string that says when to run.
+An app and a section are the same substance (a ``nu.prog`` program: a
+python module whose ``out`` entry point returns a Nu tree). They differ
+only in the ``policy`` string that says when to run.
 For v0 the policy is a bare string; a richer tagged form can come later
 without changing the shape layout.
 
@@ -47,9 +48,16 @@ class Section(nu.Shape):
 
     - ``prose``   -- one prose island. ``snippet`` holds markdown.
       Contiguous prose is one section, not one per paragraph; splitting
-      is explicit. Never compiled, never runs.
-    - ``program`` -- a Nu program. ``snippet`` holds Python source
-      evaluated with ``{nu, Space, path}``.
+      is explicit. Never constructed, never runs.
+    - ``program`` -- a Nu program. ``snippet`` is a ``ProgramRef``, so
+      the stored text is source in ``nu.prog``'s sense: a module with an
+      ``out`` entry point whose signature is the scope contract. nuspace
+      offers one scope value, ``path``. Reading the slot yields the
+      source verbatim; ``.load()`` / ``.run()`` come with the ref.
+
+    A prose block stores markdown in the same slot. That is fine -- a
+    ``ProgramRef`` is a str leaf with the Program verbs bolted on, and
+    nothing ever asks a prose block to construct.
 
     ``order`` is the block's position on the page. Dict-keyed sections
     sort by ``mint_ordered_id`` (creation time) by default, which is
@@ -59,7 +67,7 @@ class Section(nu.Shape):
     """
 
     name = nu.kv.StrRef.slot()
-    snippet = nu.kv.StrRef.slot()
+    snippet = nu.kv.ProgramRef.slot()
     policy = nu.kv.StrRef.slot()
     kind = nu.kv.StrRef.slot()
     order = nu.kv.IntRef.slot()

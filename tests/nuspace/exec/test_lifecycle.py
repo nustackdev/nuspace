@@ -194,7 +194,9 @@ async def test_uncompilable_section_is_invalid_and_the_page_survives(sup, src, s
     await settled(sup, "p1")
     status = sup.status("p1")["bad"]
     assert status["state"] == "invalid"
-    assert "SyntaxError" in status["error"]
+    # The nu.prog Diagnostic reaches the wire whole: message plus the line
+    # in the section's own source.
+    assert "does not parse" in status["error"]
     assert "line 1" in status["error"]
     assert status["started_at"] is None
     assert sup.status("p1")["good"]["state"] == "running"

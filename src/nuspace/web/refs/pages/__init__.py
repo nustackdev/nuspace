@@ -3,9 +3,13 @@
 - ``PagesRef`` / ``PagesDriver`` -- page tree + block canvas over ``Space.pages``.
 - ``SectionSupervisor`` -- the five-method seam the executor implements.
 - ``LocalSupervisor`` -- the v1 in-process stub behind that seam.
+
+Section source is constructed by ``nu.prog`` and its mount fields are
+enumerated by ``nuspace.exec.compile``; both are re-exported here for the
+callers that used to reach into a web-local copy of them.
 """
 
-from nuspace.web.refs.pages.compile import enumerate_ui_refs, parse_snippet
+from nuspace.exec.compile import construct_section, enumerate_ui_refs
 from nuspace.web.refs.pages.pages import PagesDriver, PagesRef
 from nuspace.web.refs.pages.supervise import (
     LocalSupervisor,
@@ -22,6 +26,6 @@ __all__ = [
     "SectionSpec",
     "SectionStatus",
     "SectionSupervisor",
+    "construct_section",
     "enumerate_ui_refs",
-    "parse_snippet",
 ]

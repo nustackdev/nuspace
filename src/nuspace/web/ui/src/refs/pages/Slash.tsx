@@ -22,6 +22,22 @@ import {
 	docSlashMenuLabel,
 } from "../../design";
 
+// What a fresh program block starts life as. A section is a nu.prog
+// program: a python *module* with an `out` entry point returning a Nu
+// term, not a bare expression. The entry point's signature is the scope
+// contract and nuspace offers one value, `path`, which is this block's
+// own namespace. Seeding the skeleton is how that is discoverable
+// without reading docs first.
+export const PROGRAM_TEMPLATE = [
+	"import nu",
+	"import nu.ui",
+	"",
+	"",
+	"def out(path):",
+	'    return nu.ui.TextRef(path + ".out").set(nu.Str("hello"))',
+	"",
+].join("\n");
+
 export type SlashAction =
 	| { kind: "prefix"; prefix: string }
 	| { kind: "literal"; text: string }

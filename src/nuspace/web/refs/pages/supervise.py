@@ -13,8 +13,15 @@ redesign it here:
      "error": str|None,
      "started_at": float|None}
 
-``invalid`` = never compiled (source will not compile; ``error`` carries
-the diagnostic). ``failed`` = compiled, ran, and died.
+``invalid`` = never constructed a tree; ``error`` carries the
+``nu.prog`` :class:`~nu.prog.Diagnostic`, rendered as its message plus
+the line in the section's own source. ``failed`` = it constructed, ran,
+and died.
+
+Construction itself is nu's. ``nuspace.exec.compile.construct_section``
+is ``nu.prog``'s in-process brace with ``path`` bound into the entry
+point's scope; a section is a module with an ``out`` function, not an
+expression.
 
 ``SectionSupervisor`` is the interface the driver talks to. Swapping in
 the real executor means writing a second implementation of these five
@@ -46,7 +53,8 @@ from typing import TYPE_CHECKING, Any
 
 import nu
 from nu.kv.tree import auto_flow_atomic
-from nuspace.web.refs.pages.compile import enumerate_ui_refs, parse_snippet
+from nu.prog import Diagnostic
+from nuspace.exec.compile import construct_section, enumerate_ui_refs
 
 
 if TYPE_CHECKING:
@@ -228,11 +236,13 @@ class LocalSupervisor(SectionSupervisor):
         if not spec.source.strip():
             gen.status.state = "idle"
             return gen
-        try:
-            term = parse_snippet(spec.source, spec.prefix)
-        except Exception as exc:
+        term = construct_section(spec.source, spec.prefix)
+        if isinstance(term, Diagnostic):
+            # No tree ever existed, so it never ran: `invalid`, not
+            # `failed`. `str(Diagnostic)` carries the message and, when
+            # there is one, the line in the section's own source.
             gen.status.state = "invalid"
-            gen.status.error = f"{type(exc).__name__}: {exc}"
+            gen.status.error = str(term)
             return gen
         gen.term = term
         gen.fields = enumerate_ui_refs(term, spec.prefix)

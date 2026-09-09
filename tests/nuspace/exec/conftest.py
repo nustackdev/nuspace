@@ -5,12 +5,17 @@ under test, and mocking a SIGKILL proves nothing.
 
 Everything shared is a fixture rather than a module-level import, so the
 suite does not care which import mode pytest runs in.
+
+Section sources are ``nu.prog`` programs: a python module with an ``out``
+entry point that returns a Nu term. ``path`` is the one scope value
+nuspace offers, and a source that wants it declares it.
 """
 
 from __future__ import annotations
 
 import asyncio
 import os
+import textwrap
 import time
 from types import SimpleNamespace
 
@@ -25,38 +30,77 @@ LADDER_BOUND = TEST_TIMEOUTS.graceful + TEST_TIMEOUTS.term + TEST_TIMEOUTS.kill
 
 SETTLED = {"running", "stopped", "failed", "invalid"}
 
+
+def program(body: str, *, head: str = "", takes_path: bool = True) -> str:
+    """A section source: module preamble, then an ``out`` returning ``body``."""
+    params = "path" if takes_path else ""
+    expr = textwrap.indent(textwrap.dedent(body).strip(), " " * 8)
+    preamble = "import nu\nimport nu.ui\n"
+    if head:
+        preamble += textwrap.dedent(head).strip() + "\n"
+    return f"{preamble}\n\ndef out({params}):\n    return (\n{expr}\n    )\n"
+
+
 SOURCES = SimpleNamespace(
     # Writes once and finishes: the stopped path.
-    oneshot="nu.ui.TextRef(path + '.out').set(nu.Str('hello'))",
+    oneshot=program("nu.ui.TextRef(path + '.out').set(nu.Str('hello'))"),
     # Standing tick that yields to the loop: cancels cleanly.
-    live="nu.ForeverDo(nu.Delay(nu.Float(0.05)))",
+    live=program("nu.ForeverDo(nu.Delay(nu.Float(0.05)))", takes_path=False),
     # Standing tick that writes, so a stale generation is observable.
-    ticker=(
-        "nu.ForeverDo(nu.Delay(nu.Float(0.02)) >> nu.ui.TextRef(path + '.tick').set(nu.Str('x')))"
-    ),
+    ticker=program("""
+        nu.ForeverDo(
+            nu.Delay(nu.Float(0.02)) >> nu.ui.TextRef(path + '.tick').set(nu.Str('x')),
+        )
+    """),
     # Runs, then dies.
-    raises="nu.Div(nu.Int(1), nu.Int(0))",
-    # Never compiles.
+    raises=program("nu.Div(nu.Int(1), nu.Int(0))", takes_path=False),
+    # Never constructs: the source does not parse.
     syntax="this is not python (",
     # A tree that spins the event loop with no await point. Cancellation
     # cannot touch this; only a signal can.
-    wedge_runtime="nu.WhileDo(nu.Bool(True), nu.Noop())",
-    # Wedges during compilation, before a tree ever exists.
+    wedge_runtime=program("nu.WhileDo(nu.Bool(True), nu.Noop())", takes_path=False),
+    # Wedges in the module body, before an entry point is ever called.
     wedge_compile="while True:\n    pass\n",
     # Wedges *and* ignores SIGTERM. Only SIGKILL ends this one.
-    wedge_unkillable=(
-        "import signal\n"
-        "signal.signal(signal.SIGTERM, signal.SIG_IGN)\n"
-        "nu.WhileDo(nu.Bool(True), nu.Noop())\n"
+    wedge_unkillable=program(
+        "nu.WhileDo(nu.Bool(True), nu.Noop())",
+        head="import signal\nsignal.signal(signal.SIGTERM, signal.SIG_IGN)",
+        takes_path=False,
     ),
     # Reads a ui path through the session, writes what came back.
-    reader="nu.ui.TextRef(path + '.out').set(nu.ui.InputRef('probe'))",
+    reader=program("nu.ui.TextRef(path + '.out').set(nu.ui.InputRef('probe'))"),
     # Subscribes to a ui path and echoes every change.
-    echo=(
-        "nu.ReactForever(nu.ui.Changed(nu.ui.InputRef('probe')),"
-        " nu.ui.TextRef(path + '.echo').set(nu.ui.InputRef('probe')))"
+    echo=program("""
+        nu.ReactForever(
+            nu.ui.Changed(nu.ui.InputRef('probe')),
+            nu.ui.TextRef(path + '.echo').set(nu.ui.InputRef('probe')),
+        )
+    """),
+    # Writes kv scratch and reads it back out through ui.
+    kv_round_trip=program(
+        """
+        Space.state.set_item('k', nu.Str('v'))
+        >> nu.ui.TextRef(path + '.out').set(nu.ToStr(Space.state['k']))
+        """,
+        head="from nuspace.core.shapes import Space",
+    ),
+    # Reads the same kv key without writing it: scratch is per worker.
+    kv_reader=program(
+        "nu.ui.TextRef(path + '.out').set(nu.ToStr(Space.state['k']))",
+        head="from nuspace.core.shapes import Space",
     ),
 )
+
+# A realistic page mix: some standing, some one-shot, all touching nu.ui.
+SOURCES.realistic = [
+    SOURCES.oneshot,
+    SOURCES.live,
+    program("""
+        nu.ui.TextRef(path + '.a').set(nu.Str('x'))
+        | nu.ui.TextRef(path + '.b').set(nu.Str('y'))
+    """),
+    SOURCES.ticker,
+]
 
 
 def _alive(pid: int) -> bool:

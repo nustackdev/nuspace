@@ -15,29 +15,35 @@ Three things are worth pinning:
 from __future__ import annotations
 
 import asyncio
-
-import pytest
+import textwrap
 
 import nu
+from nu.prog import Diagnostic
 from nuspace.web.refs.pages import (
     LocalSupervisor,
     SectionSpec,
     SectionStatus,
+    construct_section,
     enumerate_ui_refs,
-    parse_snippet,
 )
 from nuspace.web.refs.pages.pages import _ordered_blocks, _page_node
+
+
+def program(body: str) -> str:
+    """A section: a module with an `out` entry point that declares `path`."""
+    expr = textwrap.indent(textwrap.dedent(body).strip(), " " * 8)
+    return f"import nu\nimport nu.ui\n\n\ndef out(path):\n    return (\n{expr}\n    )\n"
 
 
 # -- mounting ----------------------------------------------------------------
 
 
 def test_enumerate_mounts_only_own_prefix():
-    src = (
-        "nu.ui.InputRef(path + '.text').set(nu.Str('x'))"
-        " >> nu.ui.StatRef('sections.s_other.echo').set_value(nu.Str('y'))"
-    )
-    term = parse_snippet(src, "sections.s_me")
+    src = program("""
+        nu.ui.InputRef(path + '.text').set(nu.Str('x'))
+        >> nu.ui.StatRef('sections.s_other.echo').set_value(nu.Str('y'))
+    """)
+    term = construct_section(src, "sections.s_me")
     fields = enumerate_ui_refs(term, "sections.s_me")
     assert [f["path"] for f in fields] == ["sections.s_me.text"]
 
@@ -45,25 +51,29 @@ def test_enumerate_mounts_only_own_prefix():
 def test_enumerate_skips_dynamic_deref():
     # The outer ref's segment is a term, not a str: it borrows whatever the
     # inner ref currently holds. Only the inner ref mounts.
-    src = "nu.ui.StatRef(path + '.out').set_value(nu.Str(nu.ui.InputRef(nu.ui.InputRef(path + '.source'))))"
-    term = parse_snippet(src, "sections.s_me")
+    src = program("""
+        nu.ui.StatRef(path + '.out').set_value(
+            nu.Str(nu.ui.InputRef(nu.ui.InputRef(path + '.source'))),
+        )
+    """)
+    term = construct_section(src, "sections.s_me")
     paths = {f["path"] for f in enumerate_ui_refs(term, "sections.s_me")}
     assert paths == {"sections.s_me.out", "sections.s_me.source"}
 
 
 def test_enumerate_dedupes_read_and_write():
-    src = (
-        "nu.ui.InputRef(path + '.t').set(nu.Str('a'))"
-        " >> nu.ui.StatRef(path + '.s').set_value(nu.Str(nu.ui.InputRef(path + '.t')))"
-    )
-    term = parse_snippet(src, "sections.s1")
+    src = program("""
+        nu.ui.InputRef(path + '.t').set(nu.Str('a'))
+        >> nu.ui.StatRef(path + '.s').set_value(nu.Str(nu.ui.InputRef(path + '.t')))
+    """)
+    term = construct_section(src, "sections.s1")
     fields = enumerate_ui_refs(term, "sections.s1")
     assert len(fields) == len({(f["type"], f["path"]) for f in fields})
 
 
-def test_parse_snippet_rejects_non_nu():
-    with pytest.raises(TypeError):
-        parse_snippet("42", "sections.s1")
+def test_construct_section_rejects_non_nu():
+    diag = construct_section("def out(path):\n    return 42\n", "sections.s1")
+    assert isinstance(diag, Diagnostic)
 
 
 # -- ordering ----------------------------------------------------------------
@@ -108,6 +118,12 @@ def test_status_wire_keys_are_fixed():
 # -- supervision -------------------------------------------------------------
 
 
+A = program("nu.Str('a')")
+B = program("nu.Str('b')")
+CHANGED = program("nu.Str('CHANGED')")
+BROKEN = program("nu.Str('unclosed'")
+
+
 class _Ctx:
     """Minimal stand-in for a Nu runtime context; nothing here needs it."""
 
@@ -119,11 +135,14 @@ def _sup() -> LocalSupervisor:
 
 
 def test_bad_source_is_invalid_not_failed():
+    """A Diagnostic means no tree ever existed, so `invalid`, never `failed`."""
     sup = _sup()
-    sup.plan([SectionSpec("s1", "nu.Str('unclosed'")])
+    sup.plan([SectionSpec("s1", BROKEN)])
     st = sup.status("s1")
     assert st["state"] == "invalid"
-    assert "SyntaxError" in st["error"]
+    # The Diagnostic's message and its line both reach the block chrome.
+    assert "does not parse" in st["error"]
+    assert "line 6" in st["error"]
     assert st["started_at"] is None
 
 
@@ -136,14 +155,14 @@ def test_empty_source_is_idle_with_no_fields():
 
 def test_plan_leaves_unchanged_running_sections_alone():
     sup = _sup()
-    sup.plan([SectionSpec("s1", "nu.Str('a')"), SectionSpec("s2", "nu.Str('b')")])
+    sup.plan([SectionSpec("s1", A), SectionSpec("s2", B)])
     # Pretend both are up.
     for sid in ("s1", "s2"):
         sup._gens[sid].status.state = "running"
         sup._gens[sid].status.started_at = 1.0
     first = sup._gens["s1"]
 
-    sup.plan([SectionSpec("s1", "nu.Str('a')"), SectionSpec("s2", "nu.Str('CHANGED')")])
+    sup.plan([SectionSpec("s1", A), SectionSpec("s2", CHANGED)])
 
     # s1 is the same generation object, untouched.
     assert sup._gens["s1"] is first
@@ -155,8 +174,8 @@ def test_plan_leaves_unchanged_running_sections_alone():
 
 def test_plan_retires_removed_sections():
     sup = _sup()
-    sup.plan([SectionSpec("s1", "nu.Str('a')"), SectionSpec("s2", "nu.Str('b')")])
-    sup.plan([SectionSpec("s1", "nu.Str('a')")])
+    sup.plan([SectionSpec("s1", A), SectionSpec("s2", B)])
+    sup.plan([SectionSpec("s1", A)])
     assert set(sup._gens) == {"s1"}
 
 
@@ -164,7 +183,7 @@ async def test_restart_of_an_invalid_section_re_reports_the_diagnostic():
     seen: list[dict] = []
     sup = _sup()
     sup.on_change(seen.append)
-    sup.plan([SectionSpec("s1", "nu.Str('unclosed'")])
+    sup.plan([SectionSpec("s1", BROKEN)])
     await sup.restart("s1")
     assert seen and seen[-1]["section_id"] == "s1"
     assert seen[-1]["state"] == "invalid"
@@ -189,7 +208,7 @@ async def test_launch_runs_and_marks_running(monkeypatch):
 
     seen: list[str] = []
     sup.on_change(lambda w: seen.append(w["state"]))
-    sup.plan([SectionSpec("s1", "nu.Str('a')")])
+    sup.plan([SectionSpec("s1", A)])
     await sup.launch()
     await asyncio.wait_for(ran.wait(), timeout=2)
     await asyncio.sleep(0)
@@ -209,7 +228,7 @@ async def test_failure_is_reported_as_failed(monkeypatch):
         lambda term, scope: term,
     )
 
-    sup.plan([SectionSpec("s1", "nu.Str('a')")])
+    sup.plan([SectionSpec("s1", A)])
     await sup.launch()
     for _ in range(20):
         await asyncio.sleep(0.01)

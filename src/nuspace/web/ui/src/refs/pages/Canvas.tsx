@@ -47,7 +47,12 @@ import {
 	type ProseHandle,
 	ProseIsland,
 } from "./Prose";
-import { filterSlash, type SlashItem, SlashMenu } from "./Slash";
+import {
+	filterSlash,
+	PROGRAM_TEMPLATE,
+	type SlashItem,
+	SlashMenu,
+} from "./Slash";
 import {
 	type EditorState,
 	type FocusReq,
@@ -213,7 +218,10 @@ export function Canvas({
 				insert:
 					insert === null
 						? null
-						: { kind: insert, source: insert === "program" ? "" : "" },
+						: {
+								kind: insert,
+								source: insert === "program" ? PROGRAM_TEMPLATE : "",
+							},
 			});
 		},
 		[notify, pagePath],
@@ -443,9 +451,11 @@ export function Canvas({
 			if (s.mode === "insert") {
 				patch({ slash: null });
 				if (item.action.kind === "split") {
+					const program = item.action.insert === "program";
 					createAfter(
 						s.blockId,
-						item.action.insert === "program" ? "program" : "prose",
+						program ? "program" : "prose",
+						program ? PROGRAM_TEMPLATE : "",
 					);
 					return;
 				}

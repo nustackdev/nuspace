@@ -26,9 +26,12 @@ and carries a ``kind``:
 
 - ``prose``   -- one prose island. ``source`` is markdown. Contiguous
   prose is *one* block, not one per paragraph; splitting is explicit.
-  Never compiled, never runs, no status.
-- ``program`` -- a Nu program. ``source`` is Python evaluated with
-  ``{nu, Space, path}``; ``path`` is ``"sections.<block_id>"``.
+  Never constructed, never runs, no status.
+- ``program`` -- a Nu program in ``nu.prog``'s sense: a python module
+  with an ``out`` entry point that returns a Nu term. The entry point's
+  signature is the scope contract and nuspace offers one value, ``path``,
+  which is ``"sections.<block_id>"``. Everything else the block imports
+  for itself, ``Space`` included.
 
 Order comes from the ``order`` int slot, ties broken by id. The driver
 renormalizes orders to ``index * 10`` after any structural change, so
@@ -38,7 +41,7 @@ gaps never close.
 under its own prefix mounts in that block. A block may name another
 block's ref to read or write it -- a live cross-block wire that keeps
 working -- but a borrowed ref renders once, in its owner. See
-``compile.enumerate_ui_refs``.
+``nuspace.exec.compile.enumerate_ui_refs``.
 
 There is no page-global code/display mode. v0 had one and it meant
 editing anything restarted everything. Mode is per block and lives in the

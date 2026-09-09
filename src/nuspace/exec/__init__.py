@@ -21,7 +21,7 @@ Headless. Nothing here imports the web shell.
 
 from __future__ import annotations
 
-from .compile import SectionCompileError, compile_section, enumerate_ui_refs
+from .compile import construct_section, enumerate_ui_refs, section_filename, wire_type
 from .handle import Timeouts, WorkerHandle
 from .hosts import LoopbackHost, SessionHost
 from .pool import WarmPool
@@ -33,7 +33,6 @@ from .supervisor import SectionSpec, Supervisor, UiHost
 __all__ = [
     "STATES",
     "LoopbackHost",
-    "SectionCompileError",
     "SectionSpec",
     "SectionState",
     "SectionStatus",
@@ -46,6 +45,8 @@ __all__ = [
     "WarmPool",
     "WorkerHandle",
     "WorkerSession",
-    "compile_section",
+    "construct_section",
     "enumerate_ui_refs",
+    "section_filename",
+    "wire_type",
 ]

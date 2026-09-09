@@ -4,10 +4,18 @@ Boots, does the expensive imports, reports ``ready``, and parks on its
 channel. That parked state is what the warm pool holds, so opening a
 page costs a message round trip and not an interpreter start.
 
-When a ``run`` arrives it compiles the source **here** -- arbitrary user
-python never runs in the server -- reports mount fields, binds a
+When a ``run`` arrives it constructs the source **here** -- arbitrary
+user python never runs in the server -- reports mount fields, binds a
 :class:`~nuspace.exec.session.WorkerSession` on a fresh Context, and
 drives the tree with ``nu.arun``.
+
+Constructing in the worker rather than shipping a tree into it is the
+whole architecture. nu's ``Venv`` brace builds in a foreign interpreter
+and pickles the tree home; here it goes the other way, because the
+process that constructs is the process that runs and it is the one
+holding the ``nu.ui`` Session. So the worker calls ``nu.prog``'s
+in-process brace on itself and nothing but source ever crosses the
+channel.
 
 The process is single-use. Once it has run user code it is never handed
 back to the pool: user code can leave threads, signal handlers, open
@@ -34,9 +42,10 @@ from typing import TYPE_CHECKING, Any
 import nu
 import nu.ui
 from nu.lang.runtime import Context
+from nu.prog import Diagnostic
 from nu.ui.core import Session
 
-from .compile import SectionCompileError, compile_section
+from .compile import construct_section, enumerate_ui_refs, section_filename
 from .protocol import (
     MSG_COMPILED,
     MSG_FAILED,
@@ -108,15 +117,14 @@ async def _run_section(channel: Channel, msg: Mapping[str, Any]) -> None:
     start = asyncio.Event()
     inbox = asyncio.create_task(_inbound(channel, session, stop, start))
 
-    try:
-        term, fields = compile_section(source, prefix)
-    except SectionCompileError as exc:
-        await channel.send({"t": MSG_INVALID, "error": exc.diagnostic()})
+    term = construct_section(source, prefix)
+    if isinstance(term, Diagnostic):
+        # It never produced a tree, so it never ran: `invalid`, not
+        # `failed`. `str(Diagnostic)` is "message (line N)", which is the
+        # source-attributed line the editor renders in place.
+        await channel.send({"t": MSG_INVALID, "error": str(term)})
         return
-    except BaseException as exc:
-        await channel.send({"t": MSG_INVALID, "error": f"{type(exc).__name__}: {exc}"})
-        return
-    await channel.send({"t": MSG_COMPILED, "fields": fields})
+    await channel.send({"t": MSG_COMPILED, "fields": enumerate_ui_refs(term, prefix)})
 
     # Park between compile and run. The supervisor ships mount fields to
     # the browser first, so a section can never write to a slice the
@@ -231,7 +239,7 @@ def _scope() -> type | None:
 def _format_error(exc: BaseException, prefix: str) -> str:
     """A usable runtime error: the exception, plus the section's own frames."""
     head = f"{type(exc).__name__}: {exc}"
-    filename = f"<section {prefix}>"
+    filename = section_filename(prefix)
     lines = [
         f"  line {frame.lineno}: {frame.line or ''}".rstrip()
         for frame in traceback.extract_tb(exc.__traceback__)

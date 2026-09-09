@@ -12,34 +12,27 @@ from __future__ import annotations
 from nuspace.exec import LoopbackHost, SectionSpec, Supervisor
 
 
-ROUND_TRIP = (
-    "Space.state.set_item('k', nu.Str('v')) >> "
-    "nu.ui.TextRef(path + '.out').set(nu.ToStr(Space.state['k']))"
-)
-
-
-async def test_section_writes_and_reads_kv(bounds):
+async def test_section_writes_and_reads_kv(bounds, src):
     host = LoopbackHost()
     sup = Supervisor(host, pool_size=1, store={"kind": "memory"}, timeouts=bounds.timeouts)
     await sup.astart()
     try:
-        await sup.open_page("p1", [SectionSpec("s", ROUND_TRIP)])
+        await sup.open_page("p1", [SectionSpec("s", src.kv_round_trip)])
         await sup.wait_for("p1", {"stopped"}, timeout=20.0)
         assert host.writes("sections.s.out") == ["v"]
     finally:
         await sup.aclose()
 
 
-async def test_workers_do_not_share_a_memory_store(bounds):
+async def test_workers_do_not_share_a_memory_store(bounds, src):
     """Each worker brackets its own navigator. Scratch is per section."""
     host = LoopbackHost()
     sup = Supervisor(host, pool_size=2, store={"kind": "memory"}, timeouts=bounds.timeouts)
-    reader = "nu.ui.TextRef(path + '.out').set(nu.ToStr(Space.state['k']))"
     await sup.astart()
     try:
         await sup.open_page(
             "p1",
-            [SectionSpec("w", ROUND_TRIP), SectionSpec("r", reader)],
+            [SectionSpec("w", src.kv_round_trip), SectionSpec("r", src.kv_reader)],
         )
         await sup.wait_for("p1", {"stopped", "failed"}, timeout=20.0)
         assert host.writes("sections.w.out") == ["v"]
