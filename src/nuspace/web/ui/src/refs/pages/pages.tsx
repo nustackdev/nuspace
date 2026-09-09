@@ -14,14 +14,60 @@
 
 import { OP_NOTIFY } from "@nustackdev/ui-core";
 import type { RefEntry } from "@nustackdev/ui-kit";
-import { Heading, Spinner, useStore } from "@nustackdev/ui-kit";
-import { useCallback, useEffect, useMemo } from "react";
+import { Spinner, useStore } from "@nustackdev/ui-kit";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { docPage } from "../../design";
-import { useRoute } from "../../router";
+import type { Crumb } from "../../design/page-header";
+import { PageHeader } from "../../design/page-header";
+import { hrefFor, onNavClick, useRoute } from "../../router";
 import { Canvas } from "./Canvas";
 import { Rail } from "./Rail";
 import { pagesSliceFactory, patchEditor, useEditorState, usePagesValue } from "./slice";
-import { EMPTY_TREE } from "./types";
+import { EMPTY_TREE, type PageNode } from "./types";
+
+// Empty-state labels. The root page ships an empty title (the server inits it
+// that way), so something has to stand in for it; "Space" is what the rail
+// already calls it, and the header disagreeing with the rail about the name of
+// the same page is the odd part of the old empty state, not the word itself.
+// Both are placeholders now - muted, and typing over one names the page - so
+// neither can be mistaken for a title that is really there.
+const SPACE_FALLBACK = "Space";
+const PAGE_FALLBACK = "Untitled";
+
+/**
+ * The trail to a page: every ancestor, the space included, the page itself
+ * excluded. The big title right below is the current page; repeating it in
+ * the crumb reads as a stutter, and the crumb is there to say what is ABOVE
+ * you.
+ *
+ * Titles come off the tree rather than off the page, because the path is a
+ * list of ids and only the tree knows what they are called.
+ */
+function trailFor(tree: PageNode, path: string[]): Crumb[] {
+	// The root page IS the space. A trail reading "Space > Space" is noise.
+	if (path.length === 0) return [];
+	const out: Crumb[] = [];
+	let node: PageNode | undefined = tree;
+	const prefix: string[] = [];
+	out.push({
+		label: tree.title || SPACE_FALLBACK,
+		href: hrefFor("pages", []),
+		onClick: onNavClick({ top: "pages", path: [] }),
+	});
+	// Ancestors only: stop one short of the page we are looking at.
+	for (const pid of path.slice(0, -1)) {
+		node = node?.pages.find((p) => p.id === pid);
+		if (!node) break;
+		prefix.push(pid);
+		const at = [...prefix];
+		out.push({
+			label: node.title || PAGE_FALLBACK,
+			href: hrefFor("pages", at),
+			onClick: onNavClick({ top: "pages", path: at }),
+		});
+	}
+	return out;
+}
 
 function PagesView({ path }: { path: string }) {
 	const value = usePagesValue(path);
@@ -64,6 +110,26 @@ function PagesView({ path }: { path: string }) {
 		[path],
 	);
 
+	// Renaming ships `on_page_rename` and the server reships the TREE, not the
+	// open page, so `page.title` keeps the old value until you navigate away
+	// and back. Hold the committed title locally until the server's copy
+	// agrees, otherwise the heading you just typed snaps back one frame later.
+	// Keyed by page path so it cannot leak onto the next page you open.
+	const [pending, setPending] = useState<{ key: string; title: string } | null>(null);
+	const pageKey = page ? page.path.join("/") : "";
+	const renamed =
+		pending && pending.key === pageKey && pending.title !== page?.title ? pending.title : null;
+
+	const rename = useCallback(
+		(title: string) => {
+			if (!page) return;
+			const at = page.path;
+			setPending({ key: at.join("/"), title });
+			notify({ op: "on_page_rename", path: at, title });
+		},
+		[notify, page],
+	);
+
 	return (
 		<div className="flex min-h-0 min-w-0 flex-1">
 			<Rail
@@ -81,23 +147,13 @@ function PagesView({ path }: { path: string }) {
 					</div>
 				) : (
 					<>
-						<header className="mx-auto w-full max-w-doc px-doc-pad-x pt-16">
-							{/* The title is a real heading that happens to be clickable,
-							    not a button that happens to look like a heading. */}
-							<button
-								type="button"
-								onClick={() => {
-									if (page.path.length === 0) return;
-									const title = window.prompt("rename page", page.title);
-									if (title) notify({ op: "on_page_rename", path: page.path, title });
-								}}
-								className="focus-ring -mx-2 block w-[calc(100%+1rem)] rounded-sm px-2 py-1 text-left transition-colors duration-fast ease-out hover:bg-doc-hover"
-							>
-								<Heading as="h1" size="3xl" className="truncate">
-									{page.title || (page.path.length === 0 ? "Space" : "Untitled")}
-								</Heading>
-							</button>
-						</header>
+						<PageHeader
+							title={renamed ?? page.title}
+							seed={page.page_id ?? ""}
+							crumbs={trailFor(tree, page.path)}
+							placeholder={page.path.length === 0 ? SPACE_FALLBACK : PAGE_FALLBACK}
+							onRename={rename}
+						/>
 						<Canvas refPath={path} page={page} notify={notify} />
 					</>
 				)}
