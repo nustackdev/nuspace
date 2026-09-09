@@ -208,9 +208,7 @@ export const pagesSliceFactory: SliceFactory = (path, ctx, _props) =>
 						page: {
 							...page,
 							blocks: page.blocks.map((b) =>
-								byId.has(b.id)
-									? { ...b, status: byId.get(b.id) ?? b.status }
-									: b,
+								byId.has(b.id) ? { ...b, status: byId.get(b.id) ?? b.status } : b,
 							),
 						},
 					};
@@ -227,12 +225,7 @@ export const pagesSliceFactory: SliceFactory = (path, ctx, _props) =>
 					blocks,
 				};
 
-				slice.sectionPaths = registerFields(
-					refs,
-					ctx,
-					blocks,
-					slice.sectionPaths ?? [],
-				);
+				slice.sectionPaths = registerFields(refs, ctx, blocks, slice.sectionPaths ?? []);
 				slice.value = { ...slice.value, page };
 
 				// Prune editor state that points at blocks which no longer exist.
@@ -259,22 +252,16 @@ export const pagesSliceFactory: SliceFactory = (path, ctx, _props) =>
 // -- reads -------------------------------------------------------------------
 
 export function usePagesValue(path: string): PagesValue | null {
-	return useStore(
-		(s) => (s.refs[path]?.value as PagesValue | undefined) ?? null,
-	);
+	return useStore((s) => (s.refs[path]?.value as PagesValue | undefined) ?? null);
 }
 
 export function useEditorState(path: string): EditorState {
-	return useStore(
-		(s) => (s.refs[path] as PagesSlice | undefined)?.editor ?? EMPTY_EDITOR,
-	);
+	return useStore((s) => (s.refs[path] as PagesSlice | undefined)?.editor ?? EMPTY_EDITOR);
 }
 
 /** Narrow subscription so a keystroke in one block does not rerender the rest. */
 export function useEditorSlot<T>(path: string, pick: (e: EditorState) => T): T {
-	return useStore((s) =>
-		pick((s.refs[path] as PagesSlice | undefined)?.editor ?? EMPTY_EDITOR),
-	);
+	return useStore((s) => pick((s.refs[path] as PagesSlice | undefined)?.editor ?? EMPTY_EDITOR));
 }
 
 // -- writes ------------------------------------------------------------------

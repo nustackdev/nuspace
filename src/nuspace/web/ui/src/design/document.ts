@@ -76,10 +76,7 @@ export const docBlockquote = cn(
 	"[&>p]:my-1 [&>p:first-child]:mt-0 [&>p:last-child]:mb-0",
 );
 
-const LIST = cn(
-	"my-2 space-y-1 pl-5 marker:text-text-muted",
-	"[&_ul]:my-1 [&_ol]:my-1",
-);
+const LIST = cn("my-2 space-y-1 pl-5 marker:text-text-muted", "[&_ul]:my-1 [&_ol]:my-1");
 export const docBulletList = cn(LIST, "list-disc");
 export const docOrderedList = cn(LIST, "list-decimal");
 
@@ -261,8 +258,7 @@ export const docSlashMenuItem = cn(
 export const docSlashMenuHint = "ml-auto text-xs text-text-muted";
 
 /** Empty state when the query matches nothing. */
-export const docSlashMenuEmpty =
-	"px-2 py-6 text-center text-sm text-text-muted";
+export const docSlashMenuEmpty = "px-2 py-6 text-center text-sm text-text-muted";
 
 /** Placeholder shown on an empty focused prose block ("type / for blocks"). */
 export const docPlaceholder = cn(

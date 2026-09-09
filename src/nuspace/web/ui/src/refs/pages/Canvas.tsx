@@ -41,24 +41,9 @@ import {
 	hasGutterRail,
 } from "../../design";
 import { ProgramBlock } from "./Program";
-import {
-	type ExitDir,
-	type InsertKind,
-	type ProseHandle,
-	ProseIsland,
-} from "./Prose";
-import {
-	filterSlash,
-	PROGRAM_TEMPLATE,
-	type SlashItem,
-	SlashMenu,
-} from "./Slash";
-import {
-	type EditorState,
-	type FocusReq,
-	patchEditor,
-	useEditorState,
-} from "./slice";
+import { type ExitDir, type InsertKind, type ProseHandle, ProseIsland } from "./Prose";
+import { filterSlash, PROGRAM_TEMPLATE, type SlashItem, SlashMenu } from "./Slash";
+import { type EditorState, type FocusReq, patchEditor, useEditorState } from "./slice";
 import type { ActivePage, Block } from "./types";
 
 type Notify = (payload: Record<string, unknown>) => void;
@@ -82,10 +67,7 @@ export function Canvas({
 	/** Positional focus intent, resolved on the next block list. */
 	const pendingAfter = useRef<{ afterId: string; edit: boolean } | null>(null);
 
-	const index = useCallback(
-		(id: string) => blocks.findIndex((b) => b.id === id),
-		[blocks],
-	);
+	const index = useCallback((id: string) => blocks.findIndex((b) => b.id === id), [blocks]);
 
 	const patch = useCallback(
 		(p: Partial<EditorState> | ((e: EditorState) => Partial<EditorState>)) =>
@@ -127,11 +109,7 @@ export function Canvas({
 			const i = index(fromId);
 			const j = dir === "up" ? i - 1 : i + 1;
 			if (i < 0 || j < 0 || j >= blocks.length) return;
-			focusBlock(
-				blocks[j],
-				{ place: dir === "up" ? "end" : "start", column, x },
-				editor.editing,
-			);
+			focusBlock(blocks[j], { place: dir === "up" ? "end" : "start", column, x }, editor.editing);
 		},
 		[blocks, editor.editing, focusBlock, index],
 	);
@@ -147,9 +125,7 @@ export function Canvas({
 				return;
 			}
 			patch((e) => ({
-				editing: e.editing.includes(block.id)
-					? e.editing
-					: [...e.editing, block.id],
+				editing: e.editing.includes(block.id) ? e.editing : [...e.editing, block.id],
 				focus: { blockId: block.id, place },
 				selected: [],
 				anchor: null,
@@ -170,9 +146,7 @@ export function Canvas({
 			patch({ focus: { blockId: target.id, place: "start" }, selected: [] });
 		} else {
 			patch((e) => ({
-				editing: e.editing.includes(target.id)
-					? e.editing
-					: [...e.editing, target.id],
+				editing: e.editing.includes(target.id) ? e.editing : [...e.editing, target.id],
 				focus: { blockId: target.id, place: "start" },
 				selected: [],
 			}));
@@ -251,8 +225,7 @@ export function Canvas({
 			const prev = blocks[i - 1];
 			if (prev.kind === "prose") {
 				const seam = prev.source.length + (prev.source && text ? 1 : 0);
-				const joined =
-					prev.source && text ? `${prev.source}\n${text}` : prev.source + text;
+				const joined = prev.source && text ? `${prev.source}\n${text}` : prev.source + text;
 				notify({
 					op: "on_block_merge",
 					page_path: pagePath,
@@ -442,10 +415,7 @@ export function Canvas({
 	// -- slash menu -----------------------------------------------------------
 
 	const slash = editor.slash;
-	const slashItems = useMemo(
-		() => (slash ? filterSlash(slash.query) : []),
-		[slash],
-	);
+	const slashItems = useMemo(() => (slash ? filterSlash(slash.query) : []), [slash]);
 
 	const pickSlash = useCallback(
 		(item: SlashItem) => {
@@ -455,15 +425,10 @@ export function Canvas({
 				patch({ slash: null });
 				if (item.action.kind === "split") {
 					const program = item.action.insert === "program";
-					createAfter(
-						s.blockId,
-						program ? "program" : "prose",
-						program ? PROGRAM_TEMPLATE : "",
-					);
+					createAfter(s.blockId, program ? "program" : "prose", program ? PROGRAM_TEMPLATE : "");
 					return;
 				}
-				const seed =
-					item.action.kind === "prefix" ? item.action.prefix : item.action.text;
+				const seed = item.action.kind === "prefix" ? item.action.prefix : item.action.text;
 				createAfter(s.blockId, "prose", seed);
 				return;
 			}
@@ -516,8 +481,7 @@ export function Canvas({
 		>
 			{blocks.map((block, i) => {
 				const selected = editor.selected.includes(block.id);
-				const focusReq =
-					editor.focus?.blockId === block.id ? editor.focus : null;
+				const focusReq = editor.focus?.blockId === block.id ? editor.focus : null;
 				const isProgram = block.kind === "program";
 				const state = block.status?.state ?? "idle";
 				return (
@@ -542,9 +506,7 @@ export function Canvas({
 							}
 						}}
 					>
-						{drag && drag.at === i ? (
-							<span className={`${docDropIndicator} top-0`} />
-						) : null}
+						{drag && drag.at === i ? <span className={`${docDropIndicator} top-0`} /> : null}
 						{/* One rail slot. A status the author must act on wins over
 						    "you are here", because a failing block is more urgent. */}
 						{isProgram && hasGutterRail(state) ? (
@@ -585,17 +547,13 @@ export function Canvas({
 								source={block.source}
 								focusReq={focusReq}
 								slashFrom={
-									slash && slash.mode === "inline" && slash.blockId === block.id
-										? slash.from
-										: null
+									slash && slash.mode === "inline" && slash.blockId === block.id ? slash.from : null
 								}
 								onFocusConsumed={() => patch({ focus: null })}
 								onCommit={(src) => commitSource(block.id, src)}
 								onExit={(dir, column, x) => step(block.id, dir, column, x)}
 								onMergeUp={(text) => mergeUp(block.id, text)}
-								onSplit={(head, tail, insert) =>
-									splitBlock(block.id, head, tail, insert)
-								}
+								onSplit={(head, tail, insert) => splitBlock(block.id, head, tail, insert)}
 								onSlashOpen={(offset, anchor) =>
 									patch({
 										slash: {
@@ -610,9 +568,7 @@ export function Canvas({
 									})
 								}
 								onSlashQuery={(query) =>
-									patch((e) =>
-										e.slash ? { slash: { ...e.slash, query, index: 0 } } : {},
-									)
+									patch((e) => (e.slash ? { slash: { ...e.slash, query, index: 0 } } : {}))
 								}
 								onSlashClose={() => patch({ slash: null })}
 								onSlashKey={slashKey}
@@ -672,12 +628,7 @@ export function Canvas({
 
 			<button
 				type="button"
-				onClick={() =>
-					createAfter(
-						blocks.length ? blocks[blocks.length - 1].id : null,
-						"prose",
-					)
-				}
+				onClick={() => createAfter(blocks.length ? blocks[blocks.length - 1].id : null, "prose")}
 				className="focus-ring w-full rounded-sm px-doc-block-x py-doc-block-y text-left text-xl text-text-muted hover:bg-doc-hover"
 			>
 				Click to write, or press / for blocks

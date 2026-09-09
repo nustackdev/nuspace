@@ -18,11 +18,7 @@
 import type { MountField } from "@nustackdev/ui-core";
 import { FieldView } from "@nustackdev/ui-kit";
 import { useCallback, useState } from "react";
-import {
-	docStatusPayload,
-	SECTION_STATUS,
-	SectionStatusPill,
-} from "../../design";
+import { docStatusPayload, SECTION_STATUS, SectionStatusPill } from "../../design";
 import { CodeBox } from "./Code";
 import type { ExitDir } from "./Prose";
 import type { FocusReq } from "./slice";
@@ -83,21 +79,13 @@ export function ProgramBlock(props: ProgramProps) {
 				<button
 					type="button"
 					title="Copy this block's mount prefix"
-					onClick={() =>
-						navigator.clipboard
-							?.writeText(`sections.${blockId}`)
-							.catch(() => {})
-					}
+					onClick={() => navigator.clipboard?.writeText(`sections.${blockId}`).catch(() => {})}
 					className="focus-ring truncate rounded-sm font-mono text-xs text-text-muted hover:text-text-secondary"
 				>
 					sections.{blockId}
 				</button>
 				<span className="flex-1" />
-				{dirty ? (
-					<span className="font-mono text-xs text-text-muted">
-						unsaved · ⌘↵
-					</span>
-				) : null}
+				{dirty ? <span className="font-mono text-xs text-text-muted">unsaved · ⌘↵</span> : null}
 				<button
 					type="button"
 					onClick={onRestart}
@@ -124,9 +112,7 @@ export function ProgramBlock(props: ProgramProps) {
 					<div className="mb-0.5 font-medium">
 						{state === "invalid" ? "does not compile" : "ran and died"}
 					</div>
-					<div className="overflow-x-auto text-text-secondary">
-						{status.error}
-					</div>
+					<div className="overflow-x-auto text-text-secondary">{status.error}</div>
 				</div>
 			) : null}
 

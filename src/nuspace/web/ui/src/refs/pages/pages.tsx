@@ -20,12 +20,7 @@ import { docPage } from "../../design";
 import { useRoute } from "../../router";
 import { Canvas } from "./Canvas";
 import { Rail } from "./Rail";
-import {
-	pagesSliceFactory,
-	patchEditor,
-	useEditorState,
-	usePagesValue,
-} from "./slice";
+import { pagesSliceFactory, patchEditor, useEditorState, usePagesValue } from "./slice";
 import { EMPTY_TREE } from "./types";
 
 function PagesView({ path }: { path: string }) {
@@ -80,9 +75,7 @@ function PagesView({ path }: { path: string }) {
 			/>
 			<div className={`${docPage} flex min-w-0 flex-1 flex-col`}>
 				{page == null ? (
-					<div className="p-8 font-mono text-sm text-text-muted">
-						loading page...
-					</div>
+					<div className="p-8 font-mono text-sm text-text-muted">loading page...</div>
 				) : (
 					<>
 						<header className="mx-auto w-full max-w-doc px-doc-pad-x pt-16">
@@ -91,8 +84,7 @@ function PagesView({ path }: { path: string }) {
 								onClick={() => {
 									if (page.path.length === 0) return;
 									const title = window.prompt("rename page", page.title);
-									if (title)
-										notify({ op: "on_page_rename", path: page.path, title });
+									if (title) notify({ op: "on_page_rename", path: page.path, title });
 								}}
 								className="w-full truncate text-left text-3xl font-semibold tracking-tight text-text-primary"
 							>

@@ -50,10 +50,7 @@ export function useNuspaceConnection(): void {
 		const scheduleReconnect = () => {
 			if (intentionalClose) return;
 			attempts += 1;
-			const exp = Math.min(
-				BACKOFF_CAP_MS,
-				BACKOFF_BASE_MS * 2 ** (attempts - 1),
-			);
+			const exp = Math.min(BACKOFF_CAP_MS, BACKOFF_BASE_MS * 2 ** (attempts - 1));
 			const delay = Math.floor(Math.random() * exp);
 			setStatus("reconnecting");
 			retryTimer = setTimeout(connect, delay);

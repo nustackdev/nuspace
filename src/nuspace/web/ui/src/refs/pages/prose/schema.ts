@@ -57,11 +57,7 @@ const nodes: Record<string, NodeSpec> = {
 			{ tag: "h5", attrs: { level: 3 } },
 			{ tag: "h6", attrs: { level: 3 } },
 		],
-		toDOM: (node) => [
-			`h${node.attrs.level}`,
-			{ class: docHeading(node.attrs.level as number) },
-			0,
-		],
+		toDOM: (node) => [`h${node.attrs.level}`, { class: docHeading(node.attrs.level as number) }, 0],
 	},
 
 	blockquote: {

@@ -78,8 +78,7 @@ export function useRoute(): Route {
 }
 
 export function navigate(target: string | { top: Top; path?: string[] }): void {
-	const url =
-		typeof target === "string" ? target : _join(target.top, target.path ?? []);
+	const url = typeof target === "string" ? target : _join(target.top, target.path ?? []);
 	if (window.location.pathname === url) return;
 	window.history.pushState({}, "", url);
 	const r = _split(url);

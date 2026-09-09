@@ -10,12 +10,7 @@
 // and Escape has to hand control back to block selection.
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import {
-	type CodeEditor,
-	type KeyboardEvt,
-	loadMonaco,
-	type MonacoApi,
-} from "./monaco";
+import { type CodeEditor, type KeyboardEvt, loadMonaco, type MonacoApi } from "./monaco";
 import type { ExitDir } from "./Prose";
 import type { FocusReq } from "./slice";
 
@@ -35,21 +30,11 @@ export type CodeBoxProps = {
 };
 
 function themeName(): string {
-	return document.documentElement.classList.contains("dark")
-		? "nu-dark"
-		: "nu-light";
+	return document.documentElement.classList.contains("dark") ? "nu-dark" : "nu-light";
 }
 
 export function CodeBox(props: CodeBoxProps) {
-	const {
-		source,
-		focusReq,
-		onFocusConsumed,
-		onCommit,
-		onExit,
-		onEscape,
-		onDirty,
-	} = props;
+	const { source, focusReq, onFocusConsumed, onCommit, onExit, onEscape, onDirty } = props;
 
 	const hostRef = useRef<HTMLDivElement | null>(null);
 	const editorRef = useRef<CodeEditor | null>(null);
@@ -90,9 +75,7 @@ export function CodeBox(props: CodeBoxProps) {
 				padding: { top: 8, bottom: 8 },
 				fontSize: 12.5,
 				fontFamily:
-					getComputedStyle(document.documentElement).getPropertyValue(
-						"--font-mono",
-					) || "monospace",
+					getComputedStyle(document.documentElement).getPropertyValue("--font-mono") || "monospace",
 				tabSize: 4,
 				insertSpaces: true,
 				wordWrap: "on",
@@ -110,10 +93,7 @@ export function CodeBox(props: CodeBoxProps) {
 			editorRef.current = editor;
 
 			const fit = () => {
-				const h = Math.min(
-					MAX_HEIGHT,
-					Math.max(MIN_HEIGHT, editor.getContentHeight()),
-				);
+				const h = Math.min(MAX_HEIGHT, Math.max(MIN_HEIGHT, editor.getContentHeight()));
 				host.style.height = `${h}px`;
 				editor.layout({ width: host.clientWidth, height: h });
 			};
@@ -157,10 +137,7 @@ export function CodeBox(props: CodeBoxProps) {
 						cb.current.onExit("up", pos.column - 1);
 						return;
 					}
-					if (
-						e.keyCode === monaco.KeyCode.DownArrow &&
-						pos.lineNumber === model.getLineCount()
-					) {
+					if (e.keyCode === monaco.KeyCode.DownArrow && pos.lineNumber === model.getLineCount()) {
 						e.preventDefault();
 						e.stopPropagation();
 						cb.current.onCommit(editor.getValue());

@@ -116,21 +116,17 @@ function ColumnPanel({
 					className="inline-block size-2 rounded-full mr-2 align-middle"
 					style={{ backgroundColor: _kindColor(kindLabel) }}
 				/>
-				{kindLabel}{" "}
-				{truncated ? `(${col.entries.length}/${col.total})` : `(${col.total})`}
+				{kindLabel} {truncated ? `(${col.entries.length}/${col.total})` : `(${col.total})`}
 			</div>
 			<div className="flex-1 min-h-0 overflow-y-auto">
 				{col.entries.length === 0 ? (
-					<div className="px-3 py-2 text-xs text-muted-foreground font-mono">
-						empty
-					</div>
+					<div className="px-3 py-2 text-xs text-muted-foreground font-mono">empty</div>
 				) : (
 					col.entries.map((e, i) => {
 						const isFocused = active && i === focused;
 						const rowKey = `${colIdx}::${i}::${e.key}`;
 						return (
 							<button
-								// biome-ignore lint/suspicious/noArrayIndexKey: server-driven list, index is stable per replace
 								key={rowKey}
 								type="button"
 								ref={(el) => {
@@ -172,8 +168,7 @@ function ColumnPanel({
 function LensView({ path }: { path: string }) {
 	const value = useStore((s) => s.refs[path]?.value as LensValue | undefined);
 	const focused = useStore(
-		(s) =>
-			(s.refs[path]?.focusedIndex as Record<number, number> | undefined) ?? {},
+		(s) => (s.refs[path]?.focusedIndex as Record<number, number> | undefined) ?? {},
 	);
 	const setLocal = useStore((s) => s.setLocal);
 	const set = useStore.setState;
@@ -244,10 +239,7 @@ function LensView({ path }: { path: string }) {
 		[columns, focused, drill, pop, setFocused],
 	);
 
-	const breadcrumb = useMemo(
-		() => ["root", ...cursorPath].join(" › "),
-		[cursorPath],
-	);
+	const breadcrumb = useMemo(() => ["root", ...cursorPath].join(" › "), [cursorPath]);
 
 	// Ensure the slice's setLocal spot isn't left stale between mounts.
 	useEffect(() => {

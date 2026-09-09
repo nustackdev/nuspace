@@ -139,12 +139,7 @@ type Anchor = { from: number; to: number };
 
 type Ctx = { anchors: Anchor[] };
 
-function scanInline(
-	s: Src,
-	marks: readonly Mark[],
-	out: PMNode[],
-	ctx: Ctx,
-): void {
+function scanInline(s: Src, marks: readonly Mark[], out: PMNode[], ctx: Ctx): void {
 	let buf = "";
 	let bufFrom = -1;
 	let bufTo = -1;
@@ -249,9 +244,7 @@ function parseList(
 		if (ordered && items.length === 0) order = Number(m[2]) || 1;
 
 		const markerLen = m[0].length;
-		const body: Line[] = [
-			{ text: lines[i].text.slice(markerLen), at: lines[i].at + markerLen },
-		];
+		const body: Line[] = [{ text: lines[i].text.slice(markerLen), at: lines[i].at + markerLen }];
 		i += 1;
 
 		// Continuation: anything indented past the marker belongs to this item.
@@ -310,12 +303,7 @@ function parseBlocks(lines: Line[], ctx: Ctx): PMNode[] {
 		if (h) {
 			const level = h[1].length;
 			const at = line.at + h[0].length - h[2].length;
-			out.push(
-				nodeType.heading.create(
-					{ level },
-					inlineNodes([{ text: h[2], at }], ctx),
-				),
-			);
+			out.push(nodeType.heading.create({ level }, inlineNodes([{ text: h[2], at }], ctx)));
 			i += 1;
 			continue;
 		}
@@ -345,11 +333,7 @@ function parseBlocks(lines: Line[], ctx: Ctx): PMNode[] {
 		}
 
 		const buf: Line[] = [];
-		while (
-			i < lines.length &&
-			lines[i].text.trim() !== "" &&
-			!isBlockStart(lines[i].text)
-		) {
+		while (i < lines.length && lines[i].text.trim() !== "" && !isBlockStart(lines[i].text)) {
 			buf.push(lines[i]);
 			i += 1;
 		}
@@ -428,10 +412,7 @@ function escapeInline(text: string): string {
 /** Escape a leading marker so a line of prose is not read back as a block. */
 function escapeLineStart(text: string): string {
 	if (RULE.test(text)) return `\\${text}`;
-	return text.replace(
-		/^(#{1,3}[ \t]|[-*+][ \t]|\d+[.)][ \t]|>)/,
-		(m) => `\\${m}`,
-	);
+	return text.replace(/^(#{1,3}[ \t]|[-*+][ \t]|\d+[.)][ \t]|>)/, (m) => `\\${m}`);
 }
 
 function sameMarks(a: readonly Mark[], b: readonly Mark[]): boolean {
@@ -480,11 +461,7 @@ function serializeInline(node: PMNode): string {
 
 	for (const run of runs) {
 		let keep = 0;
-		while (
-			keep < open.length &&
-			keep < run.marks.length &&
-			open[keep].eq(run.marks[keep])
-		) {
+		while (keep < open.length && keep < run.marks.length && open[keep].eq(run.marks[keep])) {
 			keep += 1;
 		}
 		closeDown(keep);
@@ -508,9 +485,7 @@ function prefixLines(text: string, first: string, rest: string): string {
 }
 
 function isList(node: PMNode): boolean {
-	return (
-		node.type === nodeType.bulletList || node.type === nodeType.orderedList
-	);
+	return node.type === nodeType.bulletList || node.type === nodeType.orderedList;
 }
 
 /**
@@ -564,13 +539,7 @@ function serializeBlock(node: PMNode): string {
 			const items: string[] = [];
 			node.forEach((item, _offset, index) => {
 				const marker = `${start + index}. `;
-				items.push(
-					prefixLines(
-						serializeChildren(item, true),
-						marker,
-						" ".repeat(marker.length),
-					),
-				);
+				items.push(prefixLines(serializeChildren(item, true), marker, " ".repeat(marker.length)));
 			});
 			return items.join("\n");
 		}

@@ -60,10 +60,7 @@ export function proseInputRules(): Plugin {
 				state.tr.replaceRangeWith(start, end, nodeType.rule.create()),
 			),
 			// marks
-			markInputRule(
-				/(?<!\*)\*\*([^*\s](?:[^*]*[^*\s])?)\*\*$/,
-				markType.strong,
-			),
+			markInputRule(/(?<!\*)\*\*([^*\s](?:[^*]*[^*\s])?)\*\*$/, markType.strong),
 			markInputRule(/(?<![*\w])\*([^*\s](?:[^*]*[^*\s])?)\*$/, markType.em),
 			markInputRule(/(?<!`)`([^`]+)`$/, markType.code),
 		],
@@ -76,11 +73,7 @@ function isBlank(state: EditorState): boolean {
 	const doc = state.doc;
 	if (doc.childCount !== 1) return false;
 	const first = doc.firstChild;
-	return (
-		first != null &&
-		first.type === nodeType.paragraph &&
-		first.content.size === 0
-	);
+	return first != null && first.type === nodeType.paragraph && first.content.size === 0;
 }
 
 /**

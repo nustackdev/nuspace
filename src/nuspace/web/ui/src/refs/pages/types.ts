@@ -10,13 +10,7 @@ export type PageNode = { id: string | null; title: string; pages: PageNode[] };
 export type BlockKind = "prose" | "program";
 
 /** Fixed contract, shared with the out-of-process executor. Do not redesign. */
-export type SectionState =
-	| "invalid"
-	| "idle"
-	| "starting"
-	| "running"
-	| "stopped"
-	| "failed";
+export type SectionState = "invalid" | "idle" | "starting" | "running" | "stopped" | "failed";
 
 export type SectionStatus = {
 	section_id: string;
@@ -74,14 +68,7 @@ export function coerceNode(raw: unknown, fallbackId: string | null): PageNode {
 	};
 }
 
-const STATES: SectionState[] = [
-	"invalid",
-	"idle",
-	"starting",
-	"running",
-	"stopped",
-	"failed",
-];
+const STATES: SectionState[] = ["invalid", "idle", "starting", "running", "stopped", "failed"];
 
 export function coerceStatus(raw: unknown): SectionStatus | null {
 	if (!raw || typeof raw !== "object") return null;

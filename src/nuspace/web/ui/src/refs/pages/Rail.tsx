@@ -137,12 +137,7 @@ function Row({
 						type="button"
 						title="Delete page"
 						onClick={() => {
-							if (
-								!window.confirm(
-									`delete "${node.title}" and everything under it?`,
-								)
-							)
-								return;
+							if (!window.confirm(`delete "${node.title}" and everything under it?`)) return;
 							notify({ op: "on_page_delete", path });
 						}}
 						className="hidden shrink-0 rounded-sm px-1 text-sm text-text-muted hover:text-status-danger group-hover:block"

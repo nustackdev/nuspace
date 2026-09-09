@@ -15,12 +15,7 @@
 // Splitting is always explicit -- that is the rule the island model rests on.
 
 import { useEffect, useRef } from "react";
-import {
-	docSlashMenu,
-	docSlashMenuHint,
-	docSlashMenuItem,
-	docSlashMenuLabel,
-} from "../../design";
+import { docSlashMenu, docSlashMenuHint, docSlashMenuItem, docSlashMenuLabel } from "../../design";
 
 // What a fresh program block starts life as. A section is a nu.prog
 // program: a python *module* with an `out` entry point returning a Nu
@@ -147,10 +142,7 @@ export function filterSlash(query: string): SlashItem[] {
 	const q = query.trim().toLowerCase();
 	if (!q) return SLASH_ITEMS;
 	return SLASH_ITEMS.filter(
-		(i) =>
-			i.label.toLowerCase().includes(q) ||
-			i.keywords.includes(q) ||
-			i.id.startsWith(q),
+		(i) => i.label.toLowerCase().includes(q) || i.keywords.includes(q) || i.id.startsWith(q),
 	);
 }
 
@@ -237,9 +229,7 @@ export function SlashMenu({
 							className={docSlashMenuItem}
 						>
 							<span className="flex-1 truncate text-left">{item.label}</span>
-							<span className={`${docSlashMenuHint} font-mono`}>
-								{item.hint}
-							</span>
+							<span className={`${docSlashMenuHint} font-mono`}>{item.hint}</span>
 						</button>
 					</div>
 				);

@@ -38,18 +38,15 @@ function settles(md: string): string {
 describe("blocks round-trip", () => {
 	it("keeps paragraphs", () => stable("hello world\n"));
 
-	it("keeps blank-line separated paragraphs", () =>
-		stable("first para\n\nsecond para\n"));
+	it("keeps blank-line separated paragraphs", () => stable("first para\n\nsecond para\n"));
 
-	it("keeps all three heading levels", () =>
-		stable("# one\n\n## two\n\n### three\n"));
+	it("keeps all three heading levels", () => stable("# one\n\n## two\n\n### three\n"));
 
 	it("keeps bullet lists", () => stable("- a\n- b\n- c\n"));
 
 	it("keeps numbered lists", () => stable("1. a\n2. b\n3. c\n"));
 
-	it("keeps a numbered list that does not start at one", () =>
-		stable("3. a\n4. b\n"));
+	it("keeps a numbered list that does not start at one", () => stable("3. a\n4. b\n"));
 
 	it("keeps blockquotes", () => stable("> quoted line\n"));
 
@@ -59,8 +56,7 @@ describe("blocks round-trip", () => {
 
 	it("keeps nested lists", () => stable("- a\n  - b\n  - c\n- d\n"));
 
-	it("keeps a list mixed with a heading", () =>
-		stable("# title\n\n- a\n- b\n\nbody\n"));
+	it("keeps a list mixed with a heading", () => stable("# title\n\n- a\n- b\n\nbody\n"));
 
 	it("empty source is empty", () => {
 		expect(lap("")).toBe("");
@@ -74,8 +70,7 @@ describe("marks round-trip", () => {
 	it("keeps code", () => stable("a `code()` b\n"));
 	it("keeps links", () => stable("see [docs](https://nustack.dev) now\n"));
 	it("keeps nested marks", () => stable("a **bold *and* more** b\n"));
-	it("keeps a link around a mark", () =>
-		stable("[**bold link**](https://x.dev)\n"));
+	it("keeps a link around a mark", () => stable("[**bold link**](https://x.dev)\n"));
 	it("keeps marks inside a list item", () => stable("- `/` opens the menu\n"));
 	it("keeps marks inside a heading", () => stable("# a **loud** title\n"));
 });
@@ -134,9 +129,7 @@ selection, which is the only thing that means anything there.
 		expect(once).toContain("- `/` at the start of an empty line");
 		// the wrap is gone, the content is not
 		expect(once).not.toContain("select\nacross paragraphs");
-		expect(parseMarkdown(once).doc.textContent).toContain(
-			"across paragraphs, retype a range",
-		);
+		expect(parseMarkdown(once).doc.textContent).toContain("across paragraphs, retype a range");
 	});
 
 	it("holds for every prose block the demo seeds", () => {

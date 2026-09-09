@@ -42,9 +42,7 @@ import EditorWorker from "monaco-editor/editor/editor.worker.js?worker";
 let themesDefined = false;
 
 function cssVar(name: string, fallback: string): string {
-	const v = getComputedStyle(document.documentElement)
-		.getPropertyValue(name)
-		.trim();
+	const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 	return v || fallback;
 }
 

@@ -38,28 +38,12 @@
 // leaves the island -- prosemirror-keymap matches on the full key name, so
 // `cmd+up` and `shift+up` cannot reach these handlers at all.
 
-import {
-	baseKeymap,
-	chainCommands,
-	setBlockType,
-	toggleMark,
-	wrapIn,
-} from "prosemirror-commands";
+import { baseKeymap, chainCommands, setBlockType, toggleMark, wrapIn } from "prosemirror-commands";
 import { history, redo, undo } from "prosemirror-history";
 import { keymap } from "prosemirror-keymap";
 import type { Node as PMNode } from "prosemirror-model";
-import {
-	liftListItem,
-	sinkListItem,
-	splitListItem,
-	wrapInList,
-} from "prosemirror-schema-list";
-import {
-	type Command,
-	EditorState,
-	TextSelection,
-	type Transaction,
-} from "prosemirror-state";
+import { liftListItem, sinkListItem, splitListItem, wrapInList } from "prosemirror-schema-list";
+import { type Command, EditorState, TextSelection, type Transaction } from "prosemirror-state";
 import { EditorView } from "prosemirror-view";
 import {
 	forwardRef,
@@ -214,9 +198,7 @@ function placeCaret(view: EditorView, req: FocusReq, parsed: Parsed): void {
 	}
 
 	const clamped = Math.max(0, Math.min(pos, doc.content.size));
-	const tr = view.state.tr.setSelection(
-		TextSelection.near(doc.resolve(clamped)),
-	);
+	const tr = view.state.tr.setSelection(TextSelection.near(doc.resolve(clamped)));
 	view.dispatch(tr.scrollIntoView());
 	view.focus();
 }
@@ -300,11 +282,7 @@ export const ProseIsland = forwardRef<ProseHandle, ProseProps>(
 			if (from === null) return;
 			const doc = view.state.doc;
 			const caret = view.state.selection.from;
-			if (
-				from + 1 > doc.content.size ||
-				doc.textBetween(from, from + 1) !== "/" ||
-				caret <= from
-			) {
+			if (from + 1 > doc.content.size || doc.textBetween(from, from + 1) !== "/" || caret <= from) {
 				cb.current.onSlashClose();
 				return;
 			}
@@ -400,10 +378,7 @@ export const ProseIsland = forwardRef<ProseHandle, ProseProps>(
 			});
 
 			const editing = keymap({
-				Enter: chainCommands(
-					splitListItem(nodeType.listItem),
-					baseKeymap.Enter,
-				),
+				Enter: chainCommands(splitListItem(nodeType.listItem), baseKeymap.Enter),
 				Tab: sinkListItem(nodeType.listItem),
 				"Shift-Tab": liftListItem(nodeType.listItem),
 				"Mod-b": toggleMark(markType.strong),
@@ -441,10 +416,7 @@ export const ProseIsland = forwardRef<ProseHandle, ProseProps>(
 				},
 				handleKeyDown(v, event) {
 					// The menu owns arrows / enter / escape while it is open.
-					if (
-						cb.current.slashFrom !== null &&
-						cb.current.onSlashKey(event.key)
-					) {
+					if (cb.current.slashFrom !== null && cb.current.onSlashKey(event.key)) {
 						event.preventDefault();
 						return true;
 					}
@@ -513,11 +485,7 @@ export const ProseIsland = forwardRef<ProseHandle, ProseProps>(
 			if (serializeMarkdown(view.state.doc) === props.source) return;
 			const parsed = parseMarkdown(props.source);
 			parsedRef.current = parsed;
-			const tr = view.state.tr.replaceWith(
-				0,
-				view.state.doc.content.size,
-				parsed.doc.content,
-			);
+			const tr = view.state.tr.replaceWith(0, view.state.doc.content.size, parsed.doc.content);
 			tr.setMeta("addToHistory", false);
 			view.dispatch(tr);
 			// Re-honour the seam: the offset was resolved against the old
@@ -550,10 +518,7 @@ export const ProseIsland = forwardRef<ProseHandle, ProseProps>(
 					const from = cb.current.slashFrom;
 					if (!view || from === null) return;
 					const state = view.state;
-					const to = Math.min(
-						Math.max(state.selection.from, from + 1),
-						state.doc.content.size,
-					);
+					const to = Math.min(Math.max(state.selection.from, from + 1), state.doc.content.size);
 
 					if (action.kind === "split") {
 						// Everything before the `/` stays; everything after the
@@ -571,15 +536,9 @@ export const ProseIsland = forwardRef<ProseHandle, ProseProps>(
 					cb.current.onSlashClose();
 
 					if (action.kind === "literal") {
-						view.dispatch(
-							view.state.tr.replaceSelectionWith(nodeType.rule.create()),
-						);
+						view.dispatch(view.state.tr.replaceSelectionWith(nodeType.rule.create()));
 					} else if (action.prefix === "- " || action.prefix === "1. ") {
-						listCommand(action.prefix === "1. ")(
-							view.state,
-							view.dispatch,
-							view,
-						);
+						listCommand(action.prefix === "1. ")(view.state, view.dispatch, view);
 					} else {
 						PREFIX_COMMANDS[action.prefix]?.(view.state, view.dispatch, view);
 					}

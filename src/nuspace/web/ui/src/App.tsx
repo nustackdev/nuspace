@@ -23,8 +23,7 @@ export function App() {
 		);
 	}
 
-	const activePage =
-		page.pages?.find((p) => p.route === `/${route.top}`) ?? null;
+	const activePage = page.pages?.find((p) => p.route === `/${route.top}`) ?? null;
 
 	return (
 		<div className="flex h-screen flex-col bg-bg-canvas text-text-primary">
