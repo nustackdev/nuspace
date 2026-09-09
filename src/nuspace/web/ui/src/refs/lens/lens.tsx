@@ -14,19 +14,78 @@
 // with no runtime state of its own. Reload starts back at root.
 // Up / Down move focus locally in the active column with no wire hit.
 //
-// Column kind palette leans on the kit chart-N categorical tokens so we
-// pick up theme colors for free (no bespoke lens tokens today).
+// Look and feel live in ../../design/lens.ts (class recipes, the kind and
+// value-type vocabularies) and ../../design/lens.css (tokens). Nothing below
+// picks a color or a size at the call site.
+//
+// The one idea the surface is built around: three row tiers that must never
+// collapse into each other -- neutral hover, neutral TRAIL (the row that
+// opened the column to its right), accent CURSOR (where the keyboard is).
+// In miller columns that distinction is the navigation model, not decoration.
 
 import { OP_NOTIFY } from "@nustackdev/ui-core";
 import type { RefEntry, SliceFactory } from "@nustackdev/ui-kit";
-import { useStore } from "@nustackdev/ui-kit";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import {
+	Breadcrumb,
+	BreadcrumbEllipsis,
+	BreadcrumbItem,
+	BreadcrumbLink,
+	BreadcrumbList,
+	BreadcrumbPage,
+	BreadcrumbSeparator,
+	cn,
+	Kbd,
+	Skeleton,
+	useStore,
+} from "@nustackdev/ui-kit";
+import { ChevronRight } from "lucide-react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
+
+import {
+	glyphTone,
+	kindIcon,
+	kindLabel,
+	lensBar,
+	lensBarHint,
+	lensBarPath,
+	lensCapNote,
+	lensColumn,
+	lensColumnBody,
+	lensColumnCount,
+	lensColumnHead,
+	lensColumnKind,
+	lensColumns,
+	lensCrumb,
+	lensEmpty,
+	lensFiller,
+	lensFillerHead,
+	lensHintPair,
+	lensLeafBody,
+	lensLeafNote,
+	lensRoot,
+	lensRow,
+	lensRowChevron,
+	lensRowGlyph,
+	lensRowKey,
+	lensRowRail,
+	lensRowValue,
+	lensSentinelChip,
+	lensSkeletonRow,
+	rowIcon,
+	VTYPE_SENTINEL_LABEL,
+	valueTone,
+} from "../../design/lens";
 
 type Entry = {
 	key: string;
 	kind: string;
 	preview: string;
 	navigable: boolean;
+	/** Value type. "" when the row holds no value (a dict key). */
+	vtype?: string;
+	/** Leaf rows only: the untruncated value for the reader pane. */
+	text?: string;
+	clipped?: boolean;
 };
 
 type Column = {
@@ -40,17 +99,8 @@ type LensValue = {
 	columns: Column[];
 };
 
-const KIND_COLOR: Record<string, string> = {
-	shape: "var(--chart-1)",
-	mapping: "var(--chart-2)",
-	sequence: "var(--chart-3)",
-	leaf: "var(--chart-4)",
-	unknown: "var(--chart-8)",
-};
-
-function _kindColor(kind: string): string {
-	return KIND_COLOR[kind] ?? KIND_COLOR.unknown;
-}
+/** Sentinel-ish types render as a chip, never as text. */
+const SENTINEL = new Set(["empty", "none", "invalid", "error"]);
 
 const factory: SliceFactory = (path, ctx, props) => {
 	const maxRows =
@@ -63,6 +113,10 @@ const factory: SliceFactory = (path, ctx, props) => {
 		maxRows,
 		focusedIndex: {} as Record<number, number>,
 		scroll: {} as Record<number, number>,
+		// Depth of the navigation currently in flight, or null. Drives the
+		// skeleton column: a drill should show the column arriving, not a
+		// frozen surface with nothing to say for a round trip.
+		pendingDepth: null as number | null,
 		write: (v) =>
 			ctx.set((refs) => {
 				const slice = refs[path];
@@ -73,142 +127,343 @@ const factory: SliceFactory = (path, ctx, props) => {
 					columns: Array.isArray(p.columns) ? (p.columns as Column[]) : [],
 				};
 				slice.focusedIndex = {};
+				slice.pendingDepth = null;
 			}),
 	};
 };
 
-function ColumnPanel({
-	path,
-	colIdx,
-	col,
-	focused,
-	active,
-	onFocus,
-	onDrill,
-	onSetActive,
-}: {
-	path: string;
-	colIdx: number;
-	col: Column;
-	focused: number;
-	active: boolean;
-	onFocus: (i: number) => void;
-	onDrill: (segment: string) => void;
-	onSetActive: () => void;
-}) {
-	const rowRefs = useRef<Array<HTMLButtonElement | null>>([]);
-	useEffect(() => {
-		if (active) rowRefs.current[focused]?.focus();
-	}, [active, focused]);
+/* ============================== pieces =================================== */
 
-	const kindLabel = col.kind;
-	const truncated = col.total > col.entries.length;
+/** A value cell, rendered by type. */
+function ValueCell({ entry }: { entry: Entry }) {
+	const vtype = entry.vtype ?? "";
+	if (SENTINEL.has(vtype)) {
+		return (
+			<span className={cn(lensRowValue, valueTone(vtype), lensSentinelChip)}>
+				{VTYPE_SENTINEL_LABEL[vtype] ?? vtype}
+			</span>
+		);
+	}
+	if (!entry.preview) return null;
+	return (
+		<span className={cn(lensRowValue, valueTone(vtype))} title={entry.preview}>
+			{entry.preview}
+		</span>
+	);
+}
+
+function Row({
+	entry,
+	id,
+	level,
+	cursor,
+	trail,
+	onOpen,
+}: {
+	entry: Entry;
+	id: string;
+	level: number;
+	cursor: boolean;
+	trail: boolean;
+	onOpen: () => void;
+}) {
+	const el = useRef<HTMLButtonElement | null>(null);
+	const Glyph = rowIcon(entry.kind, entry.vtype ?? "");
+
+	// Keep the cursor in view on a keyboard walk. `nearest` so a click never
+	// yanks the column, only an off-screen key press does.
+	useLayoutEffect(() => {
+		if (cursor) el.current?.scrollIntoView({ block: "nearest" });
+	}, [cursor]);
 
 	return (
-		// biome-ignore lint/a11y/noStaticElementInteractions: hover/focus tracking on a plain container
-		<div
-			className="flex flex-col gap-1 border-r border-border/60 min-w-[220px] max-w-[340px] w-[260px] shrink-0"
-			onFocus={onSetActive}
-			onMouseEnter={onSetActive}
+		<button
+			id={id}
+			ref={el}
+			type="button"
+			// The container owns the keyboard; rows stay out of the tab order
+			// so tabbing past a 200-row column takes one press, not two hundred.
+			tabIndex={-1}
+			role="treeitem"
+			aria-level={level}
+			aria-selected={cursor}
+			aria-expanded={entry.navigable ? trail : undefined}
+			className={lensRow({ cursor, trail })}
+			onClick={onOpen}
 		>
-			<div className="px-3 py-2 text-xs uppercase tracking-wide text-muted-foreground font-mono border-b border-border/60">
-				<span
-					className="inline-block size-2 rounded-full mr-2 align-middle"
-					style={{ backgroundColor: _kindColor(kindLabel) }}
-				/>
-				{kindLabel} {truncated ? `(${col.entries.length}/${col.total})` : `(${col.total})`}
+			<span className={lensRowRail({ cursor, trail })} aria-hidden="true" />
+			<Glyph
+				className={cn(lensRowGlyph, glyphTone(entry.vtype ?? "", entry.navigable))}
+				aria-hidden="true"
+			/>
+			<span className={lensRowKey} title={entry.key}>
+				{entry.key}
+			</span>
+			<ValueCell entry={entry} />
+			<ChevronRight className={lensRowChevron(entry.navigable)} aria-hidden="true" />
+		</button>
+	);
+}
+
+/** The leaf column's reader pane: one value, in full, wrapped. */
+function LeafBody({ entry }: { entry: Entry }) {
+	const vtype = entry.vtype ?? "";
+	if (SENTINEL.has(vtype)) {
+		return (
+			<div className={lensEmpty}>
+				<span className={cn(lensSentinelChip, valueTone(vtype))}>
+					{VTYPE_SENTINEL_LABEL[vtype] ?? vtype}
+				</span>
+				<span>
+					{vtype === "empty"
+						? "this slot has never been written"
+						: vtype === "none"
+							? "the slot holds null"
+							: "the read did not produce a value"}
+				</span>
 			</div>
-			<div className="flex-1 min-h-0 overflow-y-auto">
-				{col.entries.length === 0 ? (
-					<div className="px-3 py-2 text-xs text-muted-foreground font-mono">empty</div>
-				) : (
-					col.entries.map((e, i) => {
-						const isFocused = active && i === focused;
-						const rowKey = `${colIdx}::${i}::${e.key}`;
-						return (
-							<button
-								key={rowKey}
-								type="button"
-								ref={(el) => {
-									rowRefs.current[i] = el;
-								}}
-								onFocus={() => onFocus(i)}
-								onClick={() => {
-									onFocus(i);
-									if (e.navigable) onDrill(e.key);
-								}}
-								className={
-									"w-full text-left px-3 py-1.5 text-sm font-mono flex items-center gap-2 " +
-									"outline-none transition-colors " +
-									(isFocused
-										? "bg-primary/10 text-text-primary"
-										: "hover:bg-muted/40 text-text-primary")
-								}
-								data-path={path}
-							>
-								<span
-									className="inline-block size-2 rounded-full shrink-0"
-									style={{ backgroundColor: _kindColor(e.kind) }}
-								/>
-								<span className="truncate flex-1">{e.key}</span>
-								{e.preview ? (
-									<span className="text-xs text-muted-foreground truncate max-w-[60%]">
-										{e.preview}
-									</span>
-								) : null}
-							</button>
-						);
-					})
-				)}
+		);
+	}
+	const body = entry.text ?? entry.preview;
+	if (!body) {
+		return <div className={lensEmpty}>no value</div>;
+	}
+	return (
+		<>
+			<div className={cn(lensLeafBody, valueTone(vtype))}>{body}</div>
+			{entry.clipped ? (
+				<div className={lensLeafNote}>clipped -- value is longer than shown</div>
+			) : null}
+		</>
+	);
+}
+
+function ColumnPanel({
+	col,
+	colIdx,
+	active,
+	trailKey,
+	cursorIdx,
+	rowId,
+	onOpen,
+}: {
+	col: Column;
+	colIdx: number;
+	active: boolean;
+	trailKey: string | null;
+	cursorIdx: number;
+	rowId: (colIdx: number, i: number) => string;
+	onOpen: (colIdx: number, key: string) => void;
+}) {
+	const leaf = col.kind === "leaf";
+	const vtype = leaf ? (col.entries[0]?.vtype ?? "") : "";
+	// On a leaf column the header states the value's TYPE, because that is the
+	// only thing about it a header can usefully say; everywhere else it states
+	// the structural kind, which is what the rows below are.
+	const Glyph = leaf ? rowIcon(col.kind, vtype) : kindIcon(col.kind);
+	const capped = col.total > col.entries.length;
+
+	return (
+		<div className={lensColumn(leaf)}>
+			<div className={lensColumnHead(active)}>
+				<Glyph
+					className={cn(lensRowGlyph, active ? "text-accent" : "text-text-muted")}
+					aria-hidden="true"
+				/>
+				<span className={lensColumnKind}>
+					{leaf ? vtype || kindLabel(col.kind) : kindLabel(col.kind)}
+				</span>
+				{!leaf ? (
+					<span className={lensColumnCount}>
+						{capped ? `${col.entries.length}/${col.total}` : col.total}
+					</span>
+				) : null}
+			</div>
+
+			{leaf && col.entries[0] ? (
+				<LeafBody entry={col.entries[0]} />
+			) : col.entries.length === 0 ? (
+				<div className={lensEmpty}>
+					<span>nothing here</span>
+					<span>this {kindLabel(col.kind)} holds no entries</span>
+				</div>
+			) : (
+				<>
+					{/* biome-ignore lint/a11y/useSemanticElements: the tree lives on the scroll host; a column is one level of it */}
+					<div className={lensColumnBody} role="group">
+						{col.entries.map((e, i) => (
+							<Row
+								key={`${colIdx}::${e.key}`}
+								id={rowId(colIdx, i)}
+								entry={e}
+								level={colIdx + 1}
+								cursor={active && i === cursorIdx}
+								trail={!active && e.key === trailKey}
+								onOpen={() => onOpen(colIdx, e.key)}
+							/>
+						))}
+					</div>
+					{capped ? (
+						<div className={lensCapNote}>
+							first {col.entries.length} of {col.total}
+						</div>
+					) : null}
+				</>
+			)}
+		</div>
+	);
+}
+
+/** Placeholder for the column being fetched. Same geometry, so nothing jumps. */
+function SkeletonColumn() {
+	return (
+		<div className={lensColumn(false)} aria-hidden="true">
+			<div className={lensColumnHead(true)}>
+				<Skeleton shape="text" className="h-3 w-16" />
+			</div>
+			<div className={lensColumnBody}>
+				{[0, 1, 2, 3, 4, 5].map((i) => (
+					<div key={i} className={lensSkeletonRow}>
+						<Skeleton shape="circle" className="size-3" />
+						<Skeleton shape="text" className="h-2.5" style={{ width: `${70 - i * 8}%` }} />
+					</div>
+				))}
 			</div>
 		</div>
 	);
 }
+
+/** The path trail. Collapses the middle so a deep path never eats the bar. */
+function PathTrail({ path, onJump }: { path: string[]; onJump: (depth: number) => void }) {
+	// root + up to five segments reads fine at 1440; past that the middle
+	// folds, because the useful crumbs on a deep path are the root (jump
+	// home) and the last few (where you are).
+	const KEEP = 3;
+	const folded = path.length > 5;
+	const shown = folded ? path.slice(path.length - KEEP) : path;
+	const offset = folded ? path.length - KEEP : 0;
+
+	return (
+		<Breadcrumb className={lensBarPath}>
+			<BreadcrumbList className="flex-nowrap gap-1">
+				<BreadcrumbItem>
+					{path.length === 0 ? (
+						<BreadcrumbPage className={lensCrumb}>root</BreadcrumbPage>
+					) : (
+						<BreadcrumbLink
+							className={lensCrumb}
+							onClick={(e) => {
+								e.preventDefault();
+								onJump(0);
+							}}
+						>
+							root
+						</BreadcrumbLink>
+					)}
+				</BreadcrumbItem>
+				{folded ? (
+					<>
+						<BreadcrumbSeparator />
+						<BreadcrumbItem>
+							<BreadcrumbEllipsis />
+						</BreadcrumbItem>
+					</>
+				) : null}
+				{shown.map((seg, i) => {
+					const depth = offset + i + 1;
+					const last = depth === path.length;
+					return (
+						<BreadcrumbItem key={`${depth}-${seg}`}>
+							<BreadcrumbSeparator />
+							{last ? (
+								<BreadcrumbPage className={lensCrumb}>{seg}</BreadcrumbPage>
+							) : (
+								<BreadcrumbLink
+									className={lensCrumb}
+									onClick={(e) => {
+										e.preventDefault();
+										onJump(depth);
+									}}
+								>
+									{seg}
+								</BreadcrumbLink>
+							)}
+						</BreadcrumbItem>
+					);
+				})}
+			</BreadcrumbList>
+		</Breadcrumb>
+	);
+}
+
+/* ============================== view ===================================== */
 
 function LensView({ path }: { path: string }) {
 	const value = useStore((s) => s.refs[path]?.value as LensValue | undefined);
 	const focused = useStore(
 		(s) => (s.refs[path]?.focusedIndex as Record<number, number> | undefined) ?? {},
 	);
+	const pendingDepth = useStore(
+		(s) => (s.refs[path]?.pendingDepth as number | null | undefined) ?? null,
+	);
 	const setLocal = useStore((s) => s.setLocal);
 	const set = useStore.setState;
 	const send = useStore((s) => s.send);
 	const containerRef = useRef<HTMLDivElement | null>(null);
-	const activeColRef = useRef<number>(0);
 
-	const columns = value?.columns ?? [];
-	const cursorPath = value?.path ?? [];
+	const columns = useMemo(() => value?.columns ?? [], [value]);
+	const cursorPath = useMemo(() => value?.path ?? [], [value]);
+	// The live column is always the last one. In miller columns the cursor is
+	// singular by construction: clicking an earlier column does not "activate"
+	// it, it renavigates, which drops every column to its right.
 	const activeCol = Math.max(0, columns.length - 1);
+	const cursorIdx = focused[activeCol] ?? 0;
 
-	const setFocused = useCallback(
-		(colIdx: number, i: number) => {
+	const patch = useCallback(
+		(fn: (slice: Record<string, unknown>) => Record<string, unknown>) => {
 			set((s) => {
 				const slice = s.refs[path];
 				if (!slice) return s;
-				const next = { ...(slice.focusedIndex as Record<number, number>) };
-				next[colIdx] = i;
-				return {
-					...s,
-					refs: { ...s.refs, [path]: { ...slice, focusedIndex: next } },
-				};
+				return { ...s, refs: { ...s.refs, [path]: { ...slice, ...fn(slice) } } };
 			});
 		},
+		// `set` is `useStore.setState`, a module-level stable identity.
 		[path],
+	);
+
+	const setCursor = useCallback(
+		(i: number) => {
+			patch((slice) => ({
+				focusedIndex: {
+					...(slice.focusedIndex as Record<number, number>),
+					[activeCol]: i,
+				},
+			}));
+		},
+		[patch, activeCol],
 	);
 
 	const sendPath = useCallback(
 		(newPath: string[]) => {
+			patch(() => ({ pendingDepth: newPath.length }));
 			send({ op: OP_NOTIFY, ref: path, payload: { path: newPath } });
 		},
-		[path, send],
+		[patch, path, send],
 	);
 
-	const drill = useCallback(
-		(segment: string) => {
-			sendPath([...cursorPath, segment]);
+	/** Open `key` from column `colIdx`: everything right of it is replaced. */
+	const open = useCallback(
+		(colIdx: number, key: string) => {
+			containerRef.current?.focus();
+			sendPath([...cursorPath.slice(0, colIdx), key]);
 		},
 		[cursorPath, sendPath],
 	);
+
+	const drill = useCallback(() => {
+		const entry = columns[activeCol]?.entries[cursorIdx];
+		if (entry?.navigable) open(activeCol, entry.key);
+	}, [columns, activeCol, cursorIdx, open]);
 
 	const pop = useCallback(() => {
 		if (cursorPath.length === 0) return;
@@ -217,72 +472,121 @@ function LensView({ path }: { path: string }) {
 
 	const onKeyDown = useCallback(
 		(e: React.KeyboardEvent<HTMLDivElement>) => {
-			const colIdx = activeColRef.current;
-			const col = columns[colIdx];
+			const col = columns[activeCol];
 			if (!col) return;
-			const cur = focused[colIdx] ?? 0;
-			if (e.key === "ArrowDown") {
-				e.preventDefault();
-				setFocused(colIdx, Math.min(col.entries.length - 1, cur + 1));
-			} else if (e.key === "ArrowUp") {
-				e.preventDefault();
-				setFocused(colIdx, Math.max(0, cur - 1));
-			} else if (e.key === "ArrowRight" || e.key === "Enter") {
-				e.preventDefault();
-				const entry = col.entries[cur];
-				if (entry?.navigable) drill(entry.key);
-			} else if (e.key === "ArrowLeft" || e.key === "Escape") {
-				e.preventDefault();
-				pop();
+			const last = col.entries.length - 1;
+			switch (e.key) {
+				case "ArrowDown":
+					e.preventDefault();
+					setCursor(Math.min(last, cursorIdx + 1));
+					break;
+				case "ArrowUp":
+					e.preventDefault();
+					setCursor(Math.max(0, cursorIdx - 1));
+					break;
+				case "PageDown":
+					e.preventDefault();
+					setCursor(Math.min(last, cursorIdx + 10));
+					break;
+				case "PageUp":
+					e.preventDefault();
+					setCursor(Math.max(0, cursorIdx - 10));
+					break;
+				case "Home":
+					e.preventDefault();
+					setCursor(0);
+					break;
+				case "End":
+					e.preventDefault();
+					setCursor(Math.max(0, last));
+					break;
+				case "ArrowRight":
+				case "Enter":
+					e.preventDefault();
+					drill();
+					break;
+				case "ArrowLeft":
+				case "Escape":
+					e.preventDefault();
+					pop();
+					break;
 			}
 		},
-		[columns, focused, drill, pop, setFocused],
+		[columns, activeCol, cursorIdx, setCursor, drill, pop],
 	);
 
-	const breadcrumb = useMemo(() => ["root", ...cursorPath].join(" › "), [cursorPath]);
+	// Keep the live column in view. Without this a deep path walks off the
+	// right edge and the keyboard cursor ends up somewhere you cannot see.
+	// biome-ignore lint/correctness/useExhaustiveDependencies: the deps are the trigger (a column landed / a fetch started), not values the body reads
+	useLayoutEffect(() => {
+		const el = containerRef.current;
+		if (el) el.scrollLeft = el.scrollWidth;
+	}, [columns.length, pendingDepth]);
 
 	// Ensure the slice's setLocal spot isn't left stale between mounts.
 	useEffect(() => {
 		if (!value) setLocal(path, { path: [], columns: [] });
 	}, [path, value, setLocal]);
 
+	const rowId = useCallback((colIdx: number, i: number) => `${path}-r${colIdx}-${i}`, [path]);
+
+	// A drill is in flight and it goes deeper than what is painted: show the
+	// column arriving. A pop needs no placeholder, it only removes.
+	const showSkeleton = pendingDepth !== null && pendingDepth >= columns.length;
+
 	return (
-		<div className="flex flex-col h-[70vh] min-h-[400px] border rounded-md overflow-hidden bg-card">
-			<div className="px-3 py-2 border-b border-border/60 text-xs text-muted-foreground font-mono flex items-center justify-between">
-				<span>{breadcrumb}</span>
-				<span className="text-[10px] uppercase tracking-wider">
-					arrow keys navigate · enter to drill · esc to pop
-				</span>
+		<div className={lensRoot}>
+			<div className={lensBar}>
+				<PathTrail path={cursorPath} onJump={(d) => sendPath(cursorPath.slice(0, d))} />
+				<div className={lensBarHint}>
+					<span className={lensHintPair}>
+						<Kbd aria-label="Up arrow">&#8593;</Kbd>
+						<Kbd aria-label="Down arrow">&#8595;</Kbd>
+						move
+					</span>
+					<span className={lensHintPair}>
+						<Kbd aria-label="Right arrow">&#8594;</Kbd>
+						open
+					</span>
+					<span className={lensHintPair}>
+						<Kbd aria-label="Left arrow">&#8592;</Kbd>
+						back
+					</span>
+				</div>
 			</div>
+
 			<div
 				ref={containerRef}
 				tabIndex={0}
 				onKeyDown={onKeyDown}
 				role="tree"
 				aria-label="Nu Shape lens"
-				className="flex-1 min-h-0 flex overflow-x-auto overflow-y-hidden outline-none"
+				aria-activedescendant={columns.length ? rowId(activeCol, cursorIdx) : undefined}
+				className={lensColumns}
 			>
 				{columns.map((col, i) => (
 					<ColumnPanel
 						// biome-ignore lint/suspicious/noArrayIndexKey: columns are position-indexed by design
 						key={`${path}-col-${i}`}
-						path={path}
-						colIdx={i}
 						col={col}
-						focused={focused[i] ?? 0}
-						active={i === activeCol}
-						onFocus={(idx) => setFocused(i, idx)}
-						onDrill={(segment) => drill(segment)}
-						onSetActive={() => {
-							activeColRef.current = i;
-						}}
+						colIdx={i}
+						active={i === activeCol && !showSkeleton}
+						trailKey={cursorPath[i] ?? null}
+						cursorIdx={cursorIdx}
+						rowId={rowId}
+						onOpen={open}
 					/>
 				))}
-				{columns.length === 0 ? (
-					<div className="p-6 text-sm text-muted-foreground font-mono">
-						waiting for lens columns...
-					</div>
+				{showSkeleton ? <SkeletonColumn /> : null}
+				{columns.length === 0 && !showSkeleton ? (
+					<>
+						<SkeletonColumn />
+						<SkeletonColumn />
+					</>
 				) : null}
+				<div className={lensFiller} aria-hidden="true">
+					<div className={lensFillerHead} />
+				</div>
 			</div>
 		</div>
 	);

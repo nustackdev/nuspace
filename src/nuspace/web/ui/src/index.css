@@ -14,6 +14,7 @@
 @import "tw-animate-css";
 @import "@nustackdev/ui-kit/styles";
 @import "./design/tokens.css";
+@import "./design/lens.css";
 
 /* ProseMirror's own base rules (selection, pre-wrap, caret plumbing). It
  * ships no colors and no type; the prose island's look is entirely

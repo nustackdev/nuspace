@@ -27,8 +27,20 @@ Server-owned wire payload (msgpack-native, per TableRef pattern):
 Each column:
 
     {"kind": "shape"|"mapping"|"sequence"|"leaf",
-     "entries": [{"key": str, "kind": str, "preview": str, "navigable": bool}],
+     "entries": [{"key": str, "kind": str, "preview": str, "navigable": bool,
+                  "vtype": str, "text": str, "clipped": bool}],
      "total": int}
+
+``kind`` is the *structural* kind (which column shape a row leads to).
+``vtype`` is the *value* type of what the row holds -- "str", "int",
+"float", "bool", "bytes", "none", "empty", "invalid", "ref" (a shape
+slot, not a value yet), or "" (nothing to type). The browser renders a
+value by ``vtype``: an int, a string, a sentinel and an empty slot have
+to be distinguishable at a glance, and reparsing ``preview`` (a repr)
+client-side to recover that is guesswork. ``text`` / ``clipped`` ride
+along on leaf rows only: ``preview`` is a 120-char repr fit for a table
+cell, and a leaf column renders the value in full, so it needs the
+untruncated text (capped at ``MAX_LEAF_TEXT``) rather than the cell repr.
 
 Browser notify shape (client -> server):
 
@@ -52,6 +64,7 @@ from nu.domains.shape.refs.shape import ShapeRef
 from nu.domains.shape.refs.shapes_mapping import ShapesMappingRef
 from nu.engine.structure import Declared
 from nu.lang import Command, Control
+from nu.lang.sentinels import EMPTY, INVALID
 from nu.ui.core import Ref, Session
 from nu.ui.core.protocol import Frame
 
@@ -68,6 +81,11 @@ __all__ = ["LensDriver", "LensRef"]
 
 
 DEFAULT_MAX_ROWS = 200
+
+# How much of a leaf value the leaf column gets in full. A section's
+# source text is the realistic worst case and lands well under this; past
+# it the browser shows a "clipped" note instead of pretending.
+MAX_LEAF_TEXT = 4000
 
 
 # -- Ref ---------------------------------------------------------------------
@@ -167,6 +185,10 @@ async def _shape_column(shape_cls: type[Shape]) -> dict[str, Any]:
                 "kind": kind,
                 "preview": slot.ref_cls.__name__,
                 "navigable": True,
+                # A slot is a declaration, not a value: nothing has been
+                # read yet, so the row types as "ref" and the browser
+                # renders the ref class name as a type tag, not a value.
+                "vtype": "ref",
             },
         )
     return {"kind": "shape", "entries": entries, "total": len(entries)}
@@ -188,7 +210,8 @@ async def _mapping_column(
     total = len(keys)
     keys = keys[:max_rows]
     entries = [
-        {"key": str(k), "kind": "shape", "preview": "", "navigable": True} for k in keys
+        {"key": str(k), "kind": "shape", "preview": "", "navigable": True, "vtype": ""}
+        for k in keys
     ]
     return {"kind": "mapping", "entries": entries, "total": total}
 
@@ -209,7 +232,13 @@ async def _sequence_column(
     total = len(values)
     values = values[:max_rows]
     entries = [
-        {"key": str(i), "kind": "leaf", "preview": _preview(v), "navigable": True}
+        {
+            "key": str(i),
+            "kind": "leaf",
+            "preview": _preview(v),
+            "navigable": True,
+            "vtype": _vtype(v),
+        }
         for i, v in enumerate(values)
     ]
     return {"kind": "sequence", "entries": entries, "total": total}
@@ -225,12 +254,24 @@ async def _leaf_column(
     from nu.kv.tree import auto_flow_atomic
 
     term = auto_flow_atomic(ref, scope=root)
+    vtype = ""
     try:
         value, _ = await nu.arun(term, ctx)  # type: ignore[arg-type]
+        vtype = _vtype(value)
     except Exception as exc:
         value = f"<error: {exc!r}>"
+        vtype = "error"
+    text, clipped = _full_text(value)
     entries = [
-        {"key": "value", "kind": "leaf", "preview": _preview(value), "navigable": False},
+        {
+            "key": "value",
+            "kind": "leaf",
+            "preview": _preview(value),
+            "navigable": False,
+            "vtype": vtype,
+            "text": text,
+            "clipped": clipped,
+        },
     ]
     return {"kind": "leaf", "entries": entries, "total": 1}
 
@@ -239,6 +280,50 @@ def _preview(value: object) -> str:
     """Compact repr for a leaf value, trimmed for the column cell."""
     s = repr(value)
     return s if len(s) <= 120 else s[:117] + "..."
+
+
+def _vtype(value: object) -> str:
+    """Value-type token for a leaf, so the browser can render by type.
+
+    Sentinels come first: ``EMPTY`` is a real, common state on this
+    surface (a declared slot nothing has written yet) and reads nothing
+    like a missing key or a ``None``, so it gets its own token rather
+    than falling through to ``other``.
+    """
+    if value is EMPTY:
+        return "empty"
+    if value is INVALID:
+        return "invalid"
+    if value is None:
+        return "none"
+    if isinstance(value, bool):  # before int: bool is an int subclass
+        return "bool"
+    if isinstance(value, int):
+        return "int"
+    if isinstance(value, float):
+        return "float"
+    if isinstance(value, str):
+        return "str"
+    if isinstance(value, (bytes, bytearray)):
+        return "bytes"
+    if isinstance(value, (list, tuple)):
+        return "list"
+    if isinstance(value, dict):
+        return "dict"
+    return "other"
+
+
+def _full_text(value: object) -> tuple[str, bool]:
+    """Untruncated-ish text for the leaf column, plus a clipped flag."""
+    if isinstance(value, (bytes, bytearray)):
+        s = value.decode("utf-8", "replace")
+    elif isinstance(value, str):
+        s = value
+    else:
+        s = repr(value)
+    if len(s) <= MAX_LEAF_TEXT:
+        return s, False
+    return s[:MAX_LEAF_TEXT], True
 
 
 async def _column_for(
