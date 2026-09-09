@@ -24,8 +24,7 @@ STAT_SNIPPET = "nu.Str('stat body')"
 
 
 seed = (
-    Space.apps.init({"name": "", "apps": {}, "groups": {}})
-    >> Space.apps.apps.add(snippet=TEXT_SNIPPET, policy="always", app_id="a_hello")
+    Space.apps.add(snippet=TEXT_SNIPPET, policy="always", app_id="a_hello")
     # Pages nest: Space.pages is the root Page, its children are the
     # top-level pages. Same layout as Space.apps / Group.
     >> Space.pages.init({"title": "Space", "sections": {}, "pages": {}})

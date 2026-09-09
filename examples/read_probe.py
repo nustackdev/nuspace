@@ -26,10 +26,10 @@ ADDRESS = "127.0.0.1:19000"
 def _reads() -> nu.Nu:
     # Bare ref-touching subtree. auto_flow_atomic wraps it in Snapshot(scope=Space).
     return nu.Dict.of(
-        hello_snippet=Space.apps.apps["a_hello"].snippet,
+        hello_snippet=Space.apps["a_hello"].snippet,
         home_title=Space.pages.pages["p_home"].title,
         welcome_snippet=Space.pages.pages["p_home"].sections["s_welcome"].snippet,
-        app_keys=nu.Collect(nu.Iter(Space.apps.apps)),
+        app_keys=nu.Collect(nu.Iter(Space.apps)),
         page_keys=nu.Collect(nu.Iter(Space.pages.pages)),
         home_section_keys=nu.Collect(nu.Iter(Space.pages.pages["p_home"].sections)),
     )

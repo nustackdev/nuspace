@@ -31,8 +31,7 @@ TEXT_SNIPPET = "nu.Str('added via proxy')"
 
 
 seed = (
-    Space.apps.init({"name": "", "apps": {}, "groups": {}})
-    >> Space.apps.apps.add(snippet=TEXT_SNIPPET, policy="always", app_id="a_proxy")
+    Space.apps.add(snippet=TEXT_SNIPPET, policy="always", app_id="a_proxy")
     >> Space.pages.init({"title": "Space", "sections": {}, "pages": {}})
     >> Space.pages.pages.set_item(
         "p_via_proxy",

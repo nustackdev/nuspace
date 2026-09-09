@@ -35,7 +35,15 @@ from movies_blocks import (
 )
 
 import nu
-from nuspace.web.refs import LensDriver, LensRef, PagesDriver, PagesRef
+from nuspace.web.refs import (
+    AppsDriver,
+    AppsRef,
+    AppsRunner,
+    LensDriver,
+    LensRef,
+    PagesDriver,
+    PagesRef,
+)
 from nuspace.web.server import Page, Pages, Shell, server
 
 
@@ -519,6 +527,12 @@ class DemoPagesPage(Page):
     pages = PagesRef.slot(space_root=DemoSpace)
 
 
+class DemoAppsPage(Page):
+    """The ops surface: the app rail plus the source canvas."""
+
+    apps = AppsRef.slot(space_root=DemoSpace)
+
+
 class DemoLensPage(Page):
     """Lens over the same root, so the extra slots are browsable."""
 
@@ -526,20 +540,30 @@ class DemoLensPage(Page):
 
 
 class DemoShell(Shell):
-    """Same two routes as `Nuspace`, rooted at `DemoSpace`."""
+    """The same three routes as `Nuspace`, rooted at `DemoSpace`."""
 
-    pages = Pages({"/pages": DemoPagesPage, "/lens": DemoLensPage})
+    pages = Pages(
+        {"/pages": DemoPagesPage, "/apps": DemoAppsPage, "/lens": DemoLensPage},
+    )
 
 
-ui = PagesDriver(DemoPagesPage.pages) | LensDriver(DemoLensPage.lens)
+# Per connection: one driver each, in parallel, none blocking the others.
+ui = (
+    PagesDriver(DemoPagesPage.pages)
+    | AppsDriver(DemoAppsPage.apps)
+    | LensDriver(DemoLensPage.lens)
+)
 
 
 app = nu.With(
     nu.kv.rocksdb_navigator(DB_PATH, tags=(DemoSpace,)),
     server(ui, shell_cls=DemoShell, host="127.0.0.1", port=PORT, open_browser=False),
-    body=nu.kv.auto_flow_atomic(
-        _seed() >> nu.ForeverDo(nu.Delay(3600.0)), scope=DemoSpace
-    ),
+    # Two lifetimes in one body. The seed is a transaction and belongs in an
+    # atomic bracket; `AppsRunner` is the space's supervisor and must not be,
+    # or every app's whole lifetime would sit inside one snapshot. It runs
+    # whether or not a browser ever connects, which is what "always" means.
+    body=nu.kv.auto_flow_atomic(_seed(), scope=DemoSpace)
+    >> (AppsRunner(DemoSpace) | nu.ForeverDo(nu.Delay(3600.0))),
 )
 
 
