@@ -12,6 +12,7 @@ Run:
 from __future__ import annotations
 
 import asyncio
+import os
 import textwrap
 from pathlib import Path
 
@@ -25,7 +26,13 @@ from nuspace.web.server import Page, Pages, Shell, server
 # Section grew `kind` + `order` slots in task-139 and `snippet` became a
 # ProgramRef in task-141; a shape change invalidates an existing dev store,
 # so this points at a fresh directory.
-DB_PATH = str(Path(__file__).parent / "nuspace_pages.db")
+# Both are env-overridable so several instances can run side by side:
+# rocksdb takes an exclusive lock on its directory, so two demos sharing a
+# store is a hard failure rather than a slow one.
+PORT = int(os.environ.get("NUSPACE_DEMO_PORT", "8080"))
+DB_PATH = os.environ.get(
+    "NUSPACE_DEMO_DB", str(Path(__file__).parent / "nuspace_pages.db")
+)
 
 
 # --- Seed (idempotent) -------------------------------------------------------
@@ -432,7 +439,7 @@ ui = PagesDriver(DemoPagesPage.pages) | LensDriver(DemoLensPage.lens)
 
 app = nu.With(
     nu.kv.rocksdb_navigator(DB_PATH, tags=(DemoSpace,)),
-    server(ui, shell_cls=DemoShell, host="127.0.0.1", port=8080, open_browser=False),
+    server(ui, shell_cls=DemoShell, host="127.0.0.1", port=PORT, open_browser=False),
     body=nu.kv.auto_flow_atomic(
         _seed() >> nu.ForeverDo(nu.Delay(3600.0)), scope=DemoSpace
     ),
@@ -440,5 +447,5 @@ app = nu.With(
 
 
 if __name__ == "__main__":
-    print(f"nuspace demo: rocksdb at {DB_PATH!r}, http://127.0.0.1:8080")
+    print(f"nuspace demo: rocksdb at {DB_PATH!r}, http://127.0.0.1:{PORT}")
     asyncio.run(nu.arun(app))
