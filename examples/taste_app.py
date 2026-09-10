@@ -504,7 +504,6 @@ def _app_source() -> str:
 
 TASTE_APP_SOURCE = _app_source()
 
-
 # --- the page ---------------------------------------------------------------
 
 # Sorts after Control (`p_00_control`) and before the movie pages (`pm_`).
