@@ -29,7 +29,6 @@ from __future__ import annotations
 
 import nu
 from nu.domains.shape.dsl import SlotDescriptor
-from nuspace.core.refs import AppsRef, PagesRef, SectionsRef
 
 
 __all__ = ["App", "Page", "Section", "Space"]
@@ -97,13 +96,13 @@ class Page(nu.Shape):
     """
 
     title = nu.kv.StrRef.slot()
-    sections = SectionsRef.slot(Section)
+    sections = nu.kv.ShapesDictRef.slot(Section)
 
 
 # Recursive self-slot: mint the Slot after Page exists, then register it
 # both in ``_slots`` and as a descriptor so ``Page.pages`` reads like any
 # other slot from Python-side.
-_pages_slot = PagesRef.slot(Page)
+_pages_slot = nu.kv.ShapesDictRef.slot(Page)
 _pages_slot.name = "pages"
 _pages_slot._owner_cls = Page
 Page._slots["pages"] = _pages_slot
@@ -121,6 +120,6 @@ class Space(nu.Shape):
     whole address and the group layer is gone.
     """
 
-    apps = AppsRef.slot(App)
+    apps = nu.kv.ShapesDictRef.slot(App)
     pages = nu.kv.ShapeRef.slot(Page)
     state = nu.kv.DictRef.slot(str)
