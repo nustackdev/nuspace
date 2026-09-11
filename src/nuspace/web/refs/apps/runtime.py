@@ -55,6 +55,7 @@ from typing import TYPE_CHECKING, Any
 import nu
 from nu.kv.tree import auto_flow_atomic
 
+from .store import MAX_APPS
 from .supervise import AppSpec, AppsSupervisor
 
 
@@ -65,6 +66,7 @@ if TYPE_CHECKING:
 
 
 __all__ = [
+    "MAX_APPS",
     "POLL_S",
     "AppsRuntime",
     "get_runtime",
@@ -75,10 +77,6 @@ __all__ = [
 # Reconcile floor. An edit does not wait for this -- `wake()` short-circuits
 # it -- so this only bounds how stale a write nuspace did not make can get.
 POLL_S = 1.0
-
-# Cap on how many apps one space will supervise. A flat list, so this is a
-# guard against a runaway app-that-adds-apps, not a design limit.
-MAX_APPS = 500
 
 
 class AppsRuntime:

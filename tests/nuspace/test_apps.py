@@ -27,8 +27,17 @@ from nu.engine.structure import Declared
 from nu.kv.tree import auto_flow_atomic
 from nu.lang import Control
 from nuspace.core.shapes import Space
-from nuspace.web.refs.apps import AppSpec, AppsRuntime, AppsSupervisor, get_runtime
+from nuspace.web.refs.apps import (
+    AppSpec,
+    AppsRuntime,
+    AppsSupervisor,
+    View,
+    get_runtime,
+    new_app_source,
+)
+from nuspace.web.refs.apps.interactions import AppOps
 from nuspace.web.refs.apps.runtime import install_runtime
+from nuspace.web.refs.apps.store import app_row, ordered_apps
 
 
 # -- helpers -----------------------------------------------------------------
@@ -346,3 +355,65 @@ def test_apps_supervisor_is_a_section_supervisor():
     from nuspace.web.refs.pages.supervise import LocalSupervisor
 
     assert issubclass(AppsSupervisor, LocalSupervisor)
+
+
+def test_ordered_apps_is_creation_order():
+    """Ids are time-ordered, so key order is the only order a flat list needs."""
+    raw = {"a_c": {}, "a_a": {}, "a_b": {}, "junk": "not a dict"}
+    assert [aid for aid, _ in ordered_apps(raw)] == ["a_a", "a_b", "a_c"]
+
+
+def test_an_app_row_reads_source_off_the_snippet_slot():
+    row = app_row("a_x", {"name": "n", "snippet": "src"}, None)
+    assert row == {"id": "a_x", "name": "n", "source": "src", "policy": "always", "status": None}
+
+
+def test_new_app_source_addresses_this_space_root():
+    """A constant naming ``Space`` would fail the moment a subclassed space ran it."""
+    assert f"from {Space.__module__} import Space" in new_app_source(Space)
+
+
+# -- the surface -------------------------------------------------------------
+
+
+async def test_a_detached_space_ships_attached_false(space):
+    """No runner mounted is a renderable answer, not an error and not loading."""
+    view = View(space.ctx, Space)
+    payload = await view.apps_payload()
+    assert payload == {"op": "set_apps", "apps": [], "attached": False}
+
+
+async def test_the_app_ops_write_kv_and_the_payload_follows(space):
+    """Four ops, one substrate. Nothing here ships -- kv notifies and ship paints."""
+    runtime = AppsRuntime(space.ctx, Space)
+    with install_runtime(Space, runtime):
+        view = View(space.ctx, Space)
+        ops = AppOps(view)
+        await ops.init_apps()
+
+        await ops.create(name="fresh")
+        payload = await view.apps_payload()
+        assert payload["attached"] is True
+        assert [a["name"] for a in payload["apps"]] == ["fresh"]
+        aid = payload["apps"][0]["id"]
+
+        await ops.rename(app_id=aid, name="renamed")
+        await ops.update(app_id=aid, source=LIVE)
+        row = (await view.apps_payload())["apps"][0]
+        assert (row["name"], row["source"]) == ("renamed", LIVE)
+
+        await ops.delete(app_id=aid)
+        assert (await view.apps_payload())["apps"] == []
+        await view.dispose()
+
+
+async def test_a_view_drops_its_status_listener_on_dispose(space):
+    """The runtime outlives the connection, so a leaked listener leaks forever."""
+    runtime = AppsRuntime(space.ctx, Space)
+    with install_runtime(Space, runtime):
+        view = View(space.ctx, Space)
+        assert view.observe() is runtime
+        assert len(runtime._listeners) == 1
+
+        await view.dispose()
+        assert runtime._listeners == []

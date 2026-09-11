@@ -10,7 +10,7 @@
 // honestly show is its source and its state, so that is what it shows.
 //
 // Selection is router-owned: the URL /apps/<id> is the cursor, so a click
-// drives navigate() and there is no on_app_select on the wire. /apps with no
+// drives navigate() and there is no app.select on the wire. /apps with no
 // segment is "nothing open".
 //
 // We never remount the shell on navigation.
@@ -47,6 +47,7 @@ import {
 	SECTION_STATUS,
 	shellSurface,
 } from "../../design";
+import type { Notify, Ops } from "./ops";
 import { Rail } from "./Rail";
 import { SourceBox } from "./Source";
 import {
@@ -69,9 +70,11 @@ function AppsView({ path }: { path: string }) {
 	const renaming = useAppsEditorSlot(path, (e) => e.renaming);
 	const dirty = useAppsEditorSlot(path, (e) => (selectedId ? e.dirty.includes(selectedId) : false));
 
-	const notify = useCallback(
-		(payload: Record<string, unknown>) => {
-			send({ op: OP_NOTIFY, ref: path, payload });
+	// One ref per op: the op name is the tail of the wire path, not a key in
+	// the payload. `path` is this ref's own wire path, straight off the mount.
+	const notify = useCallback<Notify>(
+		<K extends keyof Ops>(op: K, args: Ops[K]) => {
+			send({ op: OP_NOTIFY, ref: `${path}.ops.${op}`, payload: args });
 		},
 		[path, send],
 	);
@@ -81,13 +84,13 @@ function AppsView({ path }: { path: string }) {
 			if (!app) return;
 			setDirty(path, app.id, false);
 			if (source === app.source) return;
-			notify({ op: "on_app_update", app_id: app.id, source });
+			notify("app.update", { app_id: app.id, source });
 		},
 		[app, notify, path],
 	);
 
 	const restart = useCallback(() => {
-		if (app) notify({ op: "on_app_restart", app_id: app.id });
+		if (app) notify("app.restart", { app_id: app.id });
 	}, [app, notify]);
 
 	return (

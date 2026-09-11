@@ -69,9 +69,8 @@ import {
 	railTitle,
 	railTitleEmpty,
 } from "../../design";
+import type { Notify } from "./ops";
 import { type AppRow, appLabel, DETACHED_STATE } from "./types";
-
-type Notify = (payload: Record<string, unknown>) => void;
 
 export function Rail({
 	apps,
@@ -155,7 +154,7 @@ export function Rail({
 			onRenameEnd();
 			const next = name.trim();
 			if (!next || next === appLabel(app)) return;
-			notify({ op: "on_app_rename", app_id: app.id, name: next });
+			notify("app.rename", { app_id: app.id, name: next });
 		},
 		[notify, onRenameEnd],
 	);
@@ -171,7 +170,7 @@ export function Rail({
 							size="sm"
 							aria-label="New app"
 							disabled={!loaded}
-							onClick={() => notify({ op: "on_app_create", name: "app" })}
+							onClick={() => notify("app.create", { name: "app" })}
 						>
 							<Plus />
 						</IconButton>
@@ -255,11 +254,11 @@ function Row({
 
 	const remove = useCallback(() => {
 		if (!window.confirm(`delete "${label}"?`)) return;
-		notify({ op: "on_app_delete", app_id: app.id });
+		notify("app.delete", { app_id: app.id });
 	}, [app.id, label, notify]);
 
 	const restart = useCallback(() => {
-		notify({ op: "on_app_restart", app_id: app.id });
+		notify("app.restart", { app_id: app.id });
 	}, [app.id, notify]);
 
 	const body = (
