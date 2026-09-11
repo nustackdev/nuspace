@@ -28,7 +28,7 @@ markdown lives at ``Space.state["sections.<sid>.text"]``, because
 from __future__ import annotations
 
 import nu
-from nu.domains.shape.dsl import SlotDescriptor
+from nuspace.recursive import RecursiveShape, self_slot
 
 
 __all__ = ["App", "Page", "Section", "Space"]
@@ -88,25 +88,20 @@ class Section(nu.Shape):
     order = nu.kv.IntRef.slot()
 
 
-class Page(nu.Shape):
+class Page(RecursiveShape):
     """A page: a title, a bag of sections, and nested child pages.
 
-    ``pages`` is stapled on after the class body because a class body
-    cannot mention its own not-yet-defined class.
+    ``pages`` holds ``Page`` itself, which a class body cannot name. That
+    is what ``self_slot`` is for: it resolves against the finished class
+    during ``__set_name__``, so the slot lands in ``_slots`` like any
+    other. See :mod:`nuspace.recursive.slots` for why the annotation form
+    is not an option, and :mod:`nuspace.recursive.addressing` for reaching
+    a page whose depth is only known at run time.
     """
 
     title = nu.kv.StrRef.slot()
     sections = nu.kv.ShapesDictRef.slot(Section)
-
-
-# Recursive self-slot: mint the Slot after Page exists, then register it
-# both in ``_slots`` and as a descriptor so ``Page.pages`` reads like any
-# other slot from Python-side.
-_pages_slot = nu.kv.ShapesDictRef.slot(Page)
-_pages_slot.name = "pages"
-_pages_slot._owner_cls = Page
-Page._slots["pages"] = _pages_slot
-Page.pages = SlotDescriptor("pages", _pages_slot)
+    pages = self_slot(nu.kv.ShapesDictRef)
 
 
 class Space(nu.Shape):
