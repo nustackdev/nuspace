@@ -6,7 +6,8 @@
 // new state:
 //   {path: string[], columns: Column[]}
 //
-// Notify frames flow the other way with the browser-computed full path:
+// Notify frames flow the other way on `<this ref>.ops.nav`, carrying the
+// browser-computed full path:
 //   {path: string[]}
 // Click / ArrowRight / Enter -> push a segment, ArrowLeft / Escape ->
 // pop -- always sent as an already-resolved full path so the server
@@ -455,7 +456,10 @@ function LensView({ path }: { path: string }) {
 	const sendPath = useCallback(
 		(newPath: string[]) => {
 			patch(() => ({ pendingDepth: newPath.length }));
-			send({ op: OP_NOTIFY, ref: path, payload: { path: newPath } });
+			// One ref per op: the op name is the tail of the wire path, not a
+			// key in the payload. Mirrors `refs/lens/ops.py`, which subscribes
+			// one handler per path instead of branching on a string.
+			send({ op: OP_NOTIFY, ref: `${path}.ops.nav`, payload: { path: newPath } });
 		},
 		[patch, path, send],
 	);
