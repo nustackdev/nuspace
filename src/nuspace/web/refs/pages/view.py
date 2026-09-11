@@ -168,7 +168,30 @@ class View:
                 return payload
 
     async def page_payload(self) -> dict[str, Any] | None:
-        """Build the active page's payload now. ``None`` if unchanged."""
+        """Build the active page's payload now. ``None`` if unchanged.
+
+        ``plan`` stays inside the payload build, deliberately. It reads
+        as a Query reconciling a supervisor, which is the wrong shape on
+        its face, so here is why it survives:
+
+        - the plan's output *is* the payload. ``fields`` and ``status``
+          below are read straight off the generations ``plan`` just
+          built. Split them and the frame would carry the previous
+          plan's fields while this one's sections are the ones about to
+          launch, which is exactly the slice-does-not-exist bug the
+          two-phase start exists to prevent.
+        - nothing starts here. ``plan`` compiles and diffs; every
+          observable effect is ``launch``, which is already a separate
+          ``Perform`` after the ``Write``. The effect is outside the
+          Query; only the compile is in it.
+        - a separate plan step would have to re-read the cursor and the
+          blocks, or lose the unchanged-payload filter below (the build
+          returns ``None`` and loops rather than shipping a frame the
+          browser would apply over itself).
+
+        So it is not separable without either duplicating the read or
+        shipping frames nobody needs. Left as is on purpose.
+        """
         path = await self.cursor()
         items = await self.blocks(path)
         page = page_ref(self.root, path)

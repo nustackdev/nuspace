@@ -12,6 +12,7 @@ session shape so the reactive plumbing behaves the same on both.
 from __future__ import annotations
 
 import asyncio
+import logging
 import uuid
 from collections import defaultdict
 from collections.abc import Callable
@@ -38,6 +39,8 @@ __all__ = ["NuspaceSession", "Subscription"]
 
 
 Callback = Callable[[object], None]
+
+log = logging.getLogger("nuspace.server")
 
 
 class Subscription:
@@ -144,7 +147,14 @@ class NuspaceSession(Session):
 
     def _dispatch(self, frame: Frame) -> None:
         if frame.op == OP_NOTIFY:
-            for sub in tuple(self._subs.get(frame.ref, ())):
+            subs = tuple(self._subs.get(frame.ref, ()))
+            if not subs:
+                # Routing is unchanged: nobody subscribed, nothing runs.
+                # But a notify to `<surface>.ops.typpo` used to vanish
+                # without a trace, and a mistyped op path is the one bug
+                # the one-ref-per-op dispatch cannot catch for you.
+                log.warning("notify to %r matched no subscription", frame.ref)
+            for sub in subs:
                 sub._fire(frame.payload)
             return
         if frame.op == OP_READ and frame.id is not None:

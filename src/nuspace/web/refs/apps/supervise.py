@@ -28,10 +28,10 @@ apps are headless.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from nuspace.web.refs.pages.supervise import LocalSupervisor, SectionSpec
+from nuspace.exec.status import SectionSpec
+from nuspace.web.refs.pages.supervise import LocalSupervisor
 
 
 if TYPE_CHECKING:
@@ -41,9 +41,12 @@ if TYPE_CHECKING:
 __all__ = ["AppSpec", "AppsSupervisor"]
 
 
-@dataclass
 class AppSpec(SectionSpec):
-    """One app: id + source. ``section_id`` is the app id."""
+    """One app: id + source. ``section_id`` is the app id.
+
+    A plain subclass, not a second dataclass: it adds no fields, it only
+    answers ``prefix`` differently.
+    """
 
     @property
     def prefix(self) -> str:

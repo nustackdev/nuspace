@@ -29,12 +29,14 @@ rendered, and never written to; it is an address the browser can name.
 
 Consequences worth knowing:
 
-- A notify to an op nobody subscribed is silent. ``Ops.stray()`` covers
-  the realistic case (the browser still notifying the bare surface path,
-  i.e. a call site that missed the migration) by subscribing there and
-  warning. A notify to ``<surface>.ops.typpo`` is still silent: matching
-  it would need a wildcard in ``NuspaceSession``, which is the transport
-  and out of scope here.
+- A notify to an op nobody subscribed runs nothing. ``Ops.stray()``
+  covers the realistic case (the browser still notifying the bare
+  surface path, i.e. a call site that missed the migration) by
+  subscribing there and warning. Anything else -- a typo'd
+  ``<surface>.ops.typpo``, say -- is caught one layer down:
+  ``NuspaceSession._dispatch`` warns on any notify that matched no
+  subscription at all. Neither changes routing; both just refuse to let
+  it happen quietly.
 - Bodies take named arguments, so a malformed frame is a ``TypeError``
   at call time rather than a silent ``payload.get(...) or ""``. That
   failure is caught in ``Perform``, once, instead of in a blanket

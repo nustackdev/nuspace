@@ -22,7 +22,8 @@ the browser slice on ``payload["op"]``:
     PageNode = {"id": str|None, "title": str, "pages": [PageNode]}
     Block    = {"id", "kind": "prose"|"program", "source", "order": int,
                 "fields": [MountField], "status": Status|None}
-    Status   = {"section_id", "state", "error", "started_at"}
+    Status   = the section status contract. It is not restated per
+               surface -- ``nuspace.exec.status`` is its one home.
 
 Browser -> server, one ``notify`` per op, each on its own path
 ``<this ref>.ops.<op>``, payload = the op's named arguments and nothing

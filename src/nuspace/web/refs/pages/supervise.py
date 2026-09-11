@@ -5,18 +5,10 @@ executor is being built in parallel, so this module owns the *seam* and
 ships a local implementation behind it so the editor is exercisable end
 to end today.
 
-The status contract is fixed and shared with the executor. Do not
-redesign it here:
-
-    {"section_id": str,
-     "state": "invalid"|"idle"|"starting"|"running"|"stopped"|"failed",
-     "error": str|None,
-     "started_at": float|None}
-
-``invalid`` = never constructed a tree; ``error`` carries the
-``nu.prog`` :class:`~nu.prog.Diagnostic`, rendered as its message plus
-the line in the section's own source. ``failed`` = it constructed, ran,
-and died.
+``SectionSpec`` and ``SectionStatus`` are not defined here. They live in
+:mod:`nuspace.exec.status`, which is the one home for the contract, and
+the out-of-process executor speaks the same two types. Different
+lifetimes, one vocabulary.
 
 Construction itself is nu's. ``nuspace.exec.compile.construct_section``
 is ``nu.prog``'s in-process brace with ``path`` bound into the entry
@@ -55,6 +47,7 @@ import nu
 from nu.kv.tree import auto_flow_atomic
 from nu.prog import Diagnostic
 from nuspace.exec.compile import construct_section, enumerate_ui_refs
+from nuspace.exec.status import STATES, SectionSpec, SectionStatus
 
 
 if TYPE_CHECKING:
@@ -72,46 +65,12 @@ __all__ = [
 ]
 
 
-STATES = ("invalid", "idle", "starting", "running", "stopped", "failed")
-
 # Bounded teardown. The local stub can only wait -- there is no signal to
 # escalate to in-process. The executor replaces this with TERM then KILL.
 STOP_GRACE_S = 2.0
 
 # Sentinel: "leave started_at alone" (None is a meaningful value).
 _KEEP: Any = object()
-
-
-@dataclass
-class SectionStatus:
-    """One section's observable state. Mirrors the wire contract exactly."""
-
-    section_id: str
-    state: str = "idle"
-    error: str | None = None
-    started_at: float | None = None
-
-    def to_wire(self) -> dict[str, Any]:
-        """The wire form, exactly as the browser block chrome consumes it."""
-        return {
-            "section_id": self.section_id,
-            "state": self.state,
-            "error": self.error,
-            "started_at": self.started_at,
-        }
-
-
-@dataclass
-class SectionSpec:
-    """What the driver asks the supervisor to run: id + source, nothing else."""
-
-    section_id: str
-    source: str
-
-    @property
-    def prefix(self) -> str:
-        """The mount prefix. Path is the mounting mechanism."""
-        return f"sections.{self.section_id}"
 
 
 @dataclass
@@ -198,8 +157,6 @@ class LocalSupervisor(SectionSupervisor):
         gen.status.state = state
         gen.status.error = error
         if started_at is not _KEEP:
-            # `started_at` survives stopped/failed on purpose -- the block
-            # chrome wants to say how long it ran before it died.
             gen.status.started_at = started_at
         self._emit(gen)
 
@@ -261,12 +218,16 @@ class LocalSupervisor(SectionSupervisor):
             self._start(gen)
 
     def _start(self, gen: _Generation) -> None:
-        self._set(gen, "starting", started_at=time.time())
+        # Stamp on `running`, not here. `starting` has no run behind it
+        # yet, and a leftover timestamp from the last generation would
+        # read as this one's. Terminal states keep it. See
+        # `nuspace.exec.status` for the whole rule.
+        self._set(gen, "starting", started_at=None)
         body = auto_flow_atomic(gen.term, scope=self._scope)
 
         async def run() -> None:
             try:
-                self._set(gen, "running")
+                self._set(gen, "running", started_at=time.time())
                 await nu.arun(body, self._ctx)  # type: ignore[arg-type]
             except asyncio.CancelledError:
                 self._set(gen, "stopped")

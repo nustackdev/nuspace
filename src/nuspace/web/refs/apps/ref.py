@@ -25,7 +25,8 @@ the browser slice on ``payload["op"]``:
     {"op": "set_status", "statuses": [Status]}
 
     App    = {"id", "name", "source", "policy", "status": Status|None}
-    Status = {"section_id", "state", "error", "started_at"}
+    Status = the section status contract. It is not restated per
+             surface -- ``nuspace.exec.status`` is its one home.
 
 ``Status.section_id`` carries the *app* id. That key is the supervisor's
 fixed contract, shared with sections, and is not renamed per surface --

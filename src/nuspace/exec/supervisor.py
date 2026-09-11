@@ -45,7 +45,7 @@ from .protocol import (
     MSG_SUBSCRIBE,
     MSG_UNSUBSCRIBE,
 )
-from .status import SectionStatus, StatusEvent, StatusStream
+from .status import UNSTARTED, SectionSpec, SectionStatus, StatusEvent, StatusStream
 
 
 if TYPE_CHECKING:
@@ -69,19 +69,6 @@ class UiHost(Protocol):
     async def aread(self, page_id: str, section_id: str, path: str) -> Any:  # noqa: ANN401
         """Round-trip a read on behalf of a section."""
         ...
-
-
-@dataclass(frozen=True)
-class SectionSpec:
-    """One section: an id and the python that evaluates to its tree."""
-
-    id: str
-    source: str
-    prefix: str | None = None
-
-    def mount_prefix(self) -> str:
-        """Path prefix the section owns. Mounting is by prefix."""
-        return self.prefix or f"sections.{self.id}"
 
 
 @dataclass(eq=False)
@@ -190,11 +177,11 @@ class Supervisor:
             self._generations[page_id] = generation
             page = _Page(page_id=page_id, generation=generation)
             for spec in specs:
-                page.specs[spec.id] = spec
-                page.statuses[spec.id] = SectionStatus(spec.id, state="starting")
+                page.specs[spec.section_id] = spec
+                page.statuses[spec.section_id] = SectionStatus(spec.section_id, state="starting")
             self._pages[page_id] = page
             for spec in specs:
-                self._publish(page, page.statuses[spec.id])
+                self._publish(page, page.statuses[spec.section_id])
             await asyncio.gather(*(self._start_section(page, s) for s in specs))
             await self._await_compiled(page)
             return generation
@@ -230,13 +217,13 @@ class Supervisor:
             page = self._pages.get(page_id)
             if page is None:
                 return []
-            page.specs[spec.id] = spec
-            self._stop_section(page, spec.id)
-            page.statuses[spec.id] = SectionStatus(spec.id, state="starting")
-            self._publish(page, page.statuses[spec.id])
+            page.specs[spec.section_id] = spec
+            self._stop_section(page, spec.section_id)
+            page.statuses[spec.section_id] = SectionStatus(spec.section_id, state="starting")
+            self._publish(page, page.statuses[spec.section_id])
             await self._start_section(page, spec)
-            await self._await_compiled(page, sections=[spec.id])
-            return list(page.statuses[spec.id].fields)
+            await self._await_compiled(page, sections=[spec.section_id])
+            return list(page.statuses[spec.section_id].fields)
 
     async def launch_section(self, page_id: str, section_id: str) -> None:
         """Release one prepared section into its run."""
@@ -248,7 +235,7 @@ class Supervisor:
     async def update_section(self, page_id: str, spec: SectionSpec) -> None:
         """Replace one section's source and restart **only** that section."""
         await self.prepare_section(page_id, spec)
-        await self.launch_section(page_id, spec.id)
+        await self.launch_section(page_id, spec.section_id)
 
     async def restart_section(self, page_id: str, section_id: str) -> None:
         """Restart one section from its current source."""
@@ -264,7 +251,7 @@ class Supervisor:
         page = self._pages.get(page_id)
         if page is None:
             return {}
-        return {sid: st.to_dict() for sid, st in page.statuses.items()}
+        return {sid: st.to_wire() for sid, st in page.statuses.items()}
 
     def fields(self, page_id: str, section_id: str) -> list[dict[str, Any]]:
         """Mount fields a compiled section owns. Not part of the status dict."""
@@ -300,9 +287,9 @@ class Supervisor:
             current = page.statuses if page is not None else {}
             keys = set(sections) if sections is not None else set(current)
             if keys and all(sid in current and current[sid].state in wanted for sid in keys):
-                return {sid: current[sid].to_dict() for sid in keys}
+                return {sid: current[sid].to_wire() for sid in keys}
             if time.monotonic() > deadline:
-                snapshot = {sid: st.to_dict() for sid, st in current.items()}
+                snapshot = {sid: st.to_wire() for sid, st in current.items()}
                 raise TimeoutError(f"page {page_id!r} never settled into {wanted}: {snapshot}")
             await asyncio.sleep(0.01)
 
@@ -353,21 +340,21 @@ class Supervisor:
         try:
             handle = await self._pool.acquire()
         except Exception as exc:
-            self._set(page, spec.id, state="failed", error=f"worker start failed: {exc}")
+            self._set(page, spec.section_id, state="failed", error=f"worker start failed: {exc}")
             return
         rec = _Worker(
-            section_id=spec.id,
+            section_id=spec.section_id,
             page_id=page.page_id,
             generation=page.generation,
             handle=handle,
         )
-        page.workers[spec.id] = rec
+        page.workers[spec.section_id] = rec
         rec.pump = asyncio.create_task(self._pump(page, rec))
         await handle.send(
             {
                 "t": MSG_RUN,
-                "section_id": spec.id,
-                "prefix": spec.mount_prefix(),
+                "section_id": spec.section_id,
+                "prefix": spec.prefix,
                 "source": spec.source,
                 "store": self._store,
             },
@@ -492,7 +479,9 @@ class Supervisor:
             status.compiled = True
         if state is not None:
             status.state = state  # type: ignore[assignment]
-            if state in ("idle", "starting", "invalid"):
+            if state in UNSTARTED:
+                # No run behind this state yet, so any timestamp is stale.
+                # Terminal states keep theirs -- see `status.py`.
                 status.started_at = None
         if error is not None:
             status.error = error
@@ -503,7 +492,7 @@ class Supervisor:
 
     def _publish(self, page: _Page, status: SectionStatus) -> None:
         self.stream.publish(
-            StatusEvent(page.page_id, page.generation, status.to_dict()),
+            StatusEvent(page.page_id, page.generation, status.to_wire()),
         )
 
     # -- teardown ------------------------------------------------------------
@@ -518,9 +507,11 @@ class Supervisor:
         for status in page.statuses.values():
             if status.state in ("starting", "running", "idle"):
                 status.state = reason  # type: ignore[assignment]
-                status.started_at = None
+                # `started_at` survives into `stopped` on purpose: the
+                # block chrome wants to say how long it ran. Only the
+                # unstarted states clear it -- see `status.py`.
                 self.stream.publish(
-                    StatusEvent(page.page_id, page.generation, status.to_dict()),
+                    StatusEvent(page.page_id, page.generation, status.to_wire()),
                 )
 
     def _stop_section(self, page: _Page, section_id: str) -> None:

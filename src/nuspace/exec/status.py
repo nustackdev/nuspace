@@ -1,4 +1,20 @@
-"""Section status contract and the observable stream over it.
+"""The section contract: what you ask to run, and what comes back.
+
+**This module is the one home for both.** Every supervisor in nuspace
+speaks these two types -- the out-of-process :class:`Supervisor`, the
+in-process ``LocalSupervisor`` behind the pages surface, and the
+``AppsSupervisor`` behind the apps surface. They have different
+lifetimes on purpose (a page runs per viewer, an app runs once for the
+space), but only one spelling of what a section is and how it reports.
+
+## What you ask for
+
+:class:`SectionSpec` -- an id and the source that evaluates to a tree.
+``prefix`` is the path the unit owns. For a section that is a ui mount
+prefix (``sections.<id>``); an app overrides it with a kv namespace,
+because apps are headless.
+
+## What comes back
 
 The dict shape is fixed and shared with the browser driver::
 
@@ -8,12 +24,33 @@ The dict shape is fixed and shared with the browser driver::
      "started_at": float | None}
 
 ``invalid`` means the source never compiled and ``error`` carries the
-diagnostic. ``failed`` means it ran and died and ``error`` carries the
-runtime error. They are different things to a person, so they are
-different states.
+``nu.prog`` ``Diagnostic``, message plus the line in the unit's own
+source. ``failed`` means it constructed, ran and died, and ``error``
+carries the runtime error. They are different things to a person, so
+they are different states.
+
+``section_id`` is the unit id whatever the unit is. The apps surface
+puts an app id in it rather than inventing ``app_id``: apps and sections
+are the same substance, and a second spelling is how the two drift
+apart.
+
+``started_at`` is when the **current** run reached ``running``:
+
+- cleared on ``idle``, ``starting`` and ``invalid``. Nothing has started
+  yet, so a leftover timestamp from the last run would be a lie.
+- stamped on ``running``.
+- kept through ``stopped`` and ``failed``. The block chrome wants to say
+  how long it ran before it died, and a terminal state has no next run
+  to confuse it with.
+
+The two supervisors used to disagree here: the local one stamped at
+``starting`` and kept it forever, the out-of-process one stamped at
+``running`` and cleared it again on teardown. Stamp late, keep through
+terminal states -- that is the only rule where every state's value
+answers "when did the run you are looking at begin".
 
 Mount fields hang off :class:`SectionStatus` but stay out of
-``to_dict()`` -- the wire contract is exactly those four keys.
+``to_wire()`` -- the wire contract is exactly those four keys.
 """
 
 from __future__ import annotations
@@ -27,12 +64,36 @@ if TYPE_CHECKING:
     from collections.abc import AsyncIterator
 
 
-__all__ = ["STATES", "SectionState", "SectionStatus", "StatusEvent", "StatusStream"]
+__all__ = [
+    "STATES",
+    "SectionSpec",
+    "SectionState",
+    "SectionStatus",
+    "StatusEvent",
+    "StatusStream",
+]
 
 
 SectionState = Literal["invalid", "idle", "starting", "running", "stopped", "failed"]
 
 STATES: tuple[str, ...] = ("invalid", "idle", "starting", "running", "stopped", "failed")
+
+# States with no run behind them yet. Entering one clears `started_at`.
+UNSTARTED: tuple[str, ...] = ("idle", "starting", "invalid")
+
+
+@dataclass(frozen=True)
+class SectionSpec:
+    """What a supervisor is asked to run: an id and a source, nothing else."""
+
+    section_id: str
+    source: str
+    prefix_override: str | None = None
+
+    @property
+    def prefix(self) -> str:
+        """The path this unit owns. Path is the mounting mechanism."""
+        return self.prefix_override or f"sections.{self.section_id}"
 
 
 @dataclass
@@ -46,7 +107,7 @@ class SectionStatus:
     fields: list[dict[str, Any]] = field(default_factory=list)
     compiled: bool = False
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_wire(self) -> dict[str, Any]:
         """The wire contract. Four keys, no more."""
         return {
             "section_id": self.section_id,
