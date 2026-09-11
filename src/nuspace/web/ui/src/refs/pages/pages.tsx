@@ -16,10 +16,10 @@ import { OP_NOTIFY } from "@nustackdev/ui-core";
 import type { RefEntry } from "@nustackdev/ui-kit";
 import { Spinner, useStore } from "@nustackdev/ui-kit";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { docPage } from "../../design";
-import type { Crumb } from "../../design/page-header";
-import { PageHeader } from "../../design/page-header";
-import { hrefFor, onNavClick, useRoute } from "../../router";
+import { hrefFor, onNavClick, useRoute } from "../../app/router";
+import type { Crumb } from "../../components";
+import { PageHeader } from "../../components";
+import { docPageLoading, docPageSurface, shellSurface } from "../../design";
 import { Canvas } from "./Canvas";
 import { Rail } from "./Rail";
 import { pagesSliceFactory, patchEditor, useEditorState, usePagesValue } from "./slice";
@@ -131,7 +131,7 @@ function PagesView({ path }: { path: string }) {
 	);
 
 	return (
-		<div className="flex min-h-0 min-w-0 flex-1">
+		<div className={shellSurface}>
 			<Rail
 				tree={tree}
 				expanded={expanded}
@@ -139,9 +139,9 @@ function PagesView({ path }: { path: string }) {
 				selectedPath={route.path}
 				notify={notify}
 			/>
-			<div className={`${docPage} flex min-w-0 flex-1 flex-col`}>
+			<div className={docPageSurface}>
 				{page == null ? (
-					<div className="flex items-center gap-2 p-8 text-base text-text-muted">
+					<div className={docPageLoading}>
 						<Spinner size="sm" tone="neutral" label="Loading page" />
 						loading page...
 					</div>

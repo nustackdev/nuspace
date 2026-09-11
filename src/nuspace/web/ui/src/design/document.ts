@@ -22,7 +22,7 @@ import { hasGutterRail } from "./section-status";
 /* ============================== page + column ============================ */
 
 /** Outer scroll surface. Canvas, not surface: the page IS the background. */
-export const docPage = cn(
+const docPage = cn(
 	"relative h-full w-full overflow-y-auto overflow-x-hidden",
 	"bg-bg-canvas text-text-primary font-display",
 );
@@ -39,6 +39,23 @@ export const docColumn = cn(
 
 /** A program block that opts out of the reading measure (charts, tables). */
 export const docColumnWide = cn(docColumn, "max-w-doc-wide");
+
+/** The scroll surface as the flex child the pages ref mounts it as. */
+export const docPageSurface = cn(docPage, "flex min-w-0 flex-1 flex-col");
+
+/** Before a page's value lands. Same quiet as the shell's boot state. */
+export const docPageLoading = "flex items-center gap-2 p-8 text-base text-text-muted";
+
+/**
+ * The click target under the last block. A document has to be openable by
+ * clicking the empty space below it, or the only way to start writing on a
+ * fresh page is to find a control. Sized and padded like a prose block so the
+ * caret does not jump when the click turns into one.
+ */
+export const docAppendBlock = cn(
+	"focus-ring w-full rounded-sm px-doc-block-x py-doc-block-y",
+	"text-left text-xl text-text-muted hover:bg-doc-hover",
+);
 
 /** Document body type tier. 16px is the only place typography.md ships xl. */
 export const docProse = "text-xl text-text-primary";
@@ -199,6 +216,44 @@ export const docDropIndicator = cn(
 	"rounded-full bg-doc-drop-line",
 );
 
+/* ============================== program block ============================ */
+//
+// A program block is a document block that happens to be a live section, so
+// its interior is kit density even though the page around it is not: the
+// control row is the kit's 32px row, the type inside it is chrome type, and
+// the code box gets the same bordered-and-sunken treatment an app's editor
+// gets. What makes it a document block and not a panel is the outside - the
+// gutter, the measure, the block padding - and that is `docBlock`'s job.
+
+/** The block's own stack: control row, alert, editor, fields. */
+export const docProgram = "flex flex-col gap-1";
+
+/** The control row. 32px, so it lines up with every other control in the shell. */
+export const docProgramBar = "flex h-8 items-center gap-1";
+
+/** The mount-prefix button, on top of a kit `Button ghost sm`. Chrome, not code. */
+export const docProgramPrefix = "min-w-0 gap-1.5 font-mono text-xs font-normal text-text-muted";
+
+/** "unsaved" plus its two Kbd caps. Quiet: it is a reminder, not a warning. */
+export const docProgramDirty = "flex items-center gap-1 text-xs text-text-muted";
+
+/** The block's mounted ui refs. Looser gap: these are whole widgets. */
+export const docProgramFields = "flex flex-col gap-3 py-1";
+
+/** The "runs headless" line, when a block mounts nothing. */
+export const docProgramHeadless = "py-1 text-base text-text-muted";
+
+/**
+ * The code box around Monaco. Bordered and sunken, the same treatment an app's
+ * editor gets (`appsEditor`), so a source editor looks like a source editor on
+ * both surfaces. It sizes to its content rather than filling: a block is one of
+ * many on the page and there is something below it to make room for.
+ */
+export const docCodeBox = cn(
+	"w-full overflow-hidden rounded-md",
+	"border border-border-default bg-bg-sunken",
+);
+
 /* ============================== status ================================== */
 
 /**
@@ -267,8 +322,11 @@ export const docSlashMenuItem = cn(
 	"[&>svg]:size-4 [&>svg]:shrink-0 [&>svg]:text-text-muted",
 );
 
-/** Trailing hint on a slash-menu row (shortcut, category). */
-export const docSlashMenuHint = "ml-auto text-xs text-text-muted";
+/** The row's label. Owns the line: it truncates, the hint never does. */
+export const docSlashMenuItemLabel = "flex-1 truncate text-left";
+
+/** Trailing hint on a slash-menu row (shortcut, category). Mono: it is a key. */
+export const docSlashMenuHint = "ml-auto font-mono text-xs text-text-muted";
 
 /** Empty state when the query matches nothing. */
 export const docSlashMenuEmpty = "px-2 py-6 text-center text-sm text-text-muted";

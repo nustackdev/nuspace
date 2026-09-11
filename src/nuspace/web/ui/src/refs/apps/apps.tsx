@@ -31,6 +31,8 @@ import {
 } from "@nustackdev/ui-kit";
 import { RotateCw } from "lucide-react";
 import { useCallback, useMemo } from "react";
+import { useRoute } from "../../app/router";
+import { SectionStatusPill } from "../../components";
 import {
 	appsBar,
 	appsBarTitle,
@@ -42,10 +44,9 @@ import {
 	appsPayload,
 	appsPlaceholder,
 	appsPolicy,
-} from "../../design/apps";
-import { SECTION_STATUS } from "../../design/section-status";
-import { SectionStatusPill } from "../../design/section-status-dot";
-import { useRoute } from "../../router";
+	SECTION_STATUS,
+	shellSurface,
+} from "../../design";
 import { Rail } from "./Rail";
 import { SourceBox } from "./Source";
 import {
@@ -90,7 +91,7 @@ function AppsView({ path }: { path: string }) {
 	}, [app, notify]);
 
 	return (
-		<div className="flex min-h-0 min-w-0 flex-1">
+		<div className={shellSurface}>
 			<Rail
 				apps={apps}
 				loaded={loaded}

@@ -32,6 +32,7 @@ import { IconButton, Tooltip, TooltipContent, TooltipTrigger } from "@nustackdev
 import { GripVertical, Plus } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import {
+	docAppendBlock,
 	docBlock,
 	docColumn,
 	docDragHandle,
@@ -662,7 +663,7 @@ export function Canvas({
 			<button
 				type="button"
 				onClick={() => createAfter(blocks.length ? blocks[blocks.length - 1].id : null, "prose")}
-				className="focus-ring w-full rounded-sm px-doc-block-x py-doc-block-y text-left text-xl text-text-muted hover:bg-doc-hover"
+				className={docAppendBlock}
 			>
 				Click to write, or press / for blocks
 			</button>

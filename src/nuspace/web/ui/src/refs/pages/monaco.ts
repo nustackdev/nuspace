@@ -9,7 +9,7 @@
 // here pulls Monaco into the initial graph.
 
 import type * as MonacoNS from "monaco-editor/editor/editor.api.js";
-import { onThemeChange } from "../../theme";
+import { onThemeChange } from "../../app/theme";
 
 export type { MonacoNS };
 

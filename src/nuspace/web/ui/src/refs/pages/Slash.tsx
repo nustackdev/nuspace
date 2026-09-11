@@ -29,7 +29,13 @@ import {
 	Type,
 } from "lucide-react";
 import { useEffect, useRef } from "react";
-import { docSlashMenu, docSlashMenuHint, docSlashMenuItem, docSlashMenuLabel } from "../../design";
+import {
+	docSlashMenu,
+	docSlashMenuHint,
+	docSlashMenuItem,
+	docSlashMenuItemLabel,
+	docSlashMenuLabel,
+} from "../../design";
 
 // What a fresh program block starts life as. A section is a nu.prog
 // program: a python *module* with an `out` entry point returning a Nu
@@ -256,8 +262,8 @@ export function SlashMenu({
 							className={docSlashMenuItem}
 						>
 							<item.icon aria-hidden="true" />
-							<span className="flex-1 truncate text-left">{item.label}</span>
-							<span className={`${docSlashMenuHint} font-mono`}>{item.hint}</span>
+							<span className={docSlashMenuItemLabel}>{item.label}</span>
+							<span className={docSlashMenuHint}>{item.hint}</span>
 						</button>
 					</div>
 				);

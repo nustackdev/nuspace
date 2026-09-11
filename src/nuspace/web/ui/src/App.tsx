@@ -13,9 +13,18 @@ import {
 } from "@nustackdev/ui-kit";
 import type { LucideIcon } from "lucide-react";
 import { Boxes, FileText, Moon, Sun, Telescope } from "lucide-react";
-import { useNuspaceConnection } from "./connect";
-import { hrefFor, onNavClick, rememberedPath, TOPS, type Top, useRoute } from "./router";
-import { toggleTheme, useTheme } from "./theme";
+import { useNuspaceConnection } from "./app/connect";
+import { hrefFor, onNavClick, rememberedPath, TOPS, type Top, useRoute } from "./app/router";
+import { toggleTheme, useTheme } from "./app/theme";
+import {
+	shellBooting,
+	shellMain,
+	shellMissing,
+	shellNav,
+	shellRoot,
+	shellStrip,
+	shellSurface,
+} from "./design";
 
 // The shell: a thin top strip and one full-bleed surface.
 //
@@ -72,7 +81,7 @@ export function App() {
 
 	if (!page) {
 		return (
-			<div className="flex min-h-screen items-center justify-center gap-2 bg-bg-canvas text-base text-text-muted">
+			<div className={shellBooting}>
 				<Spinner size="sm" tone="neutral" label="Connecting" />
 				waiting for mount...
 			</div>
@@ -83,9 +92,9 @@ export function App() {
 
 	return (
 		<TooltipProvider>
-			<div className="flex h-screen flex-col bg-bg-canvas text-text-primary">
-				<header className="flex h-9 shrink-0 items-center gap-1 border-b border-border-subtle bg-bg-surface px-2">
-					<nav aria-label="Surfaces" className="flex items-center gap-1">
+			<div className={shellRoot}>
+				<header className={shellStrip}>
+					<nav aria-label="Surfaces" className={shellNav}>
 						{TOPS.map((top) => {
 							const { icon: Icon, label } = SURFACE[top];
 							const path = rememberedPath(top);
@@ -110,17 +119,15 @@ export function App() {
 					<Separator orientation="vertical" className="mx-1 h-4" />
 					<ThemeToggle />
 				</header>
-				<main className="flex min-h-0 flex-1">
+				<main className={shellMain}>
 					{activePage ? (
-						<section className="flex min-h-0 min-w-0 flex-1">
+						<section className={shellSurface}>
 							{activePage.fields.map((f) => (
 								<FieldView key={f.path} field={f} />
 							))}
 						</section>
 					) : (
-						<section className="min-h-0 flex-1 p-6 text-base text-text-muted">
-							no surface for /{route.top}
-						</section>
+						<section className={shellMissing}>no surface for /{route.top}</section>
 					)}
 				</main>
 			</div>

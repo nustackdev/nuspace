@@ -32,7 +32,17 @@ import {
 } from "@nustackdev/ui-kit";
 import { Check, Code, Copy, RotateCw } from "lucide-react";
 import { useCallback, useState } from "react";
-import { docStatusTrace, SECTION_STATUS, SectionStatusPill } from "../../design";
+import { SectionStatusPill } from "../../components";
+import {
+	docProgram,
+	docProgramBar,
+	docProgramDirty,
+	docProgramFields,
+	docProgramHeadless,
+	docProgramPrefix,
+	docStatusTrace,
+	SECTION_STATUS,
+} from "../../design";
 import { CodeBox } from "./Code";
 import type { ExitDir } from "./Prose";
 import type { FocusReq } from "./slice";
@@ -98,19 +108,14 @@ export function ProgramBlock(props: ProgramProps) {
 	);
 
 	return (
-		<div className="flex flex-col gap-1">
+		<div className={docProgram}>
 			{/* The block's control row. 32px, the kit's default row, so a program
 			    block's chrome lines up with every other control in the shell. */}
-			<div className="flex h-8 items-center gap-1">
+			<div className={docProgramBar}>
 				<SectionStatusPill status={state} />
 				<Tooltip>
 					<TooltipTrigger asChild>
-						<Button
-							variant="ghost"
-							size="sm"
-							onClick={copyPrefix}
-							className="min-w-0 gap-1.5 font-mono text-xs font-normal text-text-muted"
-						>
+						<Button variant="ghost" size="sm" onClick={copyPrefix} className={docProgramPrefix}>
 							<span className="truncate">sections.{blockId}</span>
 							{copied ? <Check className="text-status-ok" /> : <Copy />}
 						</Button>
@@ -121,7 +126,7 @@ export function ProgramBlock(props: ProgramProps) {
 				</Tooltip>
 				<span className="flex-1" />
 				{dirty ? (
-					<span className="flex items-center gap-1 text-xs text-text-muted">
+					<span className={docProgramDirty}>
 						unsaved
 						<Kbd>⌘</Kbd>
 						<Kbd>↵</Kbd>
@@ -184,13 +189,13 @@ export function ProgramBlock(props: ProgramProps) {
 			) : null}
 
 			{fields.length > 0 ? (
-				<div className="flex flex-col gap-3 py-1">
+				<div className={docProgramFields}>
 					{fields.map((f) => (
 						<FieldView key={f.path} field={f} />
 					))}
 				</div>
 			) : !editing && !status?.error ? (
-				<div className="py-1 text-base text-text-muted">no ui refs — this block runs headless</div>
+				<div className={docProgramHeadless}>no ui refs — this block runs headless</div>
 			) : null}
 		</div>
 	);

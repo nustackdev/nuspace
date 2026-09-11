@@ -1,8 +1,11 @@
-// Page-rail class recipes + geometry.
+// Rail class recipes + geometry. One rail vocabulary, two surfaces.
 //
-// The rail is a nested tree of pages. The design system describes app chrome
-// and this doc surface's document half lives in `./document.ts`; a tree row is
-// neither. It is the one place in nuspace where three things share a 28px line
+// The pages rail is a nested tree; the apps rail is a flat list. They are the
+// same object at two depths, so they share one set of recipes rather than two
+// copies that drift. The apps rail uses LANE / GAP / ROW and skips INDENT, the
+// guides and the twisty entirely - a flat list has no levels to draw.
+//
+// The rail is the one place in nuspace where three things share a 28px line
 // - a disclosure lane, a truncating label, and a hover-revealed action lane -
 // and every "it feels off" bug in the rail traced back to those three lanes
 // being positioned against each other by hand instead of by a stated geometry.
@@ -10,6 +13,11 @@
 // So the geometry is stated once, here, and the row is laid out in normal flow
 // against it. No absolute positioning, no magic offsets, nothing that can drift
 // into the title.
+//
+// The one real divergence between the two surfaces is the row's left inset,
+// carried by the `inset` argument on `railRow` / `railSkeletonRow`. A tree row
+// gets its left offset from `railIndent(depth)`; a flat row has no indent to
+// stand in for it and pays for the inset itself.
 //
 // Everything resolves to kit L2/L4 semantic names or the doc-* names in
 // ./tokens.css. No raw hex, nothing off the 4px grid.
@@ -87,11 +95,15 @@ export const railScroll = "min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-1
  * Hover is neutral (`doc-hover`), selection is accent (`doc-selected`). The kit
  * only has `accent-wash` and uses it for both, which makes a hovered row
  * indistinguishable from the open one - see tokens.css.
+ *
+ * `inset` pads the row's own left edge. A tree row leaves it off because
+ * `railIndent(depth)` already supplies the offset; a flat row turns it on.
  */
-export function railRow(selected: boolean): string {
+export function railRow(selected: boolean, inset = false): string {
 	return cn(
 		"group/row relative flex items-center rounded-md",
 		"h-7 pr-1",
+		inset && "pl-1.5",
 		"transition-colors duration-fast ease-out",
 		// The row is the tree item, so the row carries the focus ring. Offset 0:
 		// the kit's 2px offset gets clipped by the rail's own overflow.
@@ -143,6 +155,9 @@ export const railLabel = cn(
 );
 
 export const railTitle = "min-w-0 flex-1 truncate";
+
+/** Placeholder for a row with no name yet. One tier back, never italic. */
+export const railTitleEmpty = cn(railTitle, "text-text-muted");
 
 /**
  * The action lane. Always in flow and always the same width, so the title
@@ -201,7 +216,12 @@ export const railInput = cn("h-6 min-w-0 flex-1 px-1 py-0 text-sm", "focus-visib
 
 /* ============================== empty + loading ========================= */
 
-/** Row-shaped placeholder, so the rail does not resize when the tree lands. */
-export const railSkeletonRow = "flex h-7 items-center pr-1";
+/** Row-shaped placeholder, so the rail does not resize when the list lands. */
+export function railSkeletonRow(inset = false): string {
+	return cn("flex h-7 items-center", inset ? "px-1.5" : "pr-1");
+}
+
+/** The bar inside a skeleton row, on top of a kit `Skeleton`. */
+export const railSkeletonBar = "h-3 w-full rounded-sm";
 
 export const railEmpty = cn("select-none px-2 py-3 text-sm text-text-muted");

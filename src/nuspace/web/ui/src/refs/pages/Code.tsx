@@ -10,6 +10,7 @@
 // and Escape has to hand control back to block selection.
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { docCodeBox } from "../../design";
 import { type CodeEditor, type KeyboardEvt, loadMonaco, type MonacoApi, NU_THEME } from "./monaco";
 import type { ExitDir } from "./Prose";
 import type { FocusReq } from "./slice";
@@ -198,11 +199,5 @@ export function CodeBox(props: CodeBoxProps) {
 		onFocusConsumed();
 	}, [focusReq, onFocusConsumed, ready]);
 
-	return (
-		<div
-			ref={hostRef}
-			className="w-full overflow-hidden rounded-md border border-border-default bg-bg-sunken"
-			style={{ minHeight: MIN_HEIGHT }}
-		/>
-	);
+	return <div ref={hostRef} className={docCodeBox} style={{ minHeight: MIN_HEIGHT }} />;
 }

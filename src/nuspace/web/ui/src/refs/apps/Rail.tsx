@@ -23,7 +23,8 @@
 // program and the list of apps IS the list of what is running, so the state
 // belongs in the list rather than only on the open one.
 //
-// Every class string lives in `design/apps.ts`.
+// Every class string lives in `design/rail.ts`, shared with the pages rail:
+// this is the same row at depth zero.
 
 import {
 	ContextMenu,
@@ -47,26 +48,27 @@ import {
 import { Ellipsis, PenLine, Plus, RotateCw, Trash2 } from "lucide-react";
 import type * as React from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { hrefFor, navigate, onNavClick } from "../../app/router";
+import { SectionStatusDot } from "../../components";
 import {
-	appsAction,
-	appsActions,
-	appsAside,
-	appsEmpty,
-	appsHeader,
-	appsHeaderLabel,
-	appsInput,
-	appsInputBox,
-	appsLabel,
-	appsLane,
-	appsLaneStyle,
-	appsRow,
-	appsScroll,
-	appsSkeletonRow,
-	appsTitle,
-	appsTitleEmpty,
-} from "../../design/apps";
-import { SectionStatusDot } from "../../design/section-status-dot";
-import { hrefFor, navigate, onNavClick } from "../../router";
+	railAction,
+	railActions,
+	railAside,
+	railEmpty,
+	railHeader,
+	railHeaderLabel,
+	railInput,
+	railInputBox,
+	railLabel,
+	railLane,
+	railLaneStyle,
+	railRow,
+	railScroll,
+	railSkeletonBar,
+	railSkeletonRow,
+	railTitle,
+	railTitleEmpty,
+} from "../../design";
 import { type AppRow, appLabel, DETACHED_STATE } from "./types";
 
 type Notify = (payload: Record<string, unknown>) => void;
@@ -159,9 +161,9 @@ export function Rail({
 	);
 
 	return (
-		<aside className={appsAside}>
-			<div className={appsHeader}>
-				<span className={appsHeaderLabel}>apps</span>
+		<aside className={railAside}>
+			<div className={railHeader}>
+				<span className={railHeaderLabel}>apps</span>
 				<Tooltip>
 					<TooltipTrigger asChild>
 						<IconButton
@@ -177,17 +179,17 @@ export function Rail({
 					<TooltipContent side="bottom">new app</TooltipContent>
 				</Tooltip>
 			</div>
-			<nav aria-label="Apps" className={appsScroll}>
+			<nav aria-label="Apps" className={railScroll}>
 				{!loaded ? (
 					<div aria-busy="true">
 						{[0, 1, 2].map((i) => (
-							<div key={i} className={appsSkeletonRow}>
-								<Skeleton className="h-3 w-full rounded-sm" />
+							<div key={i} className={railSkeletonRow(true)}>
+								<Skeleton className={railSkeletonBar} />
 							</div>
 						))}
 					</div>
 				) : apps.length === 0 ? (
-					<p className={appsEmpty}>no apps yet</p>
+					<p className={railEmpty}>no apps yet</p>
 				) : (
 					<div role="tree" aria-label="Apps" ref={listRef}>
 						{apps.map((app, index) => (
@@ -266,7 +268,7 @@ function Row({
 		// aria-level. The anchor stays a real anchor but drops out of the tab
 		// order.
 		<div
-			className={appsRow(selected)}
+			className={railRow(selected)}
 			role="treeitem"
 			tabIndex={tabbable ? 0 : -1}
 			data-app-id={app.id}
@@ -277,7 +279,7 @@ function Row({
 			onFocus={() => onFocus(app.id)}
 			onKeyDown={(e) => onKeyDown(e, app, index)}
 		>
-			<span className={appsLane} style={appsLaneStyle}>
+			<span className={railLane} style={railLaneStyle}>
 				<SectionStatusDot status={state} />
 			</span>
 			{renaming ? (
@@ -296,12 +298,12 @@ function Row({
 					tabIndex={-1}
 					onClick={onNavClick({ top: "apps", path: [app.id] })}
 					onDoubleClick={() => onRenameStart(app.id)}
-					className={appsLabel}
+					className={railLabel}
 				>
-					<span className={named ? appsTitle : appsTitleEmpty}>{label}</span>
+					<span className={named ? railTitle : railTitleEmpty}>{label}</span>
 				</NavLink>
 			)}
-			<div className={appsActions}>
+			<div className={railActions}>
 				<IconButton
 					variant="ghost"
 					size="sm"
@@ -309,7 +311,7 @@ function Row({
 					aria-label={`Restart ${label}`}
 					disabled={!attached}
 					onClick={restart}
-					className={appsAction}
+					className={railAction}
 				>
 					<RotateCw />
 				</IconButton>
@@ -320,7 +322,7 @@ function Row({
 							size="sm"
 							tabIndex={tabbable ? 0 : -1}
 							aria-label={`Actions for ${label}`}
-							className={appsAction}
+							className={railAction}
 						>
 							<Ellipsis />
 						</IconButton>
@@ -398,12 +400,12 @@ function RowInput({
 		el?.select();
 	}, []);
 	return (
-		<span ref={box} className={appsInputBox}>
+		<span ref={box} className={railInputBox}>
 			<Input
 				size="sm"
 				aria-label={label}
 				defaultValue={initial}
-				className={appsInput}
+				className={railInput}
 				onBlur={(e) => {
 					if (done.current) return;
 					done.current = true;

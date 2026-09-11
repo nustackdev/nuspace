@@ -17,8 +17,8 @@
 import { cn, StatusPill } from "@nustackdev/ui-kit";
 import type * as React from "react";
 
-import type { SectionDotShape, SectionStatus } from "./section-status";
-import { SECTION_STATUS } from "./section-status";
+import type { SectionDotShape, SectionStatus } from "../design";
+import { SECTION_STATUS } from "../design";
 
 /* Silhouettes. Each is a distinct outline at 8px, so the state reads without
  * color for anyone who cannot separate the hues (a11y.md §7). */

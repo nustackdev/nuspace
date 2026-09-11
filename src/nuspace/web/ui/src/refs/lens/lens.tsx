@@ -14,8 +14,8 @@
 // with no runtime state of its own. Reload starts back at root.
 // Up / Down move focus locally in the active column with no wire hit.
 //
-// Look and feel live in ../../design/lens.ts (class recipes, the kind and
-// value-type vocabularies) and ../../design/lens.css (tokens). Nothing below
+// Look and feel live in ../../design (class recipes) and design/lens.css
+// (tokens); the kind and value-type vocabulary lives in ./types.ts. Nothing below
 // picks a color or a size at the call site.
 //
 // The one idea the surface is built around: three row tiers that must never
@@ -43,8 +43,6 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react"
 
 import {
 	glyphTone,
-	kindIcon,
-	kindLabel,
 	lensBar,
 	lensBarHint,
 	lensBarPath,
@@ -71,10 +69,9 @@ import {
 	lensRowValue,
 	lensSentinelChip,
 	lensSkeletonRow,
-	rowIcon,
-	VTYPE_SENTINEL_LABEL,
 	valueTone,
-} from "../../design/lens";
+} from "../../design";
+import { kindIcon, kindLabel, rowIcon, VTYPE_SENTINEL_LABEL } from "./types";
 
 type Entry = {
 	key: string;

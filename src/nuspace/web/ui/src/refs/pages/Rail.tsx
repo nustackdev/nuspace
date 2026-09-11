@@ -40,7 +40,8 @@
 // create are a kit `Input` in the row itself - `window.prompt` blocks the tab,
 // cannot be themed, and is not so much a dialog as the absence of one.
 //
-// Geometry and every class string live in `design/rail.ts`.
+// Geometry and every class string live in `design/rail.ts`, shared with the
+// apps rail.
 
 import {
 	ContextMenu,
@@ -64,6 +65,7 @@ import {
 import { ChevronRight, Ellipsis, FileText, PenLine, Plus, Trash2 } from "lucide-react";
 import type * as React from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { hrefFor, navigate, onNavClick } from "../../app/router";
 import {
 	railAction,
 	railActions,
@@ -83,11 +85,11 @@ import {
 	railRow,
 	railRowWrap,
 	railScroll,
+	railSkeletonBar,
 	railSkeletonRow,
 	railTitle,
 	railTwisty,
-} from "../../design/rail";
-import { hrefFor, navigate, onNavClick } from "../../router";
+} from "../../design";
 import type { PageNode } from "./types";
 
 type Notify = (payload: Record<string, unknown>) => void;
@@ -369,10 +371,10 @@ export function Rail({
 							<div
 								// biome-ignore lint/suspicious/noArrayIndexKey: placeholders have no identity
 								key={i}
-								className={railSkeletonRow}
+								className={railSkeletonRow()}
 								style={railIndent(depth)}
 							>
-								<Skeleton className="h-3 w-full rounded-sm" />
+								<Skeleton className={railSkeletonBar} />
 							</div>
 						))}
 					</div>

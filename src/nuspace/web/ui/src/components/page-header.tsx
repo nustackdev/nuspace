@@ -37,7 +37,7 @@ import {
 	docPageIcon,
 	docPageIconGlyph,
 	docTitle,
-} from "./header";
+} from "../design";
 
 /* ============================== page icon ================================ */
 
