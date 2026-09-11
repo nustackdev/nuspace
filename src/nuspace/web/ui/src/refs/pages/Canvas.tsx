@@ -5,15 +5,29 @@
 // library supplies any of it, because no library knows what a running Nu
 // section is.
 //
+// ## Every block is a program, and this file is where that shows
+//
+// There is no block type to branch on. Each block below renders its `fields`
+// -- the ui refs its program mounted -- through the kit's `FieldView`, text
+// blocks included: a text block's program holds a `ProseRef`, so its
+// paragraph arrives by exactly the same route as a program block's slider.
+//
+// `tpl` is read in one place, `bare` below, and only to choose how much
+// chrome to wrap around that. A text block came from the wysiwyg template, so
+// it gets a document surface and nothing else. Anything else is arbitrary
+// code, so it gets the status pill, the mount prefix and the code toggle.
+// That is an affordance, not a dispatch: both sides compile, run, are
+// supervised and report status identically.
+//
 // ## The two selection regimes
 //
-// Inside a prose island you get a caret and everything a text editor gives
+// Inside a text block you get a caret and everything a text editor gives
 // you. Across a block boundary you get *block* selection, because selecting
 // through a running program and retyping it is not an operation with a
 // definition. The canvas owns the transition between the two:
 //
-//   - arrowing out of an island's last line moves to the next block
-//   - if that block is prose, or a program already open in code mode, the
+//   - arrowing out of a text block's last line moves to the next block
+//   - if that block is text, or a program already open in code mode, the
 //     caret enters it, carrying its column
 //   - otherwise the block gets *selected* and the canvas takes keyboard focus
 //
@@ -28,7 +42,17 @@
 // the server echo browser intent, the canvas records a *positional* intent
 // ("the block after X") and resolves it against the next block list.
 
-import { IconButton, Tooltip, TooltipContent, TooltipTrigger } from "@nustackdev/ui-kit";
+import {
+	Alert,
+	AlertDescription,
+	AlertIcon,
+	AlertTitle,
+	FieldView,
+	IconButton,
+	Tooltip,
+	TooltipContent,
+	TooltipTrigger,
+} from "@nustackdev/ui-kit";
 import { GripVertical, Plus } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import {
@@ -41,14 +65,38 @@ import {
 	docGutter,
 	docGutterAffordances,
 	docStatusRail,
+	docStatusTrace,
+	docTextBlock,
 	hasGutterRail,
+	SECTION_STATUS,
 } from "../../design";
 import type { Notify } from "./ops";
 import { ProgramBlock } from "./Program";
-import { type ExitDir, type InsertKind, type ProseHandle, ProseIsland } from "./Prose";
-import { filterSlash, PROGRAM_TEMPLATE, type SlashItem, SlashMenu } from "./Slash";
+import {
+	type BlockProse,
+	BlockProseContext,
+	type ExitDir,
+	type InsertTpl,
+	type ProseHandle,
+	proseValue,
+} from "./ProseRef";
+import { filterSlash, type SlashItem, SlashMenu } from "./Slash";
 import { type EditorState, type FocusReq, patchEditor, useEditorState } from "./slice";
 import type { ActivePage, Block } from "./types";
+
+/**
+ * The markdown a text block currently holds, read off its own ref.
+ *
+ * The page payload does not carry it: a text block's content lives on its
+ * `ProseRef`, which is where the browser already has it and where a
+ * keystroke lands without reshipping the page. A neighbour that needs it --
+ * merge-up joining two blocks -- reads it from there. The path is whatever
+ * the block's program mounted, so nothing here hardcodes a naming scheme.
+ */
+function blockText(block: Block): string {
+	const field = block.fields.find((f) => f.type === "ProseRef");
+	return field ? proseValue(field.path) : "";
+}
 
 export function Canvas({
 	refPath,
@@ -65,7 +113,7 @@ export function Canvas({
 
 	const rootRef = useRef<HTMLDivElement | null>(null);
 	const elRefs = useRef(new Map<string, HTMLElement>());
-	const proseRefs = useRef(new Map<string, ProseHandle | null>());
+	const proseHandles = useRef(new Map<string, ProseHandle | null>());
 	/** Positional focus intent, resolved on the next block list. */
 	const pendingAfter = useRef<{ afterId: string; edit: boolean } | null>(null);
 
@@ -81,7 +129,7 @@ export function Canvas({
 
 	const focusBlock = useCallback(
 		(block: Block, req: Omit<FocusReq, "blockId">, editing: string[]) => {
-			const enterable = block.kind === "prose" || editing.includes(block.id);
+			const enterable = block.tpl === "text" || editing.includes(block.id);
 			if (enterable) {
 				patch({
 					focus: { blockId: block.id, ...req },
@@ -118,7 +166,7 @@ export function Canvas({
 
 	const enterBlock = useCallback(
 		(block: Block, place: "start" | "end" = "end") => {
-			if (block.kind === "prose") {
+			if (block.tpl === "text") {
 				patch({
 					focus: { blockId: block.id, place },
 					selected: [],
@@ -144,7 +192,7 @@ export function Canvas({
 		if (i < 0 || i + 1 >= blocks.length) return;
 		pendingAfter.current = null;
 		const target = blocks[i + 1];
-		if (target.kind === "prose") {
+		if (target.tpl === "text") {
 			patch({ focus: { blockId: target.id, place: "start" }, selected: [] });
 		} else {
 			patch((e) => ({
@@ -158,35 +206,31 @@ export function Canvas({
 	// -- structural ops -------------------------------------------------------
 
 	const commitSource = useCallback(
-		(id: string, source: string) => {
-			notify("block.update", { page_path: pagePath, block_id: id, source });
+		(id: string, content: string) => {
+			notify("block.update", { page_path: pagePath, block_id: id, content });
 		},
 		[notify, pagePath],
 	);
 
+	// Empty content for a program means "use the tpl's starter". The skeleton
+	// lives once, in `nuspace/core/tpl.py`, not in two places that can drift.
 	const createAfter = useCallback(
-		(afterId: string | null, kind: "prose" | "program", source = "") => {
-			if (afterId) pendingAfter.current = { afterId, edit: kind === "program" };
-			notify("block.create", { page_path: pagePath, kind, source, after: afterId });
+		(afterId: string | null, tpl: "text" | "program", content = "") => {
+			if (afterId) pendingAfter.current = { afterId, edit: tpl === "program" };
+			notify("block.create", { page_path: pagePath, tpl, content, after: afterId });
 		},
 		[notify, pagePath],
 	);
 
 	const splitBlock = useCallback(
-		(id: string, head: string, tail: string, insert: InsertKind) => {
+		(id: string, head: string, tail: string, insert: InsertTpl) => {
 			pendingAfter.current = { afterId: id, edit: insert === "program" };
 			notify("block.split", {
 				page_path: pagePath,
 				block_id: id,
 				head,
 				tail,
-				insert:
-					insert === null
-						? null
-						: {
-								kind: insert,
-								source: insert === "program" ? PROGRAM_TEMPLATE : "",
-							},
+				insert: insert === null ? null : { tpl: insert, content: "" },
 			});
 		},
 		[notify, pagePath],
@@ -213,14 +257,15 @@ export function Canvas({
 			const i = index(id);
 			if (i <= 0) return;
 			const prev = blocks[i - 1];
-			if (prev.kind === "prose") {
-				const seam = prev.source.length + (prev.source && text ? 1 : 0);
-				const joined = prev.source && text ? `${prev.source}\n${text}` : prev.source + text;
+			if (prev.tpl === "text") {
+				const above = blockText(prev);
+				const seam = above.length + (above && text ? 1 : 0);
+				const joined = above && text ? `${above}\n${text}` : above + text;
 				notify("block.merge", {
 					page_path: pagePath,
 					block_id: id,
 					into_id: prev.id,
-					source: joined,
+					content: joined,
 				});
 				patch({
 					focus: { blockId: prev.id, place: "end", offset: seam },
@@ -229,8 +274,8 @@ export function Canvas({
 				});
 				return;
 			}
-			// A program block sits above. Deleting an empty island is what you
-			// meant; swallowing a program block is not.
+			// A program block sits above. Deleting an empty text block is what
+			// you meant; swallowing a program block is not.
 			if (text.trim() === "") {
 				deleteBlocks([id]);
 				return;
@@ -412,16 +457,15 @@ export function Canvas({
 			if (!s) return;
 			if (s.mode === "insert") {
 				patch({ slash: null });
-				if (item.action.kind === "split") {
-					const program = item.action.insert === "program";
-					createAfter(s.blockId, program ? "program" : "prose", program ? PROGRAM_TEMPLATE : "");
+				if (item.action.act === "split") {
+					createAfter(s.blockId, item.action.insert === "program" ? "program" : "text");
 					return;
 				}
-				const seed = item.action.kind === "prefix" ? item.action.prefix : item.action.text;
-				createAfter(s.blockId, "prose", seed);
+				const seed = item.action.act === "prefix" ? item.action.prefix : item.action.text;
+				createAfter(s.blockId, "text", seed);
 				return;
 			}
-			proseRefs.current.get(s.blockId)?.applySlash(item.action);
+			proseHandles.current.get(s.blockId)?.applySlash(item.action);
 		},
 		[createAfter, editor.slash, patch],
 	);
@@ -456,6 +500,13 @@ export function Canvas({
 	const setEl = useCallback((id: string, el: HTMLElement | null) => {
 		if (el) elRefs.current.set(id, el);
 		else elRefs.current.delete(id);
+	}, []);
+
+	// Stable by construction. The bus below is rebuilt every render, so the
+	// one thing a block's editor keeps across renders must not be.
+	const registerHandle = useCallback((id: string, handle: ProseHandle | null) => {
+		if (handle) proseHandles.current.set(id, handle);
+		else proseHandles.current.delete(id);
 	}, []);
 
 	const drag = editor.drag;
@@ -502,8 +553,9 @@ export function Canvas({
 				const selected = editor.selected.includes(block.id);
 				const focusReq = editor.focus?.blockId === block.id ? editor.focus : null;
 				const focused = editor.focused === block.id;
-				const isProgram = block.kind === "program";
-				const state = block.status?.state ?? "idle";
+				// The ONE read of `tpl`, and it decides chrome, nothing else.
+				const bare = block.tpl === "text";
+				const state = block.status.state;
 				return (
 					// biome-ignore lint/a11y/noStaticElementInteractions: a mousedown anywhere in a block hands control to that block's own editor
 					<div
@@ -515,7 +567,7 @@ export function Canvas({
 							selectedStrong: selected && editor.selected.length > 1,
 							focused,
 							dragging: drag?.id === block.id,
-							program: isProgram,
+							program: !bare,
 						})}
 						onMouseDown={(e) => {
 							// A plain click inside a block leaves block-selection mode;
@@ -528,13 +580,13 @@ export function Canvas({
 						{drag && drag.at === i ? <span className={`${docDropIndicator} top-0`} /> : null}
 						{/* One rail slot. A status the author must act on wins over
 						    "you are here", because a failing block is more urgent. */}
-						{isProgram && hasGutterRail(state) ? (
+						{!bare && hasGutterRail(state) ? (
 							<span className={docStatusRail(state)} />
 						) : focused ? (
 							<span className={docFocusRail} />
 						) : null}
 						<Gutter
-							program={isProgram}
+							program={!bare}
 							onDrag={(e) => startDrag(e, block.id)}
 							onPlus={(rect) =>
 								patch({
@@ -558,47 +610,41 @@ export function Canvas({
 								rootRef.current?.focus({ preventScroll: true });
 							}}
 						/>
-						{block.kind === "prose" ? (
-							<ProseIsland
-								ref={(h) => {
-									proseRefs.current.set(block.id, h);
-								}}
-								blockId={block.id}
-								source={block.source}
-								focusReq={focusReq}
-								slashFrom={
-									slash && slash.mode === "inline" && slash.blockId === block.id ? slash.from : null
-								}
-								onFocusConsumed={() => patch({ focus: null })}
-								onCommit={(src) => commitSource(block.id, src)}
-								onExit={(dir, column, x) => step(block.id, dir, column, x)}
-								onMergeUp={(text) => mergeUp(block.id, text)}
-								onSplit={(head, tail, insert) => splitBlock(block.id, head, tail, insert)}
-								onSlashOpen={(offset, anchor) =>
-									patch({
-										slash: {
-											blockId: block.id,
-											mode: "inline",
-											query: "",
-											from: offset,
-											to: offset + 1,
-											anchor,
-											index: 0,
-										},
-									})
-								}
-								onSlashQuery={(query) =>
-									patch((e) => (e.slash ? { slash: { ...e.slash, query, index: 0 } } : {}))
-								}
-								onSlashClose={() => patch({ slash: null })}
-								onSlashKey={slashKey}
-								onSelectSelf={() => {
-									patch({
-										selected: [block.id],
-										anchor: block.id,
-										focus: null,
-									});
-									rootRef.current?.focus({ preventScroll: true });
+						{bare ? (
+							<TextBlock
+								block={block}
+								bus={{
+									blockId: block.id,
+									focusReq,
+									slashFrom:
+										slash && slash.mode === "inline" && slash.blockId === block.id
+											? slash.from
+											: null,
+									onFocusConsumed: () => patch({ focus: null }),
+									onExit: (dir, column, x) => step(block.id, dir, column, x),
+									onMergeUp: (text) => mergeUp(block.id, text),
+									onSplit: (head, tail, insert) => splitBlock(block.id, head, tail, insert),
+									onSlashOpen: (offset, anchor) =>
+										patch({
+											slash: {
+												blockId: block.id,
+												mode: "inline",
+												query: "",
+												from: offset,
+												to: offset + 1,
+												anchor,
+												index: 0,
+											},
+										}),
+									onSlashQuery: (query) =>
+										patch((e) => (e.slash ? { slash: { ...e.slash, query, index: 0 } } : {})),
+									onSlashClose: () => patch({ slash: null }),
+									onSlashKey: slashKey,
+									onSelectSelf: () => {
+										patch({ selected: [block.id], anchor: block.id, focus: null });
+										rootRef.current?.focus({ preventScroll: true });
+									},
+									registerHandle,
 								}}
 							/>
 						) : (
@@ -642,7 +688,7 @@ export function Canvas({
 
 			<button
 				type="button"
-				onClick={() => createAfter(blocks.length ? blocks[blocks.length - 1].id : null, "prose")}
+				onClick={() => createAfter(blocks.length ? blocks[blocks.length - 1].id : null, "text")}
 				className={docAppendBlock}
 			>
 				Click to write, or press / for blocks
@@ -673,6 +719,47 @@ export function Canvas({
 				/>
 			) : null}
 		</div>
+	);
+}
+
+/**
+ * A text block: its program's ui refs, and nothing else.
+ *
+ * No status pill, no mount prefix, no code toggle. Not because a text block
+ * is a different substance -- it compiles, runs and is supervised like every
+ * other block -- but because it came from a template nobody typed, so there
+ * is nothing about the program for a reader to act on. What is left is the
+ * document, which is the whole point.
+ *
+ * The fields come through `FieldView` exactly as a program block's do. The
+ * one the template mounts is a `ProseRef`, and nuspace's entry for it (see
+ * ./ProseRef.tsx) reads the bus off the context provided here to rebuild the
+ * block-boundary behaviour the kit's editor deliberately leaves out.
+ *
+ * A status that says the program is broken is still shown: the template
+ * failing means nuspace is broken, and a silent blank block would hide it.
+ */
+function TextBlock({ block, bus }: { block: Block; bus: BlockProse }) {
+	const token = SECTION_STATUS[block.status.state];
+	return (
+		<BlockProseContext.Provider value={bus}>
+			<div className={docTextBlock}>
+				{block.status.error ? (
+					<Alert tone={token.tone}>
+						<AlertIcon />
+						<div className="min-w-0 flex-1">
+							<AlertTitle>
+								{block.status.state === "invalid" ? "does not compile" : "ran and died"}
+							</AlertTitle>
+							<AlertDescription className={docStatusTrace}>{block.status.error}</AlertDescription>
+						</div>
+					</Alert>
+				) : null}
+				{block.fields.map((f) => (
+					<FieldView key={f.path} field={f} />
+				))}
+			</div>
+		</BlockProseContext.Provider>
 	);
 }
 

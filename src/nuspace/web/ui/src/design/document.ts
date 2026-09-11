@@ -71,8 +71,13 @@ export const docCode = "font-mono text-lg text-text-primary";
 // you read. That is what removes the old leaf's mode-swap layout shift:
 // there is no second rendering to disagree with.
 
-/** The contenteditable host itself. */
-export const docProseEditor = cn(docProse, "nu-prose outline-none");
+/**
+ * The host the kit's `ProseEditor` mounts into. Type only: the contenteditable
+ * is its child and inherits it, and the three rules that have to name the
+ * editable itself (placeholder, trailing rule, focus outline) ship with the
+ * kit under `.nu-prose-editor`.
+ */
+export const docProseEditor = docProse;
 
 /** A paragraph. Tight vertical rhythm; the air comes from the line box. */
 export const docParagraph = "my-2 leading-relaxed first:mt-0 last:mb-0";
@@ -242,6 +247,15 @@ export const docProgramFields = "flex flex-col gap-3 py-1";
 
 /** The "runs headless" line, when a block mounts nothing. */
 export const docProgramHeadless = "py-1 text-base text-text-muted";
+
+/**
+ * A text block's stack: a diagnostic if there is one, then the document.
+ *
+ * No control row, so no gap to reserve for one. A text block is a program
+ * like any other, but it is one nobody typed, so there is nothing about the
+ * program for a reader to act on and the document gets the whole block.
+ */
+export const docTextBlock = "flex flex-col gap-1";
 
 /**
  * The code box around Monaco. Bordered and sunken, the same treatment an app's

@@ -10,13 +10,17 @@ path already answered that question.
     page.create      {parent_path, title}
     page.rename      {path, title}
     page.delete      {path}
-    block.create     {page_path, kind, source, after}
-    block.update     {page_path, block_id, source}
+    block.create     {page_path, tpl, content, after}
+    block.update     {page_path, block_id, content}
     block.delete     {page_path, block_ids}
     block.split      {page_path, block_id, head, tail, insert}
-    block.merge      {page_path, block_id, into_id, source}
+    block.merge      {page_path, block_id, into_id, content}
     block.reorder    {page_path, order}
     block.restart    {block_id}
+
+``insert`` is ``{tpl, content} | None``. ``content`` is whatever the tpl
+takes: python source for a ``program``, markdown for a ``text``. Nothing
+here branches on which -- ``BlockOps.set_content`` asks the registry.
 
 ``target`` is the Ref each op's effect lands on. Everything that changes
 the document names ``Space.pages``; ``page.select`` and ``block.restart``

@@ -41,13 +41,12 @@ import nu.mem
 from nu.kv.tree import auto_flow_atomic
 from nuspace.web.refs.common import Dirty, StatusRelay
 from nuspace.web.refs.pages.store import (
-    KIND_PROGRAM,
     MAX_BLOCKS,
     ORDER_STEP,
-    kind_of,
     ordered_blocks,
     page_node,
     page_ref,
+    tpl_of,
 )
 from nuspace.web.refs.pages.supervise import LocalSupervisor, SectionSpec
 
@@ -155,7 +154,7 @@ class View:
     async def next_page(self) -> dict[str, Any]:
         """Wait until the canvas has something new, then build its payload.
 
-        Reconciles supervision to this page's program blocks on the way
+        Reconciles supervision to every block on the page on the way
         through, so the payload carries live mount fields and live
         status. Nothing is started here -- ``plan`` compiles and returns,
         and ``launch`` runs after the frame is on the wire, so a section
@@ -199,30 +198,29 @@ class View:
         # An unset StrRef reads back as a Nu sentinel, not "".
         title = raw_title if isinstance(raw_title, str) else ""
 
+        # Every block, no filter. A text block is a Nu program like any
+        # other: it compiles, it runs, it is supervised, it has a status.
+        # The tpl rides along so the supervisor can partition tiers.
         self.supervisor.plan(
             [
-                SectionSpec(sid, str(blob.get("snippet") or ""))
+                SectionSpec(sid, str(blob.get("snippet") or ""), tpl=tpl_of(blob).name)
                 for sid, blob in items
-                if kind_of(blob) == KIND_PROGRAM
             ],
         )
 
         blocks: list[dict[str, Any]] = []
         for index, (sid, blob) in enumerate(items):
-            kind = kind_of(blob)
             order = blob.get("order")
-            entry: dict[str, Any] = {
-                "id": sid,
-                "kind": kind,
-                "source": str(blob.get("snippet") or ""),
-                "order": int(order) if isinstance(order, int) else index * ORDER_STEP,
-                "fields": [],
-                "status": None,
-            }
-            if kind == KIND_PROGRAM:
-                entry["fields"] = self.supervisor.fields(sid)
-                entry["status"] = self.supervisor.status(sid)
-            blocks.append(entry)
+            blocks.append(
+                {
+                    "id": sid,
+                    "tpl": tpl_of(blob).name,
+                    "source": str(blob.get("snippet") or ""),
+                    "order": int(order) if isinstance(order, int) else index * ORDER_STEP,
+                    "fields": self.supervisor.fields(sid),
+                    "status": self.supervisor.status(sid),
+                },
+            )
 
         payload = {
             "op": "set_page",

@@ -44,7 +44,7 @@ import {
 	SECTION_STATUS,
 } from "../../design";
 import { CodeBox } from "./Code";
-import type { ExitDir } from "./Prose";
+import type { ExitDir } from "./ProseRef";
 import type { FocusReq } from "./slice";
 import type { SectionState, SectionStatus } from "./types";
 

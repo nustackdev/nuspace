@@ -217,7 +217,7 @@ MOVIES_FORM_SOURCE = f'''
             sections=nu.Dict.of(
                 s_00_detail=nu.Dict.of(
                     name="detail",
-                    kind="program",
+                    tpl="program",
                     # Source, built at click time. The created block
                     # names its movie by id.
                     snippet=nu.Str(HEAD) + mid + nu.Str(TAIL),

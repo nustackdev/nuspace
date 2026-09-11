@@ -2,17 +2,20 @@
 //
 // Two ways in, one list out:
 //
-// - inline: `/` typed at the start of a line inside a prose island. Focus
-//   stays in the textarea (moving it would collapse the caret and commit), so
-//   the menu is presentational and the island forwards arrow/enter/escape.
+// - inline: `/` typed at the start of a line inside a text block. Focus
+//   stays in the editor (moving it would collapse the caret and commit), so
+//   the menu is presentational and the block forwards arrow/enter/escape.
 // - insert: the `+` in a block's gutter. Nothing is typing, so the menu takes
 //   focus itself.
 //
 // Actions split by what they do to document structure. A "prefix" item is
-// pure text: it rewrites the current line's markdown and the island stays one
-// section. "text" / "program" / "split" are structural: they split the island
-// at the caret, which is the only way a new section is ever born out of prose.
-// Splitting is always explicit -- that is the rule the island model rests on.
+// pure text: it rewrites the current line's markdown and the block stays one
+// block. "text" / "program" / "split" are structural: they split the block at
+// the caret, which is the only way a new block is ever born out of text.
+// Splitting is always explicit -- that is the rule the block model rests on.
+//
+// `act` is this menu's own discriminant, not block vocabulary. `insert` IS
+// block vocabulary: it names a `tpl`, which is what the create op takes.
 
 import {
 	Heading1,
@@ -37,26 +40,10 @@ import {
 	docSlashMenuLabel,
 } from "../../design";
 
-// What a fresh program block starts life as. A section is a nu.prog
-// program: a python *module* with an `out` entry point returning a Nu
-// term, not a bare expression. The entry point's signature is the scope
-// contract and nuspace offers one value, `path`, which is this block's
-// own namespace. Seeding the skeleton is how that is discoverable
-// without reading docs first.
-export const PROGRAM_TEMPLATE = [
-	"import nu",
-	"import nu.ui",
-	"",
-	"",
-	"def out(path):",
-	'    return nu.ui.TextRef(path + ".out").set(nu.Str("hello"))',
-	"",
-].join("\n");
-
 export type SlashAction =
-	| { kind: "prefix"; prefix: string }
-	| { kind: "literal"; text: string }
-	| { kind: "split"; insert: "prose" | "program" | null };
+	| { act: "prefix"; prefix: string }
+	| { act: "literal"; text: string }
+	| { act: "split"; insert: "text" | "program" | null };
 
 export type SlashItem = {
 	id: string;
@@ -77,7 +64,7 @@ export const SLASH_ITEMS: SlashItem[] = [
 		group: "blocks",
 		keywords: "text paragraph prose p",
 		icon: Type,
-		action: { kind: "split", insert: "prose" },
+		action: { act: "split", insert: "text" },
 	},
 	{
 		id: "program",
@@ -86,7 +73,7 @@ export const SLASH_ITEMS: SlashItem[] = [
 		group: "blocks",
 		keywords: "program code nu python live section",
 		icon: SquareTerminal,
-		action: { kind: "split", insert: "program" },
+		action: { act: "split", insert: "program" },
 	},
 	{
 		id: "split",
@@ -95,7 +82,7 @@ export const SLASH_ITEMS: SlashItem[] = [
 		group: "blocks",
 		keywords: "split break divide separate",
 		icon: SeparatorHorizontal,
-		action: { kind: "split", insert: null },
+		action: { act: "split", insert: null },
 	},
 	{
 		id: "h1",
@@ -104,7 +91,7 @@ export const SLASH_ITEMS: SlashItem[] = [
 		group: "prose",
 		keywords: "h1 heading title big",
 		icon: Heading1,
-		action: { kind: "prefix", prefix: "# " },
+		action: { act: "prefix", prefix: "# " },
 	},
 	{
 		id: "h2",
@@ -113,7 +100,7 @@ export const SLASH_ITEMS: SlashItem[] = [
 		group: "prose",
 		keywords: "h2 heading subtitle",
 		icon: Heading2,
-		action: { kind: "prefix", prefix: "## " },
+		action: { act: "prefix", prefix: "## " },
 	},
 	{
 		id: "h3",
@@ -122,7 +109,7 @@ export const SLASH_ITEMS: SlashItem[] = [
 		group: "prose",
 		keywords: "h3 heading small",
 		icon: Heading3,
-		action: { kind: "prefix", prefix: "### " },
+		action: { act: "prefix", prefix: "### " },
 	},
 	{
 		id: "bullet",
@@ -131,7 +118,7 @@ export const SLASH_ITEMS: SlashItem[] = [
 		group: "prose",
 		keywords: "bullet list ul unordered item",
 		icon: List,
-		action: { kind: "prefix", prefix: "- " },
+		action: { act: "prefix", prefix: "- " },
 	},
 	{
 		id: "numbered",
@@ -140,7 +127,7 @@ export const SLASH_ITEMS: SlashItem[] = [
 		group: "prose",
 		keywords: "number ordered list ol",
 		icon: ListOrdered,
-		action: { kind: "prefix", prefix: "1. " },
+		action: { act: "prefix", prefix: "1. " },
 	},
 	{
 		id: "quote",
@@ -149,7 +136,7 @@ export const SLASH_ITEMS: SlashItem[] = [
 		group: "prose",
 		keywords: "quote blockquote cite",
 		icon: TextQuote,
-		action: { kind: "prefix", prefix: "> " },
+		action: { act: "prefix", prefix: "> " },
 	},
 	{
 		id: "divider",
@@ -158,7 +145,7 @@ export const SLASH_ITEMS: SlashItem[] = [
 		group: "prose",
 		keywords: "divider rule hr line separator",
 		icon: Minus,
-		action: { kind: "literal", text: "---\n" },
+		action: { act: "literal", text: "---\n" },
 	},
 	{
 		id: "body",
@@ -167,7 +154,7 @@ export const SLASH_ITEMS: SlashItem[] = [
 		group: "prose",
 		keywords: "plain body normal clear strip",
 		icon: Pilcrow,
-		action: { kind: "prefix", prefix: "" },
+		action: { act: "prefix", prefix: "" },
 	},
 ];
 

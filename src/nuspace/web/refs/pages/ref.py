@@ -20,10 +20,18 @@ the browser slice on ``payload["op"]``:
     {"op": "set_status", "statuses": [Status]}
 
     PageNode = {"id": str|None, "title": str, "pages": [PageNode]}
-    Block    = {"id", "kind": "prose"|"program", "source", "order": int,
-                "fields": [MountField], "status": Status|None}
+    Block    = {"id", "tpl": "program"|"text", "source", "order": int,
+                "fields": [MountField], "status": Status}
     Status   = the section status contract. It is not restated per
                surface -- ``nuspace.exec.status`` is its one home.
+
+Every block carries all six keys, because every block is a Nu program:
+it compiles, it runs, it is supervised. ``tpl`` is provenance (see
+:mod:`nuspace.core.tpl`) and the browser reads it only to pick chrome.
+
+A text block's markdown is **not** in the payload. It arrives on the
+block's own ``ProseRef``, at ``sections.<id>.text``, written by the
+block's program -- which is why typing never reships the page.
 
 Browser -> server, one ``notify`` per op, each on its own path
 ``<this ref>.ops.<op>``, payload = the op's named arguments and nothing

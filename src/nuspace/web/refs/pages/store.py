@@ -14,25 +14,24 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from nuspace.core.tpl import Tpl, resolve
+
 
 if TYPE_CHECKING:
     from nu.domains.shape import Shape
 
 
 __all__ = [
-    "KINDS",
-    "KIND_PROGRAM",
-    "KIND_PROSE",
     "MAX_BLOCKS",
     "MAX_CHILD_PAGES",
     "MAX_PAGE_DEPTH",
     "ORDER_STEP",
     "as_str_list",
-    "kind_of",
     "ordered_blocks",
     "page_node",
     "page_ref",
     "parent_pages",
+    "tpl_of",
 ]
 
 
@@ -40,10 +39,6 @@ MAX_CHILD_PAGES = 200
 MAX_PAGE_DEPTH = 12
 MAX_BLOCKS = 300
 ORDER_STEP = 10
-
-KIND_PROSE = "prose"
-KIND_PROGRAM = "program"
-KINDS = (KIND_PROSE, KIND_PROGRAM)
 
 
 def page_ref(space_root: type[Shape], path: list[str]) -> Any:  # noqa: ANN401
@@ -96,10 +91,9 @@ def ordered_blocks(raw: object) -> list[tuple[str, dict[str, Any]]]:
     return items
 
 
-def kind_of(blob: dict[str, Any]) -> str:
-    """A block's kind, defaulting to ``program`` for anything unrecognised."""
-    kind = blob.get("kind")
-    return kind if kind in KINDS else KIND_PROGRAM
+def tpl_of(blob: dict[str, Any]) -> Tpl:
+    """A block's tpl. Anything unrecognised is a plain program, as it should be."""
+    return resolve(blob.get("tpl"))
 
 
 def as_str_list(raw: object) -> list[str]:

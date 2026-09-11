@@ -18,6 +18,11 @@ nuspace has no state pillar -- state is Nu's kv fabric -- but a bare
 ``nu.kv.StrRef("foo")`` carries no owner Shape, so it never resolves
 against a ``tags=(Space,)`` navigator. ``Space.state["<key>"]`` gives
 snippets a reachable slot without minting a shape per value.
+
+It is also where a templated block keeps its content: a text block's
+markdown lives at ``Space.state["sections.<sid>.text"]``, because
+``path`` is the only thing a snippet's scope carries and a slot on
+``Section`` would need the page path too. See :mod:`nuspace.core.tpl`.
 """
 
 from __future__ import annotations
@@ -54,22 +59,21 @@ class App(nu.Shape):
 
 
 class Section(nu.Shape):
-    """One block on a page.
+    """One block on a page. Always a Nu program, no exceptions.
 
-    ``kind`` splits the two things a block can be:
+    ``snippet`` is a ``ProgramRef``, so the stored text is source in
+    ``nu.prog``'s sense: a module with an ``out`` entry point whose
+    signature is the scope contract. nuspace offers one scope value,
+    ``path``, and it is ``"sections.<section_id>"``. Reading the slot
+    yields the source verbatim; ``.load()`` / ``.run()`` come with the
+    ref.
 
-    - ``prose``   -- one prose island. ``snippet`` holds markdown.
-      Contiguous prose is one section, not one per paragraph; splitting
-      is explicit. Never constructed, never runs.
-    - ``program`` -- a Nu program. ``snippet`` is a ``ProgramRef``, so
-      the stored text is source in ``nu.prog``'s sense: a module with an
-      ``out`` entry point whose signature is the scope contract. nuspace
-      offers one scope value, ``path``. Reading the slot yields the
-      source verbatim; ``.load()`` / ``.run()`` come with the ref.
-
-    A prose block stores markdown in the same slot. That is fine -- a
-    ``ProgramRef`` is a str leaf with the Program verbs bolted on, and
-    nothing ever asks a prose block to construct.
+    ``tpl`` is **provenance, not type**. It says what produced the
+    snippet -- ``program`` (arbitrary, the person wrote it) or ``text``
+    (the wysiwyg template) -- and nothing branches on it to decide
+    whether the block compiles, runs or is supervised. Every block does
+    all three. See :mod:`nuspace.core.tpl` for the registry, the tiers
+    and where a templated block keeps its content.
 
     ``order`` is the block's position on the page. Dict-keyed sections
     sort by ``mint_ordered_id`` (creation time) by default, which is
@@ -81,7 +85,7 @@ class Section(nu.Shape):
     name = nu.kv.StrRef.slot()
     snippet = nu.kv.ProgramRef.slot()
     policy = nu.kv.StrRef.slot()
-    kind = nu.kv.StrRef.slot()
+    tpl = nu.kv.StrRef.slot()
     order = nu.kv.IntRef.slot()
 
 

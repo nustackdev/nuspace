@@ -7,7 +7,12 @@ import type { MountField } from "@nustackdev/ui-core";
 
 export type PageNode = { id: string | null; title: string; pages: PageNode[] };
 
-export type BlockKind = "prose" | "program";
+/**
+ * Provenance, not type. Every block is a Nu program; `tpl` says what made
+ * the one it stores. The editor reads it to pick an affordance and for
+ * nothing else -- see `nuspace/core/tpl.py` for the registry it mirrors.
+ */
+export type BlockTpl = "text" | "program";
 
 /** Fixed contract, shared with the out-of-process executor. Do not redesign. */
 export type SectionState = "invalid" | "idle" | "starting" | "running" | "stopped" | "failed";
@@ -21,12 +26,14 @@ export type SectionStatus = {
 
 export type Block = {
 	id: string;
-	kind: BlockKind;
+	tpl: BlockTpl;
+	/** The Nu program this block stores. For a `text` block it is the
+	 *  template, identical for every text block on the page. */
 	source: string;
 	order: number;
 	fields: MountField[];
-	/** null for prose: a prose island is not a program and has no state. */
-	status: SectionStatus | null;
+	/** Never null. Every block compiles, runs and is supervised. */
+	status: SectionStatus;
 };
 
 export type ActivePage = {
@@ -111,11 +118,16 @@ export function coerceBlocks(raw: unknown): Block[] {
 		if (!id) continue;
 		out.push({
 			id,
-			kind: r.kind === "program" ? "program" : "prose",
+			tpl: r.tpl === "text" ? "text" : "program",
 			source: String(r.snippet ?? r.source ?? ""),
 			order: typeof r.order === "number" ? r.order : out.length,
 			fields: coerceFields(r.fields),
-			status: coerceStatus(r.status),
+			status: coerceStatus(r.status) ?? {
+				section_id: id,
+				state: "idle",
+				error: null,
+				started_at: null,
+			},
 		});
 	}
 	return out;

@@ -131,12 +131,13 @@ class SectionsRef(ShapesDictRef):
         snippet: str = "nu.Str('')",
         policy: str = "on_navigate",
         section_id: str | None = None,
+        tpl: str = "program",
     ) -> Nu:
-        """Add a section with ``name``/``snippet``/``policy``; mints an id if absent."""
+        """Add a section; mints an id if absent. ``tpl`` is provenance, not type."""
         sid = section_id or mint_id("s")
         return self.set_item(
             sid,
-            {"name": name, "snippet": snippet, "policy": policy},
+            {"name": name, "snippet": snippet, "policy": policy, "tpl": tpl},
         )
 
 

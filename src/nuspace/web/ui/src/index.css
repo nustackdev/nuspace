@@ -17,14 +17,19 @@
 @import "./design/lens.css";
 
 /* ProseMirror's own base rules (selection, pre-wrap, caret plumbing). It
- * ships no colors and no type; the prose island's look is entirely
- * design/document.ts. ./design/editor.css layers ours on top. */
+ * ships no colors and no type. The three rules a contenteditable needs that
+ * a class recipe cannot express (the placeholder pseudo-element, a clickable
+ * trailing rule, undoing the UA focus outline) used to live in
+ * ./design/editor.css; they are the kit's now, under `.nu-prose-editor`, and
+ * arrive with the kit stylesheet above. Everything else about the document's
+ * look is still design/document.ts, handed to the schema as toDOM classes. */
 @import "prosemirror-view/style/prosemirror.css";
-@import "./design/editor.css";
 
 /* Ensure utility classes used inside the kit primitives make it into the
- * final bundle. The npm package ships its src/ directly. */
+ * final bundle. The npm package ships its src/ directly. The second path is
+ * the aliased kit source (see vite.config.ts) and goes away with it. */
 @source "../node_modules/@nustackdev/ui-kit/src/**/*.{ts,tsx}";
+@source "../../../../../../nu/packages/nustd/src/nu/ui/web/kit/src/**/*.{ts,tsx}";
 
 @custom-variant dark (&:is(.dark *));
 

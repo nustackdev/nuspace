@@ -43,6 +43,7 @@ from taste_app import (
 )
 
 import nu
+from nuspace.core.tpl import TPL_PROGRAM, TPL_TEXT, resolve
 from nuspace.web.refs import (
     AppsDriver,
     AppsRef,
@@ -55,9 +56,10 @@ from nuspace.web.refs import (
 from nuspace.web.server import Page, Pages, Shell, server
 
 
-# Section grew `kind` + `order` slots in task-139 and `snippet` became a
-# ProgramRef in task-141; a shape change invalidates an existing dev store,
-# so this points at a fresh directory.
+# Section's slots moved again in task-144 (`kind` -> `tpl`, and a text
+# block's markdown moved out of `snippet` into `DemoSpace.state`); a shape
+# change invalidates an existing dev store, so this points at a fresh
+# directory. The store is a demo fixture, so it is reseeded, never migrated.
 # Both are env-overridable so several instances can run side by side:
 # rocksdb takes an exclusive lock on its directory, so two demos sharing a
 # store is a hard failure rather than a slow one.
@@ -164,24 +166,25 @@ CONTROLS_SOURCE = src("""
 
 # Static output refs. A block does not have to react to anything; this one
 # paints once and finishes, so it lands on `stopped` rather than `running`.
+# It also spells out the tpl table, since the page it sits on is the tour.
 REPORT_SOURCE = src("""
     import nu
     import nu.ui
 
 
     ROWS = [
-        ["prose", "markdown island", "never runs"],
-        ["program", "nu.prog module", "runs in its own worker"],
+        ["text", "the wysiwyg template", "batchable: every copy is identical"],
+        ["program", "whatever you typed", "standing: its own worker"],
     ]
 
 
     def out(path):
-        table = nu.ui.TableRef(path + ".kinds")
+        table = nu.ui.TableRef(path + ".tpls")
         blob = nu.ui.JsonViewerRef(path + ".blob")
         md = nu.ui.MarkdownRef(path + ".md")
         return (
-            md.set(nu.Str("A block is **source**. A tree is what it lowers to."))
-            >> table.set(nu.Dict.of(columns=["kind", "holds", "lifecycle"], rows=ROWS))
+            md.set(nu.Str("Every block is **source**. `tpl` says what made it."))
+            >> table.set(nu.Dict.of(columns=["tpl", "snippet is", "tier"], rows=ROWS))
             >> blob.set_value(nu.Dict.of(path=path, entry="out", scope=["path"]))
         )
 """)
@@ -217,9 +220,10 @@ DEREF_SOURCE = src("""
 
 INTRO_PROSE = """# Pages
 
-This is a **prose island**. One block, many paragraphs. Type freely, select
-across paragraphs, retype a range -- inside an island it behaves like a text
-editor, because it is one.
+This is a **text block**. Like every other block on this page it is a Nu
+program -- one that holds a prose ref and writes what you type back to kv.
+One block, many paragraphs: type freely, select across paragraphs, retype a
+range. Inside it behaves like a text editor, because it is one.
 
 Program blocks break the run. Across that boundary you get block-level
 selection, which is the only thing that means anything there.
@@ -241,8 +245,9 @@ that owns it.
 """
 
 OUTRO_PROSE = """Every block above is a live Nu program in its own supervised
-section. Editing one restarts it and nothing else on the page. The broken one
-never produced a tree, so it is `invalid`, not `failed`.
+section -- the text ones included, which is why they have a status like
+everything else. Editing a program restarts it and nothing else on the page.
+The broken one never produced a tree, so it is `invalid`, not `failed`.
 """
 
 
@@ -410,9 +415,10 @@ def _detail_source(movie_id: str) -> str:
 def _movie_page(movie: dict, movie_id: str) -> dict[str, object]:
     return {
         "title": movie["title"],
-        "sections": {
-            "s_00_detail": _block("detail", "program", _detail_source(movie_id), 0),
-        },
+        "sections": _sections(
+            ONCE_TEXT,
+            ("s_00_detail", "detail", TPL_PROGRAM, _detail_source(movie_id), 0),
+        ),
         "pages": {},
     }
 
@@ -432,22 +438,24 @@ def _movies_page() -> dict[str, object]:
     pages: dict[str, object] = {
         CONTROL_PAGE_ID: {
             "title": "Control",
-            "sections": {
-                "s_00_intro": _block("intro", "prose", CONTROL_INTRO_PROSE, 0),
-                "s_10_stats": _block("stats", "program", CONTROL_STATS_SOURCE, 10),
-                "s_20_shelf": _block("shelf", "program", CONTROL_SHELF_SOURCE, 20),
-            },
+            "sections": _sections(
+                ONCE_TEXT,
+                ("s_ctl_intro", "intro", TPL_TEXT, CONTROL_INTRO_PROSE, 0),
+                ("s_10_stats", "stats", TPL_PROGRAM, CONTROL_STATS_SOURCE, 10),
+                ("s_20_shelf", "shelf", TPL_PROGRAM, CONTROL_SHELF_SOURCE, 20),
+            ),
             "pages": {},
         },
         # Reads what the taste app wrote. No button, no model call, no
         # compute -- one markdown block over slots that already exist.
         TASTE_PAGE_ID: {
             "title": "Taste",
-            "sections": {
-                "s_00_intro": _block("intro", "prose", TASTE_INTRO_PROSE, 0),
-                "s_10_profile": _block("profile", "program", TASTE_BLOCK_SOURCE, 10),
-                "s_20_wire": _block("wire note", "prose", TASTE_WIRE_PROSE, 20),
-            },
+            "sections": _sections(
+                ONCE_TEXT,
+                ("s_taste_intro", "intro", TPL_TEXT, TASTE_INTRO_PROSE, 0),
+                ("s_10_profile", "profile", TPL_PROGRAM, TASTE_BLOCK_SOURCE, 10),
+                ("s_taste_wire", "wire note", TPL_TEXT, TASTE_WIRE_PROSE, 20),
+            ),
             "pages": {},
         },
     }
@@ -456,77 +464,125 @@ def _movies_page() -> dict[str, object]:
         pages[MOVIE_PAGE_PREFIX + key] = _movie_page(movie, MOVIE_ID_PREFIX + key)
     return {
         "title": "Movies",
-        "sections": {
-            "s_00_intro": _block("intro", "prose", MOVIES_INTRO_PROSE, 0),
-            "s_10_form": _block("log", "program", MOVIES_FORM_SOURCE, 10),
-            "s_20_rail": _block("rail note", "prose", MOVIES_RAIL_PROSE, 20),
-            "s_30_outro": _block("outro", "prose", MOVIES_OUTRO_PROSE, 30),
-        },
+        "sections": _sections(
+            ONCE_TEXT,
+            ("s_mov_intro", "intro", TPL_TEXT, MOVIES_INTRO_PROSE, 0),
+            ("s_10_form", "log", TPL_PROGRAM, MOVIES_FORM_SOURCE, 10),
+            ("s_mov_rail", "rail note", TPL_TEXT, MOVIES_RAIL_PROSE, 20),
+            ("s_mov_outro", "outro", TPL_TEXT, MOVIES_OUTRO_PROSE, 30),
+        ),
         "pages": pages,
     }
 
 
-def _block(name: str, kind: str, snippet: str, order: int) -> dict[str, object]:
+# --- Blocks --------------------------------------------------------------
+#
+# Every block is a Nu program and stores one in `snippet`. For `program`
+# that is the source below; for `text` it is the template, and the markdown
+# the reader sees is a *value* the template pulls out of `DemoSpace.state`.
+# So seeding a text block is two writes, and `_sections` collects the second
+# one into a dict the caller turns into a term.
+#
+# Two collectors, because the seed has two lifetimes. `Home` and `Ticker`
+# are fixtures and get rewritten on every boot. `Movies` and `Taste` hold
+# pages a person created, so they are seeded once -- and their text has to
+# be seeded once for the same reason, or a restart would revert an edit.
+
+# Text seeded on every boot (the Home fixture) and text seeded once.
+BOOT_TEXT: dict[str, str] = {}
+ONCE_TEXT: dict[str, str] = {}
+
+
+def _block(name: str, tpl: str, content: str, order: int) -> dict[str, object]:
     return {
         "name": name,
-        "kind": kind,
-        "snippet": snippet,
+        "tpl": tpl,
+        "snippet": resolve(tpl).source(DemoSpace, content),
         "order": order,
         "policy": "on_navigate",
     }
 
 
+def _sections(
+    seeds: dict[str, str],
+    *rows: tuple[str, str, str, str, int],
+) -> dict[str, object]:
+    """Build a page's sections, collecting any template content into ``seeds``.
+
+    Rows are ``(section_id, name, tpl, content, order)``.
+    """
+    out: dict[str, object] = {}
+    for sid, name, tpl, content, order in rows:
+        key = resolve(tpl).content_key(sid)
+        if key is not None:
+            seeds[key] = content
+        out[sid] = _block(name, tpl, content, order)
+    return out
+
+
+def _text_writes(seeds: dict[str, str]) -> nu.Nu:
+    """One term writing every collected text seed. Never empty in practice."""
+    writes = [DemoSpace.state.set_item(key, nu.Str(text)) for key, text in seeds.items()]
+    if not writes:
+        return nu.Noop()
+    term = writes[0]
+    for write in writes[1:]:
+        term = term | write
+    return term
+
+
+def _home_page() -> dict[str, object]:
+    return {
+        "title": "Home",
+        "sections": _sections(
+            BOOT_TEXT,
+            ("s_home_intro", "intro", TPL_TEXT, INTRO_PROSE, 0),
+            ("s_home_note", "note", TPL_TEXT, PROGRAM_PROSE, 5),
+            ("s_10_echo", "echo", TPL_PROGRAM, ECHO_SOURCE, 10),
+            ("s_20_controls", "controls", TPL_PROGRAM, CONTROLS_SOURCE, 20),
+            ("s_30_report", "report", TPL_PROGRAM, REPORT_SOURCE, 30),
+            ("s_home_deref_note", "deref note", TPL_TEXT, DEREF_PROSE, 40),
+            ("s_50_deref", "deref", TPL_PROGRAM, DEREF_SOURCE, 50),
+            ("s_home_outro", "outro", TPL_TEXT, OUTRO_PROSE, 60),
+            ("s_70_broken", "broken", TPL_PROGRAM, BROKEN_SOURCE, 70),
+        ),
+        "pages": {
+            "p_notes": {"title": "Notes", "sections": {}, "pages": {}},
+            "p_ticker": {
+                "title": "Ticker",
+                "sections": _sections(
+                    BOOT_TEXT,
+                    ("s_tick_intro", "intro", TPL_TEXT, TICKER_INTRO_PROSE, 0),
+                    ("s_10_controls", "controls", TPL_PROGRAM, TICKER_CONTROLS_SOURCE, 10),
+                    ("s_20_chart", "chart", TPL_PROGRAM, TICKER_CHART_SOURCE, 20),
+                    ("s_tick_wire", "wire note", TPL_TEXT, TICKER_WIRE_PROSE, 30),
+                    ("s_tick_outro", "outro", TPL_TEXT, TICKER_OUTRO_PROSE, 40),
+                ),
+                "pages": {},
+            },
+        },
+    }
+
+
 def _seed() -> nu.Nu:
+    # Built before the terms below, because building a page is what fills
+    # the text collectors it seeds from.
+    home = _home_page()
+    movies = _movies_page()
     return (
         # Root Page. init() sets only if missing.
         DemoSpace.pages.init({"title": "Space", "sections": {}, "pages": {}})
-        >> DemoSpace.pages.pages.set_item(
-            "p_home",
-            {
-                "title": "Home",
-                "sections": {
-                    "s_00_intro": _block("intro", "prose", INTRO_PROSE, 0),
-                    "s_05_note": _block("note", "prose", PROGRAM_PROSE, 5),
-                    "s_10_echo": _block("echo", "program", ECHO_SOURCE, 10),
-                    "s_20_controls": _block("controls", "program", CONTROLS_SOURCE, 20),
-                    "s_30_report": _block("report", "program", REPORT_SOURCE, 30),
-                    "s_40_deref_note": _block("deref note", "prose", DEREF_PROSE, 40),
-                    "s_50_deref": _block("deref", "program", DEREF_SOURCE, 50),
-                    "s_60_outro": _block("outro", "prose", OUTRO_PROSE, 60),
-                    "s_70_broken": _block("broken", "program", BROKEN_SOURCE, 70),
-                },
-                "pages": {
-                    "p_notes": {"title": "Notes", "sections": {}, "pages": {}},
-                    "p_ticker": {
-                        "title": "Ticker",
-                        "sections": {
-                            "s_00_intro": _block(
-                                "intro", "prose", TICKER_INTRO_PROSE, 0
-                            ),
-                            "s_10_controls": _block(
-                                "controls", "program", TICKER_CONTROLS_SOURCE, 10
-                            ),
-                            "s_20_chart": _block(
-                                "chart", "program", TICKER_CHART_SOURCE, 20
-                            ),
-                            "s_30_wire": _block(
-                                "wire note", "prose", TICKER_WIRE_PROSE, 30
-                            ),
-                            "s_40_outro": _block(
-                                "outro", "prose", TICKER_OUTRO_PROSE, 40
-                            ),
-                        },
-                        "pages": {},
-                    },
-                },
-            },
-        )
+        >> DemoSpace.pages.pages.set_item("p_home", home)
+        >> _text_writes(BOOT_TEXT)
         # Movies is seeded *once*. Home is rewritten on every boot because
         # it is a fixture; Movies holds pages the user created by logging
-        # a movie, and a set_item here would delete them on restart.
+        # a movie, and a set_item here would delete them on restart. Its
+        # text rides in the same branch for the same reason: rewriting it
+        # every boot would revert an edit to a page nobody rewrote.
         >> nu.IfDo(
             nu.Not(DemoSpace.pages.pages.contains(MOVIES_PAGE_ID)),
-            DemoSpace.pages.pages.set_item(MOVIES_PAGE_ID, _movies_page()),
+            DemoSpace.pages.pages.set_item(MOVIES_PAGE_ID, movies)
+            >> _text_writes(ONCE_TEXT),
         )
         >> _seed_movies()
         >> _seed_taste_app()

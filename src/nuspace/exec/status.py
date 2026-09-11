@@ -14,6 +14,12 @@ space), but only one spelling of what a section is and how it reports.
 prefix (``sections.<id>``); an app overrides it with a kv namespace,
 because apps are headless.
 
+``tpl`` rides along, and ``tier`` is derived from it. That is the whole
+reason it is on the spec: a supervisor partitioning standing blocks from
+batchable ones has the answer in hand rather than re-reading kv for it.
+Nothing here branches on ``tpl`` -- every spec compiles and runs the same
+way.
+
 ## What comes back
 
 The dict shape is fixed and shared with the browser driver::
@@ -59,6 +65,8 @@ import asyncio
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Literal
 
+from nuspace.core.tpl import DEFAULT_TPL, resolve
+
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
@@ -84,16 +92,28 @@ UNSTARTED: tuple[str, ...] = ("idle", "starting", "invalid")
 
 @dataclass(frozen=True)
 class SectionSpec:
-    """What a supervisor is asked to run: an id and a source, nothing else."""
+    """What a supervisor is asked to run: an id, a source, and its provenance."""
 
     section_id: str
     source: str
     prefix_override: str | None = None
+    tpl: str = DEFAULT_TPL
 
     @property
     def prefix(self) -> str:
         """The path this unit owns. Path is the mounting mechanism."""
         return self.prefix_override or f"sections.{self.section_id}"
+
+    @property
+    def tier(self) -> str:
+        """``standing`` (own worker) or ``batch`` (shares one with its tpl siblings).
+
+        Derived here, once, so a supervisor partitioning its plan does
+        not have to know the registry. Blocks whose tpl is not arbitrary
+        hold byte-identical programs, which is the whole claim the batch
+        tier rests on.
+        """
+        return resolve(self.tpl).tier
 
 
 @dataclass
