@@ -40,45 +40,34 @@
 // create are a kit `Input` in the row itself - `window.prompt` blocks the tab,
 // cannot be themed, and is not so much a dialog as the absence of one.
 //
-// Geometry and every class string live in `design/rail.ts`, shared with the
-// apps rail.
+// The furniture - the header strip, the row shell, the in-row editor, the
+// roving tabindex - is `components/rail`, shared with the apps rail; every
+// class string and the geometry are in `design/rail.ts`. What stays here is
+// the tree: flatten, the guides, the twisty, and the two arrows that fold.
 
 import {
-	ContextMenu,
-	ContextMenuContent,
 	ContextMenuItem,
 	ContextMenuSeparator,
-	ContextMenuTrigger,
 	DropdownMenu,
 	DropdownMenuContent,
 	DropdownMenuItem,
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 	IconButton,
-	Input,
-	NavLink,
 	Skeleton,
-	Tooltip,
-	TooltipContent,
-	TooltipTrigger,
 } from "@nustackdev/ui-kit";
 import { ChevronRight, Ellipsis, FileText, PenLine, Plus, Trash2 } from "lucide-react";
 import type * as React from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { hrefFor, navigate, onNavClick } from "../../app/router";
+import { RailHeader, RailRow, RailRowInput, RailRowLink, useRailFocus } from "../../components";
 import {
 	railAction,
-	railActions,
 	railAside,
 	railEmpty,
 	railGuide,
 	railGuideStyle,
-	railHeader,
-	railHeaderLabel,
 	railIndent,
-	railInput,
-	railInputBox,
-	railLabel,
 	railLane,
 	railLaneStyle,
 	railLeafIcon,
@@ -87,7 +76,6 @@ import {
 	railScroll,
 	railSkeletonBar,
 	railSkeletonRow,
-	railTitle,
 	railTwisty,
 } from "../../design";
 import type { Notify } from "./ops";
@@ -225,26 +213,13 @@ export function Rail({
 
 	// -- focus ----------------------------------------------------------------
 	//
-	// Roving tabindex: the tree is one tab stop and the arrows move inside it.
-	// A rail with fifty pages is otherwise two hundred tab stops.
-	const [activeKey, setActiveKey] = useState<string>(selKey);
-	const treeRef = useRef<HTMLDivElement | null>(null);
-
-	// Keep the tab stop on a row that exists: it follows selection and falls
-	// back to the first row when whatever it was on got folded away.
-	const tabKey = rows.some((r) => r.key === activeKey)
-		? activeKey
-		: rows.some((r) => r.key === selKey)
-			? selKey
-			: (rows[0]?.key ?? ROOT_KEY);
-
-	// Rows are addressed by data attribute rather than a ref map: `NavLink` is
-	// a plain function component and does not take one.
-	const focusRow = useCallback((key: string) => {
-		setActiveKey(key);
-		const el = treeRef.current?.querySelector<HTMLElement>(`[data-rail-key="${CSS.escape(key)}"]`);
-		el?.focus();
-	}, []);
+	// The tree is one tab stop; `useRailFocus` owns the tab stop, the by-key
+	// focus and the four moves both rails share.
+	const keys = useMemo(() => rows.map((r) => r.key), [rows]);
+	const { containerRef, tabKey, setActiveKey, focusKey, focusIndex, handleArrows } = useRailFocus(
+		keys,
+		selKey,
+	);
 
 	// -- inline rename + create -----------------------------------------------
 
@@ -282,45 +257,28 @@ export function Rail({
 	const cancelDraft = useCallback(() => {
 		const d = draft;
 		setDraft(null);
-		if (d) focusRow(d.key);
-	}, [draft, focusRow]);
+		if (d) focusKey(d.key);
+	}, [draft, focusKey]);
 
 	// -- keyboard -------------------------------------------------------------
+	//
+	// On top of the shared four: the two arrows that fold, and open-and-reveal.
 
 	const onKeyDown = useCallback(
 		(e: React.KeyboardEvent, row: VisibleRow, index: number) => {
-			const go = (j: number) => {
-				const target = rows[Math.max(0, Math.min(rows.length - 1, j))];
-				if (target) focusRow(target.key);
-			};
+			if (handleArrows(e, index)) return;
 			switch (e.key) {
-				case "ArrowDown":
-					e.preventDefault();
-					go(index + 1);
-					break;
-				case "ArrowUp":
-					e.preventDefault();
-					go(index - 1);
-					break;
 				case "ArrowRight":
 					// Open a folded branch; step into an open one.
 					e.preventDefault();
 					if (row.hasKids && !row.open) onToggle(row.key);
-					else if (row.hasKids) go(index + 1);
+					else if (row.hasKids) focusIndex(index + 1);
 					break;
 				case "ArrowLeft":
 					// Fold an open branch; otherwise climb to the parent.
 					e.preventDefault();
 					if (row.hasKids && row.open) onToggle(row.key);
-					else if (row.parent !== null) focusRow(row.parent);
-					break;
-				case "Home":
-					e.preventDefault();
-					go(0);
-					break;
-				case "End":
-					e.preventDefault();
-					go(rows.length - 1);
+					else if (row.parent !== null) focusKey(row.parent);
 					break;
 				case "Enter":
 				case " ":
@@ -338,31 +296,21 @@ export function Rail({
 					break;
 			}
 		},
-		[rows, focusRow, onToggle, reveal, startRename],
+		[handleArrows, focusIndex, focusKey, onToggle, reveal, startRename],
 	);
 
 	return (
 		<aside className={railAside}>
-			<div className={railHeader}>
-				<span className={railHeaderLabel}>pages</span>
-				<Tooltip>
-					<TooltipTrigger asChild>
-						<IconButton
-							variant="ghost"
-							size="sm"
-							aria-label="New top-level page"
-							disabled={loading}
-							onClick={() => {
-								const root = rows[0];
-								if (root) startCreate(root);
-							}}
-						>
-							<Plus />
-						</IconButton>
-					</TooltipTrigger>
-					<TooltipContent side="bottom">new page</TooltipContent>
-				</Tooltip>
-			</div>
+			<RailHeader
+				label="pages"
+				addLabel="New top-level page"
+				addTooltip="new page"
+				addDisabled={loading}
+				onAdd={() => {
+					const root = rows[0];
+					if (root) startCreate(root);
+				}}
+			/>
 			<nav aria-label="Pages" className={railScroll}>
 				{loading ? (
 					<div aria-busy="true">
@@ -378,7 +326,7 @@ export function Rail({
 						))}
 					</div>
 				) : (
-					<div role="tree" aria-label="Pages" ref={treeRef}>
+					<div role="tree" aria-label="Pages" ref={containerRef}>
 						{rows.map((row, index) => (
 							<div key={row.key} role="none">
 								<div className={railRowWrap}>
@@ -407,7 +355,7 @@ export function Rail({
 											<span className={railLane} style={railLaneStyle}>
 												<FileText className={railLeafIcon} aria-hidden="true" />
 											</span>
-											<RowInput
+											<RailRowInput
 												initial={draft.initial}
 												label="Title for the new page"
 												onCommit={commitDraft}
@@ -489,27 +437,20 @@ function Row({
 		notify("page.delete", { path });
 	}, [notify, path, title]);
 
-	const body = (
-		// The row, not the anchor, is the tree item: an ARIA tree wants focus on
-		// the item and the roving tabindex has to land somewhere that owns
-		// aria-level / aria-expanded. The anchor stays a real anchor (cmd-click,
-		// middle-click, aria-current) but drops out of the tab order.
-		<div
-			className={railRow(selected)}
-			style={railIndent(depth)}
-			role="treeitem"
-			tabIndex={tabbable ? 0 : -1}
-			data-rail-key={key}
-			aria-selected={selected}
-			aria-expanded={hasKids ? open : undefined}
-			aria-level={depth + 1}
-			aria-posinset={pos}
-			aria-setsize={size}
+	return (
+		<RailRow
+			rowKey={key}
+			selected={selected}
+			tabbable={tabbable}
+			indent={depth}
+			level={depth + 1}
+			posinset={pos}
+			setsize={size}
+			expanded={hasKids ? open : undefined}
 			onFocus={() => onFocus(key)}
 			onKeyDown={(e) => onKeyDown(e, row, index)}
-		>
-			<span className={railLane} style={railLaneStyle}>
-				{hasKids ? (
+			lane={
+				hasKids ? (
 					<IconButton
 						variant="ghost"
 						size="sm"
@@ -525,163 +466,103 @@ function Row({
 					</IconButton>
 				) : (
 					<FileText className={railLeafIcon} aria-hidden="true" />
-				)}
-			</span>
-			{renaming ? (
-				<RowInput
-					initial={title}
-					label={`Rename ${title}`}
-					onCommit={onCommit}
-					onCancel={onCancel}
-				/>
-			) : (
-				<NavLink
-					size="sm"
-					active={selected}
-					href={hrefFor("pages", path)}
-					title={title}
-					tabIndex={-1}
-					onClick={(e) => {
-						// Opening a page reveals what is inside it. It never folds
-						// it: a click that toggles is a click you cannot predict.
-						if (hasKids) reveal(key);
-						navClick(e);
-					}}
-					onDoubleClick={() => onRename(row)}
-					className={railLabel}
-				>
-					<span className={railTitle}>{title}</span>
-				</NavLink>
-			)}
-			<div className={railActions}>
-				<IconButton
-					variant="ghost"
-					size="sm"
-					tabIndex={tabbable ? 0 : -1}
-					aria-label={`New page inside ${title}`}
-					onClick={() => onCreate(row)}
-					className={railAction}
-				>
-					<Plus />
-				</IconButton>
-				<DropdownMenu>
-					<DropdownMenuTrigger asChild>
-						<IconButton
-							variant="ghost"
-							size="sm"
-							tabIndex={tabbable ? 0 : -1}
-							aria-label={`Actions for ${title}`}
-							className={railAction}
-						>
-							<Ellipsis />
-						</IconButton>
-					</DropdownMenuTrigger>
-					<DropdownMenuContent align="start" className="min-w-40">
-						<DropdownMenuItem onSelect={() => onRename(row)}>
-							<PenLine />
-							Rename
-						</DropdownMenuItem>
-						<DropdownMenuItem onSelect={() => onCreate(row)}>
-							<Plus />
-							New page inside
-						</DropdownMenuItem>
-						{depth > 0 ? (
-							<>
-								<DropdownMenuSeparator />
-								<DropdownMenuItem variant="danger" onSelect={remove}>
-									<Trash2 />
-									Delete
-								</DropdownMenuItem>
-							</>
-						) : null}
-					</DropdownMenuContent>
-				</DropdownMenu>
-			</div>
-		</div>
-	);
-
-	return (
-		<ContextMenu>
-			<ContextMenuTrigger asChild>{body}</ContextMenuTrigger>
-			<ContextMenuContent className="min-w-40">
-				<ContextMenuItem onSelect={() => navigate({ top: "pages", path })}>
-					<FileText />
-					Open
-				</ContextMenuItem>
-				<ContextMenuSeparator />
-				<ContextMenuItem onSelect={() => onRename(row)}>
-					<PenLine />
-					Rename
-				</ContextMenuItem>
-				<ContextMenuItem onSelect={() => onCreate(row)}>
-					<Plus />
-					New page inside
-				</ContextMenuItem>
-				{depth > 0 ? (
-					<>
-						<ContextMenuSeparator />
-						<ContextMenuItem variant="danger" onSelect={remove}>
-							<Trash2 />
-							Delete
-						</ContextMenuItem>
-					</>
-				) : null}
-			</ContextMenuContent>
-		</ContextMenu>
-	);
-}
-
-/**
- * The in-row editor for rename and create. Commits on Enter and on blur (you
- * clicked away, you meant it), cancels on Escape, and selects the initial text
- * so the first keystroke replaces it.
- */
-function RowInput({
-	initial,
-	label,
-	onCommit,
-	onCancel,
-}: {
-	initial: string;
-	label: string;
-	onCommit: (title: string) => void;
-	onCancel: () => void;
-}) {
-	const done = useRef(false);
-	// `Input` is a plain function component and takes no ref, so the caret is
-	// placed through the wrapper.
-	const box = useRef<HTMLSpanElement | null>(null);
-	useEffect(() => {
-		const el = box.current?.querySelector("input");
-		el?.focus();
-		el?.select();
-	}, []);
-	return (
-		<span ref={box} className={railInputBox}>
-			<Input
-				size="sm"
-				aria-label={label}
-				defaultValue={initial}
-				className={railInput}
-				onBlur={(e) => {
-					if (done.current) return;
-					done.current = true;
-					onCommit(e.currentTarget.value);
-				}}
-				onKeyDown={(e) => {
-					// The tree's arrow handling must not see these.
-					e.stopPropagation();
-					if (e.key === "Enter") {
-						e.preventDefault();
-						done.current = true;
-						onCommit(e.currentTarget.value);
-					} else if (e.key === "Escape") {
-						e.preventDefault();
-						done.current = true;
-						onCancel();
-					}
-				}}
-			/>
-		</span>
+				)
+			}
+			label={
+				renaming ? (
+					<RailRowInput
+						initial={title}
+						label={`Rename ${title}`}
+						onCommit={onCommit}
+						onCancel={onCancel}
+					/>
+				) : (
+					<RailRowLink
+						href={hrefFor("pages", path)}
+						label={title}
+						selected={selected}
+						onClick={(e) => {
+							// Opening a page reveals what is inside it. It never folds
+							// it: a click that toggles is a click you cannot predict.
+							if (hasKids) reveal(key);
+							navClick(e);
+						}}
+						onDoubleClick={() => onRename(row)}
+					/>
+				)
+			}
+			actions={
+				<>
+					<IconButton
+						variant="ghost"
+						size="sm"
+						tabIndex={tabbable ? 0 : -1}
+						aria-label={`New page inside ${title}`}
+						onClick={() => onCreate(row)}
+						className={railAction}
+					>
+						<Plus />
+					</IconButton>
+					<DropdownMenu>
+						<DropdownMenuTrigger asChild>
+							<IconButton
+								variant="ghost"
+								size="sm"
+								tabIndex={tabbable ? 0 : -1}
+								aria-label={`Actions for ${title}`}
+								className={railAction}
+							>
+								<Ellipsis />
+							</IconButton>
+						</DropdownMenuTrigger>
+						<DropdownMenuContent align="start" className="min-w-40">
+							<DropdownMenuItem onSelect={() => onRename(row)}>
+								<PenLine />
+								Rename
+							</DropdownMenuItem>
+							<DropdownMenuItem onSelect={() => onCreate(row)}>
+								<Plus />
+								New page inside
+							</DropdownMenuItem>
+							{depth > 0 ? (
+								<>
+									<DropdownMenuSeparator />
+									<DropdownMenuItem variant="danger" onSelect={remove}>
+										<Trash2 />
+										Delete
+									</DropdownMenuItem>
+								</>
+							) : null}
+						</DropdownMenuContent>
+					</DropdownMenu>
+				</>
+			}
+			menu={
+				<>
+					<ContextMenuItem onSelect={() => navigate({ top: "pages", path })}>
+						<FileText />
+						Open
+					</ContextMenuItem>
+					<ContextMenuSeparator />
+					<ContextMenuItem onSelect={() => onRename(row)}>
+						<PenLine />
+						Rename
+					</ContextMenuItem>
+					<ContextMenuItem onSelect={() => onCreate(row)}>
+						<Plus />
+						New page inside
+					</ContextMenuItem>
+					{depth > 0 ? (
+						<>
+							<ContextMenuSeparator />
+							<ContextMenuItem variant="danger" onSelect={remove}>
+								<Trash2 />
+								Delete
+							</ContextMenuItem>
+						</>
+					) : null}
+				</>
+			}
+		/>
 	);
 }

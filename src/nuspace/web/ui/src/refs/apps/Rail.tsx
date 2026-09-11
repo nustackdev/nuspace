@@ -23,46 +23,37 @@
 // program and the list of apps IS the list of what is running, so the state
 // belongs in the list rather than only on the open one.
 //
-// Every class string lives in `design/rail.ts`, shared with the pages rail:
-// this is the same row at depth zero.
+// The furniture itself is `components/rail` and every class string is in
+// `design/rail.ts`, both shared with the pages rail: this is the same row at
+// depth zero. What is left here is what an app is.
 
 import {
-	ContextMenu,
-	ContextMenuContent,
 	ContextMenuItem,
 	ContextMenuSeparator,
-	ContextMenuTrigger,
 	DropdownMenu,
 	DropdownMenuContent,
 	DropdownMenuItem,
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 	IconButton,
-	Input,
-	NavLink,
 	Skeleton,
-	Tooltip,
-	TooltipContent,
-	TooltipTrigger,
 } from "@nustackdev/ui-kit";
-import { Ellipsis, PenLine, Plus, RotateCw, Trash2 } from "lucide-react";
+import { Ellipsis, PenLine, RotateCw, Trash2 } from "lucide-react";
 import type * as React from "react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useMemo } from "react";
 import { hrefFor, navigate, onNavClick } from "../../app/router";
-import { SectionStatusDot } from "../../components";
+import {
+	RailHeader,
+	RailRow,
+	RailRowInput,
+	RailRowLink,
+	SectionStatusDot,
+	useRailFocus,
+} from "../../components";
 import {
 	railAction,
-	railActions,
 	railAside,
 	railEmpty,
-	railHeader,
-	railHeaderLabel,
-	railInput,
-	railInputBox,
-	railLabel,
-	railLane,
-	railLaneStyle,
-	railRow,
 	railScroll,
 	railSkeletonBar,
 	railSkeletonRow,
@@ -91,48 +82,16 @@ export function Rail({
 	onRenameEnd: () => void;
 	notify: Notify;
 }) {
-	// -- focus ----------------------------------------------------------------
-	//
-	// Roving tabindex: the list is one tab stop and the arrows move inside it.
-	const [activeId, setActiveId] = useState<string | null>(selectedId);
-	const listRef = useRef<HTMLDivElement | null>(null);
-
-	const tabId = apps.some((a) => a.id === activeId)
-		? activeId
-		: apps.some((a) => a.id === selectedId)
-			? selectedId
-			: (apps[0]?.id ?? null);
-
-	// Rows are addressed by data attribute rather than a ref map: `NavLink` is
-	// a plain function component and does not take one.
-	const focusRow = useCallback((id: string) => {
-		setActiveId(id);
-		listRef.current?.querySelector<HTMLElement>(`[data-app-id="${CSS.escape(id)}"]`)?.focus();
-	}, []);
+	const ids = useMemo(() => apps.map((a) => a.id), [apps]);
+	const { containerRef, tabKey, setActiveKey, focusKey, handleArrows } = useRailFocus(
+		ids,
+		selectedId,
+	);
 
 	const onKeyDown = useCallback(
 		(e: React.KeyboardEvent, app: AppRow, index: number) => {
-			const go = (j: number) => {
-				const target = apps[Math.max(0, Math.min(apps.length - 1, j))];
-				if (target) focusRow(target.id);
-			};
+			if (handleArrows(e, index)) return;
 			switch (e.key) {
-				case "ArrowDown":
-					e.preventDefault();
-					go(index + 1);
-					break;
-				case "ArrowUp":
-					e.preventDefault();
-					go(index - 1);
-					break;
-				case "Home":
-					e.preventDefault();
-					go(0);
-					break;
-				case "End":
-					e.preventDefault();
-					go(apps.length - 1);
-					break;
 				case "Enter":
 				case " ":
 					e.preventDefault();
@@ -146,7 +105,7 @@ export function Rail({
 					break;
 			}
 		},
-		[apps, focusRow, onRenameStart],
+		[handleArrows, onRenameStart],
 	);
 
 	const commitRename = useCallback(
@@ -161,23 +120,13 @@ export function Rail({
 
 	return (
 		<aside className={railAside}>
-			<div className={railHeader}>
-				<span className={railHeaderLabel}>apps</span>
-				<Tooltip>
-					<TooltipTrigger asChild>
-						<IconButton
-							variant="ghost"
-							size="sm"
-							aria-label="New app"
-							disabled={!loaded}
-							onClick={() => notify("app.create", { name: "app" })}
-						>
-							<Plus />
-						</IconButton>
-					</TooltipTrigger>
-					<TooltipContent side="bottom">new app</TooltipContent>
-				</Tooltip>
-			</div>
+			<RailHeader
+				label="apps"
+				addLabel="New app"
+				addTooltip="new app"
+				addDisabled={!loaded}
+				onAdd={() => notify("app.create", { name: "app" })}
+			/>
 			<nav aria-label="Apps" className={railScroll}>
 				{!loaded ? (
 					<div aria-busy="true">
@@ -190,7 +139,7 @@ export function Rail({
 				) : apps.length === 0 ? (
 					<p className={railEmpty}>no apps yet</p>
 				) : (
-					<div role="tree" aria-label="Apps" ref={listRef}>
+					<div role="tree" aria-label="Apps" ref={containerRef}>
 						{apps.map((app, index) => (
 							<Row
 								key={app.id}
@@ -199,15 +148,15 @@ export function Rail({
 								total={apps.length}
 								attached={attached}
 								selected={app.id === selectedId}
-								tabbable={app.id === tabId}
+								tabbable={app.id === tabKey}
 								renaming={renaming === app.id}
-								onFocus={setActiveId}
+								onFocus={setActiveKey}
 								onKeyDown={onKeyDown}
 								onRenameStart={onRenameStart}
 								onRenameCommit={commitRename}
 								onRenameCancel={() => {
 									onRenameEnd();
-									focusRow(app.id);
+									focusKey(app.id);
 								}}
 								notify={notify}
 							/>
@@ -261,169 +210,101 @@ function Row({
 		notify("app.restart", { app_id: app.id });
 	}, [app.id, notify]);
 
-	const body = (
-		// The row, not the anchor, is the tree item: an ARIA tree wants focus
-		// on the item and the roving tabindex has to land somewhere that owns
-		// aria-level. The anchor stays a real anchor but drops out of the tab
-		// order.
-		<div
-			className={railRow(selected)}
-			role="treeitem"
-			tabIndex={tabbable ? 0 : -1}
-			data-app-id={app.id}
-			aria-selected={selected}
-			aria-level={1}
-			aria-posinset={index + 1}
-			aria-setsize={total}
+	return (
+		<RailRow
+			rowKey={app.id}
+			selected={selected}
+			tabbable={tabbable}
+			level={1}
+			posinset={index + 1}
+			setsize={total}
 			onFocus={() => onFocus(app.id)}
 			onKeyDown={(e) => onKeyDown(e, app, index)}
-		>
-			<span className={railLane} style={railLaneStyle}>
-				<SectionStatusDot status={state} />
-			</span>
-			{renaming ? (
-				<RowInput
-					initial={label}
-					label={`Rename ${label}`}
-					onCommit={(name) => onRenameCommit(app, name)}
-					onCancel={onRenameCancel}
-				/>
-			) : (
-				<NavLink
-					size="sm"
-					active={selected}
-					href={hrefFor("apps", [app.id])}
-					title={label}
-					tabIndex={-1}
-					onClick={onNavClick({ top: "apps", path: [app.id] })}
-					onDoubleClick={() => onRenameStart(app.id)}
-					className={railLabel}
-				>
-					<span className={named ? railTitle : railTitleEmpty}>{label}</span>
-				</NavLink>
-			)}
-			<div className={railActions}>
-				<IconButton
-					variant="ghost"
-					size="sm"
-					tabIndex={tabbable ? 0 : -1}
-					aria-label={`Restart ${label}`}
-					disabled={!attached}
-					onClick={restart}
-					className={railAction}
-				>
-					<RotateCw />
-				</IconButton>
-				<DropdownMenu>
-					<DropdownMenuTrigger asChild>
-						<IconButton
-							variant="ghost"
-							size="sm"
-							tabIndex={tabbable ? 0 : -1}
-							aria-label={`Actions for ${label}`}
-							className={railAction}
-						>
-							<Ellipsis />
-						</IconButton>
-					</DropdownMenuTrigger>
-					<DropdownMenuContent align="start" className="min-w-40">
-						<DropdownMenuItem onSelect={() => onRenameStart(app.id)}>
-							<PenLine />
-							Rename
-						</DropdownMenuItem>
-						<DropdownMenuItem disabled={!attached} onSelect={restart}>
-							<RotateCw />
-							Restart
-						</DropdownMenuItem>
-						<DropdownMenuSeparator />
-						<DropdownMenuItem variant="danger" onSelect={remove}>
-							<Trash2 />
-							Delete
-						</DropdownMenuItem>
-					</DropdownMenuContent>
-				</DropdownMenu>
-			</div>
-		</div>
-	);
-
-	return (
-		<ContextMenu>
-			<ContextMenuTrigger asChild>{body}</ContextMenuTrigger>
-			<ContextMenuContent className="min-w-40">
-				<ContextMenuItem onSelect={() => navigate({ top: "apps", path: [app.id] })}>
-					<PenLine />
-					Open
-				</ContextMenuItem>
-				<ContextMenuSeparator />
-				<ContextMenuItem onSelect={() => onRenameStart(app.id)}>
-					<PenLine />
-					Rename
-				</ContextMenuItem>
-				<ContextMenuItem disabled={!attached} onSelect={restart}>
-					<RotateCw />
-					Restart
-				</ContextMenuItem>
-				<ContextMenuSeparator />
-				<ContextMenuItem variant="danger" onSelect={remove}>
-					<Trash2 />
-					Delete
-				</ContextMenuItem>
-			</ContextMenuContent>
-		</ContextMenu>
-	);
-}
-
-/**
- * The in-row rename editor. Commits on Enter and on blur (you clicked away,
- * you meant it), cancels on Escape, and selects the initial text so the first
- * keystroke replaces it.
- */
-function RowInput({
-	initial,
-	label,
-	onCommit,
-	onCancel,
-}: {
-	initial: string;
-	label: string;
-	onCommit: (name: string) => void;
-	onCancel: () => void;
-}) {
-	const done = useRef(false);
-	// `Input` is a plain function component and takes no ref, so the caret is
-	// placed through the wrapper.
-	const box = useRef<HTMLSpanElement | null>(null);
-	useEffect(() => {
-		const el = box.current?.querySelector("input");
-		el?.focus();
-		el?.select();
-	}, []);
-	return (
-		<span ref={box} className={railInputBox}>
-			<Input
-				size="sm"
-				aria-label={label}
-				defaultValue={initial}
-				className={railInput}
-				onBlur={(e) => {
-					if (done.current) return;
-					done.current = true;
-					onCommit(e.currentTarget.value);
-				}}
-				onKeyDown={(e) => {
-					// The list's arrow handling must not see these.
-					e.stopPropagation();
-					if (e.key === "Enter") {
-						e.preventDefault();
-						done.current = true;
-						onCommit(e.currentTarget.value);
-					} else if (e.key === "Escape") {
-						e.preventDefault();
-						done.current = true;
-						onCancel();
-					}
-				}}
-			/>
-		</span>
+			lane={<SectionStatusDot status={state} />}
+			label={
+				renaming ? (
+					<RailRowInput
+						initial={label}
+						label={`Rename ${label}`}
+						onCommit={(name) => onRenameCommit(app, name)}
+						onCancel={onRenameCancel}
+					/>
+				) : (
+					<RailRowLink
+						href={hrefFor("apps", [app.id])}
+						label={label}
+						selected={selected}
+						titleClassName={named ? railTitle : railTitleEmpty}
+						onClick={onNavClick({ top: "apps", path: [app.id] })}
+						onDoubleClick={() => onRenameStart(app.id)}
+					/>
+				)
+			}
+			actions={
+				<>
+					<IconButton
+						variant="ghost"
+						size="sm"
+						tabIndex={tabbable ? 0 : -1}
+						aria-label={`Restart ${label}`}
+						disabled={!attached}
+						onClick={restart}
+						className={railAction}
+					>
+						<RotateCw />
+					</IconButton>
+					<DropdownMenu>
+						<DropdownMenuTrigger asChild>
+							<IconButton
+								variant="ghost"
+								size="sm"
+								tabIndex={tabbable ? 0 : -1}
+								aria-label={`Actions for ${label}`}
+								className={railAction}
+							>
+								<Ellipsis />
+							</IconButton>
+						</DropdownMenuTrigger>
+						<DropdownMenuContent align="start" className="min-w-40">
+							<DropdownMenuItem onSelect={() => onRenameStart(app.id)}>
+								<PenLine />
+								Rename
+							</DropdownMenuItem>
+							<DropdownMenuItem disabled={!attached} onSelect={restart}>
+								<RotateCw />
+								Restart
+							</DropdownMenuItem>
+							<DropdownMenuSeparator />
+							<DropdownMenuItem variant="danger" onSelect={remove}>
+								<Trash2 />
+								Delete
+							</DropdownMenuItem>
+						</DropdownMenuContent>
+					</DropdownMenu>
+				</>
+			}
+			menu={
+				<>
+					<ContextMenuItem onSelect={() => navigate({ top: "apps", path: [app.id] })}>
+						<PenLine />
+						Open
+					</ContextMenuItem>
+					<ContextMenuSeparator />
+					<ContextMenuItem onSelect={() => onRenameStart(app.id)}>
+						<PenLine />
+						Rename
+					</ContextMenuItem>
+					<ContextMenuItem disabled={!attached} onSelect={restart}>
+						<RotateCw />
+						Restart
+					</ContextMenuItem>
+					<ContextMenuSeparator />
+					<ContextMenuItem variant="danger" onSelect={remove}>
+						<Trash2 />
+						Delete
+					</ContextMenuItem>
+				</>
+			}
+		/>
 	);
 }
