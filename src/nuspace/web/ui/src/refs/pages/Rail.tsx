@@ -90,9 +90,8 @@ import {
 	railTitle,
 	railTwisty,
 } from "../../design";
+import type { Notify } from "./ops";
 import type { PageNode } from "./types";
-
-type Notify = (payload: Record<string, unknown>) => void;
 
 /** One visible line of the tree, in render order. */
 type VisibleRow = {
@@ -272,9 +271,9 @@ export function Rail({
 			if (!next) return;
 			if (d.kind === "rename") {
 				if (next === d.initial.trim()) return;
-				notify({ op: "on_page_rename", path: d.path, title: next });
+				notify("page.rename", { path: d.path, title: next });
 			} else {
-				notify({ op: "on_page_create", parent_path: d.path, title: next });
+				notify("page.create", { parent_path: d.path, title: next });
 			}
 		},
 		[draft, notify],
@@ -487,7 +486,7 @@ function Row({
 
 	const remove = useCallback(() => {
 		if (!window.confirm(`delete "${title}" and everything under it?`)) return;
-		notify({ op: "on_page_delete", path });
+		notify("page.delete", { path });
 	}, [notify, path, title]);
 
 	const body = (

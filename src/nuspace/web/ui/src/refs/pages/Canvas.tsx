@@ -43,13 +43,12 @@ import {
 	docStatusRail,
 	hasGutterRail,
 } from "../../design";
+import type { Notify } from "./ops";
 import { ProgramBlock } from "./Program";
 import { type ExitDir, type InsertKind, type ProseHandle, ProseIsland } from "./Prose";
 import { filterSlash, PROGRAM_TEMPLATE, type SlashItem, SlashMenu } from "./Slash";
 import { type EditorState, type FocusReq, patchEditor, useEditorState } from "./slice";
 import type { ActivePage, Block } from "./types";
-
-type Notify = (payload: Record<string, unknown>) => void;
 
 export function Canvas({
 	refPath,
@@ -160,12 +159,7 @@ export function Canvas({
 
 	const commitSource = useCallback(
 		(id: string, source: string) => {
-			notify({
-				op: "on_block_update",
-				page_path: pagePath,
-				block_id: id,
-				source,
-			});
+			notify("block.update", { page_path: pagePath, block_id: id, source });
 		},
 		[notify, pagePath],
 	);
@@ -173,13 +167,7 @@ export function Canvas({
 	const createAfter = useCallback(
 		(afterId: string | null, kind: "prose" | "program", source = "") => {
 			if (afterId) pendingAfter.current = { afterId, edit: kind === "program" };
-			notify({
-				op: "on_block_create",
-				page_path: pagePath,
-				kind,
-				source,
-				after: afterId,
-			});
+			notify("block.create", { page_path: pagePath, kind, source, after: afterId });
 		},
 		[notify, pagePath],
 	);
@@ -187,8 +175,7 @@ export function Canvas({
 	const splitBlock = useCallback(
 		(id: string, head: string, tail: string, insert: InsertKind) => {
 			pendingAfter.current = { afterId: id, edit: insert === "program" };
-			notify({
-				op: "on_block_split",
+			notify("block.split", {
 				page_path: pagePath,
 				block_id: id,
 				head,
@@ -210,7 +197,7 @@ export function Canvas({
 			if (ids.length === 0) return;
 			const first = index(ids[0]);
 			const prev = first > 0 ? blocks[first - 1] : null;
-			notify({ op: "on_block_delete", page_path: pagePath, block_ids: ids });
+			notify("block.delete", { page_path: pagePath, block_ids: ids });
 			patch({
 				selected: prev ? [prev.id] : [],
 				anchor: prev ? prev.id : null,
@@ -229,8 +216,7 @@ export function Canvas({
 			if (prev.kind === "prose") {
 				const seam = prev.source.length + (prev.source && text ? 1 : 0);
 				const joined = prev.source && text ? `${prev.source}\n${text}` : prev.source + text;
-				notify({
-					op: "on_block_merge",
+				notify("block.merge", {
 					page_path: pagePath,
 					block_id: id,
 					into_id: prev.id,
@@ -270,7 +256,7 @@ export function Canvas({
 			const anchorId = ids[anchorIdx];
 			const at = rest.indexOf(anchorId) + (dir < 0 ? 0 : 1);
 			rest.splice(at, 0, ...picked);
-			notify({ op: "on_block_reorder", page_path: pagePath, order: rest });
+			notify("block.reorder", { page_path: pagePath, order: rest });
 		},
 		[blocks, editor.selected, notify, pagePath],
 	);
@@ -407,7 +393,7 @@ export function Canvas({
 				const rest = ids.filter((i) => i !== cur.id);
 				const at = cur.at > from ? cur.at - 1 : cur.at;
 				rest.splice(at, 0, cur.id);
-				notify({ op: "on_block_reorder", page_path: pagePath, order: rest });
+				notify("block.reorder", { page_path: pagePath, order: rest });
 			};
 			window.addEventListener("pointermove", move);
 			window.addEventListener("pointerup", up);
@@ -642,13 +628,7 @@ export function Canvas({
 										focus: on ? { blockId: block.id, place: "end" } : e.focus,
 									}))
 								}
-								onRestart={() =>
-									notify({
-										op: "on_block_restart",
-										page_path: pagePath,
-										block_id: block.id,
-									})
-								}
+								onRestart={() => notify("block.restart", { block_id: block.id })}
 							/>
 						)}
 					</div>

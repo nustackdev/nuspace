@@ -21,6 +21,7 @@ import type { Crumb } from "../../components";
 import { PageHeader } from "../../components";
 import { docPageLoading, docPageSurface, shellSurface } from "../../design";
 import { Canvas } from "./Canvas";
+import type { Notify, Ops } from "./ops";
 import { Rail } from "./Rail";
 import { pagesSliceFactory, patchEditor, useEditorState, usePagesValue } from "./slice";
 import { EMPTY_TREE, type PageNode } from "./types";
@@ -79,9 +80,11 @@ function PagesView({ path }: { path: string }) {
 	const page = value?.page ?? null;
 	const expanded = useMemo(() => new Set(editor.expanded), [editor.expanded]);
 
-	const notify = useCallback(
-		(payload: Record<string, unknown>) => {
-			send({ op: OP_NOTIFY, ref: path, payload });
+	// One ref per op: the op name is the tail of the wire path, not a key in
+	// the payload. `path` is this ref's own wire path, straight off the mount.
+	const notify = useCallback<Notify>(
+		<K extends keyof Ops>(op: K, args: Ops[K]) => {
+			send({ op: OP_NOTIFY, ref: `${path}.ops.${op}`, payload: args });
 		},
 		[path, send],
 	);
@@ -91,12 +94,8 @@ function PagesView({ path }: { path: string }) {
 	// biome-ignore lint/correctness/useExhaustiveDependencies: selectionKey captures route.path's content; route.path itself is a fresh array each render
 	useEffect(() => {
 		if (route.top !== "pages") return;
-		send({
-			op: OP_NOTIFY,
-			ref: path,
-			payload: { op: "on_page_select", path: route.path },
-		});
-	}, [selectionKey, route.top, path, send]);
+		notify("page.select", { path: route.path });
+	}, [selectionKey, route.top, notify]);
 
 	const toggleExpanded = useCallback(
 		(key: string) => {
@@ -110,11 +109,11 @@ function PagesView({ path }: { path: string }) {
 		[path],
 	);
 
-	// Renaming ships `on_page_rename` and the server reships the TREE, not the
-	// open page, so `page.title` keeps the old value until you navigate away
-	// and back. Hold the committed title locally until the server's copy
-	// agrees, otherwise the heading you just typed snaps back one frame later.
-	// Keyed by page path so it cannot leak onto the next page you open.
+	// The rename round trip is a kv write, a substrate notification and a
+	// reship, so `page.title` lags the keystroke by a frame or two. Hold the
+	// committed title locally until the server's copy agrees, otherwise the
+	// heading you just typed snaps back. Keyed by page path so it cannot leak
+	// onto the next page you open.
 	const [pending, setPending] = useState<{ key: string; title: string } | null>(null);
 	const pageKey = page ? page.path.join("/") : "";
 	const renamed =
@@ -125,7 +124,7 @@ function PagesView({ path }: { path: string }) {
 			if (!page) return;
 			const at = page.path;
 			setPending({ key: at.join("/"), title });
-			notify({ op: "on_page_rename", path: at, title });
+			notify("page.rename", { path: at, title });
 		},
 		[notify, page],
 	);

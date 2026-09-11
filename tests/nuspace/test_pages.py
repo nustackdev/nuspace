@@ -26,7 +26,7 @@ from nuspace.web.refs.pages import (
     construct_section,
     enumerate_ui_refs,
 )
-from nuspace.web.refs.pages.pages import _ordered_blocks, _page_node
+from nuspace.web.refs.pages.store import ordered_blocks, page_node
 
 
 def program(body: str) -> str:
@@ -86,11 +86,11 @@ def test_ordered_blocks_sorts_by_order_then_id():
         "s_c": {"order": 0},
         "s_d": {},  # no order yet: falls to the end, id-ordered
     }
-    assert [sid for sid, _ in _ordered_blocks(raw)] == ["s_b", "s_c", "s_a", "s_d"]
+    assert [sid for sid, _ in ordered_blocks(raw)] == ["s_b", "s_c", "s_a", "s_d"]
 
 
 def test_page_node_ignores_sections():
-    node = _page_node(
+    node = page_node(
         {"title": "Home", "sections": {"s1": {}}, "pages": {"p2": {"title": "Kid"}}},
         "p1",
         0,
