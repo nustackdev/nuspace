@@ -62,7 +62,10 @@ export function RailRow({
 }) {
 	const body = (
 		<div
-			className={railRow(selected)}
+			// A tree row takes its left offset from railIndent, so it needs no
+			// inset. A flat rail leaves indent off and pays for the offset
+			// itself, which is what the inset is.
+			className={railRow(selected, indent === undefined)}
 			style={indent === undefined ? undefined : railIndent(indent)}
 			role="treeitem"
 			tabIndex={tabbable ? 0 : -1}
