@@ -3,9 +3,14 @@
 // Pages only. Blocks are parts of a page, not navigable entities, so they
 // never appear here.
 //
-// Selection is router-owned: the URL /pages/<pid>/<pid> is the cursor, the row
-// click drives navigate(), and the canvas ships `on_page_select` off the route
+// Selection is router-owned: the URL /pages/<page_id> is the cursor, the row
+// click drives navigate(), and `pages.tsx` ships `page.select` off the route
 // effect. The rail itself holds no selection state.
+//
+// Pages are flat on the wire -- one row per page, hierarchy in `parent` and
+// `children` -- so a row is keyed by its page id and nothing here carries a
+// path. The nesting below is a rendering of the relation, not a shape the
+// server ships.
 //
 // ## The interaction model
 //
@@ -79,13 +84,13 @@ import {
 	railTwisty,
 } from "../../design";
 import type { Notify } from "./ops";
-import type { PageNode } from "./types";
+import { ancestorsOf, childrenOf, mintId, type PageTree, rootId } from "./types";
 
 /** One visible line of the tree, in render order. */
 type VisibleRow = {
-	/** Expansion + focus key: the page path, joined. The root page is "". */
+	/** Expansion + focus key. A page id, which is unique space-wide. */
 	key: string;
-	path: string[];
+	id: string;
 	depth: number;
 	title: string;
 	hasKids: boolean;
@@ -99,15 +104,19 @@ type VisibleRow = {
 };
 
 /** An inline edit in flight. `create` renders a phantom row under `key`. */
-type Draft = { kind: "rename" | "create"; key: string; path: string[]; initial: string };
+type Draft = { kind: "rename" | "create"; key: string; id: string; initial: string };
 
-const ROOT_KEY = "";
 const ROOT_LABEL = "Space";
+
+/** The URL for a page. The root page is the bare /pages, not /pages/<root>. */
+function pathFor(id: string, root: string): string[] {
+	return id === root ? [] : [id];
+}
 
 /** Walk the tree into the flat list of rows the current fold state shows. */
 function flatten(
-	node: PageNode,
-	path: string[],
+	tree: PageTree,
+	id: string,
 	depth: number,
 	parent: string | null,
 	pos: number,
@@ -115,55 +124,52 @@ function flatten(
 	expanded: Set<string>,
 	out: VisibleRow[],
 ): void {
-	const key = path.join("/");
-	const open = expanded.has(key);
+	const row = tree[id];
+	if (!row) return;
+	const kids = childrenOf(tree, id);
+	const open = expanded.has(id);
 	out.push({
-		key,
-		path,
+		key: id,
+		id,
 		depth,
-		title: node.title || (depth === 0 ? ROOT_LABEL : "Untitled"),
-		hasKids: node.pages.length > 0,
+		title: row.title || (depth === 0 ? ROOT_LABEL : "Untitled"),
+		hasKids: kids.length > 0,
 		open,
 		parent,
 		pos,
 		size,
 	});
 	if (!open) return;
-	node.pages.forEach((kid, i) => {
-		flatten(
-			kid,
-			[...path, String(kid.id)],
-			depth + 1,
-			key,
-			i + 1,
-			node.pages.length,
-			expanded,
-			out,
-		);
+	kids.forEach((kid, i) => {
+		flatten(tree, kid.id, depth + 1, id, i + 1, kids.length, expanded, out);
 	});
 }
 
 export function Rail({
 	tree,
+	loaded,
 	expanded,
 	onToggle,
-	selectedPath,
+	selectedId,
 	notify,
 }: {
-	tree: PageNode;
+	tree: PageTree;
+	loaded: boolean;
 	expanded: Set<string>;
 	onToggle: (key: string) => void;
-	selectedPath: string[];
+	selectedId: string;
 	notify: Notify;
 }) {
-	const selKey = selectedPath.join("/");
+	const selKey = selectedId;
+	const root = rootId(tree);
 	// The tree lands in one `set_tree`; until it does there is nothing to draw
 	// and the honest thing is row-shaped placeholders, not a fake empty tree.
-	const loading = tree.id == null && tree.pages.length === 0;
+	const loading = !loaded || !root;
 
 	const rows = useMemo(() => {
 		const out: VisibleRow[] = [];
-		flatten(tree, [], 0, null, 1, 1, expanded, out);
+		const top = rootId(tree);
+		if (top) flatten(tree, top, 0, null, 1, 1, expanded, out);
 		return out;
 	}, [tree, expanded]);
 
@@ -203,13 +209,14 @@ export function Rail({
 	// those ancestors, which is also what opens the tree on arrival: it is a
 	// real, foldable page like any other - the old rail forced it open *and*
 	// still drew a twisty, so that control did nothing at all.
-	// biome-ignore lint/correctness/useExhaustiveDependencies: selKey is the content of selectedPath, which is a fresh array every render
+	// biome-ignore lint/correctness/useExhaustiveDependencies: the walk reads the tree, but rerunning on every reship would fight the fold state; `root` flipping from "" is what carries the first tree in
 	useEffect(() => {
-		reveal(ROOT_KEY);
-		for (let i = 1; i < selectedPath.length; i++) {
-			reveal(selectedPath.slice(0, i).join("/"));
-		}
-	}, [selKey, reveal]);
+		if (!root) return;
+		// The root is always revealed, which is what opens the tree on arrival
+		// even when the root itself is the page being looked at.
+		reveal(root);
+		for (const row of ancestorsOf(tree, selKey)) reveal(row.id);
+	}, [selKey, root, reveal]);
 
 	// -- focus ----------------------------------------------------------------
 	//
@@ -226,13 +233,13 @@ export function Rail({
 	const [draft, setDraft] = useState<Draft | null>(null);
 
 	const startRename = useCallback((row: VisibleRow) => {
-		setDraft({ kind: "rename", key: row.key, path: row.path, initial: row.title });
+		setDraft({ kind: "rename", key: row.key, id: row.id, initial: row.title });
 	}, []);
 
 	const startCreate = useCallback(
 		(row: VisibleRow) => {
 			reveal(row.key);
-			setDraft({ kind: "create", key: row.key, path: row.path, initial: "Untitled" });
+			setDraft({ kind: "create", key: row.key, id: row.id, initial: "Untitled" });
 		},
 		[reveal],
 	);
@@ -246,9 +253,11 @@ export function Rail({
 			if (!next) return;
 			if (d.kind === "rename") {
 				if (next === d.initial.trim()) return;
-				notify("page.rename", { path: d.path, title: next });
+				notify("page.rename", { page_id: d.id, title: next });
 			} else {
-				notify("page.create", { parent_path: d.path, title: next });
+				// The id is minted here, so the new page can be routed to the
+				// moment the server confirms it rather than guessed at.
+				notify("page.create", { page_id: mintId("p"), parent_id: d.id, title: next });
 			}
 		},
 		[draft, notify],
@@ -286,7 +295,7 @@ export function Rail({
 					// inside it.
 					e.preventDefault();
 					if (row.hasKids) reveal(row.key);
-					navigate({ top: "pages", path: row.path });
+					navigate({ top: "pages", path: pathFor(row.id, root) });
 					break;
 				case "F2":
 					e.preventDefault();
@@ -296,7 +305,7 @@ export function Rail({
 					break;
 			}
 		},
-		[handleArrows, focusIndex, focusKey, onToggle, reveal, startRename],
+		[handleArrows, focusIndex, focusKey, onToggle, reveal, root, startRename],
 	);
 
 	return (
@@ -333,6 +342,7 @@ export function Rail({
 									<Guides depth={row.depth} />
 									<Row
 										row={row}
+										root={root}
 										index={index}
 										selected={row.key === selKey}
 										tabbable={row.key === tabKey}
@@ -400,6 +410,7 @@ function Guides({ depth }: { depth: number }) {
 
 function Row({
 	row,
+	root,
 	index,
 	selected,
 	tabbable,
@@ -415,6 +426,7 @@ function Row({
 	notify,
 }: {
 	row: VisibleRow;
+	root: string;
 	index: number;
 	selected: boolean;
 	tabbable: boolean;
@@ -429,13 +441,14 @@ function Row({
 	onCancel: () => void;
 	notify: Notify;
 }) {
-	const { key, path, depth, title, hasKids, open, pos, size } = row;
+	const { key, id, depth, title, hasKids, open, pos, size } = row;
+	const path = pathFor(id, root);
 	const navClick = onNavClick({ top: "pages", path });
 
 	const remove = useCallback(() => {
 		if (!window.confirm(`delete "${title}" and everything under it?`)) return;
-		notify("page.delete", { path });
-	}, [notify, path, title]);
+		notify("page.delete", { page_id: id });
+	}, [id, notify, title]);
 
 	return (
 		<RailRow

@@ -33,6 +33,16 @@ MODULES = [
     "nuspace.pages.ops",
     "nuspace.pages.runner",
     "nuspace.pages.shapes",
+    "nuspace.web",
+    "nuspace.web.refs",
+    "nuspace.web.refs.nav",
+    "nuspace.web.refs.pages",
+    "nuspace.web.serve",
+    "nuspace.web.serve.app",
+    "nuspace.web.serve.driver",
+    "nuspace.web.serve.fabric",
+    "nuspace.web.serve.session",
+    "nuspace.web.serve.shell",
 ]
 
 #: One module per package entry point, to pair up. Every ordering of these is

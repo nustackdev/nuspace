@@ -37,10 +37,24 @@
 //
 // ## Focus after a structural op
 //
-// Creating, splitting and merging all round-trip through the server, and the
-// new block's id is only known once `set_page` comes back. Rather than have
-// the server echo browser intent, the canvas records a *positional* intent
-// ("the block after X") and resolves it against the next block list.
+// A create round-trips through the server. The id does not: the browser mints
+// it and sends it, so focus is aimed at a known id rather than guessed at from
+// a position once `set_page` comes back.
+//
+// ## Split and merge are compositions, not verbs
+//
+// The server has one op per thing that happens to a section: create, update,
+// delete, move, reorder. A split is an update plus a create at the next
+// index; a merge-up is an update plus a delete. Both halves are independent
+// writes to different sections, so which arm runs first does not matter, and
+// the server never grows a verb per editor gesture.
+//
+// What neither carries is *prose*. A text block's content is not its source
+// -- the source is the template, and the content lives in the space's kv
+// under the block's own namespace, written by the block's own running
+// program through its `ProseRef`. So a split moves structure here and the
+// text follows through the refs, which means it does not follow at all until
+// something is running the sections. See the report for task-145.
 
 import {
 	Alert,
@@ -82,7 +96,7 @@ import {
 } from "./ProseRef";
 import { filterSlash, type SlashItem, SlashMenu } from "./Slash";
 import { type EditorState, type FocusReq, patchEditor, useEditorState } from "./slice";
-import type { ActivePage, Block } from "./types";
+import { type ActivePage, type Block, type BlockTpl, mintId } from "./types";
 
 /**
  * The markdown a text block currently holds, read off its own ref.
@@ -101,21 +115,27 @@ function blockText(block: Block): string {
 export function Canvas({
 	refPath,
 	page,
+	starters,
 	notify,
 }: {
 	refPath: string;
 	page: ActivePage;
+	/** What a block of each tpl starts life as, off the ref's mount props.
+	 *  `nuspace/core/tpl.py` is the one spelling of these. */
+	starters: Record<string, string>;
 	notify: Notify;
 }) {
 	const editor = useEditorState(refPath);
 	const blocks = page.blocks;
-	const pagePath = page.path;
+	const pageId = page.page_id;
 
 	const rootRef = useRef<HTMLDivElement | null>(null);
 	const elRefs = useRef(new Map<string, HTMLElement>());
 	const proseHandles = useRef(new Map<string, ProseHandle | null>());
-	/** Positional focus intent, resolved on the next block list. */
-	const pendingAfter = useRef<{ afterId: string; edit: boolean } | null>(null);
+	/** Focus intent for a block that has been asked for but not shipped back
+	 *  yet. `set_page` prunes focus pointing at a block it does not carry, so
+	 *  the intent is parked here until the block actually arrives. */
+	const pendingFocus = useRef<{ id: string; edit: boolean } | null>(null);
 
 	const index = useCallback((id: string) => blocks.findIndex((b) => b.id === id), [blocks]);
 
@@ -184,56 +204,64 @@ export function Canvas({
 		[patch],
 	);
 
-	// Resolve a positional focus intent once the new block list arrives.
+	// Land the caret in a newly created block, once the server confirms it.
 	useEffect(() => {
-		const p = pendingAfter.current;
-		if (!p) return;
-		const i = blocks.findIndex((b) => b.id === p.afterId);
-		if (i < 0 || i + 1 >= blocks.length) return;
-		pendingAfter.current = null;
-		const target = blocks[i + 1];
-		if (target.tpl === "text") {
-			patch({ focus: { blockId: target.id, place: "start" }, selected: [] });
-		} else {
-			patch((e) => ({
-				editing: e.editing.includes(target.id) ? e.editing : [...e.editing, target.id],
-				focus: { blockId: target.id, place: "start" },
-				selected: [],
-			}));
-		}
+		const want = pendingFocus.current;
+		if (!want) return;
+		if (!blocks.some((b) => b.id === want.id)) return;
+		pendingFocus.current = null;
+		patch((e) => ({
+			editing: want.edit && !e.editing.includes(want.id) ? [...e.editing, want.id] : e.editing,
+			focus: { blockId: want.id, place: "start" },
+			selected: [],
+		}));
 	}, [blocks, patch]);
 
 	// -- structural ops -------------------------------------------------------
 
 	const commitSource = useCallback(
-		(id: string, content: string) => {
-			notify("block.update", { page_path: pagePath, block_id: id, content });
+		(id: string, source: string) => {
+			notify("section.update", { page_id: pageId, section_id: id, source });
 		},
-		[notify, pagePath],
+		[notify, pageId],
 	);
 
-	// Empty content for a program means "use the tpl's starter". The skeleton
-	// lives once, in `nuspace/core/tpl.py`, not in two places that can drift.
+	/**
+	 * Add a block after `afterId` (or last), and aim the caret at it.
+	 *
+	 * `source` empty means "the tpl's starter", which arrived in the mount
+	 * rather than being written here: a template that exists in two languages
+	 * is a template that drifts.
+	 */
 	const createAfter = useCallback(
-		(afterId: string | null, tpl: "text" | "program", content = "") => {
-			if (afterId) pendingAfter.current = { afterId, edit: tpl === "program" };
-			notify("block.create", { page_path: pagePath, tpl, content, after: afterId });
+		(afterId: string | null, tpl: BlockTpl, source = "") => {
+			const id = mintId("s");
+			const at = afterId ? index(afterId) : -1;
+			notify("section.create", {
+				page_id: pageId,
+				section_id: id,
+				name: id,
+				tpl,
+				source: source || starters[tpl] || "",
+				index: at < 0 ? blocks.length : at + 1,
+			});
+			pendingFocus.current = { id, edit: tpl === "program" };
+			return id;
 		},
-		[notify, pagePath],
+		[blocks.length, index, notify, pageId, starters],
 	);
 
+	// A split is the two ops it is made of: the head stays where it is, the
+	// tail becomes a new block right after it.
 	const splitBlock = useCallback(
 		(id: string, head: string, tail: string, insert: InsertTpl) => {
-			pendingAfter.current = { afterId: id, edit: insert === "program" };
-			notify("block.split", {
-				page_path: pagePath,
-				block_id: id,
-				head,
-				tail,
-				insert: insert === null ? null : { tpl: insert, content: "" },
-			});
+			const block = blocks[index(id)];
+			// Only a program block's source is editable text. A text block's
+			// head is prose, and prose does not travel on this wire.
+			if (block && block.tpl !== "text") commitSource(id, head);
+			createAfter(id, insert ?? "text", insert === "program" ? "" : tail);
 		},
-		[notify, pagePath],
+		[blocks, commitSource, createAfter, index],
 	);
 
 	const deleteBlocks = useCallback(
@@ -241,7 +269,9 @@ export function Canvas({
 			if (ids.length === 0) return;
 			const first = index(ids[0]);
 			const prev = first > 0 ? blocks[first - 1] : null;
-			notify("block.delete", { page_path: pagePath, block_ids: ids });
+			for (const section_id of ids) {
+				notify("section.delete", { page_id: pageId, section_id });
+			}
 			patch({
 				selected: prev ? [prev.id] : [],
 				anchor: prev ? prev.id : null,
@@ -249,7 +279,7 @@ export function Canvas({
 				editing: editor.editing.filter((e) => !ids.includes(e)),
 			});
 		},
-		[blocks, editor.editing, index, notify, pagePath, patch],
+		[blocks, editor.editing, index, notify, pageId, patch],
 	);
 
 	const mergeUp = useCallback(
@@ -258,19 +288,17 @@ export function Canvas({
 			if (i <= 0) return;
 			const prev = blocks[i - 1];
 			if (prev.tpl === "text") {
+				// The join happens in the block above's own prose ref, which is
+				// where a text block's content lives; the wire only hears that
+				// this block is gone.
 				const above = blockText(prev);
 				const seam = above.length + (above && text ? 1 : 0);
-				const joined = above && text ? `${above}\n${text}` : above + text;
-				notify("block.merge", {
-					page_path: pagePath,
-					block_id: id,
-					into_id: prev.id,
-					content: joined,
-				});
+				notify("section.delete", { page_id: pageId, section_id: id });
 				patch({
 					focus: { blockId: prev.id, place: "end", offset: seam },
 					selected: [],
 					anchor: null,
+					editing: editor.editing.filter((e) => e !== id),
 				});
 				return;
 			}
@@ -283,7 +311,7 @@ export function Canvas({
 			patch({ focus: null, selected: [prev.id], anchor: prev.id });
 			rootRef.current?.focus({ preventScroll: true });
 		},
-		[blocks, deleteBlocks, index, notify, pagePath, patch],
+		[blocks, deleteBlocks, editor.editing, index, notify, pageId, patch],
 	);
 
 	const moveSelected = useCallback(
@@ -301,9 +329,9 @@ export function Canvas({
 			const anchorId = ids[anchorIdx];
 			const at = rest.indexOf(anchorId) + (dir < 0 ? 0 : 1);
 			rest.splice(at, 0, ...picked);
-			notify("block.reorder", { page_path: pagePath, order: rest });
+			notify("section.reorder", { page_id: pageId, section_ids: rest });
 		},
-		[blocks, editor.selected, notify, pagePath],
+		[blocks, editor.selected, notify, pageId],
 	);
 
 	// -- canvas-level keyboard (block selection regime) ------------------------
@@ -438,12 +466,12 @@ export function Canvas({
 				const rest = ids.filter((i) => i !== cur.id);
 				const at = cur.at > from ? cur.at - 1 : cur.at;
 				rest.splice(at, 0, cur.id);
-				notify("block.reorder", { page_path: pagePath, order: rest });
+				notify("section.reorder", { page_id: pageId, section_ids: rest });
 			};
 			window.addEventListener("pointermove", move);
 			window.addEventListener("pointerup", up);
 		},
-		[blocks, dropIndexFor, index, notify, pagePath, patch],
+		[blocks, dropIndexFor, index, notify, pageId, patch],
 	);
 
 	// -- slash menu -----------------------------------------------------------
@@ -674,7 +702,6 @@ export function Canvas({
 										focus: on ? { blockId: block.id, place: "end" } : e.focus,
 									}))
 								}
-								onRestart={() => notify("block.restart", { block_id: block.id })}
 							/>
 						)}
 					</div>

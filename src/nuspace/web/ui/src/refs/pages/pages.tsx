@@ -5,9 +5,10 @@
 // navigable entities.
 //
 // The slice owns everything runtime (see `slice.ts`). Selection is
-// router-owned: the URL /pages/<pid>/<pid> is the cursor, so a click drives
-// navigate() and the route effect ships `on_page_select`. /pages with no
-// segments is the root page, which is a real page and may carry blocks.
+// router-owned: the URL /pages/<page_id> is the cursor, so a click drives
+// navigate() and the route effect ships `page.select`. Pages are flat, so the
+// route is one id however deep the page sits; /pages with no segment is the
+// root page, which is a real page and may carry blocks.
 //
 // We never remount the shell on navigation. The mvp did, and it wipes every
 // slice on the page.
@@ -23,8 +24,14 @@ import { docPageLoading, docPageSurface, shellSurface } from "../../design";
 import { Canvas } from "./Canvas";
 import type { Notify, Ops } from "./ops";
 import { Rail } from "./Rail";
-import { pagesSliceFactory, patchEditor, useEditorState, usePagesValue } from "./slice";
-import { EMPTY_TREE, type PageNode } from "./types";
+import {
+	pagesSliceFactory,
+	patchEditor,
+	useEditorState,
+	usePagesValue,
+	useStarters,
+} from "./slice";
+import { ancestorsOf, EMPTY_TREE, type PageTree, rootId } from "./types";
 
 // Empty-state labels. The root page ships an empty title (the server inits it
 // that way), so something has to stand in for it; "Space" is what the rail
@@ -41,42 +48,30 @@ const PAGE_FALLBACK = "Untitled";
  * the crumb reads as a stutter, and the crumb is there to say what is ABOVE
  * you.
  *
- * Titles come off the tree rather than off the page, because the path is a
- * list of ids and only the tree knows what they are called.
+ * Walked off `parent` links rather than off a path, because a page carries no
+ * path: it is one row at a fixed depth and the tree is the relation between
+ * rows.
  */
-function trailFor(tree: PageNode, path: string[]): Crumb[] {
+function trailFor(tree: PageTree, pageId: string): Crumb[] {
+	const root = rootId(tree);
 	// The root page IS the space. A trail reading "Space > Space" is noise.
-	if (path.length === 0) return [];
-	const out: Crumb[] = [];
-	let node: PageNode | undefined = tree;
-	const prefix: string[] = [];
-	out.push({
-		label: tree.title || SPACE_FALLBACK,
-		href: hrefFor("pages", []),
-		onClick: onNavClick({ top: "pages", path: [] }),
-	});
-	// Ancestors only: stop one short of the page we are looking at.
-	for (const pid of path.slice(0, -1)) {
-		node = node?.pages.find((p) => p.id === pid);
-		if (!node) break;
-		prefix.push(pid);
-		const at = [...prefix];
-		out.push({
-			label: node.title || PAGE_FALLBACK,
-			href: hrefFor("pages", at),
-			onClick: onNavClick({ top: "pages", path: at }),
-		});
-	}
-	return out;
+	if (!pageId || pageId === root) return [];
+	return ancestorsOf(tree, pageId).map((row) => ({
+		label: row.title || (row.id === root ? SPACE_FALLBACK : PAGE_FALLBACK),
+		href: hrefFor("pages", row.id === root ? [] : [row.id]),
+		onClick: onNavClick({ top: "pages", path: row.id === root ? [] : [row.id] }),
+	}));
 }
 
 function PagesView({ path }: { path: string }) {
 	const value = usePagesValue(path);
 	const editor = useEditorState(path);
+	const starters = useStarters(path);
 	const send = useStore((s) => s.send);
 	const route = useRoute();
 
 	const tree = value?.tree ?? EMPTY_TREE;
+	const loaded = value?.loaded ?? false;
 	const page = value?.page ?? null;
 	const expanded = useMemo(() => new Set(editor.expanded), [editor.expanded]);
 
@@ -89,13 +84,13 @@ function PagesView({ path }: { path: string }) {
 		[path, send],
 	);
 
-	// The router path under /pages is [pid...]; empty is the root page.
-	const selectionKey = route.path.join("/");
-	// biome-ignore lint/correctness/useExhaustiveDependencies: selectionKey captures route.path's content; route.path itself is a fresh array each render
+	// The router path under /pages is at most one page id; empty is the root
+	// page, whose id the tree tells us (it is the row that parents itself).
+	const selected = route.path[0] ?? rootId(tree);
 	useEffect(() => {
-		if (route.top !== "pages") return;
-		notify("page.select", { path: route.path });
-	}, [selectionKey, route.top, notify]);
+		if (route.top !== "pages" || !selected) return;
+		notify("page.select", { page_id: selected });
+	}, [selected, route.top, notify]);
 
 	const toggleExpanded = useCallback(
 		(key: string) => {
@@ -115,16 +110,15 @@ function PagesView({ path }: { path: string }) {
 	// heading you just typed snaps back. Keyed by page path so it cannot leak
 	// onto the next page you open.
 	const [pending, setPending] = useState<{ key: string; title: string } | null>(null);
-	const pageKey = page ? page.path.join("/") : "";
+	const pageKey = page ? page.page_id : "";
 	const renamed =
 		pending && pending.key === pageKey && pending.title !== page?.title ? pending.title : null;
 
 	const rename = useCallback(
 		(title: string) => {
 			if (!page) return;
-			const at = page.path;
-			setPending({ key: at.join("/"), title });
-			notify("page.rename", { path: at, title });
+			setPending({ key: page.page_id, title });
+			notify("page.rename", { page_id: page.page_id, title });
 		},
 		[notify, page],
 	);
@@ -133,9 +127,10 @@ function PagesView({ path }: { path: string }) {
 		<div className={shellSurface}>
 			<Rail
 				tree={tree}
+				loaded={loaded}
 				expanded={expanded}
 				onToggle={toggleExpanded}
-				selectedPath={route.path}
+				selectedId={selected}
 				notify={notify}
 			/>
 			<div className={docPageSurface}>
@@ -148,12 +143,12 @@ function PagesView({ path }: { path: string }) {
 					<>
 						<PageHeader
 							title={renamed ?? page.title}
-							seed={page.page_id ?? ""}
-							crumbs={trailFor(tree, page.path)}
-							placeholder={page.path.length === 0 ? SPACE_FALLBACK : PAGE_FALLBACK}
+							seed={page.page_id}
+							crumbs={trailFor(tree, page.page_id)}
+							placeholder={page.page_id === rootId(tree) ? SPACE_FALLBACK : PAGE_FALLBACK}
 							onRename={rename}
 						/>
-						<Canvas refPath={path} page={page} notify={notify} />
+						<Canvas refPath={path} page={page} starters={starters} notify={notify} />
 					</>
 				)}
 			</div>

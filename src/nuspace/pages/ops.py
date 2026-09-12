@@ -26,6 +26,8 @@ Read:
 - :func:`page_ids` / :func:`page_exists` / :func:`parent_of` /
   :func:`children_of` / :func:`title_of`.
 - :func:`section_ids` / :func:`snippet_of`.
+- whole rows, one dict per thing: :func:`page_rows` / :func:`section_rows` /
+  :func:`section_statuses`. What a sidebar or a canvas is filled from.
 """
 
 from __future__ import annotations
@@ -55,6 +57,7 @@ __all__ = [
     "move_section",
     "page_exists",
     "page_ids",
+    "page_rows",
     "parent_of",
     "remove_page",
     "remove_section",
@@ -62,6 +65,8 @@ __all__ = [
     "reorder_pages",
     "reorder_sections",
     "section_ids",
+    "section_rows",
+    "section_statuses",
     "set_snippet",
     "set_tpl",
     "snippet_of",
@@ -85,15 +90,18 @@ def _orphans(pages: nu.Nu) -> nu.Nu:
     )
 
 
-def _keep_order(current: nu.Nu, wanted: Sequence[nu.StrArg], member: nu.Nu) -> nu.Nu:
+def _keep_order(current: nu.Nu, wanted: Sequence[nu.StrArg] | nu.Nu, member: nu.Nu) -> nu.Nu:
     """Rewrite ``current`` as ``wanted``, members only, then whatever was left.
 
     Args:
         current: the list ref being reordered.
-        wanted: the ids to put first, in the order given.
+        wanted: the ids to put first, in the order given. A python sequence
+            fixes the order when the tree is built; a ``nu.Nu`` yielding a
+            list reads it when the tree runs, which is what a browser event
+            carrying an order hands in.
         member: a ref answering whether an id is really in the collection.
     """
-    listed = nu.List.of(*wanted)
+    listed = nu.List(wanted) if isinstance(wanted, nu.Nu) else nu.List.of(*wanted)
     kept = nu.List(nu.Collect(nu.Filter(listed, member.contains(_item), key=_ITEM)))
     # Anything the caller left out keeps its place, after the listed ids.
     rest = nu.List(
@@ -225,7 +233,10 @@ def move_page(
 
 
 def reorder_pages(
-    parent_id: nu.StrArg, child_ids: Sequence[nu.StrArg], *, root: type[Shape] | None = None
+    parent_id: nu.StrArg,
+    child_ids: Sequence[nu.StrArg] | nu.Nu,
+    *,
+    root: type[Shape] | None = None,
 ) -> nu.Nu:
     """Put ``parent_id``'s children in the order given.
 
@@ -248,9 +259,10 @@ def add_section(
     name: nu.StrArg | None = None,
     tpl: nu.StrArg = DEFAULT_TPL,
     policy: nu.StrArg = DEFAULT_POLICY,
+    index: nu.IntArg | None = None,
     root: type[Shape] | None = None,
 ) -> nu.Nu:
-    """Write a whole section onto a page, landing it last.
+    """Write a whole section onto a page, landing it at ``index``.
 
     Args:
         page_id: the page to add it to. A no-op when that page is not there.
@@ -260,6 +272,9 @@ def add_section(
         name: what to call it. Defaults to the id.
         tpl: what produced the snippet. Provenance, not type.
         policy: when it runs. Nothing reads it yet.
+        index: where in the page's order. Appends when absent. Symmetric with
+            :func:`move_section`, and what lets a caller land a section
+            somewhere without a second reorder racing the create.
         root: the space's root Shape class.
     """
     section_id = mint_ordered_id("s") if section_id is None else section_id
@@ -267,12 +282,13 @@ def add_section(
     page = pages[page_id]
     section = page.sections[section_id]
     order = page.section_order
+    place = order.append(section_id) if index is None else order.insert(index, section_id)  # type: ignore[arg-type]
     return nu.IfDo(
         pages.contains(page_id),
         # Order first, so the section is placed before the runner ever hears
         # about it. Snippet last: every field write wakes its own reconcile, so
         # this leaves the pass that launches the section holding final source.
-        nu.IfDo(nu.Not(order.contains(section_id)), order.append(section_id))
+        nu.IfDo(nu.Not(order.contains(section_id)), place)
         >> section.name.set(section_id if name is None else name)
         >> section.policy.set(policy)
         >> section.tpl.set(tpl)
@@ -330,7 +346,10 @@ def move_section(
 
 
 def reorder_sections(
-    page_id: nu.StrArg, section_ids: Sequence[nu.StrArg], *, root: type[Shape] | None = None
+    page_id: nu.StrArg,
+    section_ids: Sequence[nu.StrArg] | nu.Nu,
+    *,
+    root: type[Shape] | None = None,
 ) -> nu.Nu:
     """Put a page's sections in the order given.
 
@@ -397,3 +416,84 @@ def snippet_of(
 ) -> nu.Nu:
     """A section's source, verbatim. EMPTY when there is no such section."""
     return resolve_root(root).pages[page_id].sections[section_id].snippet
+
+
+# --- read: whole rows ------------------------------------------------------
+#
+# The three below answer with a list of dicts rather than a scalar, so one
+# read fills a sidebar, a canvas or a status bar. They exist because a caller
+# that wants every page would otherwise read the ids and then loop in its own
+# language, which puts a python (or a javascript) for-loop back in the middle
+# of what is meant to be one tree.
+
+
+def page_rows(*, root: type[Shape] | None = None) -> nu.Nu:
+    """Every page as ``{id, title, parent, children}``, one dict per page.
+
+    The whole tree in one flat list: the hierarchy rides in ``parent`` and
+    ``children``, so nothing here nests and nothing walks.
+    """
+    pages = resolve_root(root).pages
+    page = pages[_item]
+    return nu.Collect(
+        nu.Map(
+            # nu.list, not the bare keys view, for the reason page_ids gives.
+            nu.list(pages.keys()),
+            nu.Dict.of(
+                id=_item,
+                title=page.title,
+                parent=page.parent,
+                children=nu.list(page.children),
+            ),
+            key=_ITEM,
+        )
+    )
+
+
+def section_rows(page_id: nu.StrArg, *, root: type[Shape] | None = None) -> nu.Nu:
+    """A page's sections as ``{id, name, source, tpl, policy}``, in order.
+
+    Driven off ``section_order``, so list position is the order here exactly
+    as it is in the store.
+    """
+    page = resolve_root(root).pages[page_id]
+    section = page.sections[_item]
+    return nu.Collect(
+        nu.Map(
+            nu.list(page.section_order),
+            nu.Dict.of(
+                id=_item,
+                name=section.name,
+                source=section.snippet,
+                tpl=section.tpl,
+                policy=section.policy,
+            ),
+            key=_ITEM,
+        )
+    )
+
+
+def section_statuses(page_id: nu.StrArg, *, root: type[Shape] | None = None) -> nu.Nu:
+    """A page's sections as ``{section_id, state, error, started_at}``, in order.
+
+    Only what the store knows: a section whose namespace holds an ``error``
+    key reads ``failed``, every other one reads ``idle``. There is no
+    liveness pillar yet, so this never claims a section is running.
+    """
+    root = resolve_root(root)
+    page = root.pages[page_id]
+    # Same binding Map makes, read as a Str so `+` concatenates rather than
+    # collapsing to INVALID the way it would on an untyped AnyAttrRef.
+    key = nu.Str("sections.") + nu.StrAttrRef(_ITEM) + nu.Str(".error")
+    return nu.Collect(
+        nu.Map(
+            nu.list(page.section_order),
+            nu.Dict.of(
+                section_id=_item,
+                state=nu.If(root.state.contains(key), nu.Str("failed"), nu.Str("idle")),
+                error=nu.ToStr(root.state.get_item(key, nu.Str(""))),
+                started_at=nu.Int(0),
+            ),
+            key=_ITEM,
+        )
+    )

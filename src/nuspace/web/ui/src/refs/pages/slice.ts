@@ -30,9 +30,9 @@ import {
 	type ActivePage,
 	type Block,
 	coerceBlocks,
-	coerceNode,
 	coerceStatus,
 	coerceStrs,
+	coerceTree,
 	EMPTY_TREE,
 	type PagesValue,
 	type SectionStatus,
@@ -133,6 +133,10 @@ type PagesSlice = RefSlice & {
 	value: PagesValue;
 	editor: EditorState;
 	sectionPaths: string[];
+	/** What a block of each tpl starts life as, off the mount props. The one
+	 *  spelling of these is `nuspace/core/tpl.py`; they ride the mount so the
+	 *  browser can fill `source` on a create without owning a template. */
+	starters: Record<string, string>;
 };
 
 // -- factory -----------------------------------------------------------------
@@ -186,12 +190,13 @@ function registerFields(
 	return registered;
 }
 
-export const pagesSliceFactory: SliceFactory = (path, ctx, _props) =>
+export const pagesSliceFactory: SliceFactory = (path, ctx, props) =>
 	({
 		type: "PagesRef",
-		value: { tree: EMPTY_TREE, page: null } as PagesValue,
+		value: { tree: EMPTY_TREE, page: null, loaded: false } as PagesValue,
 		editor: { ...EMPTY_EDITOR },
 		sectionPaths: [] as string[],
+		starters: coerceStarters((props as Record<string, unknown> | undefined)?.starters),
 		write: (v) =>
 			ctx.set((refs) => {
 				const slice = refs[path] as PagesSlice | undefined;
@@ -200,7 +205,7 @@ export const pagesSliceFactory: SliceFactory = (path, ctx, _props) =>
 				const op = String(p.op ?? "");
 
 				if (op === "set_tree") {
-					slice.value = { ...slice.value, tree: coerceNode(p.tree, null) };
+					slice.value = { ...slice.value, tree: coerceTree(p.pages), loaded: true };
 					return;
 				}
 
@@ -229,9 +234,10 @@ export const pagesSliceFactory: SliceFactory = (path, ctx, _props) =>
 
 				const blocks = coerceBlocks(p.blocks);
 				const page: ActivePage = {
-					page_id: p.page_id == null ? null : String(p.page_id),
-					path: coerceStrs(p.path),
+					page_id: String(p.page_id ?? ""),
 					title: String(p.title ?? ""),
+					parent: String(p.parent ?? ""),
+					children: coerceStrs(p.children),
 					blocks,
 				};
 
@@ -260,7 +266,23 @@ export const pagesSliceFactory: SliceFactory = (path, ctx, _props) =>
 		},
 	}) as PagesSlice;
 
+/** Narrow the mount's starter map; anything unrecognised is simply absent. */
+function coerceStarters(raw: unknown): Record<string, string> {
+	if (!raw || typeof raw !== "object") return {};
+	const out: Record<string, string> = {};
+	for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+		if (typeof v === "string") out[k] = v;
+	}
+	return out;
+}
+
 // -- reads -------------------------------------------------------------------
+
+export function useStarters(path: string): Record<string, string> {
+	return useStore((s) => (s.refs[path] as PagesSlice | undefined)?.starters ?? EMPTY_STARTERS);
+}
+
+const EMPTY_STARTERS: Record<string, string> = {};
 
 export function usePagesValue(path: string): PagesValue | null {
 	return useStore((s) => (s.refs[path]?.value as PagesValue | undefined) ?? null);

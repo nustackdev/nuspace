@@ -23,14 +23,13 @@ import {
 	AlertTitle,
 	Button,
 	FieldView,
-	IconButton,
 	Kbd,
 	Toggle,
 	Tooltip,
 	TooltipContent,
 	TooltipTrigger,
 } from "@nustackdev/ui-kit";
-import { Check, Code, Copy, RotateCw } from "lucide-react";
+import { Check, Code, Copy } from "lucide-react";
 import { useCallback, useState } from "react";
 import { SectionStatusPill } from "../../components";
 import {
@@ -60,7 +59,6 @@ export type ProgramProps = {
 	onExit: (dir: ExitDir, column: number | undefined) => void;
 	onSelectSelf: () => void;
 	onSetEditing: (on: boolean) => void;
-	onRestart: () => void;
 };
 
 export function ProgramBlock(props: ProgramProps) {
@@ -76,7 +74,6 @@ export function ProgramBlock(props: ProgramProps) {
 		onExit,
 		onSelectSelf,
 		onSetEditing,
-		onRestart,
 	} = props;
 
 	const [dirty, setDirty] = useState(false);
@@ -132,19 +129,6 @@ export function ProgramBlock(props: ProgramProps) {
 						<Kbd>↵</Kbd>
 					</span>
 				) : null}
-				<Tooltip>
-					<TooltipTrigger asChild>
-						<IconButton
-							variant="ghost"
-							size="sm"
-							aria-label="Restart this section"
-							onClick={onRestart}
-						>
-							<RotateCw />
-						</IconButton>
-					</TooltipTrigger>
-					<TooltipContent side="bottom">{token.hint} — restart this section only</TooltipContent>
-				</Tooltip>
 				<Tooltip>
 					<TooltipTrigger asChild>
 						<Toggle

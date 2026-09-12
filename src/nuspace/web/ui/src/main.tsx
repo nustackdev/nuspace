@@ -6,6 +6,7 @@ import { App } from "./App";
 import { ensureLanding } from "./app/router";
 import { AppsRef } from "./refs/apps/apps";
 import { LensRef } from "./refs/lens/lens";
+import { NavRef } from "./refs/nav/nav";
 import { ProseRef } from "./refs/pages/ProseRef";
 import { PagesRef } from "./refs/pages/pages";
 import { registerRefEntry } from "./refs/register";
@@ -16,6 +17,9 @@ import { registerRefEntry } from "./refs/register";
 registerRefEntry("LensRef", LensRef);
 registerRefEntry("PagesRef", PagesRef);
 registerRefEntry("AppsRef", AppsRef);
+// Structural, and read-only: the server pulls the route out of it. Registered
+// like any other ref because the mount envelope names it like any other ref.
+registerRefEntry("NuspaceNavRef", NavRef);
 
 // ProseRef is nu's, not nuspace's, and the kit already has an entry for it.
 // This one REPLACES it. The kit editor knows nothing about neighbouring
