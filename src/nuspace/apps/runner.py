@@ -17,7 +17,7 @@ import nu.mp_pool
 import nu.prog
 import nu.proxy
 from nu.kv.fabrics import Navigator
-from nuspace.core.shapes import Space
+from nuspace._root import resolve_root
 
 from .shapes import Runner
 
@@ -70,7 +70,7 @@ def free_port() -> int:
         return int(sock.getsockname()[1])
 
 
-def app_body(*, root: type[Space] = Space) -> nu.Nu:
+def app_body(*, root: type[Shape] | None = None) -> nu.Nu:
     """One app running, as the single term every ``Dispatch`` ships.
 
     One per space, not one per app: a ``Dispatch`` body is payload, so it is
@@ -78,6 +78,7 @@ def app_body(*, root: type[Space] = Space) -> nu.Nu:
     ``auto_flow_atomic`` covers the runner's own ``LoadNu`` read and stops
     there, since the pass does not descend through ``Eval``.
     """
+    root = resolve_root(root)
     # Construction failures are written to the app's namespace, not raised: a
     # dispatched body has no waiter, so an uncaught error vanishes silently.
     load = root.apps[_APP].snippet.load(scope={"path": nu.Str("apps.") + _APP})
@@ -94,7 +95,7 @@ def app_body(*, root: type[Space] = Space) -> nu.Nu:
     )
 
 
-def reconcile(*, root: type[Shape] = Space) -> nu.Nu:
+def reconcile(*, root: type[Shape] | None = None) -> nu.Nu:
     """Make the world agree with the store, for the one app bound at ``app``.
 
     Kill whatever worker is on record, then start whatever the store says the
@@ -102,6 +103,7 @@ def reconcile(*, root: type[Shape] = Space) -> nu.Nu:
     ``Launch``/``Dispatch``/``Kill`` all return promptly, so the seed can run
     this sequentially without the first app blocking the rest.
     """
+    root = resolve_root(root)
     pool = nu.mp_pool.PoolRef()
     stop = nu.IfDo(
         Runner.workers.contains(_APP),
@@ -116,12 +118,13 @@ def reconcile(*, root: type[Shape] = Space) -> nu.Nu:
     return stop >> start
 
 
-def driver(*, root: type[Shape] = Space) -> tuple[nu.Nu, nu.Nu]:
+def driver(*, root: type[Shape] | None = None) -> tuple[nu.Nu, nu.Nu]:
     """The seed pass and the live loop, as two terms.
 
     Returned separately because they compose differently: the seed must finish
     before anything else starts, and the live loop never finishes at all.
     """
+    root = resolve_root(root)
     body = reconcile(root=root)
     # Both containers must exist before anything reads them: a subscription
     # over a missing container resolves to INVALID and silently never fires.
@@ -172,7 +175,7 @@ def apps_tree(
     *,
     path: str,
     address: str,
-    root: type[Shape] = Space,
+    root: type[Shape] | None = None,
     redis_url: str | None = None,
     channel_prefix: str = DEFAULT_CHANNEL_PREFIX,
     alongside: nu.Nu | None = None,
@@ -184,7 +187,7 @@ def apps_tree(
         path: the store directory. This tree takes its write lock, which is
             why workers reach it through a proxy rather than opening it.
         address: where the Navigator is served, ``host:port``.
-        root: the space's root Shape class.
+        root: the space's root Shape class. Defaults to ``Space``.
         redis_url: Redis carrying change notifications, or None.
         channel_prefix: namespaces the Redis channels.
         alongside: a tree to run beside the live loop, for demos and tests.
@@ -193,6 +196,7 @@ def apps_tree(
     Returns:
         The tree. Brackets tear down LIFO when it ends, reaping every worker.
     """
+    root = resolve_root(root)
     seed, live = driver(root=root)
     flow = live if alongside is None else (live | alongside)
     if duration is not None:
@@ -229,7 +233,7 @@ async def run_apps(
     path: str,
     *,
     address: str | None = None,
-    root: type[Shape] = Space,
+    root: type[Shape] | None = None,
     redis_url: str | None = None,
     channel_prefix: str = DEFAULT_CHANNEL_PREFIX,
     alongside: nu.Nu | None = None,

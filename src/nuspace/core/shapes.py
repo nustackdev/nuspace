@@ -9,10 +9,10 @@ Two orchestration surfaces live under one ``Space``:
 
 An app and a section are the same substance (a ``nu.prog`` program: a
 python module whose ``out`` entry point returns a Nu tree). They differ
-only in the ``policy`` string that says when to run.
-For v0 the policy is a bare string; a richer tagged form can come later
-without changing the shape layout. ``App`` itself lives in
-:mod:`nuspace.apps.shapes`, beside the runner and the ops that work it.
+only in the ``policy`` string that says when to run. ``App`` lives in
+:mod:`nuspace.apps.shapes` and ``Page`` / ``Section`` in
+:mod:`nuspace.pages.shapes`, each beside the runner and the ops that work
+it. Both are re-exported here, since ``Space`` is where they meet.
 
 ``state`` is the scratch kv namespace snippets write to. Per ``model.md``
 nuspace has no state pillar -- state is Nu's kv fabric -- but a bare
@@ -30,60 +30,14 @@ from __future__ import annotations
 
 import nu
 
-# One way only: apps.shapes must never import back from here, or Space and App
-# deadlock on each other at import time.
+# One way only: neither submodule's shapes may import back from here. They
+# import nu alone, so this edge cannot deadlock whichever way the package is
+# entered, and nothing in this package depends on import order any more.
 from nuspace.apps.shapes import App
-from nuspace.recursive import RecursiveShape, self_slot
+from nuspace.pages.shapes import Page, Section
 
 
-__all__ = ["Page", "Section", "Space"]
-
-
-class Section(nu.Shape):
-    """One block on a page. Always a Nu program, no exceptions.
-
-    ``snippet`` is a ``ProgramRef``, so the stored text is source in
-    ``nu.prog``'s sense: a module with an ``out`` entry point whose
-    signature is the scope contract. nuspace offers one scope value,
-    ``path``, and it is ``"sections.<section_id>"``. Reading the slot
-    yields the source verbatim; ``.load()`` / ``.run()`` come with the
-    ref.
-
-    ``tpl`` is **provenance, not type**. It says what produced the
-    snippet -- ``program`` (arbitrary, the person wrote it) or ``text``
-    (the wysiwyg template) -- and nothing branches on it to decide
-    whether the block compiles, runs or is supervised. Every block does
-    all three. See :mod:`nuspace.core.tpl` for the registry, the tiers
-    and where a templated block keeps its content.
-
-    ``order`` is the block's position on the page. Dict-keyed sections
-    sort by ``mint_ordered_id`` (creation time) by default, which is
-    right until someone drags one; ``order`` is what makes reordering
-    expressible. The Pages driver renormalizes it to ``index * 10``
-    after every structural change.
-    """
-
-    name = nu.kv.StrRef.slot()
-    snippet = nu.kv.ProgramRef.slot()
-    policy = nu.kv.StrRef.slot()
-    tpl = nu.kv.StrRef.slot()
-    order = nu.kv.IntRef.slot()
-
-
-class Page(RecursiveShape):
-    """A page: a title, a bag of sections, and nested child pages.
-
-    ``pages`` holds ``Page`` itself, which a class body cannot name. That
-    is what ``self_slot`` is for: it resolves against the finished class
-    during ``__set_name__``, so the slot lands in ``_slots`` like any
-    other. See :mod:`nuspace.recursive.slots` for why the annotation form
-    is not an option, and :mod:`nuspace.recursive.addressing` for reaching
-    a page whose depth is only known at run time.
-    """
-
-    title = nu.kv.StrRef.slot()
-    sections = nu.kv.ShapesDictRef.slot(Section)
-    pages = self_slot(nu.kv.ShapesDictRef)
+__all__ = ["App", "Page", "Section", "Space"]
 
 
 class Space(nu.Shape):

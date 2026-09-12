@@ -2,8 +2,8 @@
 
 Every one returns a Nu tree and nothing else, so a ui, a cli or an agent
 composes them instead of hand-writing ref chains. ``root`` is the space's own
-root Shape class: ``Space.apps`` and ``DemoSpace.apps`` are different
-addresses, so an op against a subclassed space has to be told which one.
+root Shape class, resolved at call time by :func:`~nuspace._root.resolve_root`
+so this module never needs ``Space`` while it is being imported.
 
 Write:
 - :func:`add_app`     -- every field of a new app, in one tree.
@@ -19,11 +19,17 @@ Read:
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import nu
+from nuspace._root import resolve_root
 from nuspace.core.ids import mint_ordered_id
-from nuspace.core.shapes import Space
 
 from .shapes import DEFAULT_POLICY, Runner
+
+
+if TYPE_CHECKING:
+    from nu.domains.shape import Shape
 
 
 __all__ = [
@@ -55,7 +61,7 @@ def add_app(
     app_id: nu.StrArg | None = None,
     name: nu.StrArg | None = None,
     policy: nu.StrArg = DEFAULT_POLICY,
-    root: type[Space] = Space,
+    root: type[Shape] | None = None,
 ) -> nu.Nu:
     """Write a whole app: id, name, policy and source, in one tree.
 
@@ -71,7 +77,7 @@ def add_app(
     # Minted while the tree is built, not while it runs, so re-running one tree
     # rewrites one app rather than adding another.
     app_id = mint_ordered_id("a") if app_id is None else app_id
-    app = root.apps[app_id]
+    app = resolve_root(root).apps[app_id]
     # Snippet last: every field write wakes its own reconcile, so this order
     # leaves the pass that actually launches the app holding the final source.
     return (
@@ -81,55 +87,56 @@ def add_app(
     )
 
 
-def remove_app(app_id: nu.StrArg, *, root: type[Space] = Space) -> nu.Nu:
+def remove_app(app_id: nu.StrArg, *, root: type[Shape] | None = None) -> nu.Nu:
     """Drop an app from the store. A no-op when it is not there."""
+    apps = resolve_root(root).apps
     # Guarded rather than bare: del_item on a missing key raises, and removing
     # something already gone is exactly what a retried ui click does.
-    return nu.IfDo(root.apps.contains(app_id), root.apps.del_item(app_id))
+    return nu.IfDo(apps.contains(app_id), apps.del_item(app_id))
 
 
-def set_snippet(app_id: nu.StrArg, source: nu.StrArg, *, root: type[Space] = Space) -> nu.Nu:
+def set_snippet(app_id: nu.StrArg, source: nu.StrArg, *, root: type[Shape] | None = None) -> nu.Nu:
     """Replace an app's source. The runner restarts that app and no other."""
-    return root.apps[app_id].snippet.set(source)
+    return resolve_root(root).apps[app_id].snippet.set(source)
 
 
-def rename_app(app_id: nu.StrArg, name: nu.StrArg, *, root: type[Space] = Space) -> nu.Nu:
+def rename_app(app_id: nu.StrArg, name: nu.StrArg, *, root: type[Shape] | None = None) -> nu.Nu:
     """Replace an app's display name. The id does not move."""
-    return root.apps[app_id].name.set(name)
+    return resolve_root(root).apps[app_id].name.set(name)
 
 
-def set_policy(app_id: nu.StrArg, policy: nu.StrArg, *, root: type[Space] = Space) -> nu.Nu:
+def set_policy(app_id: nu.StrArg, policy: nu.StrArg, *, root: type[Shape] | None = None) -> nu.Nu:
     """Replace an app's policy string."""
-    return root.apps[app_id].policy.set(policy)
+    return resolve_root(root).apps[app_id].policy.set(policy)
 
 
 # --- read ------------------------------------------------------------------
 
 
-def app_ids(*, root: type[Space] = Space) -> nu.Nu:
+def app_ids(*, root: type[Shape] | None = None) -> nu.Nu:
     """Every app id in the space, as a list."""
     # nu.list, not the bare keys view: the view is lazy and dies with its
     # Snapshot, so an undrained one reads as StorageClosedError later.
-    return nu.list(root.apps.keys())
+    return nu.list(resolve_root(root).apps.keys())
 
 
-def exists(app_id: nu.StrArg, *, root: type[Space] = Space) -> nu.Nu:
+def exists(app_id: nu.StrArg, *, root: type[Shape] | None = None) -> nu.Nu:
     """Whether the store has an app under this id."""
-    return root.apps.contains(app_id)
+    return resolve_root(root).apps.contains(app_id)
 
 
-def snippet_of(app_id: nu.StrArg, *, root: type[Space] = Space) -> nu.Nu:
+def snippet_of(app_id: nu.StrArg, *, root: type[Shape] | None = None) -> nu.Nu:
     """An app's source, verbatim. EMPTY when there is no such app."""
-    return root.apps[app_id].snippet
+    return resolve_root(root).apps[app_id].snippet
 
 
-def error_of(app_id: nu.StrArg, *, root: type[Space] = Space) -> nu.Nu:
+def error_of(app_id: nu.StrArg, *, root: type[Shape] | None = None) -> nu.Nu:
     """The construction error the runner recorded for this app, or ``""``.
 
     Written by ``app_body`` when a snippet does not construct, since a
     dispatched body has no waiter to raise into.
     """
-    return root.state.get_item(_state_key(app_id, ".error"), nu.Str(""))
+    return resolve_root(root).state.get_item(_state_key(app_id, ".error"), nu.Str(""))
 
 
 def running() -> nu.Nu:
