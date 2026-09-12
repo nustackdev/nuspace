@@ -6,8 +6,8 @@ driver function is called directly -- every write is a notify frame on that
 op's own wire path, and everything asserted came back over the socket.
 
 What is mounted here is the **whole space**, ``space_driver``, so the apps
-arms are proved in the composition they actually ship in: both surfaces, both
-drivers, one shell, one ws. The loop is create, rename, edit the snippet,
+arms are proved in the composition they actually ship in: every surface,
+every driver, one shell, one ws. The loop is create, rename, edit the snippet,
 restart, delete, and then a **second connection** opens, gets its own driver,
 and boots from the same store having seen none of the traffic.
 
@@ -167,12 +167,13 @@ def test_the_apps_driver_is_a_flat_fold_of_arms_and_nothing_else():
     _assert_flat(apps_driver(AppsScreen.apps, attached=True), ARMS)
 
 
-def test_the_two_drivers_fold_into_one_tree_with_every_arm_of_both():
-    """The assembly adds nothing and drops nothing: it is a ``|``."""
+def test_every_driver_folds_into_one_tree_with_every_arm_of_each():
+    """The assembly adds nothing and drops nothing: it is a fold."""
     from nuspace.web.apps.driver import ARMS as APPS_ARMS
+    from nuspace.web.lens.driver import ARMS as LENS_ARMS
     from nuspace.web.pages.driver import ARMS as PAGES_ARMS
 
-    _assert_flat(space_driver(), APPS_ARMS + PAGES_ARMS)
+    _assert_flat(space_driver(), APPS_ARMS + PAGES_ARMS + LENS_ARMS)
 
 
 def test_every_event_arm_has_its_own_attrs_namespace():
@@ -212,7 +213,7 @@ async def test_the_whole_app_loop_runs_over_one_websocket():
             # The ref is where the shell says it is, which is what every op
             # path below is built from.
             screens = {s["route"]: s for s in mount["pages"]}
-            assert set(screens) == {"/apps", "/pages"}
+            assert set(screens) == {"/apps", "/pages", "/lens"}
             (field,) = screens["/apps"]["fields"]
             assert field["path"] == REF
             assert field["type"] == "AppsRef"
