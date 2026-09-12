@@ -6,6 +6,11 @@ share one idea of which page is open. A flow that needs the route reads it
 through the session's round-trip read path, and gets whatever that one
 connection's URL says right now.
 
+Shared by both surfaces and owned by neither, which is why it sits at the top
+of :mod:`nuspace.web` rather than inside ``apps/`` or ``pages/``. Only the
+pages driver reads it today -- apps are flat, so that surface ships its whole
+list every frame and has no per-view cursor to ask about.
+
 The value the browser answers with is ``{"top": str, "page_id": str}``:
 which surface is showing, and which page under ``/pages``. Bare ``/pages``
 answers with the space's root page id rather than with nothing -- the root is

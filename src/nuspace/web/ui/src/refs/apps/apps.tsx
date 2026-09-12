@@ -10,8 +10,10 @@
 // honestly show is its source and its state, so that is what it shows.
 //
 // Selection is router-owned: the URL /apps/<id> is the cursor, so a click
-// drives navigate() and there is no app.select on the wire. /apps with no
-// segment is "nothing open".
+// drives navigate() rather than moving a server-side cursor. /apps with no
+// segment is "nothing open". Opening one does send `app.select`, but that is
+// a pull -- "re-ship this batch, I am looking at it now" -- and the server
+// keeps nothing after the arm finishes.
 //
 // We never remount the shell on navigation.
 
@@ -30,7 +32,7 @@ import {
 	useStore,
 } from "@nustackdev/ui-kit";
 import { RotateCw } from "lucide-react";
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { useRoute } from "../../app/router";
 import { SectionStatusPill } from "../../components";
 import {
@@ -54,6 +56,7 @@ import {
 	appsSliceFactory,
 	patchAppsEditor,
 	setDirty,
+	useAppStarter,
 	useAppsEditorSlot,
 	useAppsValue,
 } from "./slice";
@@ -67,6 +70,7 @@ function AppsView({ path }: { path: string }) {
 	const selectedId = route.path[0] ?? null;
 	const app = useMemo(() => apps.find((a) => a.id === selectedId) ?? null, [apps, selectedId]);
 
+	const starter = useAppStarter(path);
 	const renaming = useAppsEditorSlot(path, (e) => e.renaming);
 	const dirty = useAppsEditorSlot(path, (e) => (selectedId ? e.dirty.includes(selectedId) : false));
 
@@ -78,6 +82,12 @@ function AppsView({ path }: { path: string }) {
 		},
 		[path, send],
 	);
+
+	// A pull, once per app opened. The status batch answers for every app, so
+	// this is only ever "I am looking now, tell me again".
+	useEffect(() => {
+		if (selectedId) notify("app.select", { app_id: selectedId });
+	}, [notify, selectedId]);
 
 	const commit = useCallback(
 		(source: string) => {
@@ -97,6 +107,7 @@ function AppsView({ path }: { path: string }) {
 		<div className={shellSurface}>
 			<Rail
 				apps={apps}
+				starter={starter}
 				loaded={loaded}
 				attached={attached}
 				selectedId={selectedId}

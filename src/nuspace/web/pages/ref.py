@@ -18,7 +18,7 @@ them, and nothing else.
 The ref holds no state. It reads nothing, it remembers nothing, and it knows
 about no store: every value it ships is handed to it by whoever composed it.
 What each event means in kv is :mod:`nuspace.pages.ops`, and which op is
-wired to which arm is :mod:`nuspace.web.serve.driver`.
+wired to which arm is :mod:`nuspace.web.pages.driver`.
 
 **Ids are minted by the browser.** ``page.create`` and ``section.create``
 carry the id of the thing being made. A create is then a pure function of its
@@ -33,10 +33,10 @@ from typing import TYPE_CHECKING
 
 from typing_extensions import Self
 
-from nu.forms import Dict
-from nu.ui.core import Changed, Ref, Write
+from nu.ui.core import Changed, Ref
 from nuspace._root import resolve_root
 from nuspace.core.tpl import TPLS
+from nuspace.web.wire import event, write
 
 
 if TYPE_CHECKING:
@@ -44,12 +44,7 @@ if TYPE_CHECKING:
     from nu.lang import ListArg, Nu, StrArg
 
 
-__all__ = ["OPS", "PagesRef", "starters"]
-
-
-#: Segment every event path sits under, so the ops namespace can never
-#: collide with a write path or with a nested field of the ref itself.
-OPS = "ops"
+__all__ = ["PagesRef", "starters"]
 
 
 def starters(root: type[Shape] | None = None) -> dict[str, str]:
@@ -61,14 +56,6 @@ def starters(root: type[Shape] | None = None) -> dict[str, str]:
     """
     space = resolve_root(root)
     return {name: tpl.source(space) for name, tpl in TPLS.items()}
-
-
-class _ChannelRef(Ref):
-    """One wire path under a ref, and nothing else.
-
-    Exists to be addressed: :class:`~nu.ui.core.Changed` resolves its path and
-    subscribes, and no value is ever read through it.
-    """
 
 
 class PagesRef(Ref):
@@ -95,7 +82,7 @@ class PagesRef(Ref):
         ``parent`` and ``children``, so the browser is handed the same shape
         the store holds and builds no second one.
         """
-        return _write(self, "set_tree", pages=pages)
+        return write(self, "set_tree", pages=pages)
 
     def set_page(
         self,
@@ -111,7 +98,7 @@ class PagesRef(Ref):
         Each block is ``{id, name, source, tpl, policy}``. Order is list
         position, here as in the store.
         """
-        return _write(
+        return write(
             self,
             "set_page",
             page_id=page_id,
@@ -128,7 +115,7 @@ class PagesRef(Ref):
         not a replacement: a section the batch does not name keeps whatever
         it was showing.
         """
-        return _write(self, "set_status", statuses=statuses)
+        return write(self, "set_status", statuses=statuses)
 
     # --- events: browser -> server -------------------------------------------
 
@@ -180,9 +167,4 @@ class PagesRef(Ref):
 
     def _on(self, op: str) -> Changed:
         """Subscribe to ``<this ref>.ops.<op>``."""
-        return Changed(_ChannelRef(op, parent_ref=_ChannelRef(OPS, parent_ref=self)))
-
-
-def _write(ref: PagesRef, op: str, **fields: object) -> Nu:
-    """One tagged write frame on the ref's own path."""
-    return Write(ref, Dict.of(op=op, **fields))
+        return event(self, op)

@@ -29,15 +29,20 @@ export const EMPTY_EDITOR: AppsEditorState = { dirty: [], renaming: null };
 type AppsSlice = RefSlice & {
 	value: AppsValue;
 	editor: AppsEditorState;
+	/** What a new app starts life as, off the mount props. The one spelling of
+	 *  it is `nuspace/core/tpl.py`; it rides the mount so the browser can fill
+	 *  `source` on a create without owning a template. */
+	starter: string;
 };
 
 // -- factory -----------------------------------------------------------------
 
-export const appsSliceFactory: SliceFactory = (path, ctx: SliceCtx, _props) =>
+export const appsSliceFactory: SliceFactory = (path, ctx: SliceCtx, props) =>
 	({
 		type: "AppsRef",
 		value: { ...EMPTY_APPS } as AppsValue,
 		editor: { ...EMPTY_EDITOR },
+		starter: String((props as Record<string, unknown> | undefined)?.starter ?? ""),
 		write: (v) =>
 			ctx.set((refs) => {
 				const slice = refs[path] as AppsSlice | undefined;
@@ -83,6 +88,11 @@ export const appsSliceFactory: SliceFactory = (path, ctx: SliceCtx, _props) =>
 
 export function useAppsValue(path: string): AppsValue {
 	return useStore((s) => (s.refs[path]?.value as AppsValue | undefined) ?? EMPTY_APPS);
+}
+
+/** What a create fills `source` with. Empty until the mount lands. */
+export function useAppStarter(path: string): string {
+	return useStore((s) => (s.refs[path] as AppsSlice | undefined)?.starter ?? "");
 }
 
 /** Narrow subscription so a keystroke in the editor does not rerender the rail. */

@@ -60,11 +60,13 @@ import {
 	railTitle,
 	railTitleEmpty,
 } from "../../design";
+import { mintId } from "../pages/types";
 import type { Notify } from "./ops";
 import { type AppRow, appLabel, DETACHED_STATE } from "./types";
 
 export function Rail({
 	apps,
+	starter,
 	loaded,
 	attached,
 	selectedId,
@@ -74,6 +76,7 @@ export function Rail({
 	notify,
 }: {
 	apps: AppRow[];
+	starter: string;
 	loaded: boolean;
 	attached: boolean;
 	selectedId: string | null;
@@ -125,7 +128,10 @@ export function Rail({
 				addLabel="New app"
 				addTooltip="new app"
 				addDisabled={!loaded}
-				onAdd={() => notify("app.create", { name: "app" })}
+				// The id is minted here, so the row exists under a name this tab
+				// already knows and a retried create rewrites it rather than
+				// adding a second one. `starter` rides the mount.
+				onAdd={() => notify("app.create", { app_id: mintId("a"), name: "app", source: starter })}
 			/>
 			<nav aria-label="Apps" className={railScroll}>
 				{!loaded ? (

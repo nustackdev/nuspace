@@ -68,6 +68,7 @@ if TYPE_CHECKING:
 
 
 __all__ = [
+    "APP_STARTER",
     "DEFAULT_TPL",
     "TIER_BATCH",
     "TIER_STANDING",
@@ -75,6 +76,7 @@ __all__ = [
     "TPL_PROGRAM",
     "TPL_TEXT",
     "Tpl",
+    "app_starter",
     "resolve",
 ]
 
@@ -140,13 +142,40 @@ def out(path):
 # skeleton is how that is discoverable without reading docs first.
 #
 # It lives here rather than in the browser so there is one spelling of it.
-_PROGRAM_STARTER = '''import nu
+_PROGRAM_STARTER = """import nu
 import nu.ui
 
 
 def out(path):
     return nu.ui.TextRef(path + ".out").set(nu.Str("hello"))
+"""
+
+
+# What a fresh app starts life as. An app is the same substance as a block --
+# a `nu.prog` module with an `out` entry point, handed one value, `path` --
+# and differs in having nowhere to mount a ui ref: it runs headless, whether
+# or not a browser is looking. So the starter writes rather than renders.
+#
+# `{root}` is the space's own root Shape class, for the reason the text
+# template gives: ShapeMeta rebinds `_root_shape` on inherited slots, so only
+# the space's own class resolves against its navigator.
+APP_STARTER = '''import nu
+import nu.kv
+from {module} import {root}
+
+
+def out(path):
+    """Tick a counter in this app's own corner of the space's scratch kv."""
+    key = path + ".ticks"
+    now = nu.ToInt({root}.state.get_item(key, nu.Str("0")))
+    tick = {root}.state.set_item(key, nu.ToStr(now + nu.Int(1)))
+    return nu.kv.auto_flow_atomic(nu.ForeverDo(nu.DelayedDo(1.0, tick)), scope={root})
 '''
+
+
+def app_starter(root: type[Shape]) -> str:
+    """The program a new app starts life as, bound to this space's root."""
+    return APP_STARTER.format(module=root.__module__, root=root.__name__)
 
 
 @dataclass(frozen=True)

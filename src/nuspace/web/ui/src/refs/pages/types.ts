@@ -215,12 +215,12 @@ let _seq = 0;
 /**
  * A time-ordered id, the same shape `nuspace.core.ids.mint_ordered_id` makes.
  *
- * The browser mints page and section ids, which is what makes a create a pure
+ * The browser mints page, section and app ids, which is what makes a create a pure
  * function of its event -- re-running the arm rewrites one row instead of
  * adding another -- and what lets a click navigate to the page it just made
  * without waiting to be told its name.
  */
-export function mintId(prefix: "p" | "s"): string {
+export function mintId(prefix: "p" | "s" | "a"): string {
 	const stamp = Date.now().toString(16).padStart(12, "0");
 	const seq = (_seq++ % 0x10000).toString(16).padStart(4, "0");
 	const tail = Math.floor(Math.random() * 0x10000)

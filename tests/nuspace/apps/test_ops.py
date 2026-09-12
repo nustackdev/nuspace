@@ -126,3 +126,65 @@ async def test_running_and_is_running_read_the_host_bookkeeping():
     assert await in_host(data, ops.running()) == {"a_one": 7}
     assert await in_host(data, ops.is_running("a_one")) is True
     assert await in_host(data, ops.is_running("a_two")) is False
+
+
+async def test_init_apps_creates_the_container_and_is_idempotent(store):
+    await do(store, ops.init_apps())
+    await do(store, ops.add_app(SRC, app_id="a_one"))
+    await do(store, ops.init_apps())
+
+    assert await do(store, ops.app_ids()) == ["a_one"]
+
+
+async def test_clear_error_forgets_what_the_runner_recorded(store):
+    key = nu.Str("apps.a_one.error")
+    await do(store, Space.state.init(nu.Dict.create()) >> Space.state.set_item(key, nu.Str("boom")))
+    await do(store, ops.clear_error("a_one"))
+
+    assert await do(store, ops.error_of("a_one")) == ""
+    # An app that never failed has no key, and dropping it is still a no-op.
+    await do(store, ops.clear_error("a_two"))
+
+
+async def test_app_rows_answers_with_one_dict_per_app_in_mint_order(store):
+    await do(
+        store,
+        ops.add_app(SRC, app_id="a_one", name="One")
+        >> ops.add_app("other", app_id="a_two", name="Two", policy="manual"),
+    )
+
+    assert await do(store, ops.app_rows()) == [
+        {"id": "a_one", "name": "One", "source": SRC, "policy": "always"},
+        {"id": "a_two", "name": "Two", "source": "other", "policy": "manual"},
+    ]
+
+
+async def test_app_statuses_read_failed_off_the_error_key_and_idle_otherwise(store):
+    await do(store, ops.add_app(SRC, app_id="a_one") >> ops.add_app(SRC, app_id="a_two"))
+    await do(
+        store,
+        Space.state.init(nu.Dict.create())
+        >> Space.state.set_item(nu.Str("apps.a_two.error"), nu.Str("boom")),
+    )
+
+    assert await do(store, ops.app_statuses()) == [
+        {"section_id": "a_one", "state": "idle", "error": "", "started_at": 0},
+        {"section_id": "a_two", "state": "failed", "error": "boom", "started_at": 0},
+    ]
+
+
+async def test_app_statuses_read_running_only_when_supervised(store):
+    """Unsupervised never claims an app is running, because nothing would be."""
+    await do(store, ops.add_app(SRC, app_id="a_one") >> ops.init_apps())
+    data = {}
+    await in_host(data, Runner.workers.init(nu.Dict.create()))
+    await in_host(data, Runner.workers.set_item("a_one", nu.Int(7)))
+
+    tree = nu.With(
+        nu.kv.rocksdb_navigator(store),
+        body=nu.kv.auto_flow_atomic(ops.app_statuses(supervised=True), scope=Space),
+    )
+    supervised, _ = await nu.arun(tree, nu.Context().bind(dict, data))
+
+    assert [r["state"] for r in supervised] == ["running"]
+    assert [r["state"] for r in await do(store, ops.app_statuses())] == ["idle"]

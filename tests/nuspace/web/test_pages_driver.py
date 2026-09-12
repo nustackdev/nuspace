@@ -154,7 +154,7 @@ def _walk(term, seen=None):
 
 def test_the_driver_is_a_flat_fold_of_arms_and_nothing_else():
     """The thesis, pinned: N reactive arms, no dispatch, no python in an atom."""
-    from nuspace.web.serve.driver import ARMS
+    from nuspace.web.pages.driver import ARMS
 
     tree = _driver()
     nodes = list(_walk(tree))

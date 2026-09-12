@@ -10,17 +10,24 @@
 // sides in step: add an op on one side and this file is where the other side
 // fails to compile.
 //
-// There is no `app.select`. Selection is the URL (/apps/<id>), so the server
-// stays stateless between notifies.
+// Selection is still the URL (/apps/<id>) and the server still keeps no copy
+// of it. `app.select` is a pull, not a cursor: it asks the server to re-ship
+// the status batch for the app just opened, and the server forgets it again
+// the moment the arm finishes.
+//
+// `app_id` is minted here, by `mintId("a")`. That makes a create a pure
+// function of its event -- re-running the arm rewrites one row instead of
+// adding another -- and lets a click navigate to the app it just made without
+// waiting to be told its name. Same rule as pages and sections.
 
 /** Every op the Apps surface accepts, with its argument shape. */
 export type Ops = {
-	/** `source` omitted means "template a starter program at this space's root". */
-	"app.create": { name: string; source?: string };
+	"app.create": { app_id: string; name: string; source: string };
 	"app.rename": { app_id: string; name: string };
 	"app.delete": { app_id: string };
 	"app.update": { app_id: string; source: string };
 	"app.restart": { app_id: string };
+	"app.select": { app_id: string };
 };
 
 /** Send one op. Threaded down from `apps.tsx` into the rail and the canvas. */

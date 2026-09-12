@@ -6,15 +6,19 @@ root Shape class, resolved at call time by :func:`~nuspace._root.resolve_root`
 so this module never needs ``Space`` while it is being imported.
 
 Write:
+- :func:`init_apps`   -- the container, once, on a cold store.
 - :func:`add_app`     -- every field of a new app, in one tree.
 - :func:`remove_app`  -- drop the row. The runner kills the worker.
 - :func:`set_snippet` / :func:`rename_app` / :func:`set_policy` -- one field.
+- :func:`clear_error` -- forget what the runner last recorded.
 
 Read:
 - :func:`app_ids` / :func:`exists` / :func:`snippet_of` / :func:`error_of`
   -- the store.
 - :func:`running` / :func:`is_running` -- the host's ``Runner.workers``, which
   is mem and therefore only readable from inside the runner's own tree.
+- whole rows, one dict per app: :func:`app_rows` / :func:`app_statuses`. What
+  a rail or a status bar is filled from.
 """
 
 from __future__ import annotations
@@ -35,8 +39,12 @@ if TYPE_CHECKING:
 __all__ = [
     "add_app",
     "app_ids",
+    "app_rows",
+    "app_statuses",
+    "clear_error",
     "error_of",
     "exists",
+    "init_apps",
     "is_running",
     "remove_app",
     "rename_app",
@@ -47,9 +55,28 @@ __all__ = [
 ]
 
 
+#: The name ``Map`` binds the current element under, and the ref that reads it.
+_ITEM = "_na_item"
+_item = nu.AnyAttrRef(_ITEM)
+
+
 def _state_key(app_id: nu.StrArg, suffix: str) -> nu.Nu:
     """``apps.<app_id><suffix>`` as a term, for either a python str or a term."""
     return nu.Str("apps.") + app_id + nu.Str(suffix)
+
+
+# --- write: the space ------------------------------------------------------
+
+
+def init_apps(*, root: type[Shape] | None = None) -> nu.Nu:
+    """Create the apps container if the store has none. Idempotent.
+
+    A subscription over a missing container resolves to INVALID and silently
+    never fires, so anything that means to watch ``apps`` boots through here
+    first. ``Dict.create()``, not ``{}``: a literal is captured once at Form
+    construction and shared across every evaluation of the term.
+    """
+    return resolve_root(root).apps.init(nu.Dict.create())
 
 
 # --- write -----------------------------------------------------------------
@@ -110,6 +137,17 @@ def set_policy(app_id: nu.StrArg, policy: nu.StrArg, *, root: type[Shape] | None
     return resolve_root(root).apps[app_id].policy.set(policy)
 
 
+def clear_error(app_id: nu.StrArg, *, root: type[Shape] | None = None) -> nu.Nu:
+    """Forget the construction error recorded for this app. A no-op when clean.
+
+    Guarded rather than bare: ``del_item`` on a missing key raises, and an app
+    that never failed has no key.
+    """
+    state = resolve_root(root).state
+    key = _state_key(app_id, ".error")
+    return nu.IfDo(state.contains(key), state.del_item(key))
+
+
 # --- read ------------------------------------------------------------------
 
 
@@ -151,3 +189,62 @@ def running() -> nu.Nu:
 def is_running(app_id: nu.StrArg) -> nu.Nu:
     """Whether this app has a worker on record right now."""
     return Runner.workers.contains(app_id)
+
+
+# --- read: whole rows ------------------------------------------------------
+#
+# Both answer with a list of dicts rather than a scalar, so one read fills a
+# rail or a status bar. They exist because a caller that wants every app would
+# otherwise read the ids and then loop in its own language, which puts a python
+# (or a javascript) for-loop back in the middle of what is meant to be one tree.
+
+
+def app_rows(*, root: type[Shape] | None = None) -> nu.Nu:
+    """Every app as ``{id, name, source, policy}``, one dict per app.
+
+    Keys sort by mint time, so this is creation order with no order slot.
+    """
+    apps = resolve_root(root).apps
+    app = apps[_item]
+    return nu.Collect(
+        nu.Map(
+            # nu.list, not the bare keys view, for the reason app_ids gives.
+            nu.list(apps.keys()),
+            nu.Dict.of(id=_item, name=app.name, source=app.snippet, policy=app.policy),
+            key=_ITEM,
+        )
+    )
+
+
+def app_statuses(*, supervised: bool = False, root: type[Shape] | None = None) -> nu.Nu:
+    """Every app as ``{section_id, state, error, started_at}``, in the same order.
+
+    ``section_id`` rather than ``app_id`` because this is the supervisor's
+    contract, not the Apps surface's: an app and a section are the same
+    substance and share one status shape. An app whose namespace holds an
+    ``error`` key reads ``failed``.
+
+    Args:
+        supervised: whether ``Runner.workers`` is readable here, which it only
+            is inside the runner's own tree. True adds the ``running`` state;
+            False never claims an app is running, because nothing would be.
+        root: the space's root Shape class.
+    """
+    root = resolve_root(root)
+    # Same binding Map makes, read as a Str so `+` concatenates rather than
+    # collapsing to INVALID the way it would on an untyped AnyAttrRef.
+    key = _state_key(nu.StrAttrRef(_ITEM), ".error")
+    idle = nu.Str("idle")
+    quiet = nu.If(is_running(nu.StrAttrRef(_ITEM)), nu.Str("running"), idle) if supervised else idle
+    return nu.Collect(
+        nu.Map(
+            app_ids(root=root),
+            nu.Dict.of(
+                section_id=_item,
+                state=nu.If(root.state.contains(key), nu.Str("failed"), quiet),
+                error=nu.ToStr(root.state.get_item(key, nu.Str(""))),
+                started_at=nu.Int(0),
+            ),
+            key=_ITEM,
+        )
+    )
