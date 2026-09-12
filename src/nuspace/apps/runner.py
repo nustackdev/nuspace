@@ -54,6 +54,9 @@ CHANGED_APP_INDEX = 2
 #: The app a reconcile pass is about, carried into the worker by ``carry=True``.
 _APP = nu.StrAttrRef("app")
 
+#: The pool worker a reconcile pass just launched.
+_WORKER = nu.IntAttrRef("w")
+
 #: The key that woke the live loop, and the app id inside it.
 _KEY = nu.TupleAttrRef("k")
 changed_app = _KEY[CHANGED_APP_INDEX]
@@ -111,9 +114,14 @@ def reconcile(*, root: type[Shape] | None = None) -> nu.Nu:
     )
     start = nu.IfDo(
         root.apps.contains(_APP),
-        nu.SetCmd(nu.AttrRef("w"), pool.launch())
-        >> Runner.workers.set_item(_APP, nu.AttrRef("w"))
-        >> pool.dispatch(app_body(root=root), nu.AttrRef("w"), carry=True),
+        # The worker id is read twice, recorded and then dispatched to, so it
+        # is bound once and scoped to the two reads that want it.
+        nu.Let(
+            "w",
+            pool.launch(),
+            body=Runner.workers.set_item(_APP, _WORKER)
+            >> pool.dispatch(app_body(root=root), _WORKER, carry=True),
+        ),
     )
     return stop >> start
 
@@ -142,7 +150,9 @@ def driver(*, root: type[Shape] | None = None) -> tuple[nu.Nu, nu.Nu]:
         root.apps.on_change(),
         nu.IfDo(
             nu.Len(_KEY) > nu.Int(CHANGED_APP_INDEX),
-            nu.SetCmd(_APP, changed_app) >> body,
+            # Same binding the seed pass makes with ForEachDo(item="app"), and
+            # scoped the same way, so no reaction leaves one behind.
+            nu.Let("app", changed_app, body=body),
         ),
         changed_key="k",
     )

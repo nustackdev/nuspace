@@ -48,6 +48,9 @@ CHANGED_SECTION_INDEX = 4
 #: The section a reconcile pass is about, carried into the worker by ``carry=True``.
 _SECTION = nu.StrAttrRef("section")
 
+#: The pool worker a reconcile pass just launched.
+_WORKER = nu.IntAttrRef("w")
+
 #: The key that woke the live loop, and the section id inside it.
 _KEY = nu.TupleAttrRef("k")
 changed_section = _KEY[CHANGED_SECTION_INDEX]
@@ -106,12 +109,17 @@ def reconcile(
     )
     start = nu.IfDo(
         sections.contains(_SECTION),
-        nu.SetCmd(nu.AttrRef("w"), pool.launch())
-        >> Runner.workers.set_item(_SECTION, nu.AttrRef("w"))
-        >> pool.dispatch(
-            section_body(page_id, root=root) if body is None else body,
-            nu.AttrRef("w"),
-            carry=True,
+        # The worker id is read twice, recorded and then dispatched to, so it
+        # is bound once and scoped to the two reads that want it.
+        nu.Let(
+            "w",
+            pool.launch(),
+            body=Runner.workers.set_item(_SECTION, _WORKER)
+            >> pool.dispatch(
+                section_body(page_id, root=root) if body is None else body,
+                _WORKER,
+                carry=True,
+            ),
         ),
     )
     return stop >> start
@@ -144,7 +152,9 @@ def page_driver(
         sections.on_change(),
         nu.IfDo(
             nu.Len(_KEY) > nu.Int(CHANGED_SECTION_INDEX),
-            nu.SetCmd(_SECTION, changed_section) >> pass_,
+            # Same binding the seed pass makes with ForEachDo(item="section"),
+            # and scoped the same way, so no reaction leaves one behind.
+            nu.Let("section", changed_section, body=pass_),
         ),
         changed_key="k",
     )
