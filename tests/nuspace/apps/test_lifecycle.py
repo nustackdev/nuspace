@@ -13,8 +13,7 @@ import multiprocessing
 import pytest
 
 import nu
-from nuspace.apps import run_apps
-from nuspace.core.shapes import Space
+from nuspace.apps import ops, run_apps
 
 from .conftest import (
     BROKEN,
@@ -96,7 +95,7 @@ async def test_deleting_an_app_kills_its_worker_and_forgets_it(store):
 
     script = (
         nu.DelayedDo(SETTLE, snap("t1", "a_one", "a_two"))
-        >> nu.DelayedDo(0.2, Space.apps.del_item(nu.Str("a_two")))
+        >> nu.DelayedDo(0.2, ops.remove_app("a_two"))
         >> nu.DelayedDo(
             SETTLE, seq(snap("t2", "a_one", "a_two"), snap_ticks("t2", "a_one", "a_two"))
         )

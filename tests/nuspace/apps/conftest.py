@@ -15,7 +15,7 @@ import pytest
 
 import nu
 import nu.kv
-from nuspace.apps import Runner
+from nuspace.apps import Runner, ops
 from nuspace.core.shapes import Space
 
 
@@ -62,7 +62,7 @@ def seq(*terms):
 
 def write_app(app_id, source=COUNTER):
     """One app into the store, snippet only: fewer fields, less reconcile churn."""
-    return Space.apps[app_id].snippet.set(nu.Str(source))
+    return ops.set_snippet(app_id, source)
 
 
 def snap(tag, *app_ids):

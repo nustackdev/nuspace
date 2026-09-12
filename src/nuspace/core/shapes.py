@@ -11,7 +11,8 @@ An app and a section are the same substance (a ``nu.prog`` program: a
 python module whose ``out`` entry point returns a Nu tree). They differ
 only in the ``policy`` string that says when to run.
 For v0 the policy is a bare string; a richer tagged form can come later
-without changing the shape layout.
+without changing the shape layout. ``App`` itself lives in
+:mod:`nuspace.apps.shapes`, beside the runner and the ops that work it.
 
 ``state`` is the scratch kv namespace snippets write to. Per ``model.md``
 nuspace has no state pillar -- state is Nu's kv fabric -- but a bare
@@ -28,33 +29,14 @@ markdown lives at ``Space.state["sections.<sid>.text"]``, because
 from __future__ import annotations
 
 import nu
+
+# One way only: apps.shapes must never import back from here, or Space and App
+# deadlock on each other at import time.
+from nuspace.apps.shapes import App
 from nuspace.recursive import RecursiveShape, self_slot
 
 
-__all__ = ["App", "Page", "Section", "Space"]
-
-
-class App(nu.Shape):
-    """One ops-orchestration unit. Same substance as a ``Section``.
-
-    ``snippet`` is a ``ProgramRef``, exactly like ``Section.snippet``:
-    the stored text is source in ``nu.prog``'s sense, a module with an
-    ``out`` entry point whose signature is the scope contract. nuspace
-    binds one value, ``path``, and for an app it is ``"apps.<app_id>"``.
-
-    Unlike a section, ``path`` is **not** a ui mount prefix. An app is
-    headless -- it produces, a page displays -- so it has nowhere to
-    mount a ui ref and must not try. ``path`` is a kv namespace: the
-    app's own corner of ``Space.state``, collision-free by construction.
-
-    ``policy`` is metadata, and for v1 nothing reads it: every app runs
-    always. It stays in the shape because the policy engine slots in
-    behind it, not beside it.
-    """
-
-    name = nu.kv.StrRef.slot()
-    snippet = nu.kv.ProgramRef.slot()
-    policy = nu.kv.StrRef.slot()
+__all__ = ["Page", "Section", "Space"]
 
 
 class Section(nu.Shape):

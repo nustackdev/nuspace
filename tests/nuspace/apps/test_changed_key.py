@@ -14,7 +14,7 @@ import pytest
 
 import nu
 import nu.kv
-from nuspace.apps import CHANGED_APP_INDEX
+from nuspace.apps import CHANGED_APP_INDEX, ops
 from nuspace.core.shapes import Space
 
 from .conftest import read_state, seq, write_app
@@ -53,8 +53,8 @@ async def test_the_app_id_sits_at_the_pinned_index(store):
     script = (
         nu.DelayedDo(0.2, write_app("a_one"))
         >> nu.DelayedDo(0.2, write_app("a_two"))
-        >> nu.DelayedDo(0.2, Space.apps["a_one"].snippet.set(nu.Str("edited")))
-        >> nu.DelayedDo(0.2, Space.apps.del_item(nu.Str("a_two")))
+        >> nu.DelayedDo(0.2, ops.set_snippet("a_one", "edited"))
+        >> nu.DelayedDo(0.2, ops.remove_app("a_two"))
     )
     keys = await _keys(store, script)
 

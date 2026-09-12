@@ -24,7 +24,7 @@ from pathlib import Path
 
 import nu
 from nu.core.io import STDOUT
-from nuspace.apps import Runner, run_apps
+from nuspace.apps import Runner, ops, run_apps
 from nuspace.core.shapes import Space
 
 
@@ -64,16 +64,6 @@ def out(path):
 '''
 
 
-def write(app_id, source):
-    """One app into the store, as the editor would write it."""
-    app = Space.apps[app_id]
-    return (
-        app.name.set(nu.Str(app_id))
-        >> app.policy.set(nu.Str("always"))
-        >> app.snippet.set(nu.Str(source))
-    )
-
-
 def report(label):
     """What the runner and the apps have to say for themselves, right now."""
     return nu.Print(STDOUT, label, "\n  workers:", Runner.workers, "\n  state:  ") >> nu.Print(
@@ -87,17 +77,17 @@ def report(label):
 # writing an app's three fields costs three reconciles, each a kill + spawn +
 # dispatch. That churn is why the worker ids below are not 0 and 1.
 SCRIPT = (
-    nu.DelayedDo(0.2, write("a_counter", COUNTER.format(step=1)))
-    >> nu.DelayedDo(0.2, write("a_mirror", MIRROR.format(watched="a_counter")))
+    nu.DelayedDo(0.2, ops.add_app(COUNTER.format(step=1), app_id="a_counter"))
+    >> nu.DelayedDo(0.2, ops.add_app(MIRROR.format(watched="a_counter"), app_id="a_mirror"))
     >> nu.DelayedDo(4.0, report("\n[1] both apps up and running"))
     # Edit one snippet. Only the counter restarts: its worker id moves, the
     # mirror's does not, and the counter starts over from zero stepping by
     # ten.
-    >> nu.DelayedDo(0.2, Space.apps["a_counter"].snippet.set(nu.Str(COUNTER.format(step=10))))
+    >> nu.DelayedDo(0.2, ops.set_snippet("a_counter", COUNTER.format(step=10)))
     >> nu.DelayedDo(2.0, report("\n[2] counter edited, mirror untouched"))
     # Delete one app. Its worker is killed and forgotten; the counter keeps
     # ticking and the mirror's value simply stops moving.
-    >> nu.DelayedDo(0.2, Space.apps.del_item(nu.Str("a_mirror")))
+    >> nu.DelayedDo(0.2, ops.remove_app("a_mirror"))
     >> nu.DelayedDo(2.0, report("\n[3] mirror deleted, counter undisturbed"))
 )
 
