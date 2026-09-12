@@ -1,11 +1,12 @@
 """Nuspace top shapes.
 
-Two orchestration surfaces live under one ``Space``:
+Two orchestration surfaces live under one ``Space``, and both are **flat**
+dicts keyed by id:
 
-- ``apps``  - a **flat** dict of apps. Single depth, no folders.
-- ``pages`` - the root ``Page``. Pages nest recursively (a page holds
-  child pages) and each page holds its own dict of sections. The root
-  page is a real page: it may carry sections of its own.
+- ``apps``  - every app in the space. Single depth, no folders.
+- ``pages`` - every page in the space. The tree is data, not storage
+  depth: a page carries its ``parent`` and its ordered ``children``, so
+  any page is one lookup away and a browser route addresses it directly.
 
 An app and a section are the same substance (a ``nu.prog`` program: a
 python module whose ``out`` entry point returns a Nu tree). They differ
@@ -23,7 +24,7 @@ snippets a reachable slot without minting a shape per value.
 It is also where a templated block keeps its content: a text block's
 markdown lives at ``Space.state["sections.<sid>.text"]``, because
 ``path`` is the only thing a snippet's scope carries and a slot on
-``Section`` would need the page path too. See :mod:`nuspace.core.tpl`.
+``Section`` would need the page id too. See :mod:`nuspace.core.tpl`.
 """
 
 from __future__ import annotations
@@ -43,14 +44,13 @@ __all__ = ["App", "Page", "Section", "Space"]
 class Space(nu.Shape):
     """Nuspace root.
 
-    ``apps`` is a flat dict, not a tree. v0 rooted it at a group shape
-    that nested recursively, mirroring ``Page``; nothing ever used the
-    nesting and it cost every apps call site a path walk. A page tree
-    earns its depth because a page is a place you navigate to. An app is
-    a running program in a list, so ``Space.apps["a_x"].snippet`` is the
-    whole address and the group layer is gone.
+    Neither container nests. v0 rooted apps at a recursive group shape and
+    pages at a recursive ``Page``, which cost every call site a path walk
+    and fixed a page's depth the moment its address was built. Depth is a
+    relation, so it lives in ``Page.parent`` / ``Page.children`` and both
+    dicts are one level deep.
     """
 
     apps = nu.kv.ShapesDictRef.slot(App)
-    pages = nu.kv.ShapeRef.slot(Page)
+    pages = nu.kv.ShapesDictRef.slot(Page)
     state = nu.kv.DictRef.slot(str)

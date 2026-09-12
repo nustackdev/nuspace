@@ -11,13 +11,13 @@ from typing import TYPE_CHECKING
 
 
 if TYPE_CHECKING:
-    from nu.domains.shape import Shape
+    from nuspace.core import Space
 
 
 __all__ = ["resolve_root"]
 
 
-def resolve_root(root: type[Shape] | None) -> type[Shape]:
+def resolve_root(root: type[Space] | None) -> type[Space]:
     """``root``, or ``Space`` when it is None.
 
     ``Space.apps`` and ``DemoSpace.apps`` are different addresses, so an op

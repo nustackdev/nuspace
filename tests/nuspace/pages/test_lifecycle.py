@@ -38,7 +38,7 @@ pytestmark = pytest.mark.timeout(300)
 #: the waits here are long on purpose. Shortening them buys flakiness.
 SETTLE = 4.0
 
-PAGE = ["docs", "guides"]
+PAGE = "guides"
 
 #: An edit has to be a real byte change or the store writes nothing at all.
 EDITED = COUNTER + "\n# edited\n"
@@ -66,7 +66,7 @@ async def test_a_section_already_on_the_page_is_launched_and_runs(store):
 async def test_a_section_on_another_page_is_left_alone(store):
     """The driver is scoped to one page: a sibling page's sections never run."""
     await seed_store(store, PAGE, {"s_mine": None})
-    await seed_store(store, ["docs"], {"s_theirs": None})
+    await seed_store(store, "other", {"s_theirs": None})
 
     await run_page(store, PAGE, duration=SETTLE)
 
@@ -81,7 +81,7 @@ async def test_adding_a_section_live_does_not_disturb_the_running_ones(store):
 
     script = (
         nu.DelayedDo(SETTLE, snap("t1", "s_one", "s_two"))
-        >> nu.DelayedDo(0.2, ops.set_snippet(PAGE, "s_new", EDITED))
+        >> nu.DelayedDo(0.2, ops.add_section(PAGE, EDITED, section_id="s_new"))
         >> nu.DelayedDo(SETTLE, snap("t2", "s_one", "s_two", "s_new"))
     )
     await run_page(store, PAGE, alongside=script, duration=2 * SETTLE + 4.0)

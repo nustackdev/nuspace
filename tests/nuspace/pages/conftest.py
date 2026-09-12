@@ -15,13 +15,12 @@ import pytest
 
 import nu
 import nu.kv
-import nu.mem
 import nu.mp_pool
 import nu.proxy
 from nu.kv.fabrics import Navigator
 from nuspace.apps import free_port, worker_init
 from nuspace.core.shapes import Space
-from nuspace.pages import Runner, ops, page_tree
+from nuspace.pages import ROOT_PAGE_ID, Runner, ops, page_tree
 
 
 # A counter that never stops. One kv key, ticking. Wraps its own write,
@@ -51,12 +50,6 @@ SRC = "def out(path):\n    return None\n"
 
 #: What a missing worker id reads as in a probe.
 NONE = "-1"
-
-
-class Route(nu.Shape):
-    """A mem shape holding a page path, for the runtime-path cases."""
-
-    path = nu.mem.ListRef.slot(str)
 
 
 def seq(*terms):
@@ -95,31 +88,32 @@ def snap_ticks(tag, *section_ids):
     )
 
 
-async def do(path, term, data=None):
-    """Run one term against the store and give back what it evaluated to.
-
-    Args:
-        path: the store directory.
-        term: the tree to run.
-        data: a dict to bind under ``Route``, for the mem-backed path cases.
-    """
+async def do(path, term):
+    """Run one term against the store and give back what it evaluated to."""
     tree = nu.With(
         nu.kv.rocksdb_navigator(path),
         body=nu.kv.auto_flow_atomic(term, scope=Space),
     )
-    ctx = nu.Context() if data is None else nu.Context().bind(dict, data, Route)
-    value, _ = await nu.arun(tree, ctx)
+    value, _ = await nu.arun(tree, nu.Context())
     return value
 
 
-async def seed_store(path, page_path, sections):
+async def seed_pages(path, *page_ids):
+    """The root page plus one child page per id, each directly under it."""
+    await do(path, ops.init_space())
+    for page_id in page_ids:
+        await do(path, ops.add_page(ROOT_PAGE_ID, page_id=page_id, title=page_id))
+
+
+async def seed_store(path, page_id, sections):
     """Write sections onto one page before the runner takes the write lock.
 
     ``sections`` maps section id to source; ``None`` means the plain counter.
     """
+    await seed_pages(path, page_id)
     writes = seq(
         *(
-            ops.add_section(page_path, source or COUNTER, section_id=sid)
+            ops.add_section(page_id, source or COUNTER, section_id=sid)
             for sid, source in sections.items()
         )
     )
@@ -136,7 +130,7 @@ async def read_state(path):
     return dict(rows or {})
 
 
-async def run_page(path, page_path, *, alongside=None, duration=4.0):
+async def run_page(path, page_id, *, alongside=None, duration=4.0):
     """Mount one page's tree on a host, the way a preset would.
 
     ``page_tree`` owns no store and no pool on purpose, so everything the
@@ -161,7 +155,7 @@ async def run_page(path, page_path, *, alongside=None, duration=4.0):
             nu.mp_pool.WorkerPool,
             {"name": "nuspace-pages", "init": worker_init(address)},
         ),
-        body=page_tree(page_path, alongside=alongside, duration=duration),
+        body=page_tree(page_id, alongside=alongside, duration=duration),
     )
     await nu.arun(tree, nu.Context(), max_parallel=64)
 

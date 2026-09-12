@@ -6,13 +6,17 @@ are added and launched, one snippet is edited and only that section restarts,
 one section is deleted and only its worker dies. Watch the worker ids -- pool
 ids are never reused, so a changed id means that section restarted.
 
-    docs
-      guides          <- the page we run
-        intro
+    root
+      docs
+        guides        <- the page we run
+          intro
 
     1. two sections written -> the live loop launches both
     2. counter edited       -> only the counter restarts
     3. mirror deleted       -> only the mirror's worker dies
+
+Pages are stored flat, so "guides" is the whole address however deep it sits.
+The nesting is data: `parent` and `children`, printed below beside the rest.
 
 `page_tree` brings no store and no pool on purpose, because a page runs per
 view. Everything under `host()` below is what a preset owns, not the runner.
@@ -38,14 +42,13 @@ from nu.core.io import STDOUT
 from nu.kv.fabrics import Navigator
 from nuspace.apps import free_port, worker_init
 from nuspace.core.shapes import Space
-from nuspace.pages import Runner, ops, page_tree
+from nuspace.pages import ROOT_PAGE_ID, Runner, ops, page_tree
 
 
 ROOT = Path("/tmp/nuspace-pages-demo")  # noqa: S108
 
-# The page the driver runs. Three levels deep, so the addressing is doing
-# something: every op below walks `pages["docs"].pages["guides"]` to get here.
-PAGE = ["docs", "guides"]
+# The page the driver runs. Three levels down, and still one lookup away.
+PAGE = "guides"
 
 # A counter. Writes sections.<id>.ticks every 0.1s, stepping by `step`, forever.
 # Editing `step` in the stored source is what the demo edits.
@@ -86,29 +89,34 @@ def report(label):
     return nu.Print(
         STDOUT,
         label,
-        "\n  workers: ",
+        "\n  workers:  ",
         Runner.workers,
-        "\n  titles:  ",
-        ops.titles(["docs"]),
-        "\n  order:   ",
-        ops.section_order(PAGE),
-        "\n  state:   ",
+        "\n  pages:    ",
+        ops.page_ids(),
+        "\n  children: ",
+        ops.children_of("docs"),
+        "\n  parent:   ",
+        ops.parent_of(PAGE),
+        "\n  sections: ",
+        ops.section_ids(PAGE),
+        "\n  state:    ",
     ) >> nu.Print(STDOUT, "   ", nu.dict(Space.state.items()))
 
 
-# The page tree, built through ops before anything runs. Pages first, then the
-# driver's own script: `add_page` is an ordinary term like any other, so the
-# whole shape of the space is just more of the one tree.
+# The page tree, built through ops before anything runs. `init_space` writes
+# the root page a cold store has none of; everything after it is an ordinary
+# term, so the whole shape of the space is just more of the one tree.
 SEED = (
-    ops.add_page([], page_id="docs", title="Docs")
-    >> ops.add_page(["docs"], page_id="guides", title="Guides")
+    ops.init_space()
+    >> ops.add_page(ROOT_PAGE_ID, page_id="docs", title="Docs")
+    >> ops.add_page("docs", page_id=PAGE, title="Guides")
     >> ops.add_page(PAGE, page_id="intro", title="Intro")
 )
 
 # The demo, as one tree, running beside the live loop after the seed pass.
 #
 # The waits are generous on purpose: the subscription is depth-unbounded, so
-# writing a section's five fields costs five reconciles, each a kill + spawn +
+# writing a section's four fields costs four reconciles, each a kill + spawn +
 # dispatch. That churn is why the worker ids below are not 0 and 1.
 SCRIPT = (
     nu.DelayedDo(0.2, ops.add_section(PAGE, COUNTER.format(step=1), section_id="s_counter"))
@@ -124,9 +132,10 @@ SCRIPT = (
     # ticking and the mirror's value simply stops moving.
     >> nu.DelayedDo(0.2, ops.remove_section(PAGE, "s_mirror"))
     >> nu.DelayedDo(2.0, report("\n[3] mirror deleted, counter undisturbed"))
-    # Reordering is a store write like any other and restarts nothing: `order`
-    # is for whoever renders the page, not for whoever runs it.
-    >> nu.DelayedDo(0.2, ops.reorder_sections(PAGE, ["s_counter"]))
+    # A page delete takes its whole subtree. "intro" goes with it and "docs"
+    # stops listing it, while the sections on this page carry on untouched.
+    >> nu.DelayedDo(0.2, ops.remove_page("intro"))
+    >> nu.DelayedDo(2.0, report("\n[4] intro page removed, this page untouched"))
 )
 
 
@@ -163,7 +172,7 @@ def demo():
     tree = host(
         str(ROOT / "db"),
         nu.kv.auto_flow_atomic(SEED, scope=Space)
-        >> page_tree(PAGE, alongside=SCRIPT, duration=13.0),
+        >> page_tree(PAGE, alongside=SCRIPT, duration=15.0),
     )
     asyncio.run(nu.arun(tree, nu.Context(), max_parallel=64))
 

@@ -1,10 +1,9 @@
 """What a page's sections subscription actually delivers, pinned.
 
-``changed_section_index`` is a measurement, not a guess: these tests record
+``CHANGED_SECTION_INDEX`` is a measurement, not a guess: these tests record
 the real keys the observer hands ``ReactForever`` and assert the section id is
-where the runner slices for it, at the root page and three levels down. If the
-key shape ever changes this fails loudly instead of the runner silently
-reconciling the wrong section.
+where the runner slices for it. Pages are flat, so the index is a constant --
+the same for a top page and one six levels down -- and this is what says so.
 """
 
 from __future__ import annotations
@@ -16,35 +15,43 @@ import pytest
 import nu
 import nu.kv
 from nuspace.core.shapes import Space
-from nuspace.pages import ops
-from nuspace.pages.runner import changed_section_index
+from nuspace.pages import ROOT_PAGE_ID, ops
+from nuspace.pages.runner import CHANGED_SECTION_INDEX
 
-from .conftest import SRC, read_state
+from .conftest import SRC, do, read_state
 
 
 pytestmark = pytest.mark.timeout(120)
 
 
-DEEP = ["docs", "guides", "intro"]
+DEEP = "intro"
 
 
-def _record(page_path):
+async def _seed(store):
+    """root > docs > guides > intro, so a deep page is available to subscribe to."""
+    await do(store, ops.init_space())
+    await do(store, ops.add_page(ROOT_PAGE_ID, page_id="docs"))
+    await do(store, ops.add_page("docs", page_id="guides"))
+    await do(store, ops.add_page("guides", page_id=DEEP))
+
+
+def _record(page_id):
     """Append every key the page's sections subscription delivers into state."""
     key = nu.TupleAttrRef("k")
     return nu.ReactForever(
-        ops.page_at(page_path).sections.on_change(),
+        Space.pages[page_id].sections.on_change(),
         Space.state.set_item(nu.Str("key.") + nu.ToStr(nu.Len(Space.state)), nu.ToStr(key)),
         changed_key="k",
     )
 
 
-async def _keys(store, page_path, script):
+async def _keys(store, page_id, script):
     """Run ``script`` beside a recorder and give back the keys it saw, in order."""
     tree = nu.With(
         nu.kv.rocksdb_navigator(store),
         body=nu.kv.auto_flow_atomic(
-            ops.page_at(page_path).sections.init(nu.Dict.create())
-            >> nu.Race(_record(page_path) | script, nu.DelayedDo(nu.Float(3.0), nu.Noop())),
+            Space.pages[page_id].sections.init(nu.Dict.create())
+            >> nu.Race(_record(page_id) | script, nu.DelayedDo(nu.Float(3.0), nu.Noop())),
             scope=Space,
         ),
     )
@@ -53,29 +60,30 @@ async def _keys(store, page_path, script):
     return [literal_eval(v) for k, v in sorted(state.items()) if k.startswith("key.")]
 
 
-@pytest.mark.parametrize("page_path", [[], ["docs"], DEEP])
-async def test_the_section_id_sits_at_the_pinned_index(store, page_path):
+@pytest.mark.parametrize("page_id", [ROOT_PAGE_ID, "docs", DEEP])
+async def test_the_section_id_sits_at_the_pinned_index(store, page_id):
     """Add, edit and delete, and read the section id out of every key."""
-    index = changed_section_index(page_path)
+    await _seed(store)
     script = (
-        nu.DelayedDo(0.2, ops.add_section(page_path, SRC, section_id="s_one"))
-        >> nu.DelayedDo(0.2, ops.add_section(page_path, SRC, section_id="s_two"))
-        >> nu.DelayedDo(0.2, ops.set_snippet(page_path, "s_one", "edited"))
-        >> nu.DelayedDo(0.2, ops.remove_section(page_path, "s_two"))
+        nu.DelayedDo(0.2, ops.add_section(page_id, SRC, section_id="s_one"))
+        >> nu.DelayedDo(0.2, ops.add_section(page_id, SRC, section_id="s_two"))
+        >> nu.DelayedDo(0.2, ops.set_snippet(page_id, "s_one", "edited"))
+        >> nu.DelayedDo(0.2, ops.remove_section(page_id, "s_two"))
     )
-    keys = await _keys(store, page_path, script)
+    keys = await _keys(store, page_id, script)
 
     assert keys, "the subscription delivered nothing at all"
-    # Absolute keys are rooted, so every key starts the same way.
-    prefix = ("/", "pages", *[seg for pid in page_path for seg in ("pages", pid)], "sections")
+    # Absolute keys are rooted, and a flat page puts the same four entries in
+    # front of the section id no matter how deep the page sits in the tree.
+    prefix = ("/", "pages", page_id, "sections")
     assert {tuple(k[: len(prefix)]) for k in keys} == {prefix}
-    assert len(prefix) == index
+    assert len(prefix) == CHANGED_SECTION_INDEX
     # Every key long enough to name a section names one of ours, at that index.
-    named = [k[index] for k in keys if len(k) > index]
+    named = [k[CHANGED_SECTION_INDEX] for k in keys if len(k) > CHANGED_SECTION_INDEX]
     assert set(named) == {"s_one", "s_two"}
     # Both row-level and field-level keys occur, and the index works for both.
-    assert any(len(k) == index + 1 for k in keys)
-    assert any(len(k) > index + 1 for k in keys)
+    assert any(len(k) == CHANGED_SECTION_INDEX + 1 for k in keys)
+    assert any(len(k) > CHANGED_SECTION_INDEX + 1 for k in keys)
 
 
 async def test_a_bare_container_key_occurs_and_names_no_section(store):
@@ -84,6 +92,8 @@ async def test_a_bare_container_key_occurs_and_names_no_section(store):
     This is why the live loop guards on length: slicing this one would raise
     IndexError inside the react loop and leave the driver deaf.
     """
-    keys = await _keys(store, [], nu.DelayedDo(0.2, ops.add_section([], SRC, section_id="s_one")))
+    await _seed(store)
+    script = nu.DelayedDo(0.2, ops.add_section(ROOT_PAGE_ID, SRC, section_id="s_one"))
+    keys = await _keys(store, ROOT_PAGE_ID, script)
 
-    assert any(len(k) <= changed_section_index([]) for k in keys)
+    assert any(len(k) <= CHANGED_SECTION_INDEX for k in keys)

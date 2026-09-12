@@ -11,18 +11,34 @@ from __future__ import annotations
 import nu
 import nu.kv
 import nu.mem
-from nuspace.recursive import RecursiveShape, self_slot
 
 
-__all__ = ["DEFAULT_POLICY", "ORDER_STEP", "Page", "Runner", "Section"]
+__all__ = [
+    "DEFAULT_POLICY",
+    "ROOT_PAGE_ID",
+    "ROOT_PARENT",
+    "ROOT_TITLE",
+    "Page",
+    "Runner",
+    "Section",
+]
 
 
 #: What a section runs under when nobody said otherwise. For v1 nothing reads it.
 DEFAULT_POLICY = "always"
 
-#: Gap between neighbours after a renormalise, so one can be dropped between
-#: two others later without touching either.
-ORDER_STEP = 10
+#: Key of the one page every other page descends from. Fixed rather than
+#: minted, so a cold store and a browser route can both name it without
+#: reading anything first. ``ops.init_space`` writes it.
+ROOT_PAGE_ID = "root"
+
+#: The root page is its own parent. Every ``parent`` is therefore a real page
+#: key, so ``pages[page.parent]`` is always addressable and no op needs a
+#: special case for the top of the tree.
+ROOT_PARENT = ROOT_PAGE_ID
+
+#: What the root page is called when ``init_space`` is not told otherwise.
+ROOT_TITLE = "Home"
 
 
 class Section(nu.Shape):
@@ -42,22 +58,24 @@ class Section(nu.Shape):
     # `tpl` is provenance, not type. It says what produced the snippet and
     # nothing branches on it to decide whether a block runs. See core.tpl.
     tpl = nu.kv.StrRef.slot()
-    # Sections sort by their creation-ordered id until someone drags one;
-    # `order` is what makes reordering expressible. ops renormalises it.
-    order = nu.kv.IntRef.slot()
 
 
-class Page(RecursiveShape):
-    """A page: a title, a bag of sections, and nested child pages.
+class Page(nu.Shape):
+    """A page: a title, its place in the tree, and a bag of sections.
 
-    ``pages`` holds ``Page`` itself, which a class body cannot name, so it is
-    declared with ``self_slot``. A page is a container; the sections on it are
-    what actually run.
+    Pages live in one flat dict on ``Space``, so ``parent`` and ``children``
+    are ordinary data and a page is addressed by id at a fixed depth.
     """
 
     title = nu.kv.StrRef.slot()
+    # Two facts that must agree, which is why ops is the only writer: every
+    # structural op fixes both sides in one tree. The root page parents
+    # itself, so this is never empty and never names a page that is not there.
+    parent = nu.kv.StrRef.slot()
+    children = nu.kv.ListRef.slot(str)
     sections = nu.kv.ShapesDictRef.slot(Section)
-    pages = self_slot(nu.kv.ShapesDictRef)
+    # List position is the order. No `order` field, nothing to renormalise.
+    section_order = nu.kv.ListRef.slot(str)
 
 
 class Runner(nu.Shape):

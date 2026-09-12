@@ -33,12 +33,11 @@ MODULES = [
     "nuspace.pages.ops",
     "nuspace.pages.runner",
     "nuspace.pages.shapes",
-    "nuspace.recursive",
 ]
 
 #: One module per package entry point, to pair up. Every ordering of these is
 #: tried, which is the property the old ordering comment could not offer.
-ENTRIES = ["nuspace.apps.ops", "nuspace.core.shapes", "nuspace.pages.ops", "nuspace.recursive"]
+ENTRIES = ["nuspace.apps.ops", "nuspace.core.shapes", "nuspace.pages.ops", "nuspace.pages.runner"]
 
 
 def _cold(*modules):

@@ -5,28 +5,27 @@ composes them instead of hand-writing ref chains. ``root`` is the space's own
 root Shape class, resolved at call time by :func:`~nuspace._root.resolve_root`
 so this module never needs ``Space`` while it is being imported.
 
-A page is addressed by a **path**: the page ids from the root page down, one
-per level, the empty path being the root page itself. :func:`page_at` walks
-one ``pages[...]`` link per segment, which fixes the path's *length* when the
-tree is built while leaving each segment free to be any ``nu.StrArg``.
+Pages are stored flat, exactly like apps: every page is a row in
+``Space.pages`` keyed by its id, and the tree is data -- ``Page.parent`` and
+``Page.children``. So every op below takes a page **id**, at a depth fixed at
+one, and that id may be any ``nu.StrArg``: a literal, or a browser route read
+out of another fabric with no python in the loop.
 
-:func:`rename_page` and :func:`title_of` go through ``SetDeep`` / ``GetDeep``
-instead, so those two also take a path that is runtime data -- a list read out
-of storage, a browser route split in the tree. They are the only verbs the
-deep atoms can express: the leaf they address has to be a direct slot of
-``Page``, which rules out every container verb (``del_item``, ``contains``,
-``keys``) and anything below ``sections[...]``.
+``parent`` and ``children`` are two spellings of one fact. This module is the
+only writer of either, and every structural op fixes both sides in one tree.
 
 Write:
+- space: :func:`init_space` -- the root page, once, on a cold store.
 - pages: :func:`add_page` / :func:`remove_page` / :func:`rename_page` /
-  :func:`move_page`.
+  :func:`move_page` / :func:`reorder_pages`.
 - sections: :func:`add_section` / :func:`remove_section` /
   :func:`move_section` / :func:`reorder_sections` / :func:`set_snippet` /
   :func:`set_tpl`.
 
 Read:
-- :func:`page_ids` / :func:`page_exists` / :func:`title_of` / :func:`titles`.
-- :func:`section_ids` / :func:`snippet_of` / :func:`section_order`.
+- :func:`page_ids` / :func:`page_exists` / :func:`parent_of` /
+  :func:`children_of` / :func:`title_of`.
+- :func:`section_ids` / :func:`snippet_of`.
 """
 
 from __future__ import annotations
@@ -37,9 +36,8 @@ import nu
 from nuspace._root import resolve_root
 from nuspace.core.ids import mint_ordered_id
 from nuspace.core.tpl import DEFAULT_TPL
-from nuspace.recursive import GetDeep, SetDeep
 
-from .shapes import DEFAULT_POLICY, ORDER_STEP
+from .shapes import DEFAULT_POLICY, ROOT_PAGE_ID, ROOT_PARENT, ROOT_TITLE
 
 
 if TYPE_CHECKING:
@@ -47,66 +45,77 @@ if TYPE_CHECKING:
 
     from nu.domains.shape import Shape
 
-    #: Page ids from the root page down, one per level. Empty is the root page.
-    PagePath = Sequence[nu.StrArg]
-
 
 __all__ = [
     "add_page",
     "add_section",
+    "children_of",
+    "init_space",
     "move_page",
     "move_section",
-    "page_at",
     "page_exists",
     "page_ids",
+    "parent_of",
     "remove_page",
     "remove_section",
     "rename_page",
+    "reorder_pages",
     "reorder_sections",
     "section_ids",
-    "section_order",
     "set_snippet",
     "set_tpl",
     "snippet_of",
     "title_of",
-    "titles",
 ]
 
 
-#: ``ctx.attrs`` name the per-item loops below bind their key under.
+#: The name ``Filter`` and ``ForEachDo`` bind the current element under.
 _ITEM = "_np_item"
-
-#: ``ctx.attrs`` name :func:`add_section` parks the new section's order in.
-_ORDER = "_np_order"
+_item = nu.AnyAttrRef(_ITEM)
 
 
-def page_at(path: PagePath, *, root: type[Shape] | None = None) -> nu.Nu:
-    """The Page ref at ``path``, the empty path being the root page.
+def _orphans(pages: nu.Nu) -> nu.Nu:
+    """Every page whose parent is gone, as a list.
+
+    The root page parents itself, so it is never an orphan and no page needs
+    a special case here.
+    """
+    return nu.Collect(
+        nu.Filter(nu.list(pages.keys()), nu.Not(pages.contains(pages[_item].parent)), key=_ITEM)
+    )
+
+
+def _keep_order(current: nu.Nu, wanted: Sequence[nu.StrArg], member: nu.Nu) -> nu.Nu:
+    """Rewrite ``current`` as ``wanted``, members only, then whatever was left.
 
     Args:
-        path: page ids from the root page down. A segment may be a python str
-            or a Nu term; the number of segments is fixed here, at build time.
-        root: the space's root Shape class. Defaults to ``Space``.
+        current: the list ref being reordered.
+        wanted: the ids to put first, in the order given.
+        member: a ref answering whether an id is really in the collection.
     """
-    ref = resolve_root(root).pages
-    for page_id in path:
-        ref = ref.pages[page_id]
-    return ref
+    listed = nu.List.of(*wanted)
+    kept = nu.List(nu.Collect(nu.Filter(listed, member.contains(_item), key=_ITEM)))
+    # Anything the caller left out keeps its place, after the listed ids.
+    rest = nu.List(
+        nu.Collect(nu.Filter(nu.list(current), nu.Not(listed.contains(_item)), key=_ITEM))
+    )
+    return current.set(kept + rest)
 
 
-def _split(path: PagePath, root: type[Shape] | None) -> tuple[nu.Nu, nu.StrArg]:
-    """The page's parent ref and its own key, for the verbs that need both."""
-    if not path:
-        msg = "the root page has no parent, so this op cannot address it"
-        raise ValueError(msg)
-    return page_at(path[:-1], root=root), path[-1]
+# --- write: the space ------------------------------------------------------
 
 
-def _pairs(keys: nu.Nu, value: nu.Nu) -> nu.Nu:
-    """``{key: value}`` over a list of keys, with each key bound at ``_ITEM``."""
-    # Collect first: nu.dict is a scalar consumer and refuses a live stream.
-    return nu.dict(
-        nu.Collect(nu.Map(nu.Iter(keys), nu.Tuple.of(nu.AnyAttrRef(_ITEM), value), key=_ITEM))
+def init_space(*, title: nu.StrArg = ROOT_TITLE, root: type[Shape] | None = None) -> nu.Nu:
+    """Create the root page if the store has none. Idempotent.
+
+    Every other op refuses to write under a parent that is not there, so a
+    cold store boots through here and nowhere else.
+    """
+    pages = resolve_root(root).pages
+    page = pages[ROOT_PAGE_ID]
+    return nu.IfDo(
+        nu.Not(pages.contains(ROOT_PAGE_ID)),
+        page.parent.set(ROOT_PARENT) >> page.title.set(title),
     )
 
 
@@ -114,17 +123,20 @@ def _pairs(keys: nu.Nu, value: nu.Nu) -> nu.Nu:
 
 
 def add_page(
-    path: PagePath,
+    parent_id: nu.StrArg,
     *,
     page_id: nu.StrArg | None = None,
     title: nu.StrArg | None = None,
     root: type[Shape] | None = None,
 ) -> nu.Nu:
-    """Add a child page under the page at ``path``.
+    """Add a page under ``parent_id``, last among its children.
+
+    A no-op when the parent is not there, which is what keeps ``parent`` and
+    ``children`` from disagreeing.
 
     Args:
-        path: the parent page. Empty means directly under the root page.
-        page_id: the child's key. Minted in creation order when absent, in
+        parent_id: the page to add it under. ``ROOT_PAGE_ID`` for a top page.
+        page_id: the new page's key. Minted in creation order when absent, in
             which case the caller never learns it -- pass
             ``mint_ordered_id("p")`` yourself if you mean to address it after.
         title: what to call it. Defaults to the id.
@@ -133,68 +145,103 @@ def add_page(
     # Minted while the tree is built, not while it runs, so re-running one tree
     # rewrites one page rather than adding another.
     page_id = mint_ordered_id("p") if page_id is None else page_id
-    child = page_at([*path, page_id], root=root)
-    return child.title.set(page_id if title is None else title)
+    pages = resolve_root(root).pages
+    page = pages[page_id]
+    children = pages[parent_id].children
+    return nu.IfDo(
+        pages.contains(parent_id),
+        page.parent.set(parent_id)
+        >> page.title.set(page_id if title is None else title)
+        >> nu.IfDo(nu.Not(children.contains(page_id)), children.append(page_id)),
+    )
 
 
-def remove_page(path: PagePath, *, root: type[Shape] | None = None) -> nu.Nu:
-    """Drop the page at ``path`` and its whole subtree. A no-op when absent."""
-    parent, page_id = _split(path, root)
-    # Guarded rather than bare: del_item on a missing key raises, and removing
-    # something already gone is exactly what a retried ui click does.
-    return nu.IfDo(parent.pages.contains(page_id), parent.pages.del_item(page_id))
+def remove_page(page_id: nu.StrArg, *, root: type[Shape] | None = None) -> nu.Nu:
+    """Drop a page and every page below it. A no-op when it is not there.
 
-
-def rename_page(
-    path: PagePath | nu.Nu, title: nu.StrArg, *, root: type[Shape] | None = None
-) -> nu.Nu:
-    """Replace a page's title. The id does not move.
-
-    ``title`` is a direct slot of ``Page``, so this one goes through
-    ``SetDeep`` and ``path`` may be runtime data rather than a python list.
+    There is no deep delete and no walk either: drop the row, then keep
+    dropping pages whose parent is gone until none are left. That is the
+    ``parent``/``children`` invariant doing the recursion.
     """
-    return SetDeep(resolve_root(root).pages.title, path, title)
+    pages = resolve_root(root).pages
+    siblings = pages[pages[page_id].parent].children
+    orphans = _orphans(pages)
+    return nu.IfDo(
+        pages.contains(page_id),
+        # Read while the page still knows its parent. The root parents itself
+        # and is not among its own children, so this is a no-op for it.
+        nu.IfDo(siblings.contains(page_id), siblings.remove(page_id))
+        >> pages.del_item(page_id)
+        # One pass per level, and every pass deletes at least one page.
+        >> nu.WhileDo(
+            nu.Len(orphans) > nu.Int(0),
+            nu.ForEachDo(orphans, pages.del_item(_item), item=_ITEM),
+        ),
+    )
+
+
+def rename_page(page_id: nu.StrArg, title: nu.StrArg, *, root: type[Shape] | None = None) -> nu.Nu:
+    """Replace a page's title. The id does not move."""
+    pages = resolve_root(root).pages
+    return nu.IfDo(pages.contains(page_id), pages[page_id].title.set(title))
 
 
 def move_page(
-    path: PagePath,
-    new_parent: PagePath,
+    page_id: nu.StrArg,
+    new_parent_id: nu.StrArg,
     *,
-    page_id: nu.StrArg | None = None,
+    index: nu.IntArg | None = None,
     root: type[Shape] | None = None,
 ) -> nu.Nu:
-    """Reparent the page at ``path`` under the page at ``new_parent``.
+    """Reparent a page, landing it at ``index`` among the new children.
 
-    Copies the subtree eagerly and then drops the original, so the read has to
-    happen before the delete and a move into the page's own descendant would
-    delete what it just wrote.
+    Nothing is copied: the row stays put and only the two link fields move,
+    so the whole subtree and every section come along for free. A no-op when
+    either page is missing, or when the two ids are the same.
 
     Args:
-        path: the page to move.
-        new_parent: the page to move it under.
-        page_id: the key to land under. Defaults to the one it had.
+        page_id: the page to move.
+        new_parent_id: the page to move it under.
+        index: where among the new parent's children. Appends when absent.
         root: the space's root Shape class.
     """
-    parent, old_id = _split(path, root)
-    if tuple(new_parent)[: len(path)] == tuple(path):
-        msg = f"cannot move {list(path)} under itself or its own descendant {list(new_parent)}"
-        raise ValueError(msg)
-    src = page_at(path, root=root)
-    dst = page_at(new_parent, root=root)
-    key = old_id if page_id is None else page_id
-    return nu.IfDo(
-        parent.pages.contains(old_id),
-        # nu.dict, not the eager view itself: a View has no encoder, so
-        # set_item on the raw facet dies inside the storage codec.
-        dst.pages.set_item(key, nu.dict(src.eager)) >> parent.pages.del_item(old_id),
+    pages = resolve_root(root).pages
+    page = pages[page_id]
+    old_children = pages[page.parent].children
+    new_children = pages[new_parent_id].children
+    link = (
+        new_children.append(page_id) if index is None else new_children.insert(index, page_id)  # type: ignore[arg-type]
     )
+    return nu.IfDo(
+        nu.And(
+            nu.Ne(page_id, new_parent_id),
+            pages.contains(page_id),
+            pages.contains(new_parent_id),
+        ),
+        nu.IfDo(old_children.contains(page_id), old_children.remove(page_id))
+        >> page.parent.set(new_parent_id)
+        >> nu.IfDo(nu.Not(new_children.contains(page_id)), link),
+    )
+
+
+def reorder_pages(
+    parent_id: nu.StrArg, child_ids: Sequence[nu.StrArg], *, root: type[Shape] | None = None
+) -> nu.Nu:
+    """Put ``parent_id``'s children in the order given.
+
+    Ids that are not its children are skipped, and children not listed keep
+    their place after the ones that are.
+    """
+    pages = resolve_root(root).pages
+    children = pages[parent_id].children
+    return nu.IfDo(pages.contains(parent_id), _keep_order(children, child_ids, member=children))
 
 
 # --- write: sections -------------------------------------------------------
 
 
 def add_section(
-    path: PagePath,
+    page_id: nu.StrArg,
     source: nu.StrArg,
     *,
     section_id: nu.StrArg | None = None,
@@ -203,10 +250,10 @@ def add_section(
     policy: nu.StrArg = DEFAULT_POLICY,
     root: type[Shape] | None = None,
 ) -> nu.Nu:
-    """Write a whole section onto the page at ``path``, landing it last.
+    """Write a whole section onto a page, landing it last.
 
     Args:
-        path: the page to add it to.
+        page_id: the page to add it to. A no-op when that page is not there.
         source: the snippet, a ``nu.prog`` module with an ``out`` entry point.
         section_id: the section's key, globally unique. Minted in creation
             order when absent, in which case the caller never learns it.
@@ -216,140 +263,137 @@ def add_section(
         root: the space's root Shape class.
     """
     section_id = mint_ordered_id("s") if section_id is None else section_id
-    page = page_at(path, root=root)
+    pages = resolve_root(root).pages
+    page = pages[page_id]
     section = page.sections[section_id]
-    # Counted before the first field write, because writing any field vivifies
-    # the row and would make the new section count itself.
-    order = nu.Len(nu.list(page.sections.keys())) * nu.Int(ORDER_STEP)
-    return nu.Let(
-        _ORDER,
-        order,
-        # Snippet last: every field write wakes its own reconcile, so this
-        # order leaves the pass that launches the section holding final source.
-        body=(
-            section.name.set(section_id if name is None else name)
-            >> section.policy.set(policy)
-            >> section.tpl.set(tpl)
-            >> section.order.set(nu.IntAttrRef(_ORDER))
-            >> section.snippet.set(source)
-        ),
+    order = page.section_order
+    return nu.IfDo(
+        pages.contains(page_id),
+        # Order first, so the section is placed before the runner ever hears
+        # about it. Snippet last: every field write wakes its own reconcile, so
+        # this leaves the pass that launches the section holding final source.
+        nu.IfDo(nu.Not(order.contains(section_id)), order.append(section_id))
+        >> section.name.set(section_id if name is None else name)
+        >> section.policy.set(policy)
+        >> section.tpl.set(tpl)
+        >> section.snippet.set(source),
     )
 
 
 def remove_section(
-    path: PagePath, section_id: nu.StrArg, *, root: type[Shape] | None = None
+    page_id: nu.StrArg, section_id: nu.StrArg, *, root: type[Shape] | None = None
 ) -> nu.Nu:
     """Drop a section from a page. A no-op when it is not there."""
-    sections = page_at(path, root=root).sections
-    return nu.IfDo(sections.contains(section_id), sections.del_item(section_id))
+    page = resolve_root(root).pages[page_id]
+    sections = page.sections
+    order = page.section_order
+    return nu.IfDo(
+        sections.contains(section_id),
+        nu.IfDo(order.contains(section_id), order.remove(section_id))
+        >> sections.del_item(section_id),
+    )
 
 
 def move_section(
-    path: PagePath,
+    page_id: nu.StrArg,
     section_id: nu.StrArg,
-    new_page: PagePath,
+    new_page_id: nu.StrArg,
     *,
+    index: nu.IntArg | None = None,
     root: type[Shape] | None = None,
 ) -> nu.Nu:
     """Move one section to another page, keeping its id and every field.
 
-    It lands with the ``order`` it had, which is meaningless on the new page
-    until somebody renormalises -- :func:`reorder_sections` is that somebody.
+    Args:
+        page_id: the page it is on now.
+        section_id: the section.
+        new_page_id: the page to move it to. A no-op when that is not there.
+        index: where in the new page's order. Appends when absent.
+        root: the space's root Shape class.
     """
-    src = page_at(path, root=root).sections
-    dst = page_at(new_page, root=root).sections
+    pages = resolve_root(root).pages
+    src, dst = pages[page_id], pages[new_page_id]
+    link = (
+        dst.section_order.append(section_id)
+        if index is None
+        else dst.section_order.insert(index, section_id)  # type: ignore[arg-type]
+    )
     return nu.IfDo(
-        src.contains(section_id),
-        dst.set_item(section_id, nu.dict(src[section_id].eager)) >> src.del_item(section_id),
+        nu.And(src.sections.contains(section_id), pages.contains(new_page_id)),
+        # nu.dict, not the eager view itself: a View has no encoder, so
+        # set_item on the raw facet dies inside the storage codec.
+        dst.sections.set_item(section_id, nu.dict(src.sections[section_id].eager))
+        >> nu.IfDo(nu.Not(dst.section_order.contains(section_id)), link)
+        >> nu.IfDo(src.section_order.contains(section_id), src.section_order.remove(section_id))
+        >> src.sections.del_item(section_id),
     )
 
 
 def reorder_sections(
-    path: PagePath, section_ids: Sequence[nu.StrArg], *, root: type[Shape] | None = None
+    page_id: nu.StrArg, section_ids: Sequence[nu.StrArg], *, root: type[Shape] | None = None
 ) -> nu.Nu:
-    """Renormalise ``order`` to ``index * ORDER_STEP`` in the order given.
+    """Put a page's sections in the order given.
 
-    Ids that are not on the page are skipped, and ids on the page that are not
-    listed keep whatever order they had.
+    Ids that are not on the page are skipped, and sections not listed keep
+    their place after the ones that are.
     """
-    sections = page_at(path, root=root).sections
-    writes = [
-        nu.IfDo(
-            sections.contains(section_id),
-            sections[section_id].order.set(nu.Int(index * ORDER_STEP)),
-        )
-        for index, section_id in enumerate(section_ids)
-    ]
-    if not writes:
-        return nu.Noop()
-    term = writes[0]
-    for write in writes[1:]:
-        term = term >> write
-    return term
+    page = resolve_root(root).pages[page_id]
+    return _keep_order(page.section_order, section_ids, member=page.sections)
 
 
 def set_snippet(
-    path: PagePath, section_id: nu.StrArg, source: nu.StrArg, *, root: type[Shape] | None = None
+    page_id: nu.StrArg, section_id: nu.StrArg, source: nu.StrArg, *, root: type[Shape] | None = None
 ) -> nu.Nu:
     """Replace a section's source. The runner restarts that section and no other."""
-    return page_at(path, root=root).sections[section_id].snippet.set(source)
+    sections = resolve_root(root).pages[page_id].sections
+    return nu.IfDo(sections.contains(section_id), sections[section_id].snippet.set(source))
 
 
 def set_tpl(
-    path: PagePath, section_id: nu.StrArg, tpl: nu.StrArg, *, root: type[Shape] | None = None
+    page_id: nu.StrArg, section_id: nu.StrArg, tpl: nu.StrArg, *, root: type[Shape] | None = None
 ) -> nu.Nu:
     """Replace a section's tpl string. The snippet is left exactly as it was."""
-    return page_at(path, root=root).sections[section_id].tpl.set(tpl)
+    sections = resolve_root(root).pages[page_id].sections
+    return nu.IfDo(sections.contains(section_id), sections[section_id].tpl.set(tpl))
 
 
 # --- read ------------------------------------------------------------------
 
 
-def page_ids(path: PagePath, *, root: type[Shape] | None = None) -> nu.Nu:
-    """The child page ids of the page at ``path``, as a list."""
+def page_ids(*, root: type[Shape] | None = None) -> nu.Nu:
+    """Every page id in the space, as a list. Flat, so depth costs nothing."""
     # nu.list, not the bare keys view: the view is lazy and dies with its
     # Snapshot, so an undrained one reads as StorageClosedError later.
-    return nu.list(page_at(path, root=root).pages.keys())
+    return nu.list(resolve_root(root).pages.keys())
 
 
-def section_ids(path: PagePath, *, root: type[Shape] | None = None) -> nu.Nu:
-    """The section ids on the page at ``path``, as a list.
-
-    Sorted by key, which for a minted id is creation order. Sort by
-    :func:`section_order` instead once somebody has dragged one.
-    """
-    return nu.list(page_at(path, root=root).sections.keys())
+def page_exists(page_id: nu.StrArg, *, root: type[Shape] | None = None) -> nu.Nu:
+    """Whether the space has a page under this id."""
+    return resolve_root(root).pages.contains(page_id)
 
 
-def page_exists(path: PagePath, *, root: type[Shape] | None = None) -> nu.Nu:
-    """Whether the tree has a page at ``path``. The root page always does."""
-    if not path:
-        return nu.Bool(True)
-    parent, page_id = _split(path, root)
-    return parent.pages.contains(page_id)
+def children_of(page_id: nu.StrArg, *, root: type[Shape] | None = None) -> nu.Nu:
+    """A page's child ids, in order. Empty when there is no such page."""
+    return nu.list(resolve_root(root).pages[page_id].children)
 
 
-def snippet_of(path: PagePath, section_id: nu.StrArg, *, root: type[Shape] | None = None) -> nu.Nu:
+def parent_of(page_id: nu.StrArg, *, root: type[Shape] | None = None) -> nu.Nu:
+    """A page's parent id, its own id for the root page. EMPTY when absent."""
+    return resolve_root(root).pages[page_id].parent
+
+
+def title_of(page_id: nu.StrArg, *, root: type[Shape] | None = None) -> nu.Nu:
+    """A page's title. EMPTY when there is no such page."""
+    return resolve_root(root).pages[page_id].title
+
+
+def section_ids(page_id: nu.StrArg, *, root: type[Shape] | None = None) -> nu.Nu:
+    """The section ids on a page, in order, as a list."""
+    return nu.list(resolve_root(root).pages[page_id].section_order)
+
+
+def snippet_of(
+    page_id: nu.StrArg, section_id: nu.StrArg, *, root: type[Shape] | None = None
+) -> nu.Nu:
     """A section's source, verbatim. EMPTY when there is no such section."""
-    return page_at(path, root=root).sections[section_id].snippet
-
-
-def title_of(path: PagePath | nu.Nu, *, root: type[Shape] | None = None) -> nu.Nu:
-    """A page's title. EMPTY when there is no page at ``path``.
-
-    ``title`` is a direct slot of ``Page``, so this one goes through
-    ``GetDeep`` and ``path`` may be runtime data rather than a python list.
-    """
-    return GetDeep(resolve_root(root).pages.title, path)
-
-
-def titles(path: PagePath, *, root: type[Shape] | None = None) -> nu.Nu:
-    """Child page id -> title, for the children of the page at ``path``."""
-    page = page_at(path, root=root)
-    return _pairs(nu.list(page.pages.keys()), page.pages[nu.AnyAttrRef(_ITEM)].title)
-
-
-def section_order(path: PagePath, *, root: type[Shape] | None = None) -> nu.Nu:
-    """Section id -> ``order``, for every section on the page at ``path``."""
-    page = page_at(path, root=root)
-    return _pairs(nu.list(page.sections.keys()), page.sections[nu.AnyAttrRef(_ITEM)].order)
+    return resolve_root(root).pages[page_id].sections[section_id].snippet
