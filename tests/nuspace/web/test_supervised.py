@@ -240,7 +240,7 @@ def test_the_session_driver_is_the_surfaces_plus_exactly_one_supervisor():
     from nuspace.web.lens.driver import ARMS as LENS_ARMS
     from nuspace.web.pages.driver import ARMS as PAGES_ARMS
 
-    tree = session_driver()
+    tree = session_driver("127.0.0.1:0")
     nodes = list(_walk(tree))
 
     # Every arm of every driver, plus the supervisor's two: one on the browser

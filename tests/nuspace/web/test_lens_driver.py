@@ -98,13 +98,16 @@ class Browser:
         return [e["key"] for e in self.lens["columns"][column]["entries"]]
 
 
+def _driver(_address):
+    """A fresh driver per connection. No section runs here, so no address."""
+    return space_driver()
+
+
 def _space(port, body):
     """One store, one server, one body. Brackets tear down LIFO when it ends."""
     return nu.With(
         nu.kv.memory_navigator(tags=(Space,)),
-        server(
-            space_driver, shell_cls=NuspaceShell, host="127.0.0.1", port=port, open_browser=False
-        ),
+        server(_driver, shell_cls=NuspaceShell, host="127.0.0.1", port=port, open_browser=False),
         body=body,
     )
 

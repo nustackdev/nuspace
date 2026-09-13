@@ -21,8 +21,11 @@ from fastapi import FastAPI, WebSocket
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+import nu
 from nu.lang.helpers import arun
 from nu.ui.core import Session
+from nuspace.core.host import free_port
+from nuspace.core.session import HostedSession, served_session
 
 from .session import NuspaceSession
 from .shell import Shell
@@ -79,13 +82,15 @@ class _SPAStatic(StaticFiles):
 
 
 def build_fastapi_app(
-    app: Nu | Callable[[], Nu], ctx: Context, *, shell_cls: type[Shell]
+    app: Nu | Callable[[str], Nu], ctx: Context, *, shell_cls: type[Shell]
 ) -> FastAPI:
     """Build the FastAPI app for a nuspace program.
 
     ``app`` may be a callable returning a Nu, in which case it is called once
-    per connection. A view's driver holds that connection's subscriptions, so
-    a surface whose route is per view is built here rather than at the top.
+    per connection with the address this connection's Session is served at. A
+    view's driver holds that connection's subscriptions, so a surface whose
+    route is per view is built here rather than at the top, and anything that
+    dispatches work to another process needs that address as a literal.
 
     Static assets come from the sibling ``nuspace_ui`` wheel (packaged
     vite build under ``nuspace_ui/build/``). If the wheel is not
@@ -108,8 +113,13 @@ def build_fastapi_app(
             payload["fields"],  # type: ignore[arg-type]
             pages=payload["pages"],  # type: ignore[arg-type]
         )
-        per_conn_ctx = ctx.bind(Session, session)
-        body = app() if callable(app) else app
+        # This connection's Session, on a socket of its own, so the pool
+        # workers running its sections can write through it. The bracket
+        # closes with the body, which is what ties the server to the tab.
+        address = f"127.0.0.1:{free_port()}"
+        per_conn_ctx = ctx.bind(Session, session).bind(HostedSession, HostedSession(session))
+        inner = app(address) if callable(app) else app
+        body = nu.With(served_session(address), body=inner)
         intake_task = asyncio.create_task(session.run_intake())
         eval_task = asyncio.create_task(arun(body, per_conn_ctx))
         try:

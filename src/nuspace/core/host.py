@@ -5,20 +5,37 @@ twice. RocksDB is a single-writer lock, so the store is opened exactly once
 per process and every worker reaches it through the Navigator served here.
 Whoever assembles a process wraps its whole body in :func:`host` and puts the
 supervisors and the server inside it.
+
+The worker's side of the same story is :func:`worker_init`, plus
+:class:`SpareObserver` for what a dispatched program brings with it rather
+than finds already bound.
 """
 
 from __future__ import annotations
 
 import socket
+from typing import TYPE_CHECKING
 
 import nu
 import nu.kv
 import nu.mp_pool
 import nu.proxy
-from nu.kv.fabrics import Navigator
+from nu.core.reactive import ObserverProtocol
+from nu.kv.fabrics import InMemoryObserver, InMemoryTransport, Navigator
 
 
-__all__ = ["DEFAULT_CHANNEL_PREFIX", "free_port", "host", "worker_init"]
+if TYPE_CHECKING:
+    from nu.lang.runtime import Context
+
+
+__all__ = [
+    "DEFAULT_CHANNEL_PREFIX",
+    "SpareObserver",
+    "free_port",
+    "host",
+    "spare_observer",
+    "worker_init",
+]
 
 
 #: Namespaces the Redis channels. Every writer and listener must agree on it.
@@ -36,6 +53,62 @@ def free_port() -> int:
         return int(sock.getsockname()[1])
 
 
+class SpareObserver:
+    """An ``ObserverProtocol`` a dispatched program can always find.
+
+    A kv subscription with nothing bound under the protocol raises rather
+    than waiting, and a worker only comes up holding an observer of its own
+    when the space was given a ``redis_url``. So this binds under the
+    protocol either way and forwards: to the worker's real observer when
+    there is one, and otherwise to an in-process one that hears this
+    worker's own writes and nobody else's.
+
+    That fallback is honest rather than useful. Nothing but Redis carries
+    another process's notifications, so a snippet reacting to what the web
+    process wrote needs a ``redis_url`` on the space.
+    """
+
+    _nu_bind_as = ObserverProtocol
+
+    def __init__(self) -> None:
+        self._inner: object = None
+        self._own: InMemoryObserver | None = None
+
+    def setup(self, ctx: Context) -> None:
+        """Take the bound observer, or stand up a local one."""
+        if ctx.has(ObserverProtocol):
+            self._inner = ctx.get(ObserverProtocol)
+            return
+        own = InMemoryObserver()
+        own.setup(ctx.bind(InMemoryTransport, InMemoryTransport()))
+        self._own = own
+        self._inner = own
+
+    def cleanup(self) -> None:
+        """Disconnect the local one, if this is what built it."""
+        if self._own is not None:
+            self._own.cleanup()
+            self._own = None
+        self._inner = None
+
+    async def asetup(self, ctx: Context) -> None:
+        """Async shim: setup is sync work."""
+        self.setup(ctx)
+
+    async def acleanup(self) -> None:
+        """Async shim: cleanup is sync work."""
+        self.cleanup()
+
+    def subscribe(self, options: object) -> object:
+        """Forward to whichever observer this ended up standing in for."""
+        return self._inner.subscribe(options)
+
+
+def spare_observer() -> nu.Provide:
+    """The bracket a dispatched program puts at its head. See :class:`SpareObserver`."""
+    return nu.Provide(SpareObserver, {})
+
+
 def worker_init(
     address: str,
     *,
@@ -47,6 +120,13 @@ def worker_init(
     Pickled to the child and entered there, so the proxy connects and the
     observer subscribes from inside the worker. A plain stack of brackets,
     because that is what survives the pickle.
+
+    Deliberately thin, and the Session proxy is the example. A pool fixes its
+    init once and is process-wide while a Session is one browser connection,
+    so it could not live here anyway -- but neither does anything else only
+    one kind of dispatched body needs, because every bracket here is paid for
+    on every launch and a page reconciling churns through launches. See
+    :func:`nuspace.pages.runner.section_body` for the other side of that.
     """
     observer: tuple[nu.Nu, ...] = ()
     if redis_url is not None:

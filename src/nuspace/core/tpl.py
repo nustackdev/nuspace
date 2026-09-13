@@ -111,6 +111,7 @@ TIER_BATCH = "batch"
 # resolves against its navigator. That is why the template is a format
 # string and `source()` takes the root.
 _TEXT_TEMPLATE = '''import nu
+import nu.kv
 import nu.ui
 from {module} import {root}
 
@@ -120,17 +121,19 @@ def out(path):
     key = path + ".text"
     body = nu.ui.ProseRef(key)
     cell = {root}.state[key]
-    return (
+    # A snippet owns its own atomicity; nothing brackets it on the way in.
+    return nu.kv.auto_flow_atomic(
         body.set(nu.ToStr({root}.state.get_item(key, nu.Str(""))))
         >> body.set_placeholder(nu.Str("Write, or press / for blocks"))
-        >> (
+        >> nu.ParallelAsync(
             # This browser typed. Persist it; every other connection's copy
             # of this same program hears about it through kv.
-            nu.ReactForever(body.changed(), {root}.state.set_item(key, nu.Str(body)))
+            nu.ReactForever(body.changed(), {root}.state.set_item(key, nu.Str(body))),
             # Somebody else typed. Adopt it. A round trip back to the author
             # is a no-op, because the text is already what it says.
-            | nu.ReactForever(cell.on_change(), body.set(nu.ToStr(cell)))
-        )
+            nu.ReactForever(cell.on_change(), body.set(nu.ToStr(cell))),
+        ),
+        scope={root},
     )
 '''
 

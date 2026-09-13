@@ -156,7 +156,7 @@ def _stop_recorded() -> nu.Nu:
     )
 
 
-def _seed(root: type[Shape]) -> nu.Nu:
+def _seed(root: type[Shape], session_address: str) -> nu.Nu:
     """Start every section on the page bound at ``_SEED_PAGE``.
 
     ``Launch`` and ``Dispatch`` both return as soon as the worker has the
@@ -165,7 +165,7 @@ def _seed(root: type[Shape]) -> nu.Nu:
     page = nu.StrAttrRef(_SEED_PAGE)
     sections = root.pages[page].sections
     boot = sections.init(nu.Dict.create()) >> Runner.workers.init(nu.Dict.create())
-    pass_ = reconcile(page, root=root, item=_SEED_ITEM)
+    pass_ = reconcile(page, session_address=session_address, root=root, item=_SEED_ITEM)
     return nu.IfDo(
         _addressable(page, root),
         # nu.list is load-bearing: the keys view is lazy and auto_flow_atomic
@@ -175,7 +175,7 @@ def _seed(root: type[Shape]) -> nu.Nu:
     )
 
 
-def _on_select(root: type[Shape]) -> nu.Nu:
+def _on_select(root: type[Shape], session_address: str) -> nu.Nu:
     """Leave the page the cell names, move the cell, start the new page.
 
     The event carries the page id, so nothing here reads the route back off
@@ -186,11 +186,11 @@ def _on_select(root: type[Shape]) -> nu.Nu:
         nu.Ne(_selected, cell()),
         _stop_recorded()
         >> Tab.page.set(_selected)
-        >> nu.Let(_SEED_PAGE, _selected, body=_seed(root)),
+        >> nu.Let(_SEED_PAGE, _selected, body=_seed(root, session_address)),
     )
 
 
-def _on_store(root: type[Shape]) -> nu.Nu:
+def _on_store(root: type[Shape], session_address: str) -> nu.Nu:
     """Reconcile the section that changed, if this tab is on its page.
 
     The key carries both ids, so page membership is read off the event rather
@@ -205,19 +205,26 @@ def _on_store(root: type[Shape]) -> nu.Nu:
         nu.Eq(_KEY[SECTIONS_INDEX], nu.Str(SECTIONS_SEGMENT)),
         nu.Eq(_changed_page, cell()),
     )
-    pass_ = reconcile(nu.StrAttrRef(_LIVE_PAGE), root=root, item=_LIVE_ITEM)
+    pass_ = reconcile(
+        nu.StrAttrRef(_LIVE_PAGE), session_address=session_address, root=root, item=_LIVE_ITEM
+    )
     return nu.IfDo(
         mine,
         nu.Let(_LIVE_PAGE, cell(), body=nu.Let(_LIVE_ITEM, _changed_section, body=pass_)),
     )
 
 
-def page_session(pages: PagesRef, *, root: type[Shape] | None = None) -> nu.Nu:
+def page_session(
+    pages: PagesRef, *, session_address: str, root: type[Shape] | None = None
+) -> nu.Nu:
     """This connection's page, supervised, for as long as the connection lasts.
 
     Args:
         pages: the ``PagesRef`` on the mounted shell. The select arm's
             subscription, and the only place the route enters this tree.
+        session_address: where this connection's ``nu.ui`` Session is served.
+            Per connection, not per process, which is why it arrives here and
+            not in the pool's ``worker_init``.
         root: the space's root Shape class.
 
     Returns:
@@ -226,8 +233,8 @@ def page_session(pages: PagesRef, *, root: type[Shape] | None = None) -> nu.Nu:
         to.
     """
     root = resolve_root(root)
-    flow = _arms.event(_SELECT, pages.on_select(), _on_select(root)) | _arms.event(
-        _STORE, root.pages.on_change(), _on_store(root)
+    flow = _arms.event(_SELECT, pages.on_select(), _on_select(root, session_address)) | _arms.event(
+        _STORE, root.pages.on_change(), _on_store(root, session_address)
     )
     return nu.With(
         # Tagged, both of them. A pages ``Runner.workers`` and an apps

@@ -18,7 +18,12 @@ import nu
 import nu.kv
 import nu.mp_pool
 import nu.prog
+import nu.proxy
+from nu.ui.core import Session
 from nuspace._root import resolve_root
+from nuspace.core.fields import MountFields
+from nuspace.core.host import spare_observer
+from nuspace.core.session import FrameCodec
 
 from .shapes import Runner
 
@@ -65,39 +70,90 @@ def _worker_attr(item: str) -> str:
     return f"{item}.w"
 
 
+def _term_attr(item: str) -> str:
+    """Where a pass working on ``item`` parks the term it just constructed."""
+    return f"{item}.t"
+
+
 def section_body(
-    page_id: nu.StrArg, *, root: type[Shape] | None = None, item: str = SECTION_ATTR
+    page_id: nu.StrArg,
+    *,
+    session_address: str | None = None,
+    root: type[Shape] | None = None,
+    item: str = SECTION_ATTR,
 ) -> nu.Nu:
     """One section running, as the single term every ``Dispatch`` ships.
 
     One per page, not one per section: a ``Dispatch`` body is payload, so it is
     fixed at construction and the section arrives as the carried attr ``item``.
+
+    Args:
+        page_id: the page the section is on.
+        session_address: where this connection's ``nu.ui`` Session is served.
+            The proxy is opened here rather than in ``worker_init`` because a
+            pool is process-wide and fixes its init once, while the Session is
+            one browser connection and every connection has an address of its
+            own. None runs the page headless: no Session is served, so a
+            snippet naming a ui ref fails to find one.
+        root: the space's root Shape class.
+        item: the attr the section id is bound under.
     """
     root = resolve_root(root)
     section = nu.StrAttrRef(item)
     sections = root.pages[page_id].sections
     # `path` in the snippet's scope is the section's kv namespace, keyed by
     # section id alone -- never the page id. See nuspace.core.tpl.
-    scope = {"path": nu.Str("sections.") + section}
-    load = sections[section].snippet.load(scope=scope)
+    prefix = nu.Str("sections.") + section
+    load = sections[section].snippet.load(scope={"path": prefix})
+    term_attr = _term_attr(item)
+    term = nu.AnyAttrRef(term_attr)
+    # Enumerated here, in the worker, because this is the process that builds
+    # the term: the fields are what the snippet actually named, not what the
+    # editor guessed. Written before the Eval, which never returns.
+    publish = nu.kv.auto_flow_atomic(
+        root.state.set_item(prefix + nu.Str(".fields"), MountFields(term, prefix)),
+        scope=root,
+    )
     # Construction failures are written to the section's namespace, not
     # raised: a dispatched body has no waiter, so an error vanishes silently.
     report = nu.kv.auto_flow_atomic(
-        root.state.set_item(
-            nu.Str("sections.") + section + nu.Str(".error"), nu.ToStr(nu.AttrRef("error"))
-        ),
+        root.state.set_item(prefix + nu.Str(".error"), nu.ToStr(nu.AttrRef("error"))),
         scope=root,
     )
-    return nu.TryCatch(
-        nu.prog.Eval(nu.kv.auto_flow_atomic(load, scope=root)),
-        catch=report,
-        errors=nu.prog.ConstructionError,
+    run = nu.Let(
+        term_attr,
+        nu.kv.auto_flow_atomic(load, scope=root),
+        # ParallelAsync over the one Eval, which is how a term says "on the
+        # loop". Every nu.ui atom is async-only and an Eval placed off the
+        # loop refuses to host one, so a section that renders has nowhere
+        # else to run.
+        body=publish >> nu.ParallelAsync(nu.prog.Eval(term)),
+    )
+    # The observer sits here rather than in ``worker_init``: a snippet with a
+    # kv subscription needs one bound, and a pool whose every worker pays for
+    # it on the way up makes a restart slow enough to see.
+    guarded = nu.With(
+        spare_observer(),
+        body=nu.TryCatch(run, catch=report, errors=nu.prog.ConstructionError),
+    )
+    if session_address is None:
+        return guarded
+    return nu.With(
+        # Frames are the one thing that crosses back, and invisibles ships an
+        # unknown class by reference rather than by value.
+        nu.Provide(FrameCodec, {}),
+        # Every nu.ui Ref the snippet builds asks ctx for a Session, and this
+        # is the one the browser is on the other end of. bg_serve, because a
+        # subscription's callback is a reverse proxy the server calls back.
+        nu.proxy.InvisiblesProxy(Session, address=session_address, bg_serve=True),
+        body=guarded,
     )
 
 
 def reconcile(
     page_id: nu.StrArg,
     *,
+    session_address: str | None = None,
     root: type[Shape] | None = None,
     body: nu.Nu | None = None,
     item: str = SECTION_ATTR,
@@ -111,6 +167,8 @@ def reconcile(
 
     Args:
         page_id: the page whose sections this reconciles.
+        session_address: where this connection's Session is served. None runs
+            the page headless. See :func:`section_body`.
         root: the space's root Shape class.
         body: the term to dispatch. Defaults to :func:`section_body`; replace
             it to run a section somewhere other than a pool worker.
@@ -139,7 +197,9 @@ def reconcile(
             pool.launch(),
             body=Runner.workers.set_item(section, worker)
             >> pool.dispatch(
-                section_body(page_id, root=root, item=item) if body is None else body,
+                section_body(page_id, session_address=session_address, root=root, item=item)
+                if body is None
+                else body,
                 worker,
                 carry=True,
             ),
@@ -151,6 +211,7 @@ def reconcile(
 def page_driver(
     page_id: nu.StrArg,
     *,
+    session_address: str | None = None,
     root: type[Shape] | None = None,
     body: nu.Nu | None = None,
     item: str = SECTION_ATTR,
@@ -162,7 +223,7 @@ def page_driver(
     """
     root = resolve_root(root)
     sections = root.pages[page_id].sections
-    pass_ = reconcile(page_id, root=root, body=body, item=item)
+    pass_ = reconcile(page_id, session_address=session_address, root=root, body=body, item=item)
     # Both containers must exist before anything reads them: a subscription
     # over a missing container resolves to INVALID and silently never fires.
     # Dict.create(), not {} -- a literal dict is captured once at Form
@@ -191,6 +252,7 @@ def page_driver(
 def page_tree(
     page_id: nu.StrArg,
     *,
+    session_address: str | None = None,
     root: type[Shape] | None = None,
     body: nu.Nu | None = None,
     alongside: nu.Nu | None = None,
@@ -204,6 +266,8 @@ def page_tree(
 
     Args:
         page_id: the page to run.
+        session_address: where this connection's Session is served. See
+            :func:`reconcile`.
         root: the space's root Shape class.
         body: the term dispatched per section. See :func:`reconcile`.
         alongside: a tree to run beside the live loop, for demos and tests.
@@ -213,7 +277,7 @@ def page_tree(
         The tree, already bracketed for atomicity against ``root``.
     """
     root = resolve_root(root)
-    seed, live = page_driver(page_id, root=root, body=body)
+    seed, live = page_driver(page_id, session_address=session_address, root=root, body=body)
     flow = live if alongside is None else (live | alongside)
     if duration is not None:
         flow = nu.Race(flow, nu.DelayedDo(nu.Float(duration), nu.Noop()))

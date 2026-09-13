@@ -48,7 +48,7 @@ class NuspaceServer:
 
     def __init__(
         self,
-        app: Nu | Callable[[], Nu],
+        app: Nu | Callable[[str], Nu],
         *,
         shell_cls: type[Shell],
         host: str = "127.0.0.1",
@@ -152,7 +152,7 @@ class NuspaceServer:
 
 
 def server(
-    app: Nu | Callable[[], Nu],
+    app: Nu | Callable[[str], Nu],
     *,
     shell_cls: type[Shell],
     host: str = "127.0.0.1",

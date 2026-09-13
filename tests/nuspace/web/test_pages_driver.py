@@ -112,8 +112,12 @@ class Browser:
         return [b["id"] for b in self.last["set_page"]["blocks"]]
 
 
-def _driver():
-    """A fresh driver per connection, which is what the ws endpoint wants."""
+def _driver(_address):
+    """A fresh driver per connection, which is what the ws endpoint wants.
+
+    The endpoint hands over this connection's session address; the pages
+    surface has nothing to dispatch, so it does not use it.
+    """
     return pages_driver(PagesScreen.pages, Demo.nav)
 
 
@@ -156,7 +160,7 @@ def test_the_driver_is_a_flat_fold_of_arms_and_nothing_else():
     """The thesis, pinned: N reactive arms, no dispatch, no python in an atom."""
     from nuspace.web.pages.driver import ARMS
 
-    tree = _driver()
+    tree = _driver("127.0.0.1:0")
     nodes = list(_walk(tree))
 
     arms = [n for n in nodes if isinstance(n, nu.ReactForever)]

@@ -115,7 +115,7 @@ def space_driver(
     )
 
 
-def session_driver(*, root: type[Shape] | None = None) -> nu.Nu:
+def session_driver(session_address: str, *, root: type[Shape] | None = None) -> nu.Nu:
     """Every surface plus this connection's page supervisor, as one tree.
 
     What :func:`space_tree` mounts per connection. The two halves are folded
@@ -123,11 +123,15 @@ def session_driver(*, root: type[Shape] | None = None) -> nu.Nu:
     runs alone exactly as it runs here.
 
     Args:
+        session_address: where this connection's ``nu.ui`` Session is served.
+            The ws endpoint picks it, because there is one per connection and
+            a section running in another process reaches the browser through
+            it. Positional, which is how the endpoint hands it over.
         root: the space's root Shape class.
     """
     return nu.ParallelAsync(
         space_driver(root=root),
-        page_session(PagesScreen.pages, root=root),
+        page_session(PagesScreen.pages, session_address=session_address, root=root),
     )
 
 
@@ -176,9 +180,9 @@ def space_tree(
     return host(
         nu.With(
             # A callable, not a term: the ws handler calls it once per
-            # connection, because a driver holds that connection's
-            # subscriptions, that connection's route and that connection's
-            # workers.
+            # connection with that connection's session address, because a
+            # driver holds that connection's subscriptions, that connection's
+            # route and that connection's workers.
             server(
                 partial(session_driver, root=root),
                 shell_cls=NuspaceShell,
