@@ -167,8 +167,8 @@ def space_tree(
         port: the port the ws server listens on.
         open_browser: whether booting the server opens a tab.
         redis_url: Redis carrying change notifications, or None. Only a split
-            deployment needs it; in one process the store's own observer
-            reaches every worker through the served Navigator.
+            deployment needs it; in one process ``host`` serves the store's own
+            change feed on a socket and every worker binds it.
         body: what to run beside the apps supervisor, for demos and tests.
 
     Returns:

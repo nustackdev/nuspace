@@ -1,4 +1,4 @@
-"""The head one process holds: the store, the served Navigator, the pool.
+"""The head one process holds: the store, the served Navigator, the feed, the pool.
 
 Everything a supervisor and a web server both need, and neither may own
 twice. RocksDB is a single-writer lock, so the store is opened exactly once
@@ -33,6 +33,7 @@ __all__ = [
     "SpareObserver",
     "free_port",
     "host",
+    "served_observer",
     "spare_observer",
     "worker_init",
 ]
@@ -57,15 +58,16 @@ class SpareObserver:
     """An ``ObserverProtocol`` a dispatched program can always find.
 
     A kv subscription with nothing bound under the protocol raises rather
-    than waiting, and a worker only comes up holding an observer of its own
-    when the space was given a ``redis_url``. So this binds under the
-    protocol either way and forwards: to the worker's real observer when
-    there is one, and otherwise to an in-process one that hears this
-    worker's own writes and nobody else's.
+    than waiting, and a worker dispatched by something that wired no observer
+    comes up with nothing under it. So this binds under the protocol either
+    way and forwards: to the worker's real observer when there is one, and
+    otherwise to an in-process one that hears this worker's own writes and
+    nobody else's.
 
-    That fallback is honest rather than useful. Nothing but Redis carries
-    another process's notifications, so a snippet reacting to what the web
-    process wrote needs a ``redis_url`` on the space.
+    A worker from :func:`worker_pool` always has a real one, because
+    ``worker_init`` binds the proxied feed the web process serves. The
+    fallback is for a worker launched outside that, and it is honest rather
+    than useful: it hears nobody.
     """
 
     _nu_bind_as = ObserverProtocol
@@ -112,6 +114,7 @@ def spare_observer() -> nu.Provide:
 def worker_init(
     address: str,
     *,
+    observer_address: str | None = None,
     redis_url: str | None = None,
     channel_prefix: str = DEFAULT_CHANNEL_PREFIX,
 ) -> nu.With:
@@ -127,9 +130,16 @@ def worker_init(
     one kind of dispatched body needs, because every bracket here is paid for
     on every launch and a page restarting churns through launches. See
     :func:`nuspace.pages.runner.page_body` for the other side of that.
+
+    The observer is the exception that proves it: it is process scope like the
+    Navigator, lives as long as the pool does, and costs one connect on the way
+    up. ``observer_address`` is what the web process serves its feed on; Redis
+    is the other way to the same thing, for a split deployment.
     """
     observer: tuple[nu.Nu, ...] = ()
-    if redis_url is not None:
+    if observer_address is not None:
+        observer = (nu.kv.proxy_observer(observer_address),)
+    elif redis_url is not None:
         observer = (nu.kv.redis_observer(redis_url=redis_url, channel_prefix=channel_prefix),)
     return nu.With(
         *observer,
@@ -157,10 +167,22 @@ def served_navigator(address: str, *, store_tag: object = None) -> nu.Provide:
     )
 
 
+def served_observer(address: str) -> nu.With:
+    """This process's change feed, on a socket, for the workers to hear.
+
+    The store's observer sees every write this process makes, and a worker on
+    the other end of a proxied Navigator sees none of them. This is the ears:
+    bind it here, bind :func:`nu.kv.proxy_observer` in the worker, and a page
+    can be told something changed instead of being killed to find out.
+    """
+    return nu.kv.served_observer(address)
+
+
 def worker_pool(
     address: str,
     *,
     name: str = "nuspace",
+    observer_address: str | None = None,
     redis_url: str | None = None,
     channel_prefix: str = DEFAULT_CHANNEL_PREFIX,
 ) -> nu.Provide:
@@ -173,7 +195,12 @@ def worker_pool(
         nu.mp_pool.WorkerPool,
         {
             "name": name,
-            "init": worker_init(address, redis_url=redis_url, channel_prefix=channel_prefix),
+            "init": worker_init(
+                address,
+                observer_address=observer_address,
+                redis_url=redis_url,
+                channel_prefix=channel_prefix,
+            ),
         },
     )
 
@@ -185,6 +212,7 @@ def host(
     address: str,
     name: str = "nuspace",
     store_tag: object = None,
+    observer_address: str | None = None,
     redis_url: str | None = None,
     channel_prefix: str = DEFAULT_CHANNEL_PREFIX,
 ) -> nu.With:
@@ -203,15 +231,25 @@ def host(
         name: process-name prefix for the pool's workers.
         store_tag: the tag ``store`` binds the Navigator under, if it tags it
             at all. What the served Navigator is looked up by.
-        redis_url: Redis carrying change notifications, or None. Without it a
-            worker can read and write the store but cannot react to another
-            process's writes.
+        observer_address: where the change feed is served, ``host:port``. A
+            free port by default, with the same lifetime as ``address``.
+        redis_url: Redis carrying change notifications, or None. The other way
+            to the same thing, for a split deployment where the workers are not
+            children of this process.
         channel_prefix: namespaces the Redis channels.
     """
+    observer_address = observer_address or f"127.0.0.1:{free_port()}"
     return nu.With(
         store,
         nu.Provide(dict, {}),
         served_navigator(address, store_tag=store_tag),
-        worker_pool(address, name=name, redis_url=redis_url, channel_prefix=channel_prefix),
+        served_observer(observer_address),
+        worker_pool(
+            address,
+            name=name,
+            observer_address=observer_address,
+            redis_url=redis_url,
+            channel_prefix=channel_prefix,
+        ),
         body=body,
     )
