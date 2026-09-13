@@ -46,25 +46,30 @@ class Subscription:
     def __init__(self, session: NuspaceSession, path: str) -> None:
         self._session = session
         self._path = path
-        self._callbacks: set[Callback] = set()
+        # A list, and compared by identity throughout. A callback here is
+        # usually a reverse proxy into a worker, and hashing one is a round
+        # trip over the wire -- which raises once that worker is gone, so a
+        # set could not even drop a dead entry.
+        self._callbacks: list[Callback] = []
         self._closed = False
 
     def bind(self, cb: Callback) -> None:
         """Register ``cb`` to fire on inbound notify frames for this path."""
         if self._closed:
             return
-        self._callbacks.add(cb)
+        if not any(cb is bound for bound in self._callbacks):
+            self._callbacks.append(cb)
 
     def unbind(self, cb: Callback) -> None:
         """Drop a previously bound callback (idempotent)."""
-        self._callbacks.discard(cb)
+        self._callbacks = [bound for bound in self._callbacks if bound is not cb]
 
     def close(self) -> None:
         """Detach from the session; further ``bind`` calls no-op."""
         if self._closed:
             return
         self._closed = True
-        self._callbacks.clear()
+        self._callbacks = []
         subs = self._session._subs.get(self._path)
         if subs is not None:
             subs.discard(self)
@@ -72,8 +77,21 @@ class Subscription:
                 self._session._subs.pop(self._path, None)
 
     def _fire(self, payload: object) -> None:
+        """Hand the payload to every bound callback, dropping the dead ones.
+
+        A callback here is usually a reverse proxy into a pool worker, and a
+        page restarting kills the worker without giving it a chance to unbind.
+        So a raise means the far end is gone: drop that callback and carry on,
+        rather than letting one stale subscriber take the whole ws down.
+        """
+        dead: list[Callback] = []
         for cb in tuple(self._callbacks):
-            cb(payload)
+            try:
+                cb(payload)
+            except Exception:  # the far end is a dead process
+                dead.append(cb)
+        if dead:
+            self._callbacks = [cb for cb in self._callbacks if not any(cb is gone for gone in dead)]
 
 
 class NuspaceSession(Session):

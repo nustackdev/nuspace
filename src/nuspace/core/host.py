@@ -125,8 +125,8 @@ def worker_init(
     init once and is process-wide while a Session is one browser connection,
     so it could not live here anyway -- but neither does anything else only
     one kind of dispatched body needs, because every bracket here is paid for
-    on every launch and a page reconciling churns through launches. See
-    :func:`nuspace.pages.runner.section_body` for the other side of that.
+    on every launch and a page restarting churns through launches. See
+    :func:`nuspace.pages.runner.page_body` for the other side of that.
     """
     observer: tuple[nu.Nu, ...] = ()
     if redis_url is not None:
@@ -190,7 +190,7 @@ def host(
 ) -> nu.With:
     """One process's head, with ``body`` inside it.
 
-    The store's write lock, the ``dict`` behind every ``Runner.workers``, the
+    The store's write lock, the ``dict`` behind every ``Runner``, the
     Navigator on a socket and the process-wide pool. Brackets tear down LIFO
     when the body ends, reaping every worker.
 

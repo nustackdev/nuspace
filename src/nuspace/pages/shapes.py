@@ -18,7 +18,7 @@ __all__ = [
     "ROOT_PAGE_ID",
     "ROOT_PARENT",
     "ROOT_TITLE",
-    "WORKERS_SLOT",
+    "WORKER_SLOT",
     "Page",
     "Runner",
     "Section",
@@ -80,16 +80,18 @@ class Page(nu.Shape):
 
 
 class Runner(nu.Shape):
-    """What the process driving one page knows about who is running what.
+    """What the process driving one page knows about who is running it.
 
-    ``nu.mem`` deliberately: this is host-local bookkeeping, and a kv write
-    here would let the driver wake itself. Keyed by section id, so a preset
-    running two views at once gives each its own ``dict`` binding.
+    One slot, because a page is the unit: every section on it folds into a
+    single worker, so a view is either running somewhere or it is not.
+    ``nu.mem`` deliberately -- this is host-local bookkeeping, and a kv write
+    here would let the driver wake itself. A preset running two views at once
+    gives each its own ``dict`` binding.
     """
 
-    workers = nu.mem.DictRef.slot(int)
+    worker = nu.mem.IntRef.slot()
 
 
-#: The key ``Runner.workers`` occupies in the dict backing it. Declared beside
-#: the slot so a bracket owning that dict can reach the records without a ref.
-WORKERS_SLOT = "workers"
+#: The key ``Runner.worker`` occupies in the dict backing it. Declared beside
+#: the slot so a bracket owning that dict can reach the record without a ref.
+WORKER_SLOT = "worker"

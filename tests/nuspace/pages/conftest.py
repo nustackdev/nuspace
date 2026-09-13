@@ -58,18 +58,21 @@ def seq(*terms):
 
 
 def snap(tag, *section_ids):
-    """Record the worker id of each section under ``probe.<tag>.<section>``.
+    """Record the page's worker id under ``probe.<tag>.<section>``, per section.
 
-    ``Runner.workers`` is mem in the host process, so it is gone the moment
-    the tree ends. Writing it into kv while the tree is live is how a test
-    sees it, and it is an ordinary Nu write like any other.
+    One worker holds the whole page now, so every section reads the same id.
+    ``Runner.worker`` is mem in the host process and is gone the moment the
+    tree ends, so writing it into kv while the tree is live is how a test sees
+    it, and it is an ordinary Nu write like any other.
     """
+
+    # Built per use: one node in two tree positions is one node.
+    def worker():
+        return nu.ToStr(nu.If(Runner.worker.not_empty(), Runner.worker, nu.Int(-1)))
+
     return seq(
         *(
-            Space.state.set_item(
-                nu.Str(f"probe.{tag}.{section_id}"),
-                nu.ToStr(Runner.workers.get_item(nu.Str(section_id), nu.Int(-1))),
-            )
+            Space.state.set_item(nu.Str(f"probe.{tag}.{section_id}"), worker())
             for section_id in section_ids
         )
     )
@@ -135,7 +138,7 @@ async def run_page(path, page_id, *, alongside=None, duration=4.0):
 
     ``page_tree`` owns no store and no pool on purpose, so everything the
     sections need to reach -- the proxy the workers read the store through,
-    the pool they run in, the dict behind ``Runner.workers`` -- is assembled
+    the pool they run in, the dict behind ``Runner.worker`` -- is assembled
     here instead of inside the runner.
     """
     address = f"127.0.0.1:{free_port()}"
