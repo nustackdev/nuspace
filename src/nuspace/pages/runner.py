@@ -11,6 +11,25 @@ the observer are paid for once per page rather than once per section. The fold
 is built inside the worker because the section list is kv data and the worker
 is the process holding the Navigator proxy: it reads its own sections rather
 than being handed them.
+
+**The worker manages its own sections.** It hears the store through the
+proxied observer ``worker_init`` binds, so a page changing is a reload inside
+the process it is already running in, never a new one. Two nested levels, and
+the two subscriptions are deliberately different:
+
+- the fold sits under ``sections.on_children_change()``, which is length
+  exact: it fires when a section is added or removed, never when one is
+  edited, and that is when the set of arms changed and the fold has to be
+  rebuilt.
+- each arm sits under ``sections[sid].on_change()``, which is depth
+  unbounded: any write inside that one section restarts that one arm and
+  leaves its siblings running.
+
+``Race`` is what does the restarting. The body and a ``React`` on the
+subscription run side by side, the change cancels the body, and the
+``ForeverDo`` re-enters and reloads from the store. Killing a worker is left
+for the things that really need a fresh process: navigating, and the
+connection going away.
 """
 
 from __future__ import annotations
@@ -36,23 +55,13 @@ if TYPE_CHECKING:
 
 
 __all__ = [
-    "CHANGED_SECTION_INDEX",
     "SECTION_ATTR",
-    "changed_section",
     "page_body",
     "page_tree",
     "run_page",
     "section_arm",
     "stop_page",
 ]
-
-
-#: Position of the section id in a key from ``page.sections.on_change()``.
-#: Pages are flat, so a key is always ``('/', 'pages', page_id, 'sections',
-#: section_id)`` with an optional field after it, and index 4 reaches the id
-#: whatever the page's depth in the tree. Measured, and pinned by
-#: ``tests/nuspace/pages/test_changed_key.py``.
-CHANGED_SECTION_INDEX = 4
 
 
 #: What the fold binds each section id under, inside the worker. Every arm
@@ -64,21 +73,60 @@ SECTION_ATTR = "section"
 #: reason ``SECTION_ATTR`` is.
 _TERM_ATTR = "section.term"
 
-#: The key that woke the live loop, and the section id inside it. Nothing acts
-#: on the id any more -- a page is the unit of restart -- but the shape of the
-#: key is still what tells a section write from any other page write.
-_KEY = nu.TupleAttrRef("k")
-changed_section = _KEY[CHANGED_SECTION_INDEX]
+#: Whether the section this arm is for is still in the store. Read once per
+#: turn of the arm's loop, because a delete wakes the arm before it removes it.
+_ALIVE_ATTR = "section.alive"
+
+#: How long a parked branch sleeps before waking to do nothing. Finite only
+#: because ``Delay`` takes a number; a branch that parks is waiting to be
+#: cancelled, never to time out.
+_PARK_SECONDS = 3600.0
+
+
+def _park() -> nu.Nu:
+    """Sit on the loop doing nothing, until something cancels this branch.
+
+    What a branch that has nothing left to do does instead of returning. A
+    ``Race`` ends when its first child finishes, so a body that returns would
+    restart the loop around it immediately and spin.
+    """
+    return nu.ForeverDo(nu.Delay(nu.Float(_PARK_SECONDS)))
+
+
+def _restarts_on(change: nu.Nu, body: nu.Nu, *, root: type[Shape]) -> nu.Nu:
+    """``body``, run again from the store every time ``change`` fires.
+
+    The two race: the change cancels the body, the loop re-enters, and the
+    subscription is opened fresh on the way in. ``body`` is parked behind
+    rather than returned from, so a body that ends early waits for the change
+    like a body that never ends.
+
+    Args:
+        change: the subscription to restart on. Built per call -- one node in
+            two tree positions is one node.
+        body: what runs until the change comes.
+        root: the space's root Shape class, for the subscription's bracket.
+    """
+    return nu.ForeverDo(
+        nu.Race(
+            body >> _park(),
+            # The subscription resolves a container, so it needs a snapshot as
+            # much as anything reading one does.
+            nu.kv.auto_flow_atomic(nu.React(change, nu.Noop()), scope=root),
+        )
+    )
 
 
 def section_arm(
     page_id: nu.StrArg, *, root: type[Shape] | None = None, item: str = SECTION_ATTR
 ) -> nu.Nu:
-    """One section, constructed and running, as one arm of the page's fold.
+    """One section, constructed and running and reloading, as one arm of the fold.
 
-    The section arrives as the attr ``item``, bound by the fold. Two
-    ``TryCatch`` layers, and neither is optional: the fold cancels every
-    sibling arm on the first error, so a section that dies has to die alone.
+    The section arrives as the attr ``item``, bound by the fold. It restarts
+    itself on any write inside its own subtree and nothing else, so editing one
+    block leaves every other block on the page running. Three ``TryCatch``
+    layers, and none is optional: the fold cancels every sibling arm on the
+    first error, so a section that dies has to die alone.
 
     Args:
         page_id: the page the section is on.
@@ -125,11 +173,24 @@ def section_arm(
     )
     # Inner catch is construction, outer is everything the running section
     # throws afterwards. Both land on the one `.error` key the browser reads
-    # as `failed`, and both end this arm quietly rather than raising into the
-    # fold. Nothing retries: the section stays failed until its snippet
-    # changes, which restarts the page anyway.
+    # as `failed`, and both end this turn quietly rather than raising into the
+    # fold. Nothing retries here: the section stays failed until its own
+    # subscription says it changed.
     guarded = nu.TryCatch(run, catch=report, errors=nu.prog.ConstructionError)
-    return clear >> nu.TryCatch(guarded, catch=report)
+    once = clear >> nu.TryCatch(guarded, catch=report)
+    # A delete wakes this arm before the fold above it is rebuilt, so the turn
+    # after one lands is a turn with no section to load. Read once, per turn,
+    # rather than trusted from fan-out time.
+    turn = nu.Let(
+        _ALIVE_ATTR,
+        nu.kv.auto_flow_atomic(sections.contains(section), scope=root),
+        body=nu.IfDo(nu.BoolAttrRef(_ALIVE_ATTR), once),
+    )
+    # Third layer, and the one the other two cannot cover: opening the
+    # subscription is outside the body they guard, and a section deleted at
+    # exactly the wrong moment resolves to no view at all. Park instead of
+    # raising -- the fold is about to be rebuilt without this arm anyway.
+    return nu.TryCatch(_restarts_on(sections[section].on_change(), turn, root=root), catch=_park())
 
 
 def page_body(
@@ -144,7 +205,8 @@ def page_body(
     The page arrives as a carried attr rather than baked in, because a body is
     payload and one connection navigating around reuses the same one. The
     section list is read here, in the worker, for the same reason the fields
-    are: this is the process with the store.
+    are: this is the process with the store. And it is re-read whenever the set
+    of sections changes, which is what makes adding a block cost no process.
 
     Args:
         page_id: the page to run.
@@ -164,13 +226,17 @@ def page_body(
     # Snapshot and dies with StorageClosedError.
     ids = nu.kv.auto_flow_atomic(nu.list(sections.keys()), scope=root)
     # Async-only and never-returning, which is exactly the shape here: every
-    # arm is a section that runs until the worker is killed.
+    # arm is a section that runs until it is cancelled. The items are read once
+    # at fan-out, so a section added later is picked up by the rebuild below
+    # and never by reaching into a live fold.
     fold = nu.ForEachParAsync(ids, section_arm(page_id, root=root, item=item), item=item)
+    live = _restarts_on(sections.on_children_change(), fold, root=root)
     # The observer sits here rather than in ``worker_init``: a snippet with a
     # kv subscription needs one bound, and a pool whose every worker pays for
     # it on the way up makes a restart slow enough to see. Once per page now,
-    # not once per section.
-    guarded = nu.With(spare_observer(), body=fold)
+    # not once per section. It is also what the two loops above subscribe
+    # through, so nothing here works without it.
+    guarded = nu.With(spare_observer(), body=live)
     if session_address is None:
         return guarded
     return nu.With(
@@ -195,9 +261,10 @@ def run_page(
 ) -> nu.Nu:
     """Make this connection run ``page``, whatever it was running before.
 
-    The one restart path, for arriving on a page and for a section on it
-    changing alike. The fresh worker is launched and handed the body first and
-    the one on record is killed after, so the gap is as short as a launch.
+    The hard kill, and the only one left: arriving on a page, and nothing else.
+    A section changing is the worker's own business now. The fresh worker is
+    launched and handed the body first and the one on record is killed after,
+    so the gap is as short as a launch.
 
     Args:
         page: the page id, as a term.
@@ -221,12 +288,20 @@ def run_page(
         started,
         carry=True,
     )
+    # The worker subscribes to this container, and a subscription over a
+    # missing one resolves to nothing rather than waiting, so a page that never
+    # had a section would never hear its first. Written here rather than in the
+    # body because ``Dict.create()`` does not survive the pickle to the child,
+    # and a literal dict would be captured once at Form construction and shared
+    # across every evaluation of the term.
+    boot = root.pages[nu.StrAttrRef(page_attr)].sections.init(nu.Dict.create())
     return nu.Let(
         page_attr,
         page,
         # A slot nothing has written yet reads EMPTY, and EMPTY through a kill
         # is a lookup for a worker that never existed.
-        body=nu.Let(
+        body=boot
+        >> nu.Let(
             old_attr,
             nu.If(Runner.worker.not_empty(), Runner.worker, nu.Int(-1)),
             body=nu.Let(
@@ -262,11 +337,15 @@ def page_tree(
     alongside: nu.Nu | None = None,
     duration: float | None = None,
 ) -> nu.Nu:
-    """One page, running and restarting on every section write, as one term.
+    """One page, launched once and left to run itself, as one term.
 
     No ``With`` head: the store, the pool and the ``dict`` behind
     ``Runner.worker`` all come from the context this is run in, so a preset
     can give each view its own without this module knowing about views.
+
+    One launch is the whole of it. The worker follows its own sections, so
+    there is nothing here to restart and nothing here to subscribe to; this
+    just holds the page open for as long as it is asked to.
 
     Args:
         page_id: the page to run.
@@ -274,35 +353,20 @@ def page_tree(
             :func:`page_body`.
         root: the space's root Shape class.
         body: the term dispatched for the page. See :func:`run_page`.
-        alongside: a tree to run beside the live loop, for demos and tests.
+        alongside: a tree to run beside the running page, for demos and tests.
         duration: stop after this many seconds. None runs forever.
 
     Returns:
         The tree, already bracketed for atomicity against ``root``.
     """
     root = resolve_root(root)
-    sections = root.pages[page_id].sections
-
-    def start() -> nu.Nu:
-        # Built per use: one node in two tree positions is one node.
-        return run_page(
-            nu.str(page_id), session_address=session_address, root=root, body=body, ns="tree"
-        )
-
-    # The container must exist before anything reads it: a subscription over a
-    # missing container resolves to INVALID and silently never fires.
-    # Dict.create(), not {} -- a literal dict is captured once at Form
-    # construction and shared across every evaluation of the term.
-    boot = sections.init(nu.Dict.create())
-    # The bare key naming no section also fires. It must be skipped
-    # explicitly: indexing past the end raises IndexError inside the react
-    # loop, killing it and leaving the runner silently deaf.
-    live = nu.ReactForever(
-        sections.on_change(),
-        nu.IfDo(nu.Len(_KEY) > nu.Int(CHANGED_SECTION_INDEX), start()),
-        changed_key="k",
+    start = run_page(
+        nu.str(page_id), session_address=session_address, root=root, body=body, ns="tree"
     )
-    flow = live if alongside is None else (live | alongside)
+    # Launch and Dispatch both return as soon as the worker has the body, so
+    # something has to hold the tree open or the bracket would reap the worker
+    # it just started.
+    flow = _park() if alongside is None else (_park() | alongside)
     if duration is not None:
         flow = nu.Race(flow, nu.DelayedDo(nu.Float(duration), nu.Noop()))
-    return nu.kv.auto_flow_atomic(boot >> start() >> flow, scope=root)
+    return nu.kv.auto_flow_atomic(start >> flow, scope=root)

@@ -19,6 +19,7 @@ import nu.mp_pool
 import nu.proxy
 from nu.kv.fabrics import Navigator
 from nuspace.apps import free_port, worker_init
+from nuspace.core.host import served_observer
 from nuspace.core.shapes import Space
 from nuspace.pages import ROOT_PAGE_ID, Runner, ops, page_tree
 
@@ -142,9 +143,14 @@ async def run_page(path, page_id, *, alongside=None, duration=4.0):
     here instead of inside the runner.
     """
     address = f"127.0.0.1:{free_port()}"
+    observer_address = f"127.0.0.1:{free_port()}"
     tree = nu.With(
         nu.kv.rocksdb_navigator(path),
         nu.Provide(dict, {}),
+        # The worker follows its own sections now, so it has to hear this
+        # process's writes. Without the feed it comes up deaf and never
+        # reloads.
+        served_observer(observer_address),
         nu.Provide(
             nu.proxy.InvisiblesServer,
             {
@@ -156,7 +162,10 @@ async def run_page(path, page_id, *, alongside=None, duration=4.0):
         ),
         nu.Provide(
             nu.mp_pool.WorkerPool,
-            {"name": "nuspace-pages", "init": worker_init(address)},
+            {
+                "name": "nuspace-pages",
+                "init": worker_init(address, observer_address=observer_address),
+            },
         ),
         body=page_tree(page_id, alongside=alongside, duration=duration),
     )
