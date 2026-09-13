@@ -30,6 +30,13 @@ subscription run side by side, the change cancels the body, and the
 ``ForeverDo`` re-enters and reloads from the store. Killing a worker is left
 for the things that really need a fresh process: navigating, and the
 connection going away.
+
+**Navigation dispatches into a spare.** The kill stays, and so does the fresh
+process, but the process is one this connection launched a navigation ago and
+has been holding idle. ``Runner`` keeps two slots for that reason, and the
+launch that refills the idle one runs beside the dispatch rather than in front
+of it. It is policy, so it is here: the pool serves apps too, and an app never
+wants a spare.
 """
 
 from __future__ import annotations
@@ -251,6 +258,17 @@ def page_body(
     )
 
 
+def _take_spare() -> nu.Nu:
+    """The spare's id if this connection has one, a fresh cold launch if not.
+
+    ``If`` short-circuits, which is the whole trick: the launch sits in the
+    branch that only runs when the slot is empty, so a warm navigation never
+    reaches the pool's spawn path at all. This only reads the slot; the caller
+    is what empties it.
+    """
+    return nu.If(Runner.spare.not_empty(), Runner.spare, nu.mp_pool.PoolRef().launch())
+
+
 def run_page(
     page: nu.Nu,
     *,
@@ -262,9 +280,20 @@ def run_page(
     """Make this connection run ``page``, whatever it was running before.
 
     The hard kill, and the only one left: arriving on a page, and nothing else.
-    A section changing is the worker's own business now. The fresh worker is
-    launched and handed the body first and the one on record is killed after,
-    so the gap is as short as a launch.
+    A section changing is the worker's own business now. What is left to pay
+    for is the spawn, so this does not spawn: it dispatches into the spare this
+    connection has been holding, and the launch that refills the slot happens
+    beside the dispatch rather than in front of it.
+
+    Three things run at once once the target is picked, and the order they
+    finish in does not matter: the body goes to the warm worker, the worker
+    that was on record dies, and a new spare comes up for next time. Only the
+    first is on the path to the page appearing.
+
+    Cold and exhausted both fall back to the old behaviour rather than to an
+    error. A connection's first navigation has no spare, and clicking faster
+    than a launch takes will run the slot empty; both land on a plain launch,
+    which is exactly what every navigation used to cost.
 
     Args:
         page: the page id, as a term.
@@ -295,6 +324,10 @@ def run_page(
     # and a literal dict would be captured once at Form construction and shared
     # across every evaluation of the term.
     boot = root.pages[nu.StrAttrRef(page_attr)].sections.init(nu.Dict.create())
+    # Emptied before the refill rather than overwritten by it: a launch that
+    # raises would otherwise leave the slot naming the worker now running the
+    # page, and the next navigation would dispatch a second body into it.
+    claim = nu.IfDo(Runner.spare.not_empty(), Runner.spare.erase())
     return nu.Let(
         page_attr,
         page,
@@ -306,17 +339,27 @@ def run_page(
             nu.If(Runner.worker.not_empty(), Runner.worker, nu.Int(-1)),
             body=nu.Let(
                 new_attr,
-                pool.launch(),
-                body=dispatch
-                >> Runner.worker.set(started)
-                >> nu.IfDo(stopped >= nu.Int(0), pool.kill(stopped)),
+                _take_spare(),
+                body=claim
+                >> nu.Parallel(
+                    dispatch >> Runner.worker.set(started),
+                    nu.IfDo(stopped >= nu.Int(0), pool.kill(stopped)),
+                    # The one that must not be sequenced in front of the
+                    # dispatch. Moving the spawn is not hiding it.
+                    Runner.spare.set(pool.launch()),
+                ),
             ),
         ),
     )
 
 
 def stop_page(*, ns: str = "page") -> nu.Nu:
-    """Kill the worker on record, if there is one, and forget it."""
+    """Kill both workers on record, if there are any, and forget them.
+
+    The spare counts. It is holding no body and nobody is looking at it, and it
+    is still a live process, so a teardown that reaps only the running one
+    leaks one process per connection.
+    """
     pool = nu.mp_pool.PoolRef()
     return nu.IfDo(
         Runner.worker.not_empty(),
@@ -324,6 +367,13 @@ def stop_page(*, ns: str = "page") -> nu.Nu:
             f"{ns}.old",
             Runner.worker,
             body=pool.kill(nu.IntAttrRef(f"{ns}.old")) >> Runner.worker.erase(),
+        ),
+    ) >> nu.IfDo(
+        Runner.spare.not_empty(),
+        nu.Let(
+            f"{ns}.idle",
+            Runner.spare,
+            body=pool.kill(nu.IntAttrRef(f"{ns}.idle")) >> Runner.spare.erase(),
         ),
     )
 

@@ -18,6 +18,7 @@ __all__ = [
     "ROOT_PAGE_ID",
     "ROOT_PARENT",
     "ROOT_TITLE",
+    "SPARE_SLOT",
     "WORKER_SLOT",
     "Page",
     "Runner",
@@ -82,16 +83,29 @@ class Page(nu.Shape):
 class Runner(nu.Shape):
     """What the process driving one page knows about who is running it.
 
-    One slot, because a page is the unit: every section on it folds into a
-    single worker, so a view is either running somewhere or it is not.
+    Two slots, and they are the same kind of thing at different ages. A page is
+    the unit, so every section on it folds into one ``worker`` and a view is
+    either running somewhere or it is not. ``spare`` is the next one: a process
+    already launched and holding nothing, so the next navigation dispatches
+    into a warm worker instead of paying an interpreter boot for one.
+
+    Exactly one spare, and that is not a parameter. A person navigates one page
+    at a time, so one covers the serial case, and the pool has no idea any of
+    this is going on -- warmth is policy and it lives here.
+
     ``nu.mem`` deliberately -- this is host-local bookkeeping, and a kv write
     here would let the driver wake itself. A preset running two views at once
     gives each its own ``dict`` binding.
     """
 
     worker = nu.mem.IntRef.slot()
+    spare = nu.mem.IntRef.slot()
 
 
 #: The key ``Runner.worker`` occupies in the dict backing it. Declared beside
 #: the slot so a bracket owning that dict can reach the record without a ref.
 WORKER_SLOT = "worker"
+
+#: Same, for ``Runner.spare``. A teardown has to reap this one too: an unused
+#: spare is a live process nobody is looking at.
+SPARE_SLOT = "spare"

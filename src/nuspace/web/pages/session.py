@@ -27,7 +27,7 @@ import nu.mp_pool
 from nuspace._root import resolve_root
 from nuspace.pages import ops
 from nuspace.pages.runner import run_page
-from nuspace.pages.shapes import WORKER_SLOT, Runner
+from nuspace.pages.shapes import SPARE_SLOT, WORKER_SLOT, Runner
 from nuspace.web.arms import Arms, field_str
 
 
@@ -61,27 +61,34 @@ def cell() -> nu.Nu:
 
 
 class PageWorker(dict):
-    """This connection's ``Runner.worker`` record, and the worker in it.
+    """This connection's ``Runner`` record, and the workers in it.
 
-    Bound as the ``dict`` behind the pages ``Runner``, so the record the arm
-    writes lands here and bracket close kills whatever is still on it.
+    Bound as the ``dict`` behind the pages ``Runner``, so the records the arm
+    writes land here and bracket close kills whatever is still on them.
     """
 
     __slots__ = ("_pool",)
 
     def setup(self, ctx: Context) -> None:
-        """Hold the process-wide pool the record names a worker in."""
+        """Hold the process-wide pool the records name workers in."""
         self._pool = ctx.get(nu.mp_pool.WorkerPool)
 
     def cleanup(self) -> None:
-        """Kill the worker this connection still has on record.
+        """Kill both workers this connection still has on record.
+
+        Both, because the spare is a live process that happens to be idle: a
+        teardown reaping only the running one leaks a whole interpreter every
+        time a tab closes. Either slot may be empty -- a connection that never
+        navigated has no worker, and one that navigated faster than a launch
+        has no spare.
 
         Inline and sync, like the pool's own teardown, so a cancellation
         landing on the connection cannot abandon a half-reaped tab.
         """
-        worker = self.get(WORKER_SLOT)
-        if isinstance(worker, int):
-            self._pool.kill(worker)
+        for slot in (WORKER_SLOT, SPARE_SLOT):
+            worker = self.get(slot)
+            if isinstance(worker, int):
+                self._pool.kill(worker)
 
 
 #: The arm here, labelled for the reports it prints.
