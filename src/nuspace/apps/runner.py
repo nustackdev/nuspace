@@ -8,16 +8,14 @@ but cannot react to another process's writes.
 
 from __future__ import annotations
 
-import socket
 from typing import TYPE_CHECKING
 
 import nu
 import nu.kv
 import nu.mp_pool
 import nu.prog
-import nu.proxy
-from nu.kv.fabrics import Navigator
 from nuspace._root import resolve_root
+from nuspace.core.host import DEFAULT_CHANNEL_PREFIX, free_port, host, worker_init
 
 from .shapes import Runner
 
@@ -30,18 +28,16 @@ __all__ = [
     "CHANGED_APP_INDEX",
     "DEFAULT_CHANNEL_PREFIX",
     "app_body",
+    "apps_store",
     "apps_tree",
     "changed_app",
     "driver",
     "free_port",
     "reconcile",
     "run_apps",
+    "supervisor",
     "worker_init",
 ]
-
-
-#: Namespaces the Redis channels. Every writer and listener must agree on it.
-DEFAULT_CHANNEL_PREFIX = "nuspace"
 
 
 #: Position of the app id in a key from ``Space.apps.on_change()``. The
@@ -60,17 +56,6 @@ _WORKER = nu.IntAttrRef("w")
 #: The key that woke the live loop, and the app id inside it.
 _KEY = nu.TupleAttrRef("k")
 changed_app = _KEY[CHANGED_APP_INDEX]
-
-
-def free_port() -> int:
-    """A port nobody is listening on, as of right now.
-
-    Deployment glue, racy by nature, which is fine for picking the address of
-    a server this process is about to start.
-    """
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-        sock.bind(("", 0))
-        return int(sock.getsockname()[1])
 
 
 def app_body(*, root: type[Shape] | None = None) -> nu.Nu:
@@ -101,10 +86,10 @@ def app_body(*, root: type[Shape] | None = None) -> nu.Nu:
 def reconcile(*, root: type[Shape] | None = None) -> nu.Nu:
     """Make the world agree with the store, for the one app bound at ``app``.
 
-    Kill whatever worker is on record, then start whatever the store says the
-    app is now: an add runs the second half, a delete the first, an edit both.
-    ``Launch``/``Dispatch``/``Kill`` all return promptly, so the seed can run
-    this sequentially without the first app blocking the rest.
+    One path for add, edit and delete: whatever is running for this app stops,
+    and if the store still has the app it starts again. ``Launch``, ``Dispatch``
+    and ``Kill`` all return promptly, so the seed can run this sequentially
+    without the first app blocking the rest.
     """
     root = resolve_root(root)
     pool = nu.mp_pool.PoolRef()
@@ -113,6 +98,8 @@ def reconcile(*, root: type[Shape] | None = None) -> nu.Nu:
         pool.kill(Runner.workers[_APP]) >> Runner.workers.del_item(_APP),
     )
     start = nu.IfDo(
+        # An app that has been deleted reaches here too -- that is the delete
+        # path, and this is what stops it coming back.
         root.apps.contains(_APP),
         # The worker id is read twice, recorded and then dispatched to, so it
         # is bound once and scoped to the two reads that want it.
@@ -138,7 +125,16 @@ def driver(*, root: type[Shape] | None = None) -> tuple[nu.Nu, nu.Nu]:
     # over a missing container resolves to INVALID and silently never fires.
     # Dict.create(), not {} -- a literal dict is captured once at Form
     # construction and shared across every evaluation of the term.
-    boot = root.apps.init(nu.Dict.create()) >> Runner.workers.init(nu.Dict.create())
+    #
+    # `attached` is the marker a web driver in this same process reads to say
+    # whether anything is supervising at all. It is written here rather than
+    # assumed by whoever assembled the tree, so the browser is told what is
+    # true rather than what the build script believed.
+    boot = (
+        root.apps.init(nu.Dict.create())
+        >> Runner.workers.init(nu.Dict.create())
+        >> Runner.attached.set(nu.Bool(True))
+    )
     # nu.list is load-bearing: the keys view is lazy and auto_flow_atomic
     # brackets the items slot separately, so an undrained view outlives its
     # Snapshot and dies with StorageClosedError.
@@ -159,26 +155,41 @@ def driver(*, root: type[Shape] | None = None) -> tuple[nu.Nu, nu.Nu]:
     return seed, live
 
 
-def worker_init(
-    address: str,
+def supervisor(
+    *,
+    root: type[Shape] | None = None,
+    alongside: nu.Nu | None = None,
+    duration: float | None = None,
+) -> nu.Nu:
+    """Every app in the space, supervised, as one term for whoever mounts it.
+
+    No ``With`` head: the store, the pool and the ``dict`` behind
+    ``Runner.workers`` come from the context this is run in, which is what
+    lets a web server and this share one process and one store.
+
+    Args:
+        root: the space's root Shape class.
+        alongside: a tree to run beside the live loop, for demos and tests.
+        duration: stop after this many seconds. None runs forever.
+    """
+    root = resolve_root(root)
+    seed, live = driver(root=root)
+    flow = live if alongside is None else (live | alongside)
+    if duration is not None:
+        flow = nu.Race(flow, nu.DelayedDo(nu.Float(duration), nu.Noop()))
+    return nu.kv.auto_flow_atomic(seed >> flow, scope=root)
+
+
+def apps_store(
+    path: str,
     *,
     redis_url: str | None = None,
     channel_prefix: str = DEFAULT_CHANNEL_PREFIX,
-) -> nu.With:
-    """The Context every worker comes up holding.
-
-    Pickled to the child and entered there, so the proxy connects and the
-    observer subscribes from inside the worker. A plain stack of brackets,
-    because that is what survives the pickle.
-    """
-    observer: tuple[nu.Nu, ...] = ()
-    if redis_url is not None:
-        observer = (nu.kv.redis_observer(redis_url=redis_url, channel_prefix=channel_prefix),)
-    return nu.With(
-        *observer,
-        nu.proxy.InvisiblesProxy(Navigator, address=address),
-        nu.Provide(dict, {}),
-    )
+) -> nu.Nu:
+    """The navigator bracket for a space on disk, with or without redis."""
+    if redis_url is None:
+        return nu.kv.rocksdb_navigator(path)
+    return nu.kv.rocksdb_navigator_redis(path, redis_url=redis_url, channel_prefix=channel_prefix)
 
 
 def apps_tree(
@@ -206,36 +217,12 @@ def apps_tree(
     Returns:
         The tree. Brackets tear down LIFO when it ends, reaping every worker.
     """
-    root = resolve_root(root)
-    seed, live = driver(root=root)
-    flow = live if alongside is None else (live | alongside)
-    if duration is not None:
-        flow = nu.Race(flow, nu.DelayedDo(nu.Float(duration), nu.Noop()))
-    store = (
-        nu.kv.rocksdb_navigator(path)
-        if redis_url is None
-        else nu.kv.rocksdb_navigator_redis(path, redis_url=redis_url, channel_prefix=channel_prefix)
-    )
-    return nu.With(
-        store,
-        nu.Provide(dict, {}),
-        nu.Provide(
-            nu.proxy.InvisiblesServer,
-            {
-                "target": Navigator,
-                "address": address,
-                "transport": "tcp",
-                "executor": "threaded",
-            },
-        ),
-        nu.Provide(
-            nu.mp_pool.WorkerPool,
-            {
-                "name": "nuspace",
-                "init": worker_init(address, redis_url=redis_url, channel_prefix=channel_prefix),
-            },
-        ),
-        body=nu.kv.auto_flow_atomic(seed >> flow, scope=root),
+    return host(
+        supervisor(root=root, alongside=alongside, duration=duration),
+        store=apps_store(path, redis_url=redis_url, channel_prefix=channel_prefix),
+        address=address,
+        redis_url=redis_url,
+        channel_prefix=channel_prefix,
     )
 
 

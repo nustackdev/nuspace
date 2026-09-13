@@ -87,6 +87,3 @@ export const appsPlaceholder = cn(
 	"flex min-h-0 flex-1 flex-col items-center justify-center gap-2",
 	"p-8 text-center text-base text-text-muted",
 );
-
-/** The "no runner mounted" notice. Not an error: the space is simply not one. */
-export const appsDetached = "shrink-0 px-3 pt-3";

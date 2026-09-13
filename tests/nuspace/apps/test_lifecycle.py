@@ -17,6 +17,7 @@ from nuspace.apps import ops, run_apps
 
 from .conftest import (
     BROKEN,
+    COUNTER,
     NONE,
     UNWRAPPED,
     read_state,
@@ -34,6 +35,10 @@ pytestmark = pytest.mark.timeout(300)
 #: (the change feed is per field, and the row itself is a change too), so
 #: the waits here are long on purpose. Shortening them buys flakiness.
 SETTLE = 4.0
+
+#: An edit has to be a real change to the source, or reconcile reads the app
+#: as already running exactly that and leaves the worker where it is.
+EDITED = COUNTER + "\n# edited\n"
 
 
 async def test_an_app_already_in_the_store_is_launched_and_runs(store):
@@ -72,13 +77,54 @@ async def test_adding_an_app_live_does_not_disturb_the_running_ones(store):
     assert state["probe.t2.a_two"] == state["probe.t1.a_two"]
 
 
+async def test_creating_an_app_costs_exactly_one_launch(store):
+    """The real write pattern -- every field at once -- must still cost one worker.
+
+    ``add_app`` writes name, policy and snippet, and the subscription behind
+    the runner is depth-unbounded, so this wakes reconcile several times over.
+    Pool ids are monotonic from zero and never reused, so a recorded id of 0
+    is the whole assertion: one launch, ever.
+    """
+    script = (
+        nu.DelayedDo(1.0, ops.add_app(COUNTER, app_id="a_new", name="New"))
+        >> nu.DelayedDo(SETTLE, seq(snap("t1", "a_new"), snap_ticks("t1", "a_new")))
+        >> nu.DelayedDo(SETTLE, seq(snap("t2", "a_new"), snap_ticks("t2", "a_new")))
+    )
+    await run_apps(store, alongside=script, duration=2 * SETTLE + 4.0)
+
+    state = await read_state(store)
+    assert state["probe.t1.a_new"] == "0"
+    # And it is the same worker later, still alive and still counting.
+    assert state["probe.t2.a_new"] == "0"
+    assert int(state["probe.t2.a_new.ticks"]) > int(state["probe.t1.a_new.ticks"])
+    assert multiprocessing.active_children() == []
+
+
+async def test_renaming_an_app_restarts_nothing(store):
+    """A rename is not an edit. The worker must not move."""
+    await seed_store(store, {"a_one": None})
+
+    script = (
+        nu.DelayedDo(SETTLE, snap("t1", "a_one"))
+        >> nu.DelayedDo(0.2, ops.rename_app("a_one", "Renamed"))
+        >> nu.DelayedDo(SETTLE, seq(snap("t2", "a_one"), snap_ticks("t2", "a_one")))
+        >> nu.DelayedDo(SETTLE, snap_ticks("t3", "a_one"))
+    )
+    await run_apps(store, alongside=script, duration=3 * SETTLE + 4.0)
+
+    state = await read_state(store)
+    assert state["probe.t1.a_one"] != NONE
+    assert state["probe.t2.a_one"] == state["probe.t1.a_one"]
+    assert int(state["probe.t3.a_one.ticks"]) > int(state["probe.t2.a_one.ticks"])
+
+
 async def test_editing_a_snippet_restarts_only_that_app(store):
     """One edit, one restart. The other app's worker id does not move."""
     await seed_store(store, {"a_one": None, "a_two": None})
 
     script = (
         nu.DelayedDo(SETTLE, snap("t1", "a_one", "a_two"))
-        >> nu.DelayedDo(0.2, write_app("a_one"))
+        >> nu.DelayedDo(0.2, write_app("a_one", EDITED))
         >> nu.DelayedDo(SETTLE, snap("t2", "a_one", "a_two"))
     )
     await run_apps(store, alongside=script, duration=2 * SETTLE + 4.0)

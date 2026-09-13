@@ -24,6 +24,7 @@ from .conftest import (
     NONE,
     read_state,
     run_page,
+    seed_pages,
     seed_store,
     seq,
     snap,
@@ -91,6 +92,54 @@ async def test_adding_a_section_live_does_not_disturb_the_running_ones(store):
     assert int(state["sections.s_new.ticks"]) > 0
     assert state["probe.t2.s_one"] == state["probe.t1.s_one"]
     assert state["probe.t2.s_two"] == state["probe.t1.s_two"]
+
+
+async def test_creating_a_section_costs_exactly_one_launch(store):
+    """The real write pattern -- every field at once -- must still cost one worker.
+
+    ``add_section`` writes order, name, policy, tpl and snippet, and the
+    subscription behind the driver is depth-unbounded, so this wakes reconcile
+    five to eight times. Pool ids are monotonic from zero and never reused, so
+    a recorded id of 0 is the whole assertion: one launch, ever.
+    """
+    await seed_pages(store, PAGE)
+
+    script = (
+        nu.DelayedDo(
+            1.0,
+            ops.add_section(
+                PAGE, COUNTER, section_id="s_new", name="New", tpl="program", policy="always"
+            ),
+        )
+        >> nu.DelayedDo(SETTLE, seq(snap("t1", "s_new"), snap_ticks("t1", "s_new")))
+        >> nu.DelayedDo(SETTLE, seq(snap("t2", "s_new"), snap_ticks("t2", "s_new")))
+    )
+    await run_page(store, PAGE, alongside=script, duration=2 * SETTLE + 4.0)
+
+    state = await read_state(store)
+    assert state["probe.t1.s_new"] == "0"
+    # And it is the same worker later, still alive and still counting.
+    assert state["probe.t2.s_new"] == "0"
+    assert int(state["probe.t2.s_new.ticks"]) > int(state["probe.t1.s_new.ticks"])
+    assert multiprocessing.active_children() == []
+
+
+async def test_writing_a_field_other_than_the_snippet_restarts_nothing(store):
+    """A rename or a tpl change is not an edit. The worker must not move."""
+    await seed_store(store, PAGE, {"s_one": None})
+
+    script = (
+        nu.DelayedDo(SETTLE, snap("t1", "s_one"))
+        >> nu.DelayedDo(0.2, ops.set_tpl(PAGE, "s_one", "notebook"))
+        >> nu.DelayedDo(SETTLE, seq(snap("t2", "s_one"), snap_ticks("t2", "s_one")))
+        >> nu.DelayedDo(SETTLE, snap_ticks("t3", "s_one"))
+    )
+    await run_page(store, PAGE, alongside=script, duration=3 * SETTLE + 4.0)
+
+    state = await read_state(store)
+    assert state["probe.t1.s_one"] != NONE
+    assert state["probe.t2.s_one"] == state["probe.t1.s_one"]
+    assert int(state["probe.t3.s_one.ticks"]) > int(state["probe.t2.s_one.ticks"])
 
 
 async def test_editing_a_snippet_restarts_only_that_section(store):

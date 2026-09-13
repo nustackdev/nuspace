@@ -44,3 +44,7 @@ class Runner(nu.Shape):
     """
 
     workers = nu.mem.DictRef.slot(int)
+    # Written by the runner's boot pass and by nothing else. Mem, so it reads
+    # True only where the runner itself is: a web driver in the same process
+    # sees it, one in another process never can, and neither has to be told.
+    attached = nu.mem.BoolRef.slot()

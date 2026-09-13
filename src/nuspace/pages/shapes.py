@@ -18,6 +18,7 @@ __all__ = [
     "ROOT_PAGE_ID",
     "ROOT_PARENT",
     "ROOT_TITLE",
+    "WORKERS_SLOT",
     "Page",
     "Runner",
     "Section",
@@ -87,3 +88,8 @@ class Runner(nu.Shape):
     """
 
     workers = nu.mem.DictRef.slot(int)
+
+
+#: The key ``Runner.workers`` occupies in the dict backing it. Declared beside
+#: the slot so a bracket owning that dict can reach the records without a ref.
+WORKERS_SLOT = "workers"

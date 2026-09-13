@@ -15,8 +15,9 @@ Write:
 Read:
 - :func:`app_ids` / :func:`exists` / :func:`snippet_of` / :func:`error_of`
   -- the store.
-- :func:`running` / :func:`is_running` -- the host's ``Runner.workers``, which
-  is mem and therefore only readable from inside the runner's own tree.
+- :func:`running` / :func:`is_running` / :func:`attached` -- the host's own
+  ``Runner``, which is mem and therefore only readable from inside the
+  process the runner is in.
 - whole rows, one dict per app: :func:`app_rows` / :func:`app_statuses`. What
   a rail or a status bar is filled from.
 """
@@ -41,6 +42,7 @@ __all__ = [
     "app_ids",
     "app_rows",
     "app_statuses",
+    "attached",
     "clear_error",
     "error_of",
     "exists",
@@ -191,6 +193,17 @@ def is_running(app_id: nu.StrArg) -> nu.Nu:
     return Runner.workers.contains(app_id)
 
 
+def attached() -> nu.Nu:
+    """Whether a runner is supervising apps in this very process. A live read.
+
+    Total, and true only where the bookkeeping really is: the ``FabricExists``
+    half answers False rather than raising where no ``dict`` is bound at all,
+    and ``Runner.attached`` is mem, so a runner in another process cannot make
+    this say yes.
+    """
+    return nu.And(nu.FabricRef(dict).exists(), nu.NotEmpty(Runner.attached))
+
+
 # --- read: whole rows ------------------------------------------------------
 #
 # Both answer with a list of dicts rather than a scalar, so one read fills a
@@ -216,7 +229,21 @@ def app_rows(*, root: type[Shape] | None = None) -> nu.Nu:
     )
 
 
-def app_statuses(*, supervised: bool = False, root: type[Shape] | None = None) -> nu.Nu:
+def _live(supervised: nu.BoolArg) -> nu.Nu | None:
+    """Whether the app ``Map`` is on has a worker, or None when nobody asked.
+
+    ``supervised`` is ``False`` for a tree that must not touch mem at all, and
+    a term for one that wants the answer read rather than assumed.
+    """
+    if supervised is False:
+        return None
+    running_now = is_running(nu.StrAttrRef(_ITEM))
+    if supervised is True:
+        return running_now
+    return nu.And(supervised, running_now)
+
+
+def app_statuses(*, supervised: nu.BoolArg = False, root: type[Shape] | None = None) -> nu.Nu:
     """Every app as ``{section_id, state, error, started_at}``, in the same order.
 
     ``section_id`` rather than ``app_id`` because this is the supervisor's
@@ -226,8 +253,10 @@ def app_statuses(*, supervised: bool = False, root: type[Shape] | None = None) -
 
     Args:
         supervised: whether ``Runner.workers`` is readable here, which it only
-            is inside the runner's own tree. True adds the ``running`` state;
-            False never claims an app is running, because nothing would be.
+            is inside the runner's own tree. ``False`` never claims an app is
+            running and never touches mem; ``True`` reads it outright; a term
+            (see :func:`attached`) reads whether to read it, which is what a
+            web driver that may or may not share a process with a runner wants.
         root: the space's root Shape class.
     """
     root = resolve_root(root)
@@ -235,7 +264,8 @@ def app_statuses(*, supervised: bool = False, root: type[Shape] | None = None) -
     # collapsing to INVALID the way it would on an untyped AnyAttrRef.
     key = _state_key(nu.StrAttrRef(_ITEM), ".error")
     idle = nu.Str("idle")
-    quiet = nu.If(is_running(nu.StrAttrRef(_ITEM)), nu.Str("running"), idle) if supervised else idle
+    live = _live(supervised)
+    quiet = idle if live is None else nu.If(live, nu.Str("running"), idle)
     return nu.Collect(
         nu.Map(
             app_ids(root=root),

@@ -20,10 +20,6 @@
 import { OP_NOTIFY } from "@nustackdev/ui-core";
 import type { RefEntry } from "@nustackdev/ui-kit";
 import {
-	Alert,
-	AlertDescription,
-	AlertIcon,
-	AlertTitle,
 	IconButton,
 	Spinner,
 	Tooltip,
@@ -40,7 +36,6 @@ import {
 	appsBarTitle,
 	appsBody,
 	appsCanvas,
-	appsDetached,
 	appsDirtyDot,
 	appsEditor,
 	appsPayload,
@@ -124,7 +119,6 @@ function AppsView({ path }: { path: string }) {
 					</div>
 				) : (
 					<>
-						{attached ? null : <DetachedNotice />}
 						{app == null ? (
 							<Empty hasApps={apps.length > 0} />
 						) : (
@@ -140,32 +134,6 @@ function AppsView({ path }: { path: string }) {
 					</>
 				)}
 			</div>
-		</div>
-	);
-}
-
-/**
- * No `AppsRunner` in the space tree.
- *
- * This is not an error and not a connection problem, so it is not danger and
- * not a spinner. The apps exist and are editable; nothing is running them.
- * Saying that plainly beats painting six idle dots that look like a system
- * at rest.
- */
-function DetachedNotice() {
-	return (
-		<div className={appsDetached}>
-			<Alert tone="warn">
-				<AlertIcon />
-				<div>
-					<AlertTitle>no apps runner mounted</AlertTitle>
-					<AlertDescription>
-						These apps are stored and editable, but nothing is supervising them. A space runs its
-						apps by composing <code>AppsRunner(SpaceRoot)</code> into its own tree, not into the
-						per-connection ui tree.
-					</AlertDescription>
-				</div>
-			</Alert>
 		</div>
 	);
 }

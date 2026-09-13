@@ -16,6 +16,7 @@ from __future__ import annotations
 from .ops import (
     add_app,
     app_ids,
+    attached,
     error_of,
     exists,
     is_running,
@@ -30,12 +31,14 @@ from .runner import (
     CHANGED_APP_INDEX,
     DEFAULT_CHANNEL_PREFIX,
     app_body,
+    apps_store,
     apps_tree,
     changed_app,
     driver,
     free_port,
     reconcile,
     run_apps,
+    supervisor,
     worker_init,
 )
 from .shapes import DEFAULT_POLICY, App, Runner
@@ -50,7 +53,9 @@ __all__ = [
     "add_app",
     "app_body",
     "app_ids",
+    "apps_store",
     "apps_tree",
+    "attached",
     "changed_app",
     "driver",
     "error_of",
@@ -65,5 +70,6 @@ __all__ = [
     "set_policy",
     "set_snippet",
     "snippet_of",
+    "supervisor",
     "worker_init",
 ]

@@ -26,6 +26,7 @@ from .apps import AppsRef, apps_driver
 from .lens import LensRef, lens_driver
 from .nav import NavRef
 from .pages import PagesRef, pages_driver
+from .pages.session import page_session
 from .serve import (
     NuspaceServer,
     NuspaceSession,
@@ -36,7 +37,15 @@ from .serve import (
     build_fastapi_app,
     server,
 )
-from .space import AppsScreen, LensScreen, NuspaceShell, PagesScreen, space_driver
+from .space import (
+    AppsScreen,
+    LensScreen,
+    NuspaceShell,
+    PagesScreen,
+    session_driver,
+    space_driver,
+    space_tree,
+)
 
 
 __all__ = [
@@ -57,7 +66,10 @@ __all__ = [
     "apps_driver",
     "build_fastapi_app",
     "lens_driver",
+    "page_session",
     "pages_driver",
     "server",
+    "session_driver",
     "space_driver",
+    "space_tree",
 ]

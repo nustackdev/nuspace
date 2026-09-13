@@ -29,6 +29,7 @@ if TYPE_CHECKING:
 
 __all__ = [
     "CHANGED_SECTION_INDEX",
+    "SECTION_ATTR",
     "changed_section",
     "page_driver",
     "page_tree",
@@ -45,35 +46,45 @@ __all__ = [
 CHANGED_SECTION_INDEX = 4
 
 
-#: The section a reconcile pass is about, carried into the worker by ``carry=True``.
-_SECTION = nu.StrAttrRef("section")
-
-#: The pool worker a reconcile pass just launched.
-_WORKER = nu.IntAttrRef("w")
+#: What a reconcile pass binds the section it is about under, and the attr
+#: ``carry=True`` ships into the worker. Overridable per caller: two passes
+#: that can run at once share one ``ctx.attrs`` and so may not share a name.
+SECTION_ATTR = "section"
 
 #: The key that woke the live loop, and the section id inside it.
 _KEY = nu.TupleAttrRef("k")
 changed_section = _KEY[CHANGED_SECTION_INDEX]
 
 
-def section_body(page_id: nu.StrArg, *, root: type[Shape] | None = None) -> nu.Nu:
+def _worker_attr(item: str) -> str:
+    """Where a pass working on ``item`` parks the worker it just launched.
+
+    Derived from ``item`` for the reason ``item`` itself is overridable: two
+    passes that can run at once share one ``ctx.attrs``.
+    """
+    return f"{item}.w"
+
+
+def section_body(
+    page_id: nu.StrArg, *, root: type[Shape] | None = None, item: str = SECTION_ATTR
+) -> nu.Nu:
     """One section running, as the single term every ``Dispatch`` ships.
 
-    One per page, not one per section: a ``Dispatch`` body is payload, so it
-    is fixed at construction and the section arrives as the carried attr
-    ``section``.
+    One per page, not one per section: a ``Dispatch`` body is payload, so it is
+    fixed at construction and the section arrives as the carried attr ``item``.
     """
     root = resolve_root(root)
+    section = nu.StrAttrRef(item)
     sections = root.pages[page_id].sections
     # `path` in the snippet's scope is the section's kv namespace, keyed by
     # section id alone -- never the page id. See nuspace.core.tpl.
-    scope = {"path": nu.Str("sections.") + _SECTION}
-    load = sections[_SECTION].snippet.load(scope=scope)
+    scope = {"path": nu.Str("sections.") + section}
+    load = sections[section].snippet.load(scope=scope)
     # Construction failures are written to the section's namespace, not
     # raised: a dispatched body has no waiter, so an error vanishes silently.
     report = nu.kv.auto_flow_atomic(
         root.state.set_item(
-            nu.Str("sections.") + _SECTION + nu.Str(".error"), nu.ToStr(nu.AttrRef("error"))
+            nu.Str("sections.") + section + nu.Str(".error"), nu.ToStr(nu.AttrRef("error"))
         ),
         scope=root,
     )
@@ -85,39 +96,51 @@ def section_body(page_id: nu.StrArg, *, root: type[Shape] | None = None) -> nu.N
 
 
 def reconcile(
-    page_id: nu.StrArg, *, root: type[Shape] | None = None, body: nu.Nu | None = None
+    page_id: nu.StrArg,
+    *,
+    root: type[Shape] | None = None,
+    body: nu.Nu | None = None,
+    item: str = SECTION_ATTR,
 ) -> nu.Nu:
-    """Make the world agree with the store, for the one section bound at ``section``.
+    """Make the world agree with the store, for the one section bound at ``item``.
 
-    Kill whatever worker is on record, then start whatever the store says the
-    section is now: an add runs the second half, a delete the first, an edit
-    both. The pool comes off the ambient context rather than being owned here,
-    which is what lets a preset decide where sections execute.
+    One path for add, edit and delete: whatever is running for this section
+    stops, and if the page still has the section it starts again. The pool
+    comes off the ambient context, which is what lets a preset decide where
+    sections execute.
 
     Args:
         page_id: the page whose sections this reconciles.
         root: the space's root Shape class.
         body: the term to dispatch. Defaults to :func:`section_body`; replace
             it to run a section somewhere other than a pool worker.
+        item: the attr the section id is bound under. Whoever binds it must
+            use the same name, and two passes that can run at once must not
+            share one.
     """
     root = resolve_root(root)
+    section = nu.StrAttrRef(item)
+    worker_attr = _worker_attr(item)
+    worker = nu.IntAttrRef(worker_attr)
     sections = root.pages[page_id].sections
     pool = nu.mp_pool.PoolRef()
     stop = nu.IfDo(
-        Runner.workers.contains(_SECTION),
-        pool.kill(Runner.workers[_SECTION]) >> Runner.workers.del_item(_SECTION),
+        Runner.workers.contains(section),
+        pool.kill(Runner.workers[section]) >> Runner.workers.del_item(section),
     )
     start = nu.IfDo(
-        sections.contains(_SECTION),
+        # A section that has been deleted reaches here too -- that is the
+        # delete path, and this is what stops it coming back.
+        sections.contains(section),
         # The worker id is read twice, recorded and then dispatched to, so it
         # is bound once and scoped to the two reads that want it.
         nu.Let(
-            "w",
+            worker_attr,
             pool.launch(),
-            body=Runner.workers.set_item(_SECTION, _WORKER)
+            body=Runner.workers.set_item(section, worker)
             >> pool.dispatch(
-                section_body(page_id, root=root) if body is None else body,
-                _WORKER,
+                section_body(page_id, root=root, item=item) if body is None else body,
+                worker,
                 carry=True,
             ),
         ),
@@ -126,7 +149,11 @@ def reconcile(
 
 
 def page_driver(
-    page_id: nu.StrArg, *, root: type[Shape] | None = None, body: nu.Nu | None = None
+    page_id: nu.StrArg,
+    *,
+    root: type[Shape] | None = None,
+    body: nu.Nu | None = None,
+    item: str = SECTION_ATTR,
 ) -> tuple[nu.Nu, nu.Nu]:
     """The seed pass and the live loop for one page, as two terms.
 
@@ -135,7 +162,7 @@ def page_driver(
     """
     root = resolve_root(root)
     sections = root.pages[page_id].sections
-    pass_ = reconcile(page_id, root=root, body=body)
+    pass_ = reconcile(page_id, root=root, body=body, item=item)
     # Both containers must exist before anything reads them: a subscription
     # over a missing container resolves to INVALID and silently never fires.
     # Dict.create(), not {} -- a literal dict is captured once at Form
@@ -144,7 +171,7 @@ def page_driver(
     # nu.list is load-bearing: the keys view is lazy and auto_flow_atomic
     # brackets the items slot separately, so an undrained view outlives its
     # Snapshot and dies with StorageClosedError.
-    seed = boot >> nu.ForEachDo(nu.list(sections.keys()), pass_, item="section")
+    seed = boot >> nu.ForEachDo(nu.list(sections.keys()), pass_, item=item)
     # The bare key naming no section also fires. It must be skipped
     # explicitly: indexing past the end raises IndexError inside the react
     # loop, killing it and leaving the runner silently deaf.
@@ -152,9 +179,9 @@ def page_driver(
         sections.on_change(),
         nu.IfDo(
             nu.Len(_KEY) > nu.Int(CHANGED_SECTION_INDEX),
-            # Same binding the seed pass makes with ForEachDo(item="section"),
-            # and scoped the same way, so no reaction leaves one behind.
-            nu.Let("section", changed_section, body=pass_),
+            # Same binding the seed pass makes with ForEachDo, and scoped the
+            # same way, so no reaction leaves one behind.
+            nu.Let(item, changed_section, body=pass_),
         ),
         changed_key="k",
     )

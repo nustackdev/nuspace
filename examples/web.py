@@ -1,4 +1,4 @@
-"""nuspace.web: the whole space, live in a browser, as one tree.
+"""nuspace.web: the whole space, live in a browser, running.
 
 Both surfaces on one shell, both drivers folded with `|`. Twenty-five reactive
 arms, and each one is a single subscription wired to a single thing: sixteen
@@ -12,10 +12,18 @@ either runner.
     /apps    a flat list of apps, one Monaco per app. Nothing per view at
              all: the surface is one list and every frame carries all of it.
 
-The driver is built per connection, inside the ws handler, which is what
-`server(space_driver)` below says. Two tabs on this one store get two drivers
-and two sets of subscriptions, and each sees the other's writes because both
-are reading the same kv.
+Two supervisors run behind those surfaces, at the two scopes the two things
+have:
+
+    apps       one per process, resident. An app is headless and runs whether
+               or not anybody is looking, so it belongs to the space.
+    sections   one per connection. A section belongs to a page and a page
+               belongs to a view, so it belongs to the tab -- and it follows
+               that tab's route, starting and stopping as you navigate.
+
+One store, one worker pool, one `With` owning both: RocksDB takes a single
+writer lock, so the head is assembled once by `space_tree` and everything
+below it -- supervisors, server, every connection -- shares it.
 
     uv run python examples/web.py
 
@@ -23,12 +31,11 @@ Then open http://localhost:8080. Nothing is seeded: the space boots itself
 (both drivers' boot passes are idempotent) and the pages rail starts at the
 root page, which is a real page and can carry blocks like any other.
 
-What is NOT here: nothing runs anything. A block's program and an app's
-program are both stored, shipped and edited, and the worker pool that would
-execute them is a preset's job -- see `examples/pages.py` and
-`examples/apps.py` for what that costs and what it needs. The apps surface
-says so out loud, because `attached` defaults to False and the browser paints
-that rather than a list of apps that look merely idle.
+What you should see. Make an app and it starts ticking; the rail says
+`running` because the surface is reading the supervisor's own bookkeeping,
+not a flag somebody set at boot. Add a block to a page and it starts too,
+and it runs for as long as a tab is looking at that page: navigate away and
+it stops, come back and it starts again, close the tab and it dies with it.
 """
 
 import asyncio
@@ -39,7 +46,7 @@ from pathlib import Path
 import nu
 import nu.kv
 from nuspace.core.shapes import Space
-from nuspace.web import NuspaceShell, server, space_driver
+from nuspace.web import space_tree
 
 
 ROOT = Path("/tmp/nuspace-web-demo")  # noqa: S108
@@ -50,15 +57,10 @@ def demo(fresh=True):
     if fresh:
         shutil.rmtree(ROOT, ignore_errors=True)
     ROOT.mkdir(parents=True, exist_ok=True)
-    tree = nu.With(
+    tree = space_tree(
         nu.kv.rocksdb_navigator(str(ROOT / "db"), tags=(Space,)),
-        # `space_driver` itself, not a call of it: the ws handler calls it once
-        # per connection, because a driver holds that connection's
-        # subscriptions and that connection's route.
-        server(space_driver, shell_cls=NuspaceShell, port=PORT),
-        # The server lives as long as this does, and the drivers live inside
-        # their connections. Ctrl+C ends it and the brackets unwind LIFO.
-        body=nu.Delay(3600.0),
+        store_tag=Space,
+        port=PORT,
     )
     asyncio.run(nu.arun(tree, nu.Context(), max_parallel=64))
 

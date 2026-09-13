@@ -61,7 +61,7 @@ def apps_driver(
     apps: AppsRef,
     *,
     root: type[Shape] | None = None,
-    attached: bool = False,
+    attached: bool | None = None,
 ) -> nu.Nu:
     """The apps surface, live, as one tree. Built per connection.
 
@@ -69,10 +69,12 @@ def apps_driver(
         apps: the ``AppsRef`` on the mounted shell, already bound to its
             screen so its wire path resolves.
         root: the space's root Shape class.
-        attached: whether this process also runs :mod:`nuspace.apps.runner`.
-            ``Runner.workers`` is ``nu.mem`` in the host, so only a tree that
-            mounted the runner can read it; False never claims an app is
-            running, and the surface says so rather than painting idle dots.
+        attached: whether a runner is supervising apps in this process.
+            ``None``, the default, reads it -- ``ops.attached()`` is mem, so
+            it answers True exactly where the runner's own bookkeeping is and
+            False everywhere else, and it is re-read on every frame rather
+            than guessed when the tree is built. A bool pins it instead, for a
+            caller that is assembling something and not asking.
 
     Returns:
         The tree, bracketed for atomicity against ``root``. It never
@@ -82,12 +84,16 @@ def apps_driver(
 
     # Built per use, never bound once and dropped into four arms: a Nu node is
     # a value, and one object sitting in four tree positions is one compiled
-    # node four arms then share at runtime.
+    # node four arms then share at runtime. The live read is a term, so it
+    # obeys the same rule as the rest of them.
+    def supervised() -> nu.Nu | bool:
+        return ops.attached() if attached is None else attached
+
     def rows() -> nu.Nu:
-        return apps.set_apps(ops.app_rows(root=root), attached=nu.Bool(attached))
+        return apps.set_apps(ops.app_rows(root=root), attached=supervised())
 
     def statuses() -> nu.Nu:
-        return apps.set_status(ops.app_statuses(supervised=attached, root=root))
+        return apps.set_status(ops.app_statuses(supervised=supervised(), root=root))
 
     # A cold store has no apps container, and a subscription over a missing
     # container resolves to INVALID and silently never fires. Idempotent, so a
@@ -125,10 +131,12 @@ def apps_driver(
                 field_str("app_update", "app_id"), field_str("app_update", "source"), root=root
             ),
         )
-        # A restart is a write, not a message. The runner reconciles on any
-        # change under the app's key, so rewriting the snippet as itself is
-        # exactly a kill-and-relaunch -- and the error the last launch
-        # recorded goes first, or the row would read `failed` forever.
+        # A restart is a write, not a message: the runner reconciles on any
+        # change under the app's key, and the error the last launch recorded
+        # goes first or the row would read `failed` forever. The write alone
+        # is not enough any more -- reconcile compares the stored source with
+        # the running one and a rewrite as itself reads as no change -- so the
+        # record is dropped before it, which is what makes the write bite.
         | _arms.event(
             "app_restart",
             apps.on_restart(),
@@ -154,9 +162,11 @@ def apps_driver(
 
 
 def _restart(app_id: nu.Nu, root: type[Shape]) -> nu.Nu:
-    """Make the runner reconcile one app, without naming the runner.
+    """Write one app's snippet back to itself, which is what restarts it.
 
-    Guarded on the app being there: a retried click on a row that has since
+    A snippet write is a store change like any other, so the runner's live
+    loop hears it and reconciles: the worker is killed and relaunched. Guarded
+    on the app being there, because a retried click on a row that has since
     gone must not vivify an app out of an empty snippet.
     """
     return nu.IfDo(
