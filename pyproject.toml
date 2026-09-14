@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "nuspace"
-version = "0.1.1"
+version = "0.2.0"
 description = "Nu runtime built on Nu. A self-hosted programmable space that runs Nu apps in a tree of containers and applications."
 readme = "README.md"
 license = "AGPL-3.0-or-later"
@@ -16,12 +16,12 @@ dependencies = [
     # ui for the browser, proxy (invisibles) for the worker's session, mp_pool
     # for the workers themselves. Picking extras just means discovering the
     # missing one at import time.
-    "nucore>=0.3.0",
-    "nustd[all]>=0.3.0",
+    "nucore>=0.4.0",
+    "nustd[all]>=0.4.0",
     # The compiled web bundle. A separate distribution only because PyPI caps
     # project size and a SPA rebuilt on every UI tweak would eat the quota --
     # not optional. `pip install nuspace` gives you the browser.
-    "nuspace-ui>=0.1.0",
+    "nuspace-ui>=0.2.0",
     "nuagent>=0.1.1",
     "typing-extensions>=4.7.0",
     "click>=8.0",
