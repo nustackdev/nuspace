@@ -29,19 +29,20 @@ name.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 from typing_extensions import Self
 
-from nu.ui.core import Changed, Ref
 from nuspace._root import resolve_root
 from nuspace.core.tpl import TPLS
+from nuspace.core.ui import SpaceRef
 from nuspace.web.wire import event, write
 
 
 if TYPE_CHECKING:
     from nu.domains.shape import Shape
     from nu.lang import ListArg, Nu, StrArg
+    from nu.ui.core import Changed
 
 
 __all__ = ["PagesRef", "starters"]
@@ -58,10 +59,10 @@ def starters(root: type[Shape] | None = None) -> dict[str, str]:
     return {name: tpl.source(space) for name, tpl in TPLS.items()}
 
 
-class PagesRef(Ref):
+class PagesRef(SpaceRef):
     """The page tree and one page's sections, as one browser surface."""
 
-    _wire_type_override = "PagesRef"
+    _wire_type: ClassVar[str] = "PagesRef"
 
     @classmethod
     def slot(cls, *, root: type[Shape] | None = None) -> Self:

@@ -21,7 +21,7 @@ import websockets
 
 import nu
 import nu.kv
-from nu.ui.core.protocol import OP_MOUNT, OP_NOTIFY, OP_READ, Frame, decode, encode
+from nu.ui.core.protocol import OP_INIT, OP_NOTIFY, OP_READ, OP_WRITE, Frame, decode, encode
 from nuspace.apps import free_port
 from nuspace.core.shapes import Space
 from nuspace.pages import ROOT_PAGE_ID
@@ -29,14 +29,18 @@ from nuspace.web import NuspaceShell, server, space_driver
 from nuspace.web.lens import DEFAULT_MAX_ROWS
 
 
-#: Wire paths the mount assigns. Asserted, not assumed.
-LENS = "LensScreen.lens"
-APPS = "AppsScreen.apps"
+#: Where the chain puts the surfaces: the screen slot, then the ref.
+LENS = ("lens", "lens")
+APPS = ("apps", "apps")
+
+#: The chrome a fresh connection is sent, one ``init`` per slot the shell
+#: declares. What a tab reads before anything else arrives.
+BOOT = NuspaceShell._boot_chains()
 
 #: How long a client waits for the frames one op produces to stop arriving.
 QUIET = 0.5
 
-SRC = "def out(path):\n    return None\n"
+SRC = "def out():\n    return None\n"
 
 
 class Browser:
@@ -60,16 +64,20 @@ class Browser:
             await self.ws.send(
                 encode(Frame(OP_READ, ref=frame.ref, payload=dict(self.route), id=frame.id))
             )
-        elif frame.ref == LENS:
+        elif frame.op == OP_WRITE and frame.ref == LENS:
             self.lens = frame.payload or {}
         self.frames.append(frame)
         return frame
 
-    async def mount(self):
-        """The first frame, which is always the mount envelope."""
-        frame = await self._take(5.0)
-        assert frame.op == OP_MOUNT
-        return frame.payload
+    async def boot(self):
+        """The opening batch: a clearing remove, then one init per slot.
+
+        Comes back as ``{path: (segment, type, props)}`` -- the leaf of every
+        chain, which is where a surface's declared props ride in.
+        """
+        frames = [await self._take(5.0) for _ in range(len(BOOT) + 1)]
+        assert [f.op for f in frames[1:]] == [OP_INIT] * len(BOOT)
+        return {tuple(seg for seg, _, _ in f.chain): f.chain[-1] for f in frames[1:]}
 
     async def settle(self, quiet=QUIET):
         """Read until nothing has arrived for ``quiet`` seconds."""
@@ -81,7 +89,8 @@ class Browser:
 
     async def notify(self, ref, op, **args):
         """Send one op on its own wire path, then let the answer settle."""
-        await self.ws.send(encode(Frame(OP_NOTIFY, ref=f"{ref}.ops.{op}", payload=args)))
+        # The op name stays one segment, dots and all.
+        await self.ws.send(encode(Frame(OP_NOTIFY, ref=[*ref, "ops", op], payload=args)))
         await self.settle()
 
     async def go(self, *path):
@@ -204,21 +213,18 @@ async def test_the_whole_lens_loop_runs_over_one_websocket():
         await _await_port(port)
         async with websockets.connect(f"ws://127.0.0.1:{port}/ws") as ws:
             tab = Browser(ws)
-            mount = await tab.mount()
+            slots = await tab.boot()
             await tab.settle()
 
-            # The ref is where the shell says it is, which is what every op
-            # path below is built from.
-            screens = {s["route"]: s for s in mount["pages"]}
-            assert set(screens) == {"/apps", "/pages", "/lens"}
-            (field,) = screens["/lens"]["fields"]
-            assert field["path"] == LENS
-            assert field["type"] == "LensRef"
-            # The cap rides in the mount so the browser seeds with the same
+            # The ref is where its chain says it is, which is what every op
+            # path below is built from. Three screens, one surface each.
+            assert {p for p in slots if len(p) == 2} == {LENS, APPS, ("pages", "pages")}
+            assert slots[LENS][1] == "LensRef"
+            # The cap rides in the chain so the browser seeds with the same
             # number the server clips to. Two places name it -- the ref's
             # props and the driver's kwarg -- and the stock shell takes the
             # default in both, so this is what pins them together.
-            assert field["props"]["max_rows"] == DEFAULT_MAX_ROWS
+            assert slots[LENS][2]["max_rows"] == DEFAULT_MAX_ROWS
 
             # -- boot: the root column, unasked for --------------------------
             assert tab.lens["op"] == "set_columns"
@@ -288,7 +294,7 @@ async def test_the_whole_lens_loop_runs_over_one_websocket():
             # -- a second tab, its own cursor, having seen none of this -------
             async with websockets.connect(f"ws://127.0.0.1:{port}/ws") as ws2:
                 other = Browser(ws2)
-                await other.mount()
+                await other.boot()
                 await other.settle()
                 # Its own driver boots it at root: the server holds no cursor.
                 assert other.lens["path"] == []
@@ -311,7 +317,7 @@ async def test_a_path_that_names_nothing_leaves_the_arm_alive():
         await _await_port(port)
         async with websockets.connect(f"ws://127.0.0.1:{port}/ws") as ws:
             tab = Browser(ws)
-            await tab.mount()
+            await tab.boot()
             await tab.settle()
 
             await tab.go("nosuchslot")

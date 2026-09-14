@@ -29,26 +29,25 @@ person typed, so it lives in ``Section.snippet`` like it always did.
 A template tpl is the other way round. Its snippet is boilerplate, the
 same string for every block that shares the tpl, and the thing the person
 actually typed is a *value* the template reads. That value lives in
-``Space.state[f"sections.<sid>.<slot>"]``.
+``Space.state[section].data[<slot>]``.
 
 ``Space.state`` rather than a slot on ``Section``, because of the scope
-contract. A snippet is a ``nu.prog`` module and nuspace binds it exactly
-one value, ``path``, which is ``"sections.<section_id>"``. A slot on
-``Section`` would need the *page* path to address -- ``Space.pages.pages
-["p_a"].sections["s_b"].text`` -- and ``path`` does not carry it, so the
-template could not reach its own content. ``Space.state`` is keyed by
-section id alone, which is exactly what ``path`` is. It also keeps
-``Section`` from growing a slot per template, and gives any future tpl a
-namespace of its own under the same rule.
+contract. A snippet is a ``nu.prog`` module and nuspace binds it the two
+ids it runs under, ``page`` and ``section``. A slot on ``Section`` would
+need both to address -- ``Space.pages[page].sections[section].text`` --
+which a template could spell, but it would put a person's prose in the
+same row as the program that renders it. ``Space.state`` keeps ``Section``
+from growing a slot per template and gives any future tpl a namespace of
+its own under the same rule.
 
-Nice consequence, and the reason the key and the mount path are the same
-string: a text block's content is at ``sections.<sid>.text`` in kv *and*
-at ``sections.<sid>.text`` in the browser. One address, both directions.
+Nice consequence: a text block's content is at ``data["text"]`` in its own
+kv row and its editor is at ``text`` under its own ui node. One name, both
+directions, and neither is a string somebody concatenated.
 
 **Section ids must be globally unique**, not unique per page, and this is
 what makes it load bearing. ``mint_ordered_id`` already guarantees it for
 anything created through the editor. A hand-written seed that reuses a
-readable id on two pages would have the two blocks share one string.
+readable id on two pages would have the two blocks share one row.
 
 
 ## The store is not migrated
@@ -116,19 +115,21 @@ import nu.ui
 from {module} import {root}
 
 
-def out(path):
+def out(section):
     """One text block: a prose ref over a string in the space's scratch kv."""
-    key = path + ".text"
-    body = nu.ui.ProseRef(key)
-    cell = {root}.state[key]
+    # Bare, because nuspace roots it: the ref lands under this block's own
+    # node on the pages surface, wherever that turns out to be.
+    body = nu.ui.ProseRef("text")
+    data = {root}.state[section].data
+    cell = data["text"]
     # A snippet owns its own atomicity; nothing brackets it on the way in.
     return nu.kv.auto_flow_atomic(
-        body.set(nu.ToStr({root}.state.get_item(key, nu.Str(""))))
+        body.set(nu.ToStr(data.get_item("text", nu.Str(""))))
         >> body.set_placeholder(nu.Str("Write, or press / for blocks"))
         >> nu.ParallelAsync(
             # This browser typed. Persist it; every other connection's copy
             # of this same program hears about it through kv.
-            nu.ReactForever(body.changed(), {root}.state.set_item(key, nu.Str(body))),
+            nu.ReactForever(body.on_change(), data.set_item("text", nu.Str(body))),
             # Somebody else typed. Adopt it. A round trip back to the author
             # is a no-op, because the text is already what it says.
             nu.ReactForever(cell.on_change(), body.set(nu.ToStr(cell))),
@@ -141,23 +142,30 @@ def out(path):
 # What a fresh program block starts life as. A block is a `nu.prog` program:
 # a python *module* with an `out` entry point returning a Nu term, not a bare
 # expression. The entry point's signature is the scope contract and nuspace
-# offers one value, `path`, which is this block's own namespace. Seeding the
-# skeleton is how that is discoverable without reading docs first.
+# offers two values, `page` and `section`, the ids this block runs under.
+# Seeding the skeleton is how that is discoverable without reading docs first.
+#
+# The ref is named bare and lands under this block on the page anyway, which
+# is the other thing worth seeding: nothing here says where it renders.
 #
 # It lives here rather than in the browser so there is one spelling of it.
 _PROGRAM_STARTER = """import nu
 import nu.ui
 
 
-def out(path):
-    return nu.ui.TextRef(path + ".out").set(nu.Str("hello"))
+# `out` may ask for `page` and `section`, the ids this block runs under.
+def out():
+    return nu.ui.TextRef("out").set(nu.Str("hello"))
 """
 
 
 # What a fresh app starts life as. An app is the same substance as a block --
-# a `nu.prog` module with an `out` entry point, handed one value, `path` --
-# and differs in having nowhere to mount a ui ref: it runs headless, whether
-# or not a browser is looking. So the starter writes rather than renders.
+# a `nu.prog` module with an `out` entry point -- and differs in having
+# nowhere to render: it runs headless, whether or not a browser is looking.
+# So the starter writes rather than renders.
+#
+# It is handed the same two ids a section is. `section` is the app's own id,
+# since an app is a section with no page to sit on, and `page` is empty.
 #
 # `{root}` is the space's own root Shape class, for the reason the text
 # template gives: ShapeMeta rebinds `_root_shape` on inherited slots, so only
@@ -167,11 +175,11 @@ import nu.kv
 from {module} import {root}
 
 
-def out(path):
+def out(section):
     """Tick a counter in this app's own corner of the space's scratch kv."""
-    key = path + ".ticks"
-    now = nu.ToInt({root}.state.get_item(key, nu.Str("0")))
-    tick = {root}.state.set_item(key, nu.ToStr(now + nu.Int(1)))
+    data = {root}.state[section].data
+    now = nu.ToInt(data.get_item("ticks", nu.Str("0")))
+    tick = data.set_item("ticks", nu.ToStr(now + nu.Int(1)))
     return nu.kv.auto_flow_atomic(nu.ForeverDo(nu.DelayedDo(1.0, tick)), scope={root})
 '''
 
@@ -195,7 +203,8 @@ class Tpl:
     template: str = ""
     #: Seed for an arbitrary tpl created with no content of its own.
     starter: str = ""
-    #: Last segment of the content address, for a non-arbitrary tpl.
+    #: What a non-arbitrary tpl calls its content, in its kv row and on its
+    #: ui node both. The template is the only thing that spells it.
     slot: str = "text"
 
     def source(self, root: type[Shape], content: str = "") -> str:
@@ -203,16 +212,6 @@ class Tpl:
         if self.arbitrary:
             return content or self.starter
         return self.template.format(module=root.__module__, root=root.__name__)
-
-    def content_key(self, section_id: str) -> str | None:
-        """Key under ``Space.state`` holding this block's content.
-
-        ``None`` for an arbitrary tpl, whose content is the snippet.
-        Doubles as the browser mount path of the ref that renders it.
-        """
-        if self.arbitrary:
-            return None
-        return f"sections.{section_id}.{self.slot}"
 
 
 PROGRAM = Tpl(

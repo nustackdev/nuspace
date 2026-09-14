@@ -4,34 +4,26 @@
 // right. Blocks never appear in the rail; they are parts of a page, not
 // navigable entities.
 //
-// The slice owns everything runtime (see `slice.ts`). Selection is
+// The node owns everything runtime (see `state.ts`). Selection is
 // router-owned: the URL /pages/<page_id> is the cursor, so a click drives
 // navigate() and the route effect ships `page.select`. Pages are flat, so the
 // route is one id however deep the page sits; /pages with no segment is the
 // root page, which is a real page and may carry blocks.
 //
-// We never remount the shell on navigation. The mvp did, and it wipes every
-// slice on the page.
+// We never remount the shell on navigation.
 
-import { OP_NOTIFY } from "@nustackdev/ui-core";
-import type { RefEntry } from "@nustackdev/ui-kit";
-import { Spinner, useStore } from "@nustackdev/ui-kit";
+import { type NodeEntry, type NodeProps, pathKey, Spinner } from "@nustackdev/ui-kit";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { hrefFor, onNavClick, useRoute } from "../../app/router";
+import { notifyOp } from "../../app/wire";
 import type { Crumb } from "../../components";
 import { PageHeader } from "../../components";
 import { docPageLoading, docPageSurface, shellSurface } from "../../design";
 import { Canvas } from "./Canvas";
-import type { Notify, Ops } from "./ops";
+import type { Ops } from "./ops";
 import { Rail } from "./Rail";
-import {
-	pagesSliceFactory,
-	patchEditor,
-	useEditorState,
-	usePagesValue,
-	useStarters,
-} from "./slice";
-import { ancestorsOf, EMPTY_TREE, type PageTree, rootId } from "./types";
+import { applyPagesWrite, patchEditor, useEditorState, usePagesValue, useStarters } from "./state";
+import { ancestorsOf, type PageTree, rootId } from "./types";
 
 // Empty-state labels. The root page ships an empty title (the server inits it
 // that way), so something has to stand in for it; "Space" is what the rail
@@ -63,25 +55,21 @@ function trailFor(tree: PageTree, pageId: string): Crumb[] {
 	}));
 }
 
-function PagesView({ path }: { path: string }) {
-	const value = usePagesValue(path);
+function PagesView({ path }: NodeProps) {
+	const { tree, page, loaded } = usePagesValue(path);
 	const editor = useEditorState(path);
 	const starters = useStarters(path);
-	const send = useStore((s) => s.send);
 	const route = useRoute();
+	const key = pathKey(path);
 
-	const tree = value?.tree ?? EMPTY_TREE;
-	const loaded = value?.loaded ?? false;
-	const page = value?.page ?? null;
 	const expanded = useMemo(() => new Set(editor.expanded), [editor.expanded]);
 
 	// One ref per op: the op name is the tail of the wire path, not a key in
-	// the payload. `path` is this ref's own wire path, straight off the mount.
-	const notify = useCallback<Notify>(
-		<K extends keyof Ops>(op: K, args: Ops[K]) => {
-			send({ op: OP_NOTIFY, ref: `${path}.ops.${op}`, payload: args });
-		},
-		[path, send],
+	// the payload. `path` is this node's own address in the tree.
+	// biome-ignore lint/correctness/useExhaustiveDependencies: path is compared by value.
+	const notify = useCallback(
+		<K extends keyof Ops & string>(op: K, args: Ops[K]) => notifyOp<Ops, K>(path, op, args),
+		[key],
 	);
 
 	// The router path under /pages is at most one page id; empty is the root
@@ -92,6 +80,7 @@ function PagesView({ path }: { path: string }) {
 		notify("page.select", { page_id: selected });
 	}, [selected, route.top, notify]);
 
+	// biome-ignore lint/correctness/useExhaustiveDependencies: path is compared by value.
 	const toggleExpanded = useCallback(
 		(key: string) => {
 			patchEditor(path, (e) => {
@@ -101,7 +90,7 @@ function PagesView({ path }: { path: string }) {
 				return { expanded: Array.from(next) };
 			});
 		},
-		[path],
+		[key],
 	);
 
 	// The rename round trip is a kv write, a substrate notification and a
@@ -156,7 +145,7 @@ function PagesView({ path }: { path: string }) {
 	);
 }
 
-export const PagesRef: RefEntry = {
-	factory: pagesSliceFactory,
+export const PagesRef: NodeEntry = {
 	component: PagesView,
+	handlers: { write: (ctx, payload) => ctx.update((props) => applyPagesWrite(props, payload)) },
 };

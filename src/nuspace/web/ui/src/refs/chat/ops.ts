@@ -20,5 +20,6 @@ export type Ops = {
 	"chat.reset": Record<string, never>;
 };
 
-/** Send one op. Bound once in `chat.tsx` against this ref's own wire path. */
-export type Notify = <K extends keyof Ops>(op: K, args: Ops[K]) => void;
+// There is no `Notify` alias here. The rail is one component and it calls
+// `notifyOp` (app/wire.ts) directly; the pages and apps surfaces keep theirs
+// because they thread the sender down into a rail and a canvas.

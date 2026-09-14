@@ -66,11 +66,11 @@ class HostedSession(Session):
         """Ship one Frame, on the loop that owns the socket."""
         await self._relay(self._session.send(frame))
 
-    async def aread(self, path: str) -> Any:  # noqa: ANN401 -- payload is opaque
+    async def aread(self, path: tuple[str, ...]) -> Any:  # noqa: ANN401 -- payload is opaque
         """Round-trip read, on the loop that owns the pending futures."""
         return await self._relay(self._session.aread(path))
 
-    def subscribe(self, path: str) -> Subscription:
+    def subscribe(self, path: tuple[str, ...]) -> Subscription:
         """Observe notify frames for ``path``.
 
         The handle comes back to the worker as a proxy, and the callback the
@@ -83,10 +83,12 @@ class HostedSession(Session):
 class FrameCodec:
     """Frames by value on the invisibles wire, for as long as the bracket holds.
 
-    A ``Frame`` is plain data, but invisibles boxes any class it has not been
-    told about by reference: the worker would hand the server a proxy and
+    A ``Frame`` is plain data -- a path, a payload, and the chain of types and
+    props the write walks down -- but invisibles boxes any class it has not
+    been told about by reference: the worker would hand the server a proxy and
     ``encode`` would try to msgpack a netref. Registering the type makes it
-    pickle across instead.
+    pickle across instead, chain and all, which is what lets a section running
+    in a worker create the node it writes to.
     """
 
     def setup(self, ctx: Context) -> None:

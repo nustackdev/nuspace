@@ -20,10 +20,11 @@ route can name it without reading anything first.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
 import nu
-from nu.ui.core import Changed, Ref
+from nu.ui.core import Changed
+from nuspace.core.ui import SpaceRef
 
 
 if TYPE_CHECKING:
@@ -40,7 +41,7 @@ TOP = "top"
 PAGE_ID = "page_id"
 
 
-class NavRef(Ref):
+class NavRef(SpaceRef):
     """The browser's current route, readable and subscribable. Never written.
 
     Reading it is a round trip over the session, so bind it once with
@@ -48,7 +49,7 @@ class NavRef(Ref):
     twice.
     """
 
-    _wire_type_override = "NuspaceNavRef"
+    _wire_type: ClassVar[str] = "NuspaceNavRef"
 
     def _acompile(self, nid: int, children: tuple[Callable, ...]) -> Callable:
         async def athunk(rt: Runtime) -> Any:  # noqa: ANN401 -- the browser's blob

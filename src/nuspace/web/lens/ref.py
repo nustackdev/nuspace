@@ -22,26 +22,27 @@ the path it wants, exactly as the arm does.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 from typing_extensions import Self
 
-from nu.ui.core import Changed, Ref
+from nuspace.core.ui import SpaceRef
 from nuspace.web.lens.reflect import DEFAULT_MAX_ROWS
 from nuspace.web.wire import event, write
 
 
 if TYPE_CHECKING:
     from nu.lang import ListArg, Nu
+    from nu.ui.core import Changed
 
 
 __all__ = ["LensRef"]
 
 
-class LensRef(Ref):
+class LensRef(SpaceRef):
     """Any Nu Shape, browsable as cascading columns."""
 
-    _wire_type_override = "LensRef"
+    _wire_type: ClassVar[str] = "LensRef"
 
     @classmethod
     def slot(cls, *, max_rows: int = DEFAULT_MAX_ROWS) -> Self:

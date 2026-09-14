@@ -47,7 +47,7 @@ __all__ = ["ARMS", "pages_driver"]
 
 #: How many arms the composition folds. Pinned so a new interaction that
 #: forgets its arm, or an arm that quietly loses its subscription, says so.
-ARMS = 17
+ARMS = 16
 
 
 #: Every arm in this module, labelled for the reports it prints.
@@ -110,8 +110,8 @@ def pages_driver(
     """The pages surface, live, as one tree. Built per connection.
 
     Args:
-        pages: the ``PagesRef`` on the mounted shell, already bound to its
-            screen so its wire path resolves.
+        pages: the ``PagesRef`` on the shell, already bound to its screen so
+            its chain resolves.
         nav: the shell's ``NavRef``, read whenever an arm needs the route.
         root: the space's root Shape class.
 
@@ -281,15 +281,6 @@ def pages_driver(
             "status_errors",
             root.state.on_change(),
             _at_route("status_errors", nav, lambda page: _ship_status(pages, page, root)),
-        )
-        # A section's mount fields land in the same namespace its error does,
-        # written by the worker once it has constructed its term. Nothing else
-        # tells the browser what to render, so the page is re-shipped when
-        # they arrive.
-        | _arms.state(
-            "fields",
-            root.state.on_change(),
-            _at_route("fields", nav, lambda page: _ship_page(pages, page, root)),
         )
     )
     return nu.kv.auto_flow_atomic(boot >> flow, scope=root)

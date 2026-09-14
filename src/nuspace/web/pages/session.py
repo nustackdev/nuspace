@@ -112,7 +112,7 @@ def _addressable(page_id: nu.Nu, root: type[Shape]) -> nu.Nu:
     return nu.And(nu.Ne(page_id, nu.Str("")), ops.page_exists(page_id, root=root))
 
 
-def _run(page: nu.Nu, root: type[Shape], session_address: str, ns: str) -> nu.Nu:
+def _run(page: nu.Nu, pages: PagesRef, root: type[Shape], session_address: str, ns: str) -> nu.Nu:
     """Make this connection run ``page``, if that page is really there.
 
     ``Launch`` and ``Dispatch`` both return as soon as the worker has the
@@ -120,11 +120,11 @@ def _run(page: nu.Nu, root: type[Shape], session_address: str, ns: str) -> nu.Nu
     """
     return nu.IfDo(
         _addressable(page, root),
-        run_page(page, session_address=session_address, root=root, ns=ns),
+        run_page(page, surface=pages, session_address=session_address, root=root, ns=ns),
     )
 
 
-def _on_select(root: type[Shape], session_address: str) -> nu.Nu:
+def _on_select(pages: PagesRef, root: type[Shape], session_address: str) -> nu.Nu:
     """Move the cell, then run the page it now names.
 
     The event carries the page id, so nothing here reads the route back off
@@ -133,7 +133,7 @@ def _on_select(root: type[Shape], session_address: str) -> nu.Nu:
     """
     return nu.IfDo(
         nu.Ne(_selected, cell()),
-        Tab.page.set(_selected) >> _run(_selected, root, session_address, _SELECT),
+        Tab.page.set(_selected) >> _run(_selected, pages, root, session_address, _SELECT),
     )
 
 
@@ -143,8 +143,9 @@ def page_session(
     """This connection's page, supervised, for as long as the connection lasts.
 
     Args:
-        pages: the ``PagesRef`` on the mounted shell. The arm's subscription,
-            and the only place the route enters this tree.
+        pages: the ``PagesRef`` on the shell. Two jobs: the arm's subscription,
+            which is the only place the route enters this tree, and the node
+            every section on the page roots its ui refs under.
         session_address: where this connection's ``nu.ui`` Session is served.
             Per connection, not per process, which is why it arrives here and
             not in the pool's ``worker_init``.
@@ -156,7 +157,7 @@ def page_session(
         to.
     """
     root = resolve_root(root)
-    flow = _arms.event(_SELECT, pages.on_select(), _on_select(root, session_address))
+    flow = _arms.event(_SELECT, pages.on_select(), _on_select(pages, root, session_address))
     return nu.With(
         # Tagged, both of them. A pages ``Runner`` and an apps ``Runner`` are
         # the same key by name in the process-wide dict, and two tabs on one

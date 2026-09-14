@@ -50,36 +50,43 @@ ROOT = Path("/tmp/nuspace-pages-demo")  # noqa: S108
 # The page the driver runs. Three levels down, and still one lookup away.
 PAGE = "guides"
 
-# A counter. Writes sections.<id>.ticks every 0.1s, stepping by `step`, forever.
-# Editing `step` in the stored source is what the demo edits.
+# A counter. Ticks its own row every 0.1s, stepping by `step`, forever. The
+# row is reached by navigating -- `section` is the id this block runs under --
+# so nothing here builds a key. Editing `step` is what the demo edits.
 COUNTER = '''import nu
 import nu.kv
 from nuspace.core.shapes import Space
 
 
-def out(path):
+def out(section):
     """Tick a counter in this section's own corner of the space's scratch kv."""
-    key = path + ".ticks"
-    now = nu.ToInt(Space.state.get_item(key, nu.Str("0")))
-    tick = Space.state.set_item(key, nu.ToStr(now + nu.Int({step})))
+    data = Space.state[section].data
+    now = nu.ToInt(data.get_item("ticks", nu.Str("0")))
+    tick = data.set_item("ticks", nu.ToStr(now + nu.Int({step})))
     return nu.kv.auto_flow_atomic(
-        Space.state.set_item(key, nu.Str("0")) >> nu.ForeverDo(nu.DelayedDo(0.1, tick)),
+        data.set_item("ticks", nu.Str("0")) >> nu.ForeverDo(nu.DelayedDo(0.1, tick)),
         scope=Space,
     )
 '''
 
-# Reads another section's counter and copies it into its own namespace. Two
-# sections, two processes, both reaching the one store through their own proxy.
+# Reads another section's counter and copies it into its own row. Two sections,
+# two processes, both reaching the one store through their own proxy.
+#
+# This is the cross-section reference, and it is a ref chain: the watched
+# section's row is `Space.state["s_counter"]`, an id used as a key, not a path
+# a python format hole built. Nothing is formatted into this source at all.
 MIRROR = '''import nu
 import nu.kv
 from nuspace.core.shapes import Space
 
+WATCHED = "s_counter"
 
-def out(path):
-    """Copy another section's tick count into this one's namespace."""
-    src = "sections.{watched}.ticks"
-    dst = path + ".seen"
-    copy = Space.state.set_item(dst, nu.ToStr(Space.state.get_item(src, nu.Str("0"))))
+
+def out(section):
+    """Copy another section's tick count into this one's row."""
+    mine = Space.state[section].data
+    theirs = Space.state[WATCHED].data
+    copy = mine.set_item("seen", nu.ToStr(theirs.get_item("ticks", nu.Str("0"))))
     return nu.kv.auto_flow_atomic(nu.ForeverDo(nu.DelayedDo(0.1, copy)), scope=Space)
 '''
 
@@ -99,8 +106,11 @@ def report(label):
         ops.parent_of(PAGE),
         "\n  sections: ",
         ops.section_ids(PAGE),
-        "\n  state:    ",
-    ) >> nu.Print(STDOUT, "   ", nu.dict(Space.state.items()))
+        "\n  counter:  ",
+        nu.dict(Space.state["s_counter"].data.items()),
+        "\n  mirror:   ",
+        nu.dict(Space.state["s_mirror"].data.items()),
+    )
 
 
 # The page tree, built through ops before anything runs. `init_space` writes
@@ -120,9 +130,7 @@ SEED = (
 # dispatch. That churn is why the worker ids below are not 0 and 1.
 SCRIPT = (
     nu.DelayedDo(0.2, ops.add_section(PAGE, COUNTER.format(step=1), section_id="s_counter"))
-    >> nu.DelayedDo(
-        0.2, ops.add_section(PAGE, MIRROR.format(watched="s_counter"), section_id="s_mirror")
-    )
+    >> nu.DelayedDo(0.2, ops.add_section(PAGE, MIRROR, section_id="s_mirror"))
     >> nu.DelayedDo(5.0, report("\n[1] both sections up and running"))
     # Edit one snippet. Only the counter restarts: its worker id moves, the
     # mirror's does not, and the counter starts over from zero stepping by ten.

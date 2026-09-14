@@ -8,14 +8,15 @@
 		"dev": "vite",
 		"build": "tsc -b && vite build",
 		"preview": "vite preview",
-		"typecheck": "tsc --noEmit",
+		"typecheck": "tsc -b",
 		"check": "biome check .",
 		"check:fix": "biome check --write .",
 		"test": "vitest run"
 	},
+	"comment:dev-link": "ui-core and ui-kit are DEV LINKS to the sibling nu checkout, not registry deps. The published 0.1.x is the pre-tree world (flat store, mount envelope) and nothing has been republished since nu.ui became a tree, so a caret range can only ever fetch the old one. `file:` and not a vite/tsc alias on purpose: npm makes a real symlink, `npm ls` says LINK, and the version field is a path, so nobody mistakes this for a registry resolution. Undo at release time: put the caret ranges back and `npm install` once the kit publishes a version with the tree bindings in it.",
 	"dependencies": {
-		"@nustackdev/ui-core": "^0.1.0",
-		"@nustackdev/ui-kit": "^0.1.4",
+		"@nustackdev/ui-core": "file:../../../../../nu/packages/nustd/src/nu/ui/web/core",
+		"@nustackdev/ui-kit": "file:../../../../../nu/packages/nustd/src/nu/ui/web/kit",
 		"lucide-react": "^0.564.0",
 		"monaco-editor": "^0.56.0",
 		"prosemirror-commands": "^1.7.2",

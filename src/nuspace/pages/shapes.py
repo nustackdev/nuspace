@@ -47,13 +47,14 @@ class Section(nu.Shape):
     """One block on a page, and the unit of execution. Always a Nu program.
 
     ``snippet`` is a ``nu.prog`` program: a module with an ``out`` entry point
-    whose signature is the scope contract, and nuspace binds one value,
-    ``path``, which for a section is ``"sections.<section_id>"``.
+    whose signature is the scope contract, and nuspace binds two ids, ``page``
+    and ``section``. Where the refs it names land is not the snippet's
+    business: nuspace roots them under this block. See nuspace.core.ui.
     """
 
-    # Section ids are globally unique, not unique per page: `path` is the only
-    # thing a snippet's scope carries, so two pages reusing an id would share
-    # one namespace. See nuspace.core.tpl.
+    # Section ids are globally unique, not unique per page: the id alone keys
+    # the scratch row, so two pages reusing one would share a namespace. See
+    # nuspace.core.tpl.
     name = nu.kv.StrRef.slot()
     snippet = nu.kv.ProgramRef.slot()
     policy = nu.kv.StrRef.slot()

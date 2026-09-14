@@ -13,7 +13,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { docCodeBox } from "../../design";
 import { type CodeEditor, type KeyboardEvt, loadMonaco, type MonacoApi, NU_THEME } from "./monaco";
 import type { ExitDir } from "./ProseRef";
-import type { FocusReq } from "./slice";
+import type { FocusReq } from "./state";
 
 const MIN_HEIGHT = 42;
 const MAX_HEIGHT = 560;

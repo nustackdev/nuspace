@@ -101,18 +101,16 @@ def build_fastapi_app(
         raise TypeError(
             f"shell_cls must be a nuspace Shell subclass, got {shell_cls!r}",
         )
-    payload = shell_cls._mount_payload()
+    # Walked once, here: the shell is a class and its slots do not move, so
+    # every connection is sent the same batch.
+    chains = shell_cls._boot_chains()
     fastapi_app = FastAPI(title="nuspace")
 
     @fastapi_app.websocket("/ws")
     async def ws_endpoint(ws: WebSocket) -> None:
         await ws.accept()
         session = NuspaceSession(ws)
-        await session.mount(
-            str(payload["name"]),
-            payload["fields"],  # type: ignore[arg-type]
-            pages=payload["pages"],  # type: ignore[arg-type]
-        )
+        await session.boot(chains)
         # This connection's Session, on a socket of its own, so the pool
         # workers running its sections can write through it. The bracket
         # closes with the body, which is what ties the server to the tab.

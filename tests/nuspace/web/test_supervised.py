@@ -26,16 +26,20 @@ import nu
 import nu.kv
 import nu.proxy
 from nu.kv.fabrics import Navigator
-from nu.ui.core.protocol import OP_MOUNT, OP_NOTIFY, OP_READ, Frame, decode, encode
+from nu.ui.core.protocol import OP_INIT, OP_NOTIFY, OP_READ, Frame, decode, encode
 from nuspace.core.host import free_port
 from nuspace.core.shapes import Space
 from nuspace.pages import ROOT_PAGE_ID
-from nuspace.web import session_driver, space_tree
+from nuspace.web import NuspaceShell, session_driver, space_tree
 
 
-#: Wire paths the mount assigns the two surfaces.
-APPS = "AppsScreen.apps"
-PAGES = "PagesScreen.pages"
+#: Where the chain puts the two surfaces: the screen slot, then the ref.
+APPS = ("apps", "apps")
+PAGES = ("pages", "pages")
+
+#: The chrome a fresh connection is sent, one ``init`` per slot the shell
+#: declares. What a tab reads before anything else arrives.
+BOOT = NuspaceShell._boot_chains()
 
 #: How long a client waits for the frames one op produces to stop arriving.
 #: Shorter than the counters' period, so a ticking space still goes quiet.
@@ -51,19 +55,19 @@ LIMIT = 20.0
 #: write that touches several fields.
 SETTLE = 8.0
 
-#: A section that counts, in its own namespace, forever. A section's snippet
-#: owns its own atomicity; the runner does not add one.
+#: A section that counts, in its own row, forever. A section's snippet owns
+#: its own atomicity; the runner does not add one.
 COUNTER = """import nu
 import nu.kv
 from nuspace.core.shapes import Space
 
 
-def out(path):
-    key = path + ".ticks"
-    now = nu.ToInt(Space.state.get_item(key, nu.Str("0")))
-    tick = Space.state.set_item(key, nu.ToStr(now + nu.Int(1)))
+def out(section):
+    data = Space.state[section].data
+    now = nu.ToInt(data.get_item("ticks", nu.Str("0")))
+    tick = data.set_item("ticks", nu.ToStr(now + nu.Int(1)))
     return nu.kv.auto_flow_atomic(
-        Space.state.set_item(key, nu.Str("0")) >> nu.ForeverDo(nu.DelayedDo(1.0, tick)),
+        data.set_item("ticks", nu.Str("0")) >> nu.ForeverDo(nu.DelayedDo(1.0, tick)),
         scope=Space,
     )
 """
@@ -92,11 +96,17 @@ class Tab:
             self.last[frame.ref, str(frame.payload["op"])] = frame.payload
         return frame
 
-    async def mount(self):
-        """The first frame, which is always the mount envelope."""
-        frame = await self._take(5.0)
-        assert frame.op == OP_MOUNT
-        return frame.payload
+    async def boot(self):
+        """The opening batch: a clearing remove, then one init per slot.
+
+        Comes back as ``{path: (segment, type, props)}`` -- the leaf of every
+        chain, which is where a surface's declared props ride in.
+        """
+        frames = [await self._take(5.0) for _ in range(len(BOOT) + 1)]
+        assert [f.op for f in frames[1:]] == [OP_INIT] * len(BOOT)
+        chains = [f.chain for f in frames]
+        assert chains[0] == ()
+        return {tuple(seg for seg, _, _ in c): c[-1] for c in chains[1:]}
 
     async def arrive(self):
         """Say where this tab landed, the way the browser's route effect does.
@@ -117,7 +127,8 @@ class Tab:
 
     async def notify(self, ref, op, **args):
         """Send one op on its own wire path, then let the answer settle."""
-        await self.ws.send(encode(Frame(OP_NOTIFY, ref=f"{ref}.ops.{op}", payload=args)))
+        # The op name stays one segment, dots and all.
+        await self.ws.send(encode(Frame(OP_NOTIFY, ref=[*ref, "ops", op], payload=args)))
         await self.settle()
 
     async def navigate(self, page_id):
@@ -173,30 +184,28 @@ async def _await_port(port, attempts=200):
     raise AssertionError(f"nothing listening on {port}")
 
 
-async def read_state(address):
-    """Everything under ``Space.state``, read the way a worker reads it.
+async def ticks(address, owner):
+    """One counter's current value, read the way a worker reads it.
 
     Through the served Navigator, because the tree under test holds the
-    store's write lock and this process cannot open it a second time.
+    store's write lock and this process cannot open it a second time. ``-1``
+    when that row has never been written, which is what "never ran" looks
+    like.
     """
+    cell = Space.state[owner].data.get_item("ticks", nu.Str("-1"))
     tree = nu.With(
         nu.proxy.InvisiblesProxy(Navigator, address=address),
-        body=nu.kv.auto_flow_atomic(nu.dict(Space.state.items()), scope=Space),
+        body=nu.kv.auto_flow_atomic(nu.ToStr(cell), scope=Space),
     )
-    rows, _ = await nu.arun(tree, nu.Context())
-    return dict(rows or {})
+    value, _ = await nu.arun(tree, nu.Context())
+    return int(value)
 
 
-async def ticks(address, key):
-    """One counter's current value, as an int. ``-1`` when it has never run."""
-    return int((await read_state(address)).get(key, -1))
-
-
-async def advances(address, key, over=2.5):
+async def advances(address, owner, over=2.5):
     """Whether a counter moves over a window. The proof that something runs."""
-    before = await ticks(address, key)
+    before = await ticks(address, owner)
     await asyncio.sleep(over)
-    return await ticks(address, key) > before >= 0
+    return await ticks(address, owner) > before >= 0
 
 
 @contextlib.asynccontextmanager
@@ -277,17 +286,17 @@ async def test_an_app_created_in_the_browser_actually_runs_and_says_so():
     async with running_space() as (port, address):
         async with websockets.connect(f"ws://127.0.0.1:{port}/ws") as ws:
             tab = Tab(ws, top="apps")
-            mount = await tab.mount()
+            slots = await tab.boot()
             await tab.settle()
 
             # The supervisor is in this process, and the surface read that
             # rather than being told it at build time.
             assert tab.attached() is True
 
-            # What a new app starts life as, straight off the mount: the
-            # browser fills `source` with it, so this is the real create.
-            screens = {s["route"]: s for s in mount["pages"]}
-            starter = screens["/apps"]["fields"][0]["props"]["starter"]
+            # What a new app starts life as, straight off the chain the
+            # surface's own node arrived on: the browser fills `source` with
+            # it, so this is the real create.
+            starter = slots[APPS][2]["starter"]
             await tab.notify(APPS, "app.create", app_id="a_tick", name="Tick", source=starter)
             await asyncio.sleep(SETTLE)
             await tab.settle()
@@ -297,7 +306,7 @@ async def test_an_app_created_in_the_browser_actually_runs_and_says_so():
             assert tab.app_states()["a_tick"] == "running"
             # And the program is really executing: the starter is a 1 Hz
             # counter, and it is counting.
-            assert await advances(address, "apps.a_tick.ticks", over=2.5)
+            assert await advances(address, "a_tick", over=2.5)
 
             # One worker, not the five a field-by-field create used to cost.
             assert len(multiprocessing.active_children()) == 1
@@ -320,7 +329,7 @@ async def test_an_app_created_in_the_browser_actually_runs_and_says_so():
             await tab.settle()
 
             assert tab.apps() == {}
-            assert not await advances(address, "apps.a_tick.ticks", over=2.5)
+            assert not await advances(address, "a_tick", over=2.5)
             assert multiprocessing.active_children() == []
 
 
@@ -330,11 +339,11 @@ async def test_an_app_created_in_the_browser_actually_runs_and_says_so():
 @pytest.mark.timeout(300)
 async def test_a_section_runs_for_the_tab_that_is_looking_at_its_page():
     """The per-session supervisor follows the route, both ways."""
-    key = "sections.s_tick.ticks"
+    key = "s_tick"
     async with running_space() as (port, address):
         async with websockets.connect(f"ws://127.0.0.1:{port}/ws") as ws:
             tab = Tab(ws)
-            await tab.mount()
+            await tab.boot()
             await tab.settle()
             await tab.arrive()
 
@@ -377,11 +386,11 @@ async def test_a_section_runs_for_the_tab_that_is_looking_at_its_page():
 @pytest.mark.timeout(300)
 async def test_two_tabs_on_one_page_keep_their_own_records():
     """One tab closing must not take the other tab's section down with it."""
-    key = "sections.s_two.ticks"
+    key = "s_two"
     async with running_space() as (port, address):
         async with websockets.connect(f"ws://127.0.0.1:{port}/ws") as ws:
             first = Tab(ws)
-            await first.mount()
+            await first.boot()
             await first.settle()
             await first.arrive()
             await first.notify(
@@ -398,7 +407,7 @@ async def test_two_tabs_on_one_page_keep_their_own_records():
 
             async with websockets.connect(f"ws://127.0.0.1:{port}/ws") as other:
                 second = Tab(other)
-                await second.mount()
+                await second.boot()
                 await second.settle()
                 await second.arrive()
                 await asyncio.sleep(SETTLE)

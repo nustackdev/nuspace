@@ -65,15 +65,20 @@ def app_body(*, root: type[Shape] | None = None) -> nu.Nu:
     fixed at construction and the app arrives as the carried attr ``app``. The
     ``auto_flow_atomic`` covers the runner's own ``LoadNu`` read and stops
     there, since the pass does not descend through ``Eval``.
+
+    The scope is a section's scope with the page taken out. An app is the same
+    substance as a block and gets the same two names, so one snippet runs
+    either way: ``section`` is the app's own id, and ``page`` is empty, because
+    an app sits on no page. Nothing roots its refs either -- an app runs
+    whether or not a browser is looking, so it has nowhere to render.
     """
     root = resolve_root(root)
-    # Construction failures are written to the app's namespace, not raised: a
+    scope = {"page": nu.Str(""), "section": _APP}
+    # Construction failures are written to the app's own row, not raised: a
     # dispatched body has no waiter, so an uncaught error vanishes silently.
-    load = root.apps[_APP].snippet.load(scope={"path": nu.Str("apps.") + _APP})
+    load = root.apps[_APP].snippet.load(scope=scope)
     report = nu.kv.auto_flow_atomic(
-        root.state.set_item(
-            nu.Str("apps.") + _APP + nu.Str(".error"), nu.ToStr(nu.AttrRef("error"))
-        ),
+        root.state[_APP].error.set(nu.ToStr(nu.AttrRef("error"))),
         scope=root,
     )
     return nu.TryCatch(

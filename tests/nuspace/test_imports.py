@@ -29,6 +29,7 @@ MODULES = [
     "nuspace.core.ids",
     "nuspace.core.shapes",
     "nuspace.core.tpl",
+    "nuspace.core.ui",
     "nuspace.pages",
     "nuspace.pages.ops",
     "nuspace.pages.runner",

@@ -17,19 +17,20 @@
 //
 // We never remount the shell on navigation.
 
-import { OP_NOTIFY } from "@nustackdev/ui-core";
-import type { RefEntry } from "@nustackdev/ui-kit";
 import {
 	IconButton,
+	type NodeEntry,
+	type NodeProps,
+	pathKey,
 	Spinner,
 	Tooltip,
 	TooltipContent,
 	TooltipTrigger,
-	useStore,
 } from "@nustackdev/ui-kit";
 import { RotateCw } from "lucide-react";
 import { useCallback, useEffect, useMemo } from "react";
 import { useRoute } from "../../app/router";
+import { notifyOp } from "../../app/wire";
 import { SectionStatusPill } from "../../components";
 import {
 	appsBar,
@@ -44,38 +45,37 @@ import {
 	SECTION_STATUS,
 	shellSurface,
 } from "../../design";
-import type { Notify, Ops } from "./ops";
+import type { Ops } from "./ops";
 import { Rail } from "./Rail";
 import { SourceBox } from "./Source";
 import {
-	appsSliceFactory,
-	patchAppsEditor,
+	applyAppsWrite,
 	setDirty,
+	setRenaming,
 	useAppStarter,
-	useAppsEditorSlot,
+	useAppsLocal,
 	useAppsValue,
-} from "./slice";
+} from "./state";
 import { type AppRow, appLabel, DETACHED_STATE } from "./types";
 
-function AppsView({ path }: { path: string }) {
+function AppsView({ path }: NodeProps) {
 	const { apps, attached, loaded } = useAppsValue(path);
-	const send = useStore((s) => s.send);
 	const route = useRoute();
+	const key = pathKey(path);
 
 	const selectedId = route.path[0] ?? null;
 	const app = useMemo(() => apps.find((a) => a.id === selectedId) ?? null, [apps, selectedId]);
 
 	const starter = useAppStarter(path);
-	const renaming = useAppsEditorSlot(path, (e) => e.renaming);
-	const dirty = useAppsEditorSlot(path, (e) => (selectedId ? e.dirty.includes(selectedId) : false));
+	const renaming = useAppsLocal(path, (l) => l.renaming);
+	const dirty = useAppsLocal(path, (l) => (selectedId ? l.dirty.includes(selectedId) : false));
 
 	// One ref per op: the op name is the tail of the wire path, not a key in
-	// the payload. `path` is this ref's own wire path, straight off the mount.
-	const notify = useCallback<Notify>(
-		<K extends keyof Ops>(op: K, args: Ops[K]) => {
-			send({ op: OP_NOTIFY, ref: `${path}.ops.${op}`, payload: args });
-		},
-		[path, send],
+	// the payload. `path` is this node's own address in the tree.
+	// biome-ignore lint/correctness/useExhaustiveDependencies: path is compared by value.
+	const notify = useCallback(
+		<K extends keyof Ops & string>(op: K, args: Ops[K]) => notifyOp<Ops, K>(path, op, args),
+		[key],
 	);
 
 	// A pull, once per app opened. The status batch answers for every app, so
@@ -84,6 +84,7 @@ function AppsView({ path }: { path: string }) {
 		if (selectedId) notify("app.select", { app_id: selectedId });
 	}, [notify, selectedId]);
 
+	// biome-ignore lint/correctness/useExhaustiveDependencies: path is compared by value.
 	const commit = useCallback(
 		(source: string) => {
 			if (!app) return;
@@ -91,7 +92,7 @@ function AppsView({ path }: { path: string }) {
 			if (source === app.source) return;
 			notify("app.update", { app_id: app.id, source });
 		},
-		[app, notify, path],
+		[app, notify, key],
 	);
 
 	const restart = useCallback(() => {
@@ -107,8 +108,8 @@ function AppsView({ path }: { path: string }) {
 				attached={attached}
 				selectedId={selectedId}
 				renaming={renaming}
-				onRenameStart={(id) => patchAppsEditor(path, { renaming: id })}
-				onRenameEnd={() => patchAppsEditor(path, { renaming: null })}
+				onRenameStart={(id: string) => setRenaming(path, id)}
+				onRenameEnd={() => setRenaming(path, null)}
 				notify={notify}
 			/>
 			<div className={appsCanvas}>
@@ -219,7 +220,7 @@ function Canvas({
 	);
 }
 
-export const AppsRef: RefEntry = {
-	factory: appsSliceFactory,
+export const AppsRef: NodeEntry = {
 	component: AppsView,
+	handlers: { write: (ctx, payload) => ctx.update((props) => applyAppsWrite(props, payload)) },
 };

@@ -62,11 +62,6 @@ _ITEM = "_na_item"
 _item = nu.AnyAttrRef(_ITEM)
 
 
-def _state_key(app_id: nu.StrArg, suffix: str) -> nu.Nu:
-    """``apps.<app_id><suffix>`` as a term, for either a python str or a term."""
-    return nu.Str("apps.") + app_id + nu.Str(suffix)
-
-
 # --- write: the space ------------------------------------------------------
 
 
@@ -142,12 +137,11 @@ def set_policy(app_id: nu.StrArg, policy: nu.StrArg, *, root: type[Shape] | None
 def clear_error(app_id: nu.StrArg, *, root: type[Shape] | None = None) -> nu.Nu:
     """Forget the construction error recorded for this app. A no-op when clean.
 
-    Guarded rather than bare: ``del_item`` on a missing key raises, and an app
-    that never failed has no key.
+    Guarded rather than bare: an erase on a leaf nothing wrote raises, and an
+    app that never failed has no error.
     """
-    state = resolve_root(root).state
-    key = _state_key(app_id, ".error")
-    return nu.IfDo(state.contains(key), state.del_item(key))
+    error = resolve_root(root).state[app_id].error
+    return nu.IfDo(error.exists(), error.erase())
 
 
 # --- read ------------------------------------------------------------------
@@ -176,7 +170,8 @@ def error_of(app_id: nu.StrArg, *, root: type[Shape] | None = None) -> nu.Nu:
     Written by ``app_body`` when a snippet does not construct, since a
     dispatched body has no waiter to raise into.
     """
-    return resolve_root(root).state.get_item(_state_key(app_id, ".error"), nu.Str(""))
+    error = resolve_root(root).state[app_id].error
+    return nu.If(error.exists(), nu.ToStr(error), nu.Str(""))
 
 
 def running() -> nu.Nu:
@@ -248,8 +243,8 @@ def app_statuses(*, supervised: nu.BoolArg = False, root: type[Shape] | None = N
 
     ``section_id`` rather than ``app_id`` because this is the supervisor's
     contract, not the Apps surface's: an app and a section are the same
-    substance and share one status shape. An app whose namespace holds an
-    ``error`` key reads ``failed``.
+    substance and share one status shape. An app whose row holds an ``error``
+    reads ``failed``.
 
     Args:
         supervised: whether ``Runner.workers`` is readable here, which it only
@@ -260,9 +255,9 @@ def app_statuses(*, supervised: nu.BoolArg = False, root: type[Shape] | None = N
         root: the space's root Shape class.
     """
     root = resolve_root(root)
-    # Same binding Map makes, read as a Str so `+` concatenates rather than
-    # collapsing to INVALID the way it would on an untyped AnyAttrRef.
-    key = _state_key(nu.StrAttrRef(_ITEM), ".error")
+    # The row of whichever app Map is on. A ref chain, so the app id is a
+    # segment rather than a piece of a key somebody built with a dot.
+    scratch = root.state[nu.StrAttrRef(_ITEM)]
     idle = nu.Str("idle")
     live = _live(supervised)
     quiet = idle if live is None else nu.If(live, nu.Str("running"), idle)
@@ -271,8 +266,10 @@ def app_statuses(*, supervised: nu.BoolArg = False, root: type[Shape] | None = N
             app_ids(root=root),
             nu.Dict.of(
                 section_id=_item,
-                state=nu.If(root.state.contains(key), nu.Str("failed"), quiet),
-                error=nu.ToStr(root.state.get_item(key, nu.Str(""))),
+                state=nu.If(scratch.error.exists(), nu.Str("failed"), quiet),
+                # Total: an unwritten leaf reads EMPTY, and EMPTY is not a
+                # string the browser can be handed.
+                error=nu.If(scratch.error.exists(), nu.ToStr(scratch.error), nu.Str("")),
                 started_at=nu.Int(0),
             ),
             key=_ITEM,

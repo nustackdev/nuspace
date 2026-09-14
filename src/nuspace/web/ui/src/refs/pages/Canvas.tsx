@@ -7,10 +7,12 @@
 //
 // ## Every block is a program, and this file is where that shows
 //
-// There is no block type to branch on. Each block below renders its `fields`
-// -- the ui refs its program mounted -- through the kit's `FieldView`, text
-// blocks included: a text block's program holds a `ProseRef`, so its
-// paragraph arrives by exactly the same route as a program block's slider.
+// There is no block type to branch on. Each block below renders the subtree
+// at its own address -- the ui refs its program mounted, which arrive as
+// ordinary nodes -- through `NodeView`, text blocks included: a text block's
+// program holds a `ProseRef`, so its paragraph arrives by exactly the same
+// route as a program block's slider. See ./blocks.ts for where that address
+// is and what is still open about it.
 //
 // `tpl` is read in one place, `bare` below, and only to choose how much
 // chrome to wrap around that. A text block came from the wysiwyg template, so
@@ -56,13 +58,15 @@
 // text follows through the refs, which means it does not follow at all until
 // something is running the sections. See the report for task-145.
 
+import type { Path } from "@nustackdev/ui-core";
 import {
 	Alert,
 	AlertDescription,
 	AlertIcon,
 	AlertTitle,
-	FieldView,
 	IconButton,
+	NodeView,
+	pathKey,
 	Tooltip,
 	TooltipContent,
 	TooltipTrigger,
@@ -84,6 +88,7 @@ import {
 	hasGutterRail,
 	SECTION_STATUS,
 } from "../../design";
+import { blockText, blockUiPath } from "./blocks";
 import type { Notify } from "./ops";
 import { ProgramBlock } from "./Program";
 import {
@@ -92,25 +97,10 @@ import {
 	type ExitDir,
 	type InsertTpl,
 	type ProseHandle,
-	proseValue,
 } from "./ProseRef";
 import { filterSlash, type SlashItem, SlashMenu } from "./Slash";
-import { type EditorState, type FocusReq, patchEditor, useEditorState } from "./slice";
+import { type EditorState, type FocusReq, patchEditor, useEditorState } from "./state";
 import { type ActivePage, type Block, type BlockTpl, mintId } from "./types";
-
-/**
- * The markdown a text block currently holds, read off its own ref.
- *
- * The page payload does not carry it: a text block's content lives on its
- * `ProseRef`, which is where the browser already has it and where a
- * keystroke lands without reshipping the page. A neighbour that needs it --
- * merge-up joining two blocks -- reads it from there. The path is whatever
- * the block's program mounted, so nothing here hardcodes a naming scheme.
- */
-function blockText(block: Block): string {
-	const field = block.fields.find((f) => f.type === "ProseRef");
-	return field ? proseValue(field.path) : "";
-}
 
 export function Canvas({
 	refPath,
@@ -118,9 +108,9 @@ export function Canvas({
 	starters,
 	notify,
 }: {
-	refPath: string;
+	refPath: Path;
 	page: ActivePage;
-	/** What a block of each tpl starts life as, off the ref's mount props.
+	/** What a block of each tpl starts life as, off the ref's props.
 	 *  `nuspace/core/tpl.py` is the one spelling of these. */
 	starters: Record<string, string>;
 	notify: Notify;
@@ -128,6 +118,7 @@ export function Canvas({
 	const editor = useEditorState(refPath);
 	const blocks = page.blocks;
 	const pageId = page.page_id;
+	const refKey = pathKey(refPath);
 
 	const rootRef = useRef<HTMLDivElement | null>(null);
 	const elRefs = useRef(new Map<string, HTMLElement>());
@@ -139,10 +130,11 @@ export function Canvas({
 
 	const index = useCallback((id: string) => blocks.findIndex((b) => b.id === id), [blocks]);
 
+	// biome-ignore lint/correctness/useExhaustiveDependencies: path is compared by value.
 	const patch = useCallback(
 		(p: Partial<EditorState> | ((e: EditorState) => Partial<EditorState>)) =>
 			patchEditor(refPath, p),
-		[refPath],
+		[refKey],
 	);
 
 	// -- focus routing --------------------------------------------------------
@@ -282,6 +274,7 @@ export function Canvas({
 		[blocks, editor.editing, index, notify, pageId, patch],
 	);
 
+	// biome-ignore lint/correctness/useExhaustiveDependencies: path is compared by value.
 	const mergeUp = useCallback(
 		(id: string, text: string) => {
 			const i = index(id);
@@ -291,7 +284,7 @@ export function Canvas({
 				// The join happens in the block above's own prose ref, which is
 				// where a text block's content lives; the wire only hears that
 				// this block is gone.
-				const above = blockText(prev);
+				const above = blockText(refPath, prev.id);
 				const seam = above.length + (above && text ? 1 : 0);
 				notify("section.delete", { page_id: pageId, section_id: id });
 				patch({
@@ -311,7 +304,7 @@ export function Canvas({
 			patch({ focus: null, selected: [prev.id], anchor: prev.id });
 			rootRef.current?.focus({ preventScroll: true });
 		},
-		[blocks, deleteBlocks, editor.editing, index, notify, pageId, patch],
+		[blocks, deleteBlocks, editor.editing, index, notify, pageId, patch, refKey],
 	);
 
 	const moveSelected = useCallback(
@@ -641,6 +634,7 @@ export function Canvas({
 						{bare ? (
 							<TextBlock
 								block={block}
+								uiPath={blockUiPath(refPath, block.id)}
 								bus={{
 									blockId: block.id,
 									focusReq,
@@ -679,7 +673,7 @@ export function Canvas({
 							<ProgramBlock
 								blockId={block.id}
 								source={block.source}
-								fields={block.fields}
+								uiPath={blockUiPath(refPath, block.id)}
 								status={block.status}
 								editing={editor.editing.includes(block.id)}
 								focusReq={focusReq}
@@ -758,15 +752,15 @@ export function Canvas({
  * is nothing about the program for a reader to act on. What is left is the
  * document, which is the whole point.
  *
- * The fields come through `FieldView` exactly as a program block's do. The
- * one the template mounts is a `ProseRef`, and nuspace's entry for it (see
+ * The refs come through `NodeView` exactly as a program block's do. The one
+ * the template mounts is a `ProseRef`, and nuspace's entry for it (see
  * ./ProseRef.tsx) reads the bus off the context provided here to rebuild the
  * block-boundary behaviour the kit's editor deliberately leaves out.
  *
  * A status that says the program is broken is still shown: the template
  * failing means nuspace is broken, and a silent blank block would hide it.
  */
-function TextBlock({ block, bus }: { block: Block; bus: BlockProse }) {
+function TextBlock({ block, uiPath, bus }: { block: Block; uiPath: Path; bus: BlockProse }) {
 	const token = SECTION_STATUS[block.status.state];
 	return (
 		<BlockProseContext.Provider value={bus}>
@@ -782,9 +776,7 @@ function TextBlock({ block, bus }: { block: Block; bus: BlockProse }) {
 						</div>
 					</Alert>
 				) : null}
-				{block.fields.map((f) => (
-					<FieldView key={f.path} field={f} />
-				))}
+				<NodeView path={uiPath} />
 			</div>
 		</BlockProseContext.Provider>
 	);

@@ -2,8 +2,8 @@
 //
 // A text block is a Nu program holding a `nu.ui.ProseRef`, so the thing that
 // renders a paragraph in this editor is the same machinery that renders a
-// slider in a program block: a mount field, dispatched through `FieldView`.
-// That is what makes "every block is a program" true rather than decorative.
+// slider in a program block: a node in the tree, drawn by `NodeView`. That is
+// what makes "every block is a program" true rather than decorative.
 //
 // ## Why nuspace registers its own entry over the kit's
 //
@@ -23,9 +23,9 @@
 //
 // ## Where the behaviour comes from
 //
-// Not from props. A `FieldView` renderer is handed one thing, its `path`, so
-// the canvas publishes the block's boundary handlers on `BlockProseContext`
-// and this reads them. A `ProseRef` a person puts in a program block of
+// Not from props. A node component is handed one thing, its `path`, so the
+// canvas publishes the block's boundary handlers on `BlockProseContext` and
+// this reads them. A `ProseRef` a person puts in a program block of
 // their own finds no context, gets no boundary behaviour, and behaves like
 // the kit's plain editor -- which is the right answer, because that ref is
 // not a block.
@@ -46,9 +46,17 @@
 // normally, and the bubble handler then stops it so the canvas (which owns
 // block selection) does not act on a key the caret already answered.
 
-import { OP_NOTIFY } from "@nustackdev/ui-core";
-import type { RefEntry, SliceFactory } from "@nustackdev/ui-kit";
-import { ProseEditor, useStore } from "@nustackdev/ui-kit";
+import { OPS, type Path } from "@nustackdev/ui-core";
+import {
+	type NodeEntry,
+	type NodeProps,
+	nodeAt,
+	ProseEditor,
+	useBoolProp,
+	useSend,
+	useSetValue,
+	useStringProp,
+} from "@nustackdev/ui-kit";
 import { setBlockType, wrapIn } from "prosemirror-commands";
 import type { Node as PMNode } from "prosemirror-model";
 import { liftListItem, wrapInList } from "prosemirror-schema-list";
@@ -66,7 +74,7 @@ import {
 	serializeRange,
 } from "./prose";
 import type { SlashAction } from "./Slash";
-import type { FocusReq } from "./slice";
+import type { FocusReq } from "./state";
 
 export type ExitDir = "up" | "down";
 /** What a split inserts between the two halves, if anything. A tpl name. */
@@ -224,47 +232,26 @@ function listCommand(ordered: boolean): Command {
 	};
 }
 
-/* ============================== the slice =============================== */
+/* ============================== the entry =============================== */
 
-// Same contract as the kit's own ProseRef slice: a markdown string, plus the
-// two presentation props the server can merge in. Restated rather than
-// imported because the kit exports the bundled `RefEntry`, not its halves,
-// and this entry replaces that bundle wholesale.
-const factory: SliceFactory = (path, ctx, props) => ({
-	type: "ProseRef",
-	value: typeof props?.value === "string" ? props.value : "",
-	placeholder: typeof props?.placeholder === "string" ? props.placeholder : "",
-	read_only: typeof props?.read_only === "boolean" ? props.read_only : false,
-	write: (v) =>
-		ctx.set((refs) => {
-			const slice = refs[path];
-			if (!slice) return;
-			// Scalar form: a bare string (or nil) replaces just the source.
-			if (v == null || typeof v === "string") {
-				slice.value = v == null ? "" : v;
-				return;
-			}
-			const p = v as { value?: unknown; placeholder?: unknown; read_only?: unknown };
-			if ("value" in p) slice.value = p.value == null ? "" : String(p.value);
-			if ("placeholder" in p) slice.placeholder = String(p.placeholder ?? "");
-			if ("read_only" in p) slice.read_only = Boolean(p.read_only);
-		}),
-	get: () => (useStore.getState().refs[path]?.value as string) ?? "",
-});
+// Same contract as the kit's own ProseRef: a markdown string in `value`, plus
+// the two presentation props the server can merge in. The handler is the kit's
+// too, and for the kit's reason -- a null write has to land as "" so the
+// editor never sees null and a following read answers "".
 
 /** This ref's markdown, read outside a render. What a neighbour needs. */
-export function proseValue(path: string): string {
-	return (useStore.getState().refs[path]?.value as string) ?? "";
+export function proseValue(path: Path): string {
+	return String(nodeAt(path)?.props.value ?? "");
 }
 
 /* ============================== component =============================== */
 
-function ProseView({ path }: { path: string }) {
-	const value = useStore((s) => (s.refs[path]?.value as string) ?? "");
-	const hint = useStore((s) => (s.refs[path]?.placeholder as string) ?? "");
-	const readOnly = useStore((s) => Boolean(s.refs[path]?.read_only));
-	const setLocal = useStore((s) => s.setLocal);
-	const send = useStore((s) => s.send);
+function ProseView({ path }: NodeProps) {
+	const value = useStringProp(path, "value");
+	const hint = useStringProp(path, "placeholder");
+	const readOnly = useBoolProp(path, "read_only");
+	const setValue = useSetValue(path);
+	const send = useSend(path);
 	const block = useContext(BlockProseContext);
 
 	const viewRef = useRef<EditorView | null>(null);
@@ -280,10 +267,10 @@ function ProseView({ path }: { path: string }) {
 		(source: string) => {
 			// Local first, so the read the notify provokes answers with the
 			// text that provoked it.
-			setLocal(path, source);
-			send({ op: OP_NOTIFY, ref: path, payload: null });
+			setValue(source);
+			send(OPS.notify);
 		},
-		[path, setLocal, send],
+		[setValue, send],
 	);
 
 	const onView = useCallback((v: EditorView | null) => {
@@ -295,14 +282,14 @@ function ProseView({ path }: { path: string }) {
 	 *
 	 * The editor commits on a quiet moment, and it drops a commit whose text
 	 * equals the value it was given. So writing the post-op text into the
-	 * slice *is* how a host cancels the save it no longer wants -- without
+	 * node *is* how a host cancels the save it no longer wants -- without
 	 * reaching for a dirty flag that is, rightly, the editor's own.
 	 */
 	const settle = useCallback(
 		(text: string) => {
-			setLocal(path, text);
+			setValue(text);
 		},
-		[path, setLocal],
+		[setValue],
 	);
 
 	// -- server-owned value ---------------------------------------------------
@@ -546,4 +533,22 @@ function ProseView({ path }: { path: string }) {
 	);
 }
 
-export const ProseRef: RefEntry = { factory, component: ProseView };
+export const ProseRef: NodeEntry = {
+	component: ProseView,
+	handlers: {
+		write: (ctx, payload) =>
+			ctx.update((props) => {
+				// Scalar form: a bare string (or nil) replaces just the source.
+				if (payload == null || typeof payload === "string") {
+					props.value = payload == null ? "" : payload;
+					return;
+				}
+				if (typeof payload === "object" && !Array.isArray(payload)) {
+					Object.assign(props, payload);
+					if ("value" in payload) {
+						props.value = props.value == null ? "" : String(props.value);
+					}
+				}
+			}),
+	},
+};

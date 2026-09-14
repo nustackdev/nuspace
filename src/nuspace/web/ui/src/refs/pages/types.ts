@@ -17,8 +17,6 @@
 // Section order is list position in `section_order` on the server, so blocks
 // arrive already in order and carry no `order` field to renormalise.
 
-import type { MountField } from "@nustackdev/ui-core";
-
 /** One page, as the server ships it. The root page is its own parent. */
 export type PageRow = {
 	id: string;
@@ -54,11 +52,14 @@ export type Block = {
 	/** The Nu program this block stores. For a `text` block it is the
 	 *  template, identical for every text block on the page. */
 	source: string;
-	/** Ui refs the block's program mounted. Empty until sections run. */
-	fields: MountField[];
 	/** Never null. Every block compiles, runs and is supervised. */
 	status: SectionStatus;
 };
+
+// A block carries no field list. The refs its program mounts arrive as
+// ordinary nodes under the block's own address and the browser learns them
+// from the write stream -- see ./blocks.ts, which is the one file that knows
+// where that address is.
 
 export type ActivePage = {
 	page_id: string;
@@ -164,25 +165,6 @@ export function coerceStatus(raw: unknown): SectionStatus | null {
 	};
 }
 
-export function coerceFields(raw: unknown): MountField[] {
-	if (!Array.isArray(raw)) return [];
-	const out: MountField[] = [];
-	for (const f of raw) {
-		if (!f || typeof f !== "object") continue;
-		const r = f as Record<string, unknown>;
-		const path = String(r.path ?? "");
-		const type = String(r.type ?? "");
-		if (!path || !type) continue;
-		const entry: MountField = { path, type };
-		if (r.props && typeof r.props === "object") {
-			entry.props = r.props as Record<string, unknown>;
-		}
-		if (Array.isArray(r.fields)) entry.fields = coerceFields(r.fields);
-		out.push(entry);
-	}
-	return out;
-}
-
 export function coerceBlocks(raw: unknown): Block[] {
 	if (!Array.isArray(raw)) return [];
 	const out: Block[] = [];
@@ -196,7 +178,6 @@ export function coerceBlocks(raw: unknown): Block[] {
 			name: String(r.name ?? id),
 			tpl: r.tpl === "text" ? "text" : "program",
 			source: String(r.source ?? ""),
-			fields: coerceFields(r.fields),
 			status: coerceStatus(r.status) ?? {
 				section_id: id,
 				state: "idle",

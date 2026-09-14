@@ -2,8 +2,8 @@
 
 Module layout:
 
-- :mod:`.shell`   -- ``Screen`` / ``Screens`` / ``Shell``, the fixed top-level
-  routes as nu.ui Shapes. Chrome only; the page tree lives in kv.
+- :mod:`.shell`   -- ``Screen`` / ``Shell``, the fixed top-level routes as
+  nu.ui Shapes. Chrome only; the page tree lives in kv.
 - :mod:`.session` -- ``NuspaceSession``, a ``nu.ui`` Session over one websocket.
 - :mod:`.app`     -- the FastAPI app and the ``/ws`` endpoint.
 - :mod:`.fabric`  -- ``NuspaceServer``, uvicorn wrapped as a ``Provide`` bracket.
@@ -18,14 +18,14 @@ from __future__ import annotations
 from .app import build_fastapi_app
 from .fabric import NuspaceServer, server
 from .session import NuspaceSession, Subscription
-from .shell import Screen, Screens, Shell
+from .shell import Screen, ScreenRef, Shell
 
 
 __all__ = [
     "NuspaceServer",
     "NuspaceSession",
     "Screen",
-    "Screens",
+    "ScreenRef",
     "Shell",
     "Subscription",
     "build_fastapi_app",

@@ -23,12 +23,13 @@ class App(nu.Shape):
     """One ops-orchestration unit. Same substance as a ``Section``.
 
     ``snippet`` is a ``nu.prog`` program: a module with an ``out`` entry point
-    whose signature is the scope contract, and nuspace binds one value,
-    ``path``, which for an app is ``"apps.<app_id>"``.
+    whose signature is the scope contract, and nuspace binds two ids, ``page``
+    and ``section``. An app is a section with no page, so ``section`` is its
+    own id and ``page`` is empty.
     """
 
-    # `path` is a kv namespace, not a ui mount prefix. An app is headless -- it
-    # produces, a page displays -- so it has nowhere to mount a ui ref.
+    # An app is headless -- it produces, a page displays -- so nothing roots
+    # the refs it names and it has nowhere to render.
     name = nu.kv.StrRef.slot()
     snippet = nu.kv.ProgramRef.slot()
     # Metadata. The policy engine slots in behind this, not beside it.

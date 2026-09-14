@@ -11,6 +11,11 @@ separately here.
 
 ## Unreleased
 
+- Root a snippet's refs under its own block, so an author never says where
+- Hand a snippet the page and section ids in place of a namespace string
+- Key a section's scratch kv by id, so one block can name another
+- Delete the mount walk and the fields round trip the browser read blocks from
+- Declare screens as slots and boot the browser with writes rather than an envelope
 - Add the agent sidebar: a nuagent run on Space.agent, a conversation on Space.chat, and a ChatRef pinned on the shell
 
 ## 0.1.1 — 2026-09-14

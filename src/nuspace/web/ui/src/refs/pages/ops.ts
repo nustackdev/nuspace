@@ -50,7 +50,8 @@ export type Ops = {
 		name: string;
 		tpl: BlockTpl;
 		/** The Nu program. For a templated tpl this is the shipped starter,
-		 *  which arrives in the ref's mount props -- never written here. */
+		 *  which rides the chain onto the ref as a declared prop -- never
+		 *  written here. */
 		source: string;
 		index: number;
 	};

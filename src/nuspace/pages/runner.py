@@ -50,15 +50,16 @@ import nu.prog
 import nu.proxy
 from nu.ui.core import Session
 from nuspace._root import resolve_root
-from nuspace.core.fields import MountFields
 from nuspace.core.host import spare_observer
 from nuspace.core.session import FrameCodec
+from nuspace.core.ui import SnippetRoot
 
 from .shapes import Runner
 
 
 if TYPE_CHECKING:
     from nu.domains.shape import Shape
+    from nu.ui.core import Ref
 
 
 __all__ = [
@@ -125,7 +126,11 @@ def _restarts_on(change: nu.Nu, body: nu.Nu, *, root: type[Shape]) -> nu.Nu:
 
 
 def section_arm(
-    page_id: nu.StrArg, *, root: type[Shape] | None = None, item: str = SECTION_ATTR
+    page_id: nu.StrArg,
+    *,
+    surface: Ref | None = None,
+    root: type[Shape] | None = None,
+    item: str = SECTION_ATTR,
 ) -> nu.Nu:
     """One section, constructed and running and reloading, as one arm of the fold.
 
@@ -135,38 +140,38 @@ def section_arm(
     layers, and none is optional: the fold cancels every sibling arm on the
     first error, so a section that dies has to die alone.
 
+    The snippet is handed ``page`` and ``section``, the two ids it runs under,
+    and loaded through a rewrite that roots whatever it built under its own
+    node on the surface. Both halves are the same fact said to the two
+    directions: where this block's kv is, and where its ui is.
+
     Args:
         page_id: the page the section is on.
+        surface: the ``PagesRef`` this page is drawn on. None runs the
+            sections with nothing rooting their refs, which is what headless
+            wants: no browser, so no node to hang them under.
         root: the space's root Shape class.
         item: the attr the fold binds the section id under.
     """
     root = resolve_root(root)
     section = nu.StrAttrRef(item)
     sections = root.pages[page_id].sections
-    # `path` in the snippet's scope is the section's kv namespace, keyed by
-    # section id alone -- never the page id. See nuspace.core.tpl.
-    prefix = nu.Str("sections.") + section
-    error_key = prefix + nu.Str(".error")
-    load = sections[section].snippet.load(scope={"path": prefix})
+    scratch = root.state[section]
+    scope = {"page": nu.str(page_id), "section": section}
+    rewrite = None if surface is None else SnippetRoot(surface, section)
+    load = sections[section].snippet.load(scope=scope, rewrite=rewrite)
     term = nu.AnyAttrRef(_TERM_ATTR)
-    # Enumerated here, in the worker, because this is the process that builds
-    # the term: the fields are what the snippet actually named, not what the
-    # editor guessed. Written before the Eval, which never returns.
-    publish = nu.kv.auto_flow_atomic(
-        root.state.set_item(prefix + nu.Str(".fields"), MountFields(term, prefix)),
-        scope=root,
-    )
-    # Failures are written to the section's namespace, not raised: a
-    # dispatched body has no waiter, so an error would otherwise vanish, and a
-    # raise here takes the whole page's fold down with it.
+    # Failures are written to the section's own row, not raised: a dispatched
+    # body has no waiter, so an error would otherwise vanish, and a raise here
+    # takes the whole page's fold down with it.
     report = nu.kv.auto_flow_atomic(
-        root.state.set_item(error_key, nu.ToStr(nu.AttrRef("error"))),
+        scratch.error.set(nu.ToStr(nu.AttrRef("error"))),
         scope=root,
     )
     # Last run's error goes before this one starts, or a section that was
-    # fixed would still read `failed` off a stale key.
+    # fixed would still read `failed` off a stale leaf.
     clear = nu.kv.auto_flow_atomic(
-        nu.IfDo(root.state.contains(error_key), root.state.del_item(error_key)),
+        nu.IfDo(scratch.error.exists(), scratch.error.erase()),
         scope=root,
     )
     run = nu.Let(
@@ -176,7 +181,7 @@ def section_arm(
         # loop". Every nu.ui atom is async-only and an Eval placed off the
         # loop refuses to host one, so a section that renders has nowhere
         # else to run.
-        body=publish >> nu.ParallelAsync(nu.prog.Eval(term)),
+        body=nu.ParallelAsync(nu.prog.Eval(term)),
     )
     # Inner catch is construction, outer is everything the running section
     # throws afterwards. Both land on the one `.error` key the browser reads
@@ -203,6 +208,7 @@ def section_arm(
 def page_body(
     page_id: nu.StrArg,
     *,
+    surface: Ref | None = None,
     session_address: str | None = None,
     root: type[Shape] | None = None,
     item: str = SECTION_ATTR,
@@ -211,12 +217,15 @@ def page_body(
 
     The page arrives as a carried attr rather than baked in, because a body is
     payload and one connection navigating around reuses the same one. The
-    section list is read here, in the worker, for the same reason the fields
-    are: this is the process with the store. And it is re-read whenever the set
-    of sections changes, which is what makes adding a block cost no process.
+    section list is read here, in the worker, because this is the process with
+    the store. And it is re-read whenever the set of sections changes, which is
+    what makes adding a block cost no process.
 
     Args:
         page_id: the page to run.
+        surface: the ``PagesRef`` this page is drawn on, which is what every
+            section's refs are rooted under. Pickled into the worker with the
+            rest of the body, so it is a ref and not an address.
         session_address: where this connection's ``nu.ui`` Session is served.
             The proxy is opened here rather than in ``worker_init`` because a
             pool is process-wide and fixes its init once, while the Session is
@@ -236,7 +245,9 @@ def page_body(
     # arm is a section that runs until it is cancelled. The items are read once
     # at fan-out, so a section added later is picked up by the rebuild below
     # and never by reaching into a live fold.
-    fold = nu.ForEachParAsync(ids, section_arm(page_id, root=root, item=item), item=item)
+    fold = nu.ForEachParAsync(
+        ids, section_arm(page_id, surface=surface, root=root, item=item), item=item
+    )
     live = _restarts_on(sections.on_children_change(), fold, root=root)
     # The observer sits here rather than in ``worker_init``: a snippet with a
     # kv subscription needs one bound, and a pool whose every worker pays for
@@ -272,6 +283,7 @@ def _take_spare() -> nu.Nu:
 def run_page(
     page: nu.Nu,
     *,
+    surface: Ref | None = None,
     session_address: str | None = None,
     root: type[Shape] | None = None,
     body: nu.Nu | None = None,
@@ -297,6 +309,7 @@ def run_page(
 
     Args:
         page: the page id, as a term.
+        surface: the ``PagesRef`` this page is drawn on. See :func:`page_body`.
         session_address: where this connection's Session is served. None runs
             the page headless. See :func:`page_body`.
         root: the space's root Shape class.
@@ -311,7 +324,12 @@ def run_page(
     started = nu.IntAttrRef(new_attr)
     stopped = nu.IntAttrRef(old_attr)
     dispatch = pool.dispatch(
-        page_body(nu.StrAttrRef(page_attr), session_address=session_address, root=root)
+        page_body(
+            nu.StrAttrRef(page_attr),
+            surface=surface,
+            session_address=session_address,
+            root=root,
+        )
         if body is None
         else body,
         started,
@@ -381,6 +399,7 @@ def stop_page(*, ns: str = "page") -> nu.Nu:
 def page_tree(
     page_id: nu.StrArg,
     *,
+    surface: Ref | None = None,
     session_address: str | None = None,
     root: type[Shape] | None = None,
     body: nu.Nu | None = None,
@@ -399,6 +418,7 @@ def page_tree(
 
     Args:
         page_id: the page to run.
+        surface: the ``PagesRef`` this page is drawn on. See :func:`page_body`.
         session_address: where this connection's Session is served. See
             :func:`page_body`.
         root: the space's root Shape class.
@@ -411,7 +431,12 @@ def page_tree(
     """
     root = resolve_root(root)
     start = run_page(
-        nu.str(page_id), session_address=session_address, root=root, body=body, ns="tree"
+        nu.str(page_id),
+        surface=surface,
+        session_address=session_address,
+        root=root,
+        body=body,
+        ns="tree",
     )
     # Launch and Dispatch both return as soon as the worker has the body, so
     # something has to hold the tree open or the bracket would reap the worker

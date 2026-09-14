@@ -1,216 +1,119 @@
 """The nuspace shell: fixed top-level routes, as nu.ui Shapes.
 
-``Screen`` is a Shape whose slots hold nu.ui Refs; ``Shell`` lists the
-screens by route and renders the mount envelope the browser consumes. This
-is the chrome only -- the page tree a person edits is runtime data in kv,
-under :mod:`nuspace.pages`.
+``Screen`` is a Section holding one surface's refs; ``Shell`` is the top of
+the tree and declares a slot per screen. This is the chrome only -- the page
+tree a person edits is runtime data in kv, under :mod:`nuspace.pages`.
+
+**A screen is a slot, not a row in a map.** The wire address of a ref is its
+chain and nothing else, so a screen's segment is the name of the slot it was
+reached through: ``NuspaceShell.pages.pages`` resolves at ``("pages",
+"pages")``. Registering screens in a map beside the slots would be a second
+place to say the same thing, and the one that does not decide the address.
+
+**Boot is a batch of writes.** ``_boot_chains`` walks what the Shell declares
+and hands back one chain per slot, the same ``(segment, type, props)`` shape
+a write carries. The browser drops them into its tree through the same
+autovivify walk, so a slot is on screen before anything writes to it and
+there is no envelope to keep in step with the writes.
 """
 
 from __future__ import annotations
 
-from typing import ClassVar
+from typing import Any, ClassVar
 
-from nu.domains.shape import Shape
+from typing_extensions import Self
+
+from nu.domains.shape import Shape, Slot
 from nu.ui.core import Ref, Section, SectionRef
+from nu.ui.core.base import _wire_type_of
+from nuspace.core.ui import SpaceRef
 
 
-__all__ = ["Screen", "Screens", "Shell"]
+__all__ = ["Chain", "Screen", "ScreenRef", "Shell"]
 
 
-_REFS_PKG = "nu.ui.refs."
-_REFS_BASE = f"{_REFS_PKG}base"
+#: One chain, root-first: ``(segment, type, props)`` per level. What a write
+#: carries and what a boot ``init`` frame is made of.
+Chain = tuple[tuple[str, str, dict[str, Any]], ...]
 
 
-def _wire_type(ref_or_section_cls: type) -> str:
-    """Canonical (registered) class name for a Ref or Section.
+def _boot_chains(base: Chain, shape_cls: type[Shape]) -> list[Chain]:
+    """Every slot under ``shape_cls`` as a chain, root-first, in order.
 
-    Out-of-tree Refs (e.g. those shipped by nuspace) may set a
-    ``_wire_type_override`` class attribute to name the browser-side
-    factory directly. Otherwise walk the MRO to find the closest ancestor
-    defined inside the ``nu.ui.refs`` package.
+    Depth-first in declaration order, so the browser's per-node insertion
+    order is the order the class body reads. A Section slot contributes its
+    own level and then everything under it, which is how a screen's surface
+    lands one segment below the screen.
     """
-    for base in ref_or_section_cls.__mro__:
-        override = base.__dict__.get("_wire_type_override")
-        if isinstance(override, str):
-            return override
-        mod = getattr(base, "__module__", "")
-        if not mod.startswith(_REFS_PKG):
-            continue
-        if mod == _REFS_BASE:
-            continue
-        return base.__name__
-    return ref_or_section_cls.__name__
-
-
-def _stamp_section_mount(
-    screen_cls: type[Screen],
-    section_cls: type[Section],
-    path_segments: tuple[str, ...],
-) -> None:
-    """Attach the shell's wire prefix to a Section subclass."""
-    existing = section_cls.__dict__.get("_wire_mount_key")
-    if existing is not None and existing != (screen_cls, path_segments):
-        raise RuntimeError(
-            f"Section {section_cls.__name__} is mounted at "
-            f"{existing[0].__name__}.{'.'.join(existing[1])} and cannot be "
-            f"reused at {screen_cls.__name__}.{'.'.join(path_segments)}. "
-            "Each Section subclass must be mounted at exactly one Slot.",
-        )
-    section_cls._wire_mount_key = (screen_cls, path_segments)
-
-    def _prefix(
-        cls: type[Section], _p: type[Screen] = screen_cls, _s: tuple[str, ...] = path_segments
-    ) -> list[str]:
-        return [_p.__name__, *_s]
-
-    section_cls._wire_prefix = classmethod(_prefix)
-
-    for name, slot in section_cls._slots.items():
-        if issubclass(slot.ref_cls, SectionRef):
-            child_section_cls = slot.kwargs["section_cls"]
-            _stamp_section_mount(
-                screen_cls,
-                child_section_cls,
-                (*path_segments, name),
-            )
-
-
-def _build_fields(
-    base_path: str,
-    shape_cls: type[Shape],
-) -> list[dict[str, object]]:
-    """Flatten a Shape's slots into mount field entries."""
-    out: list[dict[str, object]] = []
+    out: list[Chain] = []
     for name, slot in shape_cls._slots.items():
-        path = f"{base_path}.{name}"
         ref_cls = slot.ref_cls
-
-        if issubclass(ref_cls, SectionRef):
-            section_cls: type[Section] = slot.kwargs["section_cls"]
-            entry: dict[str, object] = {
-                "path": path,
-                "type": _wire_type(section_cls),
-            }
-            props = {**section_cls._mount_props(), **slot.props}
-            if props:
-                entry["props"] = props
-            entry["fields"] = _build_fields(path, section_cls)
-            out.append(entry)
-            continue
-
         if not issubclass(ref_cls, Ref):
             continue
-        entry = {"path": path, "type": _wire_type(ref_cls)}
-        props = {**ref_cls._mount_props(), **slot.props}
-        if props:
-            entry["props"] = props
-        out.append(entry)
+        if issubclass(ref_cls, SectionRef):
+            section_cls: type[Section] = slot.kwargs["section_cls"]
+            chain = (*base, (name, _wire_type_of(section_cls), dict(slot.props)))
+            out.append(chain)
+            out.extend(_boot_chains(chain, section_cls))
+            continue
+        out.append((*base, (name, _wire_type_of(ref_cls), dict(slot.props))))
     return out
 
 
-class Screen(Shape):
-    """One top-level route: a Shape whose slots hold nu.ui Refs.
+class ScreenRef(SectionRef, SpaceRef):
+    """Substrate Ref backing a Screen slot on a Shell.
 
-    Refs rooted here resolve to wire paths ``<ScreenShapeName>.<slot>``.
+    A :class:`~nuspace.core.ui.SpaceRef` as well as a Section ref, which is
+    what makes a chain someone rooted here exempt from a block's re-rooting: a
+    snippet naming ``NuspaceShell.pages`` said where it wanted to write.
     """
 
-    @classmethod
-    def _wire_prefix(cls) -> list[str]:
-        return [cls.__name__]
 
-    def __init_subclass__(cls, **kwargs: object) -> None:
-        super().__init_subclass__(**kwargs)
-        for name, slot in cls._slots.items():
-            if issubclass(slot.ref_cls, SectionRef):
-                section_cls = slot.kwargs["section_cls"]
-                _stamp_section_mount(cls, section_cls, (name,))
+class Screen(Section):
+    """One top-level route: a Section whose slots hold that surface's refs.
 
-    @classmethod
-    def _mount_fields(cls) -> list[dict[str, object]]:
-        return _build_fields(cls.__name__, cls)
+    Holds no address of its own. It gets one by being declared on a Shell,
+    which is where its segment comes from::
 
+        class NuspaceShell(Shell):
+            pages = PagesScreen.slot("/pages")
 
-class Screens:
-    """Ordered ``{route: ScreenSubclass}`` map for a Shell.
-
-    Class-attribute holder, not a Slot. Route strings are the nuspace
-    URLs (leading slash) picked up by the browser router.
-
-        class Nuspace(Shell):
-            header = HeaderRef.slot(tabs=[...])
-            screens = Screens({
-                "/apps":  AppsScreen,
-                "/pages": PagesScreen,
-                "/lens":  LensScreen,
-            })
+        NuspaceShell.pages.pages   # ("pages", "pages")
     """
 
-    __slots__ = ("routes",)
+    _ref_cls: ClassVar[type[SectionRef]] = ScreenRef
 
-    def __init__(self, routes: dict[str, type[Screen]]) -> None:
-        for route, screen_cls in routes.items():
-            if not isinstance(route, str) or not route.startswith("/"):
-                raise TypeError(
-                    f"Screens route must be a str starting with '/', got {route!r}",
-                )
-            if not (isinstance(screen_cls, type) and issubclass(screen_cls, Screen)):
-                raise TypeError(
-                    f"Screens value for {route!r} must be a Screen subclass, got {screen_cls!r}",
-                )
-        self.routes: dict[str, type[Screen]] = dict(routes)
+    # Every screen draws as one column of whatever it holds. The surface
+    # inside it is the thing with a component of its own; the screen is the
+    # level that puts it somewhere.
+    _wire_type: ClassVar[str] = "Column"
+
+    @classmethod
+    def slot(cls, route: str, **props: object) -> Self:  # type: ignore[override]
+        """Declare this screen on a Shell at ``route``.
+
+        ``route`` is a declared prop, so it rides the chain onto the screen's
+        node and the browser reads it off the tree like any other prop.
+        """
+        return Slot(cls._ref_cls, props={"route": route, **props}, section_cls=cls)  # type: ignore[return-value]
 
 
 class Shell(Shape):
-    """Top-level nuspace container.
+    """Top-level nuspace container. One per space.
 
-    Structural Ref slots live at the class level (header, ...). The
-    ``screens`` class attr lists Screen subclasses keyed by route. All
-    screens mount at once; the browser router picks which one's fields are
-    visible. Refs on Shell resolve to bare slot names (no prefix) -- same
-    rule nudle's Index uses.
+    The class body declares structural Ref slots (nav, chat, ...) and one
+    screen slot per route. Every screen is there at once and the browser's
+    router decides which one is showing, which is why a screen going off
+    screen never tears down what is running inside it.
     """
 
-    screens: ClassVar[Screens] = Screens({})
-
     @classmethod
-    def _structural_fields(cls) -> list[dict[str, object]]:
-        """Shell-level slot list: structural Refs (HeaderRef, ...)."""
-        out: list[dict[str, object]] = []
-        for name, slot in cls._slots.items():
-            ref_cls = slot.ref_cls
-            if not issubclass(ref_cls, Ref):
-                continue
-            entry: dict[str, object] = {"path": name, "type": _wire_type(ref_cls)}
-            props = {**ref_cls._mount_props(), **slot.props}
-            if props:
-                entry["props"] = props
-            out.append(entry)
-        return out
+    def _boot_chains(cls) -> list[Chain]:
+        """Everything this Shell declares, as chains, in declaration order.
 
-    @classmethod
-    def _screens_payload(cls) -> list[dict[str, object]]:
-        """Per-screen mount info: route, shape name, label, fields list."""
-        out: list[dict[str, object]] = []
-        for route, screen_cls in cls.screens.routes.items():
-            out.append(
-                {
-                    "route": route,
-                    "name": screen_cls.__name__,
-                    "label": route.lstrip("/") or "home",
-                    "fields": screen_cls._mount_fields(),
-                }
-            )
-        return out
-
-    @classmethod
-    def _mount_payload(cls) -> dict[str, object]:
-        """Full mount envelope: name, structural fields, screen subtrees.
-
-        The ``pages`` key is the wire name the browser already reads; only the
-        python side was renamed to Screen, to free ``Page`` for the store shape.
+        Structural Refs and screen subtrees come out of the same walk: a
+        screen slot is a Section slot that happens to carry a route, so its
+        chain starts at the Shell slot name, which is the segment the Ref
+        chain puts there too.
         """
-        return {
-            "name": cls.__name__,
-            "fields": cls._structural_fields(),
-            "pages": cls._screens_payload(),
-        }
+        return _boot_chains((), cls)

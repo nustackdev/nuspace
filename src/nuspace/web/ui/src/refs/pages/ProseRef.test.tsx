@@ -11,6 +11,8 @@
 // nonsense and the two vertical-travel bindings cannot be checked here.
 // Everything that decides on document structure alone can.
 
+import type { Path } from "@nustackdev/ui-core";
+import { tree } from "@nustackdev/ui-kit";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -23,7 +25,7 @@ import { parseMarkdown, serializeMarkdown } from "./prose";
 // render logs a warning that has nothing to do with what is being tested.
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-const PATH = "sections.s_test.text";
+const PATH: Path = ["sections", "s_test", "text"];
 
 function bus(over: Partial<BlockProse> = {}): BlockProse {
 	return {
@@ -49,16 +51,11 @@ let root: Root;
 
 /** Mount the entry's component with a value and a bus, like the canvas does. */
 async function mount(value: string, b: BlockProse) {
-	const { useStore } = await import("@nustackdev/ui-kit");
-	useStore.setState((s) => {
-		s.refs[PATH] = ProseRef.factory(
-			PATH,
-			{ set: (fn) => useStore.setState((st) => fn(st.refs)), send: () => {} },
-			{ value },
-			[],
-		);
-	});
+	// One write, chain and all, the way a frame arrives: the two levels above
+	// autovivify and the leaf is created with its declared props.
+	tree.getState().write([["sections"], ["s_test"], ["text", "ProseRef", { value }]]);
 	const Component = ProseRef.component;
+	if (!Component) throw new Error("the ProseRef entry has no component");
 	await act(async () => {
 		root.render(
 			<BlockProseContext.Provider value={b}>
@@ -79,6 +76,9 @@ function press(el: HTMLElement, key: string, mods: Partial<KeyboardEventInit> = 
 }
 
 beforeEach(() => {
+	// The store is a module singleton, so a leftover node from the last case
+	// would be the value this one sees.
+	tree.getState().remove([]);
 	host = document.createElement("div");
 	document.body.appendChild(host);
 	root = createRoot(host);
@@ -126,8 +126,6 @@ describe("the block boundary, rebuilt on top", () => {
 		const b = bus();
 		const editable = await mount("one\n\ntwo\n", b);
 		// Caret at the start of the second paragraph.
-		const { useStore } = await import("@nustackdev/ui-kit");
-		void useStore;
 		press(editable, "Enter", { metaKey: true });
 		expect(b.onSplit).toHaveBeenCalled();
 		const [head, tail, insert] = (b.onSplit as ReturnType<typeof vi.fn>).mock.calls[0];

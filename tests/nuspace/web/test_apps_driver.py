@@ -26,20 +26,24 @@ import websockets
 
 import nu
 import nu.kv
-from nu.ui.core.protocol import OP_MOUNT, OP_NOTIFY, OP_READ, Frame, decode, encode
+from nu.ui.core.protocol import OP_INIT, OP_NOTIFY, OP_READ, OP_WRITE, Frame, decode, encode
 from nuspace.apps import free_port
 from nuspace.core.shapes import Space
 from nuspace.pages import ROOT_PAGE_ID
 from nuspace.web import NuspaceShell, server, space_driver
 
 
-#: Wire path the mount assigns ``AppsScreen.apps``. Asserted, not assumed.
-REF = "AppsScreen.apps"
+#: Where the chain puts the apps surface: the screen slot, then the ref.
+REF = ("apps", "apps")
+
+#: The chrome a fresh connection is sent, one ``init`` per slot the shell
+#: declares. What a tab reads before anything else arrives.
+BOOT = NuspaceShell._boot_chains()
 
 #: How long a client waits for the frames one op produces to stop arriving.
 QUIET = 0.5
 
-SRC = "def out(path):\n    return None\n"
+SRC = "def out():\n    return None\n"
 
 
 class Browser:
@@ -64,20 +68,24 @@ class Browser:
             await self.ws.send(
                 encode(Frame(OP_READ, ref=frame.ref, payload=dict(self.route), id=frame.id))
             )
-        elif frame.ref == REF:
+        elif frame.op == OP_WRITE and frame.ref == REF:
             # Filtered by ref, not just by op: both surfaces ship a write
             # tagged `set_status`, and the real browser tells them apart the
-            # same way -- a slice is registered per mount path.
+            # same way -- a payload is handled by the node it landed on.
             payload = frame.payload or {}
             self.last[str(payload.get("op"))] = payload
         self.frames.append(frame)
         return frame
 
-    async def mount(self):
-        """The first frame, which is always the mount envelope."""
-        frame = await self._take(5.0)
-        assert frame.op == OP_MOUNT
-        return frame.payload
+    async def boot(self):
+        """The opening batch: a clearing remove, then one init per slot.
+
+        Comes back as ``{path: (segment, type, props)}`` -- the leaf of every
+        chain, which is where a surface's declared props ride in.
+        """
+        frames = [await self._take(5.0) for _ in range(len(BOOT) + 1)]
+        assert [f.op for f in frames[1:]] == [OP_INIT] * len(BOOT)
+        return {tuple(seg for seg, _, _ in f.chain): f.chain[-1] for f in frames[1:]}
 
     async def settle(self, quiet=QUIET):
         """Read until nothing has arrived for ``quiet`` seconds."""
@@ -89,7 +97,8 @@ class Browser:
 
     async def notify(self, op, **args):
         """Send one op on its own wire path, then let the answer settle."""
-        await self.ws.send(encode(Frame(OP_NOTIFY, ref=f"{REF}.ops.{op}", payload=args)))
+        # The op name stays one segment, dots and all.
+        await self.ws.send(encode(Frame(OP_NOTIFY, ref=[*REF, "ops", op], payload=args)))
         await self.settle()
 
     def rows(self):
@@ -210,19 +219,16 @@ async def test_the_whole_app_loop_runs_over_one_websocket():
         await _await_port(port)
         async with websockets.connect(f"ws://127.0.0.1:{port}/ws") as ws:
             tab = Browser(ws)
-            mount = await tab.mount()
+            slots = await tab.boot()
             await tab.settle()
 
-            # The ref is where the shell says it is, which is what every op
-            # path below is built from.
-            screens = {s["route"]: s for s in mount["pages"]}
-            assert set(screens) == {"/apps", "/pages", "/lens"}
-            (field,) = screens["/apps"]["fields"]
-            assert field["path"] == REF
-            assert field["type"] == "AppsRef"
-            # What a new app starts life as rides in the mount, so the browser
+            # The ref is where its chain says it is, which is what every op
+            # path below is built from. Three screens, one surface each.
+            assert {p for p in slots if len(p) == 2} == {REF, ("pages", "pages"), ("lens", "lens")}
+            assert slots[REF][1] == "AppsRef"
+            # What a new app starts life as rides in the chain, so the browser
             # fills `source` on a create without owning a template.
-            assert field["props"]["starter"].startswith("import nu")
+            assert slots[REF][2]["starter"].startswith("import nu")
 
             # A cold store boots itself, and says out loud that nothing is
             # supervising these apps.
@@ -265,7 +271,7 @@ async def test_the_whole_app_loop_runs_over_one_websocket():
             # -- a second tab, booting from the store, having seen none of this --
             async with websockets.connect(f"ws://127.0.0.1:{port}/ws") as ws2:
                 other = Browser(ws2)
-                await other.mount()
+                await other.boot()
                 await other.settle()
                 # Its own driver, and the store agrees with everything the
                 # first tab was told.
@@ -297,7 +303,7 @@ async def test_a_bad_app_event_leaves_every_other_arm_alive():
         await _await_port(port)
         async with websockets.connect(f"ws://127.0.0.1:{port}/ws") as ws:
             tab = Browser(ws)
-            await tab.mount()
+            await tab.boot()
             await tab.settle()
 
             # An empty app id is not a kv key, so the op raises out of the

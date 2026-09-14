@@ -35,23 +35,24 @@ left holding a conversation it cannot be corrected on.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
-from nu.ui.core import Changed, Ref
+from nuspace.core.ui import SpaceRef
 from nuspace.web.wire import event, write
 
 
 if TYPE_CHECKING:
     from nu.lang import IntArg, ListArg, Nu, StrArg
+    from nu.ui.core import Changed
 
 
 __all__ = ["ChatRef"]
 
 
-class ChatRef(Ref):
+class ChatRef(SpaceRef):
     """One agent conversation, and the box that starts the next one."""
 
-    _wire_type_override = "ChatRef"
+    _wire_type: ClassVar[str] = "ChatRef"
 
     # --- writes: server -> browser -------------------------------------------
 

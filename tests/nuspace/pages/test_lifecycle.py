@@ -22,7 +22,9 @@ from .conftest import (
     BROKEN,
     COUNTER,
     NONE,
-    read_state,
+    read_data,
+    read_error,
+    read_probes,
     run_page,
     seed_pages,
     seed_store,
@@ -56,12 +58,12 @@ async def test_a_section_already_on_the_page_is_launched_and_runs(store):
         duration=SETTLE + 2.0,
     )
 
-    state = await read_state(store)
-    assert int(state["sections.s_one.ticks"]) > 0
-    assert int(state["sections.s_two.ticks"]) > 0
-    assert state["probe.t1.s_one"] != NONE
-    assert state["probe.t1.s_two"] != NONE
-    assert state["probe.t1.s_one"] != state["probe.t1.s_two"]
+    probes = await read_probes(store)
+    assert int((await read_data(store, "s_one"))["ticks"]) > 0
+    assert int((await read_data(store, "s_two"))["ticks"]) > 0
+    assert probes["t1.s_one"] != NONE
+    assert probes["t1.s_two"] != NONE
+    assert probes["t1.s_one"] != probes["t1.s_two"]
 
 
 async def test_a_section_on_another_page_is_left_alone(store):
@@ -71,9 +73,8 @@ async def test_a_section_on_another_page_is_left_alone(store):
 
     await run_page(store, PAGE, duration=SETTLE)
 
-    state = await read_state(store)
-    assert int(state["sections.s_mine.ticks"]) > 0
-    assert "sections.s_theirs.ticks" not in state
+    assert int((await read_data(store, "s_mine"))["ticks"]) > 0
+    assert await read_data(store, "s_theirs") == {}
 
 
 async def test_adding_a_section_live_does_not_disturb_the_running_ones(store):
@@ -87,11 +88,11 @@ async def test_adding_a_section_live_does_not_disturb_the_running_ones(store):
     )
     await run_page(store, PAGE, alongside=script, duration=2 * SETTLE + 4.0)
 
-    state = await read_state(store)
-    assert state["probe.t2.s_new"] != NONE
-    assert int(state["sections.s_new.ticks"]) > 0
-    assert state["probe.t2.s_one"] == state["probe.t1.s_one"]
-    assert state["probe.t2.s_two"] == state["probe.t1.s_two"]
+    probes = await read_probes(store)
+    assert probes["t2.s_new"] != NONE
+    assert int((await read_data(store, "s_new"))["ticks"]) > 0
+    assert probes["t2.s_one"] == probes["t1.s_one"]
+    assert probes["t2.s_two"] == probes["t1.s_two"]
 
 
 async def test_creating_a_section_costs_exactly_one_launch(store):
@@ -116,11 +117,11 @@ async def test_creating_a_section_costs_exactly_one_launch(store):
     )
     await run_page(store, PAGE, alongside=script, duration=2 * SETTLE + 4.0)
 
-    state = await read_state(store)
-    assert state["probe.t1.s_new"] == "0"
+    probes = await read_probes(store)
+    assert probes["t1.s_new"] == "0"
     # And it is the same worker later, still alive and still counting.
-    assert state["probe.t2.s_new"] == "0"
-    assert int(state["probe.t2.s_new.ticks"]) > int(state["probe.t1.s_new.ticks"])
+    assert probes["t2.s_new"] == "0"
+    assert int(probes["t2.s_new.ticks"]) > int(probes["t1.s_new.ticks"])
     assert multiprocessing.active_children() == []
 
 
@@ -136,10 +137,10 @@ async def test_writing_a_field_other_than_the_snippet_restarts_nothing(store):
     )
     await run_page(store, PAGE, alongside=script, duration=3 * SETTLE + 4.0)
 
-    state = await read_state(store)
-    assert state["probe.t1.s_one"] != NONE
-    assert state["probe.t2.s_one"] == state["probe.t1.s_one"]
-    assert int(state["probe.t3.s_one.ticks"]) > int(state["probe.t2.s_one.ticks"])
+    probes = await read_probes(store)
+    assert probes["t1.s_one"] != NONE
+    assert probes["t2.s_one"] == probes["t1.s_one"]
+    assert int(probes["t3.s_one.ticks"]) > int(probes["t2.s_one.ticks"])
 
 
 async def test_editing_a_snippet_restarts_only_that_section(store):
@@ -153,10 +154,10 @@ async def test_editing_a_snippet_restarts_only_that_section(store):
     )
     await run_page(store, PAGE, alongside=script, duration=2 * SETTLE + 4.0)
 
-    state = await read_state(store)
-    assert state["probe.t2.s_one"] != state["probe.t1.s_one"]
-    assert state["probe.t2.s_one"] != NONE
-    assert state["probe.t2.s_two"] == state["probe.t1.s_two"]
+    probes = await read_probes(store)
+    assert probes["t2.s_one"] != probes["t1.s_one"]
+    assert probes["t2.s_one"] != NONE
+    assert probes["t2.s_two"] == probes["t1.s_two"]
 
 
 async def test_deleting_a_section_kills_its_worker_and_forgets_it(store):
@@ -175,15 +176,15 @@ async def test_deleting_a_section_kills_its_worker_and_forgets_it(store):
     )
     await run_page(store, PAGE, alongside=script, duration=3 * SETTLE + 4.0)
 
-    state = await read_state(store)
-    assert state["probe.t1.s_two"] != NONE
-    assert state["probe.t2.s_two"] == NONE
-    assert state["probe.t3.s_two"] == NONE
+    probes = await read_probes(store)
+    assert probes["t1.s_two"] != NONE
+    assert probes["t2.s_two"] == NONE
+    assert probes["t3.s_two"] == NONE
     # Its process really stopped: the counter it owned froze.
-    assert state["probe.t3.s_two.ticks"] == state["probe.t2.s_two.ticks"]
+    assert probes["t3.s_two.ticks"] == probes["t2.s_two.ticks"]
     # The other section was not disturbed and is still counting.
-    assert state["probe.t2.s_one"] == state["probe.t1.s_one"]
-    assert int(state["probe.t3.s_one.ticks"]) > int(state["probe.t2.s_one.ticks"])
+    assert probes["t2.s_one"] == probes["t1.s_one"]
+    assert int(probes["t3.s_one.ticks"]) > int(probes["t2.s_one.ticks"])
 
 
 async def test_removing_the_page_stops_every_section_on_it(store):
@@ -197,10 +198,10 @@ async def test_removing_the_page_stops_every_section_on_it(store):
     )
     await run_page(store, PAGE, alongside=script, duration=2 * SETTLE + 4.0)
 
-    state = await read_state(store)
-    assert state["probe.t1.s_one"] != NONE
-    assert state["probe.t2.s_one"] == NONE
-    assert state["probe.t2.s_two"] == NONE
+    probes = await read_probes(store)
+    assert probes["t1.s_one"] != NONE
+    assert probes["t2.s_one"] == NONE
+    assert probes["t2.s_two"] == NONE
 
 
 async def test_teardown_reaps_every_worker(store):
@@ -217,12 +218,11 @@ async def test_a_snippet_that_does_not_construct_reports_itself(store):
 
     A dispatched body has no waiter, so an uncaught error in one vanishes with
     nothing anywhere saying so. ``section_body`` catches ``ConstructionError``
-    and lands it under the section's own namespace instead.
+    and lands it on the section's own row instead.
     """
     await seed_store(store, PAGE, {"s_broken": BROKEN, "s_ok": None})
 
     await run_page(store, PAGE, duration=SETTLE)
 
-    state = await read_state(store)
-    assert "sections.s_broken.error" in state
-    assert int(state["sections.s_ok.ticks"]) > 0
+    assert await read_error(store, "s_broken") != ""
+    assert int((await read_data(store, "s_ok"))["ticks"]) > 0

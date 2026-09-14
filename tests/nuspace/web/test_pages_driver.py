@@ -26,15 +26,15 @@ import websockets
 
 import nu
 import nu.kv
-from nu.ui.core.protocol import OP_MOUNT, OP_NOTIFY, OP_READ, Frame, decode, encode
+from nu.ui.core.protocol import OP_INIT, OP_NOTIFY, OP_READ, OP_WRITE, Frame, decode, encode
 from nuspace.apps import free_port
 from nuspace.core.shapes import Space
 from nuspace.pages import ROOT_PAGE_ID
-from nuspace.web import NavRef, PagesRef, Screen, Screens, Shell, pages_driver, server
+from nuspace.web import NavRef, PagesRef, Screen, Shell, pages_driver, server
 
 
 class PagesScreen(Screen):
-    """The one screen this suite mounts."""
+    """The one screen this suite serves."""
 
     pages = PagesRef.slot()
 
@@ -43,11 +43,12 @@ class Demo(Shell):
     """Shell with the two refs the driver is built out of."""
 
     nav = NavRef.slot()
-    screens = Screens({"/pages": PagesScreen})
+    pages = PagesScreen.slot("/pages")
 
 
-#: Wire path the mount assigns ``PagesScreen.pages``. Asserted, not assumed.
-REF = "PagesScreen.pages"
+#: Where the chain puts ``Demo.pages.pages``: the screen slot, then the ref.
+#: Asserted below, not assumed, and every op path is built from it.
+REF = ("pages", "pages")
 
 #: How long a client waits for the frames one op produces to stop arriving.
 QUIET = 0.5
@@ -74,17 +75,17 @@ class Browser:
             await self.ws.send(
                 encode(Frame(OP_READ, ref=frame.ref, payload=dict(self.route), id=frame.id))
             )
-        elif frame.op != OP_MOUNT:
+        elif frame.op == OP_WRITE:
             payload = frame.payload or {}
             self.last[str(payload.get("op"))] = payload
         self.frames.append(frame)
         return frame
 
-    async def mount(self):
-        """The first frame, which is always the mount envelope."""
-        frame = await self._take(5.0)
-        assert frame.op == OP_MOUNT
-        return frame.payload
+    async def boot(self):
+        """The opening batch: a clearing remove, then one init per slot."""
+        frames = [await self._take(5.0) for _ in range(len(Demo._boot_chains()) + 1)]
+        assert [f.op for f in frames[1:]] == [OP_INIT] * len(frames[1:])
+        return [f.chain for f in frames[1:]]
 
     async def settle(self, quiet=QUIET):
         """Read until nothing has arrived for ``quiet`` seconds."""
@@ -96,7 +97,8 @@ class Browser:
 
     async def notify(self, op, **args):
         """Send one op on its own wire path, then let the answer settle."""
-        await self.ws.send(encode(Frame(OP_NOTIFY, ref=f"{REF}.ops.{op}", payload=args)))
+        # The op name stays one segment, dots and all.
+        await self.ws.send(encode(Frame(OP_NOTIFY, ref=[*REF, "ops", op], payload=args)))
         await self.settle()
 
     def goto(self, page_id):
@@ -118,7 +120,7 @@ def _driver(_address):
     The endpoint hands over this connection's session address; the pages
     surface has nothing to dispatch, so it does not use it.
     """
-    return pages_driver(PagesScreen.pages, Demo.nav)
+    return pages_driver(Demo.pages.pages, Demo.nav)
 
 
 def _space(port, body):
@@ -191,18 +193,17 @@ async def test_the_whole_page_loop_runs_over_one_websocket():
         await _await_port(port)
         async with websockets.connect(f"ws://127.0.0.1:{port}/ws") as ws:
             tab = Browser(ws)
-            mount = await tab.mount()
+            chains = await tab.boot()
             await tab.settle()
 
-            # The ref is where the shell says it is, which is what every op
+            # The ref is where its chain says it is, which is what every op
             # path below is built from.
-            (screen,) = mount["pages"]
-            assert [f["path"] for f in screen["fields"]] == [REF]
-            assert [f["type"] for f in screen["fields"]] == ["PagesRef"]
-            assert [f["type"] for f in mount["fields"]] == ["NuspaceNavRef"]
-            # What a new block starts life as rides in the mount, so the
+            paths = {tuple(seg for seg, _, _ in chain): chain[-1] for chain in chains}
+            assert paths[REF][1] == "PagesRef"
+            assert paths[("nav",)][1] == "NuspaceNavRef"
+            # What a new block starts life as rides in the chain, so the
             # browser fills `source` on a create without owning a template.
-            starters = screen["fields"][0]["props"]["starters"]
+            starters = paths[REF][2]["starters"]
             assert set(starters) == {"program", "text"}
             assert all(s.startswith("import nu") for s in starters.values())
 
@@ -273,7 +274,7 @@ async def test_the_whole_page_loop_runs_over_one_websocket():
             # -- a second tab, booting from the store, having seen none of this ----
             async with websockets.connect(f"ws://127.0.0.1:{port}/ws") as ws2:
                 other = Browser(ws2, page_id="p_arch")
-                await other.mount()
+                await other.boot()
                 await other.settle()
                 # Its own driver, its own route, and the store agrees with
                 # everything the first tab was told.
@@ -314,7 +315,7 @@ async def test_a_bad_event_leaves_every_other_arm_alive():
         await _await_port(port)
         async with websockets.connect(f"ws://127.0.0.1:{port}/ws") as ws:
             tab = Browser(ws)
-            await tab.mount()
+            await tab.boot()
             await tab.settle()
 
             # An empty page id is not a kv key, so the op raises out of the

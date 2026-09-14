@@ -27,28 +27,29 @@ event and re-running the arm rewrites one row instead of adding another.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 from typing_extensions import Self
 
-from nu.ui.core import Changed, Ref
 from nuspace._root import resolve_root
 from nuspace.core.tpl import app_starter
+from nuspace.core.ui import SpaceRef
 from nuspace.web.wire import event, write
 
 
 if TYPE_CHECKING:
     from nu.domains.shape import Shape
     from nu.lang import BoolArg, ListArg, Nu
+    from nu.ui.core import Changed
 
 
 __all__ = ["AppsRef"]
 
 
-class AppsRef(Ref):
+class AppsRef(SpaceRef):
     """Every app in the space, and one app's source, as one browser surface."""
 
-    _wire_type_override = "AppsRef"
+    _wire_type: ClassVar[str] = "AppsRef"
 
     @classmethod
     def slot(cls, *, root: type[Shape] | None = None) -> Self:

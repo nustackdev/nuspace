@@ -24,33 +24,37 @@ from nuspace.core.shapes import Space
 from nuspace.pages import ROOT_PAGE_ID, Runner, ops, page_tree
 
 
-# A counter that never stops. One kv key, ticking. Wraps its own write,
-# because a snippet owns its atomicity and the runner does not add one.
+# A counter that never stops. One key in this section's own row, ticking.
+# Wraps its own write, because a snippet owns its atomicity and the runner
+# does not add one.
 COUNTER = """import nu
 import nu.kv
 from nuspace.core.shapes import Space
 
 
-def out(path):
-    key = path + ".ticks"
-    now = nu.ToInt(Space.state.get_item(key, nu.Str("0")))
-    tick = Space.state.set_item(key, nu.ToStr(now + nu.Int(1)))
+def out(section):
+    data = Space.state[section].data
+    now = nu.ToInt(data.get_item("ticks", nu.Str("0")))
+    tick = data.set_item("ticks", nu.ToStr(now + nu.Int(1)))
     return nu.kv.auto_flow_atomic(
-        Space.state.set_item(key, nu.Str("0")) >> nu.ForeverDo(nu.DelayedDo(0.05, tick)),
+        data.set_item("ticks", nu.Str("0")) >> nu.ForeverDo(nu.DelayedDo(0.05, tick)),
         scope=Space,
     )
 """
 
 # A snippet that does not construct at all.
-BROKEN = """def out(path):
+BROKEN = """def out():
     this is not python
 """
 
 # The cheapest thing that is still a program, for the ops tests.
-SRC = "def out(path):\n    return None\n"
+SRC = "def out():\n    return None\n"
 
 #: What a missing worker id reads as in a probe.
 NONE = "-1"
+
+#: The row the probes below write into. Not a section id, so nothing runs it.
+PROBE = "probe"
 
 
 def seq(*terms):
@@ -59,7 +63,7 @@ def seq(*terms):
 
 
 def snap(tag, *section_ids):
-    """Record the page's worker id under ``probe.<tag>.<section>``, per section.
+    """Record the page's worker id under ``<tag>.<section>`` in the probe row.
 
     One worker holds the whole page now, so every section reads the same id.
     ``Runner.worker`` is mem in the host process and is gone the moment the
@@ -73,19 +77,19 @@ def snap(tag, *section_ids):
 
     return seq(
         *(
-            Space.state.set_item(nu.Str(f"probe.{tag}.{section_id}"), worker())
+            Space.state[PROBE].data.set_item(nu.Str(f"{tag}.{section_id}"), worker())
             for section_id in section_ids
         )
     )
 
 
 def snap_ticks(tag, *section_ids):
-    """Record each section's current tick count under ``probe.<tag>.<sid>.ticks``."""
+    """Record each section's current tick count under ``<tag>.<sid>.ticks``."""
     return seq(
         *(
-            Space.state.set_item(
-                nu.Str(f"probe.{tag}.{section_id}.ticks"),
-                nu.ToStr(Space.state.get_item(nu.Str(f"sections.{section_id}.ticks"), nu.Str("?"))),
+            Space.state[PROBE].data.set_item(
+                nu.Str(f"{tag}.{section_id}.ticks"),
+                nu.ToStr(Space.state[section_id].data.get_item(nu.Str("ticks"), nu.Str("?"))),
             )
             for section_id in section_ids
         )
@@ -124,14 +128,30 @@ async def seed_store(path, page_id, sections):
     await do(path, writes)
 
 
-async def read_state(path):
-    """Everything under ``Space.state``, read back after the run."""
+async def read(path, term):
+    """Run one term against the finished store and give back what it saw."""
     tree = nu.With(
         nu.kv.rocksdb_navigator(path, read_only=True),
-        body=nu.kv.auto_flow_atomic(nu.dict(Space.state.items()), scope=Space),
+        body=nu.kv.auto_flow_atomic(term, scope=Space),
     )
-    rows, _ = await nu.arun(tree, nu.Context())
-    return dict(rows or {})
+    value, _ = await nu.arun(tree, nu.Context())
+    return value
+
+
+async def read_data(path, section_id):
+    """One section's whole scratch row, as a dict. Empty when it never ran."""
+    return dict(await read(path, nu.dict(Space.state[section_id].data.items())) or {})
+
+
+async def read_error(path, section_id):
+    """What the runner recorded for this section, or ``""`` when it is clean."""
+    error = Space.state[section_id].error
+    return str(await read(path, nu.If(error.exists(), nu.ToStr(error), nu.Str(""))))
+
+
+async def read_probes(path):
+    """Everything :func:`snap` and :func:`snap_ticks` wrote, as a flat dict."""
+    return await read_data(path, PROBE)
 
 
 async def run_page(path, page_id, *, alongside=None, duration=4.0):

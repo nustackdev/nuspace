@@ -3,24 +3,30 @@
 // Mirror of nudle's connect hook, kept local so nuspace ships a standalone
 // bundle. Owns: connect, decode inbound frames, backoff-with-jitter reconnect,
 // outbound send queue while disconnected, clean teardown.
+//
+// The status is React state and not a node. It is a fact about the socket,
+// not about the space, so it has no business in a tree the server writes: a
+// reconnect would be the one thing in there nobody on the other end knows
+// about. The tree store owns state and dispatch; this owns transport.
 
 import { decode, encode, type Frame } from "@nustackdev/ui-core";
-import { useStore } from "@nustackdev/ui-kit";
-import { useEffect } from "react";
+import { tree } from "@nustackdev/ui-kit";
+import { useEffect, useState } from "react";
 
 const BACKOFF_BASE_MS = 250;
 const BACKOFF_CAP_MS = 10_000;
 const SEND_QUEUE_MAX = 64;
+
+export type Status = "connecting" | "connected" | "disconnected" | "reconnecting";
 
 function wsUrl(): string {
 	const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
 	return `${proto}//${window.location.host}/ws`;
 }
 
-export function useNuspaceConnection(): void {
-	const setStatus = useStore((s) => s.setStatus);
-	const setSender = useStore((s) => s.setSender);
-	const dispatch = useStore((s) => s.dispatch);
+/** Opens `/ws`, wires the tree store's send/dispatch, returns the status. */
+export function useNuspaceConnection(): Status {
+	const [status, setStatus] = useState<Status>("connecting");
 
 	useEffect(() => {
 		let ws: WebSocket | null = null;
@@ -45,7 +51,7 @@ export function useNuspaceConnection(): void {
 			queue.push(f);
 			if (queue.length > SEND_QUEUE_MAX) queue.shift();
 		};
-		setSender(send);
+		tree.getState().setSender(send);
 
 		const scheduleReconnect = () => {
 			if (intentionalClose) return;
@@ -75,7 +81,7 @@ export function useNuspaceConnection(): void {
 				scheduleReconnect();
 			});
 			ws.addEventListener("message", (event) => {
-				dispatch(decode(event.data as ArrayBuffer));
+				tree.getState().dispatch(decode(event.data as ArrayBuffer));
 			});
 		};
 
@@ -84,7 +90,10 @@ export function useNuspaceConnection(): void {
 		return () => {
 			intentionalClose = true;
 			if (retryTimer !== null) clearTimeout(retryTimer);
+			tree.getState().setSender(null);
 			if (ws) ws.close(1000, "client teardown");
 		};
-	}, [setStatus, setSender, dispatch]);
+	}, []);
+
+	return status;
 }

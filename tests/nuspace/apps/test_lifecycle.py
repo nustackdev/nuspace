@@ -20,7 +20,9 @@ from .conftest import (
     COUNTER,
     NONE,
     UNWRAPPED,
-    read_state,
+    read_data,
+    read_error,
+    read_probes,
     seed_store,
     seq,
     snap,
@@ -51,12 +53,12 @@ async def test_an_app_already_in_the_store_is_launched_and_runs(store):
         duration=SETTLE + 2.0,
     )
 
-    state = await read_state(store)
-    assert int(state["apps.a_one.ticks"]) > 0
-    assert int(state["apps.a_two.ticks"]) > 0
-    assert state["probe.t1.a_one"] != NONE
-    assert state["probe.t1.a_two"] != NONE
-    assert state["probe.t1.a_one"] != state["probe.t1.a_two"]
+    probes = await read_probes(store)
+    assert int((await read_data(store, "a_one"))["ticks"]) > 0
+    assert int((await read_data(store, "a_two"))["ticks"]) > 0
+    assert probes["t1.a_one"] != NONE
+    assert probes["t1.a_two"] != NONE
+    assert probes["t1.a_one"] != probes["t1.a_two"]
 
 
 async def test_adding_an_app_live_does_not_disturb_the_running_ones(store):
@@ -70,11 +72,11 @@ async def test_adding_an_app_live_does_not_disturb_the_running_ones(store):
     )
     await run_apps(store, alongside=script, duration=2 * SETTLE + 4.0)
 
-    state = await read_state(store)
-    assert state["probe.t2.a_new"] != NONE
-    assert int(state["apps.a_new.ticks"]) > 0
-    assert state["probe.t2.a_one"] == state["probe.t1.a_one"]
-    assert state["probe.t2.a_two"] == state["probe.t1.a_two"]
+    probes = await read_probes(store)
+    assert probes["t2.a_new"] != NONE
+    assert int((await read_data(store, "a_new"))["ticks"]) > 0
+    assert probes["t2.a_one"] == probes["t1.a_one"]
+    assert probes["t2.a_two"] == probes["t1.a_two"]
 
 
 async def test_creating_an_app_costs_exactly_one_launch(store):
@@ -92,11 +94,11 @@ async def test_creating_an_app_costs_exactly_one_launch(store):
     )
     await run_apps(store, alongside=script, duration=2 * SETTLE + 4.0)
 
-    state = await read_state(store)
-    assert state["probe.t1.a_new"] == "0"
+    probes = await read_probes(store)
+    assert probes["t1.a_new"] == "0"
     # And it is the same worker later, still alive and still counting.
-    assert state["probe.t2.a_new"] == "0"
-    assert int(state["probe.t2.a_new.ticks"]) > int(state["probe.t1.a_new.ticks"])
+    assert probes["t2.a_new"] == "0"
+    assert int(probes["t2.a_new.ticks"]) > int(probes["t1.a_new.ticks"])
     assert multiprocessing.active_children() == []
 
 
@@ -112,10 +114,10 @@ async def test_renaming_an_app_restarts_nothing(store):
     )
     await run_apps(store, alongside=script, duration=3 * SETTLE + 4.0)
 
-    state = await read_state(store)
-    assert state["probe.t1.a_one"] != NONE
-    assert state["probe.t2.a_one"] == state["probe.t1.a_one"]
-    assert int(state["probe.t3.a_one.ticks"]) > int(state["probe.t2.a_one.ticks"])
+    probes = await read_probes(store)
+    assert probes["t1.a_one"] != NONE
+    assert probes["t2.a_one"] == probes["t1.a_one"]
+    assert int(probes["t3.a_one.ticks"]) > int(probes["t2.a_one.ticks"])
 
 
 async def test_editing_a_snippet_restarts_only_that_app(store):
@@ -129,10 +131,10 @@ async def test_editing_a_snippet_restarts_only_that_app(store):
     )
     await run_apps(store, alongside=script, duration=2 * SETTLE + 4.0)
 
-    state = await read_state(store)
-    assert state["probe.t2.a_one"] != state["probe.t1.a_one"]
-    assert state["probe.t2.a_one"] != NONE
-    assert state["probe.t2.a_two"] == state["probe.t1.a_two"]
+    probes = await read_probes(store)
+    assert probes["t2.a_one"] != probes["t1.a_one"]
+    assert probes["t2.a_one"] != NONE
+    assert probes["t2.a_two"] == probes["t1.a_two"]
 
 
 async def test_deleting_an_app_kills_its_worker_and_forgets_it(store):
@@ -151,15 +153,15 @@ async def test_deleting_an_app_kills_its_worker_and_forgets_it(store):
     )
     await run_apps(store, alongside=script, duration=3 * SETTLE + 4.0)
 
-    state = await read_state(store)
-    assert state["probe.t1.a_two"] != NONE
-    assert state["probe.t2.a_two"] == NONE
-    assert state["probe.t3.a_two"] == NONE
+    probes = await read_probes(store)
+    assert probes["t1.a_two"] != NONE
+    assert probes["t2.a_two"] == NONE
+    assert probes["t3.a_two"] == NONE
     # Its process really stopped: the counter it owned froze.
-    assert state["probe.t3.a_two.ticks"] == state["probe.t2.a_two.ticks"]
+    assert probes["t3.a_two.ticks"] == probes["t2.a_two.ticks"]
     # The other app was not disturbed and is still counting.
-    assert state["probe.t2.a_one"] == state["probe.t1.a_one"]
-    assert int(state["probe.t3.a_one.ticks"]) > int(state["probe.t2.a_one.ticks"])
+    assert probes["t2.a_one"] == probes["t1.a_one"]
+    assert int(probes["t3.a_one.ticks"]) > int(probes["t2.a_one.ticks"])
 
 
 async def test_teardown_reaps_every_worker(store):
@@ -187,10 +189,10 @@ async def test_a_snippet_that_does_not_wrap_its_writes_fails(store):
         duration=SETTLE + 2.0,
     )
 
-    state = await read_state(store)
-    assert state["probe.t1.a_bare"] != NONE, "it was launched"
-    assert "apps.a_bare.ticks" not in state, "but its unwrapped write never landed"
-    assert int(state["apps.a_ok.ticks"]) > 0
+    probes = await read_probes(store)
+    assert probes["t1.a_bare"] != NONE, "it was launched"
+    assert await read_data(store, "a_bare") == {}, "but its unwrapped write never landed"
+    assert int((await read_data(store, "a_ok"))["ticks"]) > 0
 
 
 async def test_a_snippet_that_does_not_construct_reports_itself(store):
@@ -198,12 +200,11 @@ async def test_a_snippet_that_does_not_construct_reports_itself(store):
 
     A dispatched body has no waiter, so an uncaught error in one vanishes
     with nothing anywhere saying so. ``app_body`` catches ``ConstructionError``
-    and lands it under the app's own namespace instead.
+    and lands it on the app's own row instead.
     """
     await seed_store(store, {"a_broken": BROKEN, "a_ok": None})
 
     await run_apps(store, duration=SETTLE)
 
-    state = await read_state(store)
-    assert "apps.a_broken.error" in state
-    assert int(state["apps.a_ok.ticks"]) > 0
+    assert await read_error(store, "a_broken") != ""
+    assert int((await read_data(store, "a_ok"))["ticks"]) > 0

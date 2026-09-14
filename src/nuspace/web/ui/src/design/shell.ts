@@ -47,7 +47,7 @@ export const shellSurface = "flex min-h-0 min-w-0 flex-1";
 
 /* ============================== states =================================== */
 
-/** Before the mount envelope lands. Centred, quiet, the whole window. */
+/** Before the first write lands. Centred, quiet, the whole window. */
 export const shellBooting = cn(
 	"flex min-h-screen items-center justify-center gap-2",
 	"bg-bg-canvas text-base text-text-muted",

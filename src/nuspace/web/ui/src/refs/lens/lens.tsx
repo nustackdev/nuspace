@@ -1,10 +1,12 @@
 // LensRef -- Miller-columns browser for any Nu Shape.
 //
-// Browser owns the cursor. Slice starts with `path: []`; the server
-// ships the root column on mount (`{path: [], columns: [root]}`) and
-// the slice takes it from there. Every `write` frame carries the full
-// new state:
+// Browser owns the cursor. The node starts empty; the server ships the root
+// column (`{path: [], columns: [root]}`) and it takes it from there. Every
+// `write` frame carries the full new state:
 //   {path: string[], columns: Column[]}
+// Those two are plain props, merged by the default write. The one thing that
+// is not plain is the cursor reconciliation, which is why this type has a
+// write handler at all -- see the entry at the bottom.
 //
 // Notify frames flow the other way on `<this ref>.ops.nav`, carrying the
 // browser-computed full path:
@@ -24,8 +26,7 @@
 // opened the column to its right), accent CURSOR (where the keyboard is).
 // In miller columns that distinction is the navigation model, not decoration.
 
-import { OP_NOTIFY } from "@nustackdev/ui-core";
-import type { RefEntry, SliceFactory } from "@nustackdev/ui-kit";
+import type { Props } from "@nustackdev/ui-core";
 import {
 	Breadcrumb,
 	BreadcrumbEllipsis,
@@ -36,12 +37,16 @@ import {
 	BreadcrumbSeparator,
 	cn,
 	Kbd,
+	type NodeEntry,
+	type NodeProps,
+	pathKey,
 	Skeleton,
-	useStore,
+	useListProp,
 } from "@nustackdev/ui-kit";
 import { ChevronRight } from "lucide-react";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
-
+import { useCallback, useLayoutEffect, useMemo, useRef } from "react";
+import { patchLocal, useLocalSlot } from "../../app/local";
+import { notifyOp } from "../../app/wire";
 import {
 	glyphTone,
 	lensBar,
@@ -92,55 +97,31 @@ type Column = {
 	total: number;
 };
 
-type LensValue = {
-	path: string[];
-	columns: Column[];
+/** Every op the lens accepts, with its argument shape. */
+type Ops = { nav: { path: string[] } };
+
+/**
+ * What the browser owns here, and only the browser.
+ *
+ * The cursor per column, the horizontal scroll, and the depth of a
+ * navigation in flight. None of it is anybody else's business -- the server
+ * is a pure "recompute columns for whatever path you're given" loop -- so it
+ * lives in the node's `local` prop and never goes near the wire.
+ */
+type LensLocal = {
+	focusedIndex: Record<number, number>;
+	/** Depth of the navigation currently in flight, or null. Drives the
+	 *  skeleton column: a drill should show the column arriving, not a frozen
+	 *  surface with nothing to say for a round trip. */
+	pendingDepth: number | null;
 };
+
+const EMPTY_LOCAL: LensLocal = { focusedIndex: {}, pendingDepth: null };
+
+const NO_PATH: string[] = [];
 
 /** Sentinel-ish types render as a chip, never as text. */
 const SENTINEL = new Set(["empty", "none", "invalid", "error"]);
-
-const factory: SliceFactory = (path, ctx, props) => {
-	const maxRows =
-		typeof props?.max_rows === "number" && Number.isFinite(props.max_rows)
-			? Math.max(1, Math.floor(props.max_rows as number))
-			: 200;
-	return {
-		type: "LensRef",
-		value: { path: [], columns: [] } as LensValue,
-		maxRows,
-		focusedIndex: {} as Record<number, number>,
-		scroll: {} as Record<number, number>,
-		// Depth of the navigation currently in flight, or null. Drives the
-		// skeleton column: a drill should show the column arriving, not a
-		// frozen surface with nothing to say for a round trip.
-		pendingDepth: null as number | null,
-		write: (v) =>
-			ctx.set((refs) => {
-				const slice = refs[path];
-				if (!slice) return;
-				const p = (v ?? {}) as Record<string, unknown>;
-				const columns = Array.isArray(p.columns) ? (p.columns as Column[]) : [];
-				slice.value = {
-					path: Array.isArray(p.path) ? p.path.map((s) => String(s)) : [],
-					columns,
-				};
-				// Keep the cursor of every column that still exists, drop the
-				// rest. Clearing this wholesale is what made popping land back
-				// on row 0 instead of on the row you came through: the cursor
-				// for column N is exactly where you were standing when you
-				// drilled out of it.
-				const prev = (slice.focusedIndex ?? {}) as Record<number, number>;
-				const kept: Record<number, number> = {};
-				for (const key of Object.keys(prev)) {
-					const i = Number(key);
-					if (i < columns.length) kept[i] = prev[i];
-				}
-				slice.focusedIndex = kept;
-				slice.pendingDepth = null;
-			}),
-	};
-};
 
 /* ============================== pieces =================================== */
 
@@ -408,81 +389,71 @@ function PathTrail({ path, onJump }: { path: string[]; onJump: (depth: number) =
 
 /* ============================== view ===================================== */
 
-function LensView({ path }: { path: string }) {
-	const value = useStore((s) => s.refs[path]?.value as LensValue | undefined);
-	const focused = useStore(
-		(s) => (s.refs[path]?.focusedIndex as Record<number, number> | undefined) ?? {},
-	);
-	const pendingDepth = useStore(
-		(s) => (s.refs[path]?.pendingDepth as number | null | undefined) ?? null,
-	);
-	const setLocal = useStore((s) => s.setLocal);
-	const set = useStore.setState;
-	const send = useStore((s) => s.send);
+function LensView({ path }: NodeProps) {
+	// `path` and `columns` are the two props the server writes, side by side
+	// with the chrome, so the default store write merges them and there is no
+	// value object to unpack. The prop keeps its wire name; `cursorPath` is
+	// what it is called here so it never reads as this node's own address.
+	const rawPath = useListProp<unknown>(path, "path");
+	const columns = useListProp<Column>(path, "columns");
+	const focused = useLocalSlot(path, EMPTY_LOCAL, (l) => l.focusedIndex);
+	const pendingDepth = useLocalSlot(path, EMPTY_LOCAL, (l) => l.pendingDepth);
 	const containerRef = useRef<HTMLDivElement | null>(null);
+	const key = pathKey(path);
 
-	const columns = useMemo(() => value?.columns ?? [], [value]);
-	const cursorPath = useMemo(() => value?.path ?? [], [value]);
+	const cursorPath = useMemo(
+		() => (rawPath.length ? rawPath.map((s) => String(s)) : NO_PATH),
+		[rawPath],
+	);
 	// The live column is always the last one. In miller columns the cursor is
 	// singular by construction: clicking an earlier column does not "activate"
 	// it, it renavigates, which drops every column to its right.
 	const activeCol = Math.max(0, columns.length - 1);
 	const cursorIdx = focused[activeCol] ?? 0;
 
+	// biome-ignore lint/correctness/useExhaustiveDependencies: path is compared by value.
 	const patch = useCallback(
-		(fn: (slice: Record<string, unknown>) => Record<string, unknown>) => {
-			set((s) => {
-				const slice = s.refs[path];
-				if (!slice) return s;
-				return { ...s, refs: { ...s.refs, [path]: { ...slice, ...fn(slice) } } };
-			});
-		},
-		// `set` is `useStore.setState`, a module-level stable identity.
-		[path],
+		(fn: (local: LensLocal) => Partial<LensLocal>) => patchLocal(path, EMPTY_LOCAL, fn),
+		[key],
 	);
 
 	const setCursor = useCallback(
 		(i: number) => {
-			patch((slice) => ({
-				focusedIndex: {
-					...(slice.focusedIndex as Record<number, number>),
-					[activeCol]: i,
-				},
-			}));
+			patch((local) => ({ focusedIndex: { ...local.focusedIndex, [activeCol]: i } }));
 		},
 		[patch, activeCol],
 	);
 
+	// biome-ignore lint/correctness/useExhaustiveDependencies: path is compared by value.
 	const sendPath = useCallback(
 		(newPath: string[]) => {
 			patch(() => ({ pendingDepth: newPath.length }));
 			// One ref per op: the op name is the tail of the wire path, not a
 			// key in the payload. Mirrors `refs/lens/ops.py`, which subscribes
 			// one handler per path instead of branching on a string.
-			send({ op: OP_NOTIFY, ref: `${path}.ops.nav`, payload: { path: newPath } });
+			notifyOp<Ops, "nav">(path, "nav", { path: newPath });
 		},
-		[patch, path, send],
+		[patch, key],
 	);
 
 	/** Open `key` from column `colIdx`: everything right of it is replaced. */
 	const open = useCallback(
-		(colIdx: number, key: string) => {
+		(colIdx: number, rowKey: string) => {
 			containerRef.current?.focus();
 			// Park this column's cursor on the row being opened before the
 			// response lands, so popping back returns here. Columns to the
 			// right are about to be replaced, so their cursors go with them.
-			const idx = columns[colIdx]?.entries.findIndex((e) => e.key === key) ?? -1;
-			patch((slice) => {
-				const prev = (slice.focusedIndex ?? {}) as Record<number, number>;
+			const idx = columns[colIdx]?.entries.findIndex((e) => e.key === rowKey) ?? -1;
+			patch((local) => {
 				const kept: Record<number, number> = {};
-				for (const k of Object.keys(prev)) {
+				for (const k of Object.keys(local.focusedIndex)) {
 					const i = Number(k);
-					if (i < colIdx) kept[i] = prev[i];
+					if (i < colIdx) kept[i] = local.focusedIndex[i];
 				}
 				if (idx >= 0) kept[colIdx] = idx;
 				return { focusedIndex: kept };
 			});
-			sendPath([...cursorPath.slice(0, colIdx), key]);
+			sendPath([...cursorPath.slice(0, colIdx), rowKey]);
 		},
 		[columns, cursorPath, patch, sendPath],
 	);
@@ -561,12 +532,7 @@ function LensView({ path }: { path: string }) {
 		}
 	}, [columns.length, pendingDepth]);
 
-	// Ensure the slice's setLocal spot isn't left stale between mounts.
-	useEffect(() => {
-		if (!value) setLocal(path, { path: [], columns: [] });
-	}, [path, value, setLocal]);
-
-	const rowId = useCallback((colIdx: number, i: number) => `${path}-r${colIdx}-${i}`, [path]);
+	const rowId = useCallback((colIdx: number, i: number) => `${key}-r${colIdx}-${i}`, [key]);
 
 	// A drill is in flight and it goes deeper than what is painted: show the
 	// column arriving. A pop needs no placeholder, it only removes.
@@ -605,7 +571,7 @@ function LensView({ path }: { path: string }) {
 				{columns.map((col, i) => (
 					<ColumnPanel
 						// biome-ignore lint/suspicious/noArrayIndexKey: columns are position-indexed by design
-						key={`${path}-col-${i}`}
+						key={`${key}-col-${i}`}
 						col={col}
 						colIdx={i}
 						active={i === activeCol && !showSkeleton}
@@ -630,4 +596,28 @@ function LensView({ path }: { path: string }) {
 	);
 }
 
-export const LensRef: RefEntry = { factory, component: LensView };
+export const LensRef: NodeEntry = {
+	component: LensView,
+	handlers: {
+		// The one op the default cannot do. A write ships the whole new state,
+		// which the default would merge correctly, but the browser-owned
+		// cursors have to be reconciled against it in the same beat: keep the
+		// cursor of every column that still exists and drop the rest. Clearing
+		// them wholesale is what made popping land back on row 0 instead of on
+		// the row you came through -- the cursor for column N is exactly where
+		// you were standing when you drilled out of it.
+		write: (ctx, payload) =>
+			ctx.update((props: Props) => {
+				const p = (payload ?? {}) as Record<string, unknown>;
+				Object.assign(props, p);
+				const columns = Array.isArray(p.columns) ? p.columns : [];
+				const local = (props.local as LensLocal | undefined) ?? EMPTY_LOCAL;
+				const kept: Record<number, number> = {};
+				for (const k of Object.keys(local.focusedIndex)) {
+					const i = Number(k);
+					if (i < columns.length) kept[i] = local.focusedIndex[i];
+				}
+				props.local = { focusedIndex: kept, pendingDepth: null };
+			}),
+	},
+};

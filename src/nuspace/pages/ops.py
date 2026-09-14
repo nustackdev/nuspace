@@ -28,6 +28,10 @@ Read:
 - :func:`section_ids` / :func:`snippet_of`.
 - whole rows, one dict per thing: :func:`page_rows` / :func:`section_rows` /
   :func:`section_statuses`. What a sidebar or a canvas is filled from.
+
+Nothing here builds a key out of a prefix and a dot. A section's scratch row
+is ``Space.state[section_id]``, reached by navigating, which is what lets one
+block name another block's row without a string to format.
 """
 
 from __future__ import annotations
@@ -36,7 +40,6 @@ from typing import TYPE_CHECKING
 
 import nu
 from nuspace._root import resolve_root
-from nuspace.core.fields import ReadFields
 from nuspace.core.ids import mint_ordered_id
 from nuspace.core.tpl import DEFAULT_TPL
 
@@ -452,22 +455,18 @@ def page_rows(*, root: type[Shape] | None = None) -> nu.Nu:
 
 
 def section_rows(page_id: nu.StrArg, *, root: type[Shape] | None = None) -> nu.Nu:
-    """A page's sections as ``{id, name, source, tpl, policy, fields}``, in order.
+    """A page's sections as ``{id, name, source, tpl, policy}``, in order.
 
     Driven off ``section_order``, so list position is the order here exactly
-    as it is in the store. ``fields`` is what the worker running the section
-    wrote about itself, empty for a section that has not come up yet, and what
-    tells the browser which ui refs to mount for this block.
+    as it is in the store.
 
-    The list is stored as JSON, because ``Space.state`` holds strings, so
-    reading it back is :class:`~nuspace.core.fields.ReadFields`.
+    A block carries no list of what it renders. Its refs are rooted under its
+    own node on the surface and arrive there by being written, so the browser
+    learns them from the write stream rather than from a row in a page
+    payload.
     """
-    root = resolve_root(root)
-    page = root.pages[page_id]
+    page = resolve_root(root).pages[page_id]
     section = page.sections[_item]
-    # Read as a Str so `+` concatenates rather than collapsing to INVALID the
-    # way it would on an untyped AnyAttrRef.
-    key = nu.Str("sections.") + nu.StrAttrRef(_ITEM) + nu.Str(".fields")
     return nu.Collect(
         nu.Map(
             nu.list(page.section_order),
@@ -477,7 +476,6 @@ def section_rows(page_id: nu.StrArg, *, root: type[Shape] | None = None) -> nu.N
                 source=section.snippet,
                 tpl=section.tpl,
                 policy=section.policy,
-                fields=ReadFields(root.state.get_item(key, nu.Str(""))),
             ),
             key=_ITEM,
         )
@@ -487,22 +485,24 @@ def section_rows(page_id: nu.StrArg, *, root: type[Shape] | None = None) -> nu.N
 def section_statuses(page_id: nu.StrArg, *, root: type[Shape] | None = None) -> nu.Nu:
     """A page's sections as ``{section_id, state, error, started_at}``, in order.
 
-    Only what the store knows: a section whose namespace holds an ``error``
-    key reads ``failed``, every other one reads ``idle``. There is no
-    liveness pillar yet, so this never claims a section is running.
+    Only what the store knows: a section whose row holds an ``error`` reads
+    ``failed``, every other one reads ``idle``. There is no liveness pillar
+    yet, so this never claims a section is running.
     """
     root = resolve_root(root)
     page = root.pages[page_id]
-    # Same binding Map makes, read as a Str so `+` concatenates rather than
-    # collapsing to INVALID the way it would on an untyped AnyAttrRef.
-    key = nu.Str("sections.") + nu.StrAttrRef(_ITEM) + nu.Str(".error")
+    # The row of whichever section Map is on. A ref chain, so the section id
+    # is a segment rather than a piece of a key somebody built with a dot.
+    scratch = root.state[nu.StrAttrRef(_ITEM)]
     return nu.Collect(
         nu.Map(
             nu.list(page.section_order),
             nu.Dict.of(
                 section_id=_item,
-                state=nu.If(root.state.contains(key), nu.Str("failed"), nu.Str("idle")),
-                error=nu.ToStr(root.state.get_item(key, nu.Str(""))),
+                state=nu.If(scratch.error.exists(), nu.Str("failed"), nu.Str("idle")),
+                # Total: an unwritten leaf reads EMPTY, and EMPTY is not a
+                # string the browser can be handed.
+                error=nu.If(scratch.error.exists(), nu.ToStr(scratch.error), nu.Str("")),
                 started_at=nu.Int(0),
             ),
             key=_ITEM,

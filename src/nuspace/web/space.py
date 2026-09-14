@@ -48,7 +48,7 @@ from .lens import LensRef, lens_driver
 from .nav import NavRef
 from .pages import PagesRef, pages_driver
 from .pages.session import page_session
-from .serve import Screen, Screens, Shell, server
+from .serve import Screen, Shell, server
 
 
 if TYPE_CHECKING:
@@ -85,18 +85,23 @@ class LensScreen(Screen):
 
 
 class NuspaceShell(Shell):
-    """The stock shell. Two structural slots, structural for different reasons.
+    """The stock shell: three screens, and two slots that belong to none.
 
     ``nav`` is the browser's route, readable and never rendered. ``chat`` is
-    rendered, on every route, and is structural because the agent is not a
-    surface you navigate to -- it is pinned beside whichever surface is
-    showing, so a Screen is the wrong place for it. Both resolve to bare slot
-    names, which is the rule for anything on a Shell.
+    rendered, on every route, and sits here because the agent is not a surface
+    you navigate to -- it is pinned beside whichever surface is showing, so a
+    Screen is the wrong place for it.
+
+    Every slot below is an address: ``NuspaceShell.pages.pages`` resolves at
+    ``("pages", "pages")`` and ``NuspaceShell.chat`` at ``("chat",)``, because
+    a segment is in a path when something navigated through it.
     """
 
     nav = NavRef.slot()
     chat = ChatRef.slot()
-    screens = Screens({"/apps": AppsScreen, "/pages": PagesScreen, "/lens": LensScreen})
+    apps = AppsScreen.slot("/apps")
+    pages = PagesScreen.slot("/pages")
+    lens = LensScreen.slot("/lens")
 
 
 def space_driver(
@@ -124,9 +129,9 @@ def space_driver(
     # here is a ``ReactForever`` over a websocket, so the loop is where all
     # three belong and smart placement had nothing left to decide.
     return nu.ParallelAsync(
-        apps_driver(AppsScreen.apps, root=root, attached=attached),
-        pages_driver(PagesScreen.pages, NuspaceShell.nav, root=root),
-        lens_driver(LensScreen.lens, root=root),
+        apps_driver(NuspaceShell.apps.apps, root=root, attached=attached),
+        pages_driver(NuspaceShell.pages.pages, NuspaceShell.nav, root=root),
+        lens_driver(NuspaceShell.lens.lens, root=root),
         chat_driver(NuspaceShell.chat, root=root),
     )
 
@@ -147,7 +152,7 @@ def session_driver(session_address: str, *, root: type[Shape] | None = None) -> 
     """
     return nu.ParallelAsync(
         space_driver(root=root),
-        page_session(PagesScreen.pages, session_address=session_address, root=root),
+        page_session(NuspaceShell.pages.pages, session_address=session_address, root=root),
     )
 
 

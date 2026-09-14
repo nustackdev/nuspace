@@ -22,16 +22,19 @@ the agent's own surface -- the model speaks by emitting a program that appends
 to it, which is the same primitive as every other thing it does. Both live in
 their own packages under the same one-way rule.
 
-``state`` is the scratch kv namespace snippets write to. Per ``model.md``
-nuspace has no state pillar -- state is Nu's kv fabric -- but a bare
-``nu.kv.StrRef("foo")`` carries no owner Shape, so it never resolves
-against a ``tags=(Space,)`` navigator. ``Space.state["<key>"]`` gives
-snippets a reachable slot without minting a shape per value.
+``state`` is the scratch kv namespace snippets write to, one ``Scratch``
+row per running thing. Per ``model.md`` nuspace has no state pillar --
+state is Nu's kv fabric -- but a bare ``nu.kv.StrRef("foo")`` carries no
+owner Shape, so it never resolves against a ``tags=(Space,)`` navigator.
+``Space.state[section]`` gives a snippet a reachable row without minting a
+shape per value, and it is a ref chain rather than a key someone built out
+of a prefix and a dot, so one block naming another's row is ordinary
+navigation.
 
 It is also where a templated block keeps its content: a text block's
-markdown lives at ``Space.state["sections.<sid>.text"]``, because
-``path`` is the only thing a snippet's scope carries and a slot on
-``Section`` would need the page id too. See :mod:`nuspace.core.tpl`.
+markdown lives at ``Space.state[sid].data["text"]``, because the ids are
+all a snippet's scope carries and a slot on ``Section`` would need the page
+id too. See :mod:`nuspace.core.tpl`.
 """
 
 from __future__ import annotations
@@ -47,7 +50,24 @@ from nuspace.chat.shapes import Chat
 from nuspace.pages.shapes import Page, Section
 
 
-__all__ = ["Agent", "App", "Chat", "Page", "Section", "Space"]
+__all__ = ["Agent", "App", "Chat", "Page", "Scratch", "Section", "Space"]
+
+
+class Scratch(nu.Shape):
+    """One running thing's own corner of the space's kv. A section or an app.
+
+    Keyed by the id of whatever is running, which is why section ids are
+    globally unique rather than unique per page: an app and a section are the
+    same substance and share one namespace here.
+
+    Two slots, because the two have different writers. ``data`` is the
+    snippet's, and it may hold anything it likes; ``error`` is nuspace's, and
+    it is what the status a browser reads is made of, so a snippet cannot
+    clobber it by naming a key.
+    """
+
+    data = nu.kv.DictRef.slot(str)
+    error = nu.kv.StrRef.slot()
 
 
 class Space(nu.Shape):
@@ -62,7 +82,7 @@ class Space(nu.Shape):
 
     apps = nu.kv.ShapesDictRef.slot(App)
     pages = nu.kv.ShapesDictRef.slot(Page)
-    state = nu.kv.DictRef.slot(str)
+    state = nu.kv.ShapesDictRef.slot(Scratch)
     # Both singular, not dicts: nuagent runs one task at a time, so one slot
     # each is the true statement and a dict keyed by run id would be a shape
     # describing a concurrency the loop does not have.

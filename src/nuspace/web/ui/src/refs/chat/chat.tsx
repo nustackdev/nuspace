@@ -26,29 +26,40 @@
 // What the browser owns: the draft you are typing, and whether the rail is
 // collapsed. Both are pure interaction state that no other Nu code reads, so
 // neither goes near python -- the rule `ui.md` states, and the one the lens
-// cursor got wrong once.
+// cursor got wrong once. They live in the node's `local` prop, which the wire
+// never writes and never reads (see app/local.ts).
+//
+// No handlers. An inbound frame is a whole answer, so the store's default
+// write -- merge the payload object into props -- is exactly right, and the
+// coercions that used to run in the slice run at read time in the view
+// instead, which is where every ported kit type put them. "Has a frame
+// landed" is `messages` being there at all, so `loaded` is not a field
+// anybody has to remember to set.
 //
 // Look and feel live in ../../design/chat.ts; the role vocabulary and the
 // author derivation live in ./types.ts. Nothing below picks a color or a size.
 
-import { OP_NOTIFY } from "@nustackdev/ui-core";
-import type { RefEntry, RefSlice, SliceCtx, SliceFactory } from "@nustackdev/ui-kit";
+import type { Path } from "@nustackdev/ui-core";
 import {
 	Button,
 	IconButton,
 	Kbd,
+	type NodeEntry,
+	type NodeProps,
+	pathKey,
 	Spinner,
 	StatusPill,
 	TextArea,
 	Tooltip,
 	TooltipContent,
 	TooltipTrigger,
-	useStore,
+	useProps,
 } from "@nustackdev/ui-kit";
 import { Eraser, PanelRightClose, PanelRightOpen, Sparkles } from "lucide-react";
 import type React from "react";
-import { useCallback, useLayoutEffect, useRef } from "react";
-
+import { useCallback, useLayoutEffect, useMemo, useRef } from "react";
+import { patchLocal, useLocalSlot } from "../../app/local";
+import { notifyOp } from "../../app/wire";
 import {
 	chatActions,
 	chatAsk,
@@ -69,19 +80,18 @@ import {
 	chatSystem,
 	chatTurns,
 } from "../../design";
-import type { Notify, Ops } from "./ops";
+import type { Ops } from "./ops";
 import {
 	type ChatValue,
 	coerceMessages,
 	coerceStatus,
-	EMPTY_CHAT,
 	isRunning,
 	type Message,
 	ROLE_LABEL,
 	STATUS_TONE,
 } from "./types";
 
-/* ================================ slice ================================== */
+/* ============================== local state ============================== */
 
 type ChatEditorState = {
 	/** What is in the composer right now. Never sent until you submit. */
@@ -92,50 +102,23 @@ type ChatEditorState = {
 
 const EMPTY_EDITOR: ChatEditorState = { draft: "", collapsed: false };
 
-type ChatSlice = RefSlice & { value: ChatValue; editor: ChatEditorState };
-
-const factory: SliceFactory = (path, ctx: SliceCtx) =>
-	({
-		type: "ChatRef",
-		value: { ...EMPTY_CHAT } as ChatValue,
-		editor: { ...EMPTY_EDITOR },
-		write: (v) =>
-			ctx.set((refs) => {
-				const slice = refs[path] as ChatSlice | undefined;
-				if (!slice) return;
-				const p = (v ?? {}) as Record<string, unknown>;
-				if (String(p.op ?? "") !== "set_chat") return;
-				slice.value = {
-					messages: coerceMessages(p.messages),
-					status: coerceStatus(p.status),
-					task: String(p.task ?? ""),
-					turns: Number(p.turns ?? 0),
-					error: String(p.error ?? ""),
-					loaded: true,
-				};
-			}),
-	}) as ChatSlice;
-
-function useChatValue(path: string): ChatValue {
-	return useStore((s) => (s.refs[path]?.value as ChatValue | undefined) ?? EMPTY_CHAT);
-}
-
-/** Narrow subscription so a keystroke in the composer does not rerender the log. */
-function useChatEditorSlot<T>(path: string, pick: (e: ChatEditorState) => T): T {
-	return useStore((s) => pick((s.refs[path] as ChatSlice | undefined)?.editor ?? EMPTY_EDITOR));
-}
-
-/**
- * Patch the browser-owned editor state. Module-level rather than a hook so
- * handlers can call it without prop-drilling, and so it never participates in
- * a render.
- */
-function patchChatEditor(path: string, patch: Partial<ChatEditorState>): void {
-	useStore.setState((s) => {
-		const slice = s.refs[path] as ChatSlice | undefined;
-		if (!slice) return;
-		slice.editor = { ...slice.editor, ...patch };
-	});
+/** The conversation, read off props and narrowed here rather than on arrival. */
+function useChatValue(path: Path): ChatValue {
+	const props = useProps(path);
+	const raw = props.messages;
+	// Memoized on the raw prop, not rebuilt per render: the log below maps
+	// over this list and a keystroke in the composer must not re-key it.
+	const messages = useMemo(() => coerceMessages(raw), [raw]);
+	return {
+		messages,
+		status: coerceStatus(props.status),
+		task: String(props.task ?? ""),
+		turns: Number(props.turns ?? 0),
+		error: String(props.error ?? ""),
+		// A node exists from the moment a chain names it, so existence says
+		// nothing. A `messages` key is what only a landed frame can put there.
+		loaded: raw !== undefined,
+	};
 }
 
 /* ============================== the surface ============================== */
@@ -156,22 +139,20 @@ function MessageView({ message }: { message: Message }) {
 	);
 }
 
-function ChatView({ path }: { path: string }) {
+function ChatView({ path }: NodeProps) {
 	const { messages, status, turns, error, loaded } = useChatValue(path);
-	const draft = useChatEditorSlot(path, (e) => e.draft);
-	const collapsed = useChatEditorSlot(path, (e) => e.collapsed);
-	const send = useStore((s) => s.send);
+	const draft = useLocalSlot(path, EMPTY_EDITOR, (e) => e.draft);
+	const collapsed = useLocalSlot(path, EMPTY_EDITOR, (e) => e.collapsed);
 	const logRef = useRef<HTMLDivElement>(null);
 
 	const running = isRunning(status);
 
 	// One ref per op: the op name is the tail of the wire path, not a key in
-	// the payload. `path` is this ref's own wire path, straight off the mount.
-	const notify = useCallback<Notify>(
-		<K extends keyof Ops>(op: K, args: Ops[K]) => {
-			send({ op: OP_NOTIFY, ref: `${path}.ops.${op}`, payload: args });
-		},
-		[path, send],
+	// the payload. `path` is this node's own address in the tree.
+	// biome-ignore lint/correctness/useExhaustiveDependencies: path is compared by value.
+	const notify = useCallback(
+		<K extends keyof Ops & string>(op: K, args: Ops[K]) => notifyOp<Ops, K>(path, op, args),
+		[pathKey(path)],
 	);
 
 	// Pin to the bottom on every new message. Layout effect, not effect: the
@@ -189,7 +170,7 @@ function ChatView({ path }: { path: string }) {
 		// The draft is dropped optimistically: the submit appends it to the
 		// conversation, which comes straight back as a frame, so keeping it
 		// would show the ask twice.
-		patchChatEditor(path, { draft: "" });
+		patchLocal(path, EMPTY_EDITOR, { draft: "" });
 		notify("chat.submit", { text });
 	}, [draft, notify, path, running]);
 
@@ -213,7 +194,7 @@ function ChatView({ path }: { path: string }) {
 							variant="ghost"
 							size="sm"
 							aria-label="Show the agent"
-							onClick={() => patchChatEditor(path, { collapsed: false })}
+							onClick={() => patchLocal(path, EMPTY_EDITOR, { collapsed: false })}
 						>
 							<PanelRightOpen />
 						</IconButton>
@@ -255,7 +236,7 @@ function ChatView({ path }: { path: string }) {
 							variant="ghost"
 							size="sm"
 							aria-label="Hide the agent"
-							onClick={() => patchChatEditor(path, { collapsed: true })}
+							onClick={() => patchLocal(path, EMPTY_EDITOR, { collapsed: true })}
 						>
 							<PanelRightClose />
 						</IconButton>
@@ -279,7 +260,7 @@ function ChatView({ path }: { path: string }) {
 				<div className={chatLog} ref={logRef}>
 					{messages.map((message, i) => (
 						// biome-ignore lint/suspicious/noArrayIndexKey: the conversation is append-only, so position IS the identity
-						<MessageView key={`${path}-m-${i}`} message={message} />
+						<MessageView key={`${pathKey(path)}-m-${i}`} message={message} />
 					))}
 					{error ? <div className={chatError}>{error}</div> : null}
 					{running ? (
@@ -299,7 +280,7 @@ function ChatView({ path }: { path: string }) {
 					aria-label="Ask the agent"
 					value={draft}
 					disabled={running}
-					onChange={(e) => patchChatEditor(path, { draft: e.target.value })}
+					onChange={(e) => patchLocal(path, EMPTY_EDITOR, { draft: e.target.value })}
 					onKeyDown={onKeyDown}
 				/>
 				<div className={chatActions}>
@@ -315,4 +296,4 @@ function ChatView({ path }: { path: string }) {
 	);
 }
 
-export const ChatRef: RefEntry = { factory, component: ChatView };
+export const ChatRef: NodeEntry = { component: ChatView };

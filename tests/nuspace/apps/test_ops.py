@@ -13,7 +13,7 @@ from nuspace.apps import Runner, ops
 from nuspace.core.shapes import Space
 
 
-SRC = "def out(path):\n    return None\n"
+SRC = "def out():\n    return None\n"
 
 
 async def do(path, term):
@@ -109,11 +109,10 @@ async def test_app_ids_and_exists_answer_for_an_empty_space(store):
 
 
 async def test_error_of_reads_what_the_runner_recorded(store):
-    key = nu.Str("apps.a_one.error")
-    await do(store, Space.state.init(nu.Dict.create()) >> Space.state.set_item(key, nu.Str("boom")))
+    await do(store, Space.state["a_one"].error.set(nu.Str("boom")))
 
     assert await do(store, ops.error_of("a_one")) == "boom"
-    # Total on purpose: an app that constructed fine has no error key at all.
+    # Total on purpose: an app that constructed fine has no error at all.
     assert await do(store, ops.error_of("a_two")) == ""
 
 
@@ -137,12 +136,11 @@ async def test_init_apps_creates_the_container_and_is_idempotent(store):
 
 
 async def test_clear_error_forgets_what_the_runner_recorded(store):
-    key = nu.Str("apps.a_one.error")
-    await do(store, Space.state.init(nu.Dict.create()) >> Space.state.set_item(key, nu.Str("boom")))
+    await do(store, Space.state["a_one"].error.set(nu.Str("boom")))
     await do(store, ops.clear_error("a_one"))
 
     assert await do(store, ops.error_of("a_one")) == ""
-    # An app that never failed has no key, and dropping it is still a no-op.
+    # An app that never failed has no error, and dropping it is still a no-op.
     await do(store, ops.clear_error("a_two"))
 
 
@@ -161,11 +159,7 @@ async def test_app_rows_answers_with_one_dict_per_app_in_mint_order(store):
 
 async def test_app_statuses_read_failed_off_the_error_key_and_idle_otherwise(store):
     await do(store, ops.add_app(SRC, app_id="a_one") >> ops.add_app(SRC, app_id="a_two"))
-    await do(
-        store,
-        Space.state.init(nu.Dict.create())
-        >> Space.state.set_item(nu.Str("apps.a_two.error"), nu.Str("boom")),
-    )
+    await do(store, Space.state["a_two"].error.set(nu.Str("boom")))
 
     assert await do(store, ops.app_statuses()) == [
         {"section_id": "a_one", "state": "idle", "error": "", "started_at": 0},

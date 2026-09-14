@@ -30,44 +30,55 @@ from nuspace.core.shapes import Space
 
 ROOT = Path("/tmp/nuspace-apps-demo")  # noqa: S108
 
-# A counter. Writes apps.<id>.ticks every 0.1s, stepping by `step`, forever.
-# Editing `step` in the stored source is what the demo edits.
+# A counter. Ticks its own row every 0.1s, stepping by `step`, forever. An app
+# gets the same scope a section does, and `section` is its own id: an app is a
+# section with no page. Editing `step` is what the demo edits.
 COUNTER = '''import nu
 import nu.kv
 from nuspace.core.shapes import Space
 
 
-def out(path):
+def out(section):
     """Tick a counter in this app's own corner of the space's scratch kv."""
-    key = path + ".ticks"
-    now = nu.ToInt(Space.state.get_item(key, nu.Str("0")))
-    tick = Space.state.set_item(key, nu.ToStr(now + nu.Int({step})))
+    data = Space.state[section].data
+    now = nu.ToInt(data.get_item("ticks", nu.Str("0")))
+    tick = data.set_item("ticks", nu.ToStr(now + nu.Int({step})))
     return nu.kv.auto_flow_atomic(
-        Space.state.set_item(key, nu.Str("0")) >> nu.ForeverDo(nu.DelayedDo(0.1, tick)),
+        data.set_item("ticks", nu.Str("0")) >> nu.ForeverDo(nu.DelayedDo(0.1, tick)),
         scope=Space,
     )
 '''
 
-# Reads another app's counter and copies it into its own namespace. Two apps,
-# two processes, both reaching the one store through their own proxy.
+# Reads another app's counter and copies it into its own row. Two apps, two
+# processes, both reaching the one store through their own proxy, and the app
+# being watched is named by id rather than by a path formatted into the source.
 MIRROR = '''import nu
 import nu.kv
 from nuspace.core.shapes import Space
 
+WATCHED = "a_counter"
 
-def out(path):
-    """Copy another app's tick count into this one's namespace."""
-    src = "apps.{watched}.ticks"
-    dst = path + ".seen"
-    copy = Space.state.set_item(dst, nu.ToStr(Space.state.get_item(src, nu.Str("0"))))
+
+def out(section):
+    """Copy another app's tick count into this one's row."""
+    mine = Space.state[section].data
+    theirs = Space.state[WATCHED].data
+    copy = mine.set_item("seen", nu.ToStr(theirs.get_item("ticks", nu.Str("0"))))
     return nu.kv.auto_flow_atomic(nu.ForeverDo(nu.DelayedDo(0.1, copy)), scope=Space)
 '''
 
 
 def report(label):
     """What the runner and the apps have to say for themselves, right now."""
-    return nu.Print(STDOUT, label, "\n  workers:", Runner.workers, "\n  state:  ") >> nu.Print(
-        STDOUT, "   ", nu.dict(Space.state.items())
+    return nu.Print(
+        STDOUT,
+        label,
+        "\n  workers:",
+        Runner.workers,
+        "\n  counter:",
+        nu.dict(Space.state["a_counter"].data.items()),
+        "\n  mirror: ",
+        nu.dict(Space.state["a_mirror"].data.items()),
     )
 
 
@@ -78,7 +89,7 @@ def report(label):
 # dispatch. That churn is why the worker ids below are not 0 and 1.
 SCRIPT = (
     nu.DelayedDo(0.2, ops.add_app(COUNTER.format(step=1), app_id="a_counter"))
-    >> nu.DelayedDo(0.2, ops.add_app(MIRROR.format(watched="a_counter"), app_id="a_mirror"))
+    >> nu.DelayedDo(0.2, ops.add_app(MIRROR, app_id="a_mirror"))
     >> nu.DelayedDo(4.0, report("\n[1] both apps up and running"))
     # Edit one snippet. Only the counter restarts: its worker id moves, the
     # mirror's does not, and the counter starts over from zero stepping by

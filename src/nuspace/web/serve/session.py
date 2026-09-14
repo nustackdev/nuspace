@@ -19,10 +19,10 @@ from typing import TYPE_CHECKING, Any
 
 from nu.ui.core.protocol import (
     OP_ERROR,
-    OP_MOUNT,
+    OP_INIT,
     OP_NOTIFY,
     OP_READ,
-    OP_UNMOUNT,
+    OP_REMOVE,
     Frame,
     decode,
     encode,
@@ -31,7 +31,11 @@ from nu.ui.core.session import Session
 
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from fastapi import WebSocket
+
+    from .shell import Chain
 
 
 __all__ = ["NuspaceSession", "Subscription"]
@@ -43,7 +47,7 @@ Callback = Callable[[object], None]
 class Subscription:
     """Observer handle returned by ``session.subscribe(path)``."""
 
-    def __init__(self, session: NuspaceSession, path: str) -> None:
+    def __init__(self, session: NuspaceSession, path: tuple[str, ...]) -> None:
         self._session = session
         self._path = path
         # A list, and compared by identity throughout. A callback here is
@@ -95,11 +99,11 @@ class Subscription:
 
 
 class NuspaceSession(Session):
-    """One ws connection, one mounted page."""
+    """One ws connection, one browser tree."""
 
     def __init__(self, ws: WebSocket) -> None:
         self._ws = ws
-        self._subs: dict[str, set[Subscription]] = defaultdict(set)
+        self._subs: dict[tuple[str, ...], set[Subscription]] = defaultdict(set)
         self._pending: dict[str, asyncio.Future[Any]] = {}
         self._stopped = False
 
@@ -109,23 +113,22 @@ class NuspaceSession(Session):
         """Encode and ship one Frame on the ws."""
         await self._ws.send_bytes(encode(frame))
 
-    async def mount(
-        self,
-        name: str,
-        fields: list[dict[str, object]],
-        pages: list[dict[str, object]] | None = None,
-        *,
-        sidebar: bool = False,
-    ) -> None:
-        """Ship a mount frame naming the page and its field list."""
-        payload: dict[str, object] = {"name": name, "fields": fields}
-        if pages is not None:
-            payload["pages"] = pages
-        if sidebar:
-            payload["sidebar"] = True
-        await self.send(Frame(OP_MOUNT, ref="", payload=payload))
+    async def boot(self, chains: Sequence[Chain]) -> None:
+        """Seed the browser's tree: one ``init`` per slot the shell declares.
 
-    async def aread(self, path: str) -> Any:  # noqa: ANN401 -- payload is opaque
+        No envelope. An ``init`` is the walk a write takes minus the payload,
+        so the chrome arrives the same way everything else does and in
+        declaration order, which is render order.
+
+        The clearing remove goes first because a reconnect gets a fresh
+        session with none of the old one's dynamic nodes, and a section's refs
+        from the connection before would otherwise sit there forever.
+        """
+        await self.send(Frame(OP_REMOVE))
+        for chain in chains:
+            await self.send(Frame(OP_INIT, ref=[seg for seg, _, _ in chain], chain=chain))
+
+    async def aread(self, path: tuple[str, ...]) -> Any:  # noqa: ANN401 -- payload is opaque
         """Round-trip read: ship a read frame, await the client's reply."""
         rid = uuid.uuid4().hex
         loop = asyncio.get_running_loop()
@@ -137,7 +140,7 @@ class NuspaceSession(Session):
         finally:
             self._pending.pop(rid, None)
 
-    def subscribe(self, path: str) -> Subscription:
+    def subscribe(self, path: tuple[str, ...]) -> Subscription:
         """Return a Subscription observing notify frames for ``path``."""
         sub = Subscription(self, path)
         self._subs[path].add(sub)
@@ -170,7 +173,8 @@ class NuspaceSession(Session):
             if fut is not None and not fut.done():
                 fut.set_result(frame.payload)
             return
-        if frame.op in (OP_MOUNT, OP_UNMOUNT, OP_ERROR):
+        if frame.op == OP_ERROR:
+            # The browser may report one. Nothing here acts on it yet.
             return
 
     def _fail_pending(self) -> None:

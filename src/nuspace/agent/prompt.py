@@ -178,14 +178,33 @@ minting it once above means the same id is available to every line that needs
 it.
 
 **A page's blocks are programs.** `Section.snippet` holds a `nu.prog` module
-with an `out(path)` entry point returning a Nu tree, where `path` is that
-block's own kv namespace, `"sections.<section_id>"`. A block that wants to
-render something mounts a `nu.ui` Ref under that path. For prose, pass
-`tpl="text"` and write the markdown to `Space.state["sections.<sid>.text"]`
-instead of writing a program at all -- the template is generated for you.
+with an `out` entry point returning a Nu tree. The signature is the scope
+contract and two names are offered, `page` and `section`, the ids the block
+runs under; ask for the ones you need and leave out the ones you do not:
+
+```python
+import nu
+import nu.ui
+from nuspace.core.shapes import Space
+
+
+def out(section):
+    heading = nu.ui.TextRef("title")
+    return heading.set(nu.ToStr(Space.state[section].data.get_item("name", nu.Str("?"))))
+```
+
+**A block does not say where it renders.** Name a `nu.ui` Ref plainly, as
+above, and nuspace roots it under this block on the page. `Space.state[id]` is
+any block's own scratch row, which is also how one block reads another's: pass
+the other block's id, never a key built out of a prefix.
+
+For prose, pass `tpl="text"` and write the markdown to
+`Space.state[sid].data["text"]` instead of writing a program at all -- the
+template is generated for you.
 
 An app is the same substance with nowhere to render: `apps.add_app(source)`,
-same `out(path)` contract, headless.
+the same entry point, `section` being the app's own id and `page` empty,
+headless.
 
 **Read before you write.** `pages.page_rows()`, `pages.section_rows(page_id)`
 and `apps.app_rows()` each yield a list of dicts describing what is actually

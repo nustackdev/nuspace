@@ -15,15 +15,15 @@
 // without color: a triangle that never compiled versus a diamond that ran and
 // died.
 
-import type { MountField } from "@nustackdev/ui-core";
+import type { Path } from "@nustackdev/ui-core";
 import {
 	Alert,
 	AlertDescription,
 	AlertIcon,
 	AlertTitle,
 	Button,
-	FieldView,
 	Kbd,
+	NodeView,
 	Toggle,
 	Tooltip,
 	TooltipContent,
@@ -42,15 +42,17 @@ import {
 	docStatusTrace,
 	SECTION_STATUS,
 } from "../../design";
+import { blockPrefix, useBlockHasUi } from "./blocks";
 import { CodeBox } from "./Code";
 import type { ExitDir } from "./ProseRef";
-import type { FocusReq } from "./slice";
+import type { FocusReq } from "./state";
 import type { SectionState, SectionStatus } from "./types";
 
 export type ProgramProps = {
 	blockId: string;
 	source: string;
-	fields: MountField[];
+	/** Where this block's own refs live in the tree. See ./blocks.ts. */
+	uiPath: Path;
 	status: SectionStatus | null;
 	editing: boolean;
 	focusReq: FocusReq | null;
@@ -65,7 +67,7 @@ export function ProgramBlock(props: ProgramProps) {
 	const {
 		blockId,
 		source,
-		fields,
+		uiPath,
 		status,
 		editing,
 		focusReq,
@@ -78,12 +80,14 @@ export function ProgramBlock(props: ProgramProps) {
 
 	const [dirty, setDirty] = useState(false);
 	const [copied, setCopied] = useState(false);
+	const hasUi = useBlockHasUi(uiPath);
+	const prefix = blockPrefix(blockId);
 	const state: SectionState = status?.state ?? "idle";
 	const token = SECTION_STATUS[state];
 
 	const copyPrefix = useCallback(() => {
 		navigator.clipboard
-			?.writeText(`sections.${blockId}`)
+			?.writeText(blockPrefix(blockId))
 			.then(() => {
 				setCopied(true);
 				window.setTimeout(() => setCopied(false), 1200);
@@ -113,7 +117,7 @@ export function ProgramBlock(props: ProgramProps) {
 				<Tooltip>
 					<TooltipTrigger asChild>
 						<Button variant="ghost" size="sm" onClick={copyPrefix} className={docProgramPrefix}>
-							<span className="truncate">sections.{blockId}</span>
+							<span className="truncate">{prefix}</span>
 							{copied ? <Check className="text-status-ok" /> : <Copy />}
 						</Button>
 					</TooltipTrigger>
@@ -172,11 +176,9 @@ export function ProgramBlock(props: ProgramProps) {
 				/>
 			) : null}
 
-			{fields.length > 0 ? (
+			{hasUi ? (
 				<div className={docProgramFields}>
-					{fields.map((f) => (
-						<FieldView key={f.path} field={f} />
-					))}
+					<NodeView path={uiPath} />
 				</div>
 			) : !editing && !status?.error ? (
 				<div className={docProgramHeadless}>no ui refs — this block runs headless</div>
