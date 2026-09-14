@@ -2,12 +2,17 @@
 
 ## Packages shipped from this repo
 
-- **nuspace** (the runtime, the `nuspace` command) — 0.1.0
+- **nuspace** (the runtime, the `nuspace` command) — 0.1.1
 - **nuspace-ui** (the compiled web bundle) — 0.1.0
 
 Below is the changelog for **nuspace** - the full commit stream. Newest first.
 The `nuspace-ui` wheel is the same source tree's vite output and is not tracked
 separately here.
+
+## 0.1.1 — 2026-09-14
+
+- Depend on nucore and nustd[all]: a space reaches most fabrics, so picking extras only defers the ImportError
+- Resolve ui-kit from the registry and drop the sibling-checkout aliases
 
 ## 0.1.0 — 2026-09-14
 

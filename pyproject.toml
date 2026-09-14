@@ -4,14 +4,20 @@ build-backend = "hatchling.build"
 
 [project]
 name = "nuspace"
-version = "0.1.0"
+version = "0.1.1"
 description = "Nu runtime built on Nu. A self-hosted programmable space that runs Nu apps in a tree of containers and applications."
 readme = "README.md"
 license = "AGPL-3.0-or-later"
 authors = [{ name = "Gor Arakelyan", email = "gorarkln@gmail.com" }]
 requires-python = ">=3.10"
 dependencies = [
-    "nustd[kv,ui]>=0.2.0",
+    # The whole stack, every extra. A space runs arbitrary Nu apps and its own
+    # sections in pool workers, so it reaches most fabrics: kv for the store,
+    # ui for the browser, proxy (invisibles) for the worker's session, mp_pool
+    # for the workers themselves. Picking extras just means discovering the
+    # missing one at import time.
+    "nucore>=0.3.0",
+    "nustd[all]>=0.3.0",
     # The compiled web bundle. A separate distribution only because PyPI caps
     # project size and a SPA rebuilt on every UI tweak would eat the quota --
     # not optional. `pip install nuspace` gives you the browser.
@@ -40,12 +46,6 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
-]
-
-[project.optional-dependencies]
-# kv + ui are hard deps; `all` is only about the extra kv backends.
-all = [
-    "nustd[all]>=0.2.0",
 ]
 
 [project.urls]
