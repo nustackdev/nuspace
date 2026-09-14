@@ -1,4 +1,4 @@
-// The document dialect, and the one deep import into the kit.
+// The document dialect.
 //
 // nuspace does not own a prose engine any more. The schema, the input rules,
 // the markdown parser/serializer and the editor all live in ui-kit, which is
@@ -8,25 +8,14 @@
 // -- so the schema is built here, from `../../design` recipes, and handed to
 // the kit editor.
 //
-// ## The deep import, and what has to happen before the kit ships
-//
-// The kit exports `ProseEditor`, `createProseSchema` and `proseSchema` from
-// its index. It does NOT export `createMarkdown`, and nuspace needs it:
-// splitting a block at the caret means serializing a *range* of the document
-// to markdown, and merging up means serializing the whole document to hand
-// to the block above. Neither is expressible with the editor alone -- the
-// editor only ever hands out the full document, and only at a commit.
-//
-// So this reaches past the index into the module. That works today only
-// because vite/tsc are aliased at the kit source (see vite.config.ts); the
-// published package's `exports` map would refuse it. The fix is one line in
-// the kit -- re-export `createMarkdown` and `Markdown` from its index -- and
-// it has to land in the same release that first ships `ProseRef`, or this
-// import is the thing that breaks. It is deliberately the ONLY deep import
-// in the tree, so that fix is a one-line change here too.
+// `createMarkdown` comes off the kit index alongside the schema. nuspace
+// needs it, not just the editor: splitting a block at the caret means
+// serializing a *range* of the document to markdown, and merging up means
+// serializing the whole document to hand to the block above. Neither is
+// expressible with the editor alone -- it only ever hands out the full
+// document, and only at a commit.
 
-import { createProseSchema } from "@nustackdev/ui-kit";
-import { createMarkdown } from "@nustackdev/ui-kit/refs/input/prose/markdown";
+import { createMarkdown, createProseSchema } from "@nustackdev/ui-kit";
 import {
 	docBlockquote,
 	docBulletList,
@@ -76,4 +65,4 @@ export const markdown = createMarkdown(proseDialect);
 
 export const { parseMarkdown, serializeMarkdown, serializeRange, posForOffset } = markdown;
 
-export type { Parsed } from "@nustackdev/ui-kit/refs/input/prose/markdown";
+export type { Parsed } from "@nustackdev/ui-kit";

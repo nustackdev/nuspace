@@ -26,10 +26,8 @@
 @import "prosemirror-view/style/prosemirror.css";
 
 /* Ensure utility classes used inside the kit primitives make it into the
- * final bundle. The npm package ships its src/ directly. The second path is
- * the aliased kit source (see vite.config.ts) and goes away with it. */
+ * final bundle. The npm package ships its src/ directly. */
 @source "../node_modules/@nustackdev/ui-kit/src/**/*.{ts,tsx}";
-@source "../../../../../../nu/packages/nustd/src/nu/ui/web/kit/src/**/*.{ts,tsx}";
 
 @custom-variant dark (&:is(.dark *));
 

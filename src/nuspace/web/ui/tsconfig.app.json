@@ -24,20 +24,7 @@
 
 		"baseUrl": ".",
 		"paths": {
-			"@/*": ["./src/*"],
-
-			// TEMPORARY, and the twin of the `resolve.alias` in vite.config.ts.
-			// See the comment there: ui-kit@0.1.3 has no ProseRef, so the kit
-			// resolves to its source in the sibling nu checkout until the kit
-			// publishes. Delete both together.
-			"@nustackdev/ui-kit": ["../../../../../nu/packages/nustd/src/nu/ui/web/kit/src/index.ts"],
-			"@nustackdev/ui-kit/refs": [
-				"../../../../../nu/packages/nustd/src/nu/ui/web/kit/src/refs/index.ts"
-			],
-			"@nustackdev/ui-kit/store": [
-				"../../../../../nu/packages/nustd/src/nu/ui/web/kit/src/store.ts"
-			],
-			"@nustackdev/ui-kit/*": ["../../../../../nu/packages/nustd/src/nu/ui/web/kit/src/*"]
+			"@/*": ["./src/*"]
 		}
 	},
 	"include": ["src"]
