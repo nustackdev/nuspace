@@ -5,6 +5,8 @@ driver that works it are one thing and sit in one place:
 
 - :mod:`.apps`  -- ``AppsRef`` + ``apps_driver``.
 - :mod:`.pages` -- ``PagesRef`` + ``pages_driver``.
+- :mod:`.chat`  -- ``ChatRef`` + ``chat_driver``. The agent sidebar, pinned on
+  the Shell rather than on a Screen: it is there on every route.
 - :mod:`.lens`  -- ``LensRef`` + ``lens_driver``. Read-only, store-less: it
   browses whatever Shape it is pointed at.
 - :mod:`.nav`   -- ``NavRef``, where the browser is. Shared, owned by nobody.
@@ -23,6 +25,7 @@ concept. The refs and the drivers are what nuspace actually says.
 from __future__ import annotations
 
 from .apps import AppsRef, apps_driver
+from .chat import ChatRef, chat_driver
 from .lens import LensRef, lens_driver
 from .nav import NavRef
 from .pages import PagesRef, pages_driver
@@ -51,6 +54,7 @@ from .space import (
 __all__ = [
     "AppsRef",
     "AppsScreen",
+    "ChatRef",
     "LensRef",
     "LensScreen",
     "NavRef",
@@ -65,6 +69,7 @@ __all__ = [
     "Subscription",
     "apps_driver",
     "build_fastapi_app",
+    "chat_driver",
     "lens_driver",
     "page_session",
     "pages_driver",

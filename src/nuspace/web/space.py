@@ -8,9 +8,14 @@ here is the stock answer.
 
 ``space_driver`` is built **per connection**, because a driver holds that
 connection's subscriptions and ``NavRef`` reads that connection's route. The
-three halves are folded in parallel and each keeps its own
+four quarters are folded in parallel and each keeps its own
 ``auto_flow_atomic`` bracket, so any one of them runs alone exactly as it
 runs here.
+
+The chat arm is the odd one, and only in where it mounts: it is pinned on the
+Shell rather than on a Screen, because the agent is there on every route. Its
+driver is still per connection like the rest -- the conversation is space-wide
+and every tab watches the same slot.
 
 **Nothing in the fold may finish.** The ws endpoint races intake against this
 tree with ``FIRST_COMPLETED`` and closes the socket when either ends, so every
@@ -33,10 +38,12 @@ from typing import TYPE_CHECKING
 
 import nu
 import nu.kv
+from nuspace.agent.runner import DEFAULT_MODEL, agent_runner
 from nuspace.apps.runner import supervisor
 from nuspace.core.host import free_port, host
 
 from .apps import AppsRef, apps_driver
+from .chat import ChatRef, chat_driver
 from .lens import LensRef, lens_driver
 from .nav import NavRef
 from .pages import PagesRef, pages_driver
@@ -78,9 +85,17 @@ class LensScreen(Screen):
 
 
 class NuspaceShell(Shell):
-    """The stock shell. ``nav`` is structural: the browser's route, readable."""
+    """The stock shell. Two structural slots, structural for different reasons.
+
+    ``nav`` is the browser's route, readable and never rendered. ``chat`` is
+    rendered, on every route, and is structural because the agent is not a
+    surface you navigate to -- it is pinned beside whichever surface is
+    showing, so a Screen is the wrong place for it. Both resolve to bare slot
+    names, which is the rule for anything on a Shell.
+    """
 
     nav = NavRef.slot()
+    chat = ChatRef.slot()
     screens = Screens({"/apps": AppsScreen, "/pages": PagesScreen, "/lens": LensScreen})
 
 
@@ -112,6 +127,7 @@ def space_driver(
         apps_driver(AppsScreen.apps, root=root, attached=attached),
         pages_driver(PagesScreen.pages, NuspaceShell.nav, root=root),
         lens_driver(LensScreen.lens, root=root),
+        chat_driver(NuspaceShell.chat, root=root),
     )
 
 
@@ -145,6 +161,8 @@ def space_tree(
     port: int = 8080,
     open_browser: bool = True,
     redis_url: str | None = None,
+    agent: bool = True,
+    agent_model: str = DEFAULT_MODEL,
     body: nu.Nu | None = None,
 ) -> nu.Nu:
     """The whole space in one process: one store, one pool, apps running, a server.
@@ -152,8 +170,9 @@ def space_tree(
     The head is owned once here and nothing below it opens a store or a pool
     of its own -- RocksDB is a single-writer lock, so two heads is not a
     design choice, it is a crash. Inside it: the apps supervisor, which is
-    space-wide and resident, and the ws server, whose every connection gets
-    the surfaces and a page supervisor of its own.
+    space-wide and resident, the agent runner, which is resident for the same
+    reason, and the ws server, whose every connection gets the surfaces and a
+    page supervisor of its own.
 
     Args:
         store: the navigator bracket. The caller builds it, because only it
@@ -169,6 +188,12 @@ def space_tree(
         redis_url: Redis carrying change notifications, or None. Only a split
             deployment needs it; in one process ``host`` serves the store's own
             change feed on a socket and every worker binds it.
+        agent: whether to run the nuagent loop in this process. The sidebar
+            mounts either way -- a submit is a kv write, so with this off you
+            can type and the write lands and nothing picks it up. Turn it off
+            for a space nobody should be able to talk a model into editing,
+            or when a second process owns the loop.
+        agent_model: the Claude Code model that loop runs against.
         body: what to run beside the apps supervisor, for demos and tests.
 
     Returns:
@@ -176,7 +201,13 @@ def space_tree(
         on the way out.
     """
     address = address or f"127.0.0.1:{free_port()}"
+    # Sibling of the apps supervisor, not folded into its ``alongside``: both
+    # carry their own ``auto_flow_atomic`` head, and the agent runner carries
+    # a ``With`` besides. Nesting one bracket inside the other would put the
+    # model's writes under somebody else's transaction for no reason.
     apps = supervisor(root=root, alongside=body)
+    if agent:
+        apps = nu.ParallelAsync(apps, agent_runner(root=root, model=agent_model))
     return host(
         nu.With(
             # A callable, not a term: the ws handler calls it once per

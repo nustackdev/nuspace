@@ -15,6 +15,13 @@ only in the ``policy`` string that says when to run. ``App`` lives in
 :mod:`nuspace.pages.shapes`, each beside the runner and the ops that work
 it. Both are re-exported here, since ``Space`` is where they meet.
 
+``agent`` and ``chat`` are the third and fourth, and they are two slots
+rather than one because they are two things. ``agent`` is a *run*: one task
+and nuagent's working memory for it. ``chat`` is what was *said*, and it is on
+the agent's own surface -- the model speaks by emitting a program that appends
+to it, which is the same primitive as every other thing it does. Both live in
+their own packages under the same one-way rule.
+
 ``state`` is the scratch kv namespace snippets write to. Per ``model.md``
 nuspace has no state pillar -- state is Nu's kv fabric -- but a bare
 ``nu.kv.StrRef("foo")`` carries no owner Shape, so it never resolves
@@ -34,11 +41,13 @@ import nu
 # One way only: neither submodule's shapes may import back from here. They
 # import nu alone, so this edge cannot deadlock whichever way the package is
 # entered, and nothing in this package depends on import order any more.
+from nuspace.agent.shapes import Agent
 from nuspace.apps.shapes import App
+from nuspace.chat.shapes import Chat
 from nuspace.pages.shapes import Page, Section
 
 
-__all__ = ["App", "Page", "Section", "Space"]
+__all__ = ["Agent", "App", "Chat", "Page", "Section", "Space"]
 
 
 class Space(nu.Shape):
@@ -54,3 +63,11 @@ class Space(nu.Shape):
     apps = nu.kv.ShapesDictRef.slot(App)
     pages = nu.kv.ShapesDictRef.slot(Page)
     state = nu.kv.DictRef.slot(str)
+    # Both singular, not dicts: nuagent runs one task at a time, so one slot
+    # each is the true statement and a dict keyed by run id would be a shape
+    # describing a concurrency the loop does not have.
+    agent = nu.kv.ShapeRef.slot(Agent)
+    # Top level, not nested under `agent`, because it is not the agent's
+    # property. Anything in the space may post here -- a cron job, an app, a
+    # person at a REPL -- and the sidebar cannot tell which did.
+    chat = nu.kv.ShapeRef.slot(Chat)

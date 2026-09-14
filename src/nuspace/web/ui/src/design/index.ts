@@ -18,6 +18,7 @@
 //   header.ts          the page masthead
 //   rail.ts            the rail, shared by the pages and apps surfaces
 //   apps.ts            the apps canvas
+//   chat.ts            the agent sidebar, pinned on the shell
 //   lens.ts            the lens surface
 //   section-status.ts  the six-state vocabulary
 //
@@ -34,6 +35,7 @@
 // Anything in here that turns out to be generic graduates to ui-kit.
 
 export * from "./apps";
+export * from "./chat";
 export * from "./document";
 export * from "./header";
 export * from "./lens";

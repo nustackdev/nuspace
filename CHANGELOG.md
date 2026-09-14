@@ -9,6 +9,10 @@ Below is the changelog for **nuspace** - the full commit stream. Newest first.
 The `nuspace-ui` wheel is the same source tree's vite output and is not tracked
 separately here.
 
+## Unreleased
+
+- Add the agent sidebar: a nuagent run on Space.agent, a conversation on Space.chat, and a ChatRef pinned on the shell
+
 ## 0.1.1 — 2026-09-14
 
 - Depend on nucore and nustd[all]: a space reaches most fabrics, so picking extras only defers the ImportError
