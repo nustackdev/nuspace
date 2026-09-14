@@ -7,6 +7,6 @@ from importlib.metadata import PackageNotFoundError, version
 
 def nuspace_version() -> str:
     try:
-        return version("nuspace-py")
+        return version("nuspace")
     except PackageNotFoundError:
         return "0.0.0+dev"

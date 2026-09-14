@@ -1,0 +1,134 @@
+# Publishes the `nuspace` distribution to PyPI on a tag push like `nuspace@0.1.0`.
+# Manual "Run workflow" dispatch builds only, unless you tick `publish`.
+#
+# `nuspace` tags own release semantics for the repo -- this workflow also
+# creates a GitHub Release attached to the tag. The sibling `nuspace-ui` wheel
+# has its own tag but does not cut a release.
+#
+# Setup once (PyPI trusted publisher / OIDC, no secrets):
+#   pypi.org -> account -> Publishing -> Add pending publisher
+#     PyPI project name: nuspace
+#     Owner: nustackdev
+#     Repository name: nuspace
+#     Workflow name: publish-nuspace.yml
+#     Environment name: (leave blank)
+#
+# Two distributions ship from this repo, on independent tags:
+#   .                      -> nuspace     (the runtime + the `nuspace` command)
+#   src/nuspace/web/ui     -> nuspace-ui  (the compiled vite bundle)
+#
+# They version independently. `nuspace` hard-depends on `nuspace-ui>=X.Y.Z`, so
+# a python release can require a newer bundle, but a bundle-only fix ships on
+# its own tag without republishing this wheel.
+#
+# The wheel deliberately excludes `src/nuspace/web/ui/**` (see the hatch config
+# in pyproject.toml). The compiled assets live in the nuspace-ui wheel and are
+# found at runtime by `import nuspace_ui` -- see `_bundled_static()` in
+# src/nuspace/web/serve/app.py. So this build needs no node toolchain, even
+# though an install always pulls the bundle.
+#
+# Ordering on a coordinated release: push the `nuspace-ui@` tag first, so the
+# bundle is on the index before the wheel that requires it.
+#
+# Release flow:
+#   1. Bump `version` in `pyproject.toml`.
+#   2. Rename the CHANGELOG's `Unreleased` heading to the new version + date,
+#      and update the package list at the top.
+#   3. Commit and push to main.
+#   4. `git tag nuspace@X.Y.Z && git push origin nuspace@X.Y.Z`.
+name: Publish nuspace to PyPI
+
+on:
+  push:
+    tags: ["nuspace@*"]
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "Publish to PyPI (otherwise build only)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write   # needed to create the GitHub Release on tag push
+  id-token: write   # needed for PyPI trusted publishing (OIDC)
+
+concurrency:
+  group: publish-nuspace
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: verify tag matches pyproject.toml version
+        if: startsWith(github.ref, 'refs/tags/nuspace@')
+        run: |
+          TAG_VERSION="${GITHUB_REF#refs/tags/nuspace@}"
+          PKG_VERSION=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
+            echo "tag nuspace@$TAG_VERSION does not match pyproject.toml version $PKG_VERSION"
+            exit 1
+          fi
+
+      # `uv build` would normally resolve the `[tool.uv.sources]` path entries
+      # (the local nu / nuagent checkouts next to this repo, absent on CI).
+      # Build is metadata-only for a hatchling project, so nothing is resolved
+      # and the published wheel carries the plain PyPI requirements.
+      - name: build distribution
+        run: uv build --out-dir dist
+
+      # skip-existing keeps this idempotent: a rerun after a partial failure
+      # resumes instead of dying on files that already uploaded, and a tag can
+      # be pushed after a manual publish to cut the GitHub Release.
+      - name: publish nuspace
+        if: >-
+          startsWith(github.ref, 'refs/tags/nuspace@') || inputs.publish
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist
+          skip-existing: true
+
+      - name: build release notes from CHANGELOG
+        if: startsWith(github.ref, 'refs/tags/nuspace@')
+        run: |
+          VERSION="${GITHUB_REF#refs/tags/nuspace@}"
+          PREV=$(git tag -l 'nuspace@*' --sort=-v:refname | grep -v "^nuspace@${VERSION}$" | head -1)
+          {
+            echo "## Changelog"
+            echo
+            awk -v ver="$VERSION" '
+              $0 ~ "^## "ver"( |$)" {flag=1; next}
+              flag && /^## / {exit}
+              flag {print}
+            ' CHANGELOG.md
+            if [ -n "$PREV" ]; then
+              echo
+              echo "**Full Changelog**: https://github.com/${GITHUB_REPOSITORY}/compare/${PREV}...nuspace@${VERSION}"
+            fi
+          } > release_notes.md
+          cat release_notes.md
+
+      - name: create github release
+        if: startsWith(github.ref, 'refs/tags/nuspace@')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ github.ref_name }}
+          body_path: release_notes.md
+          # Explicit extensions, not `dist/**`: uv drops a .gitignore in its
+          # output dir and the broad glob uploaded it as `default.gitignore`.
+          files: |
+            dist/*.whl
+            dist/*.tar.gz
+            dist/*.attestation

@@ -107,8 +107,10 @@ build-nuspace:
 
 build-ui: web-build
 	@echo "$(BLUE)Building nuspace-ui web-bundle wheel...$(NC)"
-	cd $(UI_APP) && uv build --wheel
-	@echo "$(GREEN)Built: $(UI_APP)/dist/$(NC)"
+	# --out-dir keeps the wheel out of dist/, which IS the vite output we
+	# force-include into it. Writing there packages the last wheel into the next.
+	cd $(UI_APP) && uv build --wheel --out-dir wheel-dist
+	@echo "$(GREEN)Built: $(UI_APP)/wheel-dist/$(NC)"
 
 build-all: build-nuspace build-ui
 	@echo "$(GREEN)Both wheels built$(NC)"

@@ -1,0 +1,119 @@
+# Publishes the `nuspace-ui` wheel to PyPI on a tag push like `nuspace-ui@0.1.0`.
+# Manual "Run workflow" dispatch builds but does NOT publish.
+#
+# The nuspace-ui wheel is nothing but the compiled vite SPA, force-included at
+# the wheel path `nuspace_ui/build/`. It carries no python source and no
+# dependencies. The runtime locates it with `import nuspace_ui` -- see
+# `_bundled_static()` in src/nuspace/web/serve/app.py -- and skips the static
+# mount entirely if it is not installed.
+#
+# Keeping the bundle in its own distribution is the point: PyPI caps project
+# size, and a compiled SPA rebuilt on every UI tweak would burn through the
+# `nuspace` project's quota. Here it churns on its own budget.
+#
+# Setup once (PyPI trusted publisher / OIDC, no secrets):
+#   pypi.org -> account -> Publishing -> Add pending publisher
+#     PyPI project name: nuspace-ui
+#     Owner: nustackdev
+#     Repository name: nuspace
+#     Workflow name: publish-nuspace-ui.yml
+#     Environment name: (leave blank)
+#
+# Release flow:
+#   1. Bump `version` in both `src/nuspace/web/ui/pyproject.toml` and
+#      `src/nuspace/web/ui/package.json` (keep them equal).
+#   2. Commit and push to main.
+#   3. `git tag nuspace-ui@X.Y.Z && git push origin nuspace-ui@X.Y.Z`.
+name: Publish nuspace-ui to PyPI
+
+on:
+  push:
+    tags: ["nuspace-ui@*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write   # PyPI trusted publishing (OIDC)
+
+concurrency:
+  group: publish-nuspace-ui
+  cancel-in-progress: false
+
+env:
+  UI_DIR: src/nuspace/web/ui
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: src/nuspace/web/ui/package-lock.json
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: install uv
+        uses: astral-sh/setup-uv@v5
+
+      # Both files carry the version; a tag that matches one and not the other
+      # would ship a wheel whose contents disagree with its metadata.
+      - name: verify tag matches pyproject.toml and package.json
+        if: startsWith(github.ref, 'refs/tags/nuspace-ui@')
+        working-directory: ${{ env.UI_DIR }}
+        run: |
+          TAG_VERSION="${GITHUB_REF#refs/tags/nuspace-ui@}"
+          PKG_VERSION=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+          NPM_VERSION=$(node -p "require('./package.json').version")
+          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
+            echo "tag nuspace-ui@$TAG_VERSION does not match pyproject.toml version $PKG_VERSION"
+            exit 1
+          fi
+          if [ "$TAG_VERSION" != "$NPM_VERSION" ]; then
+            echo "tag nuspace-ui@$TAG_VERSION does not match package.json version $NPM_VERSION"
+            exit 1
+          fi
+
+      - name: install js deps
+        working-directory: ${{ env.UI_DIR }}
+        run: npm ci
+
+      - name: typecheck
+        working-directory: ${{ env.UI_DIR }}
+        run: npm run typecheck
+
+      # `npm run build` is `tsc -b && vite build` -- output lands in dist/,
+      # which the hatch force-include maps to `nuspace_ui/build/` in the wheel.
+      - name: build bundle
+        working-directory: ${{ env.UI_DIR }}
+        run: npm run build
+
+      - name: fail if the bundle is empty
+        working-directory: ${{ env.UI_DIR }}
+        run: |
+          if [ ! -f dist/index.html ]; then
+            echo "vite build produced no dist/index.html -- refusing to ship an empty bundle"
+            exit 1
+          fi
+          ls -la dist
+
+      # --wheel skips the sdist step: an sdist would strip `dist/` (gitignored)
+      # and the wheel-from-sdist path would fail the force-include lookup.
+      # --out-dir keeps the wheel out of `dist/`, which IS the vite output we
+      # force-include into it.
+      - name: build wheel
+        working-directory: ${{ env.UI_DIR }}
+        run: uv build --wheel --out-dir wheel-dist
+
+      - name: publish
+        if: startsWith(github.ref, 'refs/tags/nuspace-ui@')
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: src/nuspace/web/ui/wheel-dist
+          skip-existing: true
