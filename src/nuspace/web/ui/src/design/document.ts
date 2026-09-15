@@ -47,15 +47,36 @@ export const docPageSurface = cn(docPage, "flex min-w-0 flex-1 flex-col");
 export const docPageLoading = "flex items-center gap-2 p-8 text-base text-text-muted";
 
 /**
- * The click target under the last block. A document has to be openable by
- * clicking the empty space below it, or the only way to start writing on a
- * fresh page is to find a control. Sized and padded like a prose block so the
- * caret does not jump when the click turns into one.
+ * A ghost input: the line where a block will be, before there is one.
+ *
+ * Padded and set like a prose block, because the moment it becomes one the
+ * caret must not move: what you are looking at is where your text will be.
+ *
+ * It says nothing at rest. A permanent control sitting at the foot of every
+ * document repeating its own instructions is the loudest thing on a page
+ * whose job is to be quiet, and the affordance costs nothing to defer -- the
+ * hint arrives the instant the caret does, which is the only moment it is an
+ * answer to anything. Hence the transparent placeholder rather than a
+ * conditional label: the text is always there for a screen reader, it is
+ * merely not ink until you are in it.
  */
-export const docAppendBlock = cn(
-	"focus-ring w-full rounded-sm px-doc-block-x py-doc-block-y",
-	"text-left text-xl text-text-muted hover:bg-doc-hover",
+export const docGhost = cn(
+	"w-full rounded-sm border-0 bg-transparent outline-none",
+	"px-doc-block-x py-doc-block-y",
+	"text-xl leading-relaxed text-text-primary",
+	"placeholder:text-transparent focus:placeholder:text-text-muted",
 );
+
+/**
+ * The run-off under the last block, and the click target that opens it.
+ *
+ * Two jobs, one box. A document wants air past its end -- ending flush with
+ * the window bottom reads as truncation -- and that air is also the only
+ * large, obvious place to click to start writing, which is what every
+ * document surface people already use does. `cursor-text` is the promise;
+ * `docGhost` below the last block is what the click lands in.
+ */
+export const docTail = "h-doc-tail w-full shrink-0 cursor-text";
 
 /** Document body type tier. 16px is the only place typography.md ships xl. */
 export const docProse = "text-xl text-text-primary";

@@ -176,6 +176,15 @@
 	--spacing-doc-block-y: 0.25rem; /* 4           prose block pad-y        */
 	--spacing-doc-block-y-program: 0.5rem; /* 8    program block pad-y      */
 	--spacing-doc-block-gap: 0.125rem; /* 2        blocks are contiguous    */
+	--spacing-doc-tail: 30vh; /* the dead air under the last block. A document
+	                           * that ends at the window bottom has nowhere to
+	                           * click to start writing, and reads as though it
+	                           * were cut off rather than finished. Viewport
+	                           * relative on purpose: it is a proportion of what
+	                           * you can see, not a distance, so it stays a
+	                           * comfortable run-off on a laptop and on a 4k
+	                           * panel alike. Clicking it lands in the
+	                           * end-of-page ghost -- see `docTail`.          */
 	--spacing-doc-dot: 0.5rem; /* 8               status dot                */
 	--spacing-doc-rail: 0.125rem; /* 2            status / focus rail width */
 }

@@ -22,6 +22,27 @@
 // source -- because every block compiles, runs, is supervised and reports
 // status identically, and chrome that pretended otherwise was lying.
 //
+// ## The one thing on the canvas that is not a block: the ghost input
+//
+// A ghost is a line you can put a caret in that has not decided what it is
+// yet. It holds no value, owns no id, and nothing exists in the store because
+// of it -- it is a promise that the next thing you do will make a block, and
+// a place to stand while you do it. Type a character and it becomes a text
+// block carrying that character; press `/` and it offers the whole menu,
+// which is the one place the whole menu makes sense.
+//
+// There is always one at the end of the page, which is what makes an empty
+// page writeable without hunting for a control, and the gutter `+` summons a
+// second one after any row. The summoned one is transient: it resolves into a
+// block or it is gone the moment it loses focus with nothing in it. That is
+// the difference between "insert a block below" -- which used to create one
+// before you had said what it should be -- and "make room below".
+//
+// Seeding the block it becomes goes the long way round, and has to. A create
+// carries structure, not prose (see "Split and merge" below), so the typed
+// character is parked and handed to the new block's own prose ref the moment
+// that ref registers. See `pendingSeed`.
+//
 // ## The two selection regimes
 //
 // Inside a text block you get a caret and everything a text editor gives
@@ -75,15 +96,15 @@ import {
 	TooltipTrigger,
 } from "@nustackdev/ui-kit";
 import { Check, Code, Copy, GripVertical, Plus } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SectionStatusDot } from "../../components";
 import {
-	docAppendBlock,
 	docBlock,
 	docColumn,
 	docDragHandle,
 	docDropIndicator,
 	docFocusRail,
+	docGhost,
 	docGutter,
 	docGutterAffordances,
 	docGutterRow,
@@ -91,6 +112,7 @@ import {
 	docGutterToggle,
 	docStatusRail,
 	docStatusTrace,
+	docTail,
 	docTextBlock,
 	hasGutterRail,
 	SECTION_STATUS,
@@ -102,6 +124,7 @@ import { ProgramBlock } from "./Program";
 import {
 	type BlockProse,
 	BlockProseContext,
+	type BlockSeed,
 	type ExitDir,
 	type InsertTpl,
 	type ProseHandle,
@@ -145,7 +168,20 @@ export function Canvas({
 	/** Focus intent for a block that has been asked for but not shipped back
 	 *  yet. `set_page` prunes focus pointing at a block it does not carry, so
 	 *  the intent is parked here until the block actually arrives. */
-	const pendingFocus = useRef<{ id: string; edit: boolean } | null>(null);
+	const pendingFocus = useRef<{ id: string; edit: boolean; place: "start" | "end" } | null>(null);
+	/** What a block that does not exist yet is to start life holding.
+	 *  Parked here rather than sent, because prose does not travel on the
+	 *  create wire; `registerHandle` below hands it over the instant the new
+	 *  block's own prose ref turns up. */
+	const pendingSeed = useRef<{ id: string; seed: BlockSeed } | null>(null);
+	/** The two ghost inputs, for vertical travel to aim at. `plus` is the one
+	 *  a gutter `+` summoned, and is null far more often than not. */
+	const endGhost = useRef<HTMLInputElement | null>(null);
+	const plusGhost = useRef<HTMLInputElement | null>(null);
+	/** The block the focused ghost has already turned into, if any. Cleared
+	 *  every time a ghost takes the caret, so a ghost is spent exactly once
+	 *  and a seed that never got delivered cannot wedge the next one. */
+	const becoming = useRef<string | null>(null);
 
 	const index = useCallback((id: string) => blocks.findIndex((b) => b.id === id), [blocks]);
 
@@ -185,14 +221,36 @@ export function Canvas({
 		[patch],
 	);
 
+	/**
+	 * Leave a block vertically and land wherever is next.
+	 *
+	 * A ghost is not in `blocks` -- it is not a block -- but it IS in the
+	 * document, between two rows or at the foot of the page, so travel has to
+	 * know about it or the last line on every page would be unreachable from
+	 * the keyboard. It carries no column: there is no text in it to land under.
+	 */
 	const step = useCallback(
 		(fromId: string, dir: ExitDir, column: number | undefined, x?: number) => {
 			const i = index(fromId);
+			if (i < 0) return;
+			if (dir === "down") {
+				if (editor.ghost === fromId) {
+					plusGhost.current?.focus();
+					return;
+				}
+				if (i === blocks.length - 1) {
+					endGhost.current?.focus();
+					return;
+				}
+			} else if (i > 0 && editor.ghost === blocks[i - 1].id) {
+				plusGhost.current?.focus();
+				return;
+			}
 			const j = dir === "up" ? i - 1 : i + 1;
-			if (i < 0 || j < 0 || j >= blocks.length) return;
+			if (j < 0 || j >= blocks.length) return;
 			focusBlock(blocks[j], { place: dir === "up" ? "end" : "start", column, x }, editor.editing);
 		},
-		[blocks, editor.editing, focusBlock, index],
+		[blocks, editor.editing, editor.ghost, focusBlock, index],
 	);
 
 	const enterBlock = useCallback(
@@ -246,7 +304,7 @@ export function Canvas({
 		pendingFocus.current = null;
 		patch((e) => ({
 			editing: want.edit && !e.editing.includes(want.id) ? [...e.editing, want.id] : e.editing,
-			focus: { blockId: want.id, place: "start" },
+			focus: { blockId: want.id, place: want.place },
 			selected: [],
 		}));
 	}, [blocks, patch]);
@@ -266,9 +324,14 @@ export function Canvas({
 	 * `source` empty means "the tpl's starter", which arrived in the mount
 	 * rather than being written here: a template that exists in two languages
 	 * is a template that drifts.
+	 *
+	 * `seed` is the other thing a new block can start life holding, and it is
+	 * a separate argument because it is a separate substance: `source` is the
+	 * program and rides the create, `seed` is prose and cannot -- it waits for
+	 * the block's prose ref to exist and is handed over there.
 	 */
 	const createAfter = useCallback(
-		(afterId: string | null, tpl: BlockTpl, source = "") => {
+		(afterId: string | null, tpl: BlockTpl, source = "", seed?: BlockSeed) => {
 			const id = mintId("s");
 			const at = afterId ? index(afterId) : -1;
 			notify("section.create", {
@@ -279,7 +342,13 @@ export function Canvas({
 				source: source || starters[tpl] || "",
 				index: at < 0 ? blocks.length : at + 1,
 			});
-			pendingFocus.current = { id, edit: tpl === "program" };
+			// A seeded block is one somebody has already started writing, so the
+			// caret belongs after what they wrote. Everything else opens empty
+			// (or at the top of a starter program) and "start" is the same place
+			// or the right one. Load bearing only if the focus intent happens to
+			// land after the prose ref has already taken the seed.
+			pendingFocus.current = { id, edit: tpl === "program", place: seed ? "end" : "start" };
+			pendingSeed.current = seed ? { id, seed } : null;
 			return id;
 		},
 		[blocks.length, index, notify, pageId, starters],
@@ -512,23 +581,28 @@ export function Canvas({
 	// -- slash menu -----------------------------------------------------------
 
 	const slash = editor.slash;
-	const slashItems = useMemo(() => (slash ? filterSlash(slash.query) : []), [slash]);
+	const slashItems = useMemo(() => (slash ? filterSlash(slash.query, slash.mode) : []), [slash]);
 
 	const pickSlash = useCallback(
 		(item: SlashItem) => {
 			const s = editor.slash;
 			if (!s) return;
-			if (s.mode === "insert") {
-				patch({ slash: null });
+			if (s.mode === "ghost") {
+				patch({ slash: null, ghost: null });
+				// A ghost has no line to shape and nothing to split, so the two
+				// actions read differently here: a "split" item names the tpl to
+				// make, and a prose item makes a text block already wearing the
+				// shape it would otherwise have imposed. The prefix never lands as
+				// characters -- the seed applies the same command the inline path
+				// does, so the caret ends up after it either way.
 				if (item.action.act === "split") {
 					createAfter(s.blockId, item.action.insert === "program" ? "program" : "text");
 					return;
 				}
-				const seed = item.action.act === "prefix" ? item.action.prefix : item.action.text;
-				createAfter(s.blockId, "text", seed);
+				createAfter(s.blockId, "text", "", { action: item.action });
 				return;
 			}
-			proseHandles.current.get(s.blockId)?.applySlash(item.action);
+			if (s.blockId) proseHandles.current.get(s.blockId)?.applySlash(item.action);
 		},
 		[createAfter, editor.slash, patch],
 	);
@@ -537,7 +611,7 @@ export function Canvas({
 		(key: string): boolean => {
 			const s = editor.slash;
 			if (!s) return false;
-			const items = filterSlash(s.query);
+			const items = filterSlash(s.query, s.mode);
 			if (key === "ArrowDown" || key === "ArrowUp") {
 				const d = key === "ArrowDown" ? 1 : -1;
 				const n = Math.max(1, items.length);
@@ -558,6 +632,74 @@ export function Canvas({
 		[editor.slash, patch, pickSlash],
 	);
 
+	// -- the ghost inputs ------------------------------------------------------
+	//
+	// Both ghosts run the same handlers. What differs is where they sit and
+	// whether they are allowed to go away: the end-of-page one is furniture,
+	// the summoned one is a passing offer. `after` is the block a ghost would
+	// create past -- null only on a page with no blocks -- and it doubles as
+	// the ghost's identity, which is how the slash state can name one when
+	// neither of them has an id of its own.
+
+	/** Nothing was entered. Close the menu, and take the offer back. */
+	const dismissGhost = useCallback(
+		(transient: boolean) => patch(transient ? { ghost: null, slash: null } : { slash: null }),
+		[patch],
+	);
+
+	/**
+	 * Something was entered. This is the moment a ghost becomes a block.
+	 *
+	 * And it happens at most once per ghost, which is the whole reason this
+	 * bothers to remember anything. A create round-trips, and somebody typing
+	 * at speed gets several keystrokes in before it lands; one block per
+	 * keystroke is what "create on first character" means if you do not say
+	 * otherwise. So the first character makes the block and every character
+	 * after it rewrites the seed that block has not received yet. Nothing is
+	 * dropped and nothing is made twice.
+	 */
+	const seedGhost = useCallback(
+		(after: string | null, text: string) => {
+			const id = becoming.current;
+			if (id) {
+				if (pendingSeed.current?.id === id) pendingSeed.current = { id, seed: { text } };
+				return;
+			}
+			patch({ slash: null, ghost: null });
+			becoming.current = createAfter(after, "text", "", { text });
+		},
+		[createAfter, patch],
+	);
+
+	/** Arrow out of a ghost into whichever block is that way, if any. */
+	const leaveGhost = useCallback(
+		(after: string | null, dir: ExitDir, transient: boolean) => {
+			if (transient) patch({ ghost: null });
+			const i = after ? index(after) : -1;
+			const target = dir === "up" ? blocks[i] : blocks[i + 1];
+			if (!target) return;
+			focusBlock(target, { place: dir === "up" ? "end" : "start" }, editor.editing);
+		},
+		[blocks, editor.editing, focusBlock, index, patch],
+	);
+
+	/** Escape with no menu open, which in prose selects the block. Same here:
+	 *  the block the ghost hangs off, since the ghost itself cannot be one. */
+	const escapeGhost = useCallback(
+		(after: string | null, transient: boolean) => {
+			const block = after ? blocks[index(after)] : null;
+			patch((e) => ({
+				slash: null,
+				ghost: transient ? null : e.ghost,
+				selected: block ? [block.id] : [],
+				anchor: block ? block.id : null,
+				focus: null,
+			}));
+			rootRef.current?.focus({ preventScroll: true });
+		},
+		[blocks, index, patch],
+	);
+
 	// -- render ---------------------------------------------------------------
 
 	const setEl = useCallback((id: string, el: HTMLElement | null) => {
@@ -565,14 +707,66 @@ export function Canvas({
 		else elRefs.current.delete(id);
 	}, []);
 
-	// Stable by construction. The bus below is rebuilt every render, so the
-	// one thing a block's editor keeps across renders must not be.
+	/**
+	 * A block's prose ref arriving or leaving.
+	 *
+	 * Stable by construction. The bus below is rebuilt every render, so the
+	 * one thing a block's editor keeps across renders must not be.
+	 *
+	 * This is also where a parked seed is delivered, and it has to be: a
+	 * create round-trips through the server, the page comes back, the section
+	 * is compiled and run, and only then does its `ProseRef` exist. There is
+	 * no earlier moment at which "put this text in that block" is a thing the
+	 * browser can do, and registration is exactly that moment.
+	 */
 	const registerHandle = useCallback((id: string, handle: ProseHandle | null) => {
-		if (handle) proseHandles.current.set(id, handle);
-		else proseHandles.current.delete(id);
+		if (!handle) {
+			proseHandles.current.delete(id);
+			return;
+		}
+		proseHandles.current.set(id, handle);
+		const want = pendingSeed.current;
+		if (want?.id !== id) return;
+		pendingSeed.current = null;
+		handle.seed(want.seed);
 	}, []);
 
 	const drag = editor.drag;
+	const lastId = blocks.length ? blocks[blocks.length - 1].id : null;
+
+	/**
+	 * One ghost, wired up. `after` is both where it sits and who it is.
+	 *
+	 * A closure rather than a memo: it takes arguments that only the render
+	 * knows, and what it returns is an element, not a value anybody caches.
+	 */
+	const ghost = (after: string | null, transient: boolean) => (
+		<Ghost
+			hostRef={transient ? plusGhost : endGhost}
+			autoFocus={transient}
+			query={slash && slash.mode === "ghost" && slash.blockId === after ? slash.query : null}
+			onWake={() => {
+				becoming.current = null;
+				// Clicking a ghost leaves block-selection mode, exactly as
+				// clicking into a block does.
+				patch((e) => (e.selected.length ? { selected: [], anchor: null } : {}));
+			}}
+			onSeed={(text) => seedGhost(after, text)}
+			onOpenSlash={(anchor) =>
+				patch({
+					slash: { blockId: after, mode: "ghost", query: "", from: 0, to: 0, anchor, index: 0 },
+					selected: [],
+					anchor: null,
+				})
+			}
+			onQuery={(query) => patch((e) => (e.slash ? { slash: { ...e.slash, query, index: 0 } } : {}))}
+			onKey={slashKey}
+			onCloseSlash={() => patch({ slash: null })}
+			onEscape={() => escapeGhost(after, transient)}
+			onLeave={(dir) => leaveGhost(after, dir, transient)}
+			onDismiss={() => dismissGhost(transient)}
+		/>
+	);
 
 	// -- where the caret actually is -------------------------------------------
 	//
@@ -621,115 +815,63 @@ export function Canvas({
 				const editing = editor.editing.includes(block.id);
 				const state = block.status.state;
 				return (
-					// biome-ignore lint/a11y/noStaticElementInteractions: a mousedown anywhere in a block hands control to that block's own editor
-					<div
-						key={block.id}
-						ref={(el) => setEl(block.id, el)}
-						data-block={block.id}
-						className={docBlock({
-							selected,
-							selectedStrong: selected && editor.selected.length > 1,
-							focused,
-							dragging: drag?.id === block.id,
-							program: !bare,
-						})}
-						onMouseDown={(e) => {
-							// A plain click inside a block leaves block-selection mode;
-							// the block's own editor takes over from here.
-							if (e.button === 0 && editor.selected.length > 0) {
-								patch({ selected: [], anchor: null });
-							}
-						}}
-					>
-						{drag && drag.at === i ? <span className={`${docDropIndicator} top-0`} /> : null}
-						{/* One rail slot. A status the author must act on wins over
-						    "you are here", because a failing block is more urgent. */}
-						{hasGutterRail(state) ? (
-							<span className={docStatusRail(state)} />
-						) : focused ? (
-							<span className={docFocusRail} />
-						) : null}
-						<Gutter
-							program={!bare}
-							blockId={block.id}
-							editing={editing}
-							onSetEditing={(on) => setEditing(block.id, on)}
-							onDrag={(e) => startDrag(e, block.id)}
-							onPlus={(rect) =>
-								patch({
-									slash: {
-										blockId: block.id,
-										mode: "insert",
-										query: "",
-										from: 0,
-										to: 0,
-										anchor: { x: rect.left + 24, y: rect.bottom },
-										index: 0,
-									},
-								})
-							}
-							onSelect={() => {
-								patch({
-									selected: [block.id],
-									anchor: block.id,
-									focus: null,
-								});
-								rootRef.current?.focus({ preventScroll: true });
+					<Fragment key={block.id}>
+						{/* biome-ignore lint/a11y/noStaticElementInteractions: a mousedown anywhere in a block hands control to that block's own editor */}
+						<div
+							ref={(el) => setEl(block.id, el)}
+							data-block={block.id}
+							className={docBlock({
+								selected,
+								selectedStrong: selected && editor.selected.length > 1,
+								focused,
+								dragging: drag?.id === block.id,
+								program: !bare,
+							})}
+							onMouseDown={(e) => {
+								// A plain click inside a block leaves block-selection mode;
+								// the block's own editor takes over from here.
+								if (e.button === 0 && editor.selected.length > 0) {
+									patch({ selected: [], anchor: null });
+								}
 							}}
-						/>
-						{bare ? (
-							<TextBlock
-								block={block}
-								uiPath={blockUiPath(refPath, block.id)}
+						>
+							{drag && drag.at === i ? <span className={`${docDropIndicator} top-0`} /> : null}
+							{/* One rail slot. A status the author must act on wins over
+						    "you are here", because a failing block is more urgent. */}
+							{hasGutterRail(state) ? (
+								<span className={docStatusRail(state)} />
+							) : focused ? (
+								<span className={docFocusRail} />
+							) : null}
+							<Gutter
+								program={!bare}
+								blockId={block.id}
 								editing={editing}
-								onCommit={(src) => commitSource(block.id, src)}
-								onExit={(dir, column) => step(block.id, dir, column)}
-								onCloseEditor={() => setEditing(block.id, false)}
-								bus={{
-									blockId: block.id,
-									focusReq,
-									slashFrom:
-										slash && slash.mode === "inline" && slash.blockId === block.id
-											? slash.from
-											: null,
-									onFocusConsumed: () => patch({ focus: null }),
-									onExit: (dir, column, x) => step(block.id, dir, column, x),
-									onMergeUp: (text) => mergeUp(block.id, text),
-									onSplit: (head, tail, insert) => splitBlock(block.id, head, tail, insert),
-									onSlashOpen: (offset, anchor) =>
-										patch({
-											slash: {
-												blockId: block.id,
-												mode: "inline",
-												query: "",
-												from: offset,
-												to: offset + 1,
-												anchor,
-												index: 0,
-											},
-										}),
-									onSlashQuery: (query) =>
-										patch((e) => (e.slash ? { slash: { ...e.slash, query, index: 0 } } : {})),
-									onSlashClose: () => patch({ slash: null }),
-									onSlashKey: slashKey,
-									onSelectSelf: () => {
-										patch({ selected: [block.id], anchor: block.id, focus: null });
-										rootRef.current?.focus({ preventScroll: true });
-									},
-									registerHandle,
+								onSetEditing={(on) => setEditing(block.id, on)}
+								onDrag={(e) => startDrag(e, block.id)}
+								onPlus={() => {
+									// Make room, do not make a block. What goes here is
+									// whatever gets typed next, and until something is
+									// typed there is nothing to have an opinion about.
+									//
+									// On the last block there is already a ghost directly
+									// below -- the permanent one -- so summoning a second
+									// would put two identical empty lines next to each
+									// other and make vertical travel pick between them.
+									if (block.id === lastId) {
+										patch({ ghost: null, slash: null });
+										endGhost.current?.focus();
+										return;
+									}
+									patch({
+										ghost: block.id,
+										slash: null,
+										selected: [],
+										anchor: null,
+										focus: null,
+									});
 								}}
-							/>
-						) : (
-							<ProgramBlock
-								source={block.source}
-								uiPath={blockUiPath(refPath, block.id)}
-								status={block.status}
-								editing={editing}
-								focusReq={focusReq}
-								onFocusConsumed={() => patch({ focus: null })}
-								onCommit={(src) => commitSource(block.id, src)}
-								onExit={(dir, column) => step(block.id, dir, column)}
-								onSelectSelf={() => {
+								onSelect={() => {
 									patch({
 										selected: [block.id],
 										anchor: block.id,
@@ -737,10 +879,73 @@ export function Canvas({
 									});
 									rootRef.current?.focus({ preventScroll: true });
 								}}
-								onSetEditing={(on) => setEditing(block.id, on)}
 							/>
-						)}
-					</div>
+							{bare ? (
+								<TextBlock
+									block={block}
+									uiPath={blockUiPath(refPath, block.id)}
+									editing={editing}
+									onCommit={(src) => commitSource(block.id, src)}
+									onExit={(dir, column) => step(block.id, dir, column)}
+									onCloseEditor={() => setEditing(block.id, false)}
+									bus={{
+										blockId: block.id,
+										focusReq,
+										slashFrom:
+											slash && slash.mode === "inline" && slash.blockId === block.id
+												? slash.from
+												: null,
+										onFocusConsumed: () => patch({ focus: null }),
+										onExit: (dir, column, x) => step(block.id, dir, column, x),
+										onMergeUp: (text) => mergeUp(block.id, text),
+										onSplit: (head, tail, insert) => splitBlock(block.id, head, tail, insert),
+										onSlashOpen: (offset, anchor) =>
+											patch({
+												slash: {
+													blockId: block.id,
+													mode: "inline",
+													query: "",
+													from: offset,
+													to: offset + 1,
+													anchor,
+													index: 0,
+												},
+											}),
+										onSlashQuery: (query) =>
+											patch((e) => (e.slash ? { slash: { ...e.slash, query, index: 0 } } : {})),
+										onSlashClose: () => patch({ slash: null }),
+										onSlashKey: slashKey,
+										onSelectSelf: () => {
+											patch({ selected: [block.id], anchor: block.id, focus: null });
+											rootRef.current?.focus({ preventScroll: true });
+										},
+										registerHandle,
+									}}
+								/>
+							) : (
+								<ProgramBlock
+									source={block.source}
+									uiPath={blockUiPath(refPath, block.id)}
+									status={block.status}
+									editing={editing}
+									focusReq={focusReq}
+									onFocusConsumed={() => patch({ focus: null })}
+									onCommit={(src) => commitSource(block.id, src)}
+									onExit={(dir, column) => step(block.id, dir, column)}
+									onSelectSelf={() => {
+										patch({
+											selected: [block.id],
+											anchor: block.id,
+											focus: null,
+										});
+										rootRef.current?.focus({ preventScroll: true });
+									}}
+									onSetEditing={(on) => setEditing(block.id, on)}
+								/>
+							)}
+						</div>
+						{editor.ghost === block.id ? ghost(block.id, true) : null}
+					</Fragment>
 				);
 			})}
 			{drag && drag.at >= blocks.length ? (
@@ -749,20 +954,25 @@ export function Canvas({
 				</div>
 			) : null}
 
-			<button
-				type="button"
-				onClick={() => createAfter(blocks.length ? blocks[blocks.length - 1].id : null, "text")}
-				className={docAppendBlock}
-			>
-				Click to write, or press / for blocks
-			</button>
+			{ghost(lastId, false)}
+
+			{/* biome-ignore lint/a11y/noStaticElementInteractions: the run-off under a document is a click target, not a control -- the keyboard reaches the same ghost by arrowing down */}
+			<div
+				className={docTail}
+				onMouseDown={(e) => {
+					// mousedown and not click, and preventDefault: the caret has to
+					// land in the ghost, not in the empty div that was clicked.
+					if (e.button !== 0) return;
+					e.preventDefault();
+					endGhost.current?.focus();
+				}}
+			/>
 
 			{slash ? (
 				<SlashMenu
 					items={slashItems}
 					index={slash.index}
 					anchor={slash.anchor}
-					takeFocus={slash.mode === "insert"}
 					onPick={pickSlash}
 					onMove={(d) =>
 						patch((e) =>
@@ -778,10 +988,170 @@ export function Canvas({
 								: {},
 						)
 					}
-					onClose={() => patch({ slash: null })}
 				/>
 			) : null}
 		</div>
+	);
+}
+
+/** What a ghost offers before anything has happened in it. */
+const GHOST_HINT = "write, or / for blocks";
+/** ...and once `/` has been pressed, which is the whole of what changed. */
+const GHOST_SEARCH = "type to search";
+
+/**
+ * The ghost input.
+ *
+ * A one-line text input that is never allowed to hold anything. Everything
+ * typed into it leaves immediately -- into a new block, or into the slash
+ * query -- so its value is either the query or the empty string, and it is
+ * controlled to make sure of it. That is what "creates nothing until you
+ * commit" is, mechanically: there is no draft anywhere, because the input is
+ * not where the text was going to live.
+ *
+ * Typed characters are the interesting case. They land in the DOM input, are
+ * read back and wiped from it in the same handler, and are reported onward as
+ * the text the new block should start life with. The input is left holding
+ * nothing, every time, so each `onChange` carries exactly the characters that
+ * were not reported before: written once, never twice, and never left behind
+ * in a field that is about to stop existing. `typed` keeps the running total,
+ * because the block they are going to does not arrive for a round trip and
+ * somebody quick gets three more keystrokes in before it does.
+ *
+ * Wiping the DOM value by hand rather than letting the controlled value do it
+ * is not a shortcut around React: the rendered value IS "", so the two never
+ * disagree. It is there because a keystroke that changes no React state
+ * re-renders nothing, and an input nobody re-rendered keeps what it was given.
+ *
+ * An `<input>` and not a contenteditable on purpose: it is one line, it holds
+ * no marks, it is in the tab order for free, and screen readers already know
+ * what it is.
+ */
+function Ghost({
+	hostRef,
+	autoFocus,
+	query,
+	onWake,
+	onSeed,
+	onOpenSlash,
+	onQuery,
+	onKey,
+	onCloseSlash,
+	onEscape,
+	onLeave,
+	onDismiss,
+}: {
+	hostRef: React.RefObject<HTMLInputElement | null>;
+	/** A summoned ghost takes the caret; the end-of-page one waits for it. */
+	autoFocus: boolean;
+	/** The slash query while the menu is open on THIS ghost. Null when not. */
+	query: string | null;
+	/** The caret arrived. Whatever this ghost was last time does not count. */
+	onWake: () => void;
+	/** Everything typed so far, which is what the new block is to hold. */
+	onSeed: (text: string) => void;
+	onOpenSlash: (anchor: { x: number; y: number }) => void;
+	onQuery: (query: string) => void;
+	/** Return true if the menu consumed the key. Same contract as prose. */
+	onKey: (key: string) => boolean;
+	/** Put the menu away and leave the ghost standing. */
+	onCloseSlash: () => void;
+	onEscape: () => void;
+	onLeave: (dir: ExitDir) => void;
+	onDismiss: () => void;
+}) {
+	const open = query !== null;
+	/** Everything typed since the caret arrived. Spent when it is non-empty. */
+	const typed = useRef("");
+
+	// biome-ignore lint/correctness/useExhaustiveDependencies: hostRef is a ref object and never changes identity
+	useEffect(() => {
+		if (autoFocus) hostRef.current?.focus();
+	}, [autoFocus]);
+
+	return (
+		<input
+			ref={hostRef}
+			type="text"
+			aria-label="New block"
+			className={docGhost}
+			placeholder={open ? GHOST_SEARCH : GHOST_HINT}
+			value={query ?? ""}
+			onFocus={() => {
+				typed.current = "";
+				onWake();
+			}}
+			onChange={(e) => {
+				const el = e.currentTarget;
+				const next = el.value;
+				if (open) {
+					onQuery(next);
+					return;
+				}
+				if (!next) return;
+				el.value = "";
+				typed.current += next;
+				onSeed(typed.current);
+			}}
+			onKeyDown={(e) => {
+				// The ghost owns its keyboard outright, for the reason a focused
+				// block does: the canvas must not also act on a key answered here.
+				e.stopPropagation();
+				if (open && onKey(e.key)) {
+					e.preventDefault();
+					return;
+				}
+				if (open) {
+					// Backspacing off the end of the query is how the menu goes
+					// away in prose -- the `/` gets deleted. There is no `/` here
+					// to delete, so the empty query stands in for it.
+					if (e.key === "Backspace" && query === "") {
+						e.preventDefault();
+						onCloseSlash();
+					}
+					return;
+				}
+				if (e.key === "Escape") {
+					e.preventDefault();
+					onEscape();
+					return;
+				}
+				// Spent. A block is on its way to take the caret, and until it
+				// does this line is a waiting room, not somewhere to navigate
+				// from -- arrowing out of it now would race the arriving caret.
+				if (typed.current) return;
+				if (e.key === "/" && !e.metaKey && !e.ctrlKey && !e.altKey) {
+					// Consumed: the `/` is the gesture, not content. Nothing is in
+					// the input, so there is nothing for the query to be measured
+					// from and nothing to take back out when an item is picked.
+					e.preventDefault();
+					const r = e.currentTarget.getBoundingClientRect();
+					onOpenSlash({ x: r.left, y: r.bottom });
+					return;
+				}
+				if (e.key === "Enter") {
+					// An empty line is a legitimate thing to want.
+					e.preventDefault();
+					onSeed("");
+					return;
+				}
+				if (e.key === "ArrowUp" || e.key === "ArrowLeft" || e.key === "Backspace") {
+					e.preventDefault();
+					onLeave("up");
+					return;
+				}
+				if (e.key === "ArrowDown" || e.key === "ArrowRight") {
+					e.preventDefault();
+					onLeave("down");
+				}
+			}}
+			onBlur={() => {
+				// Nothing was entered, or the pick would have unmounted this. A
+				// menu pick keeps the caret here (mousedown is prevented), so a
+				// blur is always a departure and never a selection.
+				onDismiss();
+			}}
+		/>
 	);
 }
 
@@ -876,7 +1246,8 @@ function Gutter({
 	editing: boolean;
 	onSetEditing: (on: boolean) => void;
 	onDrag: (e: React.PointerEvent) => void;
-	onPlus: (rect: DOMRect) => void;
+	/** Open a line below this block. Not a block: see the canvas header. */
+	onPlus: () => void;
 	onSelect: () => void;
 }) {
 	const [copied, setCopied] = useState(false);
@@ -912,13 +1283,13 @@ function Gutter({
 								<IconButton
 									variant="ghost"
 									size="sm"
-									aria-label="Insert block below"
-									onClick={(e) => onPlus(e.currentTarget.getBoundingClientRect())}
+									aria-label="Add a line below"
+									onClick={onPlus}
 								>
 									<Plus />
 								</IconButton>
 							</TooltipTrigger>
-							<TooltipContent side="top">insert block below</TooltipContent>
+							<TooltipContent side="top">add a line below</TooltipContent>
 						</Tooltip>
 						<Tooltip>
 							<TooltipTrigger asChild>

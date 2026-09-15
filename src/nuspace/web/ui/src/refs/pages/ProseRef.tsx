@@ -80,9 +80,27 @@ export type ExitDir = "up" | "down";
 /** What a split inserts between the two halves, if anything. A tpl name. */
 export type InsertTpl = "text" | "program" | null;
 
+/**
+ * What a block that does not exist yet is to start life holding.
+ *
+ * A text block's content does not travel on the create wire -- the wire
+ * carries the template, and the prose lives on the ref the template mounts
+ * (see Canvas.tsx's header). So "make a block with this in it" is two moves:
+ * create it, then hand the content to its own prose ref the moment that ref
+ * exists. This is the second move's payload.
+ */
+export type BlockSeed =
+	/** Literal characters, as though they had been typed into the new block. */
+	| { text: string }
+	/** The shape a slash item asks for, applied to the new block's empty line. */
+	| { action: SlashAction };
+
 export type ProseHandle = {
 	/** Apply a slash-menu action against the live document and caret. */
 	applySlash: (action: SlashAction) => void;
+	/** Fill a brand-new block. No `/query` to take back out, because nobody
+	 *  typed one here -- the trigger was a ghost input that is already gone. */
+	seed: (seed: BlockSeed) => void;
 };
 
 /**
@@ -232,6 +250,28 @@ function listCommand(ordered: boolean): Command {
 	};
 }
 
+/**
+ * Give the line the caret is on the shape a slash item names.
+ *
+ * The non-structural half of a slash action, and the whole of what a seed
+ * does: a heading is a node type, a list is a wrap, a divider is a node. None
+ * of it is text, which is why an item's `prefix` is a *label* here -- "# " is
+ * what you would have typed, not what gets inserted -- and why seeding a new
+ * block with one lands the caret after the prefix without a prefix ever
+ * existing as characters.
+ */
+function shapeLine(view: EditorView, action: SlashAction): void {
+	if (action.act === "literal") {
+		view.dispatch(view.state.tr.replaceSelectionWith(nodeType.rule.create()));
+	} else if (action.act === "prefix") {
+		if (action.prefix === "- " || action.prefix === "1. ") {
+			listCommand(action.prefix === "1. ")(view.state, view.dispatch, view);
+		} else {
+			PREFIX_COMMANDS[action.prefix]?.(view.state, view.dispatch, view);
+		}
+	}
+}
+
 /* ============================== the entry =============================== */
 
 // Same contract as the kit's own ProseRef: a markdown string in `value`, plus
@@ -346,27 +386,39 @@ function ProseView({ path }: NodeProps) {
 			// Drop the `/query`, then transform the block it was typed in.
 			view.dispatch(state.tr.delete(from, to));
 			ctx.onSlashClose();
-
-			if (action.act === "literal") {
-				view.dispatch(view.state.tr.replaceSelectionWith(nodeType.rule.create()));
-			} else if (action.prefix === "- " || action.prefix === "1. ") {
-				listCommand(action.prefix === "1. ")(view.state, view.dispatch, view);
-			} else {
-				PREFIX_COMMANDS[action.prefix]?.(view.state, view.dispatch, view);
-			}
+			shapeLine(view, action);
 			view.focus();
 		},
 		[settle],
 	);
+
+	/**
+	 * Fill a block that was made a moment ago and is empty.
+	 *
+	 * Deliberately just a transaction: it leaves the editor dirty exactly as a
+	 * keystroke would, so the editor's own quiet-moment save persists it and
+	 * an inbound "" from the booting program cannot overwrite it. Nothing here
+	 * commits, because nothing here is different from typing.
+	 */
+	const seed = useCallback((want: BlockSeed) => {
+		const view = viewRef.current;
+		if (!view) return;
+		if ("text" in want) {
+			if (want.text) view.dispatch(view.state.tr.insertText(want.text));
+		} else {
+			shapeLine(view, want.action);
+		}
+		view.focus();
+	}, []);
 
 	// Registered once. The handle closes over refs, so it never goes stale.
 	const blockId = block?.blockId ?? "";
 	useEffect(() => {
 		const ctx = cb.current.block;
 		if (!ctx) return;
-		ctx.registerHandle(blockId, { applySlash });
+		ctx.registerHandle(blockId, { applySlash, seed });
 		return () => ctx.registerHandle(blockId, null);
-	}, [blockId, applySlash]);
+	}, [blockId, applySlash, seed]);
 
 	// -- the slash query ------------------------------------------------------
 	//

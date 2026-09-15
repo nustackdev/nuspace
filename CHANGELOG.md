@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Type where you want a block instead of choosing what to make first
 - Adding or deleting a block now leaves every other block on the page running
 - Hovering a page block now reveals only that block's controls, and they hide again
 - Slow the block controls' tooltips so passing over them says nothing

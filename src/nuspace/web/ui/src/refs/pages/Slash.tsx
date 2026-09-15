@@ -1,18 +1,33 @@
 // The slash menu.
 //
-// Two ways in, one list out:
+// Two ways in, and what they offer is NOT the same list:
 //
-// - inline: `/` typed at the start of a line inside a text block. Focus
-//   stays in the editor (moving it would collapse the caret and commit), so
-//   the menu is presentational and the block forwards arrow/enter/escape.
-// - insert: the `+` in a block's gutter. Nothing is typing, so the menu takes
-//   focus itself.
+// - inline: `/` typed at the start of a line inside a text block. Prose items
+//   only. Somebody mid-paragraph is choosing how this line looks, not what
+//   kind of block to make next, so offering "Program" there would answer a
+//   question nobody asked. Focus stays in the editor (moving it would
+//   collapse the caret and commit), so the menu is presentational and the
+//   block forwards arrow/enter/escape.
+// - ghost: a ghost input -- the not-yet-a-block line at the end of the page,
+//   or the one a gutter `+` summons. Everything, because a ghost is precisely
+//   where you choose what to make. Focus stays in the ghost's own input for
+//   the same reason it stays in the editor, and the ghost forwards the keys.
+//
+// Neither way takes focus, which is why this component has no keyboard of its
+// own: it draws a list and reports clicks. That used to be untrue -- the `+`
+// opened it with nothing typing and it grabbed focus itself -- and the `+`
+// does not open it any more.
 //
 // Actions split by what they do to document structure. A "prefix" item is
 // pure text: it rewrites the current line's markdown and the block stays one
 // block. "text" / "program" / "split" are structural: they split the block at
 // the caret, which is the only way a new block is ever born out of text.
 // Splitting is always explicit -- that is the rule the block model rests on.
+//
+// From a ghost there is no line to rewrite and nothing to split, so the same
+// two actions mean the other thing there: a prefix SEEDS a new text block
+// with that shape, and a split just makes the block it names. The canvas owns
+// that reading -- see `pickSlash`.
 //
 // `act` is this menu's own discriminant, not block vocabulary. `insert` IS
 // block vocabulary: it names a `tpl`, which is what the create op takes.
@@ -45,11 +60,21 @@ export type SlashAction =
 	| { act: "literal"; text: string }
 	| { act: "split"; insert: "text" | "program" | null };
 
+/** Which surface the menu is open on, and so which items it may offer. */
+export type SlashMode = "inline" | "ghost";
+
+/**
+ * Structure or shape. "blocks" items make a block, "prose" items shape one.
+ * That split is the whole of what scopes the menu, so it is a closed set and
+ * not a free-text heading.
+ */
+export type SlashGroup = "blocks" | "prose";
+
 export type SlashItem = {
 	id: string;
 	label: string;
 	hint: string;
-	group: string;
+	group: SlashGroup;
 	keywords: string;
 	/** Row glyph. A menu of eleven identical text rows scans as a wall. */
 	icon: LucideIcon;
@@ -158,10 +183,21 @@ export const SLASH_ITEMS: SlashItem[] = [
 	},
 ];
 
-export function filterSlash(query: string): SlashItem[] {
+/** What the inline trigger may offer. Built once: it never varies. */
+const PROSE_ITEMS = SLASH_ITEMS.filter((i) => i.group === "prose");
+
+/**
+ * The rows this context may show, narrowed by what has been typed.
+ *
+ * `mode` is not a filter on top of the query, it is the pool the query runs
+ * against: an inline `/` cannot reach a "blocks" item however precisely it is
+ * spelled, because that item does not mean anything where the caret is.
+ */
+export function filterSlash(query: string, mode: SlashMode): SlashItem[] {
+	const pool = mode === "inline" ? PROSE_ITEMS : SLASH_ITEMS;
 	const q = query.trim().toLowerCase();
-	if (!q) return SLASH_ITEMS;
-	return SLASH_ITEMS.filter(
+	if (!q) return pool;
+	return pool.filter(
 		(i) => i.label.toLowerCase().includes(q) || i.keywords.includes(q) || i.id.startsWith(q),
 	);
 }
@@ -170,24 +206,16 @@ export function SlashMenu({
 	items,
 	index,
 	anchor,
-	takeFocus,
 	onPick,
 	onMove,
-	onClose,
 }: {
 	items: SlashItem[];
 	index: number;
 	anchor: { x: number; y: number };
-	takeFocus: boolean;
 	onPick: (item: SlashItem) => void;
 	onMove: (delta: number) => void;
-	onClose: () => void;
 }) {
 	const ref = useRef<HTMLDivElement | null>(null);
-
-	useEffect(() => {
-		if (takeFocus) ref.current?.focus();
-	}, [takeFocus]);
 
 	// Keep the highlighted row visible while filtering narrows the list.
 	useEffect(() => {
@@ -203,32 +231,7 @@ export function SlashMenu({
 
 	let lastGroup = "";
 	return (
-		// biome-ignore lint/a11y/noStaticElementInteractions: the menu owns the keyboard in insert mode
-		<div
-			ref={ref}
-			tabIndex={takeFocus ? 0 : -1}
-			onKeyDown={(e) => {
-				if (!takeFocus) return;
-				if (e.key === "ArrowDown") {
-					e.preventDefault();
-					onMove(1);
-				} else if (e.key === "ArrowUp") {
-					e.preventDefault();
-					onMove(-1);
-				} else if (e.key === "Enter") {
-					e.preventDefault();
-					onPick(items[Math.max(0, Math.min(index, items.length - 1))]);
-				} else if (e.key === "Escape") {
-					e.preventDefault();
-					onClose();
-				}
-			}}
-			onBlur={() => {
-				if (takeFocus) onClose();
-			}}
-			className={`${docSlashMenu} fixed outline-none`}
-			style={{ top, left }}
-		>
+		<div ref={ref} className={`${docSlashMenu} fixed outline-none`} style={{ top, left }}>
 			{items.map((item, i) => {
 				const head = item.group !== lastGroup ? item.group : null;
 				lastGroup = item.group;

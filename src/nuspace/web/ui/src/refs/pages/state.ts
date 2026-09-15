@@ -32,6 +32,7 @@ import type { Path, Props } from "@nustackdev/ui-core";
 import { useProps } from "@nustackdev/ui-kit";
 import { useMemo } from "react";
 import { localOf, patchLocal, useLocalSlot } from "../../app/local";
+import type { SlashMode } from "./Slash";
 import {
 	type ActivePage,
 	type Block,
@@ -72,12 +73,16 @@ export type FocusReq = {
 };
 
 export type SlashState = {
-	/** Block the menu will act on. */
-	blockId: string;
-	/** "inline": the trigger is a `/` typed in prose, and `from`..`to` is the
-	 * query text to be removed on commit. "insert": opened from the gutter,
-	 * nothing to remove, the new block goes after `blockId`. */
-	mode: "inline" | "insert";
+	/**
+	 * What the menu will act on. "inline": a `/` typed in prose, `blockId` is
+	 * the block it was typed in and `from`..`to` is the query text to be
+	 * removed on commit. "ghost": a ghost input, `blockId` is the block it
+	 * sits after and `from`/`to` mean nothing -- a ghost holds no document, so
+	 * the query lives in its own input and there is nothing to take back out.
+	 */
+	mode: SlashMode;
+	/** Null only in ghost mode, and only on a page with no blocks at all. */
+	blockId: string | null;
 	query: string;
 	from: number;
 	to: number;
@@ -109,6 +114,18 @@ export type EditorState = {
 	/** Program blocks currently open in code mode. Per block, never global. */
 	editing: string[];
 	slash: SlashState | null;
+	/**
+	 * The transient ghost input, as the id of the block it sits after.
+	 *
+	 * Summoned by a gutter `+` and nothing else; it resolves into a block or
+	 * it goes away the moment it loses focus with nothing in it. At most one
+	 * exists, because it is one id and not a set -- summoning a second while a
+	 * first is open blurs the first, which is what dismisses it.
+	 *
+	 * The end-of-page ghost is NOT here. It is always there, so there is
+	 * nothing about it to remember.
+	 */
+	ghost: string | null;
 	drag: DragState | null;
 	expanded: string[];
 	/**
@@ -129,6 +146,7 @@ export const EMPTY_LOCAL: EditorState = {
 	anchor: null,
 	editing: [],
 	slash: null,
+	ghost: null,
 	drag: null,
 	expanded: [],
 	column: null,
@@ -189,7 +207,13 @@ export function applyPagesWrite(props: Props, payload: unknown): void {
 		selected: local.selected.filter((id) => live.has(id)),
 		anchor: local.anchor && live.has(local.anchor) ? local.anchor : null,
 		editing: local.editing.filter((id) => live.has(id)),
-		slash: local.slash && live.has(local.slash.blockId) ? local.slash : null,
+		// A null `blockId` is a ghost at the top of an empty page, which no
+		// block list can invalidate.
+		slash:
+			local.slash && (local.slash.blockId === null || live.has(local.slash.blockId))
+				? local.slash
+				: null,
+		ghost: local.ghost && live.has(local.ghost) ? local.ghost : null,
 		drag: null,
 	} satisfies EditorState;
 }
