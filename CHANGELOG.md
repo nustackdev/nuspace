@@ -11,6 +11,8 @@ separately here.
 
 ## Unreleased
 
+- Hovering a page block now reveals only that block's controls, and they hide again
+- Slow the block controls' tooltips so passing over them says nothing
 - Wipe a block's ui before it reruns, so its refs stop duplicating
 - Give every block the same hover chrome: insert, drag, copy, code and status
 - Follow nu 0.5.0's import split so apps and snippets keep resolving the fabrics

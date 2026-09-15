@@ -182,18 +182,38 @@ export const docFocusRail = cn(
  * source. Hidden at rest and revealed on block hover or keyboard focus - a
  * document at rest shows text, not controls.
  *
- * Sized to hold two `sm` IconButtons side by side (24px each + a 2px gap),
- * which is what makes the gutter one lane instead of two overlapping ones. The
- * top offset lines the first row up with the block's first line: a 25px prose
- * line box sits 4px into the block, a program block's output sits 8px in,
- * which is the only thing `program` still buys here now that the block-level
- * control row is gone.
+ * Sized to hold the widest row - two `sm` IconButtons side by side (24px each
+ * + a 2px gap) - which is what makes the gutter one lane instead of two
+ * overlapping ones. The top offset lines the first row up with the block's
+ * first line: a 25px prose line box sits 4px into the block, a program block's
+ * output sits 8px in, which is the only thing `program` still buys here now
+ * that the block-level control row is gone.
+ *
+ * The lane itself is inert. Three stacked rows are 76px tall (3x24 + 2x2)
+ * while a one-line prose block is 33px (a 25px line box plus 4px of pad-y top
+ * and bottom), so a block's gutter hangs roughly 47px past the bottom of the
+ * block it belongs to and straight across the next block's gutter slot. If
+ * both were live hit targets the lower one would win by document order and
+ * moving down your own controls would hand you the neighbour's - which is
+ * exactly what it did. `pointer-events-none` here and on the hidden stack
+ * means only the revealed stack takes the pointer, so at most one block's
+ * controls are live at a time and the overhang unambiguously belongs to the
+ * block that is showing. See `docGutterAffordances`.
+ *
+ * The 4px that holds the controls off the text is padding INSIDE the stack,
+ * not padding on the lane. On the lane it was a dead strip: the stack's hit
+ * rect stopped 4px short of the block's left edge, and that strip is inert,
+ * so walking from the text out to the controls dropped the block's `:hover`
+ * before the stack was reached and the stack went inert with it. The pointer
+ * is only hit-tested where it is sampled, so a fast enough swipe jumped the
+ * strip and worked while a slow one did not. The two rects touch now, and
+ * the walk is continuous at any speed.
  */
 export function docGutter(program = false): string {
 	return cn(
-		"absolute right-full w-doc-gutter",
+		"pointer-events-none absolute right-full w-doc-gutter",
 		program ? "top-2" : "top-1",
-		"flex flex-col items-end gap-0.5 pr-1 select-none",
+		"flex flex-col items-end gap-0.5 select-none",
 	);
 }
 
@@ -201,17 +221,51 @@ export function docGutter(program = false): string {
  * Wrapper for the hover-only affordances inside the gutter. One reveal for all
  * three rows, so the block's chrome arrives and leaves as a single object
  * rather than as six loose glyphs fading independently.
+ *
+ * Revealed and live are the same state, always. Hidden means `pointer-events:
+ * none`, which is what keeps a neighbour's invisible stack from stealing the
+ * pointer (see `docGutter`). Hover survives the walk out into the lane because
+ * `:hover` follows the DOM, not the box: the stack is a descendant of the
+ * block, so standing on it keeps the block hovered even though it is painted
+ * outside the block's rect. And the wrapper is one rect covering all three
+ * rows, so sliding between rows never crosses a dead strip even where a row is
+ * narrower than the lane.
+ *
+ * Reveal rules, in order of how they burn:
+ *  - hover, the ordinary one.
+ *  - focus-within scoped to the STACK, not to the block. Block-scoped
+ *    focus-within pinned the controls open for as long as the caret sat in the
+ *    prose, which is most of the time you are writing; a keyboard user who has
+ *    tabbed onto one of these buttons still keeps them.
+ *  - an open menu or popover. Tooltips cannot pin it: Radix reports them as
+ *    `delayed-open`/`instant-open` and portals the content out of this
+ *    subtree, so neither half of the selector can see one.
  */
 export const docGutterAffordances = cn(
-	"flex flex-col items-end gap-0.5",
+	"pointer-events-none flex flex-col items-end gap-0.5 pr-1",
 	"opacity-0 transition-opacity duration-fast ease-out",
-	"group-hover/block:opacity-100 group-focus-within/block:opacity-100",
-	// keep them visible while a menu they opened is still open
-	"[&:has([data-state=open])]:opacity-100",
+	"group-hover/block:pointer-events-auto group-hover/block:opacity-100",
+	"focus-within:pointer-events-auto focus-within:opacity-100",
+	"[&:has([data-state=open])]:pointer-events-auto [&:has([data-state=open])]:opacity-100",
 );
 
 /** One row of the gutter stack. Right-aligned, so the lane has a clean edge. */
 export const docGutterRow = "flex items-center justify-end gap-0.5";
+
+/**
+ * The status slot, third row of the gutter stack.
+ *
+ * A 24px box holding an 8px dot -- the same box a kit `IconButton sm` is. The
+ * dot alone would be a loose 8px glyph in a column of 24px squares, sitting
+ * the row off the rhythm the other two keep.
+ *
+ * Deliberately not a control yet: a span, so nothing here takes focus or the
+ * pointer, and the dot is a readout rather than something that looks clickable
+ * and is not. What this buys is that the slot is already the right size and
+ * in the right place, so the day the dot becomes a play/stop button it swaps
+ * in and no geometry moves.
+ */
+export const docGutterStatus = "inline-flex size-6 items-center justify-center";
 
 /**
  * The code toggle, on top of a kit `Toggle sm`. Trims the horizontal padding

@@ -162,11 +162,16 @@
 	/* p-doc-*, w-doc-*, gap-doc-* */
 	--spacing-doc-pad-x: 1.5rem; /* 24, spacing 6   page side gutter        */
 	--spacing-doc-pad-y: 4rem; /* 64, spacing 16  air above the first block */
-	--spacing-doc-gutter: 3.5rem; /* 56            two kit `sm` IconButtons
-	                               * (24 + 2 gap + 24) plus the 4px lane that
-	                               * separates the row from the text edge.
-	                               * Sized to the controls it holds so the
-	                               * gutter is one lane, not two that overlap. */
+	--spacing-doc-gutter: 3.5rem; /* 56            the gutter's WIDTH. The
+	                               * stack is three rows now; this is the
+	                               * widest of them, two kit `sm` IconButtons
+	                               * (24 + 2 gap + 24), plus the 4px lane that
+	                               * separates the row from the text edge. The
+	                               * narrower rows right-align into it, so the
+	                               * gutter stays one lane, not two that
+	                               * overlap. Height is content, not a token:
+	                               * see `docGutter` for what the overhang past
+	                               * a short block costs and how it is paid. */
 	--spacing-doc-block-x: 0.5rem; /* 8            wash overhangs the text  */
 	--spacing-doc-block-y: 0.25rem; /* 4           prose block pad-y        */
 	--spacing-doc-block-y-program: 0.5rem; /* 8    program block pad-y      */

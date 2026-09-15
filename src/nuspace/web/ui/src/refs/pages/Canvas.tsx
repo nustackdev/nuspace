@@ -71,6 +71,7 @@ import {
 	Toggle,
 	Tooltip,
 	TooltipContent,
+	TooltipProvider,
 	TooltipTrigger,
 } from "@nustackdev/ui-kit";
 import { Check, Code, Copy, GripVertical, Plus } from "lucide-react";
@@ -86,6 +87,7 @@ import {
 	docGutter,
 	docGutterAffordances,
 	docGutterRow,
+	docGutterStatus,
 	docGutterToggle,
 	docStatusRail,
 	docStatusTrace,
@@ -894,71 +896,83 @@ function Gutter({
 
 	return (
 		<div className={docGutter(program)}>
-			<div className={docGutterAffordances}>
-				<div className={docGutterRow}>
-					<Tooltip>
-						<TooltipTrigger asChild>
-							<IconButton
-								variant="ghost"
-								size="sm"
-								aria-label="Insert block below"
-								onClick={(e) => onPlus(e.currentTarget.getBoundingClientRect())}
-							>
-								<Plus />
-							</IconButton>
-						</TooltipTrigger>
-						<TooltipContent side="top">insert block below</TooltipContent>
-					</Tooltip>
-					<Tooltip>
-						<TooltipTrigger asChild>
-							<IconButton
-								variant="ghost"
-								size="sm"
-								aria-label="Drag to reorder, click to select"
-								onPointerDown={onDrag}
-								onClick={onSelect}
-								data-block-grip=""
-								className={docDragHandle}
-							>
-								<GripVertical />
-							</IconButton>
-						</TooltipTrigger>
-						<TooltipContent side="top">drag to reorder, click to select</TooltipContent>
-					</Tooltip>
+			{/* Slower than the kit's 200ms, and with no instant reopen. The gutter
+			    is a stack you walk THROUGH to reach one control, so at the kit's
+			    delay a tooltip fires on every glyph you cross and lands portalled
+			    over the blocks below. 700ms is long enough that passing through
+			    says nothing and resting says "tell me what this is"; the 0 skip
+			    window is what stops the second and third from arriving instantly
+			    once the first has spoken. Scoped here so the shell strip and the
+			    rails keep the kit's snappier feel. */}
+			<TooltipProvider delayDuration={700} skipDelayDuration={0}>
+				<div className={docGutterAffordances}>
+					<div className={docGutterRow}>
+						<Tooltip>
+							<TooltipTrigger asChild>
+								<IconButton
+									variant="ghost"
+									size="sm"
+									aria-label="Insert block below"
+									onClick={(e) => onPlus(e.currentTarget.getBoundingClientRect())}
+								>
+									<Plus />
+								</IconButton>
+							</TooltipTrigger>
+							<TooltipContent side="top">insert block below</TooltipContent>
+						</Tooltip>
+						<Tooltip>
+							<TooltipTrigger asChild>
+								<IconButton
+									variant="ghost"
+									size="sm"
+									aria-label="Drag to reorder, click to select"
+									onPointerDown={onDrag}
+									onClick={onSelect}
+									data-block-grip=""
+									className={docDragHandle}
+								>
+									<GripVertical />
+								</IconButton>
+							</TooltipTrigger>
+							<TooltipContent side="top">drag to reorder, click to select</TooltipContent>
+						</Tooltip>
+					</div>
+					<div className={docGutterRow}>
+						<Tooltip>
+							<TooltipTrigger asChild>
+								<IconButton
+									variant="ghost"
+									size="sm"
+									aria-label="Copy this block's section id"
+									onClick={copyId}
+								>
+									{copied ? <Check className="text-status-ok" /> : <Copy />}
+								</IconButton>
+							</TooltipTrigger>
+							<TooltipContent side="top">{copied ? "copied" : "copy section id"}</TooltipContent>
+						</Tooltip>
+					</div>
+					<div className={docGutterRow}>
+						<span className={docGutterStatus}>
+							<SectionStatusDot status={GUTTER_STATUS} />
+						</span>
+						<Tooltip>
+							<TooltipTrigger asChild>
+								<Toggle
+									size="sm"
+									pressed={editing}
+									onPressedChange={onSetEditing}
+									aria-label="Show this block's source"
+									className={docGutterToggle}
+								>
+									<Code />
+								</Toggle>
+							</TooltipTrigger>
+							<TooltipContent side="top">{editing ? "hide source" : "show source"}</TooltipContent>
+						</Tooltip>
+					</div>
 				</div>
-				<div className={docGutterRow}>
-					<Tooltip>
-						<TooltipTrigger asChild>
-							<IconButton
-								variant="ghost"
-								size="sm"
-								aria-label="Copy this block's section id"
-								onClick={copyId}
-							>
-								{copied ? <Check className="text-status-ok" /> : <Copy />}
-							</IconButton>
-						</TooltipTrigger>
-						<TooltipContent side="top">{copied ? "copied" : "copy section id"}</TooltipContent>
-					</Tooltip>
-				</div>
-				<div className={docGutterRow}>
-					<SectionStatusDot status={GUTTER_STATUS} />
-					<Tooltip>
-						<TooltipTrigger asChild>
-							<Toggle
-								size="sm"
-								pressed={editing}
-								onPressedChange={onSetEditing}
-								aria-label="Show this block's source"
-								className={docGutterToggle}
-							>
-								<Code />
-							</Toggle>
-						</TooltipTrigger>
-						<TooltipContent side="top">{editing ? "hide source" : "show source"}</TooltipContent>
-					</Tooltip>
-				</div>
-			</div>
+			</TooltipProvider>
 		</div>
 	);
 }
