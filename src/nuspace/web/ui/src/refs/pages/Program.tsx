@@ -1,11 +1,18 @@
-// A program block: live Nu output, its supervision status, and its source.
+// A program block's interior: live Nu output, its diagnostic, and its source.
 //
 // Per block, never per page. v0 had one code/display toggle for the whole
 // document, which meant editing anything restarted everything. Here each
 // block flips independently, its neighbours keep running, and a save restarts
 // exactly one section. That is most of the DX win in this task.
 //
-// The chrome consumes the fixed status contract:
+// There is no chrome in here. Status, the section id and the code toggle used
+// to sit on a control row at the top of every program block, which made a
+// program block look like a different kind of thing from the paragraph above
+// it -- and it is not, both compile, run and are supervised identically. All
+// three moved to the gutter (see ../pages/Canvas.tsx), where every block gets
+// them, so what is left below is purely what the program produced.
+//
+// The chrome still consumes the fixed status contract:
 //
 //   { section_id, state, error, started_at }
 //
@@ -16,40 +23,22 @@
 // died.
 
 import type { Path } from "@nustackdev/ui-core";
-import {
-	Alert,
-	AlertDescription,
-	AlertIcon,
-	AlertTitle,
-	Button,
-	Kbd,
-	NodeView,
-	Toggle,
-	Tooltip,
-	TooltipContent,
-	TooltipTrigger,
-} from "@nustackdev/ui-kit";
-import { Check, Code, Copy } from "lucide-react";
-import { useCallback, useState } from "react";
-import { SectionStatusPill } from "../../components";
+import { Alert, AlertDescription, AlertIcon, AlertTitle, NodeView } from "@nustackdev/ui-kit";
+import { useCallback } from "react";
 import {
 	docProgram,
-	docProgramBar,
-	docProgramDirty,
 	docProgramFields,
 	docProgramHeadless,
-	docProgramPrefix,
 	docStatusTrace,
 	SECTION_STATUS,
 } from "../../design";
-import { blockPrefix, useBlockHasUi } from "./blocks";
-import { CodeBox } from "./Code";
+import { useBlockHasUi } from "./blocks";
+import { SourceEditor } from "./Code";
 import type { ExitDir } from "./ProseRef";
 import type { FocusReq } from "./state";
 import type { SectionState, SectionStatus } from "./types";
 
 export type ProgramProps = {
-	blockId: string;
 	source: string;
 	/** Where this block's own refs live in the tree. See ./blocks.ts. */
 	uiPath: Path;
@@ -65,7 +54,6 @@ export type ProgramProps = {
 
 export function ProgramBlock(props: ProgramProps) {
 	const {
-		blockId,
 		source,
 		uiPath,
 		status,
@@ -78,79 +66,17 @@ export function ProgramBlock(props: ProgramProps) {
 		onSetEditing,
 	} = props;
 
-	const [dirty, setDirty] = useState(false);
-	const [copied, setCopied] = useState(false);
 	const hasUi = useBlockHasUi(uiPath);
-	const prefix = blockPrefix(blockId);
 	const state: SectionState = status?.state ?? "idle";
 	const token = SECTION_STATUS[state];
-
-	const copyPrefix = useCallback(() => {
-		navigator.clipboard
-			?.writeText(blockPrefix(blockId))
-			.then(() => {
-				setCopied(true);
-				window.setTimeout(() => setCopied(false), 1200);
-			})
-			.catch(() => {});
-	}, [blockId]);
 
 	const leaveEditor = useCallback(() => {
 		onSetEditing(false);
 		onSelectSelf();
 	}, [onSelectSelf, onSetEditing]);
 
-	const commit = useCallback(
-		(next: string) => {
-			setDirty(false);
-			onCommit(next);
-		},
-		[onCommit],
-	);
-
 	return (
 		<div className={docProgram}>
-			{/* The block's control row. 32px, the kit's default row, so a program
-			    block's chrome lines up with every other control in the shell. */}
-			<div className={docProgramBar}>
-				<SectionStatusPill status={state} />
-				<Tooltip>
-					<TooltipTrigger asChild>
-						<Button variant="ghost" size="sm" onClick={copyPrefix} className={docProgramPrefix}>
-							<span className="truncate">{prefix}</span>
-							{copied ? <Check className="text-status-ok" /> : <Copy />}
-						</Button>
-					</TooltipTrigger>
-					<TooltipContent side="bottom">
-						{copied ? "copied" : "copy this block's mount prefix"}
-					</TooltipContent>
-				</Tooltip>
-				<span className="flex-1" />
-				{dirty ? (
-					<span className={docProgramDirty}>
-						unsaved
-						<Kbd>⌘</Kbd>
-						<Kbd>↵</Kbd>
-					</span>
-				) : null}
-				<Tooltip>
-					<TooltipTrigger asChild>
-						<Toggle
-							size="sm"
-							pressed={editing}
-							onPressedChange={onSetEditing}
-							aria-label="Edit this block's source"
-						>
-							<Code />
-							code
-						</Toggle>
-					</TooltipTrigger>
-					<TooltipContent side="bottom">
-						{editing ? "close the editor" : "edit source"}
-					</TooltipContent>
-				</Tooltip>
-			</div>
-
 			{/* A diagnostic and a traceback are both inline messages with a tone,
 			    an icon and a title, which is the kit's `Alert` exactly. The only
 			    document-specific part is that the body is preformatted text. */}
@@ -165,14 +91,13 @@ export function ProgramBlock(props: ProgramProps) {
 			) : null}
 
 			{editing ? (
-				<CodeBox
+				<SourceEditor
 					source={source}
 					focusReq={focusReq}
 					onFocusConsumed={onFocusConsumed}
-					onCommit={commit}
+					onCommit={onCommit}
 					onExit={onExit}
 					onEscape={leaveEditor}
-					onDirty={setDirty}
 				/>
 			) : null}
 

@@ -26,9 +26,9 @@
 //     <the PagesRef node> / sections / <section id> / ...the section's refs
 //
 // It is the assumption the old naming scheme already made -- `sections.<id>`
-// is the prefix the copy button in a program block's bar hands you, and that
-// string is mirrored here rather than spelled a second time. If python roots
-// them somewhere else, this file is the diff.
+// is the prefix a block's program writes under, and that string is mirrored
+// here rather than spelled a second time. If python roots them somewhere
+// else, this file is the diff.
 //
 // ==========================================================================
 
@@ -46,9 +46,11 @@ export function blockUiPath(pagesPath: Path, blockId: string): Path {
 /**
  * The kv prefix a block's own program writes under, as text.
  *
- * Shown by the copy button in a program block's bar, so somebody writing the
- * next block can reach into this one. A string and not a path because it is
- * pasted into python source, where it is a ref chain spelled by hand.
+ * A string and not a path because this is the spelling that goes into python
+ * source, where it is a ref chain typed by hand: somebody writing the next
+ * block reaches into this one through it. The gutter's copy button hands out
+ * the bare id instead -- that is what every op on the wire is keyed by -- so
+ * this is currently the assumption's one written form and nothing else.
  */
 export function blockPrefix(blockId: string): string {
 	return `${SECTIONS}.${blockId}`;

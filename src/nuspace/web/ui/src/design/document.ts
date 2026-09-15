@@ -178,35 +178,47 @@ export const docFocusRail = cn(
 
 /**
  * The gutter. Hangs off the block's left edge into the page padding and holds
- * the block's affordances: add, drag. Affordances are hidden at rest and
- * revealed on block hover or keyboard focus - a document at rest shows text,
- * not controls.
+ * every affordance the block has: add and drag, copy the section id, open the
+ * source. Hidden at rest and revealed on block hover or keyboard focus - a
+ * document at rest shows text, not controls.
  *
- * Sized to hold exactly two `sm` IconButtons (24px each + a 2px gap), which is
- * what makes the gutter one lane instead of two overlapping ones. The top
- * offset centres that 24px row on the block's *first line*, which is a 25px
- * prose line box on an island and the 32px control row a program block opens
- * with - so the handles line up with the text either way.
+ * Sized to hold two `sm` IconButtons side by side (24px each + a 2px gap),
+ * which is what makes the gutter one lane instead of two overlapping ones. The
+ * top offset lines the first row up with the block's first line: a 25px prose
+ * line box sits 4px into the block, a program block's output sits 8px in,
+ * which is the only thing `program` still buys here now that the block-level
+ * control row is gone.
  */
 export function docGutter(program = false): string {
 	return cn(
 		"absolute right-full w-doc-gutter",
-		program ? "top-3" : "top-1",
-		"flex items-center justify-end gap-0.5 pr-1 select-none",
+		program ? "top-2" : "top-1",
+		"flex flex-col items-end gap-0.5 pr-1 select-none",
 	);
 }
 
 /**
- * Wrapper for the hover-only affordances inside the gutter. One row, one
- * reveal, so add and drag read as a pair rather than as two loose glyphs.
+ * Wrapper for the hover-only affordances inside the gutter. One reveal for all
+ * three rows, so the block's chrome arrives and leaves as a single object
+ * rather than as six loose glyphs fading independently.
  */
 export const docGutterAffordances = cn(
-	"flex items-center gap-0.5",
+	"flex flex-col items-end gap-0.5",
 	"opacity-0 transition-opacity duration-fast ease-out",
 	"group-hover/block:opacity-100 group-focus-within/block:opacity-100",
 	// keep them visible while a menu they opened is still open
 	"[&:has([data-state=open])]:opacity-100",
 );
+
+/** One row of the gutter stack. Right-aligned, so the lane has a clean edge. */
+export const docGutterRow = "flex items-center justify-end gap-0.5";
+
+/**
+ * The code toggle, on top of a kit `Toggle sm`. Trims the horizontal padding
+ * so its box is the 24px square an `IconButton sm` is: the gutter is a column
+ * of one-glyph controls and a 26px one in the stack reads as a wobble.
+ */
+export const docGutterToggle = "px-1";
 
 /**
  * Extra classes for the drag handle on top of a kit `IconButton ghost sm`.
@@ -224,23 +236,26 @@ export const docDropIndicator = cn(
 /* ============================== program block ============================ */
 //
 // A program block is a document block that happens to be a live section, so
-// its interior is kit density even though the page around it is not: the
-// control row is the kit's 32px row, the type inside it is chrome type, and
-// the code box gets the same bordered-and-sunken treatment an app's editor
-// gets. What makes it a document block and not a panel is the outside - the
-// gutter, the measure, the block padding - and that is `docBlock`'s job.
+// its interior is kit density even though the page around it is not: the type
+// inside it is chrome type, and the code box gets the same bordered-and-sunken
+// treatment an app's editor gets. What makes it a document block and not a
+// panel is the outside - the gutter, the measure, the block padding - and that
+// is `docBlock`'s job.
+//
+// The block has no control row of its own. Status, the id and the code toggle
+// all live in the gutter now, on the same three rows every block gets, so what
+// is left inside the block is only what the program produced.
 
-/** The block's own stack: control row, alert, editor, fields. */
+/** The block's own stack: alert, editor, fields. All output, no chrome. */
 export const docProgram = "flex flex-col gap-1";
 
-/** The control row. 32px, so it lines up with every other control in the shell. */
-export const docProgramBar = "flex h-8 items-center gap-1";
-
-/** The mount-prefix button, on top of a kit `Button ghost sm`. Chrome, not code. */
-export const docProgramPrefix = "min-w-0 gap-1.5 font-mono text-xs font-normal text-text-muted";
-
-/** "unsaved" plus its two Kbd caps. Quiet: it is a reminder, not a warning. */
-export const docProgramDirty = "flex items-center gap-1 text-xs text-text-muted";
+/**
+ * "unsaved" plus its two Kbd caps, parked under the open source editor.
+ *
+ * Quiet and right-aligned: it is a reminder about the buffer you are looking
+ * at, and it says nothing once that buffer is closed.
+ */
+export const docSourceDirty = "flex items-center gap-1 self-end text-xs text-text-muted";
 
 /** The block's mounted ui refs. Looser gap: these are whole widgets. */
 export const docProgramFields = "flex flex-col gap-3 py-1";
@@ -249,11 +264,9 @@ export const docProgramFields = "flex flex-col gap-3 py-1";
 export const docProgramHeadless = "py-1 text-base text-text-muted";
 
 /**
- * A text block's stack: a diagnostic if there is one, then the document.
- *
- * No control row, so no gap to reserve for one. A text block is a program
- * like any other, but it is one nobody typed, so there is nothing about the
- * program for a reader to act on and the document gets the whole block.
+ * A text block's stack: a diagnostic if there is one, the source if you asked
+ * for it, then the document. Same shape as `docProgram`, because a text block
+ * is a section like any other and only its output differs.
  */
 export const docTextBlock = "flex flex-col gap-1";
 

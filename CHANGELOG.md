@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Give every block the same hover chrome: insert, drag, copy, code and status
 - Follow nu 0.5.0's import split so apps and snippets keep resolving the fabrics
 
 ## 0.2.0 — 2026-09-15

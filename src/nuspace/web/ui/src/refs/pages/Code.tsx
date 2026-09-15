@@ -9,8 +9,9 @@
 // the last line have to leave the editor and land in the neighbouring block,
 // and Escape has to hand control back to block selection.
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { docCodeBox } from "../../design";
+import { Kbd } from "@nustackdev/ui-kit";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { docCodeBox, docSourceDirty } from "../../design";
 import { type CodeEditor, type KeyboardEvt, loadMonaco, type MonacoApi, NU_THEME } from "./monaco";
 import type { ExitDir } from "./ProseRef";
 import type { FocusReq } from "./state";
@@ -200,4 +201,39 @@ export function CodeBox(props: CodeBoxProps) {
 	}, [focusReq, onFocusConsumed, ready]);
 
 	return <div ref={hostRef} className={docCodeBox} style={{ minHeight: MIN_HEIGHT }} />;
+}
+
+/**
+ * A block's source as the document shows it: the editor and the one reminder
+ * that goes with it.
+ *
+ * Dirty is a fact about the open buffer and about nothing else, so it is held
+ * here rather than lifted into the block. Every block reaches for this, prose
+ * and program alike -- a text block's source is its template, and the gutter
+ * offers it on the same row either way.
+ */
+export function SourceEditor(props: Omit<CodeBoxProps, "onDirty">) {
+	const { onCommit } = props;
+	const [dirty, setDirty] = useState(false);
+
+	const commit = useCallback(
+		(next: string) => {
+			setDirty(false);
+			onCommit(next);
+		},
+		[onCommit],
+	);
+
+	return (
+		<>
+			<CodeBox {...props} onCommit={commit} onDirty={setDirty} />
+			{dirty ? (
+				<span className={docSourceDirty}>
+					unsaved
+					<Kbd>⌘</Kbd>
+					<Kbd>↵</Kbd>
+				</span>
+			) : null}
+		</>
+	);
 }

@@ -14,12 +14,13 @@
 // route as a program block's slider. See ./blocks.ts for where that address
 // is and what is still open about it.
 //
-// `tpl` is read in one place, `bare` below, and only to choose how much
-// chrome to wrap around that. A text block came from the wysiwyg template, so
-// it gets a document surface and nothing else. Anything else is arbitrary
-// code, so it gets the status pill, the mount prefix and the code toggle.
-// That is an affordance, not a dispatch: both sides compile, run, are
-// supervised and report status identically.
+// `tpl` is read in one place, `bare` below, and only to choose which interior
+// renders the block's output: a prose surface with block-boundary keyboard, or
+// a program's alert-and-fields stack. It decides nothing else. Every block,
+// whatever made it, is wrapped by the same `docBlock` and gets the same gutter
+// with the same three rows -- add and drag, copy the section id, open the
+// source -- because every block compiles, runs, is supervised and reports
+// status identically, and chrome that pretended otherwise was lying.
 //
 // ## The two selection regimes
 //
@@ -67,12 +68,14 @@ import {
 	IconButton,
 	NodeView,
 	pathKey,
+	Toggle,
 	Tooltip,
 	TooltipContent,
 	TooltipTrigger,
 } from "@nustackdev/ui-kit";
-import { GripVertical, Plus } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { Check, Code, Copy, GripVertical, Plus } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { SectionStatusDot } from "../../components";
 import {
 	docAppendBlock,
 	docBlock,
@@ -82,6 +85,8 @@ import {
 	docFocusRail,
 	docGutter,
 	docGutterAffordances,
+	docGutterRow,
+	docGutterToggle,
 	docStatusRail,
 	docStatusTrace,
 	docTextBlock,
@@ -89,6 +94,7 @@ import {
 	SECTION_STATUS,
 } from "../../design";
 import { blockText, blockUiPath } from "./blocks";
+import { SourceEditor } from "./Code";
 import type { Notify } from "./ops";
 import { ProgramBlock } from "./Program";
 import {
@@ -100,7 +106,18 @@ import {
 } from "./ProseRef";
 import { filterSlash, type SlashItem, SlashMenu } from "./Slash";
 import { type EditorState, type FocusReq, patchEditor, useEditorState } from "./state";
-import { type ActivePage, type Block, type BlockTpl, mintId } from "./types";
+import { type ActivePage, type Block, type BlockTpl, mintId, type SectionState } from "./types";
+
+/**
+ * What the gutter's status dot reports, for now.
+ *
+ * Hardcoded while the supervisor's per-block state is still settling: an
+ * always-green dot is a placeholder nobody will read as truth, whereas a dot
+ * that wobbles between real and invented states would be worse than none. To
+ * go live, delete this and hand `Gutter` the block's own `status.state` at
+ * the call site below -- the dot already renders all six.
+ */
+const GUTTER_STATUS: SectionState = "running";
 
 export function Canvas({
 	refPath,
@@ -194,6 +211,29 @@ export function Canvas({
 			}));
 		},
 		[patch],
+	);
+
+	/**
+	 * Open or close a block's source editor.
+	 *
+	 * The caret follows the editor open only for a program block. A text block
+	 * has prose to hold it, and it keeps holding it while the source sits
+	 * alongside -- opening the template to read it is not a request to leave
+	 * the paragraph you were writing.
+	 */
+	const setEditing = useCallback(
+		(id: string, on: boolean) => {
+			const bare = blocks[index(id)]?.tpl === "text";
+			patch((e) => ({
+				editing: on
+					? e.editing.includes(id)
+						? e.editing
+						: [...e.editing, id]
+					: e.editing.filter((x) => x !== id),
+				focus: on && !bare ? { blockId: id, place: "end" } : e.focus,
+			}));
+		},
+		[blocks, index, patch],
 	);
 
 	// Land the caret in a newly created block, once the server confirms it.
@@ -574,8 +614,9 @@ export function Canvas({
 				const selected = editor.selected.includes(block.id);
 				const focusReq = editor.focus?.blockId === block.id ? editor.focus : null;
 				const focused = editor.focused === block.id;
-				// The ONE read of `tpl`, and it decides chrome, nothing else.
+				// The ONE read of `tpl`, and it picks an interior, nothing else.
 				const bare = block.tpl === "text";
+				const editing = editor.editing.includes(block.id);
 				const state = block.status.state;
 				return (
 					// biome-ignore lint/a11y/noStaticElementInteractions: a mousedown anywhere in a block hands control to that block's own editor
@@ -601,13 +642,16 @@ export function Canvas({
 						{drag && drag.at === i ? <span className={`${docDropIndicator} top-0`} /> : null}
 						{/* One rail slot. A status the author must act on wins over
 						    "you are here", because a failing block is more urgent. */}
-						{!bare && hasGutterRail(state) ? (
+						{hasGutterRail(state) ? (
 							<span className={docStatusRail(state)} />
 						) : focused ? (
 							<span className={docFocusRail} />
 						) : null}
 						<Gutter
 							program={!bare}
+							blockId={block.id}
+							editing={editing}
+							onSetEditing={(on) => setEditing(block.id, on)}
 							onDrag={(e) => startDrag(e, block.id)}
 							onPlus={(rect) =>
 								patch({
@@ -635,6 +679,10 @@ export function Canvas({
 							<TextBlock
 								block={block}
 								uiPath={blockUiPath(refPath, block.id)}
+								editing={editing}
+								onCommit={(src) => commitSource(block.id, src)}
+								onExit={(dir, column) => step(block.id, dir, column)}
+								onCloseEditor={() => setEditing(block.id, false)}
 								bus={{
 									blockId: block.id,
 									focusReq,
@@ -671,11 +719,10 @@ export function Canvas({
 							/>
 						) : (
 							<ProgramBlock
-								blockId={block.id}
 								source={block.source}
 								uiPath={blockUiPath(refPath, block.id)}
 								status={block.status}
-								editing={editor.editing.includes(block.id)}
+								editing={editing}
 								focusReq={focusReq}
 								onFocusConsumed={() => patch({ focus: null })}
 								onCommit={(src) => commitSource(block.id, src)}
@@ -688,14 +735,7 @@ export function Canvas({
 									});
 									rootRef.current?.focus({ preventScroll: true });
 								}}
-								onSetEditing={(on) =>
-									patch((e) => ({
-										editing: on
-											? [...e.editing, block.id]
-											: e.editing.filter((x) => x !== block.id),
-										focus: on ? { blockId: block.id, place: "end" } : e.focus,
-									}))
-								}
+								onSetEditing={(on) => setEditing(block.id, on)}
 							/>
 						)}
 					</div>
@@ -744,23 +784,40 @@ export function Canvas({
 }
 
 /**
- * A text block: its program's ui refs, and nothing else.
+ * A text block's interior: its diagnostic, its source if you asked for it, and
+ * its program's ui refs.
  *
- * No status pill, no mount prefix, no code toggle. Not because a text block
- * is a different substance -- it compiles, runs and is supervised like every
- * other block -- but because it came from a template nobody typed, so there
- * is nothing about the program for a reader to act on. What is left is the
- * document, which is the whole point.
+ * The same three parts a program block has, in the same order, because a text
+ * block is a section like any other -- it came from a template nobody typed,
+ * which changes what the source says but not that it has one. The gutter
+ * offers it on the same row either way.
  *
  * The refs come through `NodeView` exactly as a program block's do. The one
  * the template mounts is a `ProseRef`, and nuspace's entry for it (see
  * ./ProseRef.tsx) reads the bus off the context provided here to rebuild the
  * block-boundary behaviour the kit's editor deliberately leaves out.
  *
- * A status that says the program is broken is still shown: the template
- * failing means nuspace is broken, and a silent blank block would hide it.
+ * The prose keeps the caret while the source sits open above it, so the
+ * editor gets no focus request: two editors in one block cannot both honour
+ * one, and the paragraph is the one you were writing in.
  */
-function TextBlock({ block, uiPath, bus }: { block: Block; uiPath: Path; bus: BlockProse }) {
+function TextBlock({
+	block,
+	uiPath,
+	editing,
+	bus,
+	onCommit,
+	onExit,
+	onCloseEditor,
+}: {
+	block: Block;
+	uiPath: Path;
+	editing: boolean;
+	bus: BlockProse;
+	onCommit: (source: string) => void;
+	onExit: (dir: ExitDir, column: number | undefined) => void;
+	onCloseEditor: () => void;
+}) {
 	const token = SECTION_STATUS[block.status.state];
 	return (
 		<BlockProseContext.Provider value={bus}>
@@ -776,6 +833,16 @@ function TextBlock({ block, uiPath, bus }: { block: Block; uiPath: Path; bus: Bl
 						</div>
 					</Alert>
 				) : null}
+				{editing ? (
+					<SourceEditor
+						source={block.source}
+						focusReq={null}
+						onFocusConsumed={() => {}}
+						onCommit={onCommit}
+						onExit={onExit}
+						onEscape={onCloseEditor}
+					/>
+				) : null}
 				<NodeView path={uiPath} />
 			</div>
 		</BlockProseContext.Provider>
@@ -783,56 +850,114 @@ function TextBlock({ block, uiPath, bus }: { block: Block; uiPath: Path; bus: Bl
 }
 
 /**
- * A block's affordances, hung in the gutter outside the reading column.
+ * Every affordance a block has, hung in the gutter outside the reading column.
  *
- * Two kit `IconButton`s on one row, so they share a box, a hover tier, a focus
- * ring and a reveal. The only thing the document layer adds is the grab cursor
- * on the handle. Both carry a tooltip: a bare glyph in a margin is not
+ * Three stacked rows of kit primitives, so they share a box, a hover tier, a
+ * focus ring and one reveal. Top to bottom they read as what you do to the
+ * block, what you do with it, and what it is: add and drag, copy its id, open
+ * its source next to the dot that says whether it is alive.
+ *
+ * Every glyph carries a tooltip and a label. A bare glyph in a margin is not
  * self-explanatory, and `title` is not an affordance, it is a delay.
  */
 function Gutter({
 	program,
+	blockId,
+	editing,
+	onSetEditing,
 	onDrag,
 	onPlus,
 	onSelect,
 }: {
 	program: boolean;
+	blockId: string;
+	editing: boolean;
+	onSetEditing: (on: boolean) => void;
 	onDrag: (e: React.PointerEvent) => void;
 	onPlus: (rect: DOMRect) => void;
 	onSelect: () => void;
 }) {
+	const [copied, setCopied] = useState(false);
+
+	// The bare section id, not the `sections.<id>` mount prefix: the id is what
+	// every op on the wire is keyed by, so it is the string worth having on the
+	// clipboard. See ./blocks.ts for the prefix and where it comes from.
+	const copyId = useCallback(() => {
+		navigator.clipboard
+			?.writeText(blockId)
+			.then(() => {
+				setCopied(true);
+				window.setTimeout(() => setCopied(false), 1200);
+			})
+			.catch(() => {});
+	}, [blockId]);
+
 	return (
 		<div className={docGutter(program)}>
 			<div className={docGutterAffordances}>
-				<Tooltip>
-					<TooltipTrigger asChild>
-						<IconButton
-							variant="ghost"
-							size="sm"
-							aria-label="Insert block below"
-							onClick={(e) => onPlus(e.currentTarget.getBoundingClientRect())}
-						>
-							<Plus />
-						</IconButton>
-					</TooltipTrigger>
-					<TooltipContent side="top">insert block below</TooltipContent>
-				</Tooltip>
-				<Tooltip>
-					<TooltipTrigger asChild>
-						<IconButton
-							variant="ghost"
-							size="sm"
-							aria-label="Drag to reorder, click to select"
-							onPointerDown={onDrag}
-							onClick={onSelect}
-							data-block-grip=""
-							className={docDragHandle}
-						>
-							<GripVertical />
-						</IconButton>
-					</TooltipTrigger>
-					<TooltipContent side="top">drag to reorder, click to select</TooltipContent>
-				</Tooltip>
+				<div className={docGutterRow}>
+					<Tooltip>
+						<TooltipTrigger asChild>
+							<IconButton
+								variant="ghost"
+								size="sm"
+								aria-label="Insert block below"
+								onClick={(e) => onPlus(e.currentTarget.getBoundingClientRect())}
+							>
+								<Plus />
+							</IconButton>
+						</TooltipTrigger>
+						<TooltipContent side="top">insert block below</TooltipContent>
+					</Tooltip>
+					<Tooltip>
+						<TooltipTrigger asChild>
+							<IconButton
+								variant="ghost"
+								size="sm"
+								aria-label="Drag to reorder, click to select"
+								onPointerDown={onDrag}
+								onClick={onSelect}
+								data-block-grip=""
+								className={docDragHandle}
+							>
+								<GripVertical />
+							</IconButton>
+						</TooltipTrigger>
+						<TooltipContent side="top">drag to reorder, click to select</TooltipContent>
+					</Tooltip>
+				</div>
+				<div className={docGutterRow}>
+					<Tooltip>
+						<TooltipTrigger asChild>
+							<IconButton
+								variant="ghost"
+								size="sm"
+								aria-label="Copy this block's section id"
+								onClick={copyId}
+							>
+								{copied ? <Check className="text-status-ok" /> : <Copy />}
+							</IconButton>
+						</TooltipTrigger>
+						<TooltipContent side="top">{copied ? "copied" : "copy section id"}</TooltipContent>
+					</Tooltip>
+				</div>
+				<div className={docGutterRow}>
+					<SectionStatusDot status={GUTTER_STATUS} />
+					<Tooltip>
+						<TooltipTrigger asChild>
+							<Toggle
+								size="sm"
+								pressed={editing}
+								onPressedChange={onSetEditing}
+								aria-label="Show this block's source"
+								className={docGutterToggle}
+							>
+								<Code />
+							</Toggle>
+						</TooltipTrigger>
+						<TooltipContent side="top">{editing ? "hide source" : "show source"}</TooltipContent>
+					</Tooltip>
+				</div>
 			</div>
 		</div>
 	);
