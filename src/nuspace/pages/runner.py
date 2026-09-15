@@ -44,22 +44,22 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import nu
-import nu.kv
-import nu.mp_pool
 import nu.prog
-import nu.proxy
-from nu.ui.core import Session
+import nustd.kv
+import nustd.mp_pool
+import nustd.proxy
 from nuspace._root import resolve_root
 from nuspace.core.host import spare_observer
 from nuspace.core.session import FrameCodec
 from nuspace.core.ui import SnippetRoot
+from nustd.ui.core import Session
 
 from .shapes import Runner
 
 
 if TYPE_CHECKING:
     from nu.domains.shape import Shape
-    from nu.ui.core import Ref
+    from nustd.ui.core import Ref
 
 
 __all__ = [
@@ -120,7 +120,7 @@ def _restarts_on(change: nu.Nu, body: nu.Nu, *, root: type[Shape]) -> nu.Nu:
             body >> _park(),
             # The subscription resolves a container, so it needs a snapshot as
             # much as anything reading one does.
-            nu.kv.auto_flow_atomic(nu.React(change, nu.Noop()), scope=root),
+            nustd.kv.auto_flow_atomic(nu.React(change, nu.Noop()), scope=root),
         )
     )
 
@@ -164,21 +164,21 @@ def section_arm(
     # Failures are written to the section's own row, not raised: a dispatched
     # body has no waiter, so an error would otherwise vanish, and a raise here
     # takes the whole page's fold down with it.
-    report = nu.kv.auto_flow_atomic(
+    report = nustd.kv.auto_flow_atomic(
         scratch.error.set(nu.ToStr(nu.AttrRef("error"))),
         scope=root,
     )
     # Last run's error goes before this one starts, or a section that was
     # fixed would still read `failed` off a stale leaf.
-    clear = nu.kv.auto_flow_atomic(
+    clear = nustd.kv.auto_flow_atomic(
         nu.IfDo(scratch.error.exists(), scratch.error.erase()),
         scope=root,
     )
     run = nu.Let(
         _TERM_ATTR,
-        nu.kv.auto_flow_atomic(load, scope=root),
+        nustd.kv.auto_flow_atomic(load, scope=root),
         # ParallelAsync over the one Eval, which is how a term says "on the
-        # loop". Every nu.ui atom is async-only and an Eval placed off the
+        # loop". Every nustd.ui atom is async-only and an Eval placed off the
         # loop refuses to host one, so a section that renders has nowhere
         # else to run.
         body=nu.ParallelAsync(nu.prog.Eval(term)),
@@ -195,7 +195,7 @@ def section_arm(
     # rather than trusted from fan-out time.
     turn = nu.Let(
         _ALIVE_ATTR,
-        nu.kv.auto_flow_atomic(sections.contains(section), scope=root),
+        nustd.kv.auto_flow_atomic(sections.contains(section), scope=root),
         body=nu.IfDo(nu.BoolAttrRef(_ALIVE_ATTR), once),
     )
     # Third layer, and the one the other two cannot cover: opening the
@@ -226,7 +226,7 @@ def page_body(
         surface: the ``PagesRef`` this page is drawn on, which is what every
             section's refs are rooted under. Pickled into the worker with the
             rest of the body, so it is a ref and not an address.
-        session_address: where this connection's ``nu.ui`` Session is served.
+        session_address: where this connection's ``nustd.ui`` Session is served.
             The proxy is opened here rather than in ``worker_init`` because a
             pool is process-wide and fixes its init once, while the Session is
             one browser connection and every connection has an address of its
@@ -240,7 +240,7 @@ def page_body(
     # nu.list is load-bearing: the keys view is lazy and auto_flow_atomic
     # brackets the items slot separately, so an undrained view outlives its
     # Snapshot and dies with StorageClosedError.
-    ids = nu.kv.auto_flow_atomic(nu.list(sections.keys()), scope=root)
+    ids = nustd.kv.auto_flow_atomic(nu.list(sections.keys()), scope=root)
     # Async-only and never-returning, which is exactly the shape here: every
     # arm is a section that runs until it is cancelled. The items are read once
     # at fan-out, so a section added later is picked up by the rebuild below
@@ -261,10 +261,10 @@ def page_body(
         # Frames are the one thing that crosses back, and invisibles ships an
         # unknown class by reference rather than by value.
         nu.Provide(FrameCodec, {}),
-        # Every nu.ui Ref the page builds asks ctx for a Session, and this is
+        # Every nustd.ui Ref the page builds asks ctx for a Session, and this is
         # the one the browser is on the other end of. bg_serve, because a
         # subscription's callback is a reverse proxy the server calls back.
-        nu.proxy.InvisiblesProxy(Session, address=session_address, bg_serve=True),
+        nustd.proxy.InvisiblesProxy(Session, address=session_address, bg_serve=True),
         body=guarded,
     )
 
@@ -277,7 +277,7 @@ def _take_spare() -> nu.Nu:
     reaches the pool's spawn path at all. This only reads the slot; the caller
     is what empties it.
     """
-    return nu.If(Runner.spare.not_empty(), Runner.spare, nu.mp_pool.PoolRef().launch())
+    return nu.If(Runner.spare.not_empty(), Runner.spare, nustd.mp_pool.PoolRef().launch())
 
 
 def run_page(
@@ -320,7 +320,7 @@ def run_page(
     """
     root = resolve_root(root)
     page_attr, old_attr, new_attr = f"{ns}.p", f"{ns}.old", f"{ns}.new"
-    pool = nu.mp_pool.PoolRef()
+    pool = nustd.mp_pool.PoolRef()
     started = nu.IntAttrRef(new_attr)
     stopped = nu.IntAttrRef(old_attr)
     dispatch = pool.dispatch(
@@ -378,7 +378,7 @@ def stop_page(*, ns: str = "page") -> nu.Nu:
     is still a live process, so a teardown that reaps only the running one
     leaks one process per connection.
     """
-    pool = nu.mp_pool.PoolRef()
+    pool = nustd.mp_pool.PoolRef()
     return nu.IfDo(
         Runner.worker.not_empty(),
         nu.Let(
@@ -444,4 +444,4 @@ def page_tree(
     flow = _park() if alongside is None else (_park() | alongside)
     if duration is not None:
         flow = nu.Race(flow, nu.DelayedDo(nu.Float(duration), nu.Noop()))
-    return nu.kv.auto_flow_atomic(start >> flow, scope=root)
+    return nustd.kv.auto_flow_atomic(start >> flow, scope=root)

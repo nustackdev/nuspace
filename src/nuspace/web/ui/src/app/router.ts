@@ -6,7 +6,7 @@
 // each surface's ref owns its own deeper navigation. Apps is single depth, so
 // its path is at most one app id.
 //
-// Not part of the nu.ui bridge -- purely browser-side.
+// Not part of the nustd.ui bridge -- purely browser-side.
 
 import type React from "react";
 import { useSyncExternalStore } from "react";

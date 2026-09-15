@@ -1,4 +1,4 @@
-"""``LensRef`` -- the lens surface as one nu.ui Ref.
+"""``LensRef`` -- the lens surface as one nustd.ui Ref.
 
 A component ref like ``AppsRef`` or ``PagesRef``, only narrower: it renders
 Miller columns over a Nu Shape and nothing else. Same two halves, and built
@@ -33,7 +33,7 @@ from nuspace.web.wire import event, write
 
 if TYPE_CHECKING:
     from nu.lang import ListArg, Nu
-    from nu.ui.core import Changed
+    from nustd.ui.core import Changed
 
 
 __all__ = ["LensRef"]

@@ -23,9 +23,9 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 import nu
 from nu.lang.helpers import arun
-from nu.ui.core import Session
 from nuspace.core.host import free_port
 from nuspace.core.session import HostedSession, served_session
+from nustd.ui.core import Session
 
 from .session import NuspaceSession
 from .shell import Shell

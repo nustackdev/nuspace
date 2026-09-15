@@ -25,7 +25,7 @@ One run at a time, because nuagent is one run at a time. When that stops being
 true this grows a ``ShapesDictRef`` keyed by run id and nothing else moves.
 
 ``KVRun`` is not used and neither is nuagent's ``Run``-on-the-session idea:
-the model ends a run by writing ``Run.done``, which is ``nu.mem`` and
+the model ends a run by writing ``Run.done``, which is ``nustd.mem`` and
 addresses by slot name into the untagged store :mod:`nuspace.agent.runner`
 provides around the loop. Keeping it off ``Agent`` is what keeps the model
 from reaching the conversation.
@@ -34,7 +34,7 @@ from reaching the conversation.
 from __future__ import annotations
 
 import nu
-import nu.kv
+import nustd.kv
 
 
 __all__ = [
@@ -70,15 +70,15 @@ class Agent(nu.Shape):
     """One agent run: nuagent's session slots, plus how a human starts one."""
 
     # -- the submission, nuspace's own ---------------------------------------
-    task = nu.kv.StrRef.slot()
-    nonce = nu.kv.IntRef.slot()
-    status = nu.kv.StrRef.slot()
-    error = nu.kv.StrRef.slot()
+    task = nustd.kv.StrRef.slot()
+    nonce = nustd.kv.IntRef.slot()
+    status = nustd.kv.StrRef.slot()
+    error = nustd.kv.StrRef.slot()
 
     # -- nuagent's session contract, slot for slot ---------------------------
-    messages = nu.kv.ListRef.slot(dict)
-    reply = nu.kv.StrRef.slot()
-    draft = nu.kv.ProgramRef.slot()
-    outcome = nu.kv.StrRef.slot()
-    observation = nu.kv.StrRef.slot()
-    turns = nu.kv.IntRef.slot()
+    messages = nustd.kv.ListRef.slot(dict)
+    reply = nustd.kv.StrRef.slot()
+    draft = nustd.kv.ProgramRef.slot()
+    outcome = nustd.kv.StrRef.slot()
+    observation = nustd.kv.StrRef.slot()
+    turns = nustd.kv.IntRef.slot()

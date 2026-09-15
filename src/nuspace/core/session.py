@@ -1,6 +1,6 @@
-"""One connection's ``nu.ui`` Session, reachable from another process.
+"""One connection's ``nustd.ui`` Session, reachable from another process.
 
-A section runs in a pool worker and every ``nu.ui`` Ref it builds asks the
+A section runs in a pool worker and every ``nustd.ui`` Ref it builds asks the
 context for a ``Session``. The Session is the websocket, so it cannot be
 copied into the worker; it is served over invisibles instead, exactly the way
 :func:`~nuspace.core.host.served_navigator` serves the store.
@@ -13,7 +13,7 @@ here:
 - :class:`FrameCodec`, because invisibles boxes an unknown class by reference
   and a ``Frame`` is meant to travel by value.
 
-The server itself is plain ``nu.proxy.InvisiblesServer``. It builds a
+The server itself is plain ``nustd.proxy.InvisiblesServer``. It builds a
 dispatcher per connection and drops it on close, which is what a page needs:
 a section restarting closes a client every few seconds and must not take the
 other clients' loops with it.
@@ -27,16 +27,16 @@ from typing import TYPE_CHECKING, Any
 from invisibles.core.boxing import register_value_type, unregister_value_type
 
 import nu
-import nu.proxy
-from nu.ui.core.protocol import Frame
-from nu.ui.core.session import Session
+import nustd.proxy
+from nustd.ui.core.protocol import Frame
+from nustd.ui.core.session import Session
 
 
 if TYPE_CHECKING:
     from collections.abc import Coroutine
 
     from nu.lang.runtime import Context
-    from nu.ui.core.session import Subscription
+    from nustd.ui.core.session import Subscription
 
 
 __all__ = ["FrameCodec", "HostedSession", "served_session"]
@@ -116,7 +116,7 @@ def served_session(address: str) -> nu.Provide:
     a loop to run on.
     """
     return nu.Provide(
-        nu.proxy.InvisiblesServer,
+        nustd.proxy.InvisiblesServer,
         {
             "target": HostedSession,
             "address": address,

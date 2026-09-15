@@ -9,6 +9,10 @@ Below is the changelog for **nuspace** - the full commit stream. Newest first.
 The `nuspace-ui` wheel is the same source tree's vite output and is not tracked
 separately here.
 
+## Unreleased
+
+- Follow nu 0.5.0's import split so apps and snippets keep resolving the fabrics
+
 ## 0.2.0 — 2026-09-15
 
 - Root a snippet's refs under its own block, so an author never says where

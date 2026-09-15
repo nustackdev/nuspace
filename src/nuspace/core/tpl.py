@@ -98,7 +98,7 @@ TIER_STANDING = "standing"
 TIER_BATCH = "batch"
 
 
-# The wysiwyg template. One `nu.ui.ProseRef` over one string in the space's
+# The wysiwyg template. One `nustd.ui.ProseRef` over one string in the space's
 # scratch kv, wired both ways:
 #
 #   kv  -> ref   on boot, and whenever another connection edits the text
@@ -110,8 +110,8 @@ TIER_BATCH = "batch"
 # resolves against its navigator. That is why the template is a format
 # string and `source()` takes the root.
 _TEXT_TEMPLATE = '''import nu
-import nu.kv
-import nu.ui
+import nustd.kv
+import nustd.ui
 from {module} import {root}
 
 
@@ -119,11 +119,11 @@ def out(section):
     """One text block: a prose ref over a string in the space's scratch kv."""
     # Bare, because nuspace roots it: the ref lands under this block's own
     # node on the pages surface, wherever that turns out to be.
-    body = nu.ui.ProseRef("text")
+    body = nustd.ui.ProseRef("text")
     data = {root}.state[section].data
     cell = data["text"]
     # A snippet owns its own atomicity; nothing brackets it on the way in.
-    return nu.kv.auto_flow_atomic(
+    return nustd.kv.auto_flow_atomic(
         body.set(nu.ToStr(data.get_item("text", nu.Str(""))))
         >> body.set_placeholder(nu.Str("Write, or press / for blocks"))
         >> nu.ParallelAsync(
@@ -150,12 +150,12 @@ def out(section):
 #
 # It lives here rather than in the browser so there is one spelling of it.
 _PROGRAM_STARTER = """import nu
-import nu.ui
+import nustd.ui
 
 
 # `out` may ask for `page` and `section`, the ids this block runs under.
 def out():
-    return nu.ui.TextRef("out").set(nu.Str("hello"))
+    return nustd.ui.TextRef("out").set(nu.Str("hello"))
 """
 
 
@@ -171,7 +171,7 @@ def out():
 # template gives: ShapeMeta rebinds `_root_shape` on inherited slots, so only
 # the space's own class resolves against its navigator.
 APP_STARTER = '''import nu
-import nu.kv
+import nustd.kv
 from {module} import {root}
 
 
@@ -180,7 +180,7 @@ def out(section):
     data = {root}.state[section].data
     now = nu.ToInt(data.get_item("ticks", nu.Str("0")))
     tick = data.set_item("ticks", nu.ToStr(now + nu.Int(1)))
-    return nu.kv.auto_flow_atomic(nu.ForeverDo(nu.DelayedDo(1.0, tick)), scope={root})
+    return nustd.kv.auto_flow_atomic(nu.ForeverDo(nu.DelayedDo(1.0, tick)), scope={root})
 '''
 
 

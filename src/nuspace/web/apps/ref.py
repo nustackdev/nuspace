@@ -1,4 +1,4 @@
-"""``AppsRef`` -- the apps surface as one nu.ui Ref.
+"""``AppsRef`` -- the apps surface as one nustd.ui Ref.
 
 A component ref like ``ButtonRef`` or ``InputRef``, only wider: it renders a
 flat app rail and one app's source instead of a label. Same two halves as
@@ -40,7 +40,7 @@ from nuspace.web.wire import event, write
 if TYPE_CHECKING:
     from nu.domains.shape import Shape
     from nu.lang import BoolArg, ListArg, Nu
-    from nu.ui.core import Changed
+    from nustd.ui.core import Changed
 
 
 __all__ = ["AppsRef"]

@@ -14,7 +14,7 @@ from operator import rshift
 import pytest
 
 import nu
-import nu.kv
+import nustd.kv
 from nuspace.apps import Runner, ops
 from nuspace.core.shapes import Space
 
@@ -23,7 +23,7 @@ from nuspace.core.shapes import Space
 # its own write, because a snippet owns its atomicity and the runner does not
 # add one. `section` is the app's own id: an app is a section with no page.
 COUNTER = """import nu
-import nu.kv
+import nustd.kv
 from nuspace.core.shapes import Space
 
 
@@ -31,7 +31,7 @@ def out(section):
     data = Space.state[section].data
     now = nu.ToInt(data.get_item("ticks", nu.Str("0")))
     tick = data.set_item("ticks", nu.ToStr(now + nu.Int(1)))
-    return nu.kv.auto_flow_atomic(
+    return nustd.kv.auto_flow_atomic(
         data.set_item("ticks", nu.Str("0")) >> nu.ForeverDo(nu.DelayedDo(0.05, tick)),
         scope=Space,
     )
@@ -107,8 +107,8 @@ async def seed_store(path, apps):
     """
     writes = seq(*(write_app(a, s or COUNTER) for a, s in apps.items()))
     tree = nu.With(
-        nu.kv.rocksdb_navigator(path),
-        body=nu.kv.auto_flow_atomic(writes, scope=Space),
+        nustd.kv.rocksdb_navigator(path),
+        body=nustd.kv.auto_flow_atomic(writes, scope=Space),
     )
     await nu.arun(tree, nu.Context())
 
@@ -116,8 +116,8 @@ async def seed_store(path, apps):
 async def read(path, term):
     """Run one term against the finished store and give back what it saw."""
     tree = nu.With(
-        nu.kv.rocksdb_navigator(path, read_only=True),
-        body=nu.kv.auto_flow_atomic(term, scope=Space),
+        nustd.kv.rocksdb_navigator(path, read_only=True),
+        body=nustd.kv.auto_flow_atomic(term, scope=Space),
     )
     value, _ = await nu.arun(tree, nu.Context())
     return value

@@ -215,7 +215,7 @@ def messages_of(*, root: type[Shape] | None = None) -> nu.Nu:
 def running(*, root: type[Shape] | None = None) -> nu.Nu:
     """Whether a run is in flight, as a term.
 
-    Read off the store rather than off a ``nu.mem`` record, unlike the apps
+    Read off the store rather than off a ``nustd.mem`` record, unlike the apps
     runner's ``attached``. An agent run is a fact about the space, not about
     the process: the browser has to see it, and it is the same answer for
     every connection.

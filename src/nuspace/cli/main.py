@@ -2,7 +2,7 @@
 
 No commands yet. The CLI is a DX layer that will grow once the core
 primitives settle. External automation should attach to a running space
-via ``nu.proxy`` instead of via bespoke CLI commands.
+via ``nustd.proxy`` instead of via bespoke CLI commands.
 """
 
 from __future__ import annotations

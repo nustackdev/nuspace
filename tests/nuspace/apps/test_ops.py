@@ -8,7 +8,7 @@ context instead of a store, because ``Runner.workers`` is mem.
 from __future__ import annotations
 
 import nu
-import nu.kv
+import nustd.kv
 from nuspace.apps import Runner, ops
 from nuspace.core.shapes import Space
 
@@ -19,15 +19,15 @@ SRC = "def out():\n    return None\n"
 async def do(path, term):
     """Run one term against the store and give back what it evaluated to."""
     tree = nu.With(
-        nu.kv.rocksdb_navigator(path),
-        body=nu.kv.auto_flow_atomic(term, scope=Space),
+        nustd.kv.rocksdb_navigator(path),
+        body=nustd.kv.auto_flow_atomic(term, scope=Space),
     )
     value, _ = await nu.arun(tree, nu.Context())
     return value
 
 
 async def in_host(data, term):
-    """Run one term over ``data``, the dict substrate ``nu.mem`` lives in.
+    """Run one term over ``data``, the dict substrate ``nustd.mem`` lives in.
 
     Passing the same dict twice is how a read sees what an earlier write did:
     mem keeps nothing of its own between runs.
@@ -175,8 +175,8 @@ async def test_app_statuses_read_running_only_when_supervised(store):
     await in_host(data, Runner.workers.set_item("a_one", nu.Int(7)))
 
     tree = nu.With(
-        nu.kv.rocksdb_navigator(store),
-        body=nu.kv.auto_flow_atomic(ops.app_statuses(supervised=True), scope=Space),
+        nustd.kv.rocksdb_navigator(store),
+        body=nustd.kv.auto_flow_atomic(ops.app_statuses(supervised=True), scope=Space),
     )
     supervised, _ = await nu.arun(tree, nu.Context().bind(dict, data))
 

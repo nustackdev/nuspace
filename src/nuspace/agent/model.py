@@ -1,8 +1,8 @@
 """The model endpoint: a Claude Code prompt, fed the run's whole transcript.
 
 nuagent's ``turn`` calls ``chat(messages=...)`` and expects a term yielding
-``{"text": ...}``. ``nu.llm`` speaks that natively but wants a provider and a
-key; ``nu.cc`` wants neither, and a space is a thing you run on your own
+``{"text": ...}``. ``nustd.llm`` speaks that natively but wants a provider and a
+key; ``nustd.cc`` wants neither, and a space is a thing you run on your own
 machine, so that is what is wired here. The cost is that each call is a fresh
 Claude Code session, so the conversation has to ride along in the prompt --
 which is what :class:`Rendered` is for.
@@ -29,7 +29,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import nu
-import nu.cc
+import nustd.cc
 from nu.lang import ScalarQuery
 from nu.lang.sentinels import EMPTY, INVALID
 
@@ -47,7 +47,7 @@ __all__ = ["Bot", "Rendered", "chat_with"]
 class Bot(nu.Service):
     """The Claude Code endpoint one space's agent runs against."""
 
-    ask = nu.cc.PromptRef.method()
+    ask = nustd.cc.PromptRef.method()
 
 
 class Rendered(ScalarQuery):
@@ -86,7 +86,7 @@ class Rendered(ScalarQuery):
 def _render(messages: object) -> object:
     """Role-tagged blocks, or INVALID for anything that is not a transcript.
 
-    Duck-typed, and it has to be. A ``nu.kv`` ``ListRef`` of dicts does not
+    Duck-typed, and it has to be. A ``nustd.kv`` ``ListRef`` of dicts does not
     read back as ``list[dict]`` -- it reads back as a lazy sequence view whose
     elements are mapping views, live cursors into the store. An
     ``isinstance(messages, list)`` gate therefore rejected every real

@@ -1,4 +1,4 @@
-"""The nuspace shell: fixed top-level routes, as nu.ui Shapes.
+"""The nuspace shell: fixed top-level routes, as nustd.ui Shapes.
 
 ``Screen`` is a Section holding one surface's refs; ``Shell`` is the top of
 the tree and declares a slot per screen. This is the chrome only -- the page
@@ -24,9 +24,9 @@ from typing import Any, ClassVar
 from typing_extensions import Self
 
 from nu.domains.shape import Shape, Slot
-from nu.ui.core import Ref, Section, SectionRef
-from nu.ui.core.base import _wire_type_of
 from nuspace.core.ui import SpaceRef
+from nustd.ui.core import Ref, Section, SectionRef
+from nustd.ui.core.base import _wire_type_of
 
 
 __all__ = ["Chain", "Screen", "ScreenRef", "Shell"]

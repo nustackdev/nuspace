@@ -166,7 +166,7 @@ def server(
 
     Example:
         >>> nu.With(
-        ...     nu.kv.rocksdb_navigator(".db", tags=(Space,)),
+        ...     nustd.kv.rocksdb_navigator(".db", tags=(Space,)),
         ...     nuspace.web.server(ui, shell_cls=Nuspace, port=8080),
         ...     body=driver,
         ... )

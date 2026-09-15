@@ -34,7 +34,7 @@ ROOT = Path("/tmp/nuspace-apps-demo")  # noqa: S108
 # gets the same scope a section does, and `section` is its own id: an app is a
 # section with no page. Editing `step` is what the demo edits.
 COUNTER = '''import nu
-import nu.kv
+import nustd.kv
 from nuspace.core.shapes import Space
 
 
@@ -43,7 +43,7 @@ def out(section):
     data = Space.state[section].data
     now = nu.ToInt(data.get_item("ticks", nu.Str("0")))
     tick = data.set_item("ticks", nu.ToStr(now + nu.Int({step})))
-    return nu.kv.auto_flow_atomic(
+    return nustd.kv.auto_flow_atomic(
         data.set_item("ticks", nu.Str("0")) >> nu.ForeverDo(nu.DelayedDo(0.1, tick)),
         scope=Space,
     )
@@ -53,7 +53,7 @@ def out(section):
 # processes, both reaching the one store through their own proxy, and the app
 # being watched is named by id rather than by a path formatted into the source.
 MIRROR = '''import nu
-import nu.kv
+import nustd.kv
 from nuspace.core.shapes import Space
 
 WATCHED = "a_counter"
@@ -64,7 +64,7 @@ def out(section):
     mine = Space.state[section].data
     theirs = Space.state[WATCHED].data
     copy = mine.set_item("seen", nu.ToStr(theirs.get_item("ticks", nu.Str("0"))))
-    return nu.kv.auto_flow_atomic(nu.ForeverDo(nu.DelayedDo(0.1, copy)), scope=Space)
+    return nustd.kv.auto_flow_atomic(nu.ForeverDo(nu.DelayedDo(0.1, copy)), scope=Space)
 '''
 
 

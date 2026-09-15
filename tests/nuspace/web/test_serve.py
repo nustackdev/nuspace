@@ -14,23 +14,23 @@ import pytest
 import websockets
 
 import nu
-import nu.ui
-from nu.ui.core.protocol import OP_INIT, OP_REMOVE, decode
+import nustd.ui
 from nuspace.apps import free_port
 from nuspace.web import NuspaceServer, Screen, Shell, server
+from nustd.ui.core.protocol import OP_INIT, OP_REMOVE, decode
 
 
 class Home(Screen):
     """One screen with two output refs, enough to fill a boot batch."""
 
-    title = nu.ui.HeadingRef.slot(label="nuspace")
-    body = nu.ui.TextRef.slot(value="hello")
+    title = nustd.ui.HeadingRef.slot(label="nuspace")
+    body = nustd.ui.TextRef.slot(value="hello")
 
 
 class Demo(Shell):
     """The smallest shell that still has chrome and a screen."""
 
-    heading = nu.ui.HeadingRef.slot(label="demo")
+    heading = nustd.ui.HeadingRef.slot(label="demo")
     home = Home.slot("/home")
 
 

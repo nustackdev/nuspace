@@ -35,8 +35,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-import nu
-import nu.kv
+import nustd.kv
 from nuspace._root import resolve_root
 from nuspace.agent import ops
 from nuspace.chat import ops as chat_ops
@@ -44,6 +43,7 @@ from nuspace.web.arms import Arms, field_str
 
 
 if TYPE_CHECKING:
+    import nu
     from nu.domains.shape import Shape
     from nuspace.web.chat.ref import ChatRef
 
@@ -113,4 +113,4 @@ def chat_driver(chat: ChatRef, *, root: type[Shape] | None = None) -> nu.Nu:
         | _arms.state("chat_said", root.chat.on_change(), frame())
         | _arms.state("chat_run", root.agent.on_change(), frame())
     )
-    return nu.kv.auto_flow_atomic(boot >> flow, scope=root)
+    return nustd.kv.auto_flow_atomic(boot >> flow, scope=root)

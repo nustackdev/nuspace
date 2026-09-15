@@ -9,7 +9,7 @@
 // and notifies subscribers on every change, which is how Monaco (the one
 // surface that cannot read CSS variables) restains itself.
 //
-// Not part of the nu.ui bridge. Purely browser-side, same as the router.
+// Not part of the nustd.ui bridge. Purely browser-side, same as the router.
 
 import { useSyncExternalStore } from "react";
 

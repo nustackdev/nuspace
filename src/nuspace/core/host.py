@@ -17,11 +17,11 @@ import socket
 from typing import TYPE_CHECKING
 
 import nu
-import nu.kv
-import nu.mp_pool
-import nu.proxy
+import nustd.kv
+import nustd.mp_pool
+import nustd.proxy
 from nu.core.reactive import ObserverProtocol
-from nu.kv.fabrics import InMemoryObserver, InMemoryTransport, Navigator
+from nustd.kv.fabrics import InMemoryObserver, InMemoryTransport, Navigator
 
 
 if TYPE_CHECKING:
@@ -138,12 +138,12 @@ def worker_init(
     """
     observer: tuple[nu.Nu, ...] = ()
     if observer_address is not None:
-        observer = (nu.kv.proxy_observer(observer_address),)
+        observer = (nustd.kv.proxy_observer(observer_address),)
     elif redis_url is not None:
-        observer = (nu.kv.redis_observer(redis_url=redis_url, channel_prefix=channel_prefix),)
+        observer = (nustd.kv.redis_observer(redis_url=redis_url, channel_prefix=channel_prefix),)
     return nu.With(
         *observer,
-        nu.proxy.InvisiblesProxy(Navigator, address=address),
+        nustd.proxy.InvisiblesProxy(Navigator, address=address),
         nu.Provide(dict, {}),
     )
 
@@ -156,7 +156,7 @@ def served_navigator(address: str, *, store_tag: object = None) -> nu.Provide:
     tag here is a ``LookupError`` before the server ever boots.
     """
     return nu.Provide(
-        nu.proxy.InvisiblesServer,
+        nustd.proxy.InvisiblesServer,
         {
             "target": Navigator,
             "target_tag": store_tag,
@@ -172,10 +172,10 @@ def served_observer(address: str) -> nu.With:
 
     The store's observer sees every write this process makes, and a worker on
     the other end of a proxied Navigator sees none of them. This is the ears:
-    bind it here, bind :func:`nu.kv.proxy_observer` in the worker, and a page
+    bind it here, bind :func:`nustd.kv.proxy_observer` in the worker, and a page
     can be told something changed instead of being killed to find out.
     """
-    return nu.kv.served_observer(address)
+    return nustd.kv.served_observer(address)
 
 
 def worker_pool(
@@ -192,7 +192,7 @@ def worker_pool(
     provides one has decided how long those processes live.
     """
     return nu.Provide(
-        nu.mp_pool.WorkerPool,
+        nustd.mp_pool.WorkerPool,
         {
             "name": name,
             "init": worker_init(

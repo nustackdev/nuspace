@@ -4,8 +4,8 @@ Bound on Context for the lifetime of one ws connection. Owns the ws,
 the observer registry, and the pending-read futures. Interactions build
 Frames and call ``send``; the session does no per-op work.
 
-Concrete implementation of ``nu.ui.core.session.Session`` -- the abstract
-transport nu.ui refs target. Nuspace's own host, mirroring nudle's
+Concrete implementation of ``nustd.ui.core.session.Session`` -- the abstract
+transport nustd.ui refs target. Nuspace's own host, mirroring nudle's
 session shape so the reactive plumbing behaves the same on both.
 """
 
@@ -17,7 +17,7 @@ from collections import defaultdict
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
-from nu.ui.core.protocol import (
+from nustd.ui.core.protocol import (
     OP_ERROR,
     OP_INIT,
     OP_NOTIFY,
@@ -27,7 +27,7 @@ from nu.ui.core.protocol import (
     decode,
     encode,
 )
-from nu.ui.core.session import Session
+from nustd.ui.core.session import Session
 
 
 if TYPE_CHECKING:

@@ -14,21 +14,21 @@ from operator import rshift
 import pytest
 
 import nu
-import nu.kv
-import nu.mp_pool
-import nu.proxy
-from nu.kv.fabrics import Navigator
+import nustd.kv
+import nustd.mp_pool
+import nustd.proxy
 from nuspace.apps import free_port, worker_init
 from nuspace.core.host import served_observer
 from nuspace.core.shapes import Space
 from nuspace.pages import ROOT_PAGE_ID, Runner, ops, page_tree
+from nustd.kv.fabrics import Navigator
 
 
 # A counter that never stops. One key in this section's own row, ticking.
 # Wraps its own write, because a snippet owns its atomicity and the runner
 # does not add one.
 COUNTER = """import nu
-import nu.kv
+import nustd.kv
 from nuspace.core.shapes import Space
 
 
@@ -36,7 +36,7 @@ def out(section):
     data = Space.state[section].data
     now = nu.ToInt(data.get_item("ticks", nu.Str("0")))
     tick = data.set_item("ticks", nu.ToStr(now + nu.Int(1)))
-    return nu.kv.auto_flow_atomic(
+    return nustd.kv.auto_flow_atomic(
         data.set_item("ticks", nu.Str("0")) >> nu.ForeverDo(nu.DelayedDo(0.05, tick)),
         scope=Space,
     )
@@ -99,8 +99,8 @@ def snap_ticks(tag, *section_ids):
 async def do(path, term):
     """Run one term against the store and give back what it evaluated to."""
     tree = nu.With(
-        nu.kv.rocksdb_navigator(path),
-        body=nu.kv.auto_flow_atomic(term, scope=Space),
+        nustd.kv.rocksdb_navigator(path),
+        body=nustd.kv.auto_flow_atomic(term, scope=Space),
     )
     value, _ = await nu.arun(tree, nu.Context())
     return value
@@ -131,8 +131,8 @@ async def seed_store(path, page_id, sections):
 async def read(path, term):
     """Run one term against the finished store and give back what it saw."""
     tree = nu.With(
-        nu.kv.rocksdb_navigator(path, read_only=True),
-        body=nu.kv.auto_flow_atomic(term, scope=Space),
+        nustd.kv.rocksdb_navigator(path, read_only=True),
+        body=nustd.kv.auto_flow_atomic(term, scope=Space),
     )
     value, _ = await nu.arun(tree, nu.Context())
     return value
@@ -165,14 +165,14 @@ async def run_page(path, page_id, *, alongside=None, duration=4.0):
     address = f"127.0.0.1:{free_port()}"
     observer_address = f"127.0.0.1:{free_port()}"
     tree = nu.With(
-        nu.kv.rocksdb_navigator(path),
+        nustd.kv.rocksdb_navigator(path),
         nu.Provide(dict, {}),
         # The worker follows its own sections now, so it has to hear this
         # process's writes. Without the feed it comes up deaf and never
         # reloads.
         served_observer(observer_address),
         nu.Provide(
-            nu.proxy.InvisiblesServer,
+            nustd.proxy.InvisiblesServer,
             {
                 "target": Navigator,
                 "address": address,
@@ -181,7 +181,7 @@ async def run_page(path, page_id, *, alongside=None, duration=4.0):
             },
         ),
         nu.Provide(
-            nu.mp_pool.WorkerPool,
+            nustd.mp_pool.WorkerPool,
             {
                 "name": "nuspace-pages",
                 "init": worker_init(address, observer_address=observer_address),

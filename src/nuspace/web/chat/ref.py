@@ -1,4 +1,4 @@
-"""``ChatRef`` -- the agent sidebar as one nu.ui Ref.
+"""``ChatRef`` -- the agent sidebar as one nustd.ui Ref.
 
 A component ref like ``AppsRef`` or ``LensRef``, and the narrowest of the
 four: a transcript, a status, and a box to type in. Same two halves, built out
@@ -43,7 +43,7 @@ from nuspace.web.wire import event, write
 
 if TYPE_CHECKING:
     from nu.lang import IntArg, ListArg, Nu, StrArg
-    from nu.ui.core import Changed
+    from nustd.ui.core import Changed
 
 
 __all__ = ["ChatRef"]

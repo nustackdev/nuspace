@@ -29,7 +29,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import nu
-import nu.kv
+import nustd.kv
 from nuspace._root import resolve_root
 from nuspace.web.arms import Arms, field_ids
 from nuspace.web.lens.reflect import DEFAULT_MAX_ROWS, column_terms, columns
@@ -95,4 +95,4 @@ def lens_driver(
             columns(root, field_ids(_NAV, "path"), max_rows=max_rows),
         ),
     )
-    return nu.kv.auto_flow_atomic(boot >> flow, scope=root)
+    return nustd.kv.auto_flow_atomic(boot >> flow, scope=root)

@@ -16,8 +16,8 @@ dependencies = [
     # ui for the browser, proxy (invisibles) for the worker's session, mp_pool
     # for the workers themselves. Picking extras just means discovering the
     # missing one at import time.
-    "nucore>=0.4.0",
-    "nustd[all]>=0.4.0",
+    "nucore>=0.5.0",
+    "nustd[all]>=0.5.0",
     # The compiled web bundle. A separate distribution only because PyPI caps
     # project size and a SPA rebuilt on every UI tweak would eat the quota --
     # not optional. `pip install nuspace` gives you the browser.
@@ -174,6 +174,8 @@ convention = "google"
 known-first-party = [
     "nuspace",
     "nu",
+    "nustd",
+    "nucli",
 ]
 force-single-line = false
 lines-after-imports = 2

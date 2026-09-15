@@ -1,4 +1,4 @@
-"""``PagesRef`` -- the pages surface as one nu.ui Ref.
+"""``PagesRef`` -- the pages surface as one nustd.ui Ref.
 
 A component ref like ``ButtonRef`` or ``InputRef``, only wider: it renders a
 page rail and a section canvas instead of a label. Same two halves as any of
@@ -42,7 +42,7 @@ from nuspace.web.wire import event, write
 if TYPE_CHECKING:
     from nu.domains.shape import Shape
     from nu.lang import ListArg, Nu, StrArg
-    from nu.ui.core import Changed
+    from nustd.ui.core import Changed
 
 
 __all__ = ["PagesRef", "starters"]

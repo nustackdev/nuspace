@@ -44,7 +44,7 @@ import sys
 from pathlib import Path
 
 import nu
-import nu.kv
+import nustd.kv
 from nuspace.core.shapes import Space
 from nuspace.web import space_tree
 
@@ -58,7 +58,7 @@ def demo(fresh=True):
         shutil.rmtree(ROOT, ignore_errors=True)
     ROOT.mkdir(parents=True, exist_ok=True)
     tree = space_tree(
-        nu.kv.rocksdb_navigator(str(ROOT / "db"), tags=(Space,)),
+        nustd.kv.rocksdb_navigator(str(ROOT / "db"), tags=(Space,)),
         store_tag=Space,
         port=PORT,
     )

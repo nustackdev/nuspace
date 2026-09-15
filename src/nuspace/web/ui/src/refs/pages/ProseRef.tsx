@@ -1,6 +1,6 @@
 // nuspace's own `ProseRef` entry: the kit's editor, plus the block boundary.
 //
-// A text block is a Nu program holding a `nu.ui.ProseRef`, so the thing that
+// A text block is a Nu program holding a `nustd.ui.ProseRef`, so the thing that
 // renders a paragraph in this editor is the same machinery that renders a
 // slider in a program block: a node in the tree, drawn by `NodeView`. That is
 // what makes "every block is a program" true rather than decorative.

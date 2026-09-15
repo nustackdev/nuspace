@@ -13,7 +13,7 @@ from ast import literal_eval
 import pytest
 
 import nu
-import nu.kv
+import nustd.kv
 from nuspace.apps import CHANGED_APP_INDEX, ops
 from nuspace.core.shapes import Space
 
@@ -37,8 +37,8 @@ def _record():
 async def _keys(path, script):
     """Run ``script`` beside a recorder and give back the keys it saw, in order."""
     tree = nu.With(
-        nu.kv.rocksdb_navigator(path),
-        body=nu.kv.auto_flow_atomic(
+        nustd.kv.rocksdb_navigator(path),
+        body=nustd.kv.auto_flow_atomic(
             Space.apps.init(nu.Dict.create())
             # The recorder counts what it has written, so the row it counts
             # has to be there before the first key lands.

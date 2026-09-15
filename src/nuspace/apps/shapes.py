@@ -8,8 +8,8 @@ This module imports nothing from :mod:`nuspace.core`, which is what keeps
 from __future__ import annotations
 
 import nu
-import nu.kv
-import nu.mem
+import nustd.kv
+import nustd.mem
 
 
 __all__ = ["DEFAULT_POLICY", "App", "Runner"]
@@ -30,22 +30,22 @@ class App(nu.Shape):
 
     # An app is headless -- it produces, a page displays -- so nothing roots
     # the refs it names and it has nowhere to render.
-    name = nu.kv.StrRef.slot()
-    snippet = nu.kv.ProgramRef.slot()
+    name = nustd.kv.StrRef.slot()
+    snippet = nustd.kv.ProgramRef.slot()
     # Metadata. The policy engine slots in behind this, not beside it.
-    policy = nu.kv.StrRef.slot()
+    policy = nustd.kv.StrRef.slot()
 
 
 class Runner(nu.Shape):
     """What the host process knows about who is running what.
 
-    ``nu.mem`` deliberately: this is host-local bookkeeping, and a kv write
+    ``nustd.mem`` deliberately: this is host-local bookkeeping, and a kv write
     here would let the driver wake itself. Pool ids are never reused, so "the
     worker id changed" is a sound test for "that app restarted".
     """
 
-    workers = nu.mem.DictRef.slot(int)
+    workers = nustd.mem.DictRef.slot(int)
     # Written by the runner's boot pass and by nothing else. Mem, so it reads
     # True only where the runner itself is: a web driver in the same process
     # sees it, one in another process never can, and neither has to be told.
-    attached = nu.mem.BoolRef.slot()
+    attached = nustd.mem.BoolRef.slot()

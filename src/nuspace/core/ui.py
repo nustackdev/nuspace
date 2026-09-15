@@ -3,7 +3,7 @@
 A block author writes a plain shape and does not say where it lives::
 
     class Section(nu.Shape):
-        inp = nu.ui.InputRef.slot()
+        inp = nustd.ui.InputRef.slot()
 
     def out(page, section):
         return Section.inp.set("whatever")
@@ -36,8 +36,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import nu
-import nu.ui
-from nu.ui.core import Ref, SectionRef
+import nustd.ui
+from nustd.ui.core import Ref, SectionRef
 
 
 if TYPE_CHECKING:
@@ -88,8 +88,8 @@ def section_ui(surface: Ref, section: StrArg) -> SectionRef:
         section: the section id. Any ``StrArg``, because a page's sections are
             fanned out from kv and the id is only known as the fold runs.
     """
-    sections = SectionRef(SECTIONS, section_cls=nu.ui.Column, parent_ref=surface)
-    return SectionRef(section, section_cls=nu.ui.Column, parent_ref=sections)
+    sections = SectionRef(SECTIONS, section_cls=nustd.ui.Column, parent_ref=surface)
+    return SectionRef(section, section_cls=nustd.ui.Column, parent_ref=sections)
 
 
 class SnippetRoot:

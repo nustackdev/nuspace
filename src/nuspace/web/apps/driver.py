@@ -34,7 +34,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import nu
-import nu.kv
+import nustd.kv
 from nuspace._root import resolve_root
 from nuspace.apps import ops
 from nuspace.web.arms import Arms, field_str
@@ -158,7 +158,7 @@ def apps_driver(
         | _arms.state("app_rowstatus", root.apps.on_change(), statuses())
         | _arms.state("app_errors", root.state.on_change(), statuses())
     )
-    return nu.kv.auto_flow_atomic(boot >> flow, scope=root)
+    return nustd.kv.auto_flow_atomic(boot >> flow, scope=root)
 
 
 def _restart(app_id: nu.Nu, root: type[Shape]) -> nu.Nu:

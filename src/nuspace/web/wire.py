@@ -16,8 +16,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from nu.forms import Dict
-from nu.ui.core import Changed, Ref, Write
 from nuspace.core.ui import SpaceRef
+from nustd.ui.core import Changed, Ref, Write
 
 
 if TYPE_CHECKING:
@@ -35,7 +35,7 @@ OPS = "ops"
 class ChannelRef(SpaceRef):
     """One wire path under a ref, and nothing else.
 
-    Exists to be addressed: :class:`~nu.ui.core.Changed` resolves its path and
+    Exists to be addressed: :class:`~nustd.ui.core.Changed` resolves its path and
     subscribes, and no value is ever read through it. Nothing is ever written
     through one either, so the browser never makes a node for it.
     """

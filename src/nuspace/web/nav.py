@@ -1,7 +1,7 @@
 """``NavRef`` -- where the browser is, read from the browser.
 
 The route is per view, so the browser owns it and the server keeps no copy:
-no ``nu.mem`` cache, no cursor on a payload, nothing that would make two tabs
+no ``nustd.mem`` cache, no cursor on a payload, nothing that would make two tabs
 share one idea of which page is open. A flow that needs the route reads it
 through the session's round-trip read path, and gets whatever that one
 connection's URL says right now.
@@ -23,8 +23,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, ClassVar
 
 import nu
-from nu.ui.core import Changed
 from nuspace.core.ui import SpaceRef
+from nustd.ui.core import Changed
 
 
 if TYPE_CHECKING:

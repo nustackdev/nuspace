@@ -13,17 +13,17 @@ from __future__ import annotations
 import pytest
 
 import nu
-import nu.kv
+import nustd.kv
 from nuspace.web.lens.reflect import column_terms
 
 
 class Zoo(nu.Shape):
     """One of each kind of slot, which is the whole point of it."""
 
-    title = nu.kv.StrRef.slot()
-    unset = nu.kv.StrRef.slot()
-    tags = nu.kv.ListRef.slot(str)
-    counts = nu.kv.DictRef.slot(int)
+    title = nustd.kv.StrRef.slot()
+    unset = nustd.kv.StrRef.slot()
+    tags = nustd.kv.ListRef.slot(str)
+    counts = nustd.kv.DictRef.slot(int)
 
 
 @pytest.fixture
@@ -36,8 +36,8 @@ def zoo(tmp_path):
 
 async def _seed(store):
     tree = nu.With(
-        nu.kv.rocksdb_navigator(store),
-        body=nu.kv.auto_flow_atomic(
+        nustd.kv.rocksdb_navigator(store),
+        body=nustd.kv.auto_flow_atomic(
             Zoo.title.set(nu.Str("a zoo"))
             >> Zoo.tags.init(nu.List.create())
             >> Zoo.tags.append(nu.Str("red"))
@@ -54,8 +54,8 @@ async def _seed(store):
 
 async def _columns(store, path, max_rows=200):
     tree = nu.With(
-        nu.kv.rocksdb_navigator(store, read_only=True),
-        body=nu.kv.auto_flow_atomic(column_terms(Zoo, path, max_rows), scope=Zoo),
+        nustd.kv.rocksdb_navigator(store, read_only=True),
+        body=nustd.kv.auto_flow_atomic(column_terms(Zoo, path, max_rows), scope=Zoo),
     )
     cols, _ = await nu.arun(tree, nu.Context())
     return cols
@@ -155,8 +155,8 @@ async def test_a_read_that_fails_at_run_still_answers_with_a_cascade(zoo):
 
     await _seed(zoo)
     tree = nu.With(
-        nu.kv.rocksdb_navigator(zoo, read_only=True),
-        body=nu.kv.auto_flow_atomic(
+        nustd.kv.rocksdb_navigator(zoo, read_only=True),
+        body=nustd.kv.auto_flow_atomic(
             columns(Zoo, nu.List.of(nu.Str("tags"), nu.Str("red"))), scope=Zoo
         ),
     )

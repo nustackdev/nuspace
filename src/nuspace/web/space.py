@@ -37,7 +37,6 @@ from functools import partial
 from typing import TYPE_CHECKING
 
 import nu
-import nu.kv
 from nuspace.agent.runner import DEFAULT_MODEL, agent_runner
 from nuspace.apps.runner import supervisor
 from nuspace.core.host import free_port, host
@@ -144,7 +143,7 @@ def session_driver(session_address: str, *, root: type[Shape] | None = None) -> 
     runs alone exactly as it runs here.
 
     Args:
-        session_address: where this connection's ``nu.ui`` Session is served.
+        session_address: where this connection's ``nustd.ui`` Session is served.
             The ws endpoint picks it, because there is one per connection and
             a section running in another process reaches the browser through
             it. Positional, which is how the endpoint hands it over.

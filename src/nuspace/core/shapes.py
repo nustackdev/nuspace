@@ -24,7 +24,7 @@ their own packages under the same one-way rule.
 
 ``state`` is the scratch kv namespace snippets write to, one ``Scratch``
 row per running thing. Per ``model.md`` nuspace has no state pillar --
-state is Nu's kv fabric -- but a bare ``nu.kv.StrRef("foo")`` carries no
+state is Nu's kv fabric -- but a bare ``nustd.kv.StrRef("foo")`` carries no
 owner Shape, so it never resolves against a ``tags=(Space,)`` navigator.
 ``Space.state[section]`` gives a snippet a reachable row without minting a
 shape per value, and it is a ref chain rather than a key someone built out
@@ -40,6 +40,7 @@ id too. See :mod:`nuspace.core.tpl`.
 from __future__ import annotations
 
 import nu
+import nustd.kv
 
 # One way only: neither submodule's shapes may import back from here. They
 # import nu alone, so this edge cannot deadlock whichever way the package is
@@ -66,8 +67,8 @@ class Scratch(nu.Shape):
     clobber it by naming a key.
     """
 
-    data = nu.kv.DictRef.slot(str)
-    error = nu.kv.StrRef.slot()
+    data = nustd.kv.DictRef.slot(str)
+    error = nustd.kv.StrRef.slot()
 
 
 class Space(nu.Shape):
@@ -80,14 +81,14 @@ class Space(nu.Shape):
     dicts are one level deep.
     """
 
-    apps = nu.kv.ShapesDictRef.slot(App)
-    pages = nu.kv.ShapesDictRef.slot(Page)
-    state = nu.kv.ShapesDictRef.slot(Scratch)
+    apps = nustd.kv.ShapesDictRef.slot(App)
+    pages = nustd.kv.ShapesDictRef.slot(Page)
+    state = nustd.kv.ShapesDictRef.slot(Scratch)
     # Both singular, not dicts: nuagent runs one task at a time, so one slot
     # each is the true statement and a dict keyed by run id would be a shape
     # describing a concurrency the loop does not have.
-    agent = nu.kv.ShapeRef.slot(Agent)
+    agent = nustd.kv.ShapeRef.slot(Agent)
     # Top level, not nested under `agent`, because it is not the agent's
     # property. Anything in the space may post here -- a cron job, an app, a
     # person at a REPL -- and the sidebar cannot tell which did.
-    chat = nu.kv.ShapeRef.slot(Chat)
+    chat = nustd.kv.ShapeRef.slot(Chat)

@@ -28,7 +28,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import nu
-import nu.kv
+import nustd.kv
 from nuspace._root import resolve_root
 from nuspace.pages import ops
 from nuspace.web.arms import Arms, field_ids, field_index, field_str
@@ -283,4 +283,4 @@ def pages_driver(
             _at_route("status_errors", nav, lambda page: _ship_status(pages, page, root)),
         )
     )
-    return nu.kv.auto_flow_atomic(boot >> flow, scope=root)
+    return nustd.kv.auto_flow_atomic(boot >> flow, scope=root)

@@ -18,7 +18,7 @@ prose around a fence and the person sees silence.
 
 One section is nuspace's own, and it exists to *correct* the stock surface
 preamble. That preamble tells the model to redeclare every Shape it touches,
-because ``nu.mem`` addresses by slot name and a matching declaration therefore
+because ``nustd.mem`` addresses by slot name and a matching declaration therefore
 reaches the host's world. A space's store does not work that way: it is bound
 ``tags=(Space,)``, keyed on the class object, so a redeclared ``Space`` is a
 different address and every write through it lands nowhere, silently. The
@@ -79,12 +79,13 @@ else -- by writing it:
 
 ```python
 import nu
+import nustd.mem
 
 from nuspace.core.shapes import Space
 
 
 class Run(nu.Shape):
-    done = nu.mem.BoolRef.slot()
+    done = nustd.mem.BoolRef.slot()
 
 
 def out():
@@ -151,7 +152,7 @@ lands in a store nobody reads. Import, never redeclare. The same goes for
 name them at all.
 
 **Do not bracket your program.** The host already holds the atomic bracket over
-the store. No `nu.kv.auto_flow_atomic`, no `nu.With`, no `nu.Provide`.
+the store. No `nustd.kv.auto_flow_atomic`, no `nu.With`, no `nu.Provide`.
 
 **Prefer the ops modules to hand-written ref chains.** Each function returns a
 Nu term and fixes every invariant the store has -- a page's `parent` and its
@@ -184,16 +185,16 @@ runs under; ask for the ones you need and leave out the ones you do not:
 
 ```python
 import nu
-import nu.ui
+import nustd.ui
 from nuspace.core.shapes import Space
 
 
 def out(section):
-    heading = nu.ui.TextRef("title")
+    heading = nustd.ui.TextRef("title")
     return heading.set(nu.ToStr(Space.state[section].data.get_item("name", nu.Str("?"))))
 ```
 
-**A block does not say where it renders.** Name a `nu.ui` Ref plainly, as
+**A block does not say where it renders.** Name a `nustd.ui` Ref plainly, as
 above, and nuspace roots it under this block on the page. `Space.state[id]` is
 any block's own scratch row, which is also how one block reads another's: pass
 the other block's id, never a key built out of a prefix.

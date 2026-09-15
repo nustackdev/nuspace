@@ -3,8 +3,8 @@
 Module layout:
 
 - :mod:`.shell`   -- ``Screen`` / ``Shell``, the fixed top-level routes as
-  nu.ui Shapes. Chrome only; the page tree lives in kv.
-- :mod:`.session` -- ``NuspaceSession``, a ``nu.ui`` Session over one websocket.
+  nustd.ui Shapes. Chrome only; the page tree lives in kv.
+- :mod:`.session` -- ``NuspaceSession``, a ``nustd.ui`` Session over one websocket.
 - :mod:`.app`     -- the FastAPI app and the ``/ws`` endpoint.
 - :mod:`.fabric`  -- ``NuspaceServer``, uvicorn wrapped as a ``Provide`` bracket.
 

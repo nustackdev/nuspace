@@ -35,14 +35,14 @@ import sys
 from pathlib import Path
 
 import nu
-import nu.kv
-import nu.mp_pool
-import nu.proxy
+import nustd.kv
+import nustd.mp_pool
+import nustd.proxy
 from nu.core.io import STDOUT
-from nu.kv.fabrics import Navigator
 from nuspace.apps import free_port, worker_init
 from nuspace.core.shapes import Space
 from nuspace.pages import ROOT_PAGE_ID, Runner, ops, page_tree
+from nustd.kv.fabrics import Navigator
 
 
 ROOT = Path("/tmp/nuspace-pages-demo")  # noqa: S108
@@ -54,7 +54,7 @@ PAGE = "guides"
 # row is reached by navigating -- `section` is the id this block runs under --
 # so nothing here builds a key. Editing `step` is what the demo edits.
 COUNTER = '''import nu
-import nu.kv
+import nustd.kv
 from nuspace.core.shapes import Space
 
 
@@ -63,7 +63,7 @@ def out(section):
     data = Space.state[section].data
     now = nu.ToInt(data.get_item("ticks", nu.Str("0")))
     tick = data.set_item("ticks", nu.ToStr(now + nu.Int({step})))
-    return nu.kv.auto_flow_atomic(
+    return nustd.kv.auto_flow_atomic(
         data.set_item("ticks", nu.Str("0")) >> nu.ForeverDo(nu.DelayedDo(0.1, tick)),
         scope=Space,
     )
@@ -76,7 +76,7 @@ def out(section):
 # section's row is `Space.state["s_counter"]`, an id used as a key, not a path
 # a python format hole built. Nothing is formatted into this source at all.
 MIRROR = '''import nu
-import nu.kv
+import nustd.kv
 from nuspace.core.shapes import Space
 
 WATCHED = "s_counter"
@@ -87,7 +87,7 @@ def out(section):
     mine = Space.state[section].data
     theirs = Space.state[WATCHED].data
     copy = mine.set_item("seen", nu.ToStr(theirs.get_item("ticks", nu.Str("0"))))
-    return nu.kv.auto_flow_atomic(nu.ForeverDo(nu.DelayedDo(0.1, copy)), scope=Space)
+    return nustd.kv.auto_flow_atomic(nu.ForeverDo(nu.DelayedDo(0.1, copy)), scope=Space)
 '''
 
 
@@ -155,10 +155,10 @@ def host(path, body):
     """
     address = f"127.0.0.1:{free_port()}"
     return nu.With(
-        nu.kv.rocksdb_navigator(path),
+        nustd.kv.rocksdb_navigator(path),
         nu.Provide(dict, {}),
         nu.Provide(
-            nu.proxy.InvisiblesServer,
+            nustd.proxy.InvisiblesServer,
             {
                 "target": Navigator,
                 "address": address,
@@ -167,7 +167,7 @@ def host(path, body):
             },
         ),
         nu.Provide(
-            nu.mp_pool.WorkerPool,
+            nustd.mp_pool.WorkerPool,
             {"name": "nuspace-pages", "init": worker_init(address)},
         ),
         body=body,
@@ -179,7 +179,7 @@ def demo():
     ROOT.mkdir(parents=True, exist_ok=True)
     tree = host(
         str(ROOT / "db"),
-        nu.kv.auto_flow_atomic(SEED, scope=Space)
+        nustd.kv.auto_flow_atomic(SEED, scope=Space)
         >> page_tree(PAGE, alongside=SCRIPT, duration=15.0),
     )
     asyncio.run(nu.arun(tree, nu.Context(), max_parallel=64))

@@ -31,7 +31,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 import nu
-import nu.kv
+import nustd.kv
 from nu.domains.shape.refs.item import ItemRef
 from nu.domains.shape.refs.mapping import MappingRef
 from nu.domains.shape.refs.sequence import SequenceRef
@@ -344,7 +344,7 @@ def _atomic_column_terms(root: type[Shape], path: object, max_rows: int) -> nu.N
     is opaque to the static effect walk: the outer ``auto_flow_atomic`` cannot
     see these reads, so the inner tree has to carry its own.
     """
-    return nu.kv.auto_flow_atomic(column_terms(root, path, max_rows), scope=root)
+    return nustd.kv.auto_flow_atomic(column_terms(root, path, max_rows), scope=root)
 
 
 #: :func:`column_terms` as an atom, so the path can be a value the browser

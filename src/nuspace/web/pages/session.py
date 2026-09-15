@@ -4,7 +4,7 @@ An app is space-wide, so one supervisor per process runs every app forever; a
 page belongs to a view, so this is mounted per connection and follows that
 tab's route.
 
-One arm and a ``nu.mem`` cell. The arm hears the browser navigate, writes the
+One arm and a ``nustd.mem`` cell. The arm hears the browser navigate, writes the
 new page id into the cell, and runs that page. The cell is read at event time
 and never subscribed to, which is why the arm is never rebuilt and nothing
 polls anything.
@@ -21,9 +21,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import nu
-import nu.kv
-import nu.mem
-import nu.mp_pool
+import nustd.kv
+import nustd.mem
+import nustd.mp_pool
 from nuspace._root import resolve_root
 from nuspace.pages import ops
 from nuspace.pages.runner import run_page
@@ -43,11 +43,11 @@ __all__ = ["PageWorker", "Tab", "cell", "page_session"]
 class Tab(nu.Shape):
     """What one connection knows: the page it is looking at.
 
-    ``nu.mem``, written and read by the select arm. It is never subscribed to
+    ``nustd.mem``, written and read by the select arm. It is never subscribed to
     -- a mem ref has no ``on_change``, and none is wanted.
     """
 
-    page = nu.mem.StrRef.slot()
+    page = nustd.mem.StrRef.slot()
 
 
 def cell() -> nu.Nu:
@@ -71,7 +71,7 @@ class PageWorker(dict):
 
     def setup(self, ctx: Context) -> None:
         """Hold the process-wide pool the records name workers in."""
-        self._pool = ctx.get(nu.mp_pool.WorkerPool)
+        self._pool = ctx.get(nustd.mp_pool.WorkerPool)
 
     def cleanup(self) -> None:
         """Kill both workers this connection still has on record.
@@ -146,7 +146,7 @@ def page_session(
         pages: the ``PagesRef`` on the shell. Two jobs: the arm's subscription,
             which is the only place the route enters this tree, and the node
             every section on the page roots its ui refs under.
-        session_address: where this connection's ``nu.ui`` Session is served.
+        session_address: where this connection's ``nustd.ui`` Session is served.
             Per connection, not per process, which is why it arrives here and
             not in the pool's ``worker_init``.
         root: the space's root Shape class.
@@ -167,5 +167,5 @@ def page_session(
         # One bracket over the arm, like every other driver: its own
         # subscription reads a container, so it needs a snapshot as much as
         # the body it wakes does.
-        body=nu.kv.auto_flow_atomic(flow, scope=root),
+        body=nustd.kv.auto_flow_atomic(flow, scope=root),
     )

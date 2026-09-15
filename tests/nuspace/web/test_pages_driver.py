@@ -25,12 +25,12 @@ import pytest
 import websockets
 
 import nu
-import nu.kv
-from nu.ui.core.protocol import OP_INIT, OP_NOTIFY, OP_READ, OP_WRITE, Frame, decode, encode
+import nustd.kv
 from nuspace.apps import free_port
 from nuspace.core.shapes import Space
 from nuspace.pages import ROOT_PAGE_ID
 from nuspace.web import NavRef, PagesRef, Screen, Shell, pages_driver, server
+from nustd.ui.core.protocol import OP_INIT, OP_NOTIFY, OP_READ, OP_WRITE, Frame, decode, encode
 
 
 class PagesScreen(Screen):
@@ -126,7 +126,7 @@ def _driver(_address):
 def _space(port, body):
     """One store, one server, one body. Brackets tear down LIFO when it ends."""
     return nu.With(
-        nu.kv.memory_navigator(tags=(Space,)),
+        nustd.kv.memory_navigator(tags=(Space,)),
         server(_driver, shell_cls=Demo, host="127.0.0.1", port=port, open_browser=False),
         body=body,
     )

@@ -31,7 +31,7 @@ one call the model can write without looking anything up::
 from __future__ import annotations
 
 import nu
-import nu.kv
+import nustd.kv
 
 
 __all__ = ["ROLES", "ROLE_AGENT", "ROLE_SYSTEM", "ROLE_USER", "Chat"]
@@ -53,4 +53,4 @@ ROLES = (ROLE_USER, ROLE_AGENT, ROLE_SYSTEM)
 class Chat(nu.Shape):
     """One conversation. A list of ``{role, text}``, oldest first."""
 
-    messages = nu.kv.ListRef.slot(dict)
+    messages = nustd.kv.ListRef.slot(dict)

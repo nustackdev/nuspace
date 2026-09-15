@@ -11,9 +11,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import nu
-import nu.kv
-import nu.mp_pool
 import nu.prog
+import nustd.kv
+import nustd.mp_pool
 from nuspace._root import resolve_root
 from nuspace.core.host import DEFAULT_CHANNEL_PREFIX, free_port, host, worker_init
 
@@ -77,12 +77,12 @@ def app_body(*, root: type[Shape] | None = None) -> nu.Nu:
     # Construction failures are written to the app's own row, not raised: a
     # dispatched body has no waiter, so an uncaught error vanishes silently.
     load = root.apps[_APP].snippet.load(scope=scope)
-    report = nu.kv.auto_flow_atomic(
+    report = nustd.kv.auto_flow_atomic(
         root.state[_APP].error.set(nu.ToStr(nu.AttrRef("error"))),
         scope=root,
     )
     return nu.TryCatch(
-        nu.prog.Eval(nu.kv.auto_flow_atomic(load, scope=root)),
+        nu.prog.Eval(nustd.kv.auto_flow_atomic(load, scope=root)),
         catch=report,
         errors=nu.prog.ConstructionError,
     )
@@ -97,7 +97,7 @@ def reconcile(*, root: type[Shape] | None = None) -> nu.Nu:
     without the first app blocking the rest.
     """
     root = resolve_root(root)
-    pool = nu.mp_pool.PoolRef()
+    pool = nustd.mp_pool.PoolRef()
     stop = nu.IfDo(
         Runner.workers.contains(_APP),
         pool.kill(Runner.workers[_APP]) >> Runner.workers.del_item(_APP),
@@ -182,7 +182,7 @@ def supervisor(
     flow = live if alongside is None else (live | alongside)
     if duration is not None:
         flow = nu.Race(flow, nu.DelayedDo(nu.Float(duration), nu.Noop()))
-    return nu.kv.auto_flow_atomic(seed >> flow, scope=root)
+    return nustd.kv.auto_flow_atomic(seed >> flow, scope=root)
 
 
 def apps_store(
@@ -193,8 +193,10 @@ def apps_store(
 ) -> nu.Nu:
     """The navigator bracket for a space on disk, with or without redis."""
     if redis_url is None:
-        return nu.kv.rocksdb_navigator(path)
-    return nu.kv.rocksdb_navigator_redis(path, redis_url=redis_url, channel_prefix=channel_prefix)
+        return nustd.kv.rocksdb_navigator(path)
+    return nustd.kv.rocksdb_navigator_redis(
+        path, redis_url=redis_url, channel_prefix=channel_prefix
+    )
 
 
 def apps_tree(

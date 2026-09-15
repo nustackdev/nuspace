@@ -23,14 +23,14 @@ import pytest
 import websockets
 
 import nu
-import nu.kv
-import nu.proxy
-from nu.kv.fabrics import Navigator
-from nu.ui.core.protocol import OP_INIT, OP_NOTIFY, OP_READ, Frame, decode, encode
+import nustd.kv
+import nustd.proxy
 from nuspace.core.host import free_port
 from nuspace.core.shapes import Space
 from nuspace.pages import ROOT_PAGE_ID
 from nuspace.web import NuspaceShell, session_driver, space_tree
+from nustd.kv.fabrics import Navigator
+from nustd.ui.core.protocol import OP_INIT, OP_NOTIFY, OP_READ, Frame, decode, encode
 
 
 #: Where the chain puts the two surfaces: the screen slot, then the ref.
@@ -58,7 +58,7 @@ SETTLE = 8.0
 #: A section that counts, in its own row, forever. A section's snippet owns
 #: its own atomicity; the runner does not add one.
 COUNTER = """import nu
-import nu.kv
+import nustd.kv
 from nuspace.core.shapes import Space
 
 
@@ -66,7 +66,7 @@ def out(section):
     data = Space.state[section].data
     now = nu.ToInt(data.get_item("ticks", nu.Str("0")))
     tick = data.set_item("ticks", nu.ToStr(now + nu.Int(1)))
-    return nu.kv.auto_flow_atomic(
+    return nustd.kv.auto_flow_atomic(
         data.set_item("ticks", nu.Str("0")) >> nu.ForeverDo(nu.DelayedDo(1.0, tick)),
         scope=Space,
     )
@@ -161,7 +161,7 @@ class Tab:
 def _tree(port, address, store=None):
     """The whole space in one process, with both supervisors attached."""
     return space_tree(
-        store or nu.kv.memory_navigator(tags=(Space,)),
+        store or nustd.kv.memory_navigator(tags=(Space,)),
         store_tag=Space,
         address=address,
         port=port,
@@ -194,8 +194,8 @@ async def ticks(address, owner):
     """
     cell = Space.state[owner].data.get_item("ticks", nu.Str("-1"))
     tree = nu.With(
-        nu.proxy.InvisiblesProxy(Navigator, address=address),
-        body=nu.kv.auto_flow_atomic(nu.ToStr(cell), scope=Space),
+        nustd.proxy.InvisiblesProxy(Navigator, address=address),
+        body=nustd.kv.auto_flow_atomic(nu.ToStr(cell), scope=Space),
     )
     value, _ = await nu.arun(tree, nu.Context())
     return int(value)

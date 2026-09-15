@@ -33,7 +33,7 @@ the whole security model:
   ``space_tree``'s head. The model reaches it by importing the real ``Space``.
 - an untagged ``dict`` is provided **here**, and it is where ``nuagent.Run``
   lives. The model writes ``Run.done`` into it to end the run, and any
-  ``nu.mem`` scratch it invents lands there too, out of the way.
+  ``nustd.mem`` scratch it invents lands there too, out of the way.
 
 ``Agent`` carries the session slots, so the conversation is in kv and the
 sidebar subscribes to it directly. It is handed to nuagent as ``session``
@@ -48,8 +48,8 @@ from typing import TYPE_CHECKING
 import nuagent
 
 import nu
-import nu.cc
-import nu.kv
+import nustd.cc
+import nustd.kv
 from nuspace._root import resolve_root
 from nuspace.apps import ops as apps_ops
 from nuspace.chat import ops as chat_ops
@@ -115,7 +115,7 @@ def agent_runner(
             space at ollama or an api key instead -- or at a stub, which is
             what makes the wiring testable without spending a model call.
         bind: the bracket that provides whatever ``chat`` addresses. Must be
-            passed with ``chat``: the default pair is ``nu.cc.bind(Bot, ...)``
+            passed with ``chat``: the default pair is ``nustd.cc.bind(Bot, ...)``
             and a Service endpoint with nothing provided for it is a
             ``LookupError`` on the first turn, not at boot.
 
@@ -136,7 +136,7 @@ def agent_runner(
     if chat is None:
         chat = chat_with(system_prompt(root))
     if bind is None:
-        bind = nu.cc.bind(Bot, model=model, allowed_tools=[], permission_mode="default")
+        bind = nustd.cc.bind(Bot, model=model, allowed_tools=[], permission_mode="default")
 
     loop = nuagent.agent(
         # `Space.agent` is the session: the six slots nuagent reads are
@@ -190,11 +190,11 @@ def agent_runner(
     arm = arms.event(_RUN, agent.nonce.on_change(), once)
 
     return nu.With(
-        # Untagged, so `nuagent.Run` -- and any nu.mem the model invents --
+        # Untagged, so `nuagent.Run` -- and any nustd.mem the model invents --
         # resolves here and nowhere near the conversation.
         nu.Provide(dict, {}),
         bind,
-        body=nu.kv.auto_flow_atomic(boot >> arm, scope=root),
+        body=nustd.kv.auto_flow_atomic(boot >> arm, scope=root),
     )
 
 

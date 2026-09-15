@@ -9,8 +9,8 @@ a one-way edge.
 from __future__ import annotations
 
 import nu
-import nu.kv
-import nu.mem
+import nustd.kv
+import nustd.mem
 
 
 __all__ = [
@@ -55,12 +55,12 @@ class Section(nu.Shape):
     # Section ids are globally unique, not unique per page: the id alone keys
     # the scratch row, so two pages reusing one would share a namespace. See
     # nuspace.core.tpl.
-    name = nu.kv.StrRef.slot()
-    snippet = nu.kv.ProgramRef.slot()
-    policy = nu.kv.StrRef.slot()
+    name = nustd.kv.StrRef.slot()
+    snippet = nustd.kv.ProgramRef.slot()
+    policy = nustd.kv.StrRef.slot()
     # `tpl` is provenance, not type. It says what produced the snippet and
     # nothing branches on it to decide whether a block runs. See core.tpl.
-    tpl = nu.kv.StrRef.slot()
+    tpl = nustd.kv.StrRef.slot()
 
 
 class Page(nu.Shape):
@@ -70,15 +70,15 @@ class Page(nu.Shape):
     are ordinary data and a page is addressed by id at a fixed depth.
     """
 
-    title = nu.kv.StrRef.slot()
+    title = nustd.kv.StrRef.slot()
     # Two facts that must agree, which is why ops is the only writer: every
     # structural op fixes both sides in one tree. The root page parents
     # itself, so this is never empty and never names a page that is not there.
-    parent = nu.kv.StrRef.slot()
-    children = nu.kv.ListRef.slot(str)
-    sections = nu.kv.ShapesDictRef.slot(Section)
+    parent = nustd.kv.StrRef.slot()
+    children = nustd.kv.ListRef.slot(str)
+    sections = nustd.kv.ShapesDictRef.slot(Section)
     # List position is the order. No `order` field, nothing to renormalise.
-    section_order = nu.kv.ListRef.slot(str)
+    section_order = nustd.kv.ListRef.slot(str)
 
 
 class Runner(nu.Shape):
@@ -94,13 +94,13 @@ class Runner(nu.Shape):
     at a time, so one covers the serial case, and the pool has no idea any of
     this is going on -- warmth is policy and it lives here.
 
-    ``nu.mem`` deliberately -- this is host-local bookkeeping, and a kv write
+    ``nustd.mem`` deliberately -- this is host-local bookkeeping, and a kv write
     here would let the driver wake itself. A preset running two views at once
     gives each its own ``dict`` binding.
     """
 
-    worker = nu.mem.IntRef.slot()
-    spare = nu.mem.IntRef.slot()
+    worker = nustd.mem.IntRef.slot()
+    spare = nustd.mem.IntRef.slot()
 
 
 #: The key ``Runner.worker`` occupies in the dict backing it. Declared beside
