@@ -35,10 +35,19 @@ const SPACE_FALLBACK = "Space";
 const PAGE_FALLBACK = "Untitled";
 
 /**
- * The trail to a page: every ancestor, the space included, the page itself
- * excluded. The big title right below is the current page; repeating it in
- * the crumb reads as a stutter, and the crumb is there to say what is ABOVE
- * you.
+ * The trail to a page: every ancestor, the space included, and the page
+ * itself as the last crumb.
+ *
+ * The title below says the same word as that last crumb, which is a stutter
+ * on paper and reads as an absence in practice: a trail that stops one short
+ * of where you are makes you count the levels to work out whether the page
+ * you are on is even in it. Every file manager and every browser puts the
+ * current node at the end of the path, and the last crumb renders as text
+ * rather than a link, so it is a position rather than somewhere to go.
+ *
+ * This is also what gives the root page a trail at all. It has no ancestors,
+ * so it used to get nothing, and a header that appears only once you have
+ * navigated somewhere reads as broken rather than as minimal.
  *
  * Walked off `parent` links rather than off a path, because a page carries no
  * path: it is one row at a fixed depth and the tree is the relation between
@@ -46,9 +55,9 @@ const PAGE_FALLBACK = "Untitled";
  */
 function trailFor(tree: PageTree, pageId: string): Crumb[] {
 	const root = rootId(tree);
-	// The root page IS the space. A trail reading "Space > Space" is noise.
-	if (!pageId || pageId === root) return [];
-	return ancestorsOf(tree, pageId).map((row) => ({
+	if (!pageId) return [];
+	const rows = [...ancestorsOf(tree, pageId), tree[pageId]].filter(Boolean);
+	return rows.map((row) => ({
 		label: row.title || (row.id === root ? SPACE_FALLBACK : PAGE_FALLBACK),
 		href: hrefFor("pages", row.id === root ? [] : [row.id]),
 		onClick: onNavClick({ top: "pages", path: row.id === root ? [] : [row.id] }),
@@ -132,7 +141,6 @@ function PagesView({ path }: NodeProps) {
 					<>
 						<PageHeader
 							title={renamed ?? page.title}
-							seed={page.page_id}
 							crumbs={trailFor(tree, page.page_id)}
 							placeholder={page.page_id === rootId(tree) ? SPACE_FALLBACK : PAGE_FALLBACK}
 							onRename={rename}

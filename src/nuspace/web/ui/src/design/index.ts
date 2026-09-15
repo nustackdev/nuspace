@@ -14,8 +14,7 @@
 //   editor.css         prose editor internals
 //   lens.css           lens surface tokens
 //   shell.ts           the window frame and its top strip
-//   document.ts        class recipes for the document surface
-//   header.ts          the page masthead
+//   document.ts        class recipes for the document surface, title included
 //   rail.ts            the rail, shared by the pages and apps surfaces
 //   apps.ts            the apps canvas
 //   chat.ts            the agent sidebar, pinned on the shell
@@ -37,7 +36,6 @@
 export * from "./apps";
 export * from "./chat";
 export * from "./document";
-export * from "./header";
 export * from "./lens";
 export * from "./rail";
 export * from "./section-status";

@@ -1,121 +1,30 @@
-// The page masthead.
+// The page head.
 //
-// Four parts, in the order you read them: the trail that says where you are,
-// a generated banner, the page icon, and the title. The title is the only
-// interactive one, and it is interactive by being editable, not by being a
-// button that opens a dialog.
+// Two parts: the trail that says where you are, and the page's own name. A
+// page opens on the trail, then on blank air, then on its title, which is what
+// a document with no cover looks like everywhere people already write. There
+// was a masthead here -- a generated banner and a page icon above the title --
+// and both were chrome about a document rather than the document, so they are
+// gone rather than tuned. The trail stayed because it is the only thing up
+// here that answers a question.
 //
-// Everything visual lives in ./header.ts. This file is composition and the
-// one piece of real behaviour: capturing a rename from a contenteditable
-// heading without letting React and the browser fight over the text node.
-//
-// Not in scope for v1: an icon picker and a cover picker. Both are structured
-// for - `PageIcon` takes a spec and `PageBanner` keeps a seed - so adding
-// them later is a new trigger and a new spec variant, not a rewrite.
+// Everything visual lives in ../design/document.ts. This file is composition
+// and the one piece of real behaviour: capturing a rename from a
+// contenteditable heading without letting React and the browser fight over the
+// text node.
 
 import {
 	Breadcrumb,
 	BreadcrumbItem,
 	BreadcrumbLink,
 	BreadcrumbList,
+	BreadcrumbPage,
 	BreadcrumbSeparator,
-	cn,
-	headingVariants,
 } from "@nustackdev/ui-kit";
 import type React from "react";
 import { Fragment, useCallback, useEffect, useRef } from "react";
 
-import {
-	docBanner,
-	docBannerFadeStyle,
-	docBannerGridStyle,
-	docBannerLayer,
-	docBannerTrail,
-	docBannerWashStyle,
-	docMasthead,
-	docMastheadColumn,
-	docPageIcon,
-	docPageIconGlyph,
-	docTitle,
-} from "../design";
-
-/* ============================== page icon ================================ */
-
-/**
- * What a page's icon is. v1 only ever constructs `{ kind: "default" }`; the
- * other two exist so the picker that lands later has somewhere to write to
- * and so nothing downstream has to change shape when it does.
- */
-export type PageIconSpec =
-	| { kind: "default" }
-	| { kind: "emoji"; char: string }
-	| { kind: "image"; src: string };
-
-export const DEFAULT_PAGE_ICON: PageIconSpec = { kind: "default" };
-
-/**
- * The default glyph: a page. Drawn rather than imported, because the icon is
- * the one mark on this surface that carries meaning, and direction.md is
- * explicit that meaning does not travel on a lucide glyph here. Hairline,
- * rx 3, the same grammar as the banner it sits on.
- */
-function DefaultPageGlyph({ className }: { className?: string }) {
-	return (
-		<svg
-			viewBox="0 0 24 24"
-			fill="none"
-			stroke="currentColor"
-			strokeWidth={1.25}
-			vectorEffect="non-scaling-stroke"
-			aria-hidden="true"
-			className={className}
-		>
-			<path d="M5.5 3.5h8.5l4.5 4.5v12.5h-13z" strokeLinejoin="round" />
-			<path d="M14 3.5V8h4.5" strokeLinejoin="round" />
-			<path d="M8.5 12h7M8.5 15.5h7M8.5 19h4" strokeLinecap="round" />
-		</svg>
-	);
-}
-
-export function PageIcon({ icon = DEFAULT_PAGE_ICON }: { icon?: PageIconSpec }) {
-	// A picker will make this frame a trigger. Until then it is decoration and
-	// says so: no button, no hover, nothing to click that does nothing.
-	return (
-		<div className={docPageIcon} data-slot="page-icon" aria-hidden="true">
-			{icon.kind === "emoji" ? (
-				<span className="text-2xl leading-none">{icon.char}</span>
-			) : icon.kind === "image" ? (
-				<img src={icon.src} alt="" className="size-full rounded-lg object-cover" />
-			) : (
-				<DefaultPageGlyph className={docPageIconGlyph} />
-			)}
-		</div>
-	);
-}
-
-/* ============================== banner =================================== */
-
-/**
- * The banner. A pattern, not a picture: a dot-grid substrate, one accent
- * wash, and a fade into the canvas so the cover ends without a horizon.
- *
- * Deliberately the same on every page. A per-page generated mark was tried
- * and read as noise: the masthead's job is to frame the title, and anything
- * with structure in it competes with the document underneath.
- *
- * Swap this body for an <img> when covers become uploadable; `seed` is kept
- * so a per-page cover has somewhere to key off.
- */
-export function PageBanner({ children }: { seed?: string; children?: React.ReactNode }) {
-	return (
-		<div className={docBanner} data-slot="page-banner">
-			<div className={docBannerLayer} style={docBannerGridStyle} />
-			<div className={docBannerLayer} style={docBannerWashStyle} />
-			<div className={docBannerLayer} style={docBannerFadeStyle} />
-			{children}
-		</div>
-	);
-}
+import { docTitle, docTitleHead, docTrail } from "../design";
 
 /* ============================== trail ==================================== */
 
@@ -128,15 +37,21 @@ export type Crumb = {
 function Trail({ crumbs }: { crumbs: Crumb[] }) {
 	if (crumbs.length === 0) return null;
 	return (
-		<Breadcrumb className={docBannerTrail}>
+		<Breadcrumb className={docTrail}>
 			<BreadcrumbList className="flex-nowrap text-xs">
 				{crumbs.map((c, i) => (
 					<Fragment key={c.href}>
 						{i > 0 ? <BreadcrumbSeparator /> : null}
 						<BreadcrumbItem className="min-w-0">
-							<BreadcrumbLink href={c.href} onClick={c.onClick} className="truncate">
-								{c.label}
-							</BreadcrumbLink>
+							{/* The last crumb is where you already are, so it is a
+							    position and not a destination: text, not a link. */}
+							{i === crumbs.length - 1 ? (
+								<BreadcrumbPage className="truncate">{c.label}</BreadcrumbPage>
+							) : (
+								<BreadcrumbLink href={c.href} onClick={c.onClick} className="truncate">
+									{c.label}
+								</BreadcrumbLink>
+							)}
 						</BreadcrumbItem>
 					</Fragment>
 				))}
@@ -227,7 +142,7 @@ function EditableTitle({
 			spellCheck={false}
 			aria-label="Page title"
 			data-placeholder={placeholder}
-			className={cn(headingVariants({ size: "display" }), docTitle)}
+			className={docTitle}
 			onFocus={(e) => {
 				entry.current = e.currentTarget.textContent ?? "";
 			}}
@@ -243,33 +158,23 @@ function EditableTitle({
 	);
 }
 
-/* ============================== masthead ================================= */
+/* ============================== head ===================================== */
 
 export function PageHeader({
 	title,
-	seed,
 	crumbs,
 	placeholder,
-	icon,
 	onRename,
 }: {
 	title: string;
-	/** Stable per page; the banner's mark is a function of it. */
-	seed: string;
 	crumbs: Crumb[];
 	placeholder: string;
-	icon?: PageIconSpec;
 	onRename: (title: string) => void;
 }) {
 	return (
-		<header className={docMasthead}>
-			<PageBanner seed={seed}>
-				<Trail crumbs={crumbs} />
-			</PageBanner>
-			<div className={docMastheadColumn}>
-				<PageIcon icon={icon} />
-				<EditableTitle value={title} placeholder={placeholder} onCommit={onRename} />
-			</div>
+		<header className={docTitleHead}>
+			<Trail crumbs={crumbs} />
+			<EditableTitle value={title} placeholder={placeholder} onCommit={onRename} />
 		</header>
 	);
 }

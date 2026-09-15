@@ -187,4 +187,25 @@
 	                           * end-of-page ghost -- see `docTail`.          */
 	--spacing-doc-dot: 0.5rem; /* 8               status dot                */
 	--spacing-doc-rail: 0.125rem; /* 2            status / focus rail width */
+	--spacing-doc-title-gap: 8rem; /* 128         blank air above the title.
+	                                * A page with no cover still opens on
+	                                * emptiness rather than on ink: the run-up
+	                                * is what tells you the title is the top of
+	                                * a document and not a toolbar label. Sized
+	                                * by eye against the 30vh tail, so the page
+	                                * is bracketed by air at both ends, and
+	                                * short enough that the first block is
+	                                * still on screen when a page opens.     */
+
+	/* --- title type ---------------------------------------------------------
+	 * The one size the kit's scale does not carry. typography.md tops out at
+	 * `display` (32) and that is the hero tier for app chrome, where the thing
+	 * above it is a window. On a document the title has to out-rank the
+	 * document's own h1 (`text-3xl`, 24) by more than the body's own steps do,
+	 * or the first heading you write reads as a second title. 40 is the next
+	 * 4px-grid step that does that, and it is the only place it is used.
+	 * --------------------------------------------------------------------- */
+	--text-doc-title: 2.5rem; /* 40 */
+	--text-doc-title--line-height: 1.2;
+	--text-doc-title--letter-spacing: -0.02em;
 }

@@ -39,8 +39,8 @@ export const appsCanvas = "flex min-h-0 min-w-0 flex-1 flex-col bg-bg-canvas";
 /**
  * The app's header bar. One line: name, status, policy, actions.
  *
- * A masthead would be wrong here. `PageHeader` gives a document a banner, a
- * generated icon and a 4xl editable title, because a page is a thing you sit
+ * A page head would be wrong here. `PageHeader` gives a document a run-up of
+ * blank air and a 40px editable title, because a page is a thing you sit
  * inside and read. An app is a thing you check on, so its identity gets one
  * 36px strip and the rest of the surface goes to the source.
  */

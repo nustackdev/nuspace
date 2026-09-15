@@ -78,6 +78,76 @@ export const docGhost = cn(
  */
 export const docTail = "h-doc-tail w-full shrink-0 cursor-text";
 
+/* ============================== page head ================================ */
+//
+// A page opens with where it is and what it is called, and nothing else. No
+// cover, no icon: a small trail at the top, then blank air, then the name of
+// the thing you are reading. What used to sit up here was chrome describing a
+// document rather than the document, and it pushed the first line of actual
+// writing off the fold.
+//
+// One left edge runs through all three of these and the blocks below. A
+// block's text starts at the column's 24px side gutter plus the block's own
+// 8px inset, so the trail and the title pay the same 8px -- `px-doc-block-x`
+// on both is alignment, not padding for its own sake.
+
+/**
+ * The band the trail and the title sit in. Same measure and same side gutter
+ * as `docColumn`, so the two columns are one column.
+ *
+ * The negative bottom margin eats half of the document column's own 64px top
+ * pad. Without it the title and the first block sit 64px apart on top of this
+ * band's own trailing space, which reads as two documents rather than one.
+ *
+ * The `z-10` is load-bearing, not decoration: that same negative margin makes
+ * the column's transparent top padding overlap the title, and the column is
+ * later in the DOM, so without it the padding eats every click meant for the
+ * heading.
+ */
+export const docTitleHead = cn("relative z-10 mx-auto w-full max-w-doc", "px-doc-pad-x pt-4 -mb-8");
+
+/**
+ * The trail, riding at the top of the band. It stays in the document rather
+ * than moving up into the shell strip: the strip belongs to the window and
+ * this says where one page sits among the others, which is a fact about the
+ * document.
+ *
+ * Small and quiet on purpose. It is the one thing up here you can click, and
+ * the whole point of the air under it is that the title arrives on its own.
+ */
+export const docTrail = "px-doc-block-x";
+
+/**
+ * The editable title. It is an `h1` with `contenteditable`, not an input and
+ * not a button: the heading you read and the heading you type are the same
+ * node, so there is no mode swap and no layout shift on click.
+ *
+ * The top margin is the blank run-up (see `--spacing-doc-title-gap`), carried
+ * here rather than as pad on the band so the trail sits above it and the air
+ * lands between the two.
+ *
+ * No focus ring. A ring around a 40px heading is a box drawn around the page's
+ * name, and the caret already says where you are -- the same bargain the prose
+ * blocks below make. The placeholder is a `::before` on the empty element
+ * rather than a second absolutely positioned node, so it can never fall out of
+ * alignment with that caret.
+ */
+// `text-doc-title` is concatenated rather than merged, and it has to be.
+// `cn` is tailwind-merge, which resolves conflicts from a table of the classes
+// it ships knowing about. Our size is not in that table, so it is read as a
+// `text-*` COLOUR, `text-text-primary` in the same call is taken to conflict
+// with it, and last-one-wins drops the size on the floor. The rule compiles,
+// the class reaches the bundle, and the title still renders at body size.
+// Nothing else in here conflicts, so appending it afterwards is safe. Any
+// future custom type token meeting a text colour has the same problem.
+export const docTitle = `${cn(
+	"mt-doc-title-gap block w-full px-doc-block-x py-0.5",
+	"font-bold text-text-primary",
+	"cursor-text whitespace-pre-wrap break-words outline-none",
+	"empty:before:pointer-events-none empty:before:text-text-muted",
+	"empty:before:content-[attr(data-placeholder)]",
+)} text-doc-title`;
+
 /** Document body type tier. 16px is the only place typography.md ships xl. */
 export const docProse = "text-xl text-text-primary";
 
