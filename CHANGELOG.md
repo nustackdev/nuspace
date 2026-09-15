@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Wipe a block's ui before it reruns, so its refs stop duplicating
 - Give every block the same hover chrome: insert, drag, copy, code and status
 - Follow nu 0.5.0's import split so apps and snippets keep resolving the fabrics
 

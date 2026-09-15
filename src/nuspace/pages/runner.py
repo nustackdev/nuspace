@@ -51,7 +51,7 @@ import nustd.proxy
 from nuspace._root import resolve_root
 from nuspace.core.host import spare_observer
 from nuspace.core.session import FrameCodec
-from nuspace.core.ui import SnippetRoot
+from nuspace.core.ui import SnippetRoot, section_ui
 from nustd.ui.core import Session
 
 from .shapes import Runner
@@ -174,6 +174,14 @@ def section_arm(
         nu.IfDo(scratch.error.exists(), scratch.error.erase()),
         scope=root,
     )
+    if surface is not None:
+        # The same sentence said to the ui side: a rerun mounts this block's
+        # refs again, and the nodes the last run left are still standing, so
+        # without this the block visibly doubles on every edit. Exactly this
+        # section's own node and nothing wider -- the siblings are running.
+        # No kv bracket around it: a remove is a frame on the wire and reads
+        # no storage, so there is no snapshot for it to need.
+        clear = clear >> section_ui(surface, section).erase()
     run = nu.Let(
         _TERM_ATTR,
         nustd.kv.auto_flow_atomic(load, scope=root),
