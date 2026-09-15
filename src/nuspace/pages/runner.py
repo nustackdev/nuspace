@@ -6,7 +6,7 @@ of the context it is handed and something else -- a preset, or the web
 session -- launches the worker and decides how long it lives.
 
 A page is the unit, not a section. One worker holds the whole page and every
-section on it is an arm of one ``ForEachParAsync``, so the Session proxy and
+section on it is an arm of one ``ForEachParReactive``, so the Session proxy and
 the observer are paid for once per page rather than once per section. The fold
 is built inside the worker because the section list is kv data and the worker
 is the process holding the Navigator proxy: it reads its own sections rather
@@ -19,17 +19,20 @@ the two subscriptions are deliberately different:
 
 - the fold sits under ``sections.on_children_change()``, which is length
   exact: it fires when a section is added or removed, never when one is
-  edited, and that is when the set of arms changed and the fold has to be
-  rebuilt.
+  edited, and that is when the set of arms changed. The fold keeps one arm per
+  section id and reconciles against that set, so adding a block starts an arm
+  and deleting one cancels an arm, and the blocks that did not move never
+  learn that anything happened.
 - each arm sits under ``sections[sid].on_change()``, which is depth
   unbounded: any write inside that one section restarts that one arm and
   leaves its siblings running.
 
-``Race`` is what does the restarting. The body and a ``React`` on the
-subscription run side by side, the change cancels the body, and the
-``ForeverDo`` re-enters and reloads from the store. Killing a worker is left
-for the things that really need a fresh process: navigating, and the
-connection going away.
+``Race`` is what does the restarting, at the one level that still restarts. The
+body and a ``React`` on the subscription run side by side, the change cancels
+the body, and the ``ForeverDo`` re-enters and reloads from the store. The level
+above it does not restart at all: an arm ends when its section is deleted and
+in no other way. Killing a worker is left for the things that really need a
+fresh process: navigating, and the connection going away.
 
 **Navigation dispatches into a spare.** The kill stays, and so does the fresh
 process, but the process is one this connection launched a navigation ago and
@@ -136,9 +139,16 @@ def section_arm(
 
     The section arrives as the attr ``item``, bound by the fold. It restarts
     itself on any write inside its own subtree and nothing else, so editing one
-    block leaves every other block on the page running. Three ``TryCatch``
-    layers, and none is optional: the fold cancels every sibling arm on the
-    first error, so a section that dies has to die alone.
+    block leaves every other block on the page running. It never ends on its
+    own: the fold cancels it when its section is deleted, which is the only way
+    out of here.
+
+    Three ``TryCatch`` layers, and none is optional. Containment is no longer
+    what they are for -- the fold isolates its arms now, so an uncaught error
+    would end this section and leave the page alone -- but ending quietly is
+    not the same as being reported, and a block that failed has to say so on
+    the row the browser reads. The two inner layers are that report. The outer
+    one is neither: it covers the one thing the others cannot.
 
     The snippet is handed ``page`` and ``section``, the two ids it runs under,
     and loaded through a rewrite that roots whatever it built under its own
@@ -193,14 +203,14 @@ def section_arm(
     )
     # Inner catch is construction, outer is everything the running section
     # throws afterwards. Both land on the one `.error` key the browser reads
-    # as `failed`, and both end this turn quietly rather than raising into the
-    # fold. Nothing retries here: the section stays failed until its own
+    # as `failed`, and both end this turn quietly rather than raising out of
+    # the arm. Nothing retries here: the section stays failed until its own
     # subscription says it changed.
     guarded = nu.TryCatch(run, catch=report, errors=nu.prog.ConstructionError)
     once = clear >> nu.TryCatch(guarded, catch=report)
-    # A delete wakes this arm before the fold above it is rebuilt, so the turn
-    # after one lands is a turn with no section to load. Read once, per turn,
-    # rather than trusted from fan-out time.
+    # A delete wakes this arm before the fold cancels it, so the turn after one
+    # lands is a turn with no section to load. Read once, per turn, rather than
+    # trusted from fan-out time.
     turn = nu.Let(
         _ALIVE_ATTR,
         nustd.kv.auto_flow_atomic(sections.contains(section), scope=root),
@@ -208,9 +218,13 @@ def section_arm(
     )
     # Third layer, and the one the other two cannot cover: opening the
     # subscription is outside the body they guard, and a section deleted at
-    # exactly the wrong moment resolves to no view at all. Park instead of
-    # raising -- the fold is about to be rebuilt without this arm anyway.
-    return nu.TryCatch(_restarts_on(sections[section].on_change(), turn, root=root), catch=_park())
+    # exactly the wrong moment resolves to no view at all. Return instead of
+    # raising, and instead of parking: parking held the arm open for a rebuild
+    # that no longer happens, and an arm that ends leaves its id free for the
+    # fold to start again the next time the page's sections move.
+    return nu.TryCatch(
+        _restarts_on(sections[section].on_change(), turn, root=root), catch=nu.Noop()
+    )
 
 
 def page_body(
@@ -227,7 +241,8 @@ def page_body(
     payload and one connection navigating around reuses the same one. The
     section list is read here, in the worker, because this is the process with
     the store. And it is re-read whenever the set of sections changes, which is
-    what makes adding a block cost no process.
+    what makes adding a block cost no process and, now that the fold keeps its
+    arms by id, cost the blocks already on the page nothing either.
 
     Args:
         page_id: the page to run.
@@ -249,14 +264,18 @@ def page_body(
     # brackets the items slot separately, so an undrained view outlives its
     # Snapshot and dies with StorageClosedError.
     ids = nustd.kv.auto_flow_atomic(nu.list(sections.keys()), scope=root)
-    # Async-only and never-returning, which is exactly the shape here: every
-    # arm is a section that runs until it is cancelled. The items are read once
-    # at fan-out, so a section added later is picked up by the rebuild below
-    # and never by reaching into a live fold.
-    fold = nu.ForEachParAsync(
-        ids, section_arm(page_id, surface=surface, root=root, item=item), item=item
+    # The subscription resolves a container, so it needs a snapshot as much as
+    # anything reading one does. Only for the resolving: what comes back is a
+    # filter on a path and owes the snapshot nothing afterwards.
+    changed = nustd.kv.auto_flow_atomic(sections.on_children_change(), scope=root)
+    # One arm per section, for as long as the section is there. The ids are
+    # re-read on every notification and only the difference is acted on, so
+    # adding a block starts one arm, deleting a block cancels one arm, and
+    # nothing here can restart a block that did not change. Never returns:
+    # every arm runs until it is cancelled, and so does the fold.
+    live = nu.ForEachParReactive(
+        ids, changed, section_arm(page_id, surface=surface, root=root, item=item), item
     )
-    live = _restarts_on(sections.on_children_change(), fold, root=root)
     # The observer sits here rather than in ``worker_init``: a snippet with a
     # kv subscription needs one bound, and a pool whose every worker pays for
     # it on the way up makes a restart slow enough to see. Once per page now,
