@@ -2,14 +2,14 @@
 
 ## Packages shipped from this repo
 
-- **nuspace** (the runtime, the `nuspace` command) — 0.2.0
-- **nuspace-ui** (the compiled web bundle) — 0.2.0
+- **nuspace** (the runtime, the `nuspace` command) — 0.2.1
+- **nuspace-ui** (the compiled web bundle) — 0.2.1
 
 Below is the changelog for **nuspace** - the full commit stream. Newest first.
 The `nuspace-ui` wheel is the same source tree's vite output and is not tracked
 separately here.
 
-## Unreleased
+## 0.2.1 — 2026-09-17
 
 - Open a page on quiet air and its own name instead of decoration
 - Type where you want a block instead of choosing what to make first
