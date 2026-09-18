@@ -29,9 +29,18 @@ one, so a reader asks whether it is empty rather than whether it is there.
 A Cell's program is a python module whose ``out`` declares the ids it wants:
 ``def out(plane, cell)``, either name or neither. Where it lives is the only
 thing nuspace tells it.
+
+A Cell that draws is the same term with three more things in it, and none of
+them is a thing this module understands: ``rewrite`` says where the program's
+refs land, ``erase`` takes down what the last turn put there, and
+``session_address`` is the connection they are all about. They arrive from a
+driver and are forwarded, which is what keeps the runtime language from
+knowing what a viewer is.
 """
 
 from __future__ import annotations
+
+from typing import TYPE_CHECKING
 
 import nu
 import nu.prog
@@ -45,6 +54,11 @@ from nuspace.shapes import (
     RESTART_ON_FAILURE,
     Space,
 )
+from nuspace.space import proxied_session
+
+
+if TYPE_CHECKING:
+    from nu.tree import Transform
 
 
 __all__ = [
@@ -100,7 +114,13 @@ def _backoff() -> nu.Nu:
     return nu.Delay(nu.Float(BACKOFF_SECONDS) * nu.Pow(nu.Float(2.0), nu.ToFloat(steps)))
 
 
-def cell_body(plane: nu.StrArg, *, root: type[nu.Shape] = Space) -> nu.Nu:
+def cell_body(
+    plane: nu.StrArg,
+    *,
+    rewrite: Transform | None = None,
+    erase: nu.Nu | None = None,
+    root: type[nu.Shape] = Space,
+) -> nu.Nu:
     """One Cell running under its ``restart`` policy, where the Cell is hosted.
 
     The Cell arrives as the attr :data:`CELL_ATTR`, so one term serves every
@@ -117,6 +137,16 @@ def cell_body(plane: nu.StrArg, *, root: type[nu.Shape] = Space) -> nu.Nu:
     Args:
         plane: the Plane this Cell is in. A term, since in ``async`` it
             arrives in the worker as a carried attr.
+        rewrite: a ``Nu -> Nu`` transform run on the program's term before
+            anything evaluates it, which is where a host says where the
+            program's refs land. Pickled into the worker with the body, so it
+            has to be a class rather than a closure. None leaves every ref
+            where the program put it, which is what headless wants.
+        erase: run at the head of every turn, before the program is loaded.
+            What the host drew for this Cell, taken down: a turn mounts the
+            Cell's refs again over the nodes the last one left standing, so
+            without it the Cell doubles on every edit. Exactly this Cell's own
+            node and nothing wider, because its siblings are still running.
         root: the Space shape class this Cell is stored under.
     """
     cell = nu.StrAttrRef(CELL_ATTR)
@@ -129,7 +159,7 @@ def cell_body(plane: nu.StrArg, *, root: type[nu.Shape] = Space) -> nu.Nu:
     # program runs. What the program itself touches is the program's to
     # bracket.
     load = nustd.kv.auto_flow_atomic(
-        row.prog.load(scope={"plane": plane, "cell": cell}), scope=root
+        row.prog.load(scope={"plane": plane, "cell": cell}, rewrite=rewrite), scope=root
     )
     # ParallelAsync is how a term says "on the loop". A Cell that subscribes
     # to anything is async only, and an Eval placed off the loop refuses to
@@ -141,6 +171,11 @@ def cell_body(plane: nu.StrArg, *, root: type[nu.Shape] = Space) -> nu.Nu:
     # there whether it is, and asking that across the Navigator socket costs
     # a round trip and a reported miss each time.
     clear = row.error.set(nu.Str(""))
+    if erase is not None:
+        # The same sentence said to whatever this Cell draws on, and no kv
+        # bracket around it: taking a node down is a frame on a wire and reads
+        # no storage, so there is no snapshot for it to need.
+        clear = clear >> erase
     # Guarded, because a write under a deleted Cell vivifies the row again
     # and the Space would grow a Cell that is nothing but a complaint.
     report = nu.IfDo(cells.contains(cell), row.error.set(nu.ToStr(nu.AttrRef("error"))))
@@ -183,21 +218,39 @@ def _reloads(plane: nu.StrArg, body: nu.Nu, *, root: type[nu.Shape]) -> nu.Nu:
     )
 
 
-def cell_arm(plane: nu.StrArg, *, root: type[nu.Shape] = Space) -> nu.Nu:
+def cell_arm(
+    plane: nu.StrArg,
+    *,
+    rewrite: Transform | None = None,
+    erase: nu.Nu | None = None,
+    root: type[nu.Shape] = Space,
+) -> nu.Nu:
     """One Cell as an arm of an ``async`` Plane, reloading in place.
 
     Runs in the Plane's worker, beside its siblings. An edit cancels this arm
     and loads the program again in the process that is already up, which
     costs nothing the siblings can see.
 
+    No session here: the whole Plane is in one worker, so the connection is
+    bound once around the fold rather than once per arm.
+
     Args:
         plane: the Plane this Cell is in.
+        rewrite: where the program's refs land. See :func:`cell_body`.
+        erase: what this Cell drew last turn, taken down. See :func:`cell_body`.
         root: the Space shape class this Cell is stored under.
     """
-    return _reloads(plane, cell_body(plane, root=root), root=root)
+    return _reloads(plane, cell_body(plane, rewrite=rewrite, erase=erase, root=root), root=root)
 
 
-def cell_dispatch(plane: nu.StrArg, *, root: type[nu.Shape] = Space) -> nu.Nu:
+def cell_dispatch(
+    plane: nu.StrArg,
+    *,
+    rewrite: Transform | None = None,
+    erase: nu.Nu | None = None,
+    session_address: str | None = None,
+    root: type[nu.Shape] = Space,
+) -> nu.Nu:
     """One Cell in a worker of its own, reloading by relaunch. The ``mp`` arm.
 
     Runs in the main process and holds a worker open for as long as the arm
@@ -207,17 +260,27 @@ def cell_dispatch(plane: nu.StrArg, *, root: type[nu.Shape] = Space) -> nu.Nu:
     ``mp`` is for.
 
     The body is bracketed for atomicity here, before the ``Dispatch`` is
-    built, because a dispatched body is payload and no pass reaches it.
+    built, because a dispatched body is payload and no pass reaches it. The
+    connection goes inside that bracket for the same reason: everything the
+    worker comes up holding has to be in the payload.
 
     Args:
         plane: the Plane this Cell is in.
+        rewrite: where the program's refs land. See :func:`cell_body`.
+        erase: what this Cell drew last turn, taken down. See :func:`cell_body`.
+        session_address: ``host:port`` where this connection's Session is
+            served, bound in the Cell's own worker. None runs it headless,
+            with no Session for a ui ref to find.
         root: the Space shape class this Cell is stored under.
     """
     cell = nu.StrAttrRef(CELL_ATTR)
     cells = root.planes[plane].cells
     pool = nustd.mp_pool.PoolRef()
     worker = nu.IntAttrRef(_WORKER_ATTR)
-    body = nustd.kv.auto_flow_atomic(cell_body(plane, root=root), scope=root)
+    hosted = cell_body(plane, rewrite=rewrite, erase=erase, root=root)
+    if session_address is not None:
+        hosted = proxied_session(session_address, hosted)
+    body = nustd.kv.auto_flow_atomic(hosted, scope=root)
     held = nu.Let(
         _WORKER_ATTR,
         pool.launch(),

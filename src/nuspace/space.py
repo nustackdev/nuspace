@@ -15,6 +15,12 @@ process opens a Space. Everything else here follows from that one fact:
 is the other side of the same story: what a worker comes up holding, pickled
 to the child and entered there.
 
+A browser connection is the same story once more and is why
+:func:`proxied_session` is here: the socket belongs to the process that
+accepted it, so a worker reaches it through a proxy like everything else.
+That one is per connection rather than per process, so it rides in the body a
+driver dispatches rather than in the pool's init.
+
 Nothing here writes. A cold store is initialised by ops, at the head of the
 body, before anything subscribes to a container that is not there yet.
 """
@@ -22,6 +28,7 @@ body, before anything subscribes to a container that is not there yet.
 from __future__ import annotations
 
 import socket
+from typing import TYPE_CHECKING
 
 import nu
 import nustd.kv
@@ -31,10 +38,16 @@ from nuspace.shapes import Space
 from nustd.kv.fabrics import Navigator
 
 
+if TYPE_CHECKING:
+    from nu.lang.runtime import Context
+
+
 __all__ = [
     "DEFAULT_NAME",
+    "FrameCodec",
     "free_port",
     "open_space",
+    "proxied_session",
     "served_feed",
     "served_navigator",
     "store",
@@ -122,6 +135,78 @@ def served_feed(address: str, *, root: type[nu.Shape] = Space) -> nu.With:
             reason as :func:`served_navigator`.
     """
     return nustd.kv.served_observer(address, target_tag=root)
+
+
+class FrameCodec:
+    """Frames by value on the invisibles wire, for as long as the bracket holds.
+
+    A frame is plain data, a path and a payload and the chain of types and
+    props a write walks down, but invisibles boxes any class it has not been
+    told about by reference: this process would hand the far end a netref and
+    the encoder would try to msgpack it. Registering the type makes it pickle
+    across instead, chain and all, which is what lets a Cell in a worker
+    create the node it writes to.
+
+    The registry is process wide, so this is a bracket rather than a call:
+    what it registers it takes back out again.
+    """
+
+    def setup(self, ctx: Context) -> None:
+        """Register the frame type."""
+        # Imported here rather than at module scope: a headless Space never
+        # opens this bracket and has no reason to pay for the ui import.
+        from invisibles.core.boxing import register_value_type
+
+        from nustd.ui.core.protocol import Frame
+
+        register_value_type(Frame)
+
+    def cleanup(self) -> None:
+        """Drop the registration again."""
+        from invisibles.core.boxing import unregister_value_type
+
+        from nustd.ui.core.protocol import Frame
+
+        unregister_value_type(Frame)
+
+    async def asetup(self, ctx: Context) -> None:
+        """Async shim: setup is sync work."""
+        self.setup(ctx)
+
+    async def acleanup(self) -> None:
+        """Async shim: cleanup is sync work."""
+        self.cleanup()
+
+
+def proxied_session(address: str, body: nu.Nu) -> nu.With:
+    """``body``, with the connection served at ``address`` bound as its Session.
+
+    What a process holding no socket needs in order to draw. Every ui ref a
+    Cell builds asks the Context for a Session, and in a worker the one on the
+    far end of this proxy is it.
+
+    Opened around the dispatched body rather than in :func:`worker_context`,
+    because a pool is process wide and fixes its init once while a connection
+    is one browser tab with an address of its own, and because a pool pays its
+    init on every launch and a reloading Cell churns launches.
+
+    Args:
+        address: ``host:port`` where this connection's Session is served.
+        body: what runs with it bound. Pickled into the worker, so everything
+            in it travels with the proxy.
+    """
+    # Imported here rather than at module scope: a headless Space never calls
+    # this and has no reason to pay for the ui import.
+    from nustd.ui.core.session import Session
+
+    return nu.With(
+        nu.Provide(FrameCodec, {}),
+        # bg_serve, because the far end calls back: a subscription's callback
+        # is a reverse proxy, and it is what carries a browser edit into the
+        # process running the Cell.
+        nustd.proxy.InvisiblesProxy(Session, address=address, bg_serve=True),
+        body=body,
+    )
 
 
 def worker_context(address: str, feed_address: str) -> nu.With:

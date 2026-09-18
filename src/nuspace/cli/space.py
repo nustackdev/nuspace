@@ -15,7 +15,7 @@ import nu
 from nu._config.branding import BLUE, PURPLE
 from nuspace import ops
 from nuspace.cli.utils import console, read, write
-from nuspace.exec import run_space
+from nuspace.drivers import run_space
 from nuspace.shapes import TRIGGER_BOOT, TRIGGERS
 from nuspace.space import DEFAULT_NAME, open_space
 

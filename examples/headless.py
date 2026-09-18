@@ -38,9 +38,9 @@ from nuspace import (
     Space,
     open_space,
     ops,
-    run_space,
     store,
 )
+from nuspace.drivers import run_space
 
 
 # Closing the Space drops two sockets under workers that are still holding them,

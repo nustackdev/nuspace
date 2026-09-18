@@ -1,13 +1,14 @@
 """How a Space runs.
 
-Three modules, one per noun. :mod:`nuspace.exec.space` decides which Planes
-are up, :mod:`nuspace.exec.plane` decides where a Plane's Cells go, and
-:mod:`nuspace.exec.cell` is one Cell executing. All of it runs in the main
-process and none of it hosts a Cell: every Cell is in a pool worker, and the
-two ``exec_mode`` values differ in how many workers that takes.
+Three modules, one per noun. :mod:`nuspace.exec.space` folds the Planes in a
+Space, :mod:`nuspace.exec.plane` places a Plane's Cells, and
+:mod:`nuspace.exec.cell` is one Cell executing. None of it hosts a Cell:
+every Cell is in a pool worker, and the two ``exec_mode`` values differ in
+how many workers that takes.
 
-:func:`run_space` is the entry: one term, run inside
-:func:`nuspace.space.open_space`.
+Combinators, all of it. Which Planes are up and what a Cell draws on are both
+arguments here and decisions in :mod:`nuspace.drivers`, which is what keeps
+the runtime language from knowing what a viewer is.
 """
 
 from nuspace.exec.cell import (
@@ -25,19 +26,13 @@ from nuspace.exec.plane import (
     mp_plane,
     run_plane,
 )
-from nuspace.exec.space import (
-    BOOT_TRIGGERS,
-    plane_arm,
-    planes_fold,
-    run_space,
-)
+from nuspace.exec.space import plane_arm, planes_fold
 from nuspace.exec.utils import PARK_SECONDS, park, prop, reenters_on
 
 
 __all__ = [
     "BACKOFF_SECONDS",
     "BACKOFF_STEPS",
-    "BOOT_TRIGGERS",
     "CELL_ATTR",
     "PARK_SECONDS",
     "PLANE_ATTR",
@@ -53,5 +48,4 @@ __all__ = [
     "prop",
     "reenters_on",
     "run_plane",
-    "run_space",
 ]

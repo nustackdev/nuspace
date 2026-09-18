@@ -4,22 +4,23 @@ Everything is inside a **Space**. A Space is a collection of **Planes**, and a
 Plane says how and when its **Cells** run and how they are drawn. A Cell is a
 Nu program, and it is the only thing here that executes.
 
-Four modules, and the names are the model::
+Five modules, and the names are the model::
 
     nuspace.shapes    the store layout
     nuspace.space     opening a Space in a process
     nuspace.ops       what a person does to a Space
     nuspace.exec      how a Space runs
+    nuspace.drivers   when and what runs
 
 The store layout and the two entry points are re-exported here, so a program
 that lives in a Cell says ``from nuspace import Space`` and a process that
 opens one says ``open_space(run_space())``. Everything else is reached through
-the module it lives in, because ``ops`` and ``exec`` are families rather than
-functions.
+the module it lives in, because ``ops``, ``exec`` and ``drivers`` are families
+rather than functions.
 """
 
-from nuspace import exec, ops
-from nuspace.exec import run_space
+from nuspace import drivers, exec, ops
+from nuspace.drivers import run_space
 from nuspace.shapes import (
     DEFAULT_EXEC_MODE,
     DEFAULT_RELOAD,
@@ -78,6 +79,7 @@ __all__ = [
     "Plane",
     "PlaneProps",
     "Space",
+    "drivers",
     "exec",
     "open_space",
     "ops",
