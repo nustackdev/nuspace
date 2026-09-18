@@ -17,9 +17,10 @@ to the child and entered there.
 
 A browser connection is the same story once more and is why
 :func:`proxied_session` is here: the socket belongs to the process that
-accepted it, so a worker reaches it through a proxy like everything else.
-That one is per connection rather than per process, so it rides in the body a
-driver dispatches rather than in the pool's init.
+accepted it, so a worker reaches it through a proxy like everything else. A
+process holds many connections at once and a bracket's kwargs are plain python
+rather than terms, so what goes on the socket is the whole book of them and a
+worker takes its own out by the session id it was dispatched with.
 
 Nothing here writes. A cold store is initialised by ops, at the head of the
 body, before anything subscribes to a container that is not there yet.
@@ -28,22 +29,29 @@ body, before anything subscribes to a container that is not there yet.
 from __future__ import annotations
 
 import socket
+from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING
 
 import nu
 import nustd.kv
 import nustd.mp_pool
 import nustd.proxy
+from nu.core.spans.bracket import _LifecycleBracket
 from nuspace.shapes import Space
 from nustd.kv.fabrics import Navigator
 
 
 if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
+
     from nu.lang.runtime import Context
 
 
 __all__ = [
     "DEFAULT_NAME",
+    "SESSION_ATTR",
+    "ConnectedSession",
+    "Connections",
     "FrameCodec",
     "free_port",
     "open_space",
@@ -59,6 +67,13 @@ __all__ = [
 #: Process name prefix for the pool's workers, so a space is recognisable in
 #: a process list.
 DEFAULT_NAME = "nuspace"
+
+#: What a connection's session id arrives under, both in the arm that drives
+#: the tab and in the workers a dispatch carries it to. The same string
+#: ``nustd.ws_server`` parks it under, spelled here rather than imported,
+#: because importing the server would put a web framework in every worker that
+#: draws.
+SESSION_ATTR = "sid"
 
 
 def free_port() -> int:
@@ -178,33 +193,75 @@ class FrameCodec:
         self.cleanup()
 
 
+class Connections:
+    """Every live browser connection, by session id.
+
+    A type to bind under and nothing else. What a worker gets under this name
+    is a proxy, and the book itself is in the process holding the sockets,
+    which is the only process that can answer.
+    """
+
+    def session(self, sid: str) -> object:
+        """The connection ``sid`` names, as something a ui ref can draw on.
+
+        Raises:
+            LookupError: no connection under that id. Reachable in the
+                ordinary course of things, since a tab can close between a
+                Cell being dispatched and the worker asking for it.
+        """
+        raise NotImplementedError
+
+
+class ConnectedSession(_LifecycleBracket):
+    """Bind the one connection this body draws on, taken out of the book by id.
+
+    The id is on the Context because a dispatch carried the attrs of the arm
+    that sent this body, and that arm is one browser tab's.
+
+    What lands on the Context is the remote connection itself and not a
+    wrapper around it: every call on it is a round trip the transport frames,
+    and a local object in the middle would have to know which of its methods
+    are coroutines on the far side.
+    """
+
+    @asynccontextmanager
+    async def _aopen(self, ctx: Context) -> AsyncIterator[Context]:
+        from nustd.ui.core.session import Session
+
+        sid = ctx.attrs.get(SESSION_ATTR)
+        if sid is None:
+            msg = f"ConnectedSession found no {SESSION_ATTR!r} on the Context"
+            raise LookupError(msg)
+        yield ctx.bind(Session, ctx.get(Connections).session(sid))
+
+
 def proxied_session(address: str, body: nu.Nu) -> nu.With:
-    """``body``, with the connection served at ``address`` bound as its Session.
+    """``body``, with this connection bound as the Session it draws on.
 
     What a process holding no socket needs in order to draw. Every ui ref a
     Cell builds asks the Context for a Session, and in a worker the one on the
     far end of this proxy is it.
 
     Opened around the dispatched body rather than in :func:`worker_context`,
-    because a pool is process wide and fixes its init once while a connection
-    is one browser tab with an address of its own, and because a pool pays its
-    init on every launch and a reloading Cell churns launches.
+    because a pool is process wide and fixes its init once while the answer
+    here is one browser tab's, and because a pool pays its init on every
+    launch and a reloading Cell churns launches.
 
     Args:
-        address: ``host:port`` where this connection's Session is served.
-        body: what runs with it bound. Pickled into the worker, so everything
-            in it travels with the proxy.
+        address: ``host:port`` where the book of connections is served. One
+            for the process, because a bracket's kwargs are plain python and
+            an address cannot be picked per connection inside a term that is
+            built once.
+        body: what runs with the connection bound. Pickled into the worker, so
+            everything in it travels with the proxy.
     """
-    # Imported here rather than at module scope: a headless Space never calls
-    # this and has no reason to pay for the ui import.
-    from nustd.ui.core.session import Session
-
     return nu.With(
         nu.Provide(FrameCodec, {}),
         # bg_serve, because the far end calls back: a subscription's callback
         # is a reverse proxy, and it is what carries a browser edit into the
         # process running the Cell.
-        nustd.proxy.InvisiblesProxy(Session, address=address, bg_serve=True),
+        nustd.proxy.InvisiblesProxy(Connections, address=address, bg_serve=True),
+        ConnectedSession(),
         body=body,
     )
 
