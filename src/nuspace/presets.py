@@ -27,7 +27,7 @@ from __future__ import annotations
 
 import nu
 from nuspace.drivers import BOOT_TRIGGERS, run_space
-from nuspace.shapes import VIEWER_PROSE, Space
+from nuspace.shapes import Space
 from nuspace.space import DEFAULT_NAME, open_space
 
 
@@ -79,7 +79,6 @@ def full(
     static: str | None = "nuspace_ui",
     open_browser: bool = True,
     log_level: str = "warning",
-    viewer: str = VIEWER_PROSE,
     root: type[nu.Shape] = Space,
     address: str | None = None,
     feed_address: str | None = None,
@@ -102,7 +101,6 @@ def full(
         open_browser: open the bound URL once the server says it is ready.
         log_level: how much the browser server itself says. The default leaves
             only the line that says it is up.
-        viewer: which Planes the sidebar lists.
         root: the Space shape class, which is also the store's tag.
         address: ``host:port`` where the Navigator is served.
         feed_address: ``host:port`` where the change feed is served.
@@ -125,7 +123,6 @@ def full(
                 open_browser=open_browser,
                 log_level=log_level,
                 session_address=session_address,
-                viewer=viewer,
                 root=root,
             ),
         ),

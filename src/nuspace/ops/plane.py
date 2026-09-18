@@ -8,22 +8,24 @@ order, is :mod:`nuspace.ops.cell`, which is the only writer of either.
 from __future__ import annotations
 
 import nu
-from nuspace.ops.utils import atomic, mint_ordered_id, text
+from nuspace.ops.utils import atomic, flag, mint_ordered_id, text
 from nuspace.shapes import (
+    DEFAULT_EDITABLE,
     DEFAULT_EXEC_MODE,
     DEFAULT_TRIGGER,
-    DEFAULT_VIEWER,
+    DEFAULT_UI,
     Space,
 )
 
 
 __all__ = [
     "add_plane",
+    "plane_editable",
     "plane_exec_mode",
     "plane_name",
     "plane_props",
     "plane_trigger",
-    "plane_viewer",
+    "plane_ui",
     "remove_plane",
     "rename_plane",
     "set_plane_props",
@@ -39,10 +41,11 @@ def add_plane(
     name: nu.StrArg | None = None,
     exec_mode: nu.StrArg = DEFAULT_EXEC_MODE,
     trigger: nu.StrArg = DEFAULT_TRIGGER,
-    viewer: nu.StrArg = DEFAULT_VIEWER,
+    ui: nu.BoolArg = DEFAULT_UI,
+    editable: nu.BoolArg = DEFAULT_EDITABLE,
     root: type[Space] = Space,
 ) -> nu.Nu:
-    """Write a whole Plane: its name and its three props, in one commit.
+    """Write a whole Plane: its name and its four props, in one commit.
 
     A Plane arrives complete or not at all, so the runtime reading this row
     never has to decide what a half written Plane means. Its two containers
@@ -57,7 +60,8 @@ def add_plane(
         exec_mode: ``async`` puts the whole Plane in one process, ``mp``
             gives each Cell a process of its own.
         trigger: when the Plane is up: ``boot``, ``manual`` or ``nav``.
-        viewer: how it is drawn.
+        ui: whether the Plane draws at all.
+        editable: whether a person can author its Cells from the Viewer.
         root: the Space shape class.
     """
     # Minted while the tree is built rather than while it runs, so running one
@@ -68,7 +72,8 @@ def add_plane(
         plane.name.set(plane_id if name is None else name)
         >> plane.props.exec_mode.set(exec_mode)
         >> plane.props.trigger.set(trigger)
-        >> plane.props.viewer.set(viewer),
+        >> plane.props.ui.set(ui)
+        >> plane.props.editable.set(editable),
         root,
     )
 
@@ -102,7 +107,8 @@ def set_plane_props(
     *,
     exec_mode: nu.StrArg | None = None,
     trigger: nu.StrArg | None = None,
-    viewer: nu.StrArg | None = None,
+    ui: nu.BoolArg | None = None,
+    editable: nu.BoolArg | None = None,
     root: type[Space] = Space,
 ) -> nu.Nu:
     """Change how a Plane runs or how it is drawn. Only what is named is written.
@@ -116,7 +122,8 @@ def set_plane_props(
         for ref, value in (
             (props.exec_mode, exec_mode),
             (props.trigger, trigger),
-            (props.viewer, viewer),
+            (props.ui, ui),
+            (props.editable, editable),
         )
         if value is not None
     ]
@@ -143,13 +150,18 @@ def plane_trigger(plane_id: nu.StrArg, *, root: type[Space] = Space) -> nu.Nu:
     return text(root.planes[plane_id].props.trigger, DEFAULT_TRIGGER)
 
 
-def plane_viewer(plane_id: nu.StrArg, *, root: type[Space] = Space) -> nu.Nu:
-    """How a Plane is drawn. The default where nothing was written."""
-    return text(root.planes[plane_id].props.viewer, DEFAULT_VIEWER)
+def plane_ui(plane_id: nu.StrArg, *, root: type[Space] = Space) -> nu.Nu:
+    """Whether a Plane draws. The default where nothing was written."""
+    return flag(root.planes[plane_id].props.ui, DEFAULT_UI)
+
+
+def plane_editable(plane_id: nu.StrArg, *, root: type[Space] = Space) -> nu.Nu:
+    """Whether a person can author a Plane's Cells from the Viewer."""
+    return flag(root.planes[plane_id].props.editable, DEFAULT_EDITABLE)
 
 
 def plane_props(plane_id: nu.StrArg, *, root: type[Space] = Space) -> nu.Nu:
-    """A Plane's three props as one dict, every value a string.
+    """A Plane's four props as one dict.
 
     Total, so a row somebody wrote by hand reads the same as one this module
     wrote.
@@ -157,5 +169,6 @@ def plane_props(plane_id: nu.StrArg, *, root: type[Space] = Space) -> nu.Nu:
     return nu.Dict.of(
         exec_mode=plane_exec_mode(plane_id, root=root),
         trigger=plane_trigger(plane_id, root=root),
-        viewer=plane_viewer(plane_id, root=root),
+        ui=plane_ui(plane_id, root=root),
+        editable=plane_editable(plane_id, root=root),
     )

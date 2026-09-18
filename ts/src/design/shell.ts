@@ -1,14 +1,13 @@
 // Shell class recipes.
 //
-// The shell is the frame every surface hangs inside: one 36px top strip and
-// one full-bleed surface under it. It is chrome, so it is kit chrome - the
-// strip's contents are kit primitives and nothing here paints its own hover or
-// active state. What the shell owns is only the frame: how tall the strip is,
-// which tier it sits on, and how the surface below it claims the rest.
+// The shell is the frame the two regions hang inside: the sidebar on the left,
+// the Viewer claiming the rest. It owns only the frame - how the window splits
+// and how each side claims its share.
 //
-// The 36px is the number the rails line up against (`railHeader` uses the same
-// h-9), which is what makes the strip and a rail's header read as one rule
-// running across the window instead of two.
+// The window has no strip. The connection pill and the theme flip are the only
+// chrome left and they sit in a corner of the window rather than on a bar of
+// their own: a 36px rule across the top to carry two controls is more furniture
+// than what it holds.
 //
 // Everything resolves to kit L2/L4 semantic names. No raw hex, nothing off the
 // 4px grid.
@@ -21,29 +20,26 @@ import { cn } from "@nustackdev/ui-kit";
 
 /* ============================== the frame ================================ */
 
-/** The window. Owns the viewport height so every surface inside can go flex. */
-export const shellRoot = "flex h-screen flex-col bg-bg-canvas text-text-primary";
+/** The window. Owns the viewport height so every region inside can go flex. */
+export const shellRoot = "relative flex h-screen bg-bg-canvas text-text-primary";
 
-/** The top strip. 36px, surface tier, one hairline underneath. */
-export const shellStrip = cn(
-	"flex h-9 shrink-0 items-center gap-1",
-	"border-b border-border-subtle bg-bg-surface px-2",
-);
-
-/** The surface switcher inside the strip. */
-export const shellNav = "flex items-center gap-1";
-
-/** Everything under the strip. */
-export const shellMain = "flex min-h-0 flex-1";
+/** Everything beside the sidebar. */
+export const shellMain = "flex min-h-0 min-w-0 flex-1";
 
 /**
- * A full-bleed surface. `min-w-0` so a wide child scrolls inside itself
- * instead of pushing the window sideways.
+ * A full-bleed region. `min-w-0` so a wide child scrolls inside itself instead
+ * of pushing the window sideways.
  *
- * Used twice per surface, deliberately the same box: the shell's slot, and the
- * surface's own root where it splits into a rail and a canvas.
+ * Used twice, deliberately the same box: the shell's slot, and the region's own
+ * root.
  */
 export const shellSurface = "flex min-h-0 min-w-0 flex-1";
+
+/** The window's own chrome, out of the way in the bottom right corner. */
+export const shellStatus = cn(
+	"pointer-events-none absolute right-2 bottom-2 z-20",
+	"flex items-center gap-1 [&>*]:pointer-events-auto",
+);
 
 /* ============================== states =================================== */
 
@@ -53,5 +49,5 @@ export const shellBooting = cn(
 	"bg-bg-canvas text-base text-text-muted",
 );
 
-/** A route with no surface behind it. A fact, not an error, so no tone. */
+/** A region the tree does not hold. A fact, not an error, so no tone. */
 export const shellMissing = "min-h-0 flex-1 p-6 text-base text-text-muted";

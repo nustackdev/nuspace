@@ -23,11 +23,12 @@ are families rather than functions.
 from nuspace import drivers, exec, ops, presets
 from nuspace.drivers import run_space
 from nuspace.shapes import (
+    DEFAULT_EDITABLE,
     DEFAULT_EXEC_MODE,
     DEFAULT_RELOAD,
     DEFAULT_RESTART,
     DEFAULT_TRIGGER,
-    DEFAULT_VIEWER,
+    DEFAULT_UI,
     EXEC_ASYNC,
     EXEC_MODES,
     EXEC_MP,
@@ -39,11 +40,6 @@ from nuspace.shapes import (
     TRIGGER_MANUAL,
     TRIGGER_NAV,
     TRIGGERS,
-    VIEWER_AGENT,
-    VIEWER_CODE,
-    VIEWER_HEADLESS,
-    VIEWER_PROSE,
-    VIEWERS,
     Cell,
     CellProps,
     Plane,
@@ -54,11 +50,12 @@ from nuspace.space import open_space, store
 
 
 __all__ = [
+    "DEFAULT_EDITABLE",
     "DEFAULT_EXEC_MODE",
     "DEFAULT_RELOAD",
     "DEFAULT_RESTART",
     "DEFAULT_TRIGGER",
-    "DEFAULT_VIEWER",
+    "DEFAULT_UI",
     "EXEC_ASYNC",
     "EXEC_MODES",
     "EXEC_MP",
@@ -70,11 +67,6 @@ __all__ = [
     "TRIGGER_BOOT",
     "TRIGGER_MANUAL",
     "TRIGGER_NAV",
-    "VIEWERS",
-    "VIEWER_AGENT",
-    "VIEWER_CODE",
-    "VIEWER_HEADLESS",
-    "VIEWER_PROSE",
     "Cell",
     "CellProps",
     "Plane",

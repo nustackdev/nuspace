@@ -1,9 +1,4 @@
-// Rail class recipes + geometry. One rail vocabulary, two surfaces.
-//
-// The pages rail is a nested tree; the apps rail is a flat list. They are the
-// same object at two depths, so they share one set of recipes rather than two
-// copies that drift. The apps rail uses LANE / GAP / ROW and skips INDENT, the
-// guides and the twisty entirely - a flat list has no levels to draw.
+// Rail class recipes + geometry. The sidebar's whole vocabulary.
 //
 // The rail is the one place in nuspace where three things share a 28px line
 // - a disclosure lane, a truncating label, and a hover-revealed action lane -
@@ -14,10 +9,9 @@
 // against it. No absolute positioning, no magic offsets, nothing that can drift
 // into the title.
 //
-// The one real divergence between the two surfaces is the row's left inset,
-// carried by the `inset` argument on `railRow` / `railSkeletonRow`. A tree row
-// gets its left offset from `railIndent(depth)`; a flat row has no indent to
-// stand in for it and pays for the inset itself.
+// The row's left inset is carried by the `inset` argument on `railRow` /
+// `railSkeletonRow`. A tree row gets its left offset from `railIndent(depth)`;
+// a flat row has no indent to stand in for it and pays for the inset itself.
 //
 // Everything resolves to kit L2/L4 semantic names or the doc-* names in
 // ./tokens.css. No raw hex, nothing off the 4px grid.

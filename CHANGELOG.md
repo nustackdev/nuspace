@@ -11,6 +11,8 @@ separately here.
 
 ## Unreleased
 
+- Collapse the whole interface to one sidebar and one viewer over any plane
+- A plane now says whether it draws and whether you can edit it
 - Open a space in the browser and write prose and programs into a plane's cells
 - Boot a browser tab with the chrome it holds before anything is drawn
 - Let a cell draw on a browser connection, and let a driver say which planes are up

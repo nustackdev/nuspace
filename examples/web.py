@@ -2,7 +2,7 @@
 
 Everything phase 2 claims, in a tab rather than in a print:
 
-- the rail lists every Plane whose viewer is prose, under one row for the Space;
+- the sidebar lists every Plane that draws, under one row for the Space;
 - clicking one selects it, and selecting it is what brings its Cells up;
 - a Cell draws under its own node on the page, from the worker it runs in;
 - navigating away takes that worker down, and navigating back brings it up
@@ -16,7 +16,7 @@ Run it::
 
     python examples/web.py
 
-A browser opens on http://127.0.0.1:8080/pages. Pick Notes and type. Pick
+A browser opens on http://127.0.0.1:8080. Pick Notes and type. Pick
 Counter and watch it climb, then pick Notes again and come back to it: the
 seconds are not the ones that went by while you were away, because nothing was
 running while nobody was looking.
@@ -33,8 +33,8 @@ from pathlib import Path
 
 import nu
 import nustd.kv
-from nuspace import EXEC_ASYNC, TRIGGER_NAV, VIEWER_PROSE, Space, ops, presets, store
-from nuspace.web.viewers.prose import prose_source
+from nuspace import EXEC_ASYNC, TRIGGER_NAV, Space, ops, presets, store
+from nuspace.web.viewer import prose_source
 
 
 # Closing the Space drops the sockets under workers that are still holding
@@ -89,7 +89,8 @@ def plane(plane_id, name):
         exec_mode=EXEC_ASYNC,
         # Up because somebody is looking at it, and down again when they stop.
         trigger=TRIGGER_NAV,
-        viewer=VIEWER_PROSE,
+        ui=True,
+        editable=True,
     )
 
 
@@ -120,7 +121,7 @@ def main():
         nu.With(store(str(STORE)), body=nustd.kv.auto_flow_atomic(seed(), scope=Space)),
         nu.Context(),
     )
-    print(f"\n  http://127.0.0.1:{PORT}/pages, Ctrl+C to stop\n")
+    print(f"\n  http://127.0.0.1:{PORT}, Ctrl+C to stop\n")
     try:
         # max_parallel=1: nothing in the runtime computes, every branch is an
         # await, and a larger budget rations each arm against a semaphore those

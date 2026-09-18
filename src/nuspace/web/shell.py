@@ -1,39 +1,35 @@
-"""The chrome: what a browser tab holds before anything in the Space is drawn.
+"""The app frame: what a browser tab holds before anything in the Space is drawn.
 
-Two declarations and one term.
+One declaration and one term.
 
-``Screen`` is a Section holding one surface, and ``Shell`` is the top of the
-tree with one slot per screen. Both are declarations and neither carries an
-address, because **a ref's wire address is its chain and only its chain**. A
-screen's segment is the name of the slot it was reached through, so
-``NuspaceShell.pages.pages`` resolves at ``("pages", "pages")`` and
-``NuspaceShell.nav`` at ``("nav",)``. A registry beside the slots would be a
-second place saying the same thing, and the one that does not decide the
-answer.
+:class:`Shell` is the top of the tree, and its class body is three slots: the
+route the browser is on, the sidebar of Planes that draw, and the Viewer. None
+of them carries an address, because **a ref's wire address is its chain and
+only its chain**: a slot's segment is the name it was declared under, so
+``Shell.viewer`` resolves at ``("viewer",)`` and a Cell drawn on it lands two
+levels below that. A registry beside the slots would be a second place saying
+the same thing, and the one that does not decide the answer.
 
-``Boot`` is the batch that seeds one tab, derived from those slots rather than
-written a second time. It is a term at the head of a connection's arm, which
-is where a per connection Session is bound, and it goes nowhere near the
+:class:`Boot` is the batch that seeds one tab, derived from those slots rather
+than written a second time. It is a term at the head of a connection's arm,
+which is where a per connection Session is bound, and it goes nowhere near the
 endpoint: the endpoint holds the socket and knows nothing about a Shell.
 
-The browser finds a surface by walking for a node of the right type, so where
-a surface hangs is this file's call and nothing on the other side has to be
-told.
+The browser finds a region by walking for a node of the right type, so where
+one hangs is this file's call and nothing on the other side has to be told.
 """
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, ClassVar
-
-from typing_extensions import Self
+from typing import TYPE_CHECKING
 
 import nu
 from nu.engine.structure import Declared
 from nu.lang import Command
-from nuspace.web.nav import NavRef
-from nuspace.web.utils import SpaceRef
-from nuspace.web.viewers.prose import PagesRef
-from nustd.ui.core import Chain, Section, SectionRef, boot_chains
+from nuspace.web.route import RouteRef
+from nuspace.web.sidebar import SidebarRef
+from nuspace.web.viewer import ViewerRef
+from nustd.ui.core import Chain, boot_chains
 from nustd.ui.core.protocol import OP_INIT, OP_REMOVE, Frame
 from nustd.ui.core.session import Session
 
@@ -44,14 +40,7 @@ if TYPE_CHECKING:
     from nu.lang.runtime import Runtime
 
 
-__all__ = [
-    "Boot",
-    "NuspaceShell",
-    "PagesScreen",
-    "Screen",
-    "ScreenRef",
-    "Shell",
-]
+__all__ = ["Boot", "Shell"]
 
 
 class Boot(Command):
@@ -104,90 +93,29 @@ class Boot(Command):
         return athunk
 
 
-class ScreenRef(SectionRef, SpaceRef):
-    """Substrate Ref backing a Screen slot on a Shell.
-
-    A :class:`~nuspace.web.utils.SpaceRef` as well as a Section ref, so a
-    chain somebody rooted here is one nuspace mounted and stays where it was
-    put.
-    """
-
-
-class Screen(Section):
-    """One top-level surface: a Section whose slots hold that surface's refs.
-
-    Holds no address of its own. It gets one by being declared on a Shell,
-    which is where its segment comes from::
-
-        class NuspaceShell(Shell):
-            pages = PagesScreen.slot("/pages")
-
-        NuspaceShell.pages.pages   # ("pages", "pages")
-    """
-
-    _ref_cls: ClassVar[type[SectionRef]] = ScreenRef
-
-    # Every screen draws as one column of whatever it holds. The surface
-    # inside it is the thing with a component of its own; the screen is the
-    # level that puts it somewhere.
-    _wire_type: ClassVar[str] = "Column"
-
-    @classmethod
-    def slot(cls, route: str, **props: object) -> Self:  # type: ignore[override]
-        """Declare this screen on a Shell at ``route``.
-
-        ``route`` is a declared prop, so it rides the chain onto the screen's
-        node and the browser reads it off the tree like any other prop.
-        """
-        return nu.Slot(cls._ref_cls, props={"route": route, **props}, section_cls=cls)  # type: ignore[return-value]
-
-
 class Shell(nu.Shape):
     """The top of one browser tab. One per Space.
 
-    The class body declares a slot per screen plus the structural refs that
-    belong to no screen. Every screen is there at once and the browser's
-    router decides which one is showing, so a screen going out of view never
-    takes down what is running inside it.
+    Three slots, and the whole app is two of them. ``route`` renders nothing
+    and is never written; it is there so an arm has a node to read the route
+    off, and it has to be on the tree before any arm reads it, since a read
+    addressed at a node the browser does not hold is answered by nothing at
+    all.
     """
+
+    route = RouteRef.slot()
+    sidebar = SidebarRef.slot()
+    viewer = ViewerRef.slot()
 
     @classmethod
     def boot(cls) -> Boot:
         """This Shell's slots as the batch that seeds a tab.
 
-        ``NuspaceShell.boot() >> program`` is the whole idiom.
+        ``Shell.boot() >> program`` is the whole idiom.
         """
         return Boot(cls)
 
     @classmethod
     def _boot_chains(cls) -> list[Chain]:
-        """Everything this Shell declares, as chains, in declaration order.
-
-        Structural refs and screen subtrees come out of one walk: a screen
-        slot is a Section slot that happens to carry a route.
-        """
+        """Everything this Shell declares, as chains, in declaration order."""
         return boot_chains((), cls)
-
-
-class PagesScreen(Screen):
-    """The ``/pages`` route, where a Plane a person writes prose in is drawn.
-
-    One slot, which is the whole surface. ``NuspaceShell.pages.pages`` resolves
-    at ``("pages", "pages")``, and a Cell drawn on it lands two levels under
-    that, which is the address the browser already looks for.
-    """
-
-    pages = PagesRef.slot()
-
-
-class NuspaceShell(Shell):
-    """The stock shell: one screen, and one slot that belongs to no screen.
-
-    ``nav`` is the browser's route. It renders nothing and is never written;
-    it is there so an arm has a node to read the route off, and it has to be
-    on the tree before any arm reads it, since a read addressed at a node the
-    browser does not hold is answered by nothing at all.
-    """
-
-    nav = NavRef.slot()
-    pages = PagesScreen.slot("/pages")

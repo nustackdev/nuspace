@@ -22,12 +22,19 @@ from nuspace.space import DEFAULT_NAME
 __all__ = ["clear", "ls", "run", "serve"]
 
 
+def _drawn(row: dict) -> str:
+    """What a Plane's presentation props read as on one line, or nothing."""
+    if not row["ui"]:
+        return ""
+    return " ui editable" if row["editable"] else " ui"
+
+
 def _plane_line(row: dict) -> Text:
-    """One Plane: its id, the name where it differs, and its three props."""
+    """One Plane: its id, the name where it differs, and its four props."""
     line = Text.assemble((str(row["id"]), f"bold {BLUE}"))
     if row["name"] != row["id"]:
         line.append(f"  {row['name']}")
-    line.append(f"  {row['exec_mode']} {row['trigger']} {row['viewer']}", style="dim")
+    line.append(f"  {row['exec_mode']} {row['trigger']}{_drawn(row)}", style="dim")
     return line
 
 
@@ -150,7 +157,7 @@ def serve(
     _announce(path, triggers)
     listed = [row for row in read(ops.plane_rows(), path) if row["trigger"] == TRIGGER_NAV]
     console.print(f"[dim]{len(listed)} Plane(s) a tab can navigate to[/dim]")
-    console.print(f"[dim]http://{host}:{port}/pages, Ctrl+C to stop[/dim]")
+    console.print(f"[dim]http://{host}:{port}, Ctrl+C to stop[/dim]")
     _hold(
         presets.full(
             path=path,

@@ -40,7 +40,7 @@ export const docColumn = cn(
 /** A program block that opts out of the reading measure (charts, tables). */
 export const docColumnWide = cn(docColumn, "max-w-doc-wide");
 
-/** The scroll surface as the flex child the pages ref mounts it as. */
+/** The scroll surface as the flex child the Viewer mounts it as. */
 export const docPageSurface = cn(docPage, "flex min-w-0 flex-1 flex-col");
 
 /** Before a page's value lands. Same quiet as the shell's boot state. */
@@ -416,10 +416,10 @@ export const docProgramHeadless = "py-1 text-base text-text-muted";
 export const docTextBlock = "flex flex-col gap-1";
 
 /**
- * The code box around Monaco. Bordered and sunken, the same treatment an app's
- * editor gets (`appsEditor`), so a source editor looks like a source editor on
- * both surfaces. It sizes to its content rather than filling: a block is one of
- * many on the page and there is something below it to make room for.
+ * The code box around Monaco. Bordered and sunken, so a source editor looks
+ * like a source editor wherever it turns up. It sizes to its content rather
+ * than filling: a block is one of many on the Plane and there is something
+ * below it to make room for.
  */
 export const docCodeBox = cn(
 	"w-full overflow-hidden rounded-md",

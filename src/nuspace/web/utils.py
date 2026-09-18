@@ -1,12 +1,12 @@
-"""The small things every surface is built out of. Helpers, not concepts.
+"""The small things both regions are built out of. Helpers, not concepts.
 
 A mark that says which refs nuspace put on the browser's tree, the two halves
-idiom a surface's wire vocabulary is spelled in, where a Cell's own refs land
-under the surface it is drawn on, an arm factory, and the total readers an arm
-reads a browser event with. None of them is a word from the model, which is
-why they live here rather than in a file of their own.
+idiom a region's wire vocabulary is spelled in, where a Cell's own refs land
+under the Viewer, an arm factory, and the total readers an arm reads a browser
+event with. None of them is a word from the model, which is why they live here
+rather than in a file of their own.
 
-**The two halves**, stated once so no viewer respells them:
+**The two halves**, stated once so neither region respells them:
 
 - an event rides a path of its own, ``(*<ref>, "ops", <op>)``, so the path is
   the discrimination and a driver binds one arm per op. A browser that
@@ -21,7 +21,7 @@ why they live here rather than in a file of their own.
 **Where a Cell's refs land** is the other half of the same subject. A Cell's
 program names its refs without saying where they live, so the host says it
 afterwards by rewriting the constructed term: every chain the author left bare
-is spliced under the Cell's own node on the surface it is drawn on. That is
+is spliced under the Cell's own node on the Viewer it is drawn on. That is
 :class:`CellRoot`, and :func:`rooted` is the exemption that keeps a Cell's
 store writes off the browser's tree.
 
@@ -67,9 +67,9 @@ __all__ = [
 #: collide with a write path or with a nested field of the ref itself.
 OPS = "ops"
 
-#: The segment a Cell's own node sits under, one level below the surface it is
+#: The segment a Cell's own node sits under, one level below the Viewer it is
 #: drawn on. The browser's own spelling of it, which is why it is not the
-#: model's word: ``ts/src/refs/pages/blocks.ts`` is the other half, and moving
+#: model's word: ``ts/src/refs/viewer/blocks.ts`` is the other half, and moving
 #: the address here without moving it there is the one way to break drawing.
 CELLS = "sections"
 
@@ -113,25 +113,25 @@ def rooted(ref: StructuredRef) -> bool:
     that is not a ui chain at all named its own root and was never bare, so the
     rewrite has to pass it by or a Cell's store writes land on the browser's
     tree. The second is deliberate: a ui chain rooted on a :class:`SpaceRef`
-    named a nuspace surface out loud, which is how one Cell reaches another's
+    named a nuspace region out loud, which is how one Cell reaches another's
     ui.
     """
     return not isinstance(ref, Ref) or isinstance(ref, SpaceRef)
 
 
-def cell_ui(surface: Ref, cell: StrArg) -> SectionRef:
-    """One Cell's own node under ``surface``, as a ref.
+def cell_ui(viewer: Ref, cell: StrArg) -> SectionRef:
+    """One Cell's own node under ``viewer``, as a ref.
 
     Both levels ride as ``Column``, so the browser has a real component for
     them and a Cell's refs stack in the order they were first written.
 
     Args:
-        surface: the ref the Cell is drawn on, already bound to its place on
+        viewer: the ref the Cell is drawn on, already bound to its place on
             the Shell so its chain resolves.
         cell: the Cell id. Any ``StrArg``, because a Plane's Cells are fanned
             out of the store and the id is only known as the fold runs.
     """
-    cells = SectionRef(CELLS, section_cls=nustd.ui.Column, parent_ref=surface)
+    cells = SectionRef(CELLS, section_cls=nustd.ui.Column, parent_ref=viewer)
     return SectionRef(cell, section_cls=nustd.ui.Column, parent_ref=cells)
 
 
@@ -147,14 +147,14 @@ class CellRoot:
     worker, and a closure is not pickleable.
 
     Args:
-        surface: the ref the Cell is drawn on.
+        viewer: the ref the Cell is drawn on.
         cell: the Cell id, as whatever the fold bound it to.
     """
 
     __slots__ = ("_under",)
 
-    def __init__(self, surface: Ref, cell: StrArg) -> None:
-        self._under = cell_ui(surface, cell)
+    def __init__(self, viewer: Ref, cell: StrArg) -> None:
+        self._under = cell_ui(viewer, cell)
 
     def __call__(self, term: Nu) -> Nu:
         """The term, with every chain the author left bare landing here."""

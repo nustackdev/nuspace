@@ -9,7 +9,7 @@ What the store holds::
       planes
         <plane>
           name
-          props    exec_mode, trigger, viewer
+          props    exec_mode, trigger, ui, editable
           cells
             <cell>
               name
@@ -44,11 +44,12 @@ import nustd.kv
 
 
 __all__ = [
+    "DEFAULT_EDITABLE",
     "DEFAULT_EXEC_MODE",
     "DEFAULT_RELOAD",
     "DEFAULT_RESTART",
     "DEFAULT_TRIGGER",
-    "DEFAULT_VIEWER",
+    "DEFAULT_UI",
     "EXEC_ASYNC",
     "EXEC_MODES",
     "EXEC_MP",
@@ -60,11 +61,6 @@ __all__ = [
     "TRIGGER_BOOT",
     "TRIGGER_MANUAL",
     "TRIGGER_NAV",
-    "VIEWERS",
-    "VIEWER_AGENT",
-    "VIEWER_CODE",
-    "VIEWER_HEADLESS",
-    "VIEWER_PROSE",
     "Cell",
     "CellProps",
     "Plane",
@@ -93,22 +89,6 @@ TRIGGER_NAV = "nav"
 
 TRIGGERS = (TRIGGER_BOOT, TRIGGER_MANUAL, TRIGGER_NAV)
 
-#: Draws nothing. A Cell under it roots no refs on any surface.
-VIEWER_HEADLESS = "headless"
-
-#: The page render, with the controls a document has.
-VIEWER_PROSE = "prose"
-
-#: An editor over the program a Cell holds.
-VIEWER_CODE = "code"
-
-#: A conversation.
-VIEWER_AGENT = "agent"
-
-#: The viewers nuspace ships, which is what a sidebar enumerates. The slot
-#: holds a plain string, so a viewer arriving later needs no change here.
-VIEWERS = (VIEWER_HEADLESS, VIEWER_PROSE, VIEWER_CODE, VIEWER_AGENT)
-
 #: A program that ends stays ended.
 RESTART_NO = "no"
 
@@ -127,8 +107,12 @@ DEFAULT_EXEC_MODE = EXEC_ASYNC
 #: Nothing starts itself. A Plane that should be up at boot says so.
 DEFAULT_TRIGGER = TRIGGER_MANUAL
 
-#: A Plane draws nothing until somebody picks a viewer for it.
-DEFAULT_VIEWER = VIEWER_HEADLESS
+#: A Plane draws nothing until somebody says it does.
+DEFAULT_UI = False
+
+#: Authoring is the exception, so a Plane is read-only until somebody says
+#: otherwise.
+DEFAULT_EDITABLE = False
 
 DEFAULT_RESTART = RESTART_NO
 
@@ -172,15 +156,23 @@ class Cell(nu.Shape):
 class PlaneProps(nu.Shape):
     """How a Plane meets the world: where its Cells run, when, and how drawn.
 
-    ``exec_mode`` and ``trigger`` are execution and ``viewer`` is
-    presentation. They sit together because a change to any of them
-    rearranges the Plane, and they stay three slots because the runtime reads
-    the first two and the sidebar reads the third.
+    ``exec_mode`` and ``trigger`` are execution, ``ui`` and ``editable`` are
+    presentation. They sit together because a change to any of them rearranges
+    the Plane, and they stay four slots because the runtime reads the first
+    two and the browser reads the other two.
+
+    ``ui`` says the Plane draws, and it is what the sidebar filters on.
+
+    ``editable`` says a person can author this Plane's own Cells from inside
+    the Viewer: add one, drag one, rewrite one. It is not about whether the UI
+    contains an editor. A generated Plane holding a monaco Cell is
+    ``editable: false``, because what it offers is what its program does.
     """
 
     exec_mode = nustd.kv.StrRef.slot()
     trigger = nustd.kv.StrRef.slot()
-    viewer = nustd.kv.StrRef.slot()
+    ui = nustd.kv.BoolRef.slot()
+    editable = nustd.kv.BoolRef.slot()
 
 
 class Plane(nu.Shape):

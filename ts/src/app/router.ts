@@ -1,52 +1,30 @@
-// Tiny nested-path router for nuspace.
+// The router. A route is which Plane is open, and nothing else.
 //
-// Three top-level surfaces -- /pages, /apps and /lens -- each with deep paths
-// (e.g. /pages/p_home/p_notes, /apps/a_ticker). We split
-// window.location.pathname into (top, path[]) so the shell picks a surface and
-// each surface's ref owns its own deeper navigation. Apps is single depth, so
-// its path is at most one app id.
+// One segment: /<plane id>. Bare "/" is a legal route and means nothing is
+// open, which is what a tab lands on before anybody picks a row. There is no
+// top-level surface to pick any more and no deep path under one, because the
+// sidebar is the only thing that navigates and a Plane is one row at a fixed
+// depth however it is grouped.
 //
 // Not part of the nustd.ui bridge -- purely browser-side.
 
 import type React from "react";
 import { useSyncExternalStore } from "react";
 
-export const TOPS = ["pages", "apps", "lens"] as const;
-export type Top = (typeof TOPS)[number];
-export const DEFAULT_TOP: Top = "pages";
-
-export type Route = { top: Top; path: string[] };
-
-function _split(pathname: string): Route {
+/** The plane id in `pathname`, or "" when it names none. */
+function _split(pathname: string): string {
 	const parts = pathname.split("/").filter((s) => s.length > 0);
-	const head = parts[0] ?? "";
-	if ((TOPS as readonly string[]).includes(head)) {
-		return { top: head as Top, path: parts.slice(1).map(decodeURIComponent) };
-	}
-	return { top: DEFAULT_TOP, path: [] };
-}
-
-function _join(top: Top, path: string[]): string {
-	const encoded = path.map(encodeURIComponent).join("/");
-	return encoded.length > 0 ? `/${top}/${encoded}` : `/${top}`;
+	return parts.length === 1 ? decodeURIComponent(parts[0]) : "";
 }
 
 /**
- * The URL a nav target resolves to. Exported so nav chrome can render real
- * anchors (kit `NavLink` is an `<a>`): middle-click, cmd-click and the status
- * bar preview all work, and the click handler only has to suppress the
- * default navigation.
+ * The URL a Plane resolves to. Exported so the sidebar can render real anchors
+ * (kit `NavLink` is an `<a>`): middle-click, cmd-click and the status bar
+ * preview all work, and the click handler only has to suppress the default
+ * navigation.
  */
-export function hrefFor(top: Top, path: string[] = []): string {
-	return _join(top, path);
-}
-
-// Per-surface deep path, remembered across tab switches. Flipping to /lens and
-// back should return you to the page you were reading, not to the root.
-const lastPath: Record<string, string[]> = {};
-
-export function rememberedPath(top: Top): string[] {
-	return lastPath[top] ?? [];
+export function hrefFor(planeId: string): string {
+	return planeId ? `/${encodeURIComponent(planeId)}` : "/";
 }
 
 const subscribers = new Set<() => void>();
@@ -61,40 +39,19 @@ function subscribe(cb: () => void): () => void {
 	};
 }
 
-function getRoute(): Route {
+function getSnapshot(): string {
 	return _split(window.location.pathname);
 }
 
-// Cache the last route object so `useSyncExternalStore` doesn't see a
-// fresh reference every render (which triggers an infinite loop).
-let _cached: Route = getRoute();
-let _cachedKey = _key(_cached);
-
-function _key(r: Route): string {
-	return `${r.top}::${r.path.join("/")}`;
-}
-
-function getSnapshot(): Route {
-	const next = getRoute();
-	const key = _key(next);
-	if (key !== _cachedKey) {
-		_cached = next;
-		_cachedKey = key;
-		lastPath[next.top] = next.path;
-	}
-	return _cached;
-}
-
-export function useRoute(): Route {
+/** The Plane this tab has open, or "" when it has none. */
+export function useRoute(): string {
 	return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 }
 
-export function navigate(target: string | { top: Top; path?: string[] }): void {
-	const url = typeof target === "string" ? target : _join(target.top, target.path ?? []);
+export function navigate(planeId: string): void {
+	const url = hrefFor(planeId);
 	if (window.location.pathname === url) return;
 	window.history.pushState({}, "", url);
-	const r = _split(url);
-	lastPath[r.top] = r.path;
 	for (const cb of subscribers) cb();
 }
 
@@ -103,21 +60,22 @@ export function navigate(target: string | { top: Top; path?: string[] }): void {
  * new window, download) are left to the browser -- an in-app router that eats
  * cmd+click is a worse link than a plain one.
  */
-export function onNavClick(target: string | { top: Top; path?: string[] }) {
+export function onNavClick(planeId: string) {
 	return (e: React.MouseEvent<HTMLElement>) => {
 		if (e.defaultPrevented) return;
 		if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
 		e.preventDefault();
-		navigate(target);
+		navigate(planeId);
 	};
 }
 
-// Landing bootstrap. Bare "/" (or any unknown top) becomes /pages.
+/**
+ * Landing bootstrap. Anything deeper than one segment is not a route, so it
+ * becomes the bare "/" rather than a guess at which of its segments was meant.
+ */
 export function ensureLanding(): void {
-	const p = window.location.pathname;
-	const head = p.split("/").filter(Boolean)[0] ?? "";
-	if (!(TOPS as readonly string[]).includes(head)) {
-		window.history.replaceState({}, "", `/${DEFAULT_TOP}`);
-		for (const cb of subscribers) cb();
-	}
+	const parts = window.location.pathname.split("/").filter(Boolean);
+	if (parts.length <= 1) return;
+	window.history.replaceState({}, "", "/");
+	for (const cb of subscribers) cb();
 }

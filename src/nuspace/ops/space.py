@@ -16,11 +16,12 @@ Navigator.
 from __future__ import annotations
 
 import nu
-from nuspace.ops.utils import atomic, text
+from nuspace.ops.utils import atomic, flag, text
 from nuspace.shapes import (
+    DEFAULT_EDITABLE,
     DEFAULT_EXEC_MODE,
     DEFAULT_TRIGGER,
-    DEFAULT_VIEWER,
+    DEFAULT_UI,
     Space,
 )
 
@@ -75,7 +76,7 @@ def plane_exists(plane_id: nu.StrArg, *, root: type[Space] = Space) -> nu.Nu:
 
 
 def plane_rows(*, root: type[Space] = Space) -> nu.Nu:
-    """Every Plane as ``id, name, exec_mode, trigger, viewer``, one dict each.
+    """Every Plane as ``id, name, exec_mode, trigger, ui, editable``, one dict each.
 
     One read fills a sidebar. Without it a caller reads the ids and then
     loops in its own language, which puts a python or a javascript for loop
@@ -90,7 +91,8 @@ def plane_rows(*, root: type[Space] = Space) -> nu.Nu:
                 name=text(plane.name, _item),
                 exec_mode=text(plane.props.exec_mode, DEFAULT_EXEC_MODE),
                 trigger=text(plane.props.trigger, DEFAULT_TRIGGER),
-                viewer=text(plane.props.viewer, DEFAULT_VIEWER),
+                ui=flag(plane.props.ui, DEFAULT_UI),
+                editable=flag(plane.props.editable, DEFAULT_EDITABLE),
             ),
             key=_ITEM,
         )
