@@ -2,9 +2,9 @@
 
 A mark that says which refs nuspace put on the browser's tree, the two halves
 idiom a surface's wire vocabulary is spelled in, where a Cell's own refs land
-on a surface, an arm factory, and the total readers an arm reads a browser
-event with. None of them is a word from the model, which is why they live here
-rather than in a file of their own.
+under the surface it is drawn on, an arm factory, and the total readers an arm
+reads a browser event with. None of them is a word from the model, which is
+why they live here rather than in a file of their own.
 
 **The two halves**, stated once so no viewer respells them:
 
@@ -18,12 +18,12 @@ rather than in a file of their own.
   because the browser registers one handler per node and a write to a path
   with no handler is dropped.
 
-**Where a Cell's refs land.** A Cell's program names its refs without saying
-where they live, so every one of them resolves bare and two Cells on a Plane
-would write the same node. :class:`CellRoot` is what says where afterwards, by
-rewriting the term between constructing it and evaluating it, and the address
-it says is ``<the surface's node>/sections/<cell id>``, which is what the
-browser already looks under.
+**Where a Cell's refs land** is the other half of the same subject. A Cell's
+program names its refs without saying where they live, so the host says it
+afterwards by rewriting the constructed term: every chain the author left bare
+is spliced under the Cell's own node on the surface it is drawn on. That is
+:class:`CellRoot`, and :func:`rooted` is the exemption that keeps a Cell's
+store writes off the browser's tree.
 
 **The three things that make an arm survivable** are in :class:`Arms` rather
 than in any driver, so two drivers cannot drift apart on them: an attrs
@@ -47,8 +47,8 @@ if TYPE_CHECKING:
 
 
 __all__ = [
+    "CELLS",
     "OPS",
-    "SECTIONS",
     "Arms",
     "CellRoot",
     "ChannelRef",
@@ -66,6 +66,12 @@ __all__ = [
 #: The segment every event path sits under, so the ops namespace can never
 #: collide with a write path or with a nested field of the ref itself.
 OPS = "ops"
+
+#: The segment a Cell's own node sits under, one level below the surface it is
+#: drawn on. The browser's own spelling of it, which is why it is not the
+#: model's word: ``ts/src/refs/pages/blocks.ts`` is the other half, and moving
+#: the address here without moving it there is the one way to break drawing.
+CELLS = "sections"
 
 
 class SpaceRef(Ref):
@@ -97,60 +103,51 @@ def write(ref: Ref, op: str, **fields: object) -> Nu:
     return Write(ref, nu.Dict.of(op=op, **fields))
 
 
-# --- where a Cell draws -----------------------------------------------------
+# --- where a Cell's refs land ------------------------------------------------
 
 
-#: The segment every Cell's ui hangs under, one level below the surface. The
-#: browser spells it in ``refs/pages/blocks.ts`` and this is the other half of
-#: that one agreement, so moving it means moving both.
-SECTIONS = "sections"
+def rooted(ref: StructuredRef) -> bool:
+    """Whether the author rooted this chain himself.
+
+    Two ways to have done it, and the first is the load bearing one. A chain
+    that is not a ui chain at all named its own root and was never bare, so the
+    rewrite has to pass it by or a Cell's store writes land on the browser's
+    tree. The second is deliberate: a ui chain rooted on a :class:`SpaceRef`
+    named a nuspace surface out loud, which is how one Cell reaches another's
+    ui.
+    """
+    return not isinstance(ref, Ref) or isinstance(ref, SpaceRef)
 
 
 def cell_ui(surface: Ref, cell: StrArg) -> SectionRef:
     """One Cell's own node under ``surface``, as a ref.
 
-    Both levels ride as columns, so the browser has a real component for the
-    node that positions a Cell and for the node that holds what it drew.
+    Both levels ride as ``Column``, so the browser has a real component for
+    them and a Cell's refs stack in the order they were first written.
 
     Args:
-        surface: the ref the Plane is drawn on, already bound to its place on
+        surface: the ref the Cell is drawn on, already bound to its place on
             the Shell so its chain resolves.
         cell: the Cell id. Any ``StrArg``, because a Plane's Cells are fanned
-            out from the store and the id is only known as the fold runs.
+            out of the store and the id is only known as the fold runs.
     """
-    cells = SectionRef(SECTIONS, section_cls=nustd.ui.Column, parent_ref=surface)
+    cells = SectionRef(CELLS, section_cls=nustd.ui.Column, parent_ref=surface)
     return SectionRef(cell, section_cls=nustd.ui.Column, parent_ref=cells)
-
-
-def rooted(ref: StructuredRef) -> bool:
-    """Whether whoever wrote this chain already said where it goes.
-
-    Two ways to have said it, and the first is the one that carries the
-    weight. A chain that is not a ui chain at all -- a Cell's own state, a mem
-    record, anything hung on a Shape -- named its root when it named the
-    Shape and was never bare, so a rewrite that reached it would splice a
-    Cell's own writes onto the browser's tree. Only a ui ref written bare has
-    nowhere to live yet.
-
-    The second is deliberate: a ui chain rooted on a
-    :class:`SpaceRef` named a nuspace surface out loud, which is how one Cell
-    reaches another's ui on purpose.
-    """
-    return not isinstance(ref, Ref) or isinstance(ref, SpaceRef)
 
 
 class CellRoot:
     """Splice a Cell's bare ref chains under the Cell that owns them.
 
     What a Cell's program is loaded through. It runs on the constructed term
-    before anything can evaluate it, so a Cell cannot produce a ref that
-    writes to a bare path.
+    before anything can evaluate it, so a program cannot produce a ref that
+    writes to a bare path and two Cells naming the same slot cannot write one
+    node and visibly fight over it.
 
     A class rather than a closure because a Cell's term is pickled into a pool
     worker, and a closure is not pickleable.
 
     Args:
-        surface: the ref the Plane is drawn on.
+        surface: the ref the Cell is drawn on.
         cell: the Cell id, as whatever the fold bound it to.
     """
 
@@ -160,7 +157,7 @@ class CellRoot:
         self._under = cell_ui(surface, cell)
 
     def __call__(self, term: Nu) -> Nu:
-        """The term, with every chain its author left bare landing here."""
+        """The term, with every chain the author left bare landing here."""
         return nu.shape.reroot(term, self._under, rooted=rooted)
 
 

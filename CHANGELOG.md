@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Open a space in the browser and write prose and programs into a plane's cells
 - Boot a browser tab with the chrome it holds before anything is drawn
 - Let a cell draw on a browser connection, and let a driver say which planes are up
 - Run a space of planes and cells, each cell with its own restart policy

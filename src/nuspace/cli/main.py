@@ -15,7 +15,7 @@ import rich_click as click
 from nu._config.branding import BLUE, PURPLE
 from nuspace.cli.cell import cell
 from nuspace.cli.plane import plane
-from nuspace.cli.space import clear, ls, run
+from nuspace.cli.space import clear, ls, run, serve
 from nuspace.cli.utils import DEFAULT_STORE, STORE_ENV, nuspace_version
 
 
@@ -59,6 +59,7 @@ def cli(ctx: click.Context, path: str) -> None:
 
 
 cli.add_command(run)
+cli.add_command(serve)
 cli.add_command(ls)
 cli.add_command(clear)
 cli.add_command(plane)

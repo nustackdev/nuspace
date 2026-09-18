@@ -1,9 +1,9 @@
-"""What a person does to a Space from a shell: run it, look at it, empty it.
+"""What a person does to a Space from a shell: run it, open it, look at it, empty it.
 
-``run`` is the headless runtime: the store's write lock, the Navigator and the
-change feed on sockets, the worker pool, and one arm per Plane. It holds the
-Space for as long as it is up, so the other commands here are for before and
-after.
+``run`` and ``serve`` are the two assembled trees: the store's write lock, the
+Navigator and the change feed on sockets, the worker pool, and one arm per
+Plane, with a browser server on top in the second one. Either holds the Space
+for as long as it is up, so the other commands here are for before and after.
 """
 
 from __future__ import annotations
@@ -13,14 +13,13 @@ from rich.text import Text
 
 import nu
 from nu._config.branding import BLUE, PURPLE
-from nuspace import ops
+from nuspace import ops, presets
 from nuspace.cli.utils import console, read, write
-from nuspace.drivers import run_space
-from nuspace.shapes import TRIGGER_BOOT, TRIGGERS
-from nuspace.space import DEFAULT_NAME, open_space
+from nuspace.shapes import TRIGGER_BOOT, TRIGGER_NAV, TRIGGERS
+from nuspace.space import DEFAULT_NAME
 
 
-__all__ = ["clear", "ls", "run"]
+__all__ = ["clear", "ls", "run", "serve"]
 
 
 def _plane_line(row: dict) -> Text:
@@ -95,12 +94,80 @@ def run(
     feed_address: str | None,
     name: str,
 ) -> None:
-    """Run until Ctrl+C, then let the brackets reap the fleet on the way out.
+    """Run until Ctrl+C, then let the brackets reap the fleet on the way out."""
+    _announce(path, triggers)
+    console.print("[dim]running, Ctrl+C to stop[/dim]")
+    _hold(
+        presets.headless(
+            path=path,
+            triggers=tuple(triggers),
+            address=address,
+            feed_address=feed_address,
+            name=name,
+        )
+    )
 
-    ``max_parallel=1`` because nothing in the runtime computes: every branch is
-    an await, and a larger budget rations each Plane's arm against a semaphore
-    those arms never give back.
-    """
+
+@click.command(help="Open the Space and serve it in the browser until interrupted.")
+@click.option(
+    "-t",
+    "--trigger",
+    "triggers",
+    multiple=True,
+    type=click.Choice(TRIGGERS),
+    default=(TRIGGER_BOOT,),
+    show_default=True,
+    help="Which Planes are up without a browser asking. A nav Plane never is.",
+)
+@click.option("--host", default="127.0.0.1", show_default=True, help="Interface to bind.")
+@click.option("-p", "--port", default=8080, show_default=True, help="Port to bind.")
+@click.option("--no-browser", is_flag=True, help="Do not open a browser tab on the way up.")
+@click.option(
+    "--address", default=None, help="host:port for the Navigator. A free port by default."
+)
+@click.option(
+    "--feed-address", default=None, help="host:port for the change feed. A free port by default."
+)
+@click.option(
+    "--session-address",
+    default=None,
+    help="host:port for the live connections. A free port by default.",
+)
+@click.option("--name", default=DEFAULT_NAME, show_default=True, help="Worker process name prefix.")
+@click.pass_obj
+def serve(
+    path: str,
+    triggers: tuple[str, ...],
+    host: str,
+    port: int,
+    no_browser: bool,
+    address: str | None,
+    feed_address: str | None,
+    session_address: str | None,
+    name: str,
+) -> None:
+    """Serve until Ctrl+C. A Plane is up because a tab navigated to it, or a trigger said so."""
+    _announce(path, triggers)
+    listed = [row for row in read(ops.plane_rows(), path) if row["trigger"] == TRIGGER_NAV]
+    console.print(f"[dim]{len(listed)} Plane(s) a tab can navigate to[/dim]")
+    console.print(f"[dim]http://{host}:{port}/pages, Ctrl+C to stop[/dim]")
+    _hold(
+        presets.full(
+            path=path,
+            triggers=tuple(triggers),
+            host=host,
+            port=port,
+            open_browser=not no_browser,
+            address=address,
+            feed_address=feed_address,
+            session_address=session_address,
+            name=name,
+        )
+    )
+
+
+def _announce(path: str, triggers: tuple[str, ...]) -> None:
+    """Say which Space this is and which Planes come up without being asked."""
     wanted = [row for row in read(ops.plane_rows(), path) if row["trigger"] in triggers]
     console.print(Text.assemble(("nuspace", f"bold {PURPLE}"), ("  ", ""), (path, "dim")))
     if wanted:
@@ -108,19 +175,17 @@ def run(
             console.print(_plane_line(row))
     else:
         console.print(f"[dim]nothing to bring up for trigger {', '.join(triggers)}[/dim]")
-    console.print("[dim]running, Ctrl+C to stop[/dim]")
+
+
+def _hold(tree: nu.Nu) -> None:
+    """Run a preset until interrupted, then let the brackets reap the fleet.
+
+    ``max_parallel=1`` because nothing in the runtime computes: every branch is
+    an await, and a larger budget rations each Plane's arm against a semaphore
+    those arms never give back.
+    """
     try:
-        nu.run_in_loop(
-            open_space(
-                run_space(triggers=tuple(triggers)),
-                path=path,
-                address=address,
-                feed_address=feed_address,
-                name=name,
-            ),
-            nu.Context(),
-            max_parallel=1,
-        )
+        nu.run_in_loop(tree, nu.Context(), max_parallel=1)
     except KeyboardInterrupt:
         console.print("[dim]stopped[/dim]")
 
