@@ -20,8 +20,8 @@
 #     Environment name: (leave blank)
 #
 # Release flow:
-#   1. Bump `version` in both `ui/pyproject.toml` and
-#      `ui/package.json` (keep them equal).
+#   1. Bump `version` in both `ts/pyproject.toml` and
+#      `ts/package.json` (keep them equal).
 #   2. Commit and push to main.
 #   3. `git tag nuspace-ui@X.Y.Z && git push origin nuspace-ui@X.Y.Z`.
 name: Publish nuspace-ui to PyPI
@@ -40,7 +40,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  UI_DIR: ui
+  UI_DIR: ts
 
 jobs:
   publish:
@@ -53,7 +53,7 @@ jobs:
         with:
           node-version: 24
           cache: npm
-          cache-dependency-path: ui/package-lock.json
+          cache-dependency-path: ts/package-lock.json
 
       - uses: actions/setup-python@v5
         with:
@@ -115,5 +115,5 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/nuspace-ui@')
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          packages-dir: ui/wheel-dist
+          packages-dir: ts/wheel-dist
           skip-existing: true

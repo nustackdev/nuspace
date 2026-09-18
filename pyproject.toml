@@ -59,12 +59,12 @@ packages = ["src/nuspace"]
 
 [tool.hatch.build.targets.sdist]
 exclude = [
-    "ui/node_modules",
-    "ui/dist",
+    "ts/node_modules",
+    "ts/dist",
 ]
 
 [tool.uv.sources]
-nuspace-ui = { path = "./ui" }
+nuspace-ui = { path = "./ts" }
 nucore = { path = "../nu", editable = true }
 nustd = { path = "../nu/pkgs/nustd", editable = true }
 nucli = { path = "../nu/pkgs/nucli", editable = true }
