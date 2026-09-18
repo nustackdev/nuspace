@@ -9,6 +9,10 @@ Below is the changelog for **nuspace** - the full commit stream. Newest first.
 The `nuspace-ui` wheel is the same source tree's vite output and is not tracked
 separately here.
 
+## Unreleased
+
+- Clear the v0.2 source out of the way for the v0.3 rewrite
+
 ## 0.2.1 — 2026-09-17
 
 - Open a page on quiet air and its own name instead of decoration
