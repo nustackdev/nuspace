@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Run a space of planes and cells, each cell with its own restart policy
 - Clear the v0.2 source out of the way for the v0.3 rewrite
 
 ## 0.2.1 — 2026-09-17

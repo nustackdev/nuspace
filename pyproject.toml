@@ -65,9 +65,9 @@ exclude = [
 
 [tool.uv.sources]
 nuspace-ui = { path = "./ui" }
-nucore = { path = "../nu/packages/nucore", editable = true }
-nustd = { path = "../nu/packages/nustd", editable = true }
-nucli = { path = "../nu/packages/nucli", editable = true }
+nucore = { path = "../nu", editable = true }
+nustd = { path = "../nu/pkgs/nustd", editable = true }
+nucli = { path = "../nu/pkgs/nucli", editable = true }
 nuagent = { path = "../nuagent", editable = true }
 
 [tool.uv]
