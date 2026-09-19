@@ -15,7 +15,7 @@
 	},
 	"dependencies": {
 		"@nustackdev/ui-core": "^0.2.0",
-		"@nustackdev/ui-kit": "^0.2.0",
+		"@nustackdev/ui-kit": "^0.2.1",
 		"lucide-react": "^0.564.0",
 		"monaco-editor": "^0.56.0",
 		"prosemirror-commands": "^1.7.2",

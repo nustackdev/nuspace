@@ -45,10 +45,20 @@ def test_every_group_draws_something():
         assert group.draws.ui, group.name
 
 
+def test_the_job_view_opens_the_cell_the_job_is_seeded_with():
+    """The id is a constant on one side and a literal in source text on the
+    other, and an editor over a Cell that is not there opens nothing."""
+    assert groups.JOB.runs is not None
+    assert [cell.cell_id for cell in groups.JOB.runs.cells] == [groups.JOB_CODE]
+    assert f'CODE = "{groups.JOB_CODE}"' in groups.JOB.draws.cells[0].source
+
+
 @pytest.mark.parametrize(("group", "role", "cell"), list(seeds()), ids=lambda v: str(v))
 def test_template_compiles_constructs_and_validates(group, role, cell):
     source = cell.render(SUBJECT)
-    assert SUBJECT in source
+    # Only a Cell that is about another Plane names one. The skeleton a job's
+    # code starts as is about nothing but itself.
+    assert SUBJECT in source or "{subject}" not in cell.source
     module: dict = {}
     exec(compile(source, f"<{group}:{role}:{cell.cell_id}>", "exec"), module)  # noqa: S102
     entry = module[templates.ENTRY]
@@ -102,9 +112,9 @@ def test_a_job_is_two_planes_naming_each_other(space):
     assert read(ops.plane_cascade(runner)) == ["p_b"]
     assert read(ops.plane_ui("p_b")) is True
     assert read(ops.plane_ui(runner)) is False
-    # The Plane that draws is seeded, the Plane that runs arrives empty.
+    # Both halves are seeded: the view, and the program the view opens.
     assert read(ops.cell_ids("p_b")) == [groups.JOB.draws.cells[0].cell_id]
-    assert read(ops.cell_ids(runner)) == []
+    assert read(ops.cell_ids(runner)) == [groups.JOB_CODE]
     assert runner in str(read(ops.prog_of("p_b", groups.JOB.draws.cells[0].cell_id)))
 
 

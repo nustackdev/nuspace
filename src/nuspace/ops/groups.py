@@ -37,6 +37,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import nu
+from nuspace.ops import templates
 from nuspace.ops.cell import cell_writes
 from nuspace.ops.plane import plane_writes
 from nuspace.ops.utils import atomic
@@ -55,6 +56,7 @@ from nuspace.shapes import (
 
 __all__ = [
     "JOB",
+    "JOB_CODE",
     "PAGE",
     "RUNS_SUFFIX",
     "CellSeed",
@@ -150,11 +152,17 @@ PAGE = Group(
 
 # --- the job -----------------------------------------------------------------
 
-_JOB_STATUS = '''import nu
+#: The Cell a job is seeded with, and the one its view opens. Spelled again as
+#: a literal inside the template below, because a template is source text and
+#: the only name in scope there is its own. ``test_groups`` holds the two
+#: together.
+JOB_CODE = "c_code"
+
+
+_JOB_UI = '''import nu
 import nustd.kv
 import nustd.ui
 from nuspace import ops
-from nuspace.shapes import TRIGGER_BOOT, TRIGGER_MANUAL
 from {module} import {root}
 
 
@@ -162,60 +170,51 @@ from {module} import {root}
 #: safe because a plane id never changes.
 JOB = "{subject}"
 
-#: What the row reader binds the status it is describing under. Parallel arms
-#: share one ctx.attrs, so it is a name nothing else is standing on.
-ROW = "_job_status_row"
+#: The Cell on the job that holds what it does. Seeded with the job, so it is
+#: there before anything opens this.
+CODE = "c_code"
 
 
-def shown():
-    """The job's name and one line per Cell on it, as one write each.
+def table():
+    """How the job is set to run, a row per prop, as a write.
 
     Built fresh at each call site. One node in two tree positions is one
     node, and this one is written on the way in and again on every change.
     """
-    row = nu.DictAttrRef(ROW)
-    listed = nu.Dict.of(
-        columns=nu.List.of("cell", "state", "error"),
-        rows=nu.Collect(
-            nu.Map(
-                ops.cell_statuses(JOB, root={root}),
-                nu.List.of(
-                    nu.ToStr(row.get_item(nu.Str("id"), nu.Str(""))),
-                    nu.ToStr(row.get_item(nu.Str("state"), nu.Str(""))),
-                    nu.ToStr(row.get_item(nu.Str("error"), nu.Str(""))),
-                ),
-                key=ROW,
-            )
-        ),
+    return nustd.ui.TableRef("props").set(
+        nu.Dict.of(
+            columns=nu.List.of("prop", "value"),
+            rows=nu.List.of(
+                nu.List.of(nu.Str("exec_mode"), ops.plane_exec_mode(JOB, root={root})),
+                nu.List.of(nu.Str("trigger"), ops.plane_trigger(JOB, root={root})),
+                nu.List.of(nu.Str("ui"), nu.ToStr(ops.plane_ui(JOB, root={root}))),
+                nu.List.of(nu.Str("editable"), nu.ToStr(ops.plane_editable(JOB, root={root}))),
+            ),
+        )
     )
-    # Bare, because the host roots them: they land under this Cell's own node
-    # on the surface, wherever that surface turns out to be.
-    return nustd.ui.HeadingRef("name").set(ops.plane_name(JOB, root={root})) >> nustd.ui.TableRef(
-        "cells"
-    ).set(listed)
 
 
 def out(plane, cell):
-    """What the job is doing, live, and the two controls that start and stop it."""
-    run = nustd.ui.ButtonRef("run")
-    stop = nustd.ui.ButtonRef("stop")
-    # Running a job is its trigger: boot brings it up wherever a runtime is
-    # holding the Space, manual leaves it where it stands.
-    started = ops.set_plane_props(JOB, trigger=TRIGGER_BOOT, root={root})
-    stopped = ops.set_plane_props(JOB, trigger=TRIGGER_MANUAL, root={root})
+    """How the job is set to run, and its program in an editor.
+
+    No name anywhere: the sidebar is where a Plane is called something, and
+    saying it again at the top of the thing you just clicked is saying it
+    twice.
+
+    The editor is seeded from the store on the way in and owns the text from
+    then on, so nothing here watches the program it writes: an arm that did
+    would set the buffer back under the caret on every save.
+    """
+    code = nustd.ui.MonacoRef("code")
+    prog = {root}.planes[JOB].cells[CODE].prog
     # A program owns its own atomicity. Nothing brackets it on the way in,
     # because the host cannot see inside a program it evaluates.
     return nustd.kv.auto_flow_atomic(
-        shown()
-        >> run.set_label(nu.Str("run"))
-        >> stop.set_label(nu.Str("stop"))
+        table()
+        >> code.set(prog)
         >> nu.ParallelAsync(
-            nu.ReactForever(run.on_click(), started),
-            nu.ReactForever(stop.on_click(), stopped),
-            # Depth unbounded, so this wakes on the job's props, on a Cell
-            # being added or dropped, and on a Cell writing its own state or
-            # its error. Every one of those changes what is shown.
-            nu.ReactForever({root}.planes[JOB].on_change(), shown()),
+            nu.ReactForever(code.on_change(), prog.set(nu.Str(code))),
+            nu.ReactForever({root}.planes[JOB].props.on_change(), table()),
         ),
         scope={root},
     )
@@ -232,12 +231,18 @@ JOB = Group(
         trigger=TRIGGER_NAV,
         ui=True,
         editable=False,
-        cells=(CellSeed(cell_id="c_status", name="status", source=_JOB_STATUS),),
+        cells=(CellSeed(cell_id="c_ui", name="job", source=_JOB_UI),),
     ),
-    # A process per Cell, up when somebody says so. It arrives with nothing on
-    # it: what the job does is what somebody puts on it, and until then the
-    # Plane above says so.
-    runs=PlaneSeed(exec_mode=EXEC_MP, trigger=TRIGGER_MANUAL, ui=False, editable=False),
+    # A process per Cell, up when somebody says so. It arrives holding the
+    # skeleton a Cell starts as, because what the Plane above offers is an
+    # editor over it and an editor wants something to open.
+    runs=PlaneSeed(
+        exec_mode=EXEC_MP,
+        trigger=TRIGGER_MANUAL,
+        ui=False,
+        editable=False,
+        cells=(CellSeed(cell_id=JOB_CODE, name="code", source=templates.PROGRAM.source),),
+    ),
 )
 
 
