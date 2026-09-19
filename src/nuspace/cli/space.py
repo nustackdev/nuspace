@@ -30,11 +30,11 @@ def _drawn(row: dict) -> str:
 
 
 def _plane_line(row: dict) -> Text:
-    """One Plane: its id, the name where it differs, and its four props."""
+    """One Plane: its id, the name where it differs, its group and its four props."""
     line = Text.assemble((str(row["id"]), f"bold {BLUE}"))
     if row["name"] != row["id"]:
         line.append(f"  {row['name']}")
-    line.append(f"  {row['exec_mode']} {row['trigger']}{_drawn(row)}", style="dim")
+    line.append(f"  {row['group']} {row['exec_mode']} {row['trigger']}{_drawn(row)}", style="dim")
     return line
 
 

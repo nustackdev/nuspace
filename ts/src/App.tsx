@@ -1,65 +1,27 @@
-import {
-	IconButton,
-	NodeView,
-	Spinner,
-	StatusPill,
-	Tooltip,
-	TooltipContent,
-	TooltipProvider,
-	TooltipTrigger,
-} from "@nustackdev/ui-kit";
-import { Moon, Sun } from "lucide-react";
+import { NodeView, Spinner, TooltipProvider } from "@nustackdev/ui-kit";
 import { useNuspaceConnection } from "./app/connect";
 import { useBooted, useTypePath } from "./app/surfaces";
-import { toggleTheme, useTheme } from "./app/theme";
-import { shellBooting, shellMain, shellMissing, shellRoot, shellStatus } from "./design";
+import { shellBooting, shellMain, shellMissing, shellRoot } from "./design";
 
 // The shell: a sidebar and a Viewer, side by side, and nothing else.
 //
-// There is no top strip and no surface switcher, because there is no third
-// region to switch to. The sidebar lists every Plane that draws and the Viewer
-// draws whichever one the URL names, so navigation is entirely the sidebar's
-// and the shell only places the two.
+// There is no top strip, no surface switcher and no chrome in the corner,
+// because there is no third region to switch to and the two controls the window
+// still has (the connection pill and the theme flip) sit in the sidebar's
+// footer. The sidebar lists every Plane that draws, under a section per group,
+// and the Viewer draws whichever one the URL names, so navigation is entirely
+// the sidebar's and the shell only places the two.
 //
 // Both are found BY TYPE (see app/surfaces.ts), not by a slot name. Where
 // python hangs them is python's call, and the wire type is the one thing about
 // a region both sides already agree on.
 //
-// The connection pill and the theme flip are the only chrome left. They belong
-// to the window rather than to either region, so they sit in a corner of it and
-// take no layout room from what they are reporting on.
-
-/** Wire status -> the kit's five status tones. */
-const CONNECTION_TONE: Record<string, "ok" | "info" | "warn" | "danger"> = {
-	connected: "ok",
-	connecting: "info",
-	reconnecting: "warn",
-	disconnected: "danger",
-};
-
-function ThemeToggle() {
-	const theme = useTheme();
-	const next = theme === "dark" ? "light" : "dark";
-	const Icon = theme === "dark" ? Sun : Moon;
-	return (
-		<Tooltip>
-			<TooltipTrigger asChild>
-				<IconButton
-					variant="ghost"
-					size="sm"
-					aria-label={`Switch to ${next} theme`}
-					onClick={toggleTheme}
-				>
-					<Icon />
-				</IconButton>
-			</TooltipTrigger>
-			<TooltipContent side="top">{next} theme</TooltipContent>
-		</Tooltip>
-	);
-}
+// The socket is opened here and nowhere else. What it is doing is read through
+// `useConnectionStatus` by whoever draws it, so a reconnect never re-renders
+// the shell.
 
 export function App() {
-	const status = useNuspaceConnection();
+	useNuspaceConnection();
 	const booted = useBooted();
 	const sidebar = useTypePath("SidebarRef");
 	const viewer = useTypePath("ViewerRef");
@@ -84,12 +46,6 @@ export function App() {
 						<section className={shellMissing}>no Viewer on the tree</section>
 					)}
 				</main>
-				<div className={shellStatus}>
-					<StatusPill tone={CONNECTION_TONE[status] ?? "danger"} size="sm">
-						{status}
-					</StatusPill>
-					<ThemeToggle />
-				</div>
 			</div>
 		</TooltipProvider>
 	);

@@ -13,10 +13,31 @@
 //
 // There is no path to a Plane. It is addressed by id at a fixed depth however
 // it is grouped, so the URL is /<plane id> and an op carries an id.
+//
+// ## Three kinds of row, two of them shims
+//
+// A row says what it is in `kind`, and only `plane` is a thing in the store.
+// The Space and each section are rows the server invents so the browser has a
+// root and a place to hang a Plane. Told apart by the field and never by the
+// id: a section's id is its group name and a Plane could be called anything.
+//
+// An unknown `kind` is dropped rather than bucketed. Same for a row whose
+// parent this build has no row for: a Plane in a group the server did not ship
+// a section for is simply not in the tree.
 
-/** One Plane, as the server ships it. The root row is its own parent. */
+/** What a row is. The Space, a section, or a Plane. */
+export const KIND_SPACE = "space";
+export const KIND_GROUP = "group";
+export const KIND_PLANE = "plane";
+
+export type RowKind = typeof KIND_SPACE | typeof KIND_GROUP | typeof KIND_PLANE;
+
+const KINDS: readonly string[] = [KIND_SPACE, KIND_GROUP, KIND_PLANE];
+
+/** One row, as the server ships it. The root row is its own parent. */
 export type PageRow = {
 	id: string;
+	kind: RowKind;
 	title: string;
 	parent: string;
 	children: string[];
@@ -88,8 +109,15 @@ export function coerceTree(raw: unknown): PageTree {
 		const r = p as Record<string, unknown>;
 		const id = String(r.id ?? "");
 		if (!id) continue;
+		// A row whose kind this build does not know is dropped. It cannot be
+		// drawn (there is no rule for what it looks like) and it cannot be
+		// bucketed (there is no such thing as an other section), so the honest
+		// answer is that it is not in the tree.
+		const kind = String(r.kind ?? KIND_PLANE);
+		if (!KINDS.includes(kind)) continue;
 		out[id] = {
 			id,
+			kind: kind as RowKind,
 			title: String(r.title ?? ""),
 			parent: String(r.parent ?? id),
 			children: coerceStrs(r.children),

@@ -18,6 +18,7 @@ import {
 	railLane,
 	railLaneStyle,
 	railRow,
+	railSectionTitle,
 	railTitle,
 } from "../../design";
 
@@ -127,5 +128,17 @@ export function RailRowLink({
 		>
 			<span className={titleClassName}>{label}</span>
 		</NavLink>
+	);
+}
+
+/**
+ * A section's label. Not an anchor, because a section is not a place: it is a
+ * row that folds, and the only thing it opens is itself.
+ */
+export function RailSectionLabel({ label }: { label: string }) {
+	return (
+		<span className={railSectionTitle} title={label}>
+			{label}
+		</span>
 	);
 }

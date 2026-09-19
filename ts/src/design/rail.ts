@@ -75,8 +75,29 @@ export const railHeaderLabel = cn(
 	"text-text-muted",
 );
 
+/**
+ * Footer strip. The window's own chrome, which used to float in the bottom
+ * right corner of the canvas: a connection pill and a theme flip sitting over
+ * a document are two controls with nothing holding them, and the rail already
+ * has an edge to put them on.
+ */
+export const railFooter = cn(
+	"flex h-9 shrink-0 items-center justify-between gap-1",
+	"border-t border-border-subtle pl-3 pr-1.5",
+);
+
 /** Scroll body. `px-1.5` keeps a row's wash off the rail's own border. */
 export const railScroll = "min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-1.5 py-1";
+
+/**
+ * A section's own title, on the row shell every other row uses. One tier back
+ * and cased like the header strip, so a section reads as a label with rows
+ * under it rather than as the first row of the list.
+ */
+export const railSectionTitle = cn(
+	"min-w-0 flex-1 select-none truncate",
+	"text-xs font-medium uppercase tracking-[0.06em] text-text-muted",
+);
 
 /* ============================== the row ================================= */
 

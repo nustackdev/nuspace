@@ -5,7 +5,8 @@ is its container of Planes, so :mod:`nuspace.ops.space` takes no ids. A
 Plane is its name and its props, so :mod:`nuspace.ops.plane` takes a Plane
 id. Cells are their programs and their arrangement, so
 :mod:`nuspace.ops.cell` takes a Plane id and, where it means one Cell, a
-Cell id too. :mod:`nuspace.ops.templates` is what a new Cell starts as.
+Cell id too. :mod:`nuspace.ops.templates` is what a new Cell starts as, and
+:mod:`nuspace.ops.groups` is what a whole ``+`` makes, per group.
 
 Every op returns a Nu tree and nothing else, so a CLI, a browser driver and
 an agent compose the same primitives instead of each spelling out ref chains
@@ -35,7 +36,7 @@ This is every writer in nuspace. The runtime reads what was written and runs
 it, and writes back only through the ops here.
 """
 
-from nuspace.ops import templates
+from nuspace.ops import groups, templates
 from nuspace.ops.cell import (
     STATE_FAILED,
     STATE_IDLE,
@@ -48,6 +49,7 @@ from nuspace.ops.cell import (
     cell_rows,
     cell_state,
     cell_statuses,
+    cell_writes,
     clear_error,
     clear_state,
     error_of,
@@ -62,14 +64,18 @@ from nuspace.ops.cell import (
 )
 from nuspace.ops.plane import (
     add_plane,
+    plane_cascade,
     plane_editable,
     plane_exec_mode,
+    plane_group,
     plane_name,
     plane_props,
     plane_trigger,
     plane_ui,
+    plane_writes,
     remove_plane,
     rename_plane,
+    set_plane_group,
     set_plane_props,
 )
 from nuspace.ops.space import (
@@ -114,21 +120,26 @@ __all__ = [
     "cell_rows",
     "cell_state",
     "cell_statuses",
+    "cell_writes",
     "clear_error",
     "clear_space",
     "clear_state",
     "error_of",
+    "groups",
     "mint_ordered_id",
     "move_cell",
+    "plane_cascade",
     "plane_editable",
     "plane_exec_mode",
     "plane_exists",
+    "plane_group",
     "plane_ids",
     "plane_name",
     "plane_props",
     "plane_rows",
     "plane_trigger",
     "plane_ui",
+    "plane_writes",
     "prog_of",
     "remove_cell",
     "remove_plane",
@@ -137,6 +148,7 @@ __all__ = [
     "reorder_cells",
     "set_cell_props",
     "set_error",
+    "set_plane_group",
     "set_plane_props",
     "set_prog",
     "templates",

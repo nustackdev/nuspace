@@ -9,6 +9,7 @@ What the store holds::
       planes
         <plane>
           name
+          group
           props    exec_mode, trigger, ui, editable
           cells
             <cell>
@@ -18,6 +19,7 @@ What the store holds::
               state
               error
           order
+          cascade_delete
 
 One container of Planes and one container of Cells inside each. There is no
 third noun and no container named after a kind.
@@ -29,8 +31,10 @@ when somebody changes how the Plane runs and at no other time. One level
 down, a reloading Cell watches ``cells[c].prog``, so the writes its own
 program makes to ``state`` never restart it.
 
-``name`` sits beside ``props`` for the same reason: renaming a thing is not a
-change to how it runs.
+``name``, ``group``, ``order`` and ``cascade_delete`` sit beside ``props``
+for the same reason: naming a thing, saying which family it was born into,
+tiling its Cells and naming the Planes that go when it goes are none of them
+a change to how it runs, and a Plane's arm re-enters on a write to ``props``.
 
 ``Space`` is also the store's tag. kv refs resolve their Navigator by root
 shape class, so the bracket in :mod:`nuspace.space` binds the stack under
@@ -46,6 +50,7 @@ import nustd.kv
 __all__ = [
     "DEFAULT_EDITABLE",
     "DEFAULT_EXEC_MODE",
+    "DEFAULT_GROUP",
     "DEFAULT_RELOAD",
     "DEFAULT_RESTART",
     "DEFAULT_TRIGGER",
@@ -53,6 +58,9 @@ __all__ = [
     "EXEC_ASYNC",
     "EXEC_MODES",
     "EXEC_MP",
+    "GROUPS",
+    "GROUP_JOB",
+    "GROUP_PAGE",
     "RESTARTS",
     "RESTART_ALWAYS",
     "RESTART_NO",
@@ -100,6 +108,24 @@ RESTART_ALWAYS = "always"
 
 RESTARTS = (RESTART_NO, RESTART_ON_FAILURE, RESTART_ALWAYS)
 
+#: A Plane a person writes and reads.
+GROUP_PAGE = "page"
+
+#: A Plane that does work, and the Plane that draws what it is doing.
+GROUP_JOB = "job"
+
+#: Every family a Plane can be born into, in the order they are listed.
+#:
+#: A group is set at birth and says which template made the Plane. Nothing in
+#: the runtime reads it: it is what a ``+`` builds from and what the sidebar
+#: places a row by, so a Plane whose group is a word nobody here knows is
+#: simply not listed.
+#:
+#: A parent and a child can only ever be Planes of the same group, which is
+#: what keeps sections and nesting from ever disagreeing about where a Plane
+#: belongs.
+GROUPS = (GROUP_PAGE, GROUP_JOB)
+
 #: One process for the Plane is the cheaper arrangement, so it is the one a
 #: Plane gets when nobody says otherwise.
 DEFAULT_EXEC_MODE = EXEC_ASYNC
@@ -113,6 +139,9 @@ DEFAULT_UI = False
 #: Authoring is the exception, so a Plane is read-only until somebody says
 #: otherwise.
 DEFAULT_EDITABLE = False
+
+#: A Plane nobody said anything about is one somebody is about to write in.
+DEFAULT_GROUP = GROUP_PAGE
 
 DEFAULT_RESTART = RESTART_NO
 
@@ -188,12 +217,26 @@ class Plane(nu.Shape):
     a drag wakes no arm. The runtime reads the keys of ``cells`` and never
     this list, so a Cell that reached the store some other way still runs;
     it is only drawn last.
+
+    ``group`` is which family a ``+`` built this Plane out of. Written at
+    birth and read by nothing that runs: it decides what was made, not how
+    what was made behaves, which is why no term in :mod:`nuspace.exec` ever
+    looks at it.
+
+    ``cascade_delete`` is a list of plane ids meaning **when I go, these
+    go**. A one way relation declares it on one side and a mutual one on
+    both, which makes a cycle, so the walk that reads it carries the ids it
+    has already reached. Nothing in it knows what any particular Plane is
+    for: it is what ties a job to the Plane that draws it, and it is a Plane
+    relation rather than a UI one.
     """
 
     name = nustd.kv.StrRef.slot()
+    group = nustd.kv.StrRef.slot()
     props = nustd.kv.ShapeRef.slot(PlaneProps)
     cells = nustd.kv.ShapesDictRef.slot(Cell)
     order = nustd.kv.ListRef.slot(str)
+    cascade_delete = nustd.kv.ListRef.slot(str)
 
 
 class Space(nu.Shape):

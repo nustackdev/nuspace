@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Keep pages and jobs in separate sidebar sections, and make either in one click
 - Collapse the whole interface to one sidebar and one viewer over any plane
 - A plane now says whether it draws and whether you can edit it
 - Open a space in the browser and write prose and programs into a plane's cells

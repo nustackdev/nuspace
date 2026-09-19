@@ -1,43 +1,15 @@
-// The rail's header strip: what the rail lists, and the one button that adds
-// to it.
+// The rail's header strip: what this whole rail is.
+//
+// Fixed, above the scroll, and it carries no add button: what a + makes
+// depends on which section it was pressed under, so every + is on a section
+// row and there is no such thing as adding to the rail itself.
 
-import { IconButton, Tooltip, TooltipContent, TooltipTrigger } from "@nustackdev/ui-kit";
-import { Plus } from "lucide-react";
 import { railHeader, railHeaderLabel } from "../../design";
 
-export function RailHeader({
-	label,
-	addLabel,
-	addTooltip,
-	addDisabled,
-	onAdd,
-}: {
-	/** The strip label, e.g. "planes". The recipe cases it. */
-	label: string;
-	/** Accessible name for the add button, e.g. "New app". */
-	addLabel: string;
-	/** The hint under it, e.g. "new app". */
-	addTooltip: string;
-	addDisabled: boolean;
-	onAdd: () => void;
-}) {
+export function RailHeader({ label }: { label: string }) {
 	return (
 		<div className={railHeader}>
 			<span className={railHeaderLabel}>{label}</span>
-			<Tooltip>
-				<TooltipTrigger asChild>
-					<IconButton
-						variant="ghost"
-						size="sm"
-						aria-label={addLabel}
-						disabled={addDisabled}
-						onClick={onAdd}
-					>
-						<Plus />
-					</IconButton>
-				</TooltipTrigger>
-				<TooltipContent side="bottom">{addTooltip}</TooltipContent>
-			</Tooltip>
 		</div>
 	);
 }

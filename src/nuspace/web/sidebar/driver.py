@@ -7,13 +7,21 @@ no dispatch anywhere in it. Two families, and an arm belongs to exactly one:
   :mod:`nuspace.ops` call over the event's own fields.
 - **store to browser.** The Planes changed; the arm ships the list again.
 
-**The synthetic root.** The browser renders a tree off ``parent`` and
+**Two synthetic rows.** The browser renders a tree off ``parent`` and
 ``children`` and a Plane has neither, because a Space is one flat container and
 a relation between two Planes is a field rather than storage depth. So the list
-ships as one row nobody stored, carrying every listed Plane as a child. The
-shim is here and goes no further: nothing in :mod:`nuspace.shapes` knows about
-it, the root's id is a Plane id nobody could mint, and every op addressed at it
-is a no-op because no Plane is there.
+ships with rows nobody stored: one for the Space, so the browser has a root,
+and one per group, so every listed Plane hangs under its own section. The shim
+is here and goes no further: nothing in :mod:`nuspace.shapes` knows about it,
+their ids are words nobody could mint a Plane under, every op addressed at one
+is a no-op because no Plane is there, and each says which kind it is out loud
+rather than leaving the browser to guess from a spelling.
+
+**Sections come from the group table and nothing else.** One row per entry in
+:func:`nuspace.ops.groups.defined`, in that order, so a new group is a section
+without a line changing here or in the browser. A Plane in a group this build
+does not know is not listed at all: there is no section to put it in, and an
+"other" bucket would be a kind the model does not have.
 
 Which Plane this connection has open is :mod:`nuspace.web.route`, and drawing
 one is :mod:`nuspace.web.viewer`.
@@ -26,7 +34,7 @@ from typing import TYPE_CHECKING
 import nu
 import nustd.kv
 from nuspace import ops
-from nuspace.shapes import EXEC_ASYNC, TRIGGER_NAV, Space
+from nuspace.shapes import DEFAULT_GROUP, GROUPS, Space
 from nuspace.web.sidebar import interactions
 from nuspace.web.utils import Arms, field_str
 
@@ -43,7 +51,7 @@ __all__ = ["ARMS", "ROOT_ID", "rows", "sidebar_driver"]
 ARMS = 4
 
 
-#: The row every Plane hangs under. Not a Plane and never stored: the browser
+#: The row every section hangs under. Not a Plane and never stored: the browser
 #: needs exactly one row that names itself as its own parent or it finds no root
 #: and the sidebar stays a row of skeletons. A word rather than a minted id, so
 #: a real Plane can never collide with it.
@@ -52,46 +60,67 @@ ROOT_ID = "space"
 #: Every arm in this module, labelled for the reports it prints.
 _arms = Arms("sidebar")
 
-#: What the filter binds the Plane it is deciding about under, and what the row
-#: builder binds the Plane it is describing under. Two of them because they are
-#: two questions, and both named for this module because every arm on a
-#: connection shares one ``ctx.attrs`` and ``item`` is a name anything could be
-#: standing on.
+#: What the two filters bind the Plane they are deciding about under, and what
+#: the row builder binds the Plane it is describing under. Three of them
+#: because they are three questions, and all named for this module because
+#: every arm on a connection shares one ``ctx.attrs`` and ``item`` is a name
+#: anything could be standing on.
 _PICK = "_sidebar_pick"
+_SORT = "_sidebar_sort"
 _ROW = "_sidebar_row"
 _pick = nu.DictAttrRef(_PICK)
+_sort = nu.DictAttrRef(_SORT)
 _row = nu.DictAttrRef(_ROW)
+
+
+def _group_of(held: nu.Nu) -> nu.Nu:
+    """Which group a row the store answered with says it is in."""
+    return nu.ToStr(held.get_item(nu.Str("group"), nu.Str(DEFAULT_GROUP)))
 
 
 def _listed(root: type[Space]) -> nu.Nu:
     """The Planes the sidebar lists, in creation order.
 
+    Two conditions, and the second is why a group is not a free-form tag: a
+    Plane goes in a section or nowhere, so one in a group this build has never
+    heard of is dropped rather than collected somewhere nobody asked for.
+
     Built fresh at each call site. One node in two tree positions is one node,
-    and this one is read twice per answer: once for the ids the root row
-    carries, once for the rows themselves.
+    and this one is read once per section plus once for the rows themselves.
     """
+    known = [nu.Eq(_group_of(_pick), nu.Str(group)) for group in GROUPS]
     return nu.List(
         nu.Collect(
             nu.Filter(
                 ops.plane_rows(root=root),
-                nu.ToBool(_pick.get_item(nu.Str("ui"), nu.Bool(False))),
+                nu.And(
+                    nu.ToBool(_pick.get_item(nu.Str("ui"), nu.Bool(False))),
+                    known[0] if len(known) == 1 else nu.Or(*known),
+                ),
                 key=_PICK,
             )
         )
     )
 
 
-def _ids(root: type[Space]) -> nu.Nu:
-    """The ids of the listed Planes, which is the order the sidebar draws them in.
+def _ids(group: str, root: type[Space]) -> nu.Nu:
+    """The ids of one section's Planes, which is the order it draws them in.
 
-    The browser walks the root row's ``children`` and skips an id the list does
-    not hold, so a Plane missing from here never appears whatever else it
-    carries.
+    The browser walks a row's ``children`` and skips an id the list does not
+    hold, so a Plane missing from here never appears whatever else it carries.
     """
     return nu.List(
         nu.Collect(
             nu.Map(
-                _listed(root),
+                nu.List(
+                    nu.Collect(
+                        nu.Filter(
+                            _listed(root),
+                            nu.Eq(_group_of(_sort), nu.Str(group)),
+                            key=_SORT,
+                        )
+                    )
+                ),
                 nu.ToStr(_row.get_item(nu.Str("id"), nu.Str(""))),
                 key=_ROW,
             )
@@ -100,36 +129,49 @@ def _ids(root: type[Space]) -> nu.Nu:
 
 
 def rows(*, root: type[Space] = Space) -> nu.Nu:
-    """Every Plane that draws as a browser row, under one root row nobody stored.
+    """The Space, its sections, and every Plane that draws, as browser rows.
 
     ``parent`` is written on every row and never left out. The browser defaults
     a row's parent to the row's own id and takes the first self-parenting row as
     the root, so a Plane row that forgot its parent would become the root and
     the sidebar would render one item.
     """
+    sections = ops.groups.defined()
     space = nu.Dict.of(
         id=nu.Str(ROOT_ID),
+        kind=nu.Str(interactions.KIND_SPACE),
         # Empty, and the browser draws its own word for the Space in its place.
         # The row is not a Plane, so there is no name to give it.
         title=nu.Str(""),
         parent=nu.Str(ROOT_ID),
-        children=_ids(root),
+        children=nu.List.of(*[nu.Str(group.name) for group in sections]),
     )
+    grouped = [
+        nu.Dict.of(
+            id=nu.Str(group.name),
+            kind=nu.Str(interactions.KIND_GROUP),
+            title=nu.Str(group.label),
+            parent=nu.Str(ROOT_ID),
+            children=_ids(group.name, root),
+        )
+        for group in sections
+    ]
     listed = nu.Collect(
         nu.Map(
             _listed(root),
             nu.Dict.of(
                 id=nu.ToStr(_row.get_item(nu.Str("id"), nu.Str(""))),
+                kind=nu.Str(interactions.KIND_PLANE),
                 title=nu.ToStr(_row.get_item(nu.Str("name"), nu.Str(""))),
-                parent=nu.Str(ROOT_ID),
-                # Planes do not nest yet, so the hierarchy is one level deep and
-                # every Plane is a leaf of the row that stands for the Space.
+                parent=_group_of(_row),
+                # Planes do not nest yet, so the hierarchy is two levels deep
+                # and every Plane is a leaf of the section it is listed under.
                 children=nu.List.of(),
             ),
             key=_ROW,
         )
     )
-    return nu.List.of(space) + nu.List(listed)
+    return nu.List.of(space, *grouped) + nu.List(listed)
 
 
 def sidebar_driver(sidebar: SidebarRef, *, root: type[Space] = Space) -> nu.Nu:
@@ -150,19 +192,16 @@ def sidebar_driver(sidebar: SidebarRef, *, root: type[Space] = Space) -> nu.Nu:
 
     flow = (
         # -- browser -> store ---------------------------------------------------
-        # A Plane made from the sidebar is a page somebody writes: one process
-        # for the whole Plane, up while somebody is looking at it, drawn, and
-        # authored from inside the Viewer.
+        # One arm for every section's +, because what a + makes is the group's
+        # own business and this end only carries the word across. A group the
+        # table does not hold makes the default one rather than nothing.
         _arms.event(
             "create_plane",
             interactions.on_create_plane(sidebar),
-            ops.add_plane(
+            ops.groups.add(
+                field_str("create_plane", "group"),
                 plane_id=field_str("create_plane", "page_id"),
                 name=field_str("create_plane", "title"),
-                exec_mode=EXEC_ASYNC,
-                trigger=TRIGGER_NAV,
-                ui=True,
-                editable=True,
                 root=root,
             ),
         )

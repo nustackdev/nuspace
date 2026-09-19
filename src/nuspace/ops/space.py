@@ -20,6 +20,7 @@ from nuspace.ops.utils import atomic, flag, text
 from nuspace.shapes import (
     DEFAULT_EDITABLE,
     DEFAULT_EXEC_MODE,
+    DEFAULT_GROUP,
     DEFAULT_TRIGGER,
     DEFAULT_UI,
     Space,
@@ -76,11 +77,12 @@ def plane_exists(plane_id: nu.StrArg, *, root: type[Space] = Space) -> nu.Nu:
 
 
 def plane_rows(*, root: type[Space] = Space) -> nu.Nu:
-    """Every Plane as ``id, name, exec_mode, trigger, ui, editable``, one dict each.
+    """Every Plane as ``id, name, group, exec_mode, trigger, ui, editable``, one dict each.
 
-    One read fills a sidebar. Without it a caller reads the ids and then
-    loops in its own language, which puts a python or a javascript for loop
-    back in the middle of what is meant to be one tree.
+    One read fills a sidebar: ``ui`` says whether a Plane is listed at all
+    and ``group`` says which section it is listed under. Without it a caller
+    reads the ids and then loops in its own language, which puts a python or
+    a javascript for loop back in the middle of what is meant to be one tree.
     """
     plane = root.planes[_item]
     return nu.Collect(
@@ -89,6 +91,7 @@ def plane_rows(*, root: type[Space] = Space) -> nu.Nu:
             nu.Dict.of(
                 id=_item,
                 name=text(plane.name, _item),
+                group=text(plane.group, DEFAULT_GROUP),
                 exec_mode=text(plane.props.exec_mode, DEFAULT_EXEC_MODE),
                 trigger=text(plane.props.trigger, DEFAULT_TRIGGER),
                 ui=flag(plane.props.ui, DEFAULT_UI),

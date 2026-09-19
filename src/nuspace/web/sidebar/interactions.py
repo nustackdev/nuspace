@@ -21,7 +21,12 @@ Nothing here reads or writes a store. What an event means is
 **Ids are minted by the browser.** ``page.create`` carries the id of the Plane
 being made, so a create is a pure function of its event: re-running an arm
 rewrites one row instead of adding a second, and the browser routes to what it
-just made without waiting to be told its name.
+just made without waiting to be told its name. A group that makes two Planes
+takes the second id off the first, for the same reason.
+
+**Two of the three kinds of row are shims.** The browser draws a tree off
+``parent`` and ``children``, and neither the Space nor a section is a Plane,
+so both ride as rows nobody stored. Which is which is on the row, in ``kind``.
 
 Opening a Plane is not here. The sidebar moves the browser's URL and the Viewer
 is what says a Plane was selected, so ``page.select`` is the Viewer's op.
@@ -40,6 +45,10 @@ if TYPE_CHECKING:
 
 
 __all__ = [
+    "KINDS",
+    "KIND_GROUP",
+    "KIND_PLANE",
+    "KIND_SPACE",
     "on_create_plane",
     "on_delete_plane",
     "on_move_plane",
@@ -49,15 +58,34 @@ __all__ = [
 ]
 
 
+#: The one row that stands for the Space. Nobody stored it and nothing opens
+#: it: the sidebar's fixed header is what a person sees in its place.
+KIND_SPACE = "space"
+
+#: A section. One per group, nobody stored one either, and what it holds is
+#: every listed Plane in that group.
+KIND_GROUP = "group"
+
+#: A Plane. The only kind of row that is a row in the store and the only one
+#: that opens.
+KIND_PLANE = "plane"
+
+#: Every kind a row can be. Said out loud on every row rather than worked out
+#: from an id, because two of the three are shims and a browser guessing
+#: which is which off a spelling is a browser that breaks when a Plane is
+#: named after a group.
+KINDS = (KIND_SPACE, KIND_GROUP, KIND_PLANE)
+
+
 # --- writes: server -> browser ----------------------------------------------
 
 
 def set_tree(sidebar: Ref, planes: ListArg[dict]) -> Nu:
-    """Replace the sidebar: every Plane that draws, flat.
+    """Replace the sidebar: the Space, its sections, and every Plane that draws.
 
-    A row is ``{id, title, parent, children}``, and exactly one of them has to
-    name itself as its own parent or the browser finds no root and the sidebar
-    stays a row of skeletons forever.
+    A row is ``{id, kind, title, parent, children}``, and exactly one of them
+    has to name itself as its own parent or the browser finds no root and the
+    sidebar stays a row of skeletons forever.
     """
     return write(sidebar, "set_tree", pages=planes)
 
@@ -66,7 +94,12 @@ def set_tree(sidebar: Ref, planes: ListArg[dict]) -> Nu:
 
 
 def on_create_plane(sidebar: Ref) -> Changed:
-    """``{page_id, parent_id, title}``. The browser minted ``page_id``."""
+    """``{page_id, parent_id, group, title}``. The browser minted ``page_id``.
+
+    ``group`` is the section the ``+`` was pressed under and decides what is
+    built. ``parent_id`` is where the row sits, which is a different question
+    and not one anything answers yet.
+    """
     return event(sidebar, "page.create")
 
 

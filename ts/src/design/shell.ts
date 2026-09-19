@@ -4,10 +4,10 @@
 // the Viewer claiming the rest. It owns only the frame - how the window splits
 // and how each side claims its share.
 //
-// The window has no strip. The connection pill and the theme flip are the only
-// chrome left and they sit in a corner of the window rather than on a bar of
-// their own: a 36px rule across the top to carry two controls is more furniture
-// than what it holds.
+// The window has no chrome of its own at all. The connection pill and the theme
+// flip are the only two controls left and they sit in the rail's footer: they
+// used to float over the canvas, which is two controls with nothing holding
+// them, and the rail already has an edge for them.
 //
 // Everything resolves to kit L2/L4 semantic names. No raw hex, nothing off the
 // 4px grid.
@@ -21,7 +21,7 @@ import { cn } from "@nustackdev/ui-kit";
 /* ============================== the frame ================================ */
 
 /** The window. Owns the viewport height so every region inside can go flex. */
-export const shellRoot = "relative flex h-screen bg-bg-canvas text-text-primary";
+export const shellRoot = "flex h-screen bg-bg-canvas text-text-primary";
 
 /** Everything beside the sidebar. */
 export const shellMain = "flex min-h-0 min-w-0 flex-1";
@@ -34,12 +34,6 @@ export const shellMain = "flex min-h-0 min-w-0 flex-1";
  * root.
  */
 export const shellSurface = "flex min-h-0 min-w-0 flex-1";
-
-/** The window's own chrome, out of the way in the bottom right corner. */
-export const shellStatus = cn(
-	"pointer-events-none absolute right-2 bottom-2 z-20",
-	"flex items-center gap-1 [&>*]:pointer-events-auto",
-);
 
 /* ============================== states =================================== */
 

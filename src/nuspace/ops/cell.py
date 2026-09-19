@@ -39,6 +39,7 @@ __all__ = [
     "cell_rows",
     "cell_state",
     "cell_statuses",
+    "cell_writes",
     "clear_error",
     "clear_state",
     "error_of",
@@ -69,6 +70,52 @@ STATE_FAILED = "failed"
 
 
 # --- write -----------------------------------------------------------------
+
+
+def cell_writes(
+    plane_id: nu.StrArg,
+    source: nu.StrArg,
+    *,
+    cell_id: nu.StrArg,
+    name: nu.StrArg | None = None,
+    restart: nu.StrArg = DEFAULT_RESTART,
+    reload: nu.BoolArg = DEFAULT_RELOAD,
+    index: nu.IntArg | None = None,
+    root: type[Space] = Space,
+) -> nu.Nu:
+    """Everything a whole Cell is, as writes, with no bracket of its own.
+
+    :func:`add_cell` is this in a commit and is what a caller putting one Cell
+    on a Plane wants. This one is for the caller writing a Plane and what is
+    on it together: a Transaction inside a Transaction opens a second one and
+    commits it on its own, so composing the ops would leave a Plane
+    observable before anything was on it.
+
+    Args:
+        plane_id: the Plane to put it on. The whole thing is a no-op when
+            that Plane is not there, which is what keeps ``cells`` and
+            ``order`` from disagreeing.
+        source: the program, a python module with an ``out`` entry point.
+        cell_id: the Cell's key, unique in this Plane and nothing wider.
+        name: what to call it. The id when absent.
+        restart: what happens when the program ends.
+        reload: whether editing the program restarts the Cell.
+        index: where in the Plane's order. Appended when absent.
+        root: the Space shape class.
+    """
+    planes = root.planes
+    plane = planes[plane_id]
+    cell = plane.cells[cell_id]
+    order = plane.order
+    place = order.append(cell_id) if index is None else order.insert(index, cell_id)
+    return nu.IfDo(
+        planes.contains(plane_id),
+        nu.IfDo(nu.Not(order.contains(cell_id)), place)
+        >> cell.name.set(cell_id if name is None else name)
+        >> cell.props.restart.set(restart)
+        >> cell.props.reload.set(nu.Bool(reload))
+        >> cell.prog.set(source),
+    )
 
 
 def add_cell(
@@ -113,19 +160,16 @@ def add_cell(
     cell_id = mint_ordered_id("c") if cell_id is None else cell_id
     if source is None:
         source = templates.source(template, root=root, content=content)
-    planes = root.planes
-    plane = planes[plane_id]
-    cell = plane.cells[cell_id]
-    order = plane.order
-    place = order.append(cell_id) if index is None else order.insert(index, cell_id)
     return atomic(
-        nu.IfDo(
-            planes.contains(plane_id),
-            nu.IfDo(nu.Not(order.contains(cell_id)), place)
-            >> cell.name.set(cell_id if name is None else name)
-            >> cell.props.restart.set(restart)
-            >> cell.props.reload.set(nu.Bool(reload))
-            >> cell.prog.set(source),
+        cell_writes(
+            plane_id,
+            source,
+            cell_id=cell_id,
+            name=name,
+            restart=restart,
+            reload=reload,
+            index=index,
+            root=root,
         ),
         root,
     )

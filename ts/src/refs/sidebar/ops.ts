@@ -22,7 +22,12 @@
 
 /** Every op the sidebar sends, with its argument shape. */
 export type Ops = {
-	"page.create": { page_id: string; parent_id: string; title: string };
+	/**
+	 * `group` is the section the + was pressed under and decides what gets
+	 * built, which can be more than one Plane. `parent_id` is where the row
+	 * sits, which is a different question and not one anything answers yet.
+	 */
+	"page.create": { page_id: string; parent_id: string; group: string; title: string };
 	"page.rename": { page_id: string; title: string };
 	/** Takes every Cell on the Plane with it. */
 	"page.delete": { page_id: string };
