@@ -7,6 +7,8 @@ id. Cells are their programs and their arrangement, so
 :mod:`nuspace.ops.cell` takes a Plane id and, where it means one Cell, a
 Cell id too. :mod:`nuspace.ops.templates` is what a new Cell starts as, and
 :mod:`nuspace.ops.groups` is what a whole ``+`` makes, per group.
+:mod:`nuspace.ops.chat` is the conversation one group's Cells keep in their
+state, which is a Cell id like anything else about a Cell.
 
 Every op returns a Nu tree and nothing else, so a CLI, a browser driver and
 an agent compose the same primitives instead of each spelling out ref chains
@@ -36,7 +38,7 @@ This is every writer in nuspace. The runtime reads what was written and runs
 it, and writes back only through the ops here.
 """
 
-from nuspace.ops import groups, templates
+from nuspace.ops import chat, groups, templates
 from nuspace.ops.cell import (
     STATE_FAILED,
     STATE_IDLE,
@@ -121,6 +123,7 @@ __all__ = [
     "cell_state",
     "cell_statuses",
     "cell_writes",
+    "chat",
     "clear_error",
     "clear_space",
     "clear_state",

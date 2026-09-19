@@ -59,6 +59,7 @@ __all__ = [
     "EXEC_MODES",
     "EXEC_MP",
     "GROUPS",
+    "GROUP_CHAT",
     "GROUP_JOB",
     "GROUP_PAGE",
     "RESTARTS",
@@ -114,6 +115,10 @@ GROUP_PAGE = "page"
 #: A Plane that does work, and the Plane that draws what it is doing.
 GROUP_JOB = "job"
 
+#: A job whose work is a conversation: a Plane that talks to a model, and the
+#: Plane that draws what was said.
+GROUP_CHAT = "chat"
+
 #: Every family a Plane can be born into, in the order they are listed.
 #:
 #: A group is set at birth and says which template made the Plane. Nothing in
@@ -124,7 +129,7 @@ GROUP_JOB = "job"
 #: A parent and a child can only ever be Planes of the same group, which is
 #: what keeps sections and nesting from ever disagreeing about where a Plane
 #: belongs.
-GROUPS = (GROUP_PAGE, GROUP_JOB)
+GROUPS = (GROUP_PAGE, GROUP_JOB, GROUP_CHAT)
 
 #: One process for the Plane is the cheaper arrangement, so it is the one a
 #: Plane gets when nobody says otherwise.

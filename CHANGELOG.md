@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Make a chat, ask it for something, and watch it work the space
 - See how a job is set to run, and edit what it does in a real editor
 - Keep pages and jobs in separate sidebar sections, and make either in one click
 - Collapse the whole interface to one sidebar and one viewer over any plane
