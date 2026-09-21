@@ -2,14 +2,14 @@
 
 ## Packages shipped from this repo
 
-- **nuspace** (the runtime, the `nuspace` command) — 0.2.1
-- **nuspace-ui** (the compiled web bundle) — 0.2.1
+- **nuspace** (the runtime, the `nuspace` command) — 0.3.0
+- **nuspace-ui** (the compiled web bundle) — 0.3.0
 
 Below is the changelog for **nuspace** - the full commit stream. Newest first.
 The `nuspace-ui` wheel is the same source tree's vite output and is not tracked
 separately here.
 
-## Unreleased
+## 0.3.0 — 2026-09-21
 
 - Make a chat, ask it for something, and watch it work the space
 - See how a job is set to run, and edit what it does in a real editor

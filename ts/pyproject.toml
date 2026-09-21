@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "nuspace-ui"
-version = "0.2.1"
+version = "0.3.0"
 description = "nuspace web bundle: compiled UI assets for the nuspace runtime."
 license = "AGPL-3.0-or-later"
 authors = [{ name = "Gor Arakelyan", email = "gorarkln@gmail.com" }]
