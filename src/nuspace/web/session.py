@@ -34,7 +34,6 @@ import nustd.proxy
 from nuspace.space import Connections
 from nustd.ui.core import WsSession
 from nustd.ui.core.session import Session
-from nustd.ws_server import WebServer
 
 
 if TYPE_CHECKING:
@@ -43,6 +42,7 @@ if TYPE_CHECKING:
     from nu.lang.runtime import Context
     from nustd.ui.core.protocol import Frame
     from nustd.ui.core.session import Subscription
+    from nustd.ws_server import WebServer
 
 
 __all__ = ["HostedSession", "Sessions", "WsSession", "served_sessions"]
@@ -99,6 +99,14 @@ class Sessions(Connections):
 
     async def asetup(self, ctx: Context) -> None:
         """Take the server's book and the loop its connections are on."""
+        # Imported here rather than at the top, because the top of this module
+        # is reached by every worker that draws: a Cell's dispatched body holds
+        # refs from this package, so unpickling it imports ``nuspace.web``, and
+        # a module level import would hand each of them uvicorn and fastapi for
+        # a server they will never run. The process this runs in is the one
+        # that called ``listen``, so here it is already loaded.
+        from nustd.ws_server import WebServer
+
         self._server = ctx.get(WebServer)
         self._loop = asyncio.get_running_loop()
 
