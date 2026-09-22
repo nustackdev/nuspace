@@ -33,7 +33,7 @@ import nustd.mp_pool
 from nuspace.exec.cell import CELL_ATTR, cell_arm, cell_dispatch
 from nuspace.exec.utils import park, prop
 from nuspace.shapes import DEFAULT_EXEC_MODE, EXEC_ASYNC, EXEC_MP, Space
-from nuspace.space import proxied_session
+from nuspace.space import proxied_session, take_worker
 
 
 if TYPE_CHECKING:
@@ -151,7 +151,10 @@ def async_plane(
     )
     return _cells_exist(plane, root=root) >> nu.Let(
         _WORKER_ATTR,
-        pool.launch(),
+        # Off the shelf when one is going spare, which is what keeps opening
+        # a Plane from waiting on an interpreter starting up. A Space with no
+        # shelf bound launches cold here, exactly as it used to.
+        take_worker(),
         # Dispatch returns as soon as the child has the body, so the park is
         # what holds the worker open.
         body=nu.TryCatch(

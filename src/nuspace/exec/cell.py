@@ -54,7 +54,7 @@ from nuspace.shapes import (
     RESTART_ON_FAILURE,
     Space,
 )
-from nuspace.space import proxied_session
+from nuspace.space import proxied_session, take_worker
 
 
 if TYPE_CHECKING:
@@ -283,7 +283,9 @@ def cell_dispatch(
     body = nustd.kv.auto_flow_atomic(hosted, scope=root)
     held = nu.Let(
         _WORKER_ATTR,
-        pool.launch(),
+        # Off the shelf when one is going spare. A Cell that reloads relaunches,
+        # so this is the hot path twice over: once per navigation, once per edit.
+        take_worker(),
         # Dispatch returns as soon as the child has the body, so the park is
         # what holds the worker open. The kill runs on every exit, including
         # the cancellation the fold delivers when the Cell is deleted.

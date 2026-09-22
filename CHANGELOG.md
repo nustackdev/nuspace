@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Keep workers ready in advance, so opening a plane no longer waits for one to start
 - Draw a page without a web server loaded behind it, so it opens much sooner
 - Let a chat work as long as the work takes, and stop it only when it is stuck
 - Always get a way to say something else, whatever a turn drew
