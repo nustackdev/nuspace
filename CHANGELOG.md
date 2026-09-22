@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Navigating away clears the old page at once instead of blinking through it
 - Keep workers ready in advance, so opening a plane no longer waits for one to start
 - Draw a page without a web server loaded behind it, so it opens much sooner
 - Let a chat work as long as the work takes, and stop it only when it is stuck

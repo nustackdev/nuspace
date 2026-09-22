@@ -33,7 +33,7 @@ from nuspace.web.route import PLANE_ID, opened, opens, per_connection
 from nuspace.web.session import WsSession, served_sessions
 from nuspace.web.shell import Shell
 from nuspace.web.sidebar import sidebar_driver
-from nuspace.web.utils import Arms, CellRoot, cell_ui, field_str
+from nuspace.web.utils import Arms, CellRoot, cell_ui, cells_ui, field_str
 from nuspace.web.viewer import on_select, viewer_driver
 from nustd.ws_server import SID_ATTR, listen, run_once, session_for, sessions_fold
 
@@ -93,7 +93,20 @@ def run_opened(
         The tree, bracketed for atomicity against ``root``. It never
         finishes.
     """
-    up = nu.Let(
+    # What the Plane being left behind drew, taken off the screen before the
+    # next one starts drawing on it.
+    #
+    # Here, at the head of the branch that brings a Plane up, rather than where
+    # the move is recorded: a Race settles the branch it cancelled before it
+    # returns, so by the time this runs the old Plane's worker is already dead
+    # and cannot write a node back in behind the erase. Recording the move and
+    # clearing the screen in one place would race exactly that.
+    #
+    # Unconditional, so navigating to something that draws nothing still clears
+    # what was there. On the first turn it erases a node nobody has written,
+    # which costs one frame the browser ignores.
+    cleared = cells_ui(viewer).erase()
+    up = cleared >> nu.Let(
         PLANE_ATTR,
         opened(),
         body=nu.IfDo(

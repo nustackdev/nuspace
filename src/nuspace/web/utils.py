@@ -54,6 +54,7 @@ __all__ = [
     "ChannelRef",
     "SpaceRef",
     "cell_ui",
+    "cells_ui",
     "event",
     "field_ids",
     "field_index",
@@ -119,6 +120,20 @@ def rooted(ref: StructuredRef) -> bool:
     return not isinstance(ref, Ref) or isinstance(ref, SpaceRef)
 
 
+def cells_ui(viewer: Ref) -> SectionRef:
+    """Every drawn Cell's node under ``viewer``, as one ref.
+
+    The one parent each Cell's node hangs off, which makes it the address of
+    "the page, as drawn". Erasing it is how a Plane being left behind stops
+    being on screen, in one frame rather than one per Cell.
+
+    Args:
+        viewer: the ref the Plane is drawn on, already bound to its place on
+            the Shell so its chain resolves.
+    """
+    return SectionRef(CELLS, section_cls=nustd.ui.Column, parent_ref=viewer)
+
+
 def cell_ui(viewer: Ref, cell: StrArg) -> SectionRef:
     """One Cell's own node under ``viewer``, as a ref.
 
@@ -131,8 +146,7 @@ def cell_ui(viewer: Ref, cell: StrArg) -> SectionRef:
         cell: the Cell id. Any ``StrArg``, because a Plane's Cells are fanned
             out of the store and the id is only known as the fold runs.
     """
-    cells = SectionRef(CELLS, section_cls=nustd.ui.Column, parent_ref=viewer)
-    return SectionRef(cell, section_cls=nustd.ui.Column, parent_ref=cells)
+    return SectionRef(cell, section_cls=nustd.ui.Column, parent_ref=cells_ui(viewer))
 
 
 class CellRoot:
