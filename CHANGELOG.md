@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Watch a chat work step by step, and never get a broken answer
 - Ask a chat for something and it draws the answer and how you reply
 
 ## 0.3.0 — 2026-09-21

@@ -23,13 +23,21 @@ SUBJECT = "p_subject"
 
 
 def seeds():
-    """Every Cell seed every group makes, with the group and Plane it is on."""
+    """Every Cell seed every group makes, with the group and where it goes.
+
+    ``appends`` included, and that is the point of naming those in the same
+    file. A template a group does not name is a template nothing below
+    compiles, and the failure it would hide is the same one: a Plane that
+    opens onto a traceback.
+    """
     for group in groups.defined():
         for role, seed in (("draws", group.draws), ("runs", group.runs)):
             if seed is None:
                 continue
             for cell in seed.cells:
                 yield group.name, role, cell
+        for cell in group.appends:
+            yield group.name, "appends", cell
 
 
 def named(value):
@@ -62,18 +70,30 @@ def test_the_job_view_opens_the_cell_the_job_is_seeded_with():
     assert f'CODE = "{groups.JOB_CODE}"' in groups.JOB.draws.cells[0].source
 
 
-def test_a_chat_is_seeded_with_the_two_cells_the_agent_cannot_draw():
-    """Everything else on a chat's Plane is appended by the agent while it
-    runs. Steps are the host's and go first, so a turn landing after them
-    never has to insert around anything; the box is the bootstrap, because
-    nothing is running to draw one until somebody has typed in it."""
-    assert [cell.name for cell in groups.CHAT.draws.cells] == ["steps", "input"]
+def test_a_chat_is_born_holding_only_the_box_nothing_could_have_drawn():
+    """Everything else on a chat's Plane arrives while it runs: the panel per
+    turn from the submit that started it, and whatever the agent drew after
+    that. The box is the one thing neither of them can have written, because
+    nothing is running behind a chat until somebody has typed in it."""
+    assert [cell.name for cell in groups.CHAT.draws.cells] == ["input"]
 
 
-def test_every_cell_a_chat_draws_with_reaches_the_cell_that_talks():
-    """The conversation and what the agent is doing are both in the talking
-    Cell's own state, and the id is a literal in source text on this side."""
+def test_a_chat_gets_one_panel_per_turn_and_is_born_with_none():
+    """Seeding it would stand an empty one at the top of every chat forever.
+    The seed carries the stem and the turn number goes after it, so the ids
+    say which turn a panel is for without anything storing that."""
+    assert [cell.source for cell in groups.CHAT.appends] == [groups.CHAT_DISPLAY.source]
+    assert groups.CHAT_DISPLAY.cell_id == groups.CHAT_DISPLAY_ID
+    assert groups.CHAT_DISPLAY.name == groups.CHAT_DISPLAY_NAME
+    assert all(cell.source != groups.CHAT_DISPLAY.source for cell in groups.CHAT.draws.cells)
+
+
+def test_the_box_a_chat_starts_in_reaches_the_cell_that_talks():
+    """The conversation is in the talking Cell's own state, and the id is a
+    literal in source text on this side. The panel names neither: a turn's
+    trace is in the panel's own state, so it is handed its own two ids."""
     assert all(f'TALK = "{groups.CHAT_TALK}"' in cell.source for cell in groups.CHAT.draws.cells)
+    assert all(groups.CHAT_TALK not in cell.source for cell in groups.CHAT.appends)
 
 
 @pytest.mark.parametrize(("group", "role", "cell"), list(seeds()), ids=named)

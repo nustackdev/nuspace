@@ -22,7 +22,6 @@ dependencies = [
     # project size and a SPA rebuilt on every UI tweak would eat the quota --
     # not optional. `pip install nuspace` gives you the browser.
     "nuspace-ui>=0.3.0",
-    "nuagent>=0.1.3",
     "typing-extensions>=4.7.0",
     "click>=8.0",
     "rich>=10.7",
@@ -74,7 +73,6 @@ nuspace-ui = { path = "./ts" }
 nucore = { path = "../nu", editable = true }
 nustd = { path = "../nu/pkgs/nustd", editable = true }
 nucli = { path = "../nu/pkgs/nucli", editable = true }
-nuagent = { path = "../nuagent", editable = true }
 
 [tool.uv]
 default-groups = ["dev"]

@@ -2,10 +2,15 @@
 
 A group is set at birth and says which family a Plane came out of. This is
 the other half of that: one entry per group, holding the Planes pressing
-``+`` writes and the Cells they are seeded with. Nothing here is read again
-afterwards, and nothing in the runtime ever asks a Plane what group it is in.
-A group decides what is made; what is made behaves the way its props say,
-like any other Plane.
+``+`` writes and the Cells they are seeded with. Nothing in the runtime ever
+asks a Plane what group it is in. A group decides what is made; what is made
+behaves the way its props say, like any other Plane.
+
+One thing here is read after birth, and it is named here anyway. A chat gets
+a panel per turn rather than one at birth, so its template is in ``appends``
+and :func:`nuspace.ops.chat.submit` renders it on every press. A template
+this file does not name is a template the one test between a broken one and
+somebody else's broken screen never sees.
 
 Not :mod:`nuspace.ops.templates`, which is what a new *Cell* starts as. That
 one is a seed for one program a person is about to replace; this one is a
@@ -57,6 +62,9 @@ from nuspace.shapes import (
 
 __all__ = [
     "CHAT",
+    "CHAT_DISPLAY",
+    "CHAT_DISPLAY_ID",
+    "CHAT_DISPLAY_NAME",
     "CHAT_TALK",
     "JOB",
     "JOB_CODE",
@@ -139,6 +147,13 @@ class Group:
     #: The Plane that does the work, where the group has one. It draws
     #: nothing; the Plane above is what shows what it is doing.
     runs: PlaneSeed | None = None
+    #: Cells an op appends to the Plane that draws while the thing is running,
+    #: rather than at birth. A ``+`` writes none of them, and their ids are
+    #: worked out per append, so the seed here carries the stem. Named in this
+    #: file anyway, because a template is a template: the one test standing
+    #: between a broken one and somebody else's broken screen walks what is
+    #: here, and a template nothing here names is a template nothing checks.
+    appends: tuple[CellSeed, ...] = ()
 
 
 # --- the page ----------------------------------------------------------------
@@ -253,85 +268,12 @@ JOB = Group(
 
 #: The Cell a chat's runs Plane is seeded with: the one that talks to the
 #: model and keeps what was said in its own state. Spelled again as a literal
-#: inside both view templates below, because a template is source text and the
-#: only name in scope there is its own. The Cell that talks is handed its own
-#: ids and names neither. ``test_chat`` holds the spellings together.
+#: inside the box below, because a template is source text and the only name
+#: in scope there is its own. The Cell that talks names no id but the Plane it
+#: draws to, and the panel names none at all: a turn's trace is in the panel's
+#: own state, so it is handed its own two ids like any other Cell.
+#: ``test_chat`` holds the spellings together.
 CHAT_TALK = "c_talk"
-
-
-_CHAT_STEPS = '''import nu
-import nustd.kv
-import nustd.ui
-from nuspace import ops
-from {module} import {root}
-
-
-#: The chat this Cell is about. Baked in when the Plane was seeded, which is
-#: safe because a plane id never changes.
-CHAT = "{subject}"
-
-#: The Cell on it that talks and keeps the conversation. Seeded with the
-#: chat, so it is there before anything opens this.
-TALK = "c_talk"
-
-#: What the two columns of the record are called.
-COLUMNS = ("step", "what")
-
-#: What the row reader binds the step it is on under.
-ITEM = "_chat_step"
-
-
-def steps():
-    """What the agent is doing, as rows, oldest first, as a write.
-
-    One ref holding a list rather than a ref per step: what a run is doing is
-    one value that grows and is thrown away whole at the next turn, and a node
-    per line would be a node to mint, root and take down again on every move.
-
-    Built fresh at each call site. One node in two tree positions is one
-    node, and this one is written on the way in and again on every step.
-    """
-    did = nu.DictAttrRef(ITEM)
-    return nustd.ui.TableRef("steps").set(
-        nu.Dict.of(
-            columns=nu.List.of(nu.Str(COLUMNS[0]), nu.Str(COLUMNS[1])),
-            rows=nu.Collect(
-                nu.Map(
-                    ops.chat.steps_of(CHAT, TALK, root={root}),
-                    nu.List.of(
-                        nu.ToStr(did.get_item(nu.Str("kind"), nu.Str(""))),
-                        nu.ToStr(did.get_item(nu.Str("text"), nu.Str(""))),
-                    ),
-                    key=ITEM,
-                )
-            ),
-        )
-    )
-
-
-def out(plane, cell):
-    """What the agent is doing right now, and nothing else.
-
-    The one Cell on a chat the model does not write. What the agent is doing
-    is *about* the agent rather than from it, and it has to read the same way
-    in every chat, so the host draws it and keeps it first: a turn the agent
-    appends lands after this and never has to insert around it.
-
-    No name anywhere: the sidebar is where a Plane is called something, and
-    saying it again at the top of the thing you just clicked is saying it
-    twice.
-    """
-    # A program owns its own atomicity. Nothing brackets it on the way in,
-    # because the host cannot see inside a program it evaluates.
-    return nustd.kv.auto_flow_atomic(
-        steps()
-        # A fresh subscription, never a term shared with the write above: one
-        # node in two tree positions is one node, and a subscription is a
-        # handle the first holder to end would close under the other.
-        >> nu.ReactForever(ops.chat.steps_changed(CHAT, TALK, root={root}), steps()),
-        scope={root},
-    )
-'''
 
 
 _CHAT_INPUT = '''import nu
@@ -359,6 +301,11 @@ def out(plane, cell):
     have. Every input after this one is the agent's own, appended as it
     replies, and this one stays where the conversation started.
 
+    ``plane`` is the Plane that draws the chat, because this Cell is on it,
+    and that is what the submit is handed: the panel for the turn goes up on
+    the Plane the person pressing send is looking at. Nothing is baked in for
+    it, since a Cell is always told which Plane it is on.
+
     The box is emptied after the submit and not before, because the submit is
     what reads it.
     """
@@ -367,19 +314,60 @@ def out(plane, cell):
     # A program owns its own atomicity. Nothing brackets it on the way in,
     # because the host cannot see inside a program it evaluates.
     return nustd.kv.auto_flow_atomic(
-        # Written empty rather than left alone. A bare ref is rooted by the
-        # host when something writes it, so a box nobody writes is a box
-        # nobody can type in: it would first appear on the submit that reads
-        # it, which is the one moment it is too late to be there.
+        # Written empty rather than left alone. Writing a ref is what ships
+        # its chain to the browser and what makes the node there, so a box
+        # nothing writes is a box nobody can type in: it would first come
+        # into being on the submit that reads it, which is the one moment it
+        # is too late to be there.
         box.set(nu.Str(""))
         >> send.set_label(nu.Str("send"))
         >> nu.ReactForever(
             send.on_click(),
-            ops.chat.submit(CHAT, TALK, nu.Str(box), root={root}) >> box.set(nu.Str("")),
+            ops.chat.submit(CHAT, TALK, nu.Str(box), ui_plane_id=plane, root={root})
+            >> box.set(nu.Str("")),
         ),
         scope={root},
     )
 '''
+
+
+#: What the id of a turn's display Cell starts with, before the turn number.
+#: A stem rather than an id: there is one of these per turn and the number is
+#: which turn it is, so ``c_disp_2`` is the second thing a person said and
+#: everything the agent did about it. Read by :mod:`nuspace.ops.chat`, which
+#: is what appends them.
+CHAT_DISPLAY_ID = "c_disp_"
+
+#: What one is called, before the same number. It reads as a divider down the
+#: chat, which is the honest thing to call a panel that stands at the top of a
+#: turn.
+CHAT_DISPLAY_NAME = "turn "
+
+
+# Ten lines that call `nuspace.agent`, the same collapse the talking Cell got
+# and for the same reason: a seed has no migration, so behaviour written out
+# here is behaviour a chat made last month keeps forever. The panel is the one
+# Cell in a chat the model never writes, never varies and cannot reach, so it
+# is the one that most wants to be upgraded by installing a newer nuspace.
+_CHAT_DISPLAY = '''import nuspace.agent
+from {module} import {root}
+
+
+def out(plane, cell):
+    """What the agent did in this turn, as it does it.
+
+    Its own two ids and nothing else. The trace this draws is in this Cell's
+    own state, so there is no chat to name and no subject to bake in: the
+    panel a turn writes into is the panel that turn put up.
+
+    One list per turn rather than one list a turn empties, which is the whole
+    of why scrolling back to the first thing you asked shows what was done
+    about it rather than what is being done now.
+    """
+    return nuspace.agent.display(plane, cell, root={root})
+'''
+
+CHAT_DISPLAY = CellSeed(cell_id=CHAT_DISPLAY_ID, name=CHAT_DISPLAY_NAME, source=_CHAT_DISPLAY)
 
 
 # The program a chat's talking Cell stores is ten lines, and all it does is
@@ -416,23 +404,18 @@ def out(plane, cell):
 CHAT = Group(
     name=GROUP_CHAT,
     label="Chats",
-    # Two Cells at birth and no timeline, because a chat's timeline is what
-    # the agent writes: every turn it appends the Cells that present what it
-    # did and the one that is how you answer next. These two are the ones it
-    # cannot write. The steps Cell is the host's and is first, so a turn
-    # appended after it never has to insert around anything; the input Cell is
-    # the bootstrap, there because nothing is running behind a chat until
-    # somebody talks and an agent that is not up cannot have drawn the box you
-    # start in.
+    # One Cell at birth and no timeline, because a chat's timeline is what a
+    # turn writes: the host puts up the panel for the turn on the press that
+    # started it, and the agent appends what it drew after that. The box is
+    # the bootstrap and the one thing neither of them can have written, since
+    # nothing is running behind a chat until somebody talks and an agent that
+    # is not up cannot have drawn the box you start in.
     draws=PlaneSeed(
         exec_mode=EXEC_ASYNC,
         trigger=TRIGGER_NAV,
         ui=True,
         editable=False,
-        cells=(
-            CellSeed(cell_id="c_steps", name="steps", source=_CHAT_STEPS),
-            CellSeed(cell_id="c_input", name="input", source=_CHAT_INPUT),
-        ),
+        cells=(CellSeed(cell_id="c_input", name="input", source=_CHAT_INPUT),),
     ),
     # A process of its own, and down until somebody talks. ``manual`` is not
     # decoration here: a chat arrives complete and idle, and the first message
@@ -446,6 +429,10 @@ CHAT = Group(
         editable=False,
         cells=(CellSeed(cell_id=CHAT_TALK, name="talk", source=_CHAT_TALK),),
     ),
+    # One panel per turn, appended by the submit that started it. Not seeded,
+    # because a chat nobody has spoken in has no turn to show and an empty one
+    # standing at the top forever is a panel that says nothing.
+    appends=(CHAT_DISPLAY,),
 )
 
 

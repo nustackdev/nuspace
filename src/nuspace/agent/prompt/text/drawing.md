@@ -1,69 +1,67 @@
-# Drawing a turn
+# Drawing an answer
 
-A turn is a Cell. When you finish a reply you put one or more Cells on the
-Plane that draws this chat, and the last of them is how the person answers
-you back.
+The `cell` you hand back is the text of a Python module, the same kind of
+module you are writing right now: it imports what it needs, defines
+`out(plane, cell)`, and returns a Nu term. `plane` is the plane it is on and
+`cell` is its own id; take either, or neither, and the host passes what you
+asked for.
 
-```
-ops.chat.draw("<the ui plane>", SOURCE, name="answer", root=$ROOT)
-```
-
-`SOURCE` is the text of a Python module, the same kind of module you are
-writing right now: it imports what it needs, defines `out(plane, cell)`, and
-returns a Nu term. The host stores it as an ordinary Cell and runs it
-whenever somebody opens the chat, so what you drew is live -- bound to the
-store, redrawing itself when the store changes -- and the person can open it
-in the editor afterwards and change it.
-
-You write that module as a string inside the program you are emitting. Quote
-it with `'''`, which leaves the module free to hold ordinary `"""`
-docstrings. What it must not hold is another `'''`, because that ends your
-string in the middle of the program.
+The host stores it as an ordinary Cell and runs it whenever somebody opens the
+chat, so what you drew is live: bound to the store, redrawing itself when the
+store changes, and open in the editor afterwards if the person wants to change
+it.
 
 ## The rules
 
-**A turn draws, it never acts.** A Cell's program is stored and runs again
-every time somebody opens the chat, a week later, with nobody asking. So a
-turn's program writes to the ui and reads from the store, and never writes to
-the store on the way in. The one exception is a click: a button a person
-presses acts because a person asked for it right then. Acting is what you do
-from the Plane you run on, in the program you are writing now.
+**An answer draws, it never acts.** A Cell's program is stored and runs again
+every time somebody opens the chat, a week later, with nobody asking. So it
+writes to the ui and reads from the store, and never writes to the store on
+the way in. The one exception is a click: a button a person presses acts
+because a person asked for it right then.
 
-**Seed every input.** A bare ref exists in the browser from the moment
-something writes it. A `TextAreaRef("message")` that nothing writes is a box
-nobody can type in: it first appears on the submit that reads it, which is
-the one moment it is too late. Write every input once on the way in, even if
-only with `""`.
+**A ref you never write is a ref that is not there.** Writing one is what
+ships its whole chain to the browser, and the chain is what makes the node on
+that side: nothing else brings one into being. So a ref no write ever touches
+has nothing there to render, nothing to click, and nothing to read back. That
+is not a rule about inputs. A `ButtonRef` with only `on_click()` is a button
+nobody can press; a `TableRef` you meant to fill on the next change is empty
+until that change comes. Write every ref once on the way in, with `""`, with
+its label, with whatever it will end up holding.
 
 **Bracket the whole term** in `nustd.kv.auto_flow_atomic(..., scope=$ROOT)`.
-Every Cell does, including the ones that only draw. A drawn Cell is a program
-of its own and owns its own atomicity; nothing brackets it on the way in.
+A drawn Cell is a program of its own and owns its own atomicity; nothing
+brackets it on the way in.
 
 **Everything the person does comes back through `ops.chat.submit`.** A box, a
 row of buttons, a form, a slider with a confirm: whatever you draw, what a
 click finally does is hand one string to
-`ops.chat.submit("<chat plane>", "<chat cell>", text, root=$ROOT)`. That
-string is what wakes you and what the conversation keeps, so it has to read
-as something a person said. Empty text is dropped and starts nothing, so
-never submit a value that can be blank without checking it first.
 
-**Refs stack, in the order they were first written.** A Cell is one column
-and there are no layout containers inside it. Two things side by side is two
-Cells, not a Row.
+```
+ops.chat.submit("<chat plane>", "<chat cell>", text, ui_plane_id=plane, root=$ROOT)
+```
 
-**One `draw` is one Cell.** The id is minted while your program is being
-built, so a `draw` under a `ForEachDo` or a `ReactForever` would rewrite a
-single Cell over and over instead of appending. One call per Cell, written
-out.
+`ui_plane_id` is the plane the Cell is on, which is the `plane` your `out` was
+handed, and it is not optional: it is where the host puts the panel for the
+turn that press starts. That string is what wakes you and what the
+conversation keeps, so it has to read as something a person said. Empty text
+is dropped and starts nothing, so never submit a value that can be blank
+without checking it first.
+
+**Refs stack, in the order they were first written.** A Cell is one column and
+there are no layout containers inside it. So the response goes first and the
+way to answer it goes last, and that is the whole of the layout.
 
 **Name your refs for the Cell they are in, not for the chat.** Ids are unique
-inside one Cell and nothing wider, so `"answer"` and `"send"` are fine and
-are not going to collide with the turn before.
+inside one Cell and nothing wider, so `"answer"` and `"send"` are fine and are
+not going to collide with the turn before.
+
+**One `'''` and no more.** The Cell is a string inside the module you reply
+with. Use `'''` for it and `"""` inside it, and never `'''` inside it.
 
 ## The kit
 
-Every name below is a `nustd.ui` Ref. Build one with a string id, write it
-with the call shown. `nu.inspect.Inspect("nustd.ui")` lists all of them, and
+Every name below is a `nustd.ui` Ref. Build one with a string id, write it with
+the call shown. `nu.inspect.Inspect("nustd.ui")` lists all of them, and
 `Inspect("nustd.ui.refs.TableRef")` gives you one in full.
 
 Showing:
@@ -104,65 +102,11 @@ MonacoRef("id")        .set(source), .set_language("python")
 ProseRef("id")         .set(markdown)
 ```
 
-## Four turns, whole
+## Three answers, whole
 
-### A text answer
-
-The one you draw most. Nothing live in it, so nothing subscribes.
-
-```python
-import nu
-import nustd.kv
-import nustd.ui
-from $MODULE import $ROOT
-
-
-SAID = """\
-I renamed **Notes** to **Reading**. Nothing else on the plane changed, and
-the two Cells on it kept their order.
-"""
-
-
-def out(plane, cell):
-    """What just happened, as markdown.
-
-    This whole module is the string a turn's program quoted with `'''`, so
-    docstrings like this one are safe in here. Another `'''` would not be.
-    """
-    return nustd.kv.auto_flow_atomic(
-        nustd.ui.MarkdownRef("answer").set(nu.Str(SAID)),
-        scope=$ROOT,
-    )
-```
-
-### A box to answer in
-
-The default next move, and what the chat is seeded with. The box is emptied
-after the submit and not before, because the submit is what reads it.
-
-```python
-import nu
-import nustd.kv
-import nustd.ui
-from nuspace import ops
-from $MODULE import $ROOT
-
-
-def out(plane, cell):
-    """A box to write in and the button that sends it."""
-    box = nustd.ui.TextAreaRef("message")
-    send = nustd.ui.ButtonRef("send")
-    return nustd.kv.auto_flow_atomic(
-        box.set(nu.Str(""))
-        >> send.set_label(nu.Str("send"))
-        >> nu.ReactForever(
-            send.on_click(),
-            ops.chat.submit("p_chat_runs", "c_talk", nu.Str(box), root=$ROOT)
-            >> box.set(nu.Str("")),
-        ),
-        scope=$ROOT,
-    )
-```
+Each of these is the `cell` string, spelled out as the module it is. The one
+in "Answering" is the plain one: some markdown and a box. These are the other
+three shapes an answer takes.
 
 ### A set of choices
 
@@ -191,8 +135,10 @@ CHOICES = (
 
 
 def out(plane, cell):
-    """The question, and one button per way of answering it."""
-    drawn = nustd.ui.TextRef("asked").set(nu.Str("Rename Notes to Reading?"))
+    """What I found, then one button per way of answering it."""
+    drawn = nustd.ui.MarkdownRef("answer").set(
+        nu.Str("**Notes** has 2 Cells on it and nothing else points at it.")
+    )
     for index, (label, said) in enumerate(CHOICES):
         button = nustd.ui.ButtonRef(f"choice{index}")
         drawn = (
@@ -200,7 +146,7 @@ def out(plane, cell):
             >> button.set_label(nu.Str(label))
             >> nu.ReactForever(
                 button.on_click(),
-                ops.chat.submit(CHAT, TALK, nu.Str(said), root=$ROOT),
+                ops.chat.submit(CHAT, TALK, nu.Str(said), ui_plane_id=plane, root=$ROOT),
             )
         )
     return nustd.kv.auto_flow_atomic(drawn, scope=$ROOT)
@@ -225,8 +171,11 @@ from nuspace import ops
 from $MODULE import $ROOT
 
 
+CHAT = "p_chat_runs"
+TALK = "c_talk"
+
 #: What the row reader binds the Plane it is on under.
-ITEM = "_turn_plane"
+ITEM = "_answer_plane"
 
 
 def table():
@@ -255,13 +204,74 @@ def table():
 
 
 def out(plane, cell):
-    """The Planes, now, and again whenever one is added or dropped."""
+    """The Planes now, again whenever one moves, and a box under them."""
+    box = nustd.ui.InputRef("message")
+    send = nustd.ui.ButtonRef("send")
     return nustd.kv.auto_flow_atomic(
-        table() >> nu.ReactForever($ROOT.planes.on_change(), table()),
+        table()
+        >> box.set(nu.Str(""))
+        >> send.set_label(nu.Str("send"))
+        >> nu.ParallelAsync(
+            nu.ReactForever($ROOT.planes.on_change(), table()),
+            nu.ReactForever(
+                send.on_click(),
+                ops.chat.submit(CHAT, TALK, nu.Str(box), ui_plane_id=plane, root=$ROOT)
+                >> box.set(nu.Str("")),
+            ),
+        ),
         scope=$ROOT,
     )
 ```
 
-A form is the same shape as the choices: draw an `InputRef`, a `SelectRef`
-and a `ButtonRef`, seed all three, and have the click compose one sentence
-out of what they hold and submit that.
+Two things that both go on forever are two arms of a `ParallelAsync`, never a
+`>>`: sequenced, the second one would never start.
+
+### A form
+
+One sentence composed out of several fields, sent by one button. Seed every
+field on the way in, read them all in the click, and refuse to submit an empty
+one, because empty text is dropped and the person would press send and watch
+nothing happen.
+
+```python
+import nu
+import nustd.kv
+import nustd.ui
+from nuspace import ops
+from $MODULE import $ROOT
+
+
+CHAT = "p_chat_runs"
+TALK = "c_talk"
+
+GROUPS = ("page", "job", "chat")
+
+
+def out(plane, cell):
+    """What to call the new Plane, and which group to make it in."""
+    name = nustd.ui.InputRef("name")
+    group = nustd.ui.SelectRef("group")
+    make = nustd.ui.ButtonRef("make")
+    said = (
+        nu.Str("make a ")
+        + nu.Str(group)
+        + nu.Str(" plane called ")
+        + nu.Str(name)
+    )
+    return nustd.kv.auto_flow_atomic(
+        nustd.ui.MarkdownRef("answer").set(nu.Str("Tell me what to make and I will make it."))
+        >> name.set(nu.Str(""))
+        >> group.set_options(nu.List.of(*[nu.Str(one) for one in GROUPS]))
+        >> group.set(nu.Str(GROUPS[0]))
+        >> make.set_label(nu.Str("make it"))
+        >> nu.ReactForever(
+            make.on_click(),
+            nu.IfDo(
+                nu.Gt(nu.Len(nu.Str(name)), nu.Int(0)),
+                ops.chat.submit(CHAT, TALK, said, ui_plane_id=plane, root=$ROOT)
+                >> name.set(nu.Str("")),
+            ),
+        ),
+        scope=$ROOT,
+    )
+```

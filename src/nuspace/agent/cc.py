@@ -6,16 +6,16 @@ than an api key somebody has to find.
 
 **The session is the whole point of this file.** ``nustd.cc.Session`` is a
 bracket: the first prompt inside it starts a conversation, every later prompt
-resumes it. Opened around the chat's whole loop rather than around a turn, so
-the model keeps its own context from one turn of a run to the next and a
+resumes it. Opened around the chat's whole loop rather than around a pass, so
+the model keeps its own context from one pass of a turn to the next and a
 prompt carries only what is new. Without it every call is a cold start, the
-entire transcript has to ride in every prompt, and turn eight re-sends seven
-turns of code and diagnostics to be told one line.
+entire transcript has to ride in every prompt, and pass eight re-sends seven
+passes of code and diagnostics to be told one line.
 
 So :func:`ask` sends the newest message and nothing before it. That is right
-cold as well as warm: the first message of a run is the opening, which
+cold as well as warm: the first message of a turn is the opening, which
 carries the conversation whole, and every message after it is an observation
-about the turn that just ran.
+about the pass that just ran.
 """
 
 from __future__ import annotations
@@ -44,9 +44,9 @@ class Bot(nu.Service):
 
 
 def ask(*, messages: nu.Nu) -> nu.Nu:
-    """One turn's prompt: the newest message, and nothing before it.
+    """One pass's prompt: the newest message, and nothing before it.
 
-    What nuagent's turn calls. It hands over the whole transcript and this
+    What one pass calls. It hands over the whole transcript and this
     takes the last of it, because the rest is already in the session.
 
     Args:
@@ -78,9 +78,9 @@ def claude_code(
             matters once tools are allowed.
 
     Returns:
-        A callable ``endpoint(turns, *, system)``. ``turns`` is what to run
+        A callable ``endpoint(loop, *, system)``. ``loop`` is what to run
         once the endpoint is up, as a function of :func:`ask`; ``system`` is
-        the system prompt. It yields whatever ``turns`` yields.
+        the system prompt. It yields whatever ``loop`` yields.
 
     Notes:
         - The bracket is the lifetime. The client opens when the ``With`` is
@@ -90,7 +90,7 @@ def claude_code(
           nested ``With`` the loop opens still joins the session.
     """
 
-    def endpoint(turns: Callable[..., nu.Nu], *, system: str) -> nu.Nu:
+    def endpoint(loop: Callable[..., nu.Nu], *, system: str) -> nu.Nu:
         return nu.With(
             nustd.cc.bind(
                 Bot,
@@ -99,7 +99,7 @@ def claude_code(
                 allowed_tools=list(allowed_tools),
                 permission_mode=permission_mode,
             ),
-            body=nustd.cc.Session(turns(ask)),
+            body=nustd.cc.Session(loop(ask)),
         )
 
     return endpoint

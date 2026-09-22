@@ -1,11 +1,11 @@
-"""A plain model over the OpenAI wire: one call per turn, nothing remembered.
+"""A plain model over the OpenAI wire: one call per pass, nothing remembered.
 
 The other endpoint a chat can run against, for a model served somewhere on
 the network rather than a Claude Code on the machine. One wire covers Ollama,
 vLLM, OpenAI, OpenRouter and the rest, so which of them it is, is a base url.
 
 **Stateless, and the transcript is the state.** There is no session to keep:
-every call carries the system prompt and every message of the run, and the
+every call carries the system prompt and every message of the turn, and the
 endpoint remembers nothing between them. That is the opposite of
 :mod:`nuspace.agent.cc` and the two are deliberately not abstracted over each
 other. A session and a transcript are not two implementations of one idea:
@@ -57,19 +57,19 @@ def served_model(
             model is loaded off disk on the first call.
 
     Returns:
-        A callable ``endpoint(turns, *, system)``, the same shape
-        :func:`nuspace.agent.cc.claude_code` returns. ``turns`` is what to
-        run once the endpoint is up, as a function of the per-turn ask.
+        A callable ``endpoint(loop, *, system)``, the same shape
+        :func:`nuspace.agent.cc.claude_code` returns. ``loop`` is what to
+        run once the endpoint is up, as a function of the per-pass ask.
 
     Notes:
         - The http client opens when the ``With`` is entered and closes when
           it exits, so the bracket has to be around the chat rather than
-          around a turn even though nothing is remembered inside it.
+          around a pass even though nothing is remembered inside it.
     """
 
-    def endpoint(turns: Callable[..., nu.Nu], *, system: str) -> nu.Nu:
+    def endpoint(loop: Callable[..., nu.Nu], *, system: str) -> nu.Nu:
         def ask(*, messages: nu.Nu) -> nu.Nu:
-            """One turn's call: the system prompt, then every message of the run."""
+            """One pass's call: the system prompt, then every message of the turn."""
             framing = nu.List.of(nu.Dict.of(role=nu.Str("system"), content=nu.Str(system)))
             return Bot.chat(messages=framing + nu.List(messages))
 
@@ -81,7 +81,7 @@ def served_model(
                 api_key=api_key,
                 timeout=timeout,
             ),
-            body=turns(ask),
+            body=loop(ask),
         )
 
     return endpoint

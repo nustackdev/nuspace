@@ -18,10 +18,13 @@ same way and a reader cannot tell them apart.
 A message is a plain ``{role, text}`` dict rather than a Shape, so appending
 is one call a model can write without looking anything up.
 
-:func:`submit` is the one op here that reaches past the conversation. A chat
-is made at ``trigger: manual`` and the first message is what starts it, so the
-append and the flip land in one commit or a chat is observable holding a
-question with nothing running to answer it.
+:func:`submit` is the one op here that reaches past the conversation, and it
+reaches twice. A chat is made at ``trigger: manual`` and the first message is
+what starts it, so the append and the flip land in one commit or a chat is
+observable holding a question with nothing running to answer it. That same
+commit appends the turn's display Cell, because the panel has to be on the
+screen the instant somebody presses send, and the agent that would otherwise
+draw it is not awake yet.
 
 **A turn answers by drawing.** The model's reply is not a line of text in a
 timeline nuspace ships: it is one or more Cells appended to the Plane that
@@ -37,50 +40,67 @@ person does through whatever the model drew comes back here as ``{role,
 text}``, so everything that reads a chat reads one shape however the question
 was put. Cells are presentation, ``messages`` is what happened.
 
-``steps`` is the third thing kept here and the shortest lived: what the agent
-is doing while it is doing it, the host's write, thrown away when the next
-turn starts. It is beside ``messages`` because it is about the same run and a
-caller holding the chat's address already holds it, and it is a list of its
-own because it is not the conversation. Nobody said any of it, and a person
-reading back next week wants none of it.
+``trace`` is the third thing kept here, and the one thing kept somewhere else.
+It is what the agent is doing while it is doing it: the host's fixed states
+between the links of a pass, and the model's own notes about what it changed.
+One turn's trace lives in **that turn's display Cell's own state**, because a
+Cell's state is where a Cell's state goes. It used to be one list beside the
+conversation that every turn emptied, and a list that gets emptied is a panel
+that can only ever show the turn you are standing in: scrolling back to turn
+one showed turn four's work, or nothing. A list per display Cell is what makes
+a chat readable a week later, and it costs no bookkeeping, because the Cell
+that draws a turn is the Cell that turn writes into.
 """
 
 from __future__ import annotations
 
 import nu
-from nuspace.ops.cell import add_cell
+from nuspace.ops.cell import add_cell, cell_writes
+from nuspace.ops.groups import CHAT_DISPLAY, CHAT_DISPLAY_ID, CHAT_DISPLAY_NAME
 from nuspace.ops.utils import atomic
 from nuspace.shapes import RESTART_NO, TRIGGER_BOOT, Space
 
 
 __all__ = [
+    "CYCLES",
+    "CYCLE_ANSWER",
+    "CYCLE_WORK",
+    "DISPLAY",
+    "KINDS",
+    "KIND_DONE",
+    "KIND_FAILED",
+    "KIND_HEARD",
+    "KIND_NOTE",
+    "KIND_RUNNING",
+    "KIND_THINKING",
+    "KIND_WRITING",
     "MESSAGES",
     "ROLES",
     "ROLE_AGENT",
     "ROLE_SYSTEM",
     "ROLE_USER",
-    "STEPS",
-    "STEP_DONE",
-    "STEP_DREW",
-    "STEP_FAILED",
-    "STEP_KINDS",
-    "STEP_THINKING",
-    "STEP_WROTE",
+    "TRACE",
     "changed",
-    "clear_steps",
     "draw",
+    "latest_display",
     "messages_of",
+    "note",
     "say",
-    "step",
-    "steps_changed",
-    "steps_of",
+    "state",
     "submit",
+    "trace_changed",
+    "trace_of",
     "unanswered",
 ]
 
 
 #: The key the conversation is kept under, in the talking Cell's own state.
 MESSAGES = "messages"
+
+#: The key the id of this turn's display Cell is kept under, beside it. One
+#: fact, written by the op that made the Cell, rather than a number two
+#: callers work out separately and disagree about.
+DISPLAY = "display"
 
 #: A person typed it.
 ROLE_USER = "user"
@@ -97,32 +117,56 @@ ROLE_SYSTEM = "system"
 ROLES = (ROLE_USER, ROLE_AGENT, ROLE_SYSTEM)
 
 
-#: The key the run log is kept under, in that same state.
-STEPS = "steps"
+#: The key the trace is kept under, in the display Cell's own state.
+TRACE = "trace"
 
-#: It is working, and has nothing to show for it yet.
-STEP_THINKING = "thinking"
+#: Doing what the person asked for, pass after pass, until the model is done.
+CYCLE_WORK = "work"
 
-#: It put a Cell on the Plane that draws the chat.
-STEP_DREW = "drew"
+#: Drawing what the person sees: the response and the next input form, in one
+#: Cell, constructed and validated before it is appended.
+CYCLE_ANSWER = "answer"
 
-#: It changed the Space: a Plane, a Cell, a program. Every write that is not
-#: a drawing.
-STEP_WROTE = "wrote"
+#: The two phases of a turn, in the order a turn takes them. A closed pair:
+#: a turn works and then it answers, and there is no third thing to be doing.
+CYCLES = (CYCLE_WORK, CYCLE_ANSWER)
 
-#: Something in the turn went wrong. About the run, never about the work,
-#: which is the model's to report.
-STEP_FAILED = "failed"
+#: The turn started, and this is what the person said.
+KIND_HEARD = "heard"
 
-#: The turn is over. The last step a turn takes, and what tells a reader the
-#: list in front of it is finished rather than stalled.
-STEP_DONE = "done"
+#: A model call is out, and this is the prose that came back from the one
+#: before it. It is working and has nothing to show for it yet.
+KIND_THINKING = "thinking"
 
-#: Every kind a reader knows, and a closed set because a step is drawn *by*
-#: its kind: one shape per kind is the whole of what makes the panel uniform,
-#: and a kind nobody knows has no shape to draw. Anything else reads as
+#: Source was pulled out of the reply. Which pass this is, against the budget.
+KIND_WRITING = "writing"
+
+#: The program constructed and ran, and this is what it came to.
+KIND_RUNNING = "running"
+
+#: It did not construct, or it raised. The diagnostic's first line.
+KIND_FAILED = "failed"
+
+#: A cycle finished, because the model said so in the program it wrote.
+KIND_DONE = "done"
+
+#: The model's own line about what it changed. The one kind the host does not
+#: write: what a program was for is known only to whoever wrote it.
+KIND_NOTE = "note"
+
+#: Every kind a reader knows, and a closed set because a row is drawn *by* its
+#: kind: one shape per kind is the whole of what makes the panel uniform, and
+#: a kind nobody knows has no shape to draw. Anything else reads as
 #: ``thinking``, which is the kind that claims the least.
-STEP_KINDS = (STEP_THINKING, STEP_DREW, STEP_WROTE, STEP_FAILED, STEP_DONE)
+KINDS = (
+    KIND_HEARD,
+    KIND_THINKING,
+    KIND_WRITING,
+    KIND_RUNNING,
+    KIND_FAILED,
+    KIND_DONE,
+    KIND_NOTE,
+)
 
 
 #: What the row reader binds the message it is on under. Parallel arms share
@@ -130,21 +174,32 @@ STEP_KINDS = (STEP_THINKING, STEP_DREW, STEP_WROTE, STEP_FAILED, STEP_DONE)
 _ITEM = "_nx_said"
 _item = nu.DictAttrRef(_ITEM)
 
-#: The same for a step, and a second name rather than the one above. One Cell
-#: can draw the conversation and the run log in two parallel arms, and two
+#: The same for a trace row, and a second name rather than the one above. One
+#: Cell can draw the conversation and the trace in two parallel arms, and two
 #: Maps binding one attr would each be reading the other's element.
-_STEP_ITEM = "_nx_step"
-_step_item = nu.DictAttrRef(_STEP_ITEM)
+_ROW = "_nx_row"
+_row = nu.DictAttrRef(_ROW)
+
+#: And a third, for counting what a person has said. The count is built inside
+#: :func:`submit`, which is also appending a message, so it cannot borrow the
+#: name the message reader uses.
+_SPOKE = "_nx_spoke"
+_spoke = nu.DictAttrRef(_SPOKE)
 
 
-def _held(plane_id: nu.StrArg, cell_id: nu.StrArg, root: type[Space]) -> nu.Nu:
-    """The leaf the conversation is kept in.
+def _own(plane_id: nu.StrArg, cell_id: nu.StrArg, root: type[Space]) -> nu.Nu:
+    """A Cell's own state, whichever Cell it is.
 
     A fresh ref at every call site. One node in two tree positions is one
     node, and a subscription is a handle the first holder to end would close
     under the other.
     """
-    return root.planes[plane_id].cells[cell_id].state[MESSAGES]
+    return root.planes[plane_id].cells[cell_id].state
+
+
+def _held(plane_id: nu.StrArg, cell_id: nu.StrArg, root: type[Space]) -> nu.Nu:
+    """The leaf the conversation is kept in. Fresh, for the reason above."""
+    return _own(plane_id, cell_id, root)[MESSAGES]
 
 
 def _said(plane_id: nu.StrArg, cell_id: nu.StrArg, root: type[Space]) -> nu.Nu:
@@ -157,25 +212,71 @@ def _said(plane_id: nu.StrArg, cell_id: nu.StrArg, root: type[Space]) -> nu.Nu:
     return nu.If(held.exists(), nu.List(held), nu.List.of())
 
 
-def _kept(plane_id: nu.StrArg, cell_id: nu.StrArg, root: type[Space]) -> nu.Nu:
-    """The leaf the run log is kept in.
+def _turn(plane_id: nu.StrArg, cell_id: nu.StrArg, root: type[Space]) -> nu.Nu:
+    """Which turn a chat is on: how many times a person has said something.
 
-    Fresh at every call site for the reason :func:`_held` is, and beside it
-    rather than under it: one leaf per list, so clearing the steps at the top
-    of a turn cannot reach the conversation.
+    A turn is one input looped until done, so counting inputs counts turns,
+    and nothing has to store a number that a restart could lose. It only ever
+    goes up, and it goes up exactly once per :func:`submit`, which is what
+    makes ``c_disp_<n>`` unique without minting anything: two people pressing
+    send at the same moment are two messages, so they are two numbers.
+
+    A reply the model appends does not move it, which is the point: the whole
+    of a turn, however many passes it takes, writes into the one panel.
     """
-    return root.planes[plane_id].cells[cell_id].state[STEPS]
+    return nu.Len(
+        nu.List(
+            nu.Collect(
+                nu.Filter(
+                    nu.List(_said(plane_id, cell_id, root)),
+                    nu.Eq(
+                        nu.ToStr(_spoke.get_item(nu.Str("role"), nu.Str(ROLE_SYSTEM))),
+                        nu.Str(ROLE_USER),
+                    ),
+                    key=_SPOKE,
+                )
+            )
+        )
+    )
 
 
-def _taken(plane_id: nu.StrArg, cell_id: nu.StrArg, root: type[Space]) -> nu.Nu:
-    """The steps as they lie, empty where the turn has taken none.
+def _numbered(stem: str, turn: nu.Nu) -> nu.Nu:
+    """``stem`` with the turn number after it: an id, or what it is called."""
+    return nu.Str(stem) + nu.ToStr(turn)
 
-    Floored like :func:`_said`, and a chat spends most of its life here: the
-    leaf is unwritten until the first turn clears it, and an unwritten leaf
-    reads EMPTY, which collapses every Query that touches it to INVALID.
+
+def _addressed(disp_plane_id: nu.StrArg, disp_cell_id: nu.StrArg, root: type[Space]) -> nu.Nu:
+    """Whether these ids name a display Cell that is really there.
+
+    The emptiness test is not redundant and it has to come first. A store key
+    may not hold an empty segment, so ``contains("")`` raises out of the codec
+    rather than reading as absent, and :func:`latest_display` answers ``""``
+    for a chat nobody has spoken in. ``And`` short-circuiting is what keeps
+    the guard total.
     """
-    kept = _kept(plane_id, cell_id, root)
-    return nu.If(kept.exists(), nu.List(kept), nu.List.of())
+    cells = root.planes[disp_plane_id].cells
+    return nu.And(nu.Ne(nu.ToStr(disp_cell_id), nu.Str("")), cells.contains(disp_cell_id))
+
+
+def _kept(disp_plane_id: nu.StrArg, disp_cell_id: nu.StrArg, root: type[Space]) -> nu.Nu:
+    """The leaf a turn's trace is kept in. Fresh at every call site."""
+    return _own(disp_plane_id, disp_cell_id, root)[TRACE]
+
+
+def _traced(disp_plane_id: nu.StrArg, disp_cell_id: nu.StrArg, root: type[Space]) -> nu.Nu:
+    """The trace as it lies, empty where the turn has written none.
+
+    Floored like :func:`_said`, and guarded on the id besides: a display Cell
+    exists from the submit that made it, but the id read back for a chat
+    nobody has spoken in is ``""``, and an empty key segment raises in the
+    codec rather than reading as absent.
+    """
+    kept = _kept(disp_plane_id, disp_cell_id, root)
+    return nu.If(
+        nu.And(nu.Ne(nu.ToStr(disp_cell_id), nu.Str("")), kept.exists()),
+        nu.List(kept),
+        nu.List.of(),
+    )
 
 
 # --- write -------------------------------------------------------------------
@@ -203,16 +304,19 @@ def say(
         cell_id: the Cell on it that holds the conversation.
         role: who is speaking. Not validated: an unknown role renders as
             ``system`` rather than disappearing, and a store that refused one
-            would be a store that can lose a message.
+            would be a store that can lose a message. ``user`` is the one to
+            leave alone: a person's word arrives through :func:`submit`, which
+            also puts up the panel the answer is narrated into, and a ``user``
+            message appended here would be a turn with nowhere to say what it
+            is doing.
         text: what was said, verbatim.
         root: the Space shape class.
     """
     cells = root.planes[plane_id].cells
-    state = cells[cell_id].state
     return atomic(
         nu.IfDo(
             cells.contains(cell_id),
-            state.set_item(
+            _own(plane_id, cell_id, root).set_item(
                 MESSAGES,
                 nu.List(_said(plane_id, cell_id, root))
                 + nu.List.of(nu.Dict.of(role=nu.Str(role), text=nu.Str(text))),
@@ -227,19 +331,31 @@ def submit(
     cell_id: nu.StrArg,
     text: nu.StrArg,
     *,
+    ui_plane_id: nu.StrArg,
     root: type[Space] = Space,
 ) -> nu.Nu:
-    """A person said something, and the first thing they say starts the chat.
+    """A person said something: start the chat, and put this turn's panel up.
 
-    Two facts in one commit, which is why this is an op rather than two. A
-    chat is made at ``trigger: manual``, so nothing is running behind it until
-    somebody talks; the first message flips the Plane to ``boot`` and the
+    Three facts in one commit, which is why this is an op rather than three.
+
+    A chat is made at ``trigger: manual``, so nothing is running behind it
+    until somebody talks; the first message flips the Plane to ``boot`` and the
     runtime brings it up. Every message after that only appends, because the
     Plane is already up and hears the write.
 
+    The third is the display Cell, and it is the host's rather than the
+    agent's for one reason: a run takes as long as it takes, and the panel
+    that says what it is doing has to be on the screen before it has done
+    anything. An agent that drew its own panel would draw it after waking, on
+    the far side of the first model call, which is exactly the minute the
+    person is watching a blank chat. So the host draws it, on the same press
+    that asked the question.
+
     The emptiness test comes first in the sequence and that is load bearing: a
     Transaction sees its own writes, so asking after the append would always
-    answer no and a chat would never start.
+    answer no and a chat would never start. The turn number is the other side
+    of that coin and is read *after* the append on purpose, so the panel this
+    press makes is numbered for the message this press wrote.
 
     Empty text is dropped rather than appended. A submit with nothing in it is
     a stray click, and a chat that started on one would ask a model an empty
@@ -249,10 +365,16 @@ def submit(
         plane_id: the Plane that runs the chat.
         cell_id: the Cell on it that holds the conversation.
         text: what the person wrote.
+        ui_plane_id: the Plane that draws the chat, which is where the panel
+            goes. The append alone is a no-op when that Plane is not there.
         root: the Space shape class.
     """
     plane = root.planes[plane_id]
-    state = plane.cells[cell_id].state
+
+    def turn() -> nu.Nu:
+        """Which turn this is, read after the append. Fresh at each site."""
+        return _turn(plane_id, cell_id, root)
+
     return atomic(
         nu.IfDo(
             nu.And(
@@ -263,10 +385,21 @@ def submit(
                 nu.Eq(nu.Len(_said(plane_id, cell_id, root)), nu.Int(0)),
                 plane.props.trigger.set(nu.Str(TRIGGER_BOOT)),
             )
-            >> state.set_item(
+            >> _own(plane_id, cell_id, root).set_item(
                 MESSAGES,
                 nu.List(_said(plane_id, cell_id, root))
                 + nu.List.of(nu.Dict.of(role=nu.Str(ROLE_USER), text=nu.Str(text))),
+            )
+            >> _own(plane_id, cell_id, root).set_item(DISPLAY, _numbered(CHAT_DISPLAY_ID, turn()))
+            # The panel is about the Cell it is on and about nothing else, so
+            # there is no subject to bake into it: it reads the trace out of
+            # its own state, under its own two ids.
+            >> cell_writes(
+                ui_plane_id,
+                CHAT_DISPLAY.render("", root=root),
+                cell_id=_numbered(CHAT_DISPLAY_ID, turn()),
+                name=_numbered(CHAT_DISPLAY_NAME, turn()),
+                root=root,
             ),
         ),
         root,
@@ -313,9 +446,10 @@ def draw(
     return add_cell(ui_plane_id, source, name=name, restart=RESTART_NO, root=root)
 
 
-def step(
-    plane_id: nu.StrArg,
-    cell_id: nu.StrArg,
+def state(
+    disp_plane_id: nu.StrArg,
+    disp_cell_id: nu.StrArg,
+    cycle: nu.StrArg,
     kind: nu.StrArg,
     text: nu.StrArg,
     *,
@@ -325,59 +459,72 @@ def step(
 
     Not a message, and the difference is who it is for. A message was said to
     somebody and is kept forever, which is why nothing edits or drops one. A
-    step is the agent narrating itself while the turn runs: the host writes
-    it, the next turn throws it away, and somebody reading the conversation
-    back later should see none of it.
+    trace row is the agent narrating itself while the turn runs: the host
+    writes it between the links of a pass, and somebody reading the
+    conversation back later wants none of it.
 
     Appends rather than replaces, so a slow turn reads as a list that grows
-    instead of one line that flickers.
+    instead of one line that flickers. Nothing ever clears it: the list
+    belongs to one turn's panel and that turn is over when it stops growing.
 
-    Guarded on the Cell for the reason :func:`say` is: a write under a key
-    nobody made vivifies the row, and a chat deleted mid turn would grow a
-    Cell out of a late step.
+    Guarded on the display Cell for the reason :func:`say` is guarded on the
+    talking one: a write under a key nobody made vivifies the row, and a chat
+    deleted mid turn would grow a Cell out of a state arriving late.
 
     Args:
-        plane_id: the Plane that runs the chat.
-        cell_id: the Cell on it that holds the conversation.
-        kind: one of :data:`STEP_KINDS`, which is what a reader draws it by.
-            Not validated, for the reason a role is not: an unknown kind reads
-            as ``thinking`` rather than disappearing, and a store that refused
+        disp_plane_id: the Plane that draws the chat.
+        disp_cell_id: the display Cell this turn writes into, which is what
+            :func:`latest_display` answers.
+        cycle: which half of the turn this happened in, one of
+            :data:`CYCLES`. Not validated, for the reason a kind is not.
+        kind: one of :data:`KINDS`, which is what a reader draws it by. Not
+            validated, for the reason a role is not: an unknown kind reads as
+            ``thinking`` rather than disappearing, and a store that refused
             one would be a store that can lose what happened.
         text: what to show for it, in one line.
         root: the Space shape class.
     """
-    cells = root.planes[plane_id].cells
-    state = cells[cell_id].state
     return atomic(
         nu.IfDo(
-            cells.contains(cell_id),
-            state.set_item(
-                STEPS,
-                nu.List(_taken(plane_id, cell_id, root))
-                + nu.List.of(nu.Dict.of(kind=nu.Str(kind), text=nu.Str(text))),
+            _addressed(disp_plane_id, disp_cell_id, root),
+            _own(disp_plane_id, disp_cell_id, root).set_item(
+                TRACE,
+                nu.List(_traced(disp_plane_id, disp_cell_id, root))
+                + nu.List.of(nu.Dict.of(cycle=nu.Str(cycle), kind=nu.Str(kind), text=nu.Str(text))),
             ),
         ),
         root,
     )
 
 
-def clear_steps(plane_id: nu.StrArg, cell_id: nu.StrArg, *, root: type[Space] = Space) -> nu.Nu:
-    """Throw away the steps, so a turn starts on a clean list.
+def note(
+    disp_plane_id: nu.StrArg,
+    disp_cell_id: nu.StrArg,
+    cycle: nu.StrArg,
+    text: nu.StrArg,
+    *,
+    root: type[Space] = Space,
+) -> nu.Nu:
+    """Say what was changed, in the model's own words. Its one row to write.
 
-    At the top of a turn and not at the bottom, which is the difference
-    between a panel a person can read and one that blanks. What the last turn
-    did stays up until the next turn has something of its own to show.
+    :func:`state` with the kind already filled in, and it exists as a separate
+    name because of who calls it. The host writes states from the loop, where
+    an extra argument costs nothing. This one the model writes from inside a
+    program it is composing, so it is the one call in this module whose
+    spelling has to fit in a sentence of a prompt.
 
-    Written empty rather than erased: an erase on a leaf nothing wrote raises,
-    and every chat's first turn clears before it has ever stepped.
+    The host cannot write this row for it. What a program was *for* is known
+    only to whoever wrote it, and "renamed the notes plane" is a sentence no
+    host composes out of a term it did not author.
 
-    Guarded on the Cell, because a write under a key nobody made makes one.
+    Args:
+        disp_plane_id: the Plane that draws the chat.
+        disp_cell_id: the display Cell this turn writes into.
+        cycle: which half of the turn this happened in, one of :data:`CYCLES`.
+        text: what changed, in one line.
+        root: the Space shape class.
     """
-    cells = root.planes[plane_id].cells
-    return atomic(
-        nu.IfDo(cells.contains(cell_id), cells[cell_id].state.set_item(STEPS, nu.List.of())),
-        root,
-    )
+    return state(disp_plane_id, disp_cell_id, cycle, KIND_NOTE, text, root=root)
 
 
 # --- read --------------------------------------------------------------------
@@ -404,32 +551,59 @@ def messages_of(plane_id: nu.StrArg, cell_id: nu.StrArg, *, root: type[Space] = 
     )
 
 
-def steps_of(plane_id: nu.StrArg, cell_id: nu.StrArg, *, root: type[Space] = Space) -> nu.Nu:
-    """What the agent is doing, one ``{kind, text}`` dict each, oldest first.
+def trace_of(
+    disp_plane_id: nu.StrArg, disp_cell_id: nu.StrArg, *, root: type[Space] = Space
+) -> nu.Nu:
+    """One turn's trace, ``{cycle, kind, text}`` each, oldest first.
 
     Rebuilt key by key rather than handed over as it lies, for the reason
     :func:`messages_of` is: a list written into a kv leaf reads back as a
     *view*, and a view is a live cursor into the store rather than a value, so
     the bare list is a frame msgpack cannot pack and an arm that reports
-    itself once per write. The Cell drawing this redraws on every step, which
-    is the one place that failure would show up most.
+    itself once per write. The Cell drawing this redraws on every row, which
+    is the one place that failure would show up loudest.
 
-    A step with nothing under ``kind`` floors to ``thinking`` rather than
-    dropping out of the list: it is still something that happened, and that is
-    the kind which says the least about it. A kind nobody knows comes through
-    as it was written, for the same reason an invented role does, and it is
-    the reader that decides what an unknown one looks like.
+    A row with nothing under ``kind`` floors to ``thinking`` and one with
+    nothing under ``cycle`` floors to ``work``, rather than dropping out of the
+    list: it is still something that happened, and those are the two that claim
+    the least about it. A word nobody knows comes through as it was written,
+    for the same reason an invented role does, and it is the reader that
+    decides what an unknown one looks like.
     """
     return nu.Collect(
         nu.Map(
-            nu.List(_taken(plane_id, cell_id, root)),
+            nu.List(_traced(disp_plane_id, disp_cell_id, root)),
             nu.Dict.of(
-                kind=nu.ToStr(_step_item.get_item(nu.Str("kind"), nu.Str(STEP_THINKING))),
-                text=nu.ToStr(_step_item.get_item(nu.Str("text"), nu.Str(""))),
+                cycle=nu.ToStr(_row.get_item(nu.Str("cycle"), nu.Str(CYCLE_WORK))),
+                kind=nu.ToStr(_row.get_item(nu.Str("kind"), nu.Str(KIND_THINKING))),
+                text=nu.ToStr(_row.get_item(nu.Str("text"), nu.Str(""))),
             ),
-            key=_STEP_ITEM,
+            key=_ROW,
         )
     )
+
+
+def latest_display(plane_id: nu.StrArg, cell_id: nu.StrArg, *, root: type[Space] = Space) -> nu.Nu:
+    """The display Cell the running turn should be writing into.
+
+    The id only, because the Plane it is on is the one the chat draws to, and
+    whoever is asking this is holding that id already: the agent was handed it
+    and the panel is running on it.
+
+    Read back rather than worked out again. :func:`submit` is what made the
+    Cell, so :func:`submit` is what says which one it is, and a second caller
+    counting messages for itself would be a second answer to one question.
+
+    ``""`` for a chat nobody has spoken in, which is a chat with no panel yet.
+    Every write here is guarded against that, so a row addressed at it goes
+    nowhere instead of raising.
+
+    Args:
+        plane_id: the Plane that runs the chat.
+        cell_id: the Cell on it that holds the conversation.
+        root: the Space shape class.
+    """
+    return nu.ToStr(_own(plane_id, cell_id, root).get_item(DISPLAY, nu.Str("")))
 
 
 def unanswered(plane_id: nu.StrArg, cell_id: nu.StrArg, *, root: type[Space] = Space) -> nu.Nu:
@@ -470,22 +644,29 @@ def changed(plane_id: nu.StrArg, cell_id: nu.StrArg, *, root: type[Space] = Spac
     chat answers the message it came up holding and then goes deaf. A watch on
     the container above it carries.
 
-    So this hears the steps too, because those are in that same state. Every
-    reader here re-asks what was actually said, so a wake on a step is a turn
-    round a loop that finds nothing owed and goes back to waiting.
+    So this hears the display id too, which is written by the same press that
+    writes the message and says nothing new. It no longer hears the trace at
+    all: a turn narrates itself into the panel's state, on the Plane that
+    draws, so the loop is not woken once a pass by a row it does not read.
     """
-    return root.planes[plane_id].cells[cell_id].state.on_change()
+    return _own(plane_id, cell_id, root).on_change()
 
 
-def steps_changed(plane_id: nu.StrArg, cell_id: nu.StrArg, *, root: type[Space] = Space) -> nu.Nu:
-    """A fresh subscription that fires on every step.
+def trace_changed(
+    disp_plane_id: nu.StrArg, disp_cell_id: nu.StrArg, *, root: type[Space] = Space
+) -> nu.Nu:
+    """A fresh subscription that fires on every row of one turn's trace.
 
-    The same container :func:`changed` watches, and named twice on purpose. A
-    child scoped watch never carries to a worker, so the finest thing that can
-    wake one is the Cell's own state, and that one container holds both lists.
-    Two names because the two callers are asking two questions and neither
-    should be spelling a ref chain of its own, and because a subscription is a
-    handle either way: two arms sharing one node share one handle, and the
-    first of them to end closes it under the other.
+    The display Cell's own state, which is the container the trace is a key
+    in. A child scoped watch never carries to a worker, so the finest thing
+    that can wake one is a Cell's own state, and nothing else is kept in this
+    one: a panel drawing a turn is woken by that turn and by nothing else.
+
+    Fresh at each call site, because a subscription is a handle: two arms
+    sharing one node share one handle, and the first of them to end closes it
+    under the other.
+
+    Called with the panel's own two ids, so there is no empty id to guard
+    against here the way the writes guard against one.
     """
-    return root.planes[plane_id].cells[cell_id].state.on_change()
+    return _own(disp_plane_id, disp_cell_id, root).on_change()
