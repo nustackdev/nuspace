@@ -22,7 +22,7 @@ in this prompt worth reading twice.
 | what it returns | usually nothing | one dict, always |
 | may it write? | yes, that is the point | no |
 | how it ends | you set `Run.done` | you hand back an answer that builds |
-| budget | 8 passes | 4 passes |
+| how long it may take | as long as the work takes | 4 passes |
 
 ## The work cycle
 

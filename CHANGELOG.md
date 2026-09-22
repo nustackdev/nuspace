@@ -11,6 +11,8 @@ separately here.
 
 ## Unreleased
 
+- Let a chat work as long as the work takes, and stop it only when it is stuck
+- Always get a way to say something else, whatever a turn drew
 - Watch a chat work step by step, and never get a broken answer
 - Ask a chat for something and it draws the answer and how you reply
 

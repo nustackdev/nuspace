@@ -51,6 +51,7 @@ __all__ = [
     "reply_of",
     "said_line_of",
     "session_of",
+    "stalled_of",
 ]
 
 
@@ -116,6 +117,17 @@ def reply_of(plane_id: nu.StrArg, cell_id: nu.StrArg, *, root: type[Space] = Spa
     """
     reply = _floored(session_of(plane_id, cell_id, root=root).reply)
     return nu.Str(nu.List(reply.split(nu.Str(FENCE)))[nu.Int(0)]).strip()
+
+
+def stalled_of(plane_id: nu.StrArg, cell_id: nu.StrArg, *, root: type[Space] = Space) -> nu.Nu:
+    """Why a cycle gave up this turn, in a sentence. ``""`` where none did.
+
+    What the host says into the conversation when a turn ended owing a reply.
+    It is composed by whichever cycle stopped, because that is the one thing
+    that knows whether it was stuck or out of passes and what it was stuck on,
+    and a host that composed it from here would be guessing.
+    """
+    return _floored(session_of(plane_id, cell_id, root=root).stalled)
 
 
 def outcome_of(plane_id: nu.StrArg, cell_id: nu.StrArg, *, root: type[Space] = Space) -> nu.Nu:
@@ -190,9 +202,11 @@ def cleared(plane_id: nu.StrArg, cell_id: nu.StrArg, *, root: type[Space] = Spac
     for as long as its first model call took, and an answer cycle that started
     holding the last turn's answer would draw it again.
 
-    ``messages`` is not here because the turn sets it outright, and ``passes``
-    is not because each cycle zeroes it. What is left is the slots a pass only
-    ever overwrites, which is the same thing said one turn too late.
+    ``messages`` is not here because the turn sets it outright, and ``passes``,
+    ``repeats`` and ``failure`` are not because each cycle zeroes its own. What
+    is left is the slots a pass only ever overwrites, which is the same thing
+    said one turn too late, and ``stalled``, which is a turn's and is read at
+    the end of one.
 
     Written empty rather than erased: an erase on a leaf nothing wrote raises,
     and every chat's first turn clears before it has ever had a pass.
@@ -211,7 +225,8 @@ def cleared(plane_id: nu.StrArg, cell_id: nu.StrArg, *, root: type[Space] = Spac
             >> session.outcome.set(nu.Str(""))
             >> session.observation.set(nu.Str(""))
             >> session.answer.set(nu.Dict.of())
-            >> session.drawn.set(nu.Bool(False)),
+            >> session.drawn.set(nu.Bool(False))
+            >> session.stalled.set(nu.Str("")),
         ),
         root,
     )

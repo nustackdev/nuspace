@@ -44,6 +44,9 @@ __all__ = [
     "OF",
     "OUT_OF_PASSES",
     "PASS",
+    "SAME",
+    "STUCK",
+    "TIMES",
     "Panel",
     "asked",
     "clipped",
@@ -55,9 +58,9 @@ __all__ = [
 #: What a pass's own row starts with, before the count.
 PASS = "pass "  # noqa: S105 -- a panel row, not a secret
 
-#: What separates the count from the budget. A count on its own says a cycle
-#: is moving; a count against a budget says whether it is about to run out,
-#: which is the question somebody watching a slow chat is actually asking.
+#: What separates the count from what it is counting against. A count on its
+#: own says a cycle is moving; a count against a ceiling says how much room is
+#: left, which is the question somebody watching a slow chat is asking.
 OF = " of "
 
 #: The last row of a cycle that ended because the model said so. Which cycle
@@ -67,6 +70,16 @@ FINISHED = "finished: "
 
 #: A cycle that used its passes without the model ever saying it was done.
 OUT_OF_PASSES = "out of passes: "
+
+#: A cycle that stopped because it was going in circles rather than because it
+#: ran long. Which cycle goes after it.
+STUCK = "stuck: "
+
+#: And then how many times the same thing went wrong.
+SAME = " failed the same way "
+
+#: And then the thing itself, which is the one row here worth reading twice.
+TIMES = " times: "
 
 #: The loop itself dying, with the error after it. The model's own mistakes
 #: never reach this: a module that will not construct is fed back to it and
@@ -182,18 +195,23 @@ class Panel:
             self.state(cycle, chat.KIND_THINKING, clipped(self._said())),
         )
 
-    def writing(self, cycle: nu.StrArg, *, budget: int) -> nu.Nu:
-        """Which pass this is, against the cycle's budget, once source is out.
+    def writing(self, cycle: nu.StrArg, *, budget: nu.IntArg) -> nu.Nu:
+        """Which pass this is, against the cycle's ceiling, once source is out.
 
         The backstop under everything else in the panel. A model that narrates
         nothing and draws nothing still moves this, so a turn is never a list
-        that stops growing, and a count against the budget is what tells a
-        reader the difference between a cycle working and a cycle circling.
+        that stops growing, and a count somebody can read is what tells the
+        difference between a cycle working and a cycle circling.
+
+        The ceiling is a term and not a number, because for the work cycle it
+        is a fact about the chat that anything can raise while the chat is
+        running. A row is what says the new one took.
         """
         counted = (
             nu.Str(PASS)
             + nu.ToStr(memory.passes_of(self.plane_id, self.cell_id, root=self.root))
-            + nu.Str(f"{OF}{budget}")
+            + nu.Str(OF)
+            + nu.ToStr(nu.Int(budget))
         )
         return self.state(cycle, chat.KIND_WRITING, counted)
 
@@ -224,6 +242,24 @@ class Panel:
     def stalled(self, cycle: nu.StrArg) -> nu.Nu:
         """A cycle ended because it ran out of passes, which is not the same."""
         return self.state(cycle, chat.KIND_FAILED, nu.Str(OUT_OF_PASSES) + nu.ToStr(cycle))
+
+    def stuck(self, cycle: nu.StrArg, repeats: nu.IntArg, failure: nu.StrArg) -> nu.Nu:
+        """A cycle ended because it kept failing the same way.
+
+        The third way a cycle can end and the only one worth a row that says
+        what went wrong, because it is the only one where the same line is
+        already three rows above this one and the person needs telling that
+        those three were the reason rather than a coincidence.
+        """
+        told = (
+            nu.Str(STUCK)
+            + nu.ToStr(cycle)
+            + nu.Str(SAME)
+            + nu.ToStr(nu.Int(repeats))
+            + nu.Str(TIMES)
+            + nu.Str(failure)
+        )
+        return self.state(cycle, chat.KIND_FAILED, clipped(told))
 
     def crashed(self, why: nu.StrArg) -> nu.Nu:
         """The loop itself died. Written where a turn never got to close itself."""

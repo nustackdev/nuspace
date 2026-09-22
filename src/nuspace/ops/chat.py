@@ -50,6 +50,13 @@ that can only ever show the turn you are standing in: scrolling back to turn
 one showed turn four's work, or nothing. A list per display Cell is what makes
 a chat readable a week later, and it costs no bookkeeping, because the Cell
 that draws a turn is the Cell that turn writes into.
+
+The last two things here are the two numbers a turn runs under, and they are
+in the store for one reason: a chat that is grinding can be given more room
+without being restarted, and it cannot be restarted, because the Cell that
+talks is ``restart: no`` and a turn that was cut off is a turn nobody can
+resume. :func:`budget_of` and :func:`patience_of` read them, :func:`allow`
+writes them, and the loop asks again on every pass.
 """
 
 from __future__ import annotations
@@ -62,9 +69,12 @@ from nuspace.shapes import RESTART_NO, TRIGGER_BOOT, Space
 
 
 __all__ = [
+    "BUDGET",
     "CYCLES",
     "CYCLE_ANSWER",
     "CYCLE_WORK",
+    "DEFAULT_BUDGET",
+    "DEFAULT_PATIENCE",
     "DISPLAY",
     "KINDS",
     "KIND_DONE",
@@ -75,16 +85,20 @@ __all__ = [
     "KIND_THINKING",
     "KIND_WRITING",
     "MESSAGES",
+    "PATIENCE",
     "ROLES",
     "ROLE_AGENT",
     "ROLE_SYSTEM",
     "ROLE_USER",
     "TRACE",
+    "allow",
+    "budget_of",
     "changed",
     "draw",
     "latest_display",
     "messages_of",
     "note",
+    "patience_of",
     "say",
     "state",
     "submit",
@@ -101,6 +115,27 @@ MESSAGES = "messages"
 #: fact, written by the op that made the Cell, rather than a number two
 #: callers work out separately and disagree about.
 DISPLAY = "display"
+
+#: The key a chat's pass ceiling is kept under, beside the conversation. How
+#: much room a turn gets is a fact about the chat and not about the host, and
+#: it is here rather than in python so that a run already grinding can be
+#: given more of it from anywhere that can write.
+BUDGET = "budget"
+
+#: And the key its patience is kept under: how many passes in a row may fail
+#: the same way before the cycle stops.
+PATIENCE = "patience"
+
+#: The ceiling where nobody has said otherwise. Far away on purpose. It is not
+#: a judgement about how long work should take, which is the model's; it is
+#: the backstop under a spin the repeat guard cannot see, and anything that
+#: reaches it was not going to finish.
+DEFAULT_BUDGET = 100
+
+#: And the patience where nobody has said otherwise. One failure, one repair
+#: that failed the same way, one more: three identical passes is a model that
+#: has stopped reading what it is handed, and a fourth costs money to confirm.
+DEFAULT_PATIENCE = 3
 
 #: A person typed it.
 ROLE_USER = "user"
@@ -527,6 +562,44 @@ def note(
     return state(disp_plane_id, disp_cell_id, cycle, KIND_NOTE, text, root=root)
 
 
+def allow(
+    plane_id: nu.StrArg,
+    cell_id: nu.StrArg,
+    *,
+    budget: nu.IntArg | None = None,
+    patience: nu.IntArg | None = None,
+    root: type[Space] = Space,
+) -> nu.Nu:
+    """Give this chat more room, or less. Both numbers, or either one.
+
+    The point of keeping them in the store rather than in python is that this
+    can be run against a chat that is already grinding: the loop reads both on
+    every pass, so a ceiling raised now is a ceiling the turn in flight gets.
+    Nothing has to be restarted, and a restart is not even available, since a
+    chat's talking Cell is ``restart: no`` and a turn that was cut off is a
+    turn nobody can resume.
+
+    Guarded on the Cell like every other write here, and one commit, so a
+    caller setting both never has a pass read the new ceiling against the old
+    patience.
+
+    Args:
+        plane_id: the Plane that runs the chat.
+        cell_id: the Cell on it that talks.
+        budget: how many passes a work cycle may take. Left alone when absent.
+        patience: how many passes in a row may fail the same way before the
+            cycle gives up. Left alone when absent.
+        root: the Space shape class.
+    """
+    cells = root.planes[plane_id].cells
+    written = nu.Noop()
+    if budget is not None:
+        written = written >> _own(plane_id, cell_id, root).set_item(BUDGET, nu.Int(budget))
+    if patience is not None:
+        written = written >> _own(plane_id, cell_id, root).set_item(PATIENCE, nu.Int(patience))
+    return atomic(nu.IfDo(cells.contains(cell_id), written), root)
+
+
 # --- read --------------------------------------------------------------------
 
 
@@ -604,6 +677,31 @@ def latest_display(plane_id: nu.StrArg, cell_id: nu.StrArg, *, root: type[Space]
         root: the Space shape class.
     """
     return nu.ToStr(_own(plane_id, cell_id, root).get_item(DISPLAY, nu.Str("")))
+
+
+def budget_of(plane_id: nu.StrArg, cell_id: nu.StrArg, *, root: type[Space] = Space) -> nu.Nu:
+    """How many passes a work cycle on this chat may take.
+
+    :data:`DEFAULT_BUDGET` where nobody has said otherwise, which is almost
+    always: the number is here to be raised on the one chat that needs it, not
+    to be set on every chat that does not.
+
+    Read fresh on every pass rather than settled when the turn started, which
+    is the whole of why it is a key and not an argument.
+    """
+    held = _own(plane_id, cell_id, root).get_item(BUDGET, nu.Int(DEFAULT_BUDGET))
+    return nu.Int(held)
+
+
+def patience_of(plane_id: nu.StrArg, cell_id: nu.StrArg, *, root: type[Space] = Space) -> nu.Nu:
+    """How many passes in a row may fail the same way before a cycle gives up.
+
+    :data:`DEFAULT_PATIENCE` where nobody has said otherwise. Raising it is
+    for a model working against something that genuinely reports one error for
+    several different mistakes; lowering it is for an expensive endpoint.
+    """
+    held = _own(plane_id, cell_id, root).get_item(PATIENCE, nu.Int(DEFAULT_PATIENCE))
+    return nu.Int(held)
 
 
 def unanswered(plane_id: nu.StrArg, cell_id: nu.StrArg, *, root: type[Space] = Space) -> nu.Nu:

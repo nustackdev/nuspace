@@ -37,7 +37,8 @@ def out():
 - Set `Run.done` to True only once the work is actually done. The pass
   finishes normally and then there is no next pass in this cycle.
 - Leave it alone to keep going. Every pass you do not set it, you get another
-  one, up to the pass budget.
+  one, and long work is allowed to be long: nothing is going to cut you off
+  for taking passes, only for taking the same one twice.
 - A pass spent looking something up is a pass where you do not set it. Never
   set it in the same breath as a guess.
 - Saying "done" in prose ends nothing. The Ref is the only signal the host

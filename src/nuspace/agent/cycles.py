@@ -25,6 +25,21 @@ hands back an answer that stands up. Neither is a host predicate over the
 world: a state predicate tests what a program did, not whether the job is
 done, and it is gameable, duplicated against the prose task, and unwritable
 for anything judgement-shaped.
+
+**What stops a cycle that is not going to end is not a budget.** A tally big
+enough to let real work finish is a tally that never fires, and one small
+enough to fire is one that cuts a chat off mid task and hands the person
+nothing. The thing worth stopping is narrower than "this is taking a while":
+it is a model repeating one failure, which it will repeat forever, on an
+endpoint that costs money per pass. So the guard is the repeat and not the
+count, the far ceiling above it is a backstop rather than a policy, and both
+are read out of the chat so a run that is grinding can be given more room
+without being restarted. :func:`~nuspace.ops.chat.budget_of` and
+:func:`~nuspace.ops.chat.patience_of` are where they live.
+
+**And the last thing the answer cycle does is not the answer.** The host
+appends the escape hatch under it, every turn, whether or not the model drew
+anything: see :func:`hatch`.
 """
 
 from __future__ import annotations
@@ -51,33 +66,51 @@ __all__ = [
     "ANSWER_PASSES",
     "INCOMPLETE",
     "LANDED",
+    "SPENT",
+    "STUCK_HEAD",
+    "STUCK_LINE",
+    "STUCK_TIMES",
     "TURN_ID",
     "TURN_NAME",
-    "WORK_PASSES",
     "answer",
+    "hatch",
     "work",
 ]
 
 
-#: Passes one work cycle gets. Small on purpose: a question that has not been
-#: worked out in this many is usually one that needed splitting, and a model
-#: editing a live Space is cheaper to re-ask than to let wander.
-WORK_PASSES = 8
-
-#: Passes one answer cycle gets. Smaller, because there is one thing to do in
-#: it and every pass after the first is the model repairing a Cell it already
-#: wrote. Four is three repairs, which is more than a model that is going to
-#: get there ever needs.
+#: Passes one answer cycle gets, and the one budget here that is a number in
+#: python rather than a fact about a chat. There is one thing to do in this
+#: cycle and every pass after the first is the model repairing a Cell it
+#: already wrote, so more tries is not what fixes a Cell that will not build.
+#: Four is three repairs, which is more than a model that is going to get
+#: there ever needs.
 ANSWER_PASSES = 4
 
+#: What the person is told when a cycle gave up, before the cycle's name.
+STUCK_HEAD = "The "
+
+#: And after it, before how many times in a row the same thing went wrong.
+STUCK_TIMES = " cycle gave up: it hit the same failure "
+
+#: And after that, before the failure itself. It says stuck rather than slow,
+#: because those are different things and the person can only act on one of
+#: them: a run that was going to get there was not stopped by this.
+STUCK_LINE = " times in a row, so trying again was not going to help. "
+
+#: What the person is told when a cycle used every pass it had. The ceiling is
+#: far away and nothing is expected to reach it, so reaching it is worth
+#: saying in its own words rather than as a kind of being stuck.
+SPENT = " cycle ran out of passes before it finished. "
+
 #: What the Cell an answer lands in is called, before the turn number. The
-#: number is the panel's, so a turn's two Cells carry one number between them
-#: and a reader scrolling back can see which answer goes with which trace.
+#: number is the panel's, so every Cell a turn leaves carries one number
+#: between them and a reader scrolling back can see which answer goes with
+#: which trace.
 TURN_ID = "c_turn_"
 
-#: And what a person sees it called in the sidebar. Not ``turn``, because
-#: the panel beside it already carries that word and a turn's two Cells
-#: reading the same in a list is two rows nobody can tell apart.
+#: And what a person sees it called in the sidebar. Not ``turn``, because the
+#: panel beside it already carries that word and two rows in a list reading
+#: the same is two rows nobody can tell apart.
 TURN_NAME = "answer "
 
 #: The outcome of a pass whose answer stood up and landed. Short, because it
@@ -115,7 +148,8 @@ def work(
     panel: Panel,
     ask: Callable[..., nu.Nu],
     state: nu.Nu | None = None,
-    budget: int = WORK_PASSES,
+    budget: nu.IntArg | None = None,
+    patience: nu.IntArg | None = None,
 ) -> nu.Nu:
     """Do what the person asked for, pass after pass, until the model is done.
 
@@ -123,36 +157,61 @@ def work(
     program acts on the space, the outcome of running it becomes the next
     thing the model reads, and the exit is the slot the model writes.
 
+    Long work is allowed to be long. The model knows when the work is done and
+    the host does not, so the only thing the host stops is a model that has
+    stopped getting anywhere, which is :func:`~nuspace.agent.passes.one`
+    counting one failure repeating. The ceiling above that exists so a spin
+    the repeat check cannot see still ends.
+
     Args:
         session: the turn's slots, as the ref they hang off.
         panel: where this turn's rows go.
         ask: what reaches the model.
         state: the world after each program ran, shown to the model.
-        budget: how many passes it gets.
+        budget: the pass ceiling. Read off the chat when absent, which is what
+            makes it raiseable mid run.
+        patience: how many identical failures in a row to allow. Read off the
+            chat when absent, for the same reason.
 
     Returns:
-        A Flow that ends when the model sets ``Run.done`` or the budget runs
-        out, and says which of the two happened in its last row.
+        A Flow that ends when the model sets ``Run.done``, when it has failed
+        the same way ``patience`` times, or when it has used the ceiling. It
+        says which of the three happened in its last row.
     """
+
+    def ceiling() -> nu.Nu:
+        """How many passes this chat allows. Fresh at each call site."""
+        return _allowed(panel, budget, chat.budget_of)
+
+    def limit() -> nu.Nu:
+        """How many identical failures it allows. Fresh at each call site."""
+        return _allowed(panel, patience, chat.patience_of)
+
     body = passes.one(
         session=session,
         panel=panel,
         ask=ask,
         cycle=chat.CYCLE_WORK,
         act=session.outcome.set(nu.Str(source.attempted(session.draft))),
-        budget=budget,
+        budget=ceiling(),
         state=state,
     )
     return (
-        session.passes.set(nu.Int(0))
+        _opened(session)
         # False before the first pass and not left unset: an unset Bool reads
         # EMPTY and the loop condition would never be a Bool at all.
         >> Run.done.set(nu.Bool(False))
-        >> nu.WhileDo(nu.And(session.passes < nu.Int(budget), Run.done.not_()), body)
+        >> nu.WhileDo(
+            nu.And(
+                nu.And(session.passes < nu.Int(ceiling()), Run.done.not_()),
+                session.repeats < nu.Int(limit()),
+            ),
+            body,
+        )
         >> nu.IfDo(
             Run.done,
             panel.finished(chat.CYCLE_WORK),
-            panel.stalled(chat.CYCLE_WORK),
+            _gave_up(session=session, panel=panel, cycle=chat.CYCLE_WORK, patience=limit()),
         )
     )
 
@@ -165,8 +224,13 @@ def answer(
     ui_plane_id: nu.StrArg,
     state: nu.Nu | None = None,
     budget: int = ANSWER_PASSES,
+    patience: nu.IntArg | None = None,
 ) -> nu.Nu:
     """Draw what the person sees, and do not append anything that will not build.
+
+    The one cycle that keeps a real pass budget, because here a pass that did
+    not work is a Cell that did not build and the fix for that is a different
+    Cell rather than another try at the same one.
 
     Args:
         session: the turn's slots, as the ref they hang off.
@@ -175,12 +239,21 @@ def answer(
         ui_plane_id: the Plane the answer is drawn onto.
         state: the world after each program ran, shown to the model.
         budget: how many passes it gets.
+        patience: how many identical failures in a row to allow. Read off the
+            chat when absent.
 
     Returns:
-        A Flow that ends when an answer has landed or the budget runs out. It
-        says nothing into the conversation on its own: the record is part of
-        the answer, and a cycle that never landed one is the caller's to close.
+        A Flow that ends when an answer has landed, when the same failure has
+        come back ``patience`` times, or when the budget runs out, and which
+        appends the escape hatch either way. It says nothing into the
+        conversation on its own: the record is part of the answer, and a cycle
+        that never landed one is the caller's to close.
     """
+
+    def limit() -> nu.Nu:
+        """How many identical failures it allows. Fresh at each call site."""
+        return _allowed(panel, patience, chat.patience_of)
+
     body = passes.one(
         session=session,
         panel=panel,
@@ -195,14 +268,125 @@ def answer(
         state=state,
     )
     return (
-        session.passes.set(nu.Int(0))
+        _opened(session)
         >> session.drawn.set(nu.Bool(False))
-        >> nu.WhileDo(nu.And(session.passes < nu.Int(budget), session.drawn.not_()), body)
+        >> nu.WhileDo(
+            nu.And(
+                nu.And(session.passes < nu.Int(budget), session.drawn.not_()),
+                session.repeats < nu.Int(limit()),
+            ),
+            body,
+        )
         >> nu.IfDo(
             session.drawn,
             panel.finished(chat.CYCLE_ANSWER),
-            panel.stalled(chat.CYCLE_ANSWER),
+            _gave_up(session=session, panel=panel, cycle=chat.CYCLE_ANSWER, patience=limit()),
         )
+        >> hatch(panel=panel, ui_plane_id=ui_plane_id)
+    )
+
+
+def hatch(*, panel: Panel, ui_plane_id: nu.StrArg) -> nu.Nu:
+    """Append the escape hatch under whatever this turn drew.
+
+    The host's, every turn, and the model is never asked. The reason is a
+    failure that actually happens: a turn draws three buttons, forgets the
+    fourth, and the person has no way to say anything else at all. Uniform and
+    always there is the same rule that makes the panel host owned, so this is
+    owned the same way, appended after the answer, and unsuppressable.
+
+    Outside the loop rather than beside the append inside it, so a turn that
+    never landed an answer still gets one. That is the turn that needs it
+    most: the person is looking at a panel that says it gave up.
+
+    Args:
+        panel: this turn's panel, which is where the turn number comes from
+            and which carries the chat the hatch submits to.
+        ui_plane_id: the Plane the chat draws onto.
+
+    Returns:
+        A Flow appending one Cell. ``restart`` is ``no`` like every other
+        drawn Cell: a program that persists would otherwise run again, a week
+        later, with nobody asking.
+    """
+    return ops.add_cell(
+        ui_plane_id,
+        groups.CHAT_OTHER.program(panel.plane_id, root=panel.root),
+        cell_id=_numbered(groups.CHAT_OTHER_ID, panel),
+        name=_numbered(groups.CHAT_OTHER_NAME, panel),
+        restart=RESTART_NO,
+        root=panel.root,
+    )
+
+
+def _numbered(stem: str, panel: Panel) -> nu.Nu:
+    """``stem`` with this turn's number after it: an id, or a name.
+
+    Derived off the panel's id rather than minted, and that is not a shortcut.
+    The term a chat runs is built once and runs for the life of the chat, so
+    an id minted while it was built would be one id for every turn the chat
+    ever takes and the second answer would land on top of the first. The panel
+    is already numbered per turn by the submit that made it, so the number is
+    there to be read.
+
+    Fresh at each call site, because ``panel.cell()`` is a read.
+    """
+    return nu.Str(stem) + nu.Str(panel.cell()).removeprefix(groups.CHAT_DISPLAY_ID)
+
+
+def _allowed(panel: Panel, given: nu.IntArg | None, asked: Callable[..., nu.Nu]) -> nu.Nu:
+    """A limit: the one handed in, or the one the chat holds.
+
+    Read while the tree runs rather than settled when it is built, which is
+    the whole point of keeping it in the store: a chat that is grinding can be
+    given more room from anywhere that can write, and the loop it is already
+    inside picks the new number up on its next pass.
+
+    Fresh at each call site, like every other address here.
+    """
+    if given is not None:
+        return nu.Int(given)
+    return asked(panel.plane_id, panel.cell_id, root=panel.root)
+
+
+def _opened(session: nu.Nu) -> nu.Nu:
+    """Zero what a cycle counts, so each of the two starts on its own numbers.
+
+    The repeat counter belongs to a cycle and not to a turn: the work cycle's
+    last failure has nothing to do with the answer cycle's first, and carrying
+    it across would spend the answer cycle's patience on somebody else's
+    mistake.
+    """
+    return (
+        session.passes.set(nu.Int(0))
+        >> session.repeats.set(nu.Int(0))
+        >> session.failure.set(nu.Str(""))
+    )
+
+
+def _gave_up(*, session: nu.Nu, panel: Panel, cycle: str, patience: nu.Nu) -> nu.Nu:
+    """A cycle ended without its exit: say which way, in the panel and to the person.
+
+    Two readers and one fact. The panel gets a row, because somebody watching
+    a turn wants to see where it stopped. ``stalled`` gets the sentence, which
+    is what the host says into the conversation if the turn never answered:
+    "that run ended without an answer" tells a person nothing they can act on,
+    and "it hit the same failure three times" tells them to ask differently.
+    """
+    stuck = nu.Ge(nu.Int(session.repeats), nu.Int(patience))
+    said = (
+        nu.Str(STUCK_HEAD)
+        + nu.Str(cycle)
+        + nu.Str(STUCK_TIMES)
+        + nu.ToStr(nu.Int(session.repeats))
+        + nu.Str(STUCK_LINE)
+        + nu.Str(session.failure)
+    )
+    spent = nu.Str(STUCK_HEAD) + nu.Str(cycle) + nu.Str(SPENT)
+    return nu.IfDo(
+        stuck,
+        panel.stuck(cycle, session.repeats, session.failure) >> session.stalled.set(said),
+        panel.stalled(cycle) >> session.stalled.set(spent),
     )
 
 
@@ -260,20 +444,12 @@ def _checked(*, session: nu.Nu, panel: Panel, ui_plane_id: nu.StrArg) -> nu.Nu:
         return memory.said_line_of(panel.plane_id, panel.cell_id, root=panel.root)
 
     def turn_id() -> nu.Nu:
-        """What the Cell this answer lands in is called.
-
-        Derived off the panel's id rather than minted, and that is not a
-        shortcut. The term a chat runs is built once and runs for the life of
-        the chat, so an id minted while it was built would be one id for every
-        turn the chat ever takes and the second answer would land on top of the
-        first. The panel is already numbered per turn by the submit that made
-        it, so the number is there to be read.
-        """
-        return nu.Str(TURN_ID) + nu.Str(panel.cell()).removeprefix(groups.CHAT_DISPLAY_ID)
+        """What the Cell this answer lands in is called. Fresh at each site."""
+        return _numbered(TURN_ID, panel)
 
     def turn_name() -> nu.Nu:
         """And what a person sees it called. Fresh at each call site."""
-        return nu.Str(TURN_NAME) + nu.Str(panel.cell()).removeprefix(groups.CHAT_DISPLAY_ID)
+        return _numbered(TURN_NAME, panel)
 
     landed = (
         # An ordinary Cell append rather than ``ops.chat.draw``, for the id:

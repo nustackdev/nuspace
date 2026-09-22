@@ -20,7 +20,9 @@ write.
 can stall and the turn still answers: a model that could not do the thing
 still owes the person a sentence, and a turn that said nothing is the worst
 outcome available to it. Only the answer cycle failing leaves the chat still
-owed a reply, and that is the one place the host speaks.
+owed a reply, and that is the one place the host speaks. What it says is the
+account the cycle that stopped wrote about itself, because a person told only
+that nothing came back has been told nothing they can do anything with.
 
 The endpoint is not here. It is brought up once, around this whole loop, so a
 Claude Code session lasts as long as the chat rather than as long as a turn.
@@ -41,14 +43,20 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
 
-__all__ = ["CRASHED", "SILENT", "answering", "performing"]
+__all__ = ["ASK_AGAIN", "CRASHED", "SILENT", "answering", "performing"]
 
 
-#: What the host says when a turn ended without the model answering. The host
-#: speaks here and nowhere else, and it earns its place twice: silence reads
-#: as a broken space rather than as an unfinished job, and an answered
-#: question is what stops this asking the same one again.
-SILENT = "That turn ended without an answer. Ask again, or ask for less."
+#: What the host says when a turn ended without the model answering and
+#: without either cycle having anything to say about why. The host speaks here
+#: and nowhere else, and it earns its place twice: silence reads as a broken
+#: space rather than as an unfinished job, and an answered question is what
+#: stops this asking the same one again.
+SILENT = "That turn ended without an answer."
+
+#: And what goes after it, or after the cycle's own account of where it
+#: stopped. It is the only part a person can act on, so it is the part that is
+#: always there.
+ASK_AGAIN = " Ask again, or ask for less."
 
 #: Same, for the loop itself dying. The model's own mistakes never reach this:
 #: a module that will not construct is fed back to it and the turn carries on.
@@ -187,7 +195,13 @@ def _turn(
         # straight back round the same question.
         >> nu.IfDo(
             owed(),
-            ops.chat.say(plane_id, cell_id, ops.chat.ROLE_SYSTEM, SILENT, root=root),
+            ops.chat.say(
+                plane_id,
+                cell_id,
+                ops.chat.ROLE_SYSTEM,
+                _stopped(plane_id, cell_id, root=root),
+                root=root,
+            ),
         )
     )
     return nu.With(
@@ -204,6 +218,23 @@ def _turn(
             >> panel.crashed(nu.AttrRef("error")),
         ),
     )
+
+
+def _stopped(plane_id: nu.StrArg, cell_id: nu.StrArg, *, root: type[Space]) -> nu.Nu:
+    """What to tell a person whose turn ended without an answer.
+
+    Whichever cycle stopped wrote the account, so this reads it back rather
+    than working anything out: it knows that a turn did not answer and nothing
+    else, and "that run ended without an answer" is exactly the sentence
+    somebody reads twice and still cannot act on.
+
+    Floored to :data:`SILENT`, because a turn can end owing a reply without
+    either cycle having given up: an answer that landed and then a person
+    talking again inside the same turn would be one.
+    """
+    stalled = memory.stalled_of(plane_id, cell_id, root=root)
+    said = nu.Str(nu.If(nu.Gt(nu.Len(stalled), nu.Int(0)), nu.Str(stalled), nu.Str(SILENT)))
+    return said + nu.Str(ASK_AGAIN)
 
 
 def _opened(session: nu.Nu, first: nu.Nu) -> nu.Nu:

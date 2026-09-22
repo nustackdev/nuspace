@@ -78,22 +78,30 @@ def test_a_chat_is_born_holding_only_the_box_nothing_could_have_drawn():
     assert [cell.name for cell in groups.CHAT.draws.cells] == ["input"]
 
 
-def test_a_chat_gets_one_panel_per_turn_and_is_born_with_none():
-    """Seeding it would stand an empty one at the top of every chat forever.
-    The seed carries the stem and the turn number goes after it, so the ids
-    say which turn a panel is for without anything storing that."""
-    assert [cell.source for cell in groups.CHAT.appends] == [groups.CHAT_DISPLAY.source]
+def test_a_chat_gets_a_panel_and_an_escape_hatch_per_turn_and_is_born_with_neither():
+    """Seeding either would stand an empty one at the top of every chat
+    forever. Both seeds carry a stem and the turn number goes after it, so the
+    ids say which turn each is for without anything storing that."""
+    assert [cell.source for cell in groups.CHAT.appends] == [
+        groups.CHAT_DISPLAY.source,
+        groups.CHAT_OTHER.source,
+    ]
     assert groups.CHAT_DISPLAY.cell_id == groups.CHAT_DISPLAY_ID
     assert groups.CHAT_DISPLAY.name == groups.CHAT_DISPLAY_NAME
-    assert all(cell.source != groups.CHAT_DISPLAY.source for cell in groups.CHAT.draws.cells)
+    assert groups.CHAT_OTHER.cell_id == groups.CHAT_OTHER_ID
+    assert groups.CHAT_OTHER.name == groups.CHAT_OTHER_NAME
+    appended = {cell.source for cell in groups.CHAT.appends}
+    assert all(cell.source not in appended for cell in groups.CHAT.draws.cells)
 
 
-def test_the_box_a_chat_starts_in_reaches_the_cell_that_talks():
+def test_everything_a_person_types_reaches_the_cell_that_talks():
     """The conversation is in the talking Cell's own state, and the id is a
-    literal in source text on this side. The panel names neither: a turn's
-    trace is in the panel's own state, so it is handed its own two ids."""
-    assert all(f'TALK = "{groups.CHAT_TALK}"' in cell.source for cell in groups.CHAT.draws.cells)
-    assert all(groups.CHAT_TALK not in cell.source for cell in groups.CHAT.appends)
+    literal in source text on every side that submits: the box a chat starts
+    in, and the escape hatch under every turn. The panel names neither, since
+    a turn's trace is in its own state and it is handed its own two ids."""
+    submits = (*groups.CHAT.draws.cells, groups.CHAT_OTHER)
+    assert all(f'TALK = "{groups.CHAT_TALK}"' in cell.source for cell in submits)
+    assert groups.CHAT_TALK not in groups.CHAT_DISPLAY.source
 
 
 @pytest.mark.parametrize(("group", "role", "cell"), list(seeds()), ids=named)

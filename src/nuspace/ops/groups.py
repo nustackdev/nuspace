@@ -65,6 +65,9 @@ __all__ = [
     "CHAT_DISPLAY",
     "CHAT_DISPLAY_ID",
     "CHAT_DISPLAY_NAME",
+    "CHAT_OTHER",
+    "CHAT_OTHER_ID",
+    "CHAT_OTHER_NAME",
     "CHAT_TALK",
     "JOB",
     "JOB_CODE",
@@ -370,6 +373,89 @@ def out(plane, cell):
 CHAT_DISPLAY = CellSeed(cell_id=CHAT_DISPLAY_ID, name=CHAT_DISPLAY_NAME, source=_CHAT_DISPLAY)
 
 
+#: What the id of a turn's escape hatch starts with, before the turn number.
+#: One per answer and numbered with it, so the Cell a person says something
+#: else in sits beside the answer they are saying it about.
+CHAT_OTHER_ID = "c_other_"
+
+#: What one is called. The same word the closed control reads, because to a
+#: person they are one thing.
+CHAT_OTHER_NAME = "other "
+
+
+# The one affordance on a chat the model neither draws nor can suppress, and
+# it is host owned for the same reason the panel is. A turn that drew three
+# buttons and forgot the fourth leaves the person with nothing to say at all,
+# and a way out that is only there when somebody remembered it is not a way
+# out. So the host appends one of these under every answer and the model is
+# never asked.
+_CHAT_OTHER = '''import nu
+import nustd.kv
+import nustd.ui
+from nustd.ui.refs.layout import AccordionRef
+from nuspace import ops
+from {module} import {root}
+
+
+#: The chat this Cell is about. Baked in when the turn was answered, which is
+#: safe because a plane id never changes.
+CHAT = "{subject}"
+
+#: The Cell on it that talks and keeps the conversation. Seeded with the
+#: chat, so it is there before anything opens this.
+TALK = "c_talk"
+
+#: The one section the control opens, and what the closed row reads. One word,
+#: because what it stands under is whatever the turn offered: three buttons
+#: and then "other".
+OTHER = "other"
+
+#: The section's body. An Accordion's body is a tree child rather than a
+#: prop, and child ``i`` is the body of section ``i`` in the order the
+#: children were first written, so one section wants exactly one of these.
+BODY = "body"
+
+
+def out(plane, cell):
+    """A box for saying something this turn did not offer, folded away.
+
+    Collapsed, because the answer above it is the answer and this is the way
+    round it. Open, it is the same box the chat started in.
+
+    Four refs and four boot writes, and none of them is decoration: writing a
+    ref is what ships its chain to the browser and what makes the node there,
+    so an accordion nothing writes has no section to open and a box nothing
+    writes would first come into being on the submit that reads it.
+
+    ``plane`` is the Plane that draws the chat, because this Cell is on it,
+    and that is what the submit is handed: the panel for the turn goes up on
+    the Plane the person pressing send is looking at.
+
+    The box is emptied after the submit and not before, because the submit is
+    what reads it.
+    """
+    other = AccordionRef(OTHER, section_cls=nustd.ui.Accordion)
+    body = nustd.ui.SectionRef(BODY, section_cls=nustd.ui.Column, parent_ref=other)
+    box = nustd.ui.TextAreaRef("message", parent_ref=body)
+    send = nustd.ui.ButtonRef("send", parent_ref=body)
+    # A program owns its own atomicity. Nothing brackets it on the way in,
+    # because the host cannot see inside a program it evaluates.
+    return nustd.kv.auto_flow_atomic(
+        other.set_sections([{{"id": OTHER, "label": OTHER}}])
+        >> box.set(nu.Str(""))
+        >> send.set_label(nu.Str("send"))
+        >> nu.ReactForever(
+            send.on_click(),
+            ops.chat.submit(CHAT, TALK, nu.Str(box), ui_plane_id=plane, root={root})
+            >> box.set(nu.Str("")),
+        ),
+        scope={root},
+    )
+'''
+
+CHAT_OTHER = CellSeed(cell_id=CHAT_OTHER_ID, name=CHAT_OTHER_NAME, source=_CHAT_OTHER)
+
+
 # The program a chat's talking Cell stores is ten lines, and all it does is
 # call `nuspace.agent`. That is a deliberate break with how a template usually
 # works. A template is a seed and a seed has no migration, so a Cell keeps
@@ -429,10 +515,11 @@ CHAT = Group(
         editable=False,
         cells=(CellSeed(cell_id=CHAT_TALK, name="talk", source=_CHAT_TALK),),
     ),
-    # One panel per turn, appended by the submit that started it. Not seeded,
-    # because a chat nobody has spoken in has no turn to show and an empty one
-    # standing at the top forever is a panel that says nothing.
-    appends=(CHAT_DISPLAY,),
+    # One panel per turn, appended by the submit that started it, and one
+    # escape hatch per turn, appended by the turn once it has answered.
+    # Neither is seeded: a chat nobody has spoken in has no turn to show and
+    # nothing yet to say anything else about.
+    appends=(CHAT_DISPLAY, CHAT_OTHER),
 )
 
 

@@ -149,12 +149,13 @@ def test_the_endpoint_table_is_the_whole_of_the_mechanism():
         nuspace.agent.nothing_like_this  # noqa: B018
 
 
-def test_a_pass_budget_per_cycle_and_the_two_things_the_host_says():
-    """One budget each, because the two cycles run out for different reasons.
-    Both host lines are what stops an unanswered question putting the loop
-    straight back round it."""
-    assert cycles.WORK_PASSES > cycles.ANSWER_PASSES > 0
-    assert conversation.SILENT and conversation.CRASHED
+def test_what_stops_a_cycle_that_is_not_going_to_end():
+    """The work cycle is not capped at a number anybody would reach: long work
+    is allowed to be long, and what stops it is a failure repeating. The
+    answer cycle keeps a small budget, because there a pass that did not work
+    is a Cell that did not build and more tries is not the fix."""
+    assert chat.DEFAULT_BUDGET > cycles.ANSWER_PASSES > chat.DEFAULT_PATIENCE > 0
+    assert conversation.SILENT and conversation.ASK_AGAIN and conversation.CRASHED
 
 
 # --- the prompt ----------------------------------------------------------------
@@ -445,19 +446,23 @@ def test_the_host_writes_what_the_person_said_before_anything_runs(tmp_path):
     ]
 
 
-def test_a_pass_says_which_one_it_is_against_the_budget(tmp_path):
+def test_a_pass_says_which_one_it_is_against_the_ceiling(tmp_path):
     """The backstop under everything else in the panel. A model that narrates
-    nothing still moves this, so a cycle is never a list that stops growing."""
+    nothing still moves this, so a cycle is never a list that stops growing.
+
+    The ceiling is read off the chat on every row, so a ceiling raised while a
+    turn runs is a ceiling the next row shows.
+    """
     _, write, read = _asked(tmp_path)
     slots = session.session_of(RUNS, groups.CHAT_TALK)
+    ceiling = chat.budget_of(RUNS, groups.CHAT_TALK)
     write(slots.passes.set(nu.Int(2)))
-    write(_panel().writing(chat.CYCLE_WORK, budget=cycles.WORK_PASSES))
-    assert read(chat.trace_of(UI, DISP)) == [
-        {
-            "cycle": chat.CYCLE_WORK,
-            "kind": chat.KIND_WRITING,
-            "text": f"{trace.PASS}2{trace.OF}{cycles.WORK_PASSES}",
-        }
+    write(_panel().writing(chat.CYCLE_WORK, budget=ceiling))
+    write(chat.allow(RUNS, groups.CHAT_TALK, budget=400))
+    write(_panel().writing(chat.CYCLE_WORK, budget=ceiling))
+    assert [row["text"] for row in read(chat.trace_of(UI, DISP))] == [
+        f"{trace.PASS}2{trace.OF}{chat.DEFAULT_BUDGET}",
+        f"{trace.PASS}2{trace.OF}400",
     ]
 
 
@@ -739,9 +744,11 @@ def test_a_turn_works_then_answers_and_says_so_row_by_row(tmp_path):
     assert any(kind == chat.KIND_THINKING for _, kind in kinds)
 
     # The answer landed as a Cell, after the panel, and the record went with
-    # it in the same breath.
+    # it in the same breath. The escape hatch went under it, which is the
+    # host's and not the model's: whatever the answer offered, there is always
+    # one more way to say something.
     drawn = read(ops.cell_ids(UI))
-    assert drawn == [CHAT_INPUT, DISP, f"{cycles.TURN_ID}1"]
+    assert drawn == [CHAT_INPUT, DISP, f"{cycles.TURN_ID}1", f"{groups.CHAT_OTHER_ID}1"]
     assert "MarkdownRef" in str(read(ops.prog_of(UI, f"{cycles.TURN_ID}1")))
     assert [one["text"] for one in read(chat.messages_of(RUNS, groups.CHAT_TALK))] == [
         "how many planes are there",
@@ -758,8 +765,10 @@ def test_a_broken_cell_is_not_appended_and_the_model_is_told(tmp_path):
     path, write, read = _asked(tmp_path)
     _ran(path, _scripted(RUNS, groups.CHAT_TALK, _fenced(WORKED, BROKEN)))
 
-    # Nothing but the seeded input and this turn's panel.
-    assert read(ops.cell_ids(UI)) == [CHAT_INPUT, DISP]
+    # The seeded input, this turn's panel, and the escape hatch. Nothing the
+    # model drew, and the hatch anyway: a turn that gave up is the turn a
+    # person most needs a way to answer.
+    assert read(ops.cell_ids(UI)) == [CHAT_INPUT, DISP, f"{groups.CHAT_OTHER_ID}1"]
     # And the model was told, in words that name the Cell rather than the reply.
     complained = [
         row["text"]
@@ -767,11 +776,38 @@ def test_a_broken_cell_is_not_appended_and_the_model_is_told(tmp_path):
         if row["kind"] == chat.KIND_FAILED and row["cycle"] == chat.CYCLE_ANSWER
     ]
     assert any(one.startswith(source.CELL_LABEL) for one in complained)
+    # It failed in two different ways here, so it was never stuck: it used the
+    # answer cycle's four passes, and the person is told that in those words.
+    assert any(one.startswith(trace.OUT_OF_PASSES) for one in complained)
+    said = read(chat.messages_of(RUNS, groups.CHAT_TALK))[-1]
+    assert said["role"] == chat.ROLE_SYSTEM
+    assert said["text"] == (
+        f"{cycles.STUCK_HEAD}{chat.CYCLE_ANSWER}{cycles.SPENT}{conversation.ASK_AGAIN}"
+    )
     # The chat is no longer owed anything, or the loop would go straight back
     # round the same question.
-    assert read(chat.messages_of(RUNS, groups.CHAT_TALK))[-1] == {
-        "role": chat.ROLE_SYSTEM,
-        "text": conversation.SILENT,
-    }
     assert read(chat.unanswered(RUNS, groups.CHAT_TALK)) is False
+    del write
+
+
+def test_a_cycle_that_keeps_failing_the_same_way_gives_up_and_says_what_at(tmp_path):
+    """The guard that replaced the pass budget, and the reason it replaced it.
+    A model failing in new ways is working; one handed back the same first
+    line twice has stopped reading it, and no number of further passes changes
+    that. Patience is read off the chat, so this is also what says a number
+    written into the store reaches the loop."""
+    path, write, read = _asked(tmp_path)
+    write(chat.allow(RUNS, groups.CHAT_TALK, patience=2))
+    _ran(path, _scripted(RUNS, groups.CHAT_TALK, _fenced(WORKED, BROKEN)))
+
+    rows = [row for row in read(chat.trace_of(UI, DISP)) if row["cycle"] == chat.CYCLE_ANSWER]
+    failed = [row["text"] for row in rows if row["kind"] == chat.KIND_FAILED]
+    # Two passes, both the same complaint, and then it stopped: it never
+    # reached the third of the four the answer cycle would have allowed.
+    assert failed[0] == failed[1]
+    assert failed[-1].startswith(trace.STUCK)
+    assert f"{trace.SAME}2{trace.TIMES}" in failed[-1]
+    said = read(chat.messages_of(RUNS, groups.CHAT_TALK))[-1]["text"]
+    assert said.startswith(f"{cycles.STUCK_HEAD}{chat.CYCLE_ANSWER}{cycles.STUCK_TIMES}2")
+    assert failed[0] in said
     del write

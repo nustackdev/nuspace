@@ -51,6 +51,14 @@ without checking it first.
 there are no layout containers inside it. So the response goes first and the
 way to answer it goes last, and that is the whole of the layout.
 
+**The host puts a folded "other" box under every answer you draw.** It is not
+yours, you cannot suppress it, and it is there on the turns you draw nothing
+at all, so the person is never left with no way to speak. What it means for
+you is that you do not need a catch-all: draw the moves that actually follow
+from what you said, three buttons if that is the shape of it, and let the
+person who wants something else open the box. It does not excuse an answer
+that offers nothing, though. The obvious next move is still yours to draw.
+
 **Name your refs for the Cell they are in, not for the chat.** Ids are unique
 inside one Cell and nothing wider, so `"answer"` and `"send"` are fine and are
 not going to collide with the turn before.

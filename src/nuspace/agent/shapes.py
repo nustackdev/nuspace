@@ -3,8 +3,9 @@
 nuagent's two Shapes, brought across and renamed for the words we use now.
 ``Session`` is a turn's working memory: the conversation the host is having
 with the model, the raw reply, the source pulled out of it, what running that
-came to, the observation fed back, how many passes have gone, and what the
-answer cycle handed back. ``Run`` is the one slot the model owns.
+came to, the observation fed back, how many passes have gone, whether they
+are going in circles, and what the answer cycle handed back. ``Run`` is the
+one slot the model owns.
 
 **The session is on kv and only on kv.** nuagent ships a mem twin and the
 difference is the whole of what separates an ephemeral run from a durable
@@ -57,6 +58,23 @@ class Session(nu.Shape):
     #: watching rather than the second of the turn.
     passes = nustd.kv.IntRef.slot()
 
+    #: How many passes in a row have failed the same way. Zero after any pass
+    #: that did not fail, which is what makes it a measure of being stuck
+    #: rather than of having struggled: a model failing in new ways is still
+    #: working, and one repeating itself will repeat itself forever.
+    repeats = nustd.kv.IntRef.slot()
+
+    #: The first line those repeats are of, which is what the next failure is
+    #: compared against. Empty after a pass that worked.
+    failure = nustd.kv.StrRef.slot()
+
+    #: Why a cycle gave up, in a sentence for the person. Empty while both
+    #: cycles are still going and after either ends the way it meant to. It is
+    #: read at the end of the turn, so it is cleared per turn and not per
+    #: cycle: the answer cycle overwrites the work cycle's, which is right,
+    #: since the later one is what left the person without an answer.
+    stalled = nustd.kv.StrRef.slot()
+
     #: What the answer cycle's pass handed back: ``cell`` is the source of the
     #: Cell to draw and ``said`` is the line the conversation keeps. Empty
     #: through the whole work cycle.
@@ -74,8 +92,9 @@ class Run(nu.Shape):
     Notes:
         - ``done`` is the model's to write. Set it in the same program that
           finishes the work, once the work is actually finished.
-        - The loop reads this exact slot after every pass. Nothing else ends a
-          cycle except the pass budget.
+        - The loop reads this exact slot after every pass. The only other
+          things that end a work cycle are the repeat guard and the far
+          ceiling above it, and neither is a judgement about the work.
         - It rides on the app's own fabric, so it needs no binding of its own.
     """
 

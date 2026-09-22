@@ -10,7 +10,7 @@ So the chain is written out, with :class:`~nuspace.agent.trace.Panel` rows in
 between:
 
     thinking  ->  ask  ->  record  ->  extract  ->  writing  ->  act
-              ->  running or failed  ->  observe  ->  record
+              ->  repeated?  ->  running or failed  ->  observe  ->  record
 
 **The states are written between the links and not around them.** A row after
 the whole pass would arrive with everything else at the end, which is the
@@ -20,6 +20,12 @@ failure this replaces.
 cycles, and what differs is what the model's program is *for*: in the work
 cycle it acts on the space, in the answer cycle it hands back a Cell to draw.
 That one term is passed in as ``act``, and it is the only seam.
+
+**One link is bookkeeping and it is here because it is per pass.**
+:func:`_repeated` is what a cycle's guard reads: whether this pass failed the
+same way the last one did. It sits right after ``act``, because ``act`` is
+what wrote the outcome it looks at, and before the row, so a panel and a loop
+are never a pass apart on the same question.
 """
 
 from __future__ import annotations
@@ -27,7 +33,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import nu
-from nuspace.agent import source
+from nuspace.agent import source, trace
 
 
 if TYPE_CHECKING:
@@ -53,7 +59,7 @@ def one(
     ask: Callable[..., nu.Nu],
     cycle: str,
     act: nu.Nu,
-    budget: int,
+    budget: nu.IntArg,
     state: nu.Nu | None = None,
 ) -> nu.Nu:
     """Compose one pass of a cycle, with the host's rows between the links.
@@ -69,7 +75,9 @@ def one(
             leaves. One of :data:`nuspace.ops.chat.CYCLES`.
         act: what to do with the source the model wrote. Sets ``outcome``,
             whatever happens, because ``outcome`` is what the model reads next.
-        budget: how many passes the cycle gets, written after the count.
+        budget: how many passes the cycle gets, written after the count. A
+            term rather than a number wherever it is a fact about the chat, so
+            a ceiling raised mid run shows up on the next row.
         state: the world after the program ran, appended to the observation.
             Omitted for a cycle whose model has nothing to look at.
 
@@ -106,7 +114,39 @@ def one(
         >> session.passes.inc()
         >> panel.writing(cycle, budget=budget)
         >> act
+        >> _repeated(session)
         >> panel.ran(cycle)
         >> observation.set(nu.Str(observed))
         >> messages.append(nu.Dict.of(role="user", content=observation))
+    )
+
+
+def _repeated(session: nu.Nu) -> nu.Nu:
+    """Count this pass against the last one, and keep what it failed at.
+
+    The whole of the stall guard, and it is deliberately the narrowest thing
+    that tells the two cases apart. A model failing in new ways is working:
+    each diagnostic is different because each one is further in. A model
+    handed back the same first line three times has stopped reading it, and no
+    number of further passes changes that.
+
+    Only a complaint counts. The yield of a program that worked is not
+    evidence of anything: a pass that writes yields nothing at all, so a run
+    of honest write passes all report the same thing and would look like a
+    spin. What is compared is the first line, because that is where the label
+    and the message are and everything under it is a traceback that moves.
+    """
+
+    def line() -> nu.Nu:
+        """The head of what the pass came to. Fresh at each call site."""
+        return trace.head(nu.Str(session.outcome))
+
+    return nu.IfDo(
+        source.complaint(line()),
+        nu.IfDo(
+            nu.Eq(line(), nu.Str(session.failure)),
+            session.repeats.inc(),
+            session.repeats.set(nu.Int(1)) >> session.failure.set(line()),
+        ),
+        session.repeats.set(nu.Int(0)) >> session.failure.set(nu.Str("")),
     )

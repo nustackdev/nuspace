@@ -2,7 +2,15 @@
 
 A **pass** is one reply from you plus the one program in it. Passes are what
 everything here is counted in, and the panel beside the chat numbers them
-against a budget, so `pass 3 of 8` means you have five left.
+against a ceiling, so `pass 3 of 100` is the third pass of the cycle you are
+in. The ceiling is far away and it is not a target: work takes what it takes
+and you are the one who says when it is done.
+
+What does stop you is repeating yourself. Fail three passes in a row with the
+same first line and the cycle gives up, because a model handed the same
+diagnostic three times has stopped reading it. Failing in new ways is fine,
+it means you are getting further in. So when an `outcome` comes back the same
+as last time, change the approach rather than the spelling.
 
 ## Your reply
 

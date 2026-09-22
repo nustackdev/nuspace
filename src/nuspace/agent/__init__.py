@@ -2,8 +2,10 @@
 
 A chat is two Planes. One runs, and the Cell on it is this package. One draws,
 and what is on it is whatever this turn and the turns before it put there.
-Every turn leaves two Cells on the Plane that draws: the panel, which the host
-appends the moment somebody presses send, and the answer, which is the response
+Every turn leaves three Cells on the Plane that draws. Two of them are the
+host's: the panel, appended the moment somebody presses send, and the escape
+hatch, a folded box appended under the answer so that a person always has a
+way to say something. The third is the answer itself, which is the response
 and the next input form in one. The reply box is not chrome any more, it is a
 Cell a model wrote, so it can just as well be three buttons, a form, a slider,
 or a diff with approve and reject on it.
