@@ -55,6 +55,12 @@ Repository = "https://github.com/nustackdev/nuspace"
 nuspace = "nuspace.cli:main"
 
 [tool.hatch.build.targets.wheel]
+# Whole directories, not python files: the agent's system prompt is prose in
+# `nuspace/agent/prompt/text/*.md`, read at runtime through
+# importlib.resources. hatchling ships every file under a listed package, so
+# this needs no data entry of its own -- but adding an `include` or
+# `only-include` here would drop the prose and leave a wheel whose chats
+# raise on their first message. Don't.
 packages = ["src/nuspace"]
 
 [tool.hatch.build.targets.sdist]

@@ -1,11 +1,13 @@
 """A chat is a job with a label, and the conversation is what makes it one.
 
-Three things are checked here and nothing else is. What a ``+`` makes, which
-is the same pair every job makes. What a message does, which is where the one
+Four things are checked here and nothing else is. What a ``+`` makes, which is
+the same pair every job makes. What a message does, which is where the one
 piece of machinery a chat has lives: the first message starts the Plane and
-every one after it only appends. And what the Cell asks when it comes up,
-which is the whole of why a restart answers an outstanding question and never
-replays a conversation it already answered.
+every one after it only appends. What the Cell asks when it comes up, which is
+the whole of why a restart answers an outstanding question and never replays a
+conversation it already answered. And what a turn leaves behind: a Cell on the
+Plane that draws, which is how a model answers at all, and a run log beside
+the conversation that the turn after it throws away.
 
 The templates themselves are covered by ``test_groups``, which renders,
 compiles and validates every seed of every group.
@@ -20,7 +22,7 @@ import nustd.kv
 from nuspace import ops
 from nuspace.drivers import run_space
 from nuspace.ops import chat, groups
-from nuspace.shapes import EXEC_MP, TRIGGER_BOOT, TRIGGER_MANUAL, Space
+from nuspace.shapes import EXEC_MP, RESTART_NO, TRIGGER_BOOT, TRIGGER_MANUAL, Space
 from nuspace.space import open_space, store
 
 
@@ -174,6 +176,16 @@ def test_a_reboot_does_not_replay_an_answered_conversation(tmp_path):
     assert read(chat.unanswered(RUNS, groups.CHAT_TALK)) is False
 
 
+def test_a_fresh_subscription_every_time_and_one_container_for_both_lists():
+    """A child scoped watch is silent in a worker, so the finest thing that can
+    wake one is the Cell's own state, and that one container holds the
+    conversation and the run log both. Fresh nodes because a subscription is a
+    handle and the first arm to end closes it under the other."""
+    watch = chat.steps_changed(RUNS, groups.CHAT_TALK)
+    assert repr(watch) == repr(chat.changed(RUNS, groups.CHAT_TALK))
+    assert watch is not chat.steps_changed(RUNS, groups.CHAT_TALK)
+
+
 def test_the_host_speaking_closes_an_unanswered_run(tmp_path):
     """A run that said nothing leaves the question standing, which would put
     the loop straight back round it. The host saying so is what ends that."""
@@ -181,6 +193,112 @@ def test_the_host_speaking_closes_an_unanswered_run(tmp_path):
     write(chat.submit(RUNS, groups.CHAT_TALK, nu.Str("do a thing")))
     write(chat.say(RUNS, groups.CHAT_TALK, chat.ROLE_SYSTEM, nu.Str("that run ended")))
     assert read(chat.unanswered(RUNS, groups.CHAT_TALK)) is False
+
+
+# --- what a turn draws ---------------------------------------------------------
+
+#: A turn's program, as short as one can be. Nothing compiles it here: drawing
+#: is a write, and a program that will not construct is a Cell that says so
+#: when somebody runs it.
+TURN = "def out(plane, cell):\n    return None\n"
+
+
+def test_a_turn_lands_as_a_cell_after_what_the_plane_was_seeded_with(tmp_path):
+    """The model answers by appending, so the view a chat is born with keeps
+    the place it was born in and turns pile up behind it."""
+    write, read = _seeded(tmp_path)
+    seeded = read(ops.cell_ids(DRAWN))
+    write(chat.draw(DRAWN, TURN, name="a table of planes"))
+    drawn = read(ops.cell_ids(DRAWN))
+    assert drawn[: len(seeded)] == seeded
+    assert len(drawn) == len(seeded) + 1
+    assert read(ops.cell_name(DRAWN, drawn[-1])) == "a table of planes"
+    assert "def out" in str(read(ops.prog_of(DRAWN, drawn[-1])))
+
+
+def test_a_turn_never_restarts(tmp_path):
+    """A Cell's program persists and runs again on every reload, so a turn that
+    did something would do it again with nobody asking."""
+    write, read = _seeded(tmp_path)
+    write(chat.draw(DRAWN, TURN))
+    assert read(ops.cell_restart(DRAWN, read(ops.cell_ids(DRAWN))[-1])) == RESTART_NO
+
+
+def test_two_turns_are_two_cells(tmp_path):
+    """The id is minted per call, so the second turn appends rather than
+    landing on top of the first."""
+    write, read = _seeded(tmp_path)
+    seeded = read(ops.cell_ids(DRAWN))
+    write(chat.draw(DRAWN, TURN))
+    write(chat.draw(DRAWN, TURN))
+    assert len(read(ops.cell_ids(DRAWN))) == len(seeded) + 2
+
+
+def test_a_turn_drawn_on_a_plane_nobody_made_draws_nothing(tmp_path):
+    """A write under a missing key vivifies the row, so a chat dropped mid turn
+    would grow a Plane out of the answer arriving late."""
+    write, read = _seeded(tmp_path)
+    write(chat.draw("p_nobody", TURN))
+    assert sorted(read(ops.plane_ids())) == sorted([DRAWN, RUNS])
+
+
+# --- what the agent is doing ---------------------------------------------------
+
+
+def test_steps_read_back_in_the_order_they_were_taken(tmp_path):
+    write, read = _seeded(tmp_path)
+    write(chat.step(RUNS, groups.CHAT_TALK, chat.STEP_THINKING, nu.Str("reading the space")))
+    write(chat.step(RUNS, groups.CHAT_TALK, chat.STEP_DREW, nu.Str("a table of planes")))
+    assert read(chat.steps_of(RUNS, groups.CHAT_TALK)) == [
+        {"kind": chat.STEP_THINKING, "text": "reading the space"},
+        {"kind": chat.STEP_DREW, "text": "a table of planes"},
+    ]
+
+
+def test_a_chat_that_has_taken_no_steps_reads_empty(tmp_path):
+    """Where a chat spends most of its life. The leaf is unwritten until a turn
+    touches it, and an unwritten leaf reads EMPTY, which collapses every Query
+    that reaches it."""
+    write, read = _seeded(tmp_path)
+    assert read(chat.steps_of(RUNS, groups.CHAT_TALK)) == []
+    del write
+
+
+def test_the_run_log_ships_as_values_not_views(tmp_path):
+    """Same failure as the conversation's, and this is the list that redraws on
+    every write, so it is the one that would report itself loudest."""
+    write, read = _seeded(tmp_path)
+    write(chat.step(RUNS, groups.CHAT_TALK, chat.STEP_DONE, nu.Str("said it")))
+    steps = read(chat.steps_of(RUNS, groups.CHAT_TALK))
+    assert all(type(one) is dict for one in steps)
+    assert msgpack.packb(steps) is not None
+
+
+def test_clearing_the_steps_leaves_the_conversation(tmp_path):
+    """Two lists in one Cell's state, and a turn empties exactly one of them."""
+    write, read = _seeded(tmp_path)
+    write(chat.submit(RUNS, groups.CHAT_TALK, nu.Str("what is here")))
+    write(chat.step(RUNS, groups.CHAT_TALK, chat.STEP_THINKING, nu.Str("looking")))
+    write(chat.clear_steps(RUNS, groups.CHAT_TALK))
+    assert read(chat.steps_of(RUNS, groups.CHAT_TALK)) == []
+    assert [said["text"] for said in read(chat.messages_of(RUNS, groups.CHAT_TALK))] == [
+        "what is here"
+    ]
+
+
+def test_clearing_a_chat_that_never_stepped_raises_nothing(tmp_path):
+    """Every chat's first turn clears before it has ever stepped, and an erase
+    on a leaf nothing wrote raises, which is why this one writes empty."""
+    write, read = _seeded(tmp_path)
+    write(chat.clear_steps(RUNS, groups.CHAT_TALK))
+    assert read(chat.steps_of(RUNS, groups.CHAT_TALK)) == []
+
+
+def test_a_step_on_a_cell_nobody_made_makes_nothing(tmp_path):
+    write, read = _seeded(tmp_path)
+    write(chat.step(RUNS, "c_nobody", chat.STEP_DONE, nu.Str("ghost")))
+    write(chat.clear_steps(RUNS, "c_nobody"))
+    assert read(ops.cell_ids(RUNS)) == [groups.CHAT_TALK]
 
 
 # --- against a live Space ------------------------------------------------------
@@ -199,7 +317,12 @@ def out(plane, cell):
         return ops.chat.unanswered(plane, cell, root=Space)
 
     def ack():
-        return ops.chat.say(plane, cell, ops.chat.ROLE_AGENT, nu.Str("ack"), root=Space)
+        return (
+            ops.chat.clear_steps(plane, cell, root=Space)
+            >> ops.chat.step(plane, cell, ops.chat.STEP_THINKING, nu.Str("working"), root=Space)
+            >> ops.chat.say(plane, cell, ops.chat.ROLE_AGENT, nu.Str("ack"), root=Space)
+            >> ops.chat.step(plane, cell, ops.chat.STEP_DONE, nu.Str("said it"), root=Space)
+        )
 
     return nustd.kv.auto_flow_atomic(
         nu.ForeverDo(
@@ -224,6 +347,11 @@ def test_a_started_chat_answers_every_message(tmp_path):
     Cell asking what is outstanding as it comes up, and it lands even if the
     subscription is dead. The second answer is the subscription, and the shape
     of the failure is a chat that answers once and then goes quiet forever.
+
+    The run log rides along, because writing it and reading it back are the
+    same two things in the same worker: what is left at the end is the last
+    turn's steps and only those, which is the clear at the top of a turn
+    landing in a process that is not the one asking.
     """
     path = str(tmp_path / "space")
     timeline = (
@@ -242,11 +370,21 @@ def test_a_started_chat_answers_every_message(tmp_path):
         nu.Context(),
         max_parallel=1,
     )
-    said, _ = nu.run_in_loop(
+    kept, _ = nu.run_in_loop(
         nu.With(
             store(path, root=Space),
-            body=nustd.kv.Snapshot(chat.messages_of(RUNS, groups.CHAT_TALK), scope=Space),
+            body=nustd.kv.Snapshot(
+                nu.Dict.of(
+                    said=chat.messages_of(RUNS, groups.CHAT_TALK),
+                    steps=chat.steps_of(RUNS, groups.CHAT_TALK),
+                ),
+                scope=Space,
+            ),
         ),
         nu.Context(),
     )
-    assert [one["text"] for one in said] == ["one", "ack", "two", "ack"]
+    assert [one["text"] for one in kept["said"]] == ["one", "ack", "two", "ack"]
+    assert kept["steps"] == [
+        {"kind": chat.STEP_THINKING, "text": "working"},
+        {"kind": chat.STEP_DONE, "text": "said it"},
+    ]

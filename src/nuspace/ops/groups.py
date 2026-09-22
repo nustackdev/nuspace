@@ -253,13 +253,13 @@ JOB = Group(
 
 #: The Cell a chat's runs Plane is seeded with: the one that talks to the
 #: model and keeps what was said in its own state. Spelled again as a literal
-#: inside the view template below, because a template is source text and the
+#: inside both view templates below, because a template is source text and the
 #: only name in scope there is its own. The Cell that talks is handed its own
-#: ids and names neither. ``test_chat`` holds the two spellings together.
+#: ids and names neither. ``test_chat`` holds the spellings together.
 CHAT_TALK = "c_talk"
 
 
-_CHAT_UI = '''import nu
+_CHAT_STEPS = '''import nu
 import nustd.kv
 import nustd.ui
 from nuspace import ops
@@ -274,33 +274,33 @@ CHAT = "{subject}"
 #: chat, so it is there before anything opens this.
 TALK = "c_talk"
 
-#: What the two columns of the conversation are called.
-COLUMNS = ("who", "said")
+#: What the two columns of the record are called.
+COLUMNS = ("step", "what")
 
-#: What the row reader binds the message it is on under.
-ITEM = "_chat_line"
+#: What the row reader binds the step it is on under.
+ITEM = "_chat_step"
 
 
-def timeline():
-    """What was said, as rows, oldest first, as a write.
+def steps():
+    """What the agent is doing, as rows, oldest first, as a write.
 
-    One ref holding a list rather than a ref per message: a conversation is
-    one value that grows, and a node per line would be a node to mint, root
-    and take down again on every reply.
+    One ref holding a list rather than a ref per step: what a run is doing is
+    one value that grows and is thrown away whole at the next turn, and a node
+    per line would be a node to mint, root and take down again on every move.
 
     Built fresh at each call site. One node in two tree positions is one
-    node, and this one is written on the way in and again on every message.
+    node, and this one is written on the way in and again on every step.
     """
-    said = nu.DictAttrRef(ITEM)
-    return nustd.ui.TableRef("timeline").set(
+    did = nu.DictAttrRef(ITEM)
+    return nustd.ui.TableRef("steps").set(
         nu.Dict.of(
             columns=nu.List.of(nu.Str(COLUMNS[0]), nu.Str(COLUMNS[1])),
             rows=nu.Collect(
                 nu.Map(
-                    ops.chat.messages_of(CHAT, TALK, root={root}),
+                    ops.chat.steps_of(CHAT, TALK, root={root}),
                     nu.List.of(
-                        nu.ToStr(said.get_item(nu.Str("role"), nu.Str(""))),
-                        nu.ToStr(said.get_item(nu.Str("text"), nu.Str(""))),
+                        nu.ToStr(did.get_item(nu.Str("kind"), nu.Str(""))),
+                        nu.ToStr(did.get_item(nu.Str("text"), nu.Str(""))),
                     ),
                     key=ITEM,
                 )
@@ -310,11 +310,54 @@ def timeline():
 
 
 def out(plane, cell):
-    """The conversation, a box to write in, and the button that sends it.
+    """What the agent is doing right now, and nothing else.
+
+    The one Cell on a chat the model does not write. What the agent is doing
+    is *about* the agent rather than from it, and it has to read the same way
+    in every chat, so the host draws it and keeps it first: a turn the agent
+    appends lands after this and never has to insert around it.
 
     No name anywhere: the sidebar is where a Plane is called something, and
     saying it again at the top of the thing you just clicked is saying it
     twice.
+    """
+    # A program owns its own atomicity. Nothing brackets it on the way in,
+    # because the host cannot see inside a program it evaluates.
+    return nustd.kv.auto_flow_atomic(
+        steps()
+        # A fresh subscription, never a term shared with the write above: one
+        # node in two tree positions is one node, and a subscription is a
+        # handle the first holder to end would close under the other.
+        >> nu.ReactForever(ops.chat.steps_changed(CHAT, TALK, root={root}), steps()),
+        scope={root},
+    )
+'''
+
+
+_CHAT_INPUT = '''import nu
+import nustd.kv
+import nustd.ui
+from nuspace import ops
+from {module} import {root}
+
+
+#: The chat this Cell is about. Baked in when the Plane was seeded, which is
+#: safe because a plane id never changes.
+CHAT = "{subject}"
+
+#: The Cell on it that talks and keeps the conversation. Seeded with the
+#: chat, so it is there before anything opens this.
+TALK = "c_talk"
+
+
+def out(plane, cell):
+    """A box to write in and the button that sends it: the first message.
+
+    The one way of answering a person gets that the model did not draw. A
+    chat arrives idle and the first message is what starts the Plane behind
+    it, so the agent that would have drawn this is not up yet and cannot
+    have. Every input after this one is the agent's own, appended as it
+    replies, and this one stays where the conversation started.
 
     The box is emptied after the submit and not before, because the submit is
     what reads it.
@@ -324,391 +367,72 @@ def out(plane, cell):
     # A program owns its own atomicity. Nothing brackets it on the way in,
     # because the host cannot see inside a program it evaluates.
     return nustd.kv.auto_flow_atomic(
-        timeline()
         # Written empty rather than left alone. A bare ref is rooted by the
         # host when something writes it, so a box nobody writes is a box
         # nobody can type in: it would first appear on the submit that reads
         # it, which is the one moment it is too late to be there.
-        >> box.set(nu.Str(""))
+        box.set(nu.Str(""))
         >> send.set_label(nu.Str("send"))
-        >> nu.ParallelAsync(
-            nu.ReactForever(
-                send.on_click(),
-                ops.chat.submit(CHAT, TALK, nu.Str(box), root={root})
-                >> box.set(nu.Str("")),
-            ),
-            # A fresh subscription, never a term shared with the arm above:
-            # two arms holding one node hold one handle, and the first of them
-            # to end closes it under the other.
-            nu.ReactForever(ops.chat.changed(CHAT, TALK, root={root}), timeline()),
+        >> nu.ReactForever(
+            send.on_click(),
+            ops.chat.submit(CHAT, TALK, nu.Str(box), root={root}) >> box.set(nu.Str("")),
         ),
         scope={root},
     )
 '''
 
 
-_CHAT_TALK = '''import nuagent
-
-import nu
-import nustd.cc
-import nustd.kv
-from nu.lang import ScalarQuery
-from nu.lang.sentinels import EMPTY, INVALID
-from nuspace import ops
+# The program a chat's talking Cell stores is ten lines, and all it does is
+# call `nuspace.agent`. That is a deliberate break with how a template usually
+# works. A template is a seed and a seed has no migration, so a Cell keeps
+# whatever program it was born with, and a chat made last month would be
+# running last month's agent forever. Pointing the program at the package
+# instead puts the behaviour where an upgrade reaches it: installing a newer
+# nuspace upgrades every chat already in the store. For a prompt that gets
+# tuned daily that is the behaviour we want, and what is left here is only the
+# ids the package cannot know and the call that hands them over.
+_CHAT_TALK = '''import nuspace.agent
 from {module} import {root}
 
 
-#: What the loop talks to. Claude Code rather than an api key, because a space
-#: is a thing you run on the machine you are sitting at.
-MODEL = "claude-opus-5"
-
-#: Turns one message gets. Small on purpose: a question that has not been
-#: answered in this many is usually one that needed splitting, and a model
-#: editing a live Space is cheaper to re-ask than to let wander.
-MAX_TURNS = 8
-
-#: What the host says when a run ended without the model saying anything. The
-#: host speaks here and nowhere else, and it earns its place twice: silence
-#: reads as a broken space rather than as an unfinished job, and an answered
-#: question is what stops this asking the same one again.
-SILENT = "That run ended without an answer. Ask again, or ask for less."
-
-#: Same, for the loop itself dying. The model's own mistakes never reach this:
-#: a module that will not construct is fed back to it and the run carries on.
-CRASHED = "The run crashed and stopped: "
-
-#: What the first user message of a run says before the conversation. The ask
-#: itself is the last thing in that conversation, so there is nothing to
-#: restate.
-OPENING = "Somebody is talking to you in a chat. Answer the last thing they said."
-
-
-TASK = """\\
-You are the agent inside a running nuspace, and you are one chat in it. A
-person is talking to you, and everything said so far arrives as the first user
-message of this run.
-
-Do what they ask by writing programs against the space. Spend the early turns
-reading -- return a program that yields what you need to know -- and write only
-once you know the shape of what you are changing.
-
-Every run ends the same way: one program that appends your answer to the
-conversation and sets `Run.done`. Read "Talking to the person" below before you
-write anything. Nothing you type outside a code fence is ever shown, so a run
-that ends without that append is a run the person experienced as silence,
-however well it went.\\
-"""
-
-
-#: The one thing this agent does differently from every other agent, so it
-#: gets its own section rather than a bullet inside the space rules.
-SPEAKING = """\\
-# Talking to the person
-
-Your reply text is not shown to anybody. Not the prose, not the explanation
-around the fence, not a summary at the end. The only thing the host does with
-your reply is pull the fenced block out of it and run that.
-
-So **speaking is an action**, and you do it the same way you do everything
-else -- by writing it:
-
-```python
-import nu
-import nustd.mem
-from nuspace import ops
-
-
-class Run(nu.Shape):
-    done = nustd.mem.BoolRef.slot()
-
-
-def out():
-    return ops.chat.say(
-        "<the chat plane>",
-        "<the chat cell>",
-        "agent",
-        "there are 3 planes: root, Notes, Ideas",
-    ) >> Run.done.set(True)
-```
-
-Both ids are in the first user message of this run, copy them off it exactly.
-That append is what lands in the chat. It is the same op a cron job or a
-person at a REPL would use, and the chat is subscribed to that one slot, so
-anything that writes there is heard. There is no separate reply channel and
-there is not going to be one.
-
-Rules:
-
-- **Say something before you finish.** The last program of every run appends a
-  message and sets `Run.done`, in that order, in one program.
-- **Answer with a value you actually read, not one you remember.** If the ask
-  was a question, the turn before this one is where you read the answer;
-  compose the text out of that reading where you can.
-- **`role` is always `"agent"`** when you are the one speaking. `"user"` is
-  the person and `"system"` is the host; writing either of those is putting
-  words in somebody else's mouth.
-- **Say it once.** Re-running a turn because something else failed must not
-  re-append what you already said. If you are unsure whether an append landed,
-  read the conversation back and look.
-- **Short.** One or two sentences. It is a chat, not a report. If the answer
-  really is a list, a list is fine.
-- **Say it when it fails, too.** If you cannot do what was asked, append that,
-  with the reason, and set `Run.done`. An unfinished run that said nothing is
-  the worst outcome available to you.\\
-"""
-
-
-#: The rules the stock surface preamble gets wrong for a durable, tagged
-#: store. Placed after the surface so it reads as the correction it is.
-SPACE_RULES = """\\
-# Working the space
-
-Your world is a live nuspace, and it is durable. Its store is bound tagged by
-the root Shape class object itself, which makes the redeclaration rule above
-**wrong for it**. Import the real class instead:
-
-```python
-from nuspace import ops
-from {module} import {root}
-```
-
-A `{root}` you declare yourself is a different class object, so the tagged
-store does not resolve against it: your program runs, nothing raises, and
-every write lands in a store nobody reads. Import, never redeclare. `Plane`
-and `Cell` are reached through `{root}`, so you rarely name them at all;
-inspect them when you need to.
-
-**Do not bracket your program.** The host already holds the atomic bracket
-over the store. No `nustd.kv.auto_flow_atomic`, no `nu.With`, no `nu.Provide`.
-
-**Prefer `nuspace.ops` to hand-written ref chains.** Each function returns a
-Nu term and fixes every invariant the store has -- which Cells a Plane holds
-and the order they are tiled in are two spellings of one fact, and these are
-the only writers that keep them agreeing:
-
-```python
-from nuspace import ops
-
-plane = ops.mint_ordered_id("p")   # python, at module level, not in the term
-
-
-def out():
-    return ops.groups.add("page", plane_id=plane, name="Notes")
-```
-
-**Read before you write.** `ops.plane_rows()`, `ops.cell_rows(plane)` and
-`ops.cell_statuses(plane)` each yield a list of dicts describing what is
-actually there. Returning one of those as your whole program is a good first
-turn.
-
-**A write program yields nothing.** It is a Flow, so the observation for a
-turn that changed something reads `outcome: None`. That is correct, not a
-failure, and not something to report or retry. A read program is the other way
-round: its yield is the answer, and that is the turn whose outcome carries
-something you can say out loud.\\
-"""
-
-
-class Bot(nu.Service):
-    """The Claude Code endpoint this chat runs against."""
-
-    ask = nustd.cc.PromptRef.method()
-
-
-class Rendered(ScalarQuery):
-    """A run's transcript flattened into one role-tagged prompt string.
-
-    Every call to Claude Code is a fresh session, so the whole run has to ride
-    along in the prompt. A python join in the middle of a Nu tree would make
-    the turn unwalkable, so the flattening is an atom like everything else.
-
-    This is nuagent's working memory -- what the model and the host said to
-    each other -- and not the conversation, which is what the person reads.
-    """
-
-    def _compile(self, nid, children):
-        (messages,) = children
-
-        def thunk(rt):
-            return _render(messages(rt))
-
-        return thunk
-
-    def _acompile(self, nid, children):
-        (messages,) = children
-
-        async def athunk(rt):
-            return _render(await messages(rt))
-
-        return athunk
-
-
-def _render(messages):
-    """Role-tagged blocks, or INVALID for anything that is not a transcript.
-
-    Total on purpose: this runs inside a turn, and a raise here would kill the
-    run rather than feed the model something it could fix.
-    """
-    if messages is EMPTY or messages is INVALID:
-        return INVALID
-    try:
-        items = list(messages)
-    except TypeError:
-        return INVALID
-    blocks = []
-    for message in items:
-        try:
-            record = dict(message)
-        except (TypeError, ValueError):
-            return INVALID
-        role = str(record.get("role", "user")).upper()
-        blocks.append("### " + role + "\\n\\n" + str(record.get("content", "")))
-    return "\\n\\n".join(blocks)
-
-
-def talk(*, messages):
-    """The endpoint nuagent's turn calls. It asks for ``messages``."""
-    return Bot.ask(prompt=nu.Str(Rendered(messages)))
-
-
-def system():
-    """The whole system prompt, built against this Space's own root class.
-
-    The surface is rendered in rather than written out, so a chat in a
-    subclassed Space is told about *its* root. The two sections after it are
-    nuspace's own, and the order is the argument: the correction comes after
-    the thing it corrects, and how to speak comes last, because it is the rule
-    a model is most likely to drop.
-    """
-    sections = nuagent.inserted(nuagent.DEFAULT_SECTIONS, nuagent.surface_section(({root},)))
-    sections = nuagent.inserted(sections, nuagent.prompt.Section("space", lambda: SPACE_RULES))
-    sections = nuagent.inserted(sections, nuagent.prompt.Section("speaking", lambda: SPEAKING))
-    return nuagent.system_prompt(TASK, sections=sections)
+#: The Plane this chat draws into: the one the ``+`` opened and the one a
+#: person is looking at. Baked in when the Plane was seeded, which is safe
+#: because a plane id never changes.
+CHAT_UI = "{subject}"
 
 
 def out(plane, cell):
     """One chat, live: answer whatever is outstanding, then wait for more.
 
-    The conversation is in this Cell's own state, because a Cell's state is
-    where a Cell's state goes, and because the Plane that draws is `nav` and
-    is down whenever nobody is looking. nuagent's working memory is
-    `MemSession` and lasts one run: it holds the model's raw replies and the
-    host's observations, which is machinery. What the person reads is what
-    the model *appended*, and the two are different substances.
-
-    There is no submit to watch for. A chat is made at `manual` and the first
-    message starts the Plane, so a Cell coming up is itself the signal, and
-    everything after that arrives as a change.
+    Everything it does is in ``nuspace.agent``: the turn loop, the endpoint,
+    the prompt the model reads. A prompt nobody can open is a prompt nobody
+    improves, and this one is rewritten far more often than the store it
+    talks to.
     """
-
-    def owed():
-        """Whether the chat is waiting on a reply. Fresh at each call site."""
-        return ops.chat.unanswered(plane, cell, root={root})
-
-    def said():
-        """What was said, as the model is shown it. Fresh at each call site."""
-        return ops.chat.messages_of(plane, cell, root={root})
-
-    def opening():
-        """A run's first user message: where this chat is, and what was said.
-
-        The ids ride in the message rather than in the system prompt because
-        the prompt is a python string built once and the ids are terms the
-        running tree resolves.
-        """
-        return nu.Dict.of(
-            role="user",
-            content=nu.Str(OPENING)
-            + nu.Str("\\n\\nchat plane: ")
-            + nu.ToStr(plane)
-            + nu.Str("\\nchat cell: ")
-            + nu.ToStr(cell)
-            + nu.Str("\\n\\nWhat has been said, oldest first:\\n\\n")
-            + nu.ToStr(nu.Repr(said())),
-        )
-
-    def run():
-        """One nuagent loop over the conversation as it stands.
-
-        Two dict fabrics, and the split is the whole of what the model can
-        reach. The session is tagged, so nothing the model writes touches the
-        run's own memory. The untagged one is where `Run.done` lives and where
-        any `nustd.mem` the model invents lands, out of the way of the store.
-        """
-        loop = nuagent.agent(
-            session=nuagent.MemSession,
-            chat=talk,
-            state=nu.Dict.of(planes=ops.plane_ids(root={root}), said=said()),
-            max_turns=MAX_TURNS,
-            start=nuagent.MemSession.messages.set(nu.List.of(opening())),
-            # Quiet. The turn prints on the worker's own stdout, which nobody
-            # is reading: a Cell is in a process of its own and what it has to
-            # say reaches a person through the conversation, or through the
-            # error on its row when it could not say anything at all.
-            echo=False,
-        )
-        attempt = nu.TryCatch(
-            loop
-            >> nu.IfDo(
-                owed(),
-                ops.chat.say(plane, cell, ops.chat.ROLE_SYSTEM, SILENT, root={root}),
-            ),
-            catch=ops.chat.say(
-                plane,
-                cell,
-                ops.chat.ROLE_SYSTEM,
-                nu.Str(CRASHED) + nu.ToStr(nu.AttrRef("error")),
-                root={root},
-            ),
-        )
-        return nu.With(
-            nu.Provide(dict, dict(), tag=nuagent.MemSession),
-            nu.Provide(dict, dict()),
-            nustd.cc.bind(
-                Bot,
-                model=MODEL,
-                system_prompt=system(),
-                allowed_tools=[],
-                permission_mode="default",
-            ),
-            body=attempt,
-        )
-
-    # A program owns its own atomicity. Nothing brackets it on the way in,
-    # because the host cannot see inside a program it evaluates.
-    return nustd.kv.auto_flow_atomic(
-        nu.ForeverDo(
-            # Answer what is outstanding, then wait until something is. The
-            # question is read twice and both reads earn their place: the
-            # first covers the gap between a run ending and this subscribing,
-            # where a message would otherwise wait for the next one; the
-            # second is the wait itself, which ends on the message that makes
-            # an answer owed and sits through every other write.
-            nu.IfDo(owed(), run())
-            >> nu.IfDo(
-                nu.Not(owed()),
-                nu.ReactWhile(
-                    ops.chat.changed(plane, cell, root={root}), nu.Not(owed()), nu.Noop()
-                ),
-            )
-        ),
-        scope={root},
-    )
+    return nuspace.agent.converse(plane, cell, ui_plane_id=CHAT_UI, root={root})
 '''
 
 
 CHAT = Group(
     name=GROUP_CHAT,
     label="Chats",
-    # Drawn, not authored, for the same reason a job's view is: its Cells are
-    # the template's, and a person rewriting them is rewriting the view of a
-    # conversation rather than the conversation.
+    # Two Cells at birth and no timeline, because a chat's timeline is what
+    # the agent writes: every turn it appends the Cells that present what it
+    # did and the one that is how you answer next. These two are the ones it
+    # cannot write. The steps Cell is the host's and is first, so a turn
+    # appended after it never has to insert around anything; the input Cell is
+    # the bootstrap, there because nothing is running behind a chat until
+    # somebody talks and an agent that is not up cannot have drawn the box you
+    # start in.
     draws=PlaneSeed(
         exec_mode=EXEC_ASYNC,
         trigger=TRIGGER_NAV,
         ui=True,
         editable=False,
-        cells=(CellSeed(cell_id="c_ui", name="chat", source=_CHAT_UI),),
+        cells=(
+            CellSeed(cell_id="c_steps", name="steps", source=_CHAT_STEPS),
+            CellSeed(cell_id="c_input", name="input", source=_CHAT_INPUT),
+        ),
     ),
     # A process of its own, and down until somebody talks. ``manual`` is not
     # decoration here: a chat arrives complete and idle, and the first message

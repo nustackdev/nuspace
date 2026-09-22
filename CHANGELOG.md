@@ -9,6 +9,10 @@ Below is the changelog for **nuspace** - the full commit stream. Newest first.
 The `nuspace-ui` wheel is the same source tree's vite output and is not tracked
 separately here.
 
+## Unreleased
+
+- Ask a chat for something and it draws the answer and how you reply
+
 ## 0.3.0 — 2026-09-21
 
 - Make a chat, ask it for something, and watch it work the space
