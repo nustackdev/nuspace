@@ -166,11 +166,25 @@ def cell_body(
     # host one.
     run = nu.ParallelAsync(nu.prog.Eval(load))
     # Last run's error goes before this one starts, or a Cell that was fixed
-    # still reads failed off a stale leaf. Written empty rather than erased:
-    # every turn of every Cell would otherwise ask a leaf that is usually not
-    # there whether it is, and asking that across the Navigator socket costs
-    # a round trip and a reported miss each time.
-    clear = row.error.set(nu.Str(""))
+    # still reads failed off a stale leaf. Asked first and written only when
+    # there is something to clear, which is the opposite of what it used to do.
+    #
+    # The old shape wrote the empty string every turn to save the round trip
+    # that asking costs. That trade is backwards, and expensively so: three
+    # separate arms watch ``planes`` depth unbounded, so this one write reships
+    # the sidebar, the whole page and every status, and a Plane of N Cells paid
+    # it N times on the way up for nothing. A read costs one round trip and
+    # wakes nobody. Nearly every turn has no error, so nearly every turn now
+    # writes nothing at all.
+    #
+    # ``not_empty`` answers whether the leaf is there rather than whether the
+    # string has anything in it, and a cleared Cell holds "", so the content is
+    # what has to be compared. Guarded by the read through ``prop``, since an
+    # unwritten leaf reads EMPTY and that is not a string.
+    clear = nu.IfDo(
+        nu.Ne(nu.ToStr(prop(row.error, "")), nu.Str("")),
+        row.error.set(nu.Str("")),
+    )
     if erase is not None:
         # The same sentence said to whatever this Cell draws on, and no kv
         # bracket around it: taking a node down is a frame on a wire and reads

@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Opening a page no longer slows down with each extra cell on it
 - Navigating away clears the old page at once instead of blinking through it
 - Keep workers ready in advance, so opening a plane no longer waits for one to start
 - Draw a page without a web server loaded behind it, so it opens much sooner
