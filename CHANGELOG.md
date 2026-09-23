@@ -2,14 +2,14 @@
 
 ## Packages shipped from this repo
 
-- **nuspace** (the runtime, the `nuspace` command) — 0.3.0
+- **nuspace** (the runtime, the `nuspace` command) — 0.3.1
 - **nuspace-ui** (the compiled web bundle) — 0.3.0
 
 Below is the changelog for **nuspace** - the full commit stream. Newest first.
 The `nuspace-ui` wheel is the same source tree's vite output and is not tracked
 separately here.
 
-## Unreleased
+## 0.3.1 — 2026-09-23
 
 - Opening a page no longer slows down with each extra cell on it
 - Navigating away clears the old page at once instead of blinking through it
