@@ -17,7 +17,6 @@
 import { cn } from "@nustackdev/ui-kit";
 
 import type { SectionStatus } from "./section-status";
-import { hasGutterRail } from "./section-status";
 
 /* ============================== page + column ============================ */
 
@@ -184,25 +183,18 @@ export function docBlock(state: BlockStateFlags = {}): string {
 		"px-doc-block-x",
 		"py-doc-block-y-program",
 		"transition-colors duration-fast ease-out",
+		// the hovered block rides above its neighbours, so a gutter stack that
+		// overhangs a short block stays on top of the next block's lane.
+		"hover:z-20",
 		!state.selected && "has-[[data-block-grip]:hover]:bg-doc-hover",
 		state.selected && "bg-doc-selected",
 		state.selectedStrong && "bg-doc-selected-strong",
 		// the caret's block gets no fill: it is already marked by the caret.
-		// It gets the neutral gutter rail instead, see `docFocusRail`.
+		// Its status rail is pinned instead, see `docStatusRail`.
 		state.focused && "z-10",
 		state.dragging && "opacity-40",
 	);
 }
-
-/**
- * Neutral rail marking the block the caret is in. Sits in the same slot as
- * the status rail; status wins when both apply, since a failing block is
- * more urgent than "you are here".
- */
-export const docFocusRail = cn(
-	"absolute left-0 top-0 bottom-0 w-doc-rail rounded-full",
-	"bg-doc-focus-rail",
-);
 
 /**
  * The gutter. Hangs off the block's left edge into the page padding and holds
@@ -234,8 +226,15 @@ export const docFocusRail = cn(
  * strip and worked while a slow one did not. The two rects touch now, and
  * the walk is continuous at any speed.
  */
+//
+// The lane is a live hover target now, spanning the block's full height (and
+// at least the stack's height, min-h-14). It is a descendant of the block, so
+// standing anywhere in the column keeps the block's `group-hover/block`, and
+// the controls stay pinned at the top via pt-2. The overhang problem above is
+// handled by `hover:z-20` on the block: the hovered block paints over the next
+// one, so its overhanging lane and stack win the hit test.
 export const docGutter = cn(
-	"pointer-events-none absolute right-full w-doc-gutter top-2",
+	"absolute right-full top-0 bottom-0 min-h-14 w-doc-gutter pt-2",
 	"flex flex-col items-end gap-0.5 select-none",
 );
 
@@ -263,31 +262,27 @@ export const docGutter = cn(
  *    `delayed-open`/`instant-open` and portals the content out of this
  *    subtree, so neither half of the selector can see one.
  */
-export const docGutterAffordances = cn(
-	"pointer-events-none flex flex-col items-end gap-0.5 pr-1",
-	"opacity-0 transition-opacity duration-fast ease-out",
-	"group-hover/block:pointer-events-auto group-hover/block:opacity-100",
-	"focus-within:pointer-events-auto focus-within:opacity-100",
-	"[&:has([data-state=open])]:pointer-events-auto [&:has([data-state=open])]:opacity-100",
-);
+export function docGutterAffordances(pinned = false): string {
+	return cn(
+		// sticky: in a tall block the stack rides the top of the viewport while
+		// the block is on screen, and the full-height lane is its track.
+		"sticky top-2 flex flex-col items-end gap-0.5 pr-1",
+		"transition-opacity duration-fast ease-out",
+		pinned
+			? "pointer-events-auto opacity-100"
+			: cn(
+					"pointer-events-none opacity-0",
+					"group-hover/block:pointer-events-auto group-hover/block:opacity-100",
+					// keyboard focus only: a mouse click leaves focus on the button and must
+					// not pin the stack open after the pointer leaves.
+					"has-[:focus-visible]:pointer-events-auto has-[:focus-visible]:opacity-100",
+					"[&:has([data-state=open])]:pointer-events-auto [&:has([data-state=open])]:opacity-100",
+				),
+	);
+}
 
 /** One row of the gutter stack. Right-aligned, so the lane has a clean edge. */
 export const docGutterRow = "flex items-center justify-end gap-0.5";
-
-/**
- * The status slot, third row of the gutter stack.
- *
- * A 24px box holding an 8px dot -- the same box a kit `IconButton sm` is. The
- * dot alone would be a loose 8px glyph in a column of 24px squares, sitting
- * the row off the rhythm the other two keep.
- *
- * Deliberately not a control yet: a span, so nothing here takes focus or the
- * pointer, and the dot is a readout rather than something that looks clickable
- * and is not. What this buys is that the slot is already the right size and
- * in the right place, so the day the dot becomes a play/stop button it swaps
- * in and no geometry moves.
- */
-export const docGutterStatus = "inline-flex size-6 items-center justify-center";
 
 /**
  * The code toggle, on top of a kit `Toggle sm`. Trims the horizontal padding
@@ -352,20 +347,25 @@ export const docCodeBox = cn(
 /* ============================== status ================================== */
 
 /**
- * The status rail: a 2px line down the left of the block, in the section's
- * hue. Only painted for states that want the author's eye - see
- * `hasGutterRail`. Everything else stays silent.
+ * The status rail: a 2px line down the gutter lane's inner edge (beside the
+ * block, not on it), in the section's hue, running the lane's full height. It
+ * is the block's one state indicator, so every state paints one, idle
+ * included (muted gray). Same visibility as the gutter controls: block hover,
+ * or pinned while the source is open or the block is selected.
  */
-export function docStatusRail(status: SectionStatus): string {
-	if (!hasGutterRail(status)) return "hidden";
+export function docStatusRail(status: SectionStatus, pinned = false): string {
 	return cn(
-		"absolute left-0 top-0 bottom-0 w-doc-rail rounded-full",
-		"transition-colors duration-fast ease-out",
+		"absolute right-0 top-0 bottom-0 w-doc-rail rounded-full",
+		"transition-[color,background-color,opacity] duration-fast ease-out",
+		pinned ? "opacity-100" : "opacity-0 group-hover/block:opacity-100",
 		{
 			invalid: "bg-section-invalid",
-			failed: "bg-section-failed",
+			idle: "bg-section-idle",
+			starting: "bg-section-starting",
 			running: "bg-section-running",
-		}[status as "invalid" | "failed" | "running"],
+			stopped: "bg-section-stopped",
+			failed: "bg-section-failed",
+		}[status],
 	);
 }
 

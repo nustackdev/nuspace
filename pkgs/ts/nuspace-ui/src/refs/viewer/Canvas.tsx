@@ -57,25 +57,21 @@ import {
 	TooltipProvider,
 	TooltipTrigger,
 } from "@nustackdev/ui-kit";
-import { Check, Code, Copy, GripVertical, Plus } from "lucide-react";
+import { Check, Code, GripVertical, Hash, Plus } from "lucide-react";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { mintId } from "../../app/ids";
-import { SectionStatusDot } from "../../components";
 import {
 	docBlock,
 	docColumn,
 	docDragHandle,
 	docDropIndicator,
-	docFocusRail,
 	docGhost,
 	docGutter,
 	docGutterAffordances,
 	docGutterRow,
-	docGutterStatus,
 	docGutterToggle,
 	docStatusRail,
 	docTail,
-	hasGutterRail,
 } from "../../design";
 import { blockUiPath } from "./blocks";
 import type { Notify } from "./ops";
@@ -84,17 +80,6 @@ import { filterSlash, SlashMenu } from "./Slash";
 import type { SlashSnippet } from "./state";
 import { type EditorState, type FocusReq, patchEditor, useEditorState } from "./state";
 import type { ActivePage, Block, ExitDir, SectionState } from "./types";
-
-/**
- * What the gutter's status dot reports, for now.
- *
- * Hardcoded while the supervisor's per-block state is still settling: an
- * always-green dot is a placeholder nobody will read as truth, whereas a dot
- * that wobbles between real and invented states would be worse than none. To
- * go live, delete this and hand `Gutter` the block's own `status.state` at
- * the call site below -- the dot already renders all six.
- */
-const GUTTER_STATUS: SectionState = "running";
 
 const NO_SNIPPETS: SlashSnippet[] = [];
 
@@ -643,16 +628,11 @@ export function Canvas({
 							}}
 						>
 							{drag && drag.at === i ? <span className={`${docDropIndicator} top-0`} /> : null}
-							{/* One rail slot. A status the author must act on wins over
-						    "you are here", because a failing block is more urgent. */}
-							{hasGutterRail(state) ? (
-								<span className={docStatusRail(state)} />
-							) : focused ? (
-								<span className={docFocusRail} />
-							) : null}
 							{editable ? (
 								<Gutter
 									blockId={block.id}
+									state={state}
+									pinned={editing || selected}
 									editing={editing}
 									onSetEditing={(on) => setEditing(block.id, on)}
 									onDrag={(e) => startDrag(e, block.id)}
@@ -897,8 +877,14 @@ function Gutter({
 	onDrag,
 	onPlus,
 	onSelect,
+	state,
+	pinned,
 }: {
 	blockId: string;
+	/** The block's state, painted as the rail on the lane's edge. */
+	state: SectionState;
+	/** Keep controls + rail visible off hover: source open, or block-selected. */
+	pinned: boolean;
 	editing: boolean;
 	onSetEditing: (on: boolean) => void;
 	onDrag: (e: React.PointerEvent) => void;
@@ -923,6 +909,7 @@ function Gutter({
 
 	return (
 		<div className={docGutter}>
+			<span className={docStatusRail(state, pinned)} title={state} />
 			{/* Slower than the kit's 200ms, and with no instant reopen. The gutter
 			    is a stack you walk THROUGH to reach one control, so at the kit's
 			    delay a tooltip fires on every glyph you cross and lands portalled
@@ -932,7 +919,7 @@ function Gutter({
 			    once the first has spoken. Scoped here so the shell strip and the
 			    rails keep the kit's snappier feel. */}
 			<TooltipProvider delayDuration={700} skipDelayDuration={0}>
-				<div className={docGutterAffordances}>
+				<div className={docGutterAffordances(pinned)}>
 					<div className={docGutterRow}>
 						<Tooltip>
 							<TooltipTrigger asChild>
@@ -973,16 +960,11 @@ function Gutter({
 									aria-label="Copy this block's section id"
 									onClick={copyId}
 								>
-									{copied ? <Check className="text-status-ok" /> : <Copy />}
+									{copied ? <Check className="text-status-ok" /> : <Hash />}
 								</IconButton>
 							</TooltipTrigger>
 							<TooltipContent side="top">{copied ? "copied" : "copy section id"}</TooltipContent>
 						</Tooltip>
-					</div>
-					<div className={docGutterRow}>
-						<span className={docGutterStatus}>
-							<SectionStatusDot status={GUTTER_STATUS} />
-						</span>
 						<Tooltip>
 							<TooltipTrigger asChild>
 								<Toggle

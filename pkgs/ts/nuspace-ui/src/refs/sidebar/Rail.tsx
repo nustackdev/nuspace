@@ -91,6 +91,7 @@ import {
 	railLane,
 	railLaneStyle,
 	railLeafIcon,
+	railResizeHandle,
 	railRow,
 	railRowWrap,
 	railScroll,
@@ -101,6 +102,7 @@ import {
 import { RailFooter } from "./footer";
 import { RailHeader } from "./header";
 import type { Notify } from "./ops";
+import { useRailWidth } from "./resize";
 import { useRailFocus } from "./roving-focus";
 import { RailRow, RailRowLink, RailSectionLabel } from "./row";
 import { RailRowInput } from "./row-input";
@@ -185,6 +187,7 @@ export function Rail({
 	notify: Notify;
 }) {
 	const route = useRoute();
+	const { width: railWidth, onResizeStart, onResizeReset } = useRailWidth();
 	const root = rootId(tree);
 	// A bare "/" has nothing open, and no row stands in for that: the row that
 	// stands for the Space is the tree's root and is not drawn.
@@ -361,7 +364,7 @@ export function Rail({
 	);
 
 	return (
-		<aside className={railAside}>
+		<aside className={railAside} style={{ width: railWidth }}>
 			<RailHeader label={RAIL_LABEL} />
 			<nav aria-label="Planes" className={railScroll}>
 				{loading ? (
@@ -429,6 +432,13 @@ export function Rail({
 				)}
 			</nav>
 			<RailFooter />
+			{/* biome-ignore lint/a11y/noStaticElementInteractions: pointer-only resize strip */}
+			<div
+				aria-hidden="true"
+				className={railResizeHandle}
+				onPointerDown={onResizeStart}
+				onDoubleClick={onResizeReset}
+			/>
 		</aside>
 	);
 }
