@@ -2,7 +2,7 @@
 
 ## Packages shipped from this repo
 
-- **nuspace** (the runtime, the `nuspace` command) — 0.3.0
+- **nuspace** (the runtime, the `nuspace` command) — 0.3.1
 - **nuspace-ui** (the compiled web bundle) — 0.3.0
 
 Below is the changelog for **nuspace** - the full commit stream. Newest first.
@@ -19,6 +19,9 @@ separately here.
 - Add the operations every part of a space is built from
 - Store planes, cells and runs apart, and let a program declare its own typed state
 - Clear the v3 source out of the way for the v4 rewrite
+
+## 0.3.1 — 2026-09-23
+
 - Opening a page no longer slows down with each extra cell on it
 - Navigating away clears the old page at once instead of blinking through it
 - Keep workers ready in advance, so opening a plane no longer waits for one to start
