@@ -13,19 +13,20 @@
 #     Workflow name: publish-nuspace.yml
 #     Environment name: (leave blank)
 #
-# Two distributions ship from this repo, on independent tags:
-#   .                      -> nuspace     (the runtime + the `nuspace` command)
-#   ts     -> nuspace-ui  (the compiled vite bundle)
+# Three distributions ship from this repo, on independent tags:
+#   .                  -> nuspace     (the runtime + the `nuspace` command)
+#   pkgs/nuverse       -> nuverse     (the extensions: apps, snippets)
+#   pkgs/ts/nuspace-ui -> nuspace-ui  (the compiled vite bundle)
 #
-# They version independently. `nuspace` hard-depends on `nuspace-ui>=X.Y.Z`, so
-# a python release can require a newer bundle, but a bundle-only fix ships on
-# its own tag without republishing this wheel.
+# They version independently. `nuspace` hard-depends on `nuspace-ui>=X.Y.Z` and
+# `nuverse>=X.Y.Z`, so a python release can require a newer bundle, but a
+# bundle-only fix ships on its own tag without republishing this wheel.
 #
-# The wheel deliberately excludes `ts/**` (see the hatch config
-# in pyproject.toml). The compiled assets live in the nuspace-ui wheel and are
-# found at runtime by `import nuspace_ui` -- see `_bundled_static()` in
-# src/nuspace/web/serve/app.py. So this build needs no node toolchain, even
-# though an install always pulls the bundle.
+# The wheel deliberately ships `src/nuspace` alone, `pkgs/**` stays out (see
+# the hatch config in pyproject.toml). The compiled assets live in the
+# nuspace-ui wheel and are found at runtime by import -- see `serve_web` in
+# src/nuspace/system/devices/web/device.py. So this build needs no node
+# toolchain, even though an install always pulls the bundle.
 #
 # Ordering on a coordinated release: push the `nuspace-ui@` tag first, so the
 # bundle is on the index before the wheel that requires it.

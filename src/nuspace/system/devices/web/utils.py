@@ -64,8 +64,8 @@ __all__ = [
 OPS = "ops"
 
 #: The segment a cell's own node sits under, one level below the viewer. The
-#: browser's spelling (``ts/src/refs/viewer/blocks.ts``): moving it here
-#: without moving it there breaks drawing.
+#: browser's spelling (``pkgs/ts/nuspace-ui/src/refs/viewer/blocks.ts``):
+#: moving it here without moving it there breaks drawing.
 CELLS = "sections"
 
 #: How long a parked branch sleeps between doing nothing.

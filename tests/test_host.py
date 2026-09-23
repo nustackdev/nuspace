@@ -8,8 +8,6 @@ the space opens. The web variant is only compiled.
 from __future__ import annotations
 
 import asyncio
-import logging
-import runpy
 import subprocess
 import sys
 import warnings
@@ -30,6 +28,9 @@ from nuspace.shapes import STATUS_UP, Reroot, Space, reroot
 from nuspace.system.kernel import Env, store
 from nuspace.system.kernel.body import Bracketed, Rewrites
 from nuspace.system.services import BOOTED, SERVICES, ensure_system, init
+from nuverse.snippets import SNIPPETS
+from nuverse.snippets import program as nuverse_program
+from nuverse.snippets import prose as nuverse_prose
 
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -152,20 +153,6 @@ TAB = "tab"
 STARTER = "starter"
 
 
-def _example() -> dict:
-    """examples/web.py as a namespace, its logging tweak undone."""
-    quiet = logging.getLogger("invisibles")
-    level = quiet.level
-    try:
-        return runpy.run_path(str(Path(__file__).parents[1] / "examples" / "web.py"))
-    finally:
-        quiet.setLevel(level)
-
-
-#: The web example, loaded: its snippets are checked below.
-EXAMPLE = _example()
-
-
 async def test_boot_before_the_first_open_keeps_the_services(store):
     await store.run(boot(USER) >> ensure_system())
     assert await store.read(ops.cell_rows(init.PLANE)) == [
@@ -189,9 +176,9 @@ async def test_open_space_headless_runs_a_booted_plane(tmp_path, monkeypatch):
         >> ops.add_plane(TAB)
         >> ops.add_cell(TAB, SET_42, cell_id="c")
         >> atomic(stale.opened.set(nu.Float(0.0)) >> stale.route.set(nu.Str(TAB)))
-        # The web example's starter program runs headless too.
+        # nuverse's starter program runs headless too.
         >> ops.add_plane(STARTER)
-        >> ops.add_cell(STARTER, EXAMPLE["PROGRAM"], cell_id="c")
+        >> ops.add_cell(STARTER, nuverse_program.SOURCE, cell_id="c")
         >> boot(STARTER)
     )
     await nu.arun(nu.With(store(path), body=seed))
@@ -223,17 +210,17 @@ async def test_open_space_headless_runs_a_booted_plane(tmp_path, monkeypatch):
         await space.close()
 
 
-# --- the web example's snippets ---------------------------------------------------
+# --- nuverse's snippets ---------------------------------------------------------
 
 
-async def test_example_prose_loads_through_the_kernel_rewrites(store):
+async def test_nuverse_prose_loads_through_the_kernel_rewrites(store):
     """Prose draws, so it runs only in a session: here it is loaded and compiled."""
     from nuspace.system.devices.web.env import session_env
     from nuspace.system.devices.web.viewer.feed import PROSE, prose_source
 
-    assert prose_source(EXAMPLE["SNIPPETS"]) == EXAMPLE["PROSE"]
+    assert prose_source(SNIPPETS) == nuverse_prose.SOURCE
     assert PROSE == "prose"
-    await store.run(ops.add_plane("p") >> ops.add_cell("p", EXAMPLE["PROSE"], cell_id="c"))
+    await store.run(ops.add_plane("p") >> ops.add_cell("p", nuverse_prose.SOURCE, cell_id="c"))
     env = session_env("127.0.0.1:9")("s1")
     rewrite = Rewrites(Reroot("p", "c"), env.rewrite, Bracketed())
     source = Space.planes["p"].cells["c"].prog

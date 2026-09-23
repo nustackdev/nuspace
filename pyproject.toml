@@ -22,6 +22,11 @@ dependencies = [
     # project size and a SPA rebuilt on every UI tweak would eat the quota --
     # not optional. `pip install nuspace` gives you the browser.
     "nuspace-ui>=0.3.0",
+    # The extensions a space offers out of the box: apps, snippets. Always
+    # pulled, split into extras when its deps grow. nuspace never imports it:
+    # it is found through the `nuspace.extensions` entry point, like any
+    # third party.
+    "nuverse>=0.1.0",
     "typing-extensions>=4.7.0",
     "click>=8.0",
     "rich>=10.7",
@@ -63,13 +68,18 @@ nuspace = "nuspace.host.cli:main"
 packages = ["src/nuspace"]
 
 [tool.hatch.build.targets.sdist]
+# pkgs/ holds the sibling distributions (nuverse, nuspace-ui), each shipped
+# from its own directory on its own tag.
 exclude = [
-    "ts/node_modules",
-    "ts/dist",
+    "pkgs",
 ]
 
+[tool.uv.workspace]
+members = ["pkgs/nuverse"]
+
 [tool.uv.sources]
-nuspace-ui = { path = "./ts" }
+nuverse = { workspace = true }
+nuspace-ui = { path = "./pkgs/ts/nuspace-ui" }
 nucore = { path = "../nu", editable = true }
 nustd = { path = "../nu/pkgs/nustd", editable = true }
 nucli = { path = "../nu/pkgs/nucli", editable = true }
@@ -132,6 +142,7 @@ line-length = 100
 target-version = "py310"
 src = [
     "src",
+    "pkgs/nuverse/src",
 ]
 extend-exclude = [".venv", "build", "dist", "*.egg-info"]
 
@@ -174,6 +185,7 @@ convention = "google"
 [tool.ruff.lint.isort]
 known-first-party = [
     "nuspace",
+    "nuverse",
     "nu",
     "nustd",
     "nucli",

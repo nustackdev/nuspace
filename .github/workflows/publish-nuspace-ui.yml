@@ -3,9 +3,9 @@
 #
 # The nuspace-ui wheel is nothing but the compiled vite SPA, force-included at
 # the wheel path `nuspace_ui/build/`. It carries no python source and no
-# dependencies. The runtime locates it with `import nuspace_ui` -- see
-# `_bundled_static()` in src/nuspace/web/serve/app.py -- and skips the static
-# mount entirely if it is not installed.
+# dependencies. The web device hands `static="nuspace_ui"` to nustd.ws_server,
+# which locates it by import (see `serve_web` in
+# src/nuspace/system/devices/web/device.py).
 #
 # Keeping the bundle in its own distribution is the point: PyPI caps project
 # size, and a compiled SPA rebuilt on every UI tweak would burn through the
@@ -20,8 +20,8 @@
 #     Environment name: (leave blank)
 #
 # Release flow:
-#   1. Bump `version` in both `ts/pyproject.toml` and
-#      `ts/package.json` (keep them equal).
+#   1. Bump `version` in both `pkgs/ts/nuspace-ui/pyproject.toml`
+#      and `pkgs/ts/nuspace-ui/package.json` (keep them equal).
 #   2. Commit and push to main.
 #   3. `git tag nuspace-ui@X.Y.Z && git push origin nuspace-ui@X.Y.Z`.
 name: Publish nuspace-ui to PyPI
@@ -40,7 +40,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  UI_DIR: ts
+  UI_DIR: pkgs/ts/nuspace-ui
 
 jobs:
   publish:
@@ -53,7 +53,7 @@ jobs:
         with:
           node-version: 24
           cache: npm
-          cache-dependency-path: ts/package-lock.json
+          cache-dependency-path: pkgs/ts/nuspace-ui/package-lock.json
 
       - uses: actions/setup-python@v5
         with:
@@ -115,5 +115,5 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/nuspace-ui@')
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          packages-dir: ts/wheel-dist
+          packages-dir: pkgs/ts/nuspace-ui/wheel-dist
           skip-existing: true

@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Ship apps and snippets as nuverse, a separate package found on install
 - Run a cell the moment it is added to an open page, and stop it when removed
 - Forget old browser tabs on open, and give the web example prose and program cells
 - Open a space from one call or the command line, with extensions found on install

@@ -5,7 +5,7 @@ GREEN := \033[0;32m
 YELLOW := \033[1;33m
 NC := \033[0m
 
-UI_APP := ts
+UI_APP := pkgs/ts/nuspace-ui
 
 help:
 	@echo "$(BLUE)nuspace$(NC)"
