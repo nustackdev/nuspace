@@ -12,6 +12,7 @@ separately here.
 
 ## Unreleased
 
+- A cell finishing no longer breaks drawing for the other cells on its page
 - Every cell renders the same way, and / inserts any registered snippet
 - Publish nuverse on its own tag so the extensions ship separately
 - Pick any registered snippet from the / menu

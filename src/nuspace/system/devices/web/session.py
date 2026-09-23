@@ -22,6 +22,7 @@ the host's loop. :class:`HostedSession` hands every call back to that loop.
 from __future__ import annotations
 
 import asyncio
+import threading
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING, Any
 
@@ -65,25 +66,38 @@ class FrameCodec:
     Invisibles boxes a class it was not told about by reference, and the
     encoder cannot msgpack a netref. Registering the frame type pickles it
     across instead, chain and all, which lets a cell in a worker create the
-    node it writes to. The registry is process wide, so this is a bracket:
-    what it registers it takes back out.
+    node it writes to.
+
+    The registry is process wide and a worker hosts many runs at once, so the
+    registration is counted: the first run in registers, the last one out
+    unregisters. Uncounted, the first run to end took frames away from every
+    run still drawing on its worker.
     """
 
+    _held = 0
+    _lock = threading.Lock()
+
     def setup(self, ctx: Context) -> None:
-        """Register the frame type."""
+        """Register the frame type, once per process."""
         from invisibles.core.boxing import register_value_type
 
         from nustd.ui.core.protocol import Frame
 
-        register_value_type(Frame)
+        with FrameCodec._lock:
+            if FrameCodec._held == 0:
+                register_value_type(Frame)
+            FrameCodec._held += 1
 
     def cleanup(self) -> None:
-        """Drop the registration."""
+        """Drop the registration when the last run holding it ends."""
         from invisibles.core.boxing import unregister_value_type
 
         from nustd.ui.core.protocol import Frame
 
-        unregister_value_type(Frame)
+        with FrameCodec._lock:
+            FrameCodec._held -= 1
+            if FrameCodec._held == 0:
+                unregister_value_type(Frame)
 
     async def asetup(self, ctx: Context) -> None:
         """Async shim: setup is sync work."""
