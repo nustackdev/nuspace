@@ -28,7 +28,6 @@ from nuspace.shapes import STATUS_UP, Reroot, Space, reroot
 from nuspace.system.kernel import Env, store
 from nuspace.system.kernel.body import Bracketed, Rewrites
 from nuspace.system.services import BOOTED, SERVICES, ensure_system, init
-from nuverse.snippets import SNIPPETS
 from nuverse.snippets import program as nuverse_program
 from nuverse.snippets import prose as nuverse_prose
 
@@ -216,10 +215,7 @@ async def test_open_space_headless_runs_a_booted_plane(tmp_path, monkeypatch):
 async def test_nuverse_prose_loads_through_the_kernel_rewrites(store):
     """Prose draws, so it runs only in a session: here it is loaded and compiled."""
     from nuspace.system.devices.web.env import session_env
-    from nuspace.system.devices.web.viewer.feed import PROSE, prose_source
 
-    assert prose_source(SNIPPETS) == nuverse_prose.SOURCE
-    assert PROSE == "prose"
     await store.run(ops.add_plane("p") >> ops.add_cell("p", nuverse_prose.SOURCE, cell_id="c"))
     env = session_env("127.0.0.1:9")("s1")
     rewrite = Rewrites(Reroot("p", "c"), env.rewrite, Bracketed())

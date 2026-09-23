@@ -11,8 +11,8 @@
 //
 // Density note. A document is not a panel. Horizontally it uses kit density
 // (a block's inner chrome is chrome: 32px rows, 6px radii). Vertically it is
-// looser, but the air comes from the 16px/1.55 prose line box, not from
-// padding - block padding stays at 4px. See tokens.css for the full rule.
+// looser, but the air comes from the 16px/1.55 body line box, not from
+// padding. See tokens.css for the full rule.
 
 import { cn } from "@nustackdev/ui-kit";
 
@@ -48,9 +48,6 @@ export const docPageLoading = "flex items-center gap-2 p-8 text-base text-text-m
 
 /**
  * A ghost input: the line where a block will be, before there is one.
- *
- * Padded and set like a prose block, because the moment it becomes one the
- * caret must not move: what you are looking at is where your text will be.
  *
  * It says nothing at rest. A permanent control sitting at the foot of every
  * document repeating its own instructions is the loudest thing on a page
@@ -127,8 +124,7 @@ export const docTrail = "px-doc-block-x";
  * lands between the two.
  *
  * No focus ring. A ring around a 40px heading is a box drawn around the page's
- * name, and the caret already says where you are -- the same bargain the prose
- * blocks below make. The placeholder is a `::before` on the empty element
+ * name, and the caret already says where you are. The placeholder is a `::before` on the empty element
  * rather than a second absolutely positioned node, so it can never fall out of
  * alignment with that caret.
  */
@@ -148,65 +144,8 @@ export const docTitle = `${cn(
 	"empty:before:content-[attr(data-placeholder)]",
 )} text-doc-title`;
 
-/** Document body type tier. 16px is the only place typography.md ships xl. */
-export const docProse = "text-xl text-text-primary";
-
 /** Code inside a block. Editor tier is 14px mono, per typography.md §1. */
 export const docCode = "font-mono text-lg text-text-primary";
-
-/* ============================== prose interior =========================== */
-//
-// The inside of a prose island. These are the *only* place the document's
-// typographic rhythm is stated, and the editor's schema hands them straight
-// to `toDOM`, so what you type is styled by the same recipe that styles what
-// you read. That is what removes the old leaf's mode-swap layout shift:
-// there is no second rendering to disagree with.
-
-/**
- * The host the kit's `ProseEditor` mounts into. Type only: the contenteditable
- * is its child and inherits it, and the three rules that have to name the
- * editable itself (placeholder, trailing rule, focus outline) ship with the
- * kit under `.nu-prose-editor`.
- */
-export const docProseEditor = docProse;
-
-/** A paragraph. Tight vertical rhythm; the air comes from the line box. */
-export const docParagraph = "my-2 leading-relaxed first:mt-0 last:mb-0";
-
-/** Headings. Only three levels; the slash menu offers exactly these. */
-export function docHeading(level: number): string {
-	return (
-		{
-			1: "text-3xl font-semibold tracking-tight mt-6 mb-2 first:mt-0",
-			2: "text-2xl font-semibold tracking-tight mt-5 mb-2 first:mt-0",
-			3: "text-xl font-semibold tracking-tight mt-4 mb-1.5 first:mt-0",
-		}[level] ?? "text-xl font-semibold tracking-tight mt-4 mb-1.5 first:mt-0"
-	);
-}
-
-export const docBlockquote = cn(
-	"my-2 border-l-2 border-border-strong pl-3 text-text-secondary",
-	"[&>p]:my-1 [&>p:first-child]:mt-0 [&>p:last-child]:mb-0",
-);
-
-const LIST = cn("my-2 space-y-1 pl-5 marker:text-text-muted", "[&_ul]:my-1 [&_ol]:my-1");
-export const docBulletList = cn(LIST, "list-disc");
-export const docOrderedList = cn(LIST, "list-decimal");
-
-/** A list item. Its paragraph loses the block margin so items stay tight. */
-export const docListItem = "[&>p]:my-0";
-
-export const docRule = "my-5 border-border-subtle";
-
-/* --- inline marks --- */
-
-export const docStrong = "font-semibold";
-export const docEm = "italic";
-export const docInlineCode = cn(
-	"rounded-sm bg-bg-sunken px-1 py-0.5",
-	"font-mono text-[0.9em] text-text-primary",
-);
-export const docLink = "text-accent underline underline-offset-2";
 
 /* ============================== block ==================================== */
 
@@ -219,8 +158,6 @@ export interface BlockStateFlags {
 	selectedStrong?: boolean;
 	/** This block is the one being dragged. Ghosted while it travels. */
 	dragging?: boolean;
-	/** Program block rather than a prose island. Slightly more pad-y. */
-	program?: boolean;
 }
 
 /**
@@ -245,7 +182,7 @@ export function docBlock(state: BlockStateFlags = {}): string {
 	return cn(
 		"group/block relative w-full rounded-sm",
 		"px-doc-block-x",
-		state.program ? "py-doc-block-y-program" : "py-doc-block-y",
+		"py-doc-block-y-program",
 		"transition-colors duration-fast ease-out",
 		!state.selected && "has-[[data-block-grip]:hover]:bg-doc-hover",
 		state.selected && "bg-doc-selected",
@@ -276,14 +213,11 @@ export const docFocusRail = cn(
  * Sized to hold the widest row - two `sm` IconButtons side by side (24px each
  * + a 2px gap) - which is what makes the gutter one lane instead of two
  * overlapping ones. The top offset lines the first row up with the block's
- * first line: a 25px prose line box sits 4px into the block, a program block's
- * output sits 8px in, which is the only thing `program` still buys here now
- * that the block-level control row is gone.
+ * output, which sits 8px in.
  *
- * The lane itself is inert. Three stacked rows are 76px tall (3x24 + 2x2)
- * while a one-line prose block is 33px (a 25px line box plus 4px of pad-y top
- * and bottom), so a block's gutter hangs roughly 47px past the bottom of the
- * block it belongs to and straight across the next block's gutter slot. If
+ * The lane itself is inert. Three stacked rows are 76px tall (3x24 + 2x2),
+ * taller than a one-line block, so a block's gutter hangs past the bottom of
+ * the block it belongs to and straight across the next block's gutter slot. If
  * both were live hit targets the lower one would win by document order and
  * moving down your own controls would hand you the neighbour's - which is
  * exactly what it did. `pointer-events-none` here and on the hidden stack
@@ -300,13 +234,10 @@ export const docFocusRail = cn(
  * strip and worked while a slow one did not. The two rects touch now, and
  * the walk is continuous at any speed.
  */
-export function docGutter(program = false): string {
-	return cn(
-		"pointer-events-none absolute right-full w-doc-gutter",
-		program ? "top-2" : "top-1",
-		"flex flex-col items-end gap-0.5 select-none",
-	);
-}
+export const docGutter = cn(
+	"pointer-events-none absolute right-full w-doc-gutter top-2",
+	"flex flex-col items-end gap-0.5 select-none",
+);
 
 /**
  * Wrapper for the hover-only affordances inside the gutter. One reveal for all
@@ -326,7 +257,7 @@ export function docGutter(program = false): string {
  *  - hover, the ordinary one.
  *  - focus-within scoped to the STACK, not to the block. Block-scoped
  *    focus-within pinned the controls open for as long as the caret sat in the
- *    prose, which is most of the time you are writing; a keyboard user who has
+ *    block, which is most of the time you are writing; a keyboard user who has
  *    tabbed onto one of these buttons still keeps them.
  *  - an open menu or popover. Tooltips cannot pin it: Radix reports them as
  *    `delayed-open`/`instant-open` and portals the content out of this
@@ -378,10 +309,9 @@ export const docDropIndicator = cn(
 	"rounded-full bg-doc-drop-line",
 );
 
-/* ============================== program block ============================ */
+/* ============================== block interior =========================== */
 //
-// A program block is a document block that happens to be a live section, so
-// its interior is kit density even though the page around it is not: the type
+// Every block is a live section, so its interior is kit density even though the page around it is not: the type
 // inside it is chrome type, and the code box gets the same bordered-and-sunken
 // treatment an app's editor gets. What makes it a document block and not a
 // panel is the outside - the gutter, the measure, the block padding - and that
@@ -407,13 +337,6 @@ export const docProgramFields = "flex flex-col gap-3 py-1";
 
 /** The "runs headless" line, when a block mounts nothing. */
 export const docProgramHeadless = "py-1 text-base text-text-muted";
-
-/**
- * A text block's stack: a diagnostic if there is one, the source if you asked
- * for it, then the document. Same shape as `docProgram`, because a text block
- * is a section like any other and only its output differs.
- */
-export const docTextBlock = "flex flex-col gap-1";
 
 /**
  * The code box around Monaco. Bordered and sunken, so a source editor looks
@@ -474,12 +397,6 @@ export const docSlashMenu = cn(
 	"duration-base ease-out",
 );
 
-/** Group heading inside the slash menu. */
-export const docSlashMenuLabel = cn(
-	"px-2 py-1.5 text-xs font-medium tracking-[0.02em]",
-	"uppercase text-text-muted select-none",
-);
-
 /**
  * One slash-menu row. 32px, the kit's default row height. Active row uses the
  * accent tier because here selection IS the only state - there is no
@@ -502,9 +419,3 @@ export const docSlashMenuHint = "ml-auto font-mono text-xs text-text-muted";
 
 /** Empty state when the query matches nothing. */
 export const docSlashMenuEmpty = "px-2 py-6 text-center text-sm text-text-muted";
-
-/** Placeholder shown on an empty focused prose block ("type / for blocks"). */
-export const docPlaceholder = cn(
-	"pointer-events-none absolute select-none",
-	"text-xl text-text-muted",
-);

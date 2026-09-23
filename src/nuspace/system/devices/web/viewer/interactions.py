@@ -32,8 +32,6 @@ __all__ = [
     "STATE_RUNNING",
     "STATE_STARTING",
     "STATE_STOPPED",
-    "TPL_PROGRAM",
-    "TPL_TEXT",
     "on_create_cell",
     "on_delete_cell",
     "on_move_cell",
@@ -44,12 +42,6 @@ __all__ = [
     "set_status",
 ]
 
-
-#: A cell the person writes prose into: a document surface.
-TPL_TEXT = "text"
-
-#: A cell the person writes a program into. Anything not :data:`TPL_TEXT`.
-TPL_PROGRAM = "program"
 
 #: Nothing running, and nothing wrong the last time.
 STATE_IDLE = "idle"
@@ -83,7 +75,7 @@ def set_page(
 ) -> Nu:
     """Replace what the viewer draws: one plane and its cells, in order.
 
-    A cell is ``{id, name, tpl, source}``. Every select is answered with one,
+    A cell is ``{id, name, source}``. Every select is answered with one,
     even for something that is not a plane, or the viewer loads forever.
     """
     return write(viewer, "set_page", page_id=plane_id, title=title, editable=editable, blocks=cells)
@@ -107,7 +99,10 @@ def on_select(viewer: Ref) -> Changed:
 
 
 def on_create_cell(viewer: Ref) -> Changed:
-    """``{page_id, section_id, name, tpl, source, index}``. Browser minted id."""
+    """``{page_id, section_id, name, index}``. Browser minted id.
+
+    ``name`` names a snippet: the cell stores its prog and takes its name.
+    """
     return event(viewer, "section.create")
 
 

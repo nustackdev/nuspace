@@ -4,11 +4,9 @@ A component ref like ``ButtonRef``, only wider: it renders one plane's cells.
 It never asks what kind of plane it draws; the one bit it reads off the
 plane is ``editable``, which arrives with the page like anything else.
 
-It is mounted with two props, both off the registered snippets (D19):
-``starters``, what a cell made from each ``/`` entry starts as, and
-``snippets``, the ``/`` menu's block entries in order. Seeded when the shell
-boots, since the snippets are the host's registry and the shell is a static
-class.
+It is mounted with one prop off the registered snippets (D19):
+``snippets``, the ``/`` menu's entries in order. Seeded when the shell boots,
+since the snippets are the host's registry and the shell is a static class.
 """
 
 from __future__ import annotations
@@ -29,24 +27,12 @@ if TYPE_CHECKING:
     from nustd.ui.core import Changed
 
 
-__all__ = ["ViewerRef", "slash_entries", "starters"]
-
-#: The snippet whose prog marks a cell as prose (D19).
-PROSE = "prose"
-
-
-def starters(snippets: Iterable[Snippet]) -> dict[str, str]:
-    """What a cell made from each snippet starts as, keyed by snippet name."""
-    return {snippet.name: snippet.source for snippet in snippets}
+__all__ = ["ViewerRef", "slash_entries"]
 
 
 def slash_entries(snippets: Iterable[Snippet]) -> list[dict]:
-    """The ``/`` menu's block entries, in registry order.
-
-    ``text`` marks the prose snippet: the browser makes a document cell from
-    it rather than a program cell.
-    """
-    return [{"name": s.name, "label": s.label, "text": s.name == PROSE} for s in snippets]
+    """The ``/`` menu's entries, ``{name, label}`` in registry order."""
+    return [{"name": s.name, "label": s.label} for s in snippets]
 
 
 class ViewerRef(SpaceRef):
@@ -55,16 +41,9 @@ class ViewerRef(SpaceRef):
     _wire_type: ClassVar[str] = "ViewerRef"
 
     @classmethod
-    def slot(
-        cls,
-        *,
-        starters: Mapping[str, str] | None = None,
-        snippets: Sequence[Mapping[str, object]] | None = None,
-    ) -> Self:
-        """Mount the viewer, seeded with what a new cell starts as and the menu."""
-        return super().slot(
-            starters=dict(starters or {}), snippets=[dict(s) for s in snippets or ()]
-        )
+    def slot(cls, *, snippets: Sequence[Mapping[str, object]] | None = None) -> Self:
+        """Mount the viewer, seeded with the ``/`` menu."""
+        return super().slot(snippets=[dict(s) for s in snippets or ()])
 
     def set_page(
         self,
@@ -86,7 +65,7 @@ class ViewerRef(SpaceRef):
         return interactions.on_select(self)
 
     def on_create_section(self) -> Changed:
-        """``{page_id, section_id, name, tpl, source, index}``."""
+        """``{page_id, section_id, name, index}``."""
         return interactions.on_create_cell(self)
 
     def on_update_section(self) -> Changed:

@@ -1,7 +1,7 @@
 """The viewer: the open plane's cells, drawn. One, never one per kind.
 
 ``ref``
-    The node the browser draws, mounted with the snippets' starters.
+    The node the browser draws, mounted with the snippets' ``/`` menu.
 ``interactions``
     Everything that node says and hears, in the browser's words.
 ``feed``
@@ -9,14 +9,7 @@
     page or the statuses again.
 """
 
-from nuspace.system.devices.web.viewer.feed import (
-    PROSE,
-    blocks,
-    page,
-    prose_source,
-    statuses,
-    viewer_feed,
-)
+from nuspace.system.devices.web.viewer.feed import blocks, page, statuses, viewer_feed
 from nuspace.system.devices.web.viewer.interactions import (
     STATE_FAILED,
     STATE_IDLE,
@@ -24,8 +17,6 @@ from nuspace.system.devices.web.viewer.interactions import (
     STATE_STARTING,
     STATE_STOPPED,
     STATES,
-    TPL_PROGRAM,
-    TPL_TEXT,
     on_create_cell,
     on_delete_cell,
     on_move_cell,
@@ -35,19 +26,16 @@ from nuspace.system.devices.web.viewer.interactions import (
     set_page,
     set_status,
 )
-from nuspace.system.devices.web.viewer.ref import ViewerRef, slash_entries, starters
+from nuspace.system.devices.web.viewer.ref import ViewerRef, slash_entries
 
 
 __all__ = [
-    "PROSE",
     "STATES",
     "STATE_FAILED",
     "STATE_IDLE",
     "STATE_RUNNING",
     "STATE_STARTING",
     "STATE_STOPPED",
-    "TPL_PROGRAM",
-    "TPL_TEXT",
     "ViewerRef",
     "blocks",
     "on_create_cell",
@@ -57,11 +45,9 @@ __all__ = [
     "on_select",
     "on_update_cell",
     "page",
-    "prose_source",
     "set_page",
     "set_status",
     "slash_entries",
-    "starters",
     "statuses",
     "viewer_feed",
 ]

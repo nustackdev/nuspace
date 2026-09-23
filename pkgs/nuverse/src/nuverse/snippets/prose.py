@@ -1,8 +1,8 @@
-"""The ``prose`` snippet: a document cell.
+"""The ``prose`` snippet: a text editor cell.
 
-One prose surface over a string in its own state, synced both ways. Every
-prose cell holds exactly this prog, and that is how the viewer tells one
-apart: what the person wrote lives in the state, not here.
+One prose surface over a string in its own state, synced both ways. What the
+person wrote lives in the state, not in the prog. The viewer draws it like any
+other cell.
 """
 
 from __future__ import annotations

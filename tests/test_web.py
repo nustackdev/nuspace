@@ -201,20 +201,17 @@ async def test_viewer_page(store):
     await store.run(ops.add_cell("p1", "x = 1", cell_id="c2", name="code"))
     await store.run(ops.add_cell("p1", "y = 2", cell_id="c0", name="first", index=0))
 
-    got = await store.read(page("p1", PROSE_SRC))
+    got = await store.read(page("p1"))
 
     assert got == {
         "title": "Notes",
         "editable": True,
         "blocks": [
-            {"id": "c0", "name": "first", "tpl": "program", "source": "y = 2"},
-            {"id": "c1", "name": "intro", "tpl": "text", "source": PROSE_SRC},
-            {"id": "c2", "name": "code", "tpl": "program", "source": "x = 1"},
+            {"id": "c0", "name": "first", "source": "y = 2"},
+            {"id": "c1", "name": "intro", "source": PROSE_SRC},
+            {"id": "c2", "name": "code", "source": "x = 1"},
         ],
     }
-    # No prose snippet: everything is a program.
-    plain = await store.read(page("p1"))
-    assert {block["tpl"] for block in plain["blocks"]} == {"program"}
 
 
 async def test_viewer_page_missing_and_not_editable(store):
@@ -369,7 +366,9 @@ async def test_connection_live(store):
         await _until(lambda: session.writes("set_tree"))
         assert session.frames[0].op == "remove"
         viewer_init = next(f for f in session.frames if f.ref == ("viewer",))
-        assert viewer_init.chain[0][2]["starters"] == {s.name: s.source for s in SNIPPETS}
+        assert viewer_init.chain[0][2]["snippets"] == [
+            {"name": s.name, "label": s.label} for s in SNIPPETS
+        ]
         assert [row["id"] for row in session.writes("set_tree")[-1]["pages"]] == [
             "space",
             "page",
@@ -404,13 +403,21 @@ async def test_connection_live(store):
         assert len(session.writes("set_status")) == stats
         assert len(session.writes("set_tree")) == trees
 
-        # Browser events run ops.
+        # Browser events run ops. A create stores the named snippet's prog, an
+        # unknown name a blank program.
         session.notify(
             ("viewer", "ops", "section.create"),
-            {"page_id": "p1", "section_id": "c3", "tpl": "text", "source": "tail", "index": 0},
+            {"page_id": "p1", "section_id": "c3", "name": "prose", "index": 0},
         )
         await _until(lambda: session.writes("set_page")[-1]["blocks"][0]["id"] == "c3")
-        assert session.writes("set_page")[-1]["blocks"][0]["tpl"] == "text"
+        made = session.writes("set_page")[-1]["blocks"][0]
+        assert made["name"] == "prose" and made["source"] == PROSE_SRC
+        session.notify(
+            ("viewer", "ops", "section.create"),
+            {"page_id": "p1", "section_id": "c4", "name": "nope", "index": 0},
+        )
+        await _until(lambda: session.writes("set_page")[-1]["blocks"][0]["id"] == "c4")
+        assert session.writes("set_page")[-1]["blocks"][0]["source"] == ""
         session.notify(
             ("sidebar", "ops", "page.create"), {"page_id": "p2", "group": "job", "title": "Two"}
         )

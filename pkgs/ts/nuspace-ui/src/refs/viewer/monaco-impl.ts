@@ -10,8 +10,7 @@
 // program block mounts.
 //
 // Monaco owns the contents of ONE program block and nothing else. It has no
-// idea a document exists. That is the borrow boundary, and it is the same
-// boundary the prose leaf sits behind.
+// idea a document exists. That is the borrow boundary.
 
 import * as monaco from "monaco-editor/editor/editor.api.js";
 

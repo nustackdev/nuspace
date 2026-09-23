@@ -6,12 +6,8 @@
 // Block order is list position in the Plane's `order` on the server, so blocks
 // arrive already in order and carry no `order` field to renormalise.
 
-/**
- * Provenance, not type. Every block is a Nu program; `tpl` says what made the
- * one it stores. The editor reads it to pick an affordance and for nothing
- * else.
- */
-export type BlockTpl = "text" | "program";
+/** Which way the caret leaves an editor across a block boundary. */
+export type ExitDir = "up" | "down";
 
 /** Fixed contract, shared with the out-of-process executor. Do not redesign. */
 export type SectionState = "invalid" | "idle" | "starting" | "running" | "stopped" | "failed";
@@ -26,9 +22,7 @@ export type SectionStatus = {
 export type Block = {
 	id: string;
 	name: string;
-	tpl: BlockTpl;
-	/** The Nu program this block stores. For a `text` block it is the
-	 *  template, identical for every text block on the Plane. */
+	/** The Nu program this block stores. */
 	source: string;
 	/** Never null. Every block compiles, runs and is supervised. */
 	status: SectionStatus;
@@ -86,7 +80,6 @@ export function coerceBlocks(raw: unknown): Block[] {
 		out.push({
 			id,
 			name: String(r.name ?? id),
-			tpl: r.tpl === "text" ? "text" : "program",
 			source: String(r.source ?? ""),
 			status: coerceStatus(r.status) ?? {
 				section_id: id,

@@ -5,12 +5,9 @@
 // block flips independently, its neighbours keep running, and a save restarts
 // exactly one section. That is most of the DX win in this task.
 //
-// There is no chrome in here. Status, the section id and the code toggle used
-// to sit on a control row at the top of every program block, which made a
-// program block look like a different kind of thing from the paragraph above
-// it -- and it is not, both compile, run and are supervised identically. All
-// three moved to the gutter (see ./Canvas.tsx), where every block gets
-// them, so what is left below is purely what the program produced.
+// There is no chrome in here. Status, the section id and the code toggle live
+// in the gutter (see ./Canvas.tsx), where every block gets them, so what is
+// left below is purely what the program produced.
 //
 // The chrome still consumes the fixed status contract:
 //
@@ -34,9 +31,8 @@ import {
 } from "../../design";
 import { useBlockHasUi } from "./blocks";
 import { SourceEditor } from "./Code";
-import type { ExitDir } from "./ProseRef";
 import type { FocusReq } from "./state";
-import type { SectionState, SectionStatus } from "./types";
+import type { ExitDir, SectionState, SectionStatus } from "./types";
 
 export type ProgramProps = {
 	source: string;

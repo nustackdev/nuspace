@@ -4,8 +4,8 @@
 // The wire half is the open Plane and its blocks, replaced wholesale by
 // `set_page` and patched by `set_status`. It lands in props.
 //
-// The browser half is caret intent, block selection, which program blocks are
-// open in code mode, the slash menu, the drag in flight. The server never sees
+// The browser half is caret intent, block selection, which blocks are open in
+// code mode, the slash menu, the drag in flight. The server never sees
 // any of it, none of it survives a reload, and none of it should. It lives in
 // the node's `local` prop (see app/local.ts).
 //
@@ -30,7 +30,6 @@ import type { Path, Props } from "@nustackdev/ui-core";
 import { useProps } from "@nustackdev/ui-kit";
 import { useMemo } from "react";
 import { localOf, patchLocal, useLocalSlot } from "../../app/local";
-import type { SlashMode } from "./Slash";
 import {
 	type ActivePage,
 	type Block,
@@ -48,39 +47,18 @@ export type FocusReq = {
 	/** Which end of the target editor to enter from. */
 	place: "start" | "end";
 	/**
-	 * Desired visual column, carried across a block boundary so arrowing
-	 * down out of one block and into the next lands under the caret rather
-	 * than at column 0. Best effort: monospace vs prose widths differ.
+	 * Desired column, carried across a block boundary so arrowing down out of
+	 * one block and into the next lands under the caret rather than at
+	 * column 0.
 	 */
 	column?: number;
-	/**
-	 * Where the caret actually was on screen when it left the previous block.
-	 * A character column is a guess once text wraps or the fonts differ; a
-	 * pixel column is not, so this wins over `column` wherever the target
-	 * editor can resolve coordinates. Only prose produces it.
-	 */
-	x?: number;
-	/**
-	 * Exact character offset, used when we know it precisely -- after a merge
-	 * the caret belongs at the seam, not at either end. Wins over `place`.
-	 */
-	offset?: number;
 };
 
 export type SlashState = {
-	/**
-	 * What the menu will act on. "inline": a `/` typed in prose, `blockId` is
-	 * the block it was typed in and `from`..`to` is the query text to be
-	 * removed on commit. "ghost": a ghost input, `blockId` is the block it
-	 * sits after and `from`/`to` mean nothing -- a ghost holds no document, so
-	 * the query lives in its own input and there is nothing to take back out.
-	 */
-	mode: SlashMode;
-	/** Null only in ghost mode, and only on a page with no blocks at all. */
+	/** The block the ghost it is open on sits after. Null only on a page
+	 *  with no blocks at all. */
 	blockId: string | null;
 	query: string;
-	from: number;
-	to: number;
 	anchor: { x: number; y: number };
 	index: number;
 };
@@ -106,7 +84,7 @@ export type EditorState = {
 	selected: string[];
 	/** Anchor for shift-extended block selection. */
 	anchor: string | null;
-	/** Program blocks currently open in code mode. Per block, never global. */
+	/** Blocks currently open in code mode. Per block, never global. */
 	editing: string[];
 	slash: SlashState | null;
 	/**
@@ -123,14 +101,11 @@ export type EditorState = {
 	ghost: string | null;
 	drag: DragState | null;
 	/**
-	 * Desired visual column, parked while the caret is "between" editors --
-	 * i.e. while a live program block is merely *selected*. Without this the
-	 * column resets every time vertical travel hops over a program block, and
-	 * arrowing down through a document drifts back to the left margin.
+	 * Desired column, parked while the caret is "between" editors -- i.e.
+	 * while a block is merely *selected*. Without this the column resets every
+	 * time vertical travel hops over a block.
 	 */
 	column: number | null;
-	/** The pixel column, parked alongside `column` and for the same reason. */
-	x: number | null;
 };
 
 export const EMPTY_LOCAL: EditorState = {
@@ -143,7 +118,6 @@ export const EMPTY_LOCAL: EditorState = {
 	ghost: null,
 	drag: null,
 	column: null,
-	x: null,
 };
 
 // -- the write handler's body ------------------------------------------------
@@ -206,32 +180,12 @@ export function applyViewerWrite(props: Props, payload: unknown): void {
 
 // -- reads -------------------------------------------------------------------
 
-const EMPTY_STARTERS: Record<string, string> = {};
-
-/** What a block of each tpl starts life as.
- *
- *  The one spelling of these is `nuspace/ops/templates.py`; they ride the
- *  chain onto this node as declared props so the browser can fill `source` on
- *  a create without owning a template. */
-export function useStarters(path: Path): Record<string, string> {
-	const raw = useProps(path).starters;
-	return useMemo(() => {
-		if (!raw || typeof raw !== "object") return EMPTY_STARTERS;
-		const out: Record<string, string> = {};
-		for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
-			if (typeof v === "string") out[k] = v;
-		}
-		return out;
-	}, [raw]);
-}
-
-/** One registered snippet, as the `/` menu offers it. `text` marks the
- *  prose snippet: it makes a document block rather than a program block. */
-export type SlashSnippet = { name: string; label: string; text: boolean };
+/** One registered snippet, as the `/` menu offers it. */
+export type SlashSnippet = { name: string; label: string };
 
 const EMPTY_SNIPPETS: SlashSnippet[] = [];
 
-/** The `/` menu's block entries, in registry order, off the mount's props. */
+/** The `/` menu's entries, in registry order, off the mount's props. */
 export function useSnippets(path: Path): SlashSnippet[] {
 	const raw = useProps(path).snippets;
 	return useMemo(() => {
@@ -243,7 +197,7 @@ export function useSnippets(path: Path): SlashSnippet[] {
 			const name = typeof o.name === "string" ? o.name : "";
 			if (!name) continue;
 			const label = typeof o.label === "string" && o.label ? o.label : name;
-			out.push({ name, label, text: o.text === true });
+			out.push({ name, label });
 		}
 		return out.length ? out : EMPTY_SNIPPETS;
 	}, [raw]);

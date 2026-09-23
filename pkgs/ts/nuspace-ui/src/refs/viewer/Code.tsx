@@ -13,8 +13,8 @@ import { Kbd } from "@nustackdev/ui-kit";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { docCodeBox, docSourceDirty } from "../../design";
 import { type CodeEditor, type KeyboardEvt, loadMonaco, type MonacoApi, NU_THEME } from "./monaco";
-import type { ExitDir } from "./ProseRef";
 import type { FocusReq } from "./state";
+import type { ExitDir } from "./types";
 
 const MIN_HEIGHT = 42;
 const MAX_HEIGHT = 560;
@@ -72,8 +72,8 @@ export function CodeBox(props: CodeBoxProps) {
 					alwaysConsumeMouseWheel: false,
 				},
 				padding: { top: 8, bottom: 8 },
-				// Editor tier, one step under the document's 16px prose so code
-				// does not tower over the paragraph above it (typography.md §2).
+				// Editor tier, one step under the document's 16px body type
+				// (typography.md §2).
 				fontSize: 13,
 				fontFamily:
 					getComputedStyle(document.documentElement).getPropertyValue("--font-mono") || "monospace",
@@ -208,9 +208,7 @@ export function CodeBox(props: CodeBoxProps) {
  * that goes with it.
  *
  * Dirty is a fact about the open buffer and about nothing else, so it is held
- * here rather than lifted into the block. Every block reaches for this, prose
- * and program alike -- a text block's source is its template, and the gutter
- * offers it on the same row either way.
+ * here rather than lifted into the block.
  */
 export function SourceEditor(props: Omit<CodeBoxProps, "onDirty">) {
 	const { onCommit } = props;

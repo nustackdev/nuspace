@@ -11,7 +11,7 @@ There is no route slot. The route lives in the store
 
 :class:`Boot` seeds one tab. The shell is a static class, because a worker
 unpickles cell chains rooted on it, so what varies per space (the viewer's
-starters) is seeded here, as init frame props, rather than declared on the
+``/`` menu) is seeded here, as init frame props, rather than declared on the
 slot. Chain props are a create time seed in the browser, so writes that come
 later carry the slot's own props and change nothing.
 """
@@ -57,7 +57,7 @@ class Boot(Command):
 
     Args:
         shape_cls: the shell whose slots seed the tree.
-        seeds: extra props per top level slot, eg the viewer's starters.
+        seeds: extra props per top level slot, eg the viewer's ``/`` menu.
     """
 
     # A Command names a slot it writes through. What this one moves is a
@@ -102,18 +102,12 @@ class Shell(nu.Shape):
     viewer = ViewerRef.slot()
 
     @classmethod
-    def boot(
-        cls,
-        starters: Mapping[str, str] | None = None,
-        snippets: Sequence[Mapping[str, Any]] | None = None,
-    ) -> Boot:
+    def boot(cls, snippets: Sequence[Mapping[str, Any]] | None = None) -> Boot:
         """This shell's slots as the batch that seeds a tab.
 
         Args:
-            starters: what a cell made from each ``/`` entry starts as,
+            snippets: the ``/`` menu's entries, ``{name, label}`` in order,
                 mounted on the viewer.
-            snippets: the ``/`` menu's block entries, ``{name, label, text}``
-                in order, mounted on the viewer.
         """
-        viewer = {"starters": dict(starters or {}), "snippets": [dict(s) for s in snippets or ()]}
+        viewer = {"snippets": [dict(s) for s in snippets or ()]}
         return Boot(cls, {"viewer": viewer})

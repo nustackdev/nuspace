@@ -26,8 +26,8 @@
 //
 // ==========================================================================
 
-import type { Path, TreeNode } from "@nustackdev/ui-core";
-import { nodeAt, useChildren } from "@nustackdev/ui-kit";
+import type { Path } from "@nustackdev/ui-core";
+import { useChildren } from "@nustackdev/ui-kit";
 
 /** The segment every section hangs under. */
 export const SECTIONS = "sections";
@@ -53,37 +53,4 @@ export function blockPrefix(blockId: string): string {
 /** Whether a block mounted any ui at all. False means it runs headless. */
 export function useBlockHasUi(uiPath: Path): boolean {
 	return useChildren(uiPath).length > 0;
-}
-
-function findOfType(node: TreeNode, type: string, here: Path): Path | null {
-	for (const [segment, child] of node.children) {
-		const at = [...here, segment];
-		if (child.type === type) return at;
-		const deeper = findOfType(child, type, at);
-		if (deeper) return deeper;
-	}
-	return null;
-}
-
-/**
- * The markdown a text block currently holds, read off its own ProseRef.
- *
- * The page payload does not carry it: a text block's content lives on the ref
- * its program mounted, which is where the browser already has it and where a
- * keystroke lands without reshipping the page. A neighbour that needs it --
- * merge-up joining two blocks -- reads it from there. Found by type, so
- * nothing here depends on what the template calls its slot.
- *
- * Outside a render on purpose: this answers "what is in the block above" at
- * the moment of a backspace, and nobody subscribes to it.
- */
-export function blockText(viewerPath: Path, blockId: string): string {
-	const root = blockUiPath(viewerPath, blockId);
-	const node = nodeAt(root);
-	if (!node) return "";
-	if (node.type === "ProseRef") return String(node.props.value ?? "");
-	const found = findOfType(node, "ProseRef", root);
-	if (!found) return "";
-	const prose = nodeAt(found);
-	return String(prose?.props.value ?? "");
 }

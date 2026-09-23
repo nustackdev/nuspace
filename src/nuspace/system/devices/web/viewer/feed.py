@@ -47,10 +47,7 @@ from nuspace.system.devices.web.viewer.interactions import (
     STATE_RUNNING,
     STATE_STARTING,
     STATE_STOPPED,
-    TPL_PROGRAM,
-    TPL_TEXT,
 )
-from nuspace.system.devices.web.viewer.ref import PROSE
 from nuspace.system.kernel.utils import snap
 
 
@@ -61,7 +58,7 @@ if TYPE_CHECKING:
     from nustd.ui.core import Ref
 
 
-__all__ = ["PROSE", "blocks", "page", "prose_source", "statuses", "viewer_feed"]
+__all__ = ["blocks", "page", "statuses", "viewer_feed"]
 
 
 _arms = Arms("viewer")
@@ -76,41 +73,27 @@ _MOVE = "nuspace.web.viewer.move"
 _REORDER = "nuspace.web.viewer.reorder"
 
 
-def prose_source(snippets: Iterable[Snippet]) -> str | None:
-    """The prog of the snippet named :data:`PROSE`, None when there is none."""
-    return next((snippet.source for snippet in snippets if snippet.name == PROSE), None)
-
-
 # --- what the browser is handed: bare reads ----------------------------------
 
 
-def blocks(plane_id: nu.StrArg, prose: str | None = None) -> nu.Nu:
-    """A plane's cells as ``{id, name, tpl, source}``, in order. Bare read.
-
-    ``tpl`` is recovered, not stored: a cell holding exactly the prose
-    snippet's prog is prose, anything else is a program.
-    """
+def blocks(plane_id: nu.StrArg) -> nu.Nu:
+    """A plane's cells as ``{id, name, source}``, in order. Bare read."""
     item = fresh("viewer_block")
     row = nu.DictAttrRef(item)
-    source = nu.ToStr(row.get_item(nu.Str("prog"), nu.Str("")))
-    tpl: nu.Nu = nu.Str(TPL_PROGRAM)
-    if prose is not None:
-        tpl = nu.If(nu.Eq(source, nu.Str(prose)), nu.Str(TPL_TEXT), nu.Str(TPL_PROGRAM))
     return nu.Collect(
         nu.Map(
             ops.cell_rows(plane_id),
             nu.Dict.of(
                 id=nu.ToStr(row.get_item(nu.Str("id"), nu.Str(""))),
                 name=nu.ToStr(row.get_item(nu.Str("name"), nu.Str(""))),
-                tpl=tpl,
-                source=source,
+                source=nu.ToStr(row.get_item(nu.Str("prog"), nu.Str(""))),
             ),
             key=item,
         )
     )
 
 
-def page(plane_id: nu.StrArg, prose: str | None = None) -> nu.Nu:
+def page(plane_id: nu.StrArg) -> nu.Nu:
     """``{title, editable, blocks}`` for a plane. Bare read.
 
     A plane that is not there reads as an empty untitled page, so a select
@@ -124,7 +107,7 @@ def page(plane_id: nu.StrArg, prose: str | None = None) -> nu.Nu:
             editable=nu.ToBool(
                 nu.Dict(row.meta.extract()).get_item(nu.Str("editable"), nu.Bool(False))
             ),
-            blocks=blocks(plane_id, prose),
+            blocks=blocks(plane_id),
         ),
         nu.Dict.of(title=nu.Str(""), editable=nu.Bool(False), blocks=nu.List.of()),
     )
@@ -217,12 +200,12 @@ def statuses(plane_id: nu.StrArg) -> nu.Nu:
 # --- shipping ------------------------------------------------------------------
 
 
-def _ship_page(viewer: Ref, plane: nu.Nu, prose: str | None) -> nu.Nu:
+def _ship_page(viewer: Ref, plane: nu.Nu) -> nu.Nu:
     held = fresh("viewer_page")
     got = nu.DictAttrRef(held)
     return nu.Let(
         held,
-        snap(page(plane, prose)),
+        snap(page(plane)),
         interactions.set_page(
             viewer,
             plane,
@@ -267,28 +250,14 @@ def _status_changes() -> list[nu.Nu]:
 
 
 def _create_prog(snippets: Sequence[Snippet]) -> nu.Nu:
-    """The prog a created cell stores, off the create's ``tpl`` and ``source``.
+    """The prog a created cell stores: the snippet its ``name`` names.
 
-    ``tpl`` names a snippet (``text`` is the prose one's wire name). A prose
-    create stores the prose snippet's prog: what the browser sends with it is
-    the tail of a split document, not a program. Any other create stores its
-    ``source``, or the named snippet's when the browser sent none.
+    An unknown or empty name stores a blank program.
     """
-    tpl = field_str(_CREATE, "tpl")
-    source = field_str(_CREATE, "source")
-    prog: nu.Nu = source
+    name = field_str(_CREATE, "name")
+    prog: nu.Nu = nu.Str("")
     for snippet in reversed(snippets):
-        if snippet.name == PROSE:
-            continue
-        prog = nu.If(
-            nu.And(nu.Eq(tpl, nu.Str(snippet.name)), nu.Eq(source, nu.Str(""))),
-            nu.Str(snippet.source),
-            prog,
-        )
-    prose = prose_source(snippets)
-    if prose is not None:
-        is_prose = nu.Or(nu.Eq(tpl, nu.Str(TPL_TEXT)), nu.Eq(tpl, nu.Str(PROSE)))
-        prog = nu.If(is_prose, nu.Str(prose), prog)
+        prog = nu.If(nu.Eq(name, nu.Str(snippet.name)), nu.Str(snippet.source), prog)
     return prog
 
 
@@ -372,11 +341,9 @@ def viewer_feed(viewer: Ref, sid: nu.StrArg, snippets: Iterable[Snippet] = ()) -
         viewer: the shell's viewer ref.
         sid: the connection id, whose ``connections[sid].route`` says which
             plane is open. The row must exist before this runs.
-        snippets: the registered snippets. The one named :data:`PROSE`
-            marks prose cells.
+        snippets: the registered snippets, what a created cell stores.
     """
     snippets = list(snippets)
-    prose = prose_source(snippets)
     route = Space.connections[sid].route
     at = fresh("viewer_route")
     plane = nu.StrAttrRef(at)
@@ -384,7 +351,7 @@ def viewer_feed(viewer: Ref, sid: nu.StrArg, snippets: Iterable[Snippet] = ()) -
         _arms.state(
             "page",
             _page_changes(plane),
-            _ship_page(viewer, plane, prose) >> _ship_status(viewer, plane),
+            _ship_page(viewer, plane) >> _ship_status(viewer, plane),
         ),
         _arms.state("status", _status_changes(), _ship_status(viewer, plane)),
     )

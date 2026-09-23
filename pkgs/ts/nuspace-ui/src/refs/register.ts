@@ -15,7 +15,6 @@
 import { type NodeEntry, register } from "@nustackdev/ui-kit";
 import { RouteRef } from "./route";
 import { SidebarRef } from "./sidebar/sidebar";
-import { ProseRef } from "./viewer/ProseRef";
 import { ViewerRef } from "./viewer/viewer";
 
 export const nuspaceEntries: Record<string, NodeEntry> = {
@@ -24,14 +23,6 @@ export const nuspaceEntries: Record<string, NodeEntry> = {
 	// Structural and pulled-only: the server reads the route out of it, and it
 	// renders nothing.
 	RouteRef,
-	// ProseRef is nu's, not nuspace's, and the kit already registers one.
-	// This one REPLACES it, and the last `register` for a name wins, so this
-	// map has to be applied after the kit's. The kit editor knows nothing
-	// about neighbouring blocks, by design; a text block is a block, so
-	// nuspace wraps that editor and rebuilds split, merge-up, arrow travel and
-	// the slash menu on top. A ProseRef somewhere that is not a block finds no
-	// block context and gets the kit's plain behaviour back.
-	ProseRef,
 };
 
 for (const [type, entry] of Object.entries(nuspaceEntries)) register(type, entry);

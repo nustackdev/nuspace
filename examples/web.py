@@ -2,8 +2,8 @@
 
 Everything offered comes from nuverse, found through its entry point: the
 ``page`` app is a sidebar section, ``+`` makes a plane under it, and ``/``
-offers its snippets: ``prose``, a document cell, ``program``, a starter to
-write code into, and ``ticker``. A Counter plane, a page with one ticker, is
+offers its snippets, each a cell like any other: ``prose``, a text editor,
+``program``, a starter to write code into, and ``ticker``. A Counter plane, a page with one ticker, is
 seeded the first time. Selecting it is what brings it up (the nav service),
 and leaving it takes it down again, which the count says out loud by going on
 from where it stopped.

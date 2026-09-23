@@ -21,18 +21,6 @@
 // a pure function of its event on the server, and lets the caret aim at a
 // known id rather than guess at one from a position. Use `mintId` from
 // ../../app/ids; do not invent a second scheme.
-//
-// ## What is NOT here
-//
-// Typing in a text block. A text block's ref is wired straight to kv by the
-// block's own program, so a keystroke is a notify on that ref and never
-// touches the Viewer.
-//
-// Split and merge. Both are compositions of the ops below -- a split is an
-// update plus a create at the next index, a merge is an update plus a delete
-// -- and the canvas composes them rather than the server growing a verb for
-// each editor gesture. The two halves are independent writes to different
-// sections, so it does not matter which arm runs first.
 
 /** Every op the Viewer sends, with its argument shape. */
 export type Ops = {
@@ -41,13 +29,9 @@ export type Ops = {
 	"section.create": {
 		page_id: string;
 		section_id: string;
+		/** The snippet it is made from. The server stores that snippet's
+		 *  program, or a blank one when no snippet has this name. */
 		name: string;
-		/** "text" for prose, otherwise the name of the snippet it is made from. */
-		tpl: string;
-		/** The Nu program. For a templated tpl this is the shipped starter,
-		 *  which rides the chain onto the ref as a declared prop -- never
-		 *  written here. */
-		source: string;
 		index: number;
 	};
 	/** Replaces the stored program. Nothing else about the section moves. */

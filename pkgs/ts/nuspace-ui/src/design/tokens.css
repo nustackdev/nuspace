@@ -150,7 +150,7 @@
 	 * the kit's density (a block's inner chrome is panel chrome and uses the
 	 * kit's 32px rows). Vertically it is looser than a panel, because reading
 	 * rhythm is set by line-height, not by padding. So block padding stays
-	 * tiny (4px) and the air comes from the 16px/1.55 prose line box. A
+	 * tiny (4px) and the air comes from the 16px/1.55 body line box. A
 	 * document is not a place to spend spacing tokens.
 	 * --------------------------------------------------------------------- */
 
@@ -173,8 +173,8 @@
 	                               * see `docGutter` for what the overhang past
 	                               * a short block costs and how it is paid. */
 	--spacing-doc-block-x: 0.5rem; /* 8            wash overhangs the text  */
-	--spacing-doc-block-y: 0.25rem; /* 4           prose block pad-y        */
-	--spacing-doc-block-y-program: 0.5rem; /* 8    program block pad-y      */
+	--spacing-doc-block-y: 0.25rem; /* 4           ghost line pad-y         */
+	--spacing-doc-block-y-program: 0.5rem; /* 8    block pad-y              */
 	--spacing-doc-block-gap: 0.125rem; /* 2        blocks are contiguous    */
 	--spacing-doc-tail: 30vh; /* the dead air under the last block. A document
 	                           * that ends at the window bottom has nowhere to

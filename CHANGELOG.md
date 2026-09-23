@@ -12,6 +12,7 @@ separately here.
 
 ## Unreleased
 
+- Every cell renders the same way, and / inserts any registered snippet
 - Publish nuverse on its own tag so the extensions ship separately
 - Pick any registered snippet from the / menu
 - An open page runs every cell as soon as you land on it, even after a restart
