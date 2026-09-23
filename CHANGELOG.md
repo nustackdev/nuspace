@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Add the operations every part of a space is built from
 - Store planes, cells and runs apart, and let a program declare its own typed state
 - Clear the v3 source out of the way for the v4 rewrite
 - Opening a page no longer slows down with each extra cell on it

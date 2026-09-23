@@ -80,11 +80,15 @@ class Worker(nu.Shape):
     ``wid`` is the pool's own id for the process. Pool ids are process local
     ints, so the store keys workers by an id the kernel mints and keeps the
     pool's here.
+
+    ``error`` says why it died when nobody asked it to: a crash, or a kind
+    the kernel cannot make.
     """
 
     kind = nustd.kv.StrRef.slot()
     wid = nustd.kv.IntRef.slot()
     status = nustd.kv.StrRef.slot()
+    error = nustd.kv.StrRef.slot()
     started = nustd.kv.FloatRef.slot()
     ended = nustd.kv.FloatRef.slot()
 
@@ -124,8 +128,12 @@ class Kernel(nu.Shape):
 
     ``live`` is ``run id -> worker id`` for every run not dead: what is
     running, and what runs on a worker, without scanning history.
+
+    ``active`` is ``worker id -> True`` for every worker not dead, so the
+    kernel's worker fold iterates the living rather than the history.
     """
 
     workers = nustd.kv.ShapesDictRef.slot(Worker)
     runs = nustd.kv.ShapesDictRef.slot(Run)
     live = nustd.kv.DictRef.slot(str)
+    active = nustd.kv.DictRef.slot(bool)

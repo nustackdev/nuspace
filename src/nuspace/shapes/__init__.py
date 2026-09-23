@@ -18,6 +18,7 @@ reads it and it reads nothing back::
         workers     id -> Worker
         runs        id -> Run
         live        run id -> worker id
+        active      worker id -> True
       connections   id -> Connection
 
 Plane and cell hold structure only. How and when a cell runs is the caller's
@@ -46,7 +47,7 @@ from .kernel import (
     Worker,
 )
 from .plane import Plane
-from .reroot import Reroot, reroot
+from .reroot import Reroot, reroot, reroot_base
 from .space import Space
 from .state import CellState, PlaneState
 from .tree import ROOT, Node
@@ -80,4 +81,5 @@ __all__ = [
     "Space",
     "Worker",
     "reroot",
+    "reroot_base",
 ]

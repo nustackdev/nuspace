@@ -34,7 +34,7 @@ if TYPE_CHECKING:
     from nu.domains.shape.refs.base import StructuredRef
 
 
-__all__ = ["Reroot", "reroot"]
+__all__ = ["Reroot", "reroot", "reroot_base"]
 
 
 def _foreign(base: type[nu.Shape]) -> Callable[[StructuredRef], bool]:
@@ -45,6 +45,24 @@ def _foreign(base: type[nu.Shape]) -> Callable[[StructuredRef], bool]:
         return not (isinstance(shape, type) and issubclass(shape, base))
 
     return rooted
+
+
+def reroot_base(term: nu.Nu, base: type[nu.Shape], at: nu.Nu) -> nu.Nu:
+    """``term`` with the chains rooted at a ``base`` subclass spliced under ``at``.
+
+    The one splice both bases go through, exposed so an op can land a
+    program's state somewhere other than its own cell (eg a sibling's).
+
+    Args:
+        term: any Nu term.
+        base: :class:`CellState` or :class:`PlaneState`. Chains rooted at
+            any other shape are left alone.
+        at: the ref the chains land under, eg ``Space.planes[p].state``.
+
+    Returns:
+        The rewritten term, or ``term`` itself when nothing matched.
+    """
+    return nu.shape.reroot(term, at, rooted=_foreign(base))
 
 
 def reroot(term: nu.Nu, plane: nu.StrArg, cell: nu.StrArg) -> nu.Nu:
@@ -61,8 +79,8 @@ def reroot(term: nu.Nu, plane: nu.StrArg, cell: nu.StrArg) -> nu.Nu:
         state chains comes back as the same object.
     """
     row = Space.planes[plane]
-    term = nu.shape.reroot(term, row.cells[cell].state, rooted=_foreign(CellState))
-    return nu.shape.reroot(term, row.state, rooted=_foreign(PlaneState))
+    term = reroot_base(term, CellState, row.cells[cell].state)
+    return reroot_base(term, PlaneState, row.state)
 
 
 class Reroot:
