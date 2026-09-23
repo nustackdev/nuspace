@@ -8,6 +8,8 @@ the space opens. The web variant is only compiled.
 from __future__ import annotations
 
 import asyncio
+import logging
+import runpy
 import subprocess
 import sys
 import warnings
@@ -17,13 +19,16 @@ import pytest
 from click.testing import CliRunner
 
 import nu
+import nustd.kv
 from nuspace import App, Extension, Snippet, boot, open_space, ops
 from nuspace.host import registry as registry_module
 from nuspace.host.cli import cli
 from nuspace.host.registry import GROUP, Registry, RegistryWarning, discover
 from nuspace.host.space import space_registry
-from nuspace.shapes import STATUS_UP, Space, reroot
+from nuspace.ops.utils import atomic
+from nuspace.shapes import STATUS_UP, Reroot, Space, reroot
 from nuspace.system.kernel import Env, store
+from nuspace.system.kernel.body import Bracketed, Rewrites
 from nuspace.system.services import BOOTED, SERVICES, ensure_system, init
 
 
@@ -143,6 +148,22 @@ def test_discovery_can_be_turned_off(monkeypatch):
 
 
 USER = "user"
+TAB = "tab"
+STARTER = "starter"
+
+
+def _example() -> dict:
+    """examples/web.py as a namespace, its logging tweak undone."""
+    quiet = logging.getLogger("invisibles")
+    level = quiet.level
+    try:
+        return runpy.run_path(str(Path(__file__).parents[1] / "examples" / "web.py"))
+    finally:
+        quiet.setLevel(level)
+
+
+#: The web example, loaded: its snippets are checked below.
+EXAMPLE = _example()
 
 
 async def test_boot_before_the_first_open_keeps_the_services(store):
@@ -161,6 +182,18 @@ async def test_open_space_headless_runs_a_booted_plane(tmp_path, monkeypatch):
     _points(monkeypatch, [])
     path = str(tmp_path / "space")
     seed = ops.add_plane(USER) >> ops.add_cell(USER, SET_42, cell_id="c") >> boot(USER)
+    # A tab the previous run never closed, routed to a plane of its own.
+    stale = Space.connections["stale"]
+    seed = (
+        seed
+        >> ops.add_plane(TAB)
+        >> ops.add_cell(TAB, SET_42, cell_id="c")
+        >> atomic(stale.opened.set(nu.Float(0.0)) >> stale.route.set(nu.Str(TAB)))
+        # The web example's starter program runs headless too.
+        >> ops.add_plane(STARTER)
+        >> ops.add_cell(STARTER, EXAMPLE["PROGRAM"], cell_id="c")
+        >> boot(STARTER)
+    )
     await nu.arun(nu.With(store(path), body=seed))
 
     loop = asyncio.get_running_loop()
@@ -172,6 +205,8 @@ async def test_open_space_headless_runs_a_booted_plane(tmp_path, monkeypatch):
     try:
         state = Space.planes[USER].cells["c"].state.extract()
         assert await space.until(state, lambda s: s == {"n": 42}) == {"n": 42}
+        starter = Space.planes[STARTER].cells["c"].state.extract()
+        assert await space.until(starter, lambda s: s == {"hello": "world"}) == {"hello": "world"}
         # The services are made and init brought up its boot list beside the user plane.
         assert {r["id"] for r in await space.read(ops.plane_rows())} >= {
             USER,
@@ -181,8 +216,34 @@ async def test_open_space_headless_runs_a_booted_plane(tmp_path, monkeypatch):
             await space.until(
                 ops.runs(plane=plane), lambda rs: any(r["status"] == STATUS_UP for r in rs)
             )
+        # Cleared before init started nav: the stale tab brought nothing up.
+        assert await space.read(nu.list(Space.connections.keys())) == []
+        assert await space.read(ops.runs(plane=TAB)) == []
     finally:
         await space.close()
+
+
+# --- the web example's snippets ---------------------------------------------------
+
+
+async def test_example_prose_loads_through_the_kernel_rewrites(store):
+    """Prose draws, so it runs only in a session: here it is loaded and compiled."""
+    from nuspace.system.devices.web.env import session_env
+    from nuspace.system.devices.web.viewer.feed import PROSE, prose_source
+
+    assert prose_source(EXAMPLE["SNIPPETS"]) == EXAMPLE["PROSE"]
+    assert PROSE == "prose"
+    await store.run(ops.add_plane("p") >> ops.add_cell("p", EXAMPLE["PROSE"], cell_id="c"))
+    env = session_env("127.0.0.1:9")("s1")
+    rewrite = Rewrites(Reroot("p", "c"), env.rewrite, Bracketed())
+    source = Space.planes["p"].cells["c"].prog
+    term = await store.run(
+        nustd.kv.auto_flow_atomic(
+            source.load(scope={"plane": "p", "cell": "c"}, rewrite=rewrite), scope=Space
+        )
+    )
+    assert isinstance(term, nu.Nu)
+    nu.validate(nu.compile(term))
 
 
 def test_open_space_with_web_compiles(monkeypatch):

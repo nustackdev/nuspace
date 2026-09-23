@@ -106,6 +106,24 @@ def test_worker_unpickling_imports_no_web_server(tmp_path):
     assert done.returncode == 0, done.stdout + done.stderr
 
 
+def test_warm_imports_cover_drawing_runs_and_no_web_server():
+    code = (
+        "import sys\n"
+        "from nuspace.system.kernel.space import Warmed\n"
+        "Warmed().setup(None)\n"
+        "light = ('fastapi', 'uvicorn', 'starlette', 'nustd.ws_server')\n"
+        "warm = ('nustd.ui', 'nuspace.system.devices.web.env')\n"
+        "bad = [m for m in light if m in sys.modules]\n"
+        "bad += [m for m in warm if m not in sys.modules]\n"
+        "print(bad)\n"
+        "sys.exit(1 if bad else 0)\n"
+    )
+    done = subprocess.run(  # noqa: S603
+        [sys.executable, "-c", code], capture_output=True, text=True, timeout=60
+    )
+    assert done.returncode == 0, done.stdout + done.stderr
+
+
 def test_device_term_compiles_and_validates():
     from nuspace.system.devices.web import serve_web
 

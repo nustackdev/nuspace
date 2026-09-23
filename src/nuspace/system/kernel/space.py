@@ -162,10 +162,18 @@ class Warmed:
     """
 
     def setup(self, ctx: Context) -> None:
-        """Import what unpickling and running a body reaches for."""
+        """Import what unpickling and running a body reaches for.
+
+        A drawing run's body holds the session env's wrap and rewrite, so
+        the web package's worker safe modules come too, with ``nustd.ui``.
+        Never :mod:`~nuspace.system.devices.web.device`: it pulls in the web
+        server, which a worker has no use for.
+        """
         import nu.prog  # noqa: F401 -- imported for the module cache
+        import nuspace.system.devices.web.env
         import nuspace.system.kernel.body
         import nuspace.system.kernel.out  # noqa: F401
+        import nustd.ui  # noqa: F401
 
     async def asetup(self, ctx: Context) -> None:
         """Async shim: importing is sync work."""

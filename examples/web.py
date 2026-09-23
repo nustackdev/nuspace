@@ -1,7 +1,8 @@
 """A space in a browser: pick a plane in the sidebar and its cells run.
 
-One app, ``page``, is a sidebar section: ``+`` makes a plane under it. One
-snippet, ``ticker``, is offered from ``/``. A Counter plane is seeded the
+One app, ``page``, is a sidebar section: ``+`` makes a plane under it. Three
+snippets are offered from ``/``: ``prose``, a document cell, ``program``, a
+starter to write code into, and ``ticker``. A Counter plane is seeded the
 first time. Selecting it is what brings it up (the nav service), and leaving
 it takes it down again, which the count says out loud by going on from where
 it stopped.
@@ -57,6 +58,54 @@ def out():
 """
 
 
+#: A document cell: one prose surface over a string in its own state, synced
+#: both ways. Every prose cell holds exactly this prog, and that is how the
+#: viewer tells one apart: what the person wrote lives in the state, not here.
+PROSE = """\
+import nu
+import nustd.kv
+import nustd.ui
+import nuspace
+
+
+class Doc(nuspace.CellState):
+    text = nustd.kv.StrRef.slot()
+
+
+def out():
+    body = nustd.ui.ProseRef("text")
+    held = nu.If(Doc.text.exists(), nu.ToStr(Doc.text), nu.Str(""))
+    return (
+        body.set(held)
+        >> body.set_placeholder(nu.Str("Write, or press / for blocks"))
+        >> nu.ParallelAsync(
+            # This tab typed: keep it. Every other tab on the plane hears it
+            # through the store.
+            nu.ReactForever(body.on_change(), Doc.text.set(nu.Str(body))),
+            # Somebody else typed: show it. The echo back to the author is a
+            # no-op, the text is already what it says.
+            nu.ReactForever(Doc.text.on_change(), body.set(nu.ToStr(Doc.text))),
+        )
+    )
+"""
+
+#: What a fresh code cell starts as: one key in its own state, then done.
+PROGRAM = """\
+import nu
+import nustd.kv
+import nuspace
+
+
+class Note(nuspace.CellState):
+    hello = nustd.kv.StrRef.slot()
+
+
+def out():
+    # Bare state: the kernel lands it under this cell, whichever it is.
+    return Note.hello.set(nu.Str("world"))
+"""
+
+
 def page(plane_id: nu.StrArg | None = None, name: nu.StrArg = "") -> nu.Nu:
     """The ``page`` app: a plane the sidebar lists under Pages."""
     return ops.add_plane(
@@ -65,7 +114,11 @@ def page(plane_id: nu.StrArg | None = None, name: nu.StrArg = "") -> nu.Nu:
 
 
 APPS = [App("page", "Pages", page, description="A plane of cells.")]
-SNIPPETS = [Snippet("ticker", "Ticker", TICKER)]
+SNIPPETS = [
+    Snippet("prose", "Text", PROSE),
+    Snippet("program", "Program", PROGRAM),
+    Snippet("ticker", "Ticker", TICKER),
+]
 
 
 def seed() -> nu.Nu:

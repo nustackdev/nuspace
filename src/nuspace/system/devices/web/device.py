@@ -25,7 +25,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import nu
-from nuspace.ops.utils import atomic, fresh, text
+from nuspace.ops.utils import atomic, text
 from nuspace.shapes import Space
 from nuspace.system.devices.web.env import SESSION_ENV, session_env
 from nuspace.system.devices.web.session import served_sessions
@@ -35,6 +35,7 @@ from nuspace.system.devices.web.utils import Arms, cells_ui, field_str
 from nuspace.system.devices.web.viewer import on_select, starters, viewer_feed
 from nuspace.system.kernel.space import free_port
 from nuspace.system.kernel.utils import Now, snap
+from nuspace.system.services.nav import clear_connections
 from nustd.ui.core import WsSession
 from nustd.ws_server import SID_ATTR, listen, run_once, session_for, sessions_fold
 
@@ -75,13 +76,6 @@ def open_connection(sid: nu.StrArg) -> nu.Nu:
 def close_connection(sid: nu.StrArg) -> nu.Nu:
     """Drop connection ``sid``. A no-op when it is gone."""
     return atomic(nu.IfDo(_connections.contains(sid), _connections.del_item(sid)))
-
-
-def clear_connections() -> nu.Nu:
-    """Drop every connection: what a previous open left behind. One commit."""
-    item = fresh("web_stale")
-    at = nu.StrAttrRef(item)
-    return atomic(nu.ForEachDo(nu.list(_connections.keys()), _connections.del_item(at), item=item))
 
 
 def route_arm(viewer: Ref, sid: nu.StrArg) -> nu.Nu:
@@ -143,8 +137,9 @@ def serve_web(
 ) -> tuple[nu.Nu, dict[str, EnvFactory]]:
     """The web device: the term the host runs, and the envs it registers.
 
-    The term opens the server and the socket workers draw through, clears
-    connections a previous open left, then runs one arm per connection. It
+    The term opens the server and the socket workers draw through, then
+    runs one arm per connection. Connections a previous open left are the
+    host's to clear, before init starts (D34). It
     never returns; it goes in a ``body=`` slot, beside the kernel, inside the
     store brackets (``open_kernel``).
 
@@ -179,8 +174,7 @@ def serve_web(
             open_browser=open_browser,
         ),
         served_sessions(session_address),
-        body=clear_connections()
-        >> sessions_fold(
+        body=sessions_fold(
             session_for(
                 SID_ATTR,
                 # Once per connection: the fold respawns ended arms on every

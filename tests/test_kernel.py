@@ -128,8 +128,10 @@ class Kernel:
         rows = await self.until(ops.runs(), lambda rs: pred(_by_id(rs, rid)))
         return _by_id(rows, rid)
 
-    async def worker_row(self, wid: str, pred: Callable[[dict], bool]) -> dict:
-        rows = await self.until(ops.workers(), lambda ws: pred(_by_id(ws, wid)))
+    async def worker_row(
+        self, wid: str, pred: Callable[[dict], bool], timeout: float = 4.0
+    ) -> dict:
+        rows = await self.until(ops.workers(), lambda ws: pred(_by_id(ws, wid)), timeout)
         return _by_id(rows, wid)
 
     async def plane(self, *progs: str) -> tuple[str, list[str]]:

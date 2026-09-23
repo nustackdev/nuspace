@@ -6,9 +6,11 @@ inside :func:`~nuspace.system.kernel.open_kernel` after reconcile:
 
 1. :func:`~nuspace.system.services.ensure_system`: the service planes, made
    where missing;
-2. init started by the kernel's own :func:`~nuspace.system.kernel.init_start`,
+2. :func:`~nuspace.system.services.nav.clear_connections`: tabs of a previous
+   run dropped, so nav never brings a plane up for one (D34);
+3. init started by the kernel's own :func:`~nuspace.system.kernel.init_start`,
    which brings up its boot list (nav, supervisor, reload by default);
-3. the web device and ``body``, beside the kernel.
+4. the web device and ``body``, beside the kernel.
 
 The kernel's ``init=`` would start init beside the body, before the service
 planes are sure to exist on a first open, so the start is sequenced here
@@ -27,6 +29,7 @@ import nu
 from nuspace.system.kernel import DEFAULT_SPARES, init_start, open_kernel
 from nuspace.system.services import ensure_system
 from nuspace.system.services import init as init_service
+from nuspace.system.services.nav import clear_connections
 from nuspace.system.utils import park
 
 from .registry import Extension, Registry, RegistryWarning
@@ -142,7 +145,7 @@ def open_space(
     beside = arms[0] if len(arms) == 1 else nu.Race(*arms)
     kwargs = {} if name is None else {"name": name}
     return open_kernel(
-        ensure_system() >> init_start(init_service.PLANE) >> beside,
+        ensure_system() >> clear_connections() >> init_start(init_service.PLANE) >> beside,
         path=path,
         spares=spares,
         envs=factories,

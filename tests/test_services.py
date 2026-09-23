@@ -136,6 +136,10 @@ async def space(tmp_path_factory):
     await k.close()
 
 
+#: A deadline for waits a loaded machine stretches. Met early, it costs nothing.
+SLOW = 20.0
+
+
 async def runs_of(space: Kernel, plane: str, pred, timeout: float = 4.0) -> list[dict]:
     return await space.until(ops.runs(plane=plane), pred, timeout)
 
@@ -221,13 +225,15 @@ async def test_supervisor_always_restarts_on_a_worker_still_serving(space):
     await space.run(supervise(p, c, ALWAYS))
     w = await space.run(ops.worker())
     await space.run(ops.up_plane(p, worker=w, by="test"))
-    rows = await space.until(ops.runs(plane=p, cell=c), lambda rs: len(rs) >= 3)
+    # Deadlines, not delays: each wait returns once its condition holds. They
+    # are long because a loaded machine stretches backoff and a worker's stop.
+    rows = await space.until(ops.runs(plane=p, cell=c), lambda rs: len(rs) >= 3, SLOW)
     await space.run(unsupervise(p, c))
     assert [r["by"] for r in rows[:3]] == ["test", supervisor_service.BY, supervisor_service.BY]
     assert {r["worker"] for r in rows} == {w}
     assert all(r["exit"] == EXIT_OK for r in rows[:2])
     await space.run(ops.kill_worker(w))
-    await space.worker_row(w, _dead)
+    await space.worker_row(w, _dead, SLOW)
 
 
 @module_loop

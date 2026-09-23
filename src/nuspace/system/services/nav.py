@@ -1,7 +1,7 @@
 """nav: what runs for each connection is the plane its route names (D12, D14).
 
-One arm per connection in ``Space.connections``, which only the device
-writes. An arm follows its connection's ``route``: a user plane named there
+One arm per connection in ``Space.connections``, which the device writes
+and the host empties at open. An arm follows its connection's ``route``: a user plane named there
 comes up on a worker of its own, inside the ``session`` env bound to the
 connection. The worker is the whole handle, so moving on is killing it:
 
@@ -12,19 +12,22 @@ connection. The worker is the whole handle, so moving on is killing it:
 
 Killing happens on every way out of the arm (``finally_``), so a route
 change, a connection going and nav itself stopping all leave nothing behind.
+
+A connection outlives no open: :func:`clear_connections` runs before init
+starts nav (D34), so a tab from a previous run never brings a plane up.
 """
 
 from __future__ import annotations
 
 import nu
 from nuspace.ops import kill_worker, plane_exists, up_plane, worker
-from nuspace.ops.utils import atomic, flag
+from nuspace.ops.utils import atomic, flag, fresh
 from nuspace.shapes import Space
 
 from ..utils import follows, park, snap
 
 
-__all__ = ["BY", "CELL", "PLANE", "SESSION", "SHIM", "program"]
+__all__ = ["BY", "CELL", "PLANE", "SESSION", "SHIM", "clear_connections", "program"]
 
 
 #: The plane id, fixed (D31).
@@ -52,6 +55,14 @@ def out():
 _SID = "nuspace.nav.connection"
 _ROUTE = "nuspace.nav.route"
 _WORKER = "nuspace.nav.worker"
+
+
+def clear_connections() -> nu.Nu:
+    """Drop every connection: what a previous open left behind. One commit."""
+    connections = Space.connections
+    item = fresh("nav_stale")
+    at = nu.StrAttrRef(item)
+    return atomic(nu.ForEachDo(nu.list(connections.keys()), connections.del_item(at), item=item))
 
 
 def _shown(route: nu.StrAttrRef) -> nu.Nu:

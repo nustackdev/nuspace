@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Forget old browser tabs on open, and give the web example prose and program cells
 - Open a space from one call or the command line, with extensions found on install
 - Serve the browser from a device that tracks tabs and never runs planes
 - Start, restart, reload and route planes through ordinary services on workers
