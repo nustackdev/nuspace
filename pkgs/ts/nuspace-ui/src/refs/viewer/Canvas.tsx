@@ -134,9 +134,10 @@ import {
 	type InsertTpl,
 	type ProseHandle,
 } from "./ProseRef";
-import { filterSlash, type SlashItem, SlashMenu } from "./Slash";
+import { buildSlashItems, filterSlash, type SlashItem, SlashMenu } from "./Slash";
+import type { SlashSnippet } from "./state";
 import { type EditorState, type FocusReq, patchEditor, useEditorState } from "./state";
-import type { ActivePage, Block, BlockTpl, SectionState } from "./types";
+import type { ActivePage, Block, SectionState } from "./types";
 
 /**
  * What the gutter's status dot reports, for now.
@@ -149,10 +150,13 @@ import type { ActivePage, Block, BlockTpl, SectionState } from "./types";
  */
 const GUTTER_STATUS: SectionState = "running";
 
+const NO_SNIPPETS: SlashSnippet[] = [];
+
 export function Canvas({
 	refPath,
 	page,
 	starters,
+	snippets = NO_SNIPPETS,
 	editable,
 	notify,
 }: {
@@ -161,6 +165,8 @@ export function Canvas({
 	/** What a block of each tpl starts life as, off the ref's props.
 	 *  `nuspace/ops/templates.py` is the one spelling of these. */
 	starters: Record<string, string>;
+	/** The registered snippets, in order: the `/` menu's block rows. */
+	snippets?: SlashSnippet[];
 	/** The Plane's own bit. False draws the same Cells with none of the
 	 *  controls a document has: no gutter, no insert, no drag, no code
 	 *  toggle. */
@@ -341,7 +347,7 @@ export function Canvas({
 	 * the block's prose ref to exist and is handed over there.
 	 */
 	const createAfter = useCallback(
-		(afterId: string | null, tpl: BlockTpl, source = "", seed?: BlockSeed) => {
+		(afterId: string | null, tpl: string, source = "", seed?: BlockSeed) => {
 			const id = mintId("s");
 			const at = afterId ? index(afterId) : -1;
 			notify("section.create", {
@@ -357,7 +363,7 @@ export function Canvas({
 			// (or at the top of a starter program) and "start" is the same place
 			// or the right one. Load bearing only if the focus intent happens to
 			// land after the prose ref has already taken the seed.
-			pendingFocus.current = { id, edit: tpl === "program", place: seed ? "end" : "start" };
+			pendingFocus.current = { id, edit: tpl !== "text", place: seed ? "end" : "start" };
 			pendingSeed.current = seed ? { id, seed } : null;
 			return id;
 		},
@@ -372,7 +378,8 @@ export function Canvas({
 			// Only a program block's source is editable text. A text block's
 			// head is prose, and prose does not travel on this wire.
 			if (block && block.tpl !== "text") commitSource(id, head);
-			createAfter(id, insert ?? "text", insert === "program" ? "" : tail);
+			const tpl = insert ?? "text";
+			createAfter(id, tpl, tpl === "text" ? tail : "");
 		},
 		[blocks, commitSource, createAfter, index],
 	);
@@ -591,7 +598,11 @@ export function Canvas({
 	// -- slash menu -----------------------------------------------------------
 
 	const slash = editor.slash;
-	const slashItems = useMemo(() => (slash ? filterSlash(slash.query, slash.mode) : []), [slash]);
+	const menuItems = useMemo(() => buildSlashItems(snippets), [snippets]);
+	const slashItems = useMemo(
+		() => (slash ? filterSlash(slash.query, slash.mode, menuItems) : []),
+		[slash, menuItems],
+	);
 
 	const pickSlash = useCallback(
 		(item: SlashItem) => {
@@ -606,7 +617,7 @@ export function Canvas({
 				// characters -- the seed applies the same command the inline path
 				// does, so the caret ends up after it either way.
 				if (item.action.act === "split") {
-					createAfter(s.blockId, item.action.insert === "program" ? "program" : "text");
+					createAfter(s.blockId, item.action.insert ?? "text");
 					return;
 				}
 				createAfter(s.blockId, "text", "", { action: item.action });
@@ -621,7 +632,7 @@ export function Canvas({
 		(key: string): boolean => {
 			const s = editor.slash;
 			if (!s) return false;
-			const items = filterSlash(s.query, s.mode);
+			const items = filterSlash(s.query, s.mode, menuItems);
 			if (key === "ArrowDown" || key === "ArrowUp") {
 				const d = key === "ArrowDown" ? 1 : -1;
 				const n = Math.max(1, items.length);
@@ -639,7 +650,7 @@ export function Canvas({
 			}
 			return false;
 		},
-		[editor.slash, patch, pickSlash],
+		[editor.slash, menuItems, patch, pickSlash],
 	);
 
 	// -- the ghost inputs ------------------------------------------------------

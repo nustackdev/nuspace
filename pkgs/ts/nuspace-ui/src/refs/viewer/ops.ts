@@ -34,8 +34,6 @@
 // each editor gesture. The two halves are independent writes to different
 // sections, so it does not matter which arm runs first.
 
-import type { BlockTpl } from "./types";
-
 /** Every op the Viewer sends, with its argument shape. */
 export type Ops = {
 	/** No kv write: the answer is a `set_page` plus a `set_status`. */
@@ -44,7 +42,8 @@ export type Ops = {
 		page_id: string;
 		section_id: string;
 		name: string;
-		tpl: BlockTpl;
+		/** "text" for prose, otherwise the name of the snippet it is made from. */
+		tpl: string;
 		/** The Nu program. For a templated tpl this is the shipped starter,
 		 *  which rides the chain onto the ref as a declared prop -- never
 		 *  written here. */

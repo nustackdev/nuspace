@@ -77,8 +77,9 @@ import type { SlashAction } from "./Slash";
 import type { FocusReq } from "./state";
 
 export type ExitDir = "up" | "down";
-/** What a split inserts between the two halves, if anything. A tpl name. */
-export type InsertTpl = "text" | "program" | null;
+/** What a split inserts between the two halves, if anything. A tpl name:
+ *  "text" for prose, otherwise a snippet's name. */
+export type InsertTpl = string | null;
 
 /**
  * What a block that does not exist yet is to start life holding.

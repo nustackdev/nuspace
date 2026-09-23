@@ -21,7 +21,7 @@ import { notifyOp } from "../../app/wire";
 import { docPageLoading, docPageSurface, docTitle, docTitleHead, shellSurface } from "../../design";
 import { Canvas } from "./Canvas";
 import type { Ops } from "./ops";
-import { applyViewerWrite, useStarters, useViewerValue } from "./state";
+import { applyViewerWrite, useSnippets, useStarters, useViewerValue } from "./state";
 
 // The Plane the server inits with no name shows this instead. A placeholder,
 // muted, so it cannot be mistaken for a title that is really there.
@@ -33,6 +33,7 @@ const NOTHING_OPEN = "pick a Plane";
 function ViewerView({ path }: NodeProps) {
 	const { page } = useViewerValue(path);
 	const starters = useStarters(path);
+	const snippets = useSnippets(path);
 	const planeId = useRoute();
 	const key = pathKey(path);
 
@@ -75,6 +76,7 @@ function ViewerView({ path }: NodeProps) {
 							refPath={path}
 							page={showing}
 							starters={starters}
+							snippets={snippets}
 							editable={showing.editable}
 							notify={notify}
 						/>

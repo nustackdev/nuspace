@@ -225,6 +225,30 @@ export function useStarters(path: Path): Record<string, string> {
 	}, [raw]);
 }
 
+/** One registered snippet, as the `/` menu offers it. `text` marks the
+ *  prose snippet: it makes a document block rather than a program block. */
+export type SlashSnippet = { name: string; label: string; text: boolean };
+
+const EMPTY_SNIPPETS: SlashSnippet[] = [];
+
+/** The `/` menu's block entries, in registry order, off the mount's props. */
+export function useSnippets(path: Path): SlashSnippet[] {
+	const raw = useProps(path).snippets;
+	return useMemo(() => {
+		if (!Array.isArray(raw)) return EMPTY_SNIPPETS;
+		const out: SlashSnippet[] = [];
+		for (const r of raw) {
+			if (!r || typeof r !== "object") continue;
+			const o = r as Record<string, unknown>;
+			const name = typeof o.name === "string" ? o.name : "";
+			if (!name) continue;
+			const label = typeof o.label === "string" && o.label ? o.label : name;
+			out.push({ name, label, text: o.text === true });
+		}
+		return out.length ? out : EMPTY_SNIPPETS;
+	}, [raw]);
+}
+
 export function useViewerValue(path: Path): ViewerValue {
 	const props = useProps(path);
 	const page = (props.page as ActivePage | undefined) ?? null;

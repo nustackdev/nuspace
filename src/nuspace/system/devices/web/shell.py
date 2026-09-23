@@ -31,7 +31,7 @@ from nustd.ui.core.session import Session
 
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Mapping
+    from collections.abc import Callable, Mapping, Sequence
 
     from nu.lang.runtime import Runtime
 
@@ -102,11 +102,18 @@ class Shell(nu.Shape):
     viewer = ViewerRef.slot()
 
     @classmethod
-    def boot(cls, starters: Mapping[str, str] | None = None) -> Boot:
+    def boot(
+        cls,
+        starters: Mapping[str, str] | None = None,
+        snippets: Sequence[Mapping[str, Any]] | None = None,
+    ) -> Boot:
         """This shell's slots as the batch that seeds a tab.
 
         Args:
             starters: what a cell made from each ``/`` entry starts as,
                 mounted on the viewer.
+            snippets: the ``/`` menu's block entries, ``{name, label, text}``
+                in order, mounted on the viewer.
         """
-        return Boot(cls, {"viewer": {"starters": dict(starters or {})}})
+        viewer = {"starters": dict(starters or {}), "snippets": [dict(s) for s in snippets or ()]}
+        return Boot(cls, {"viewer": viewer})

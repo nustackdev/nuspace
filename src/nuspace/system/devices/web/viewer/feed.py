@@ -50,11 +50,12 @@ from nuspace.system.devices.web.viewer.interactions import (
     TPL_PROGRAM,
     TPL_TEXT,
 )
+from nuspace.system.devices.web.viewer.ref import PROSE
 from nuspace.system.kernel.utils import snap
 
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable
+    from collections.abc import Iterable, Sequence
 
     from nuspace.ops import Snippet
     from nustd.ui.core import Ref
@@ -62,9 +63,6 @@ if TYPE_CHECKING:
 
 __all__ = ["PROSE", "blocks", "page", "prose_source", "statuses", "viewer_feed"]
 
-
-#: The snippet whose prog marks a cell as prose (D19).
-PROSE = "prose"
 
 _arms = Arms("viewer")
 _runs = Space.kernel.runs
@@ -268,7 +266,33 @@ def _status_changes() -> list[nu.Nu]:
 # --- the composition -------------------------------------------------------------
 
 
-def _events(viewer: Ref, prose: str | None) -> list[nu.Nu]:
+def _create_prog(snippets: Sequence[Snippet]) -> nu.Nu:
+    """The prog a created cell stores, off the create's ``tpl`` and ``source``.
+
+    ``tpl`` names a snippet (``text`` is the prose one's wire name). A prose
+    create stores the prose snippet's prog: what the browser sends with it is
+    the tail of a split document, not a program. Any other create stores its
+    ``source``, or the named snippet's when the browser sent none.
+    """
+    tpl = field_str(_CREATE, "tpl")
+    source = field_str(_CREATE, "source")
+    prog: nu.Nu = source
+    for snippet in reversed(snippets):
+        if snippet.name == PROSE:
+            continue
+        prog = nu.If(
+            nu.And(nu.Eq(tpl, nu.Str(snippet.name)), nu.Eq(source, nu.Str(""))),
+            nu.Str(snippet.source),
+            prog,
+        )
+    prose = prose_source(snippets)
+    if prose is not None:
+        is_prose = nu.Or(nu.Eq(tpl, nu.Str(TPL_TEXT)), nu.Eq(tpl, nu.Str(PROSE)))
+        prog = nu.If(is_prose, nu.Str(prose), prog)
+    return prog
+
+
+def _events(viewer: Ref, snippets: Sequence[Snippet]) -> list[nu.Nu]:
     """Browser to store: one arm per viewer op."""
 
     def named(name: str) -> nu.Nu:
@@ -277,12 +301,7 @@ def _events(viewer: Ref, prose: str | None) -> list[nu.Nu]:
             nu.Ne(field_str(name, "section_id"), nu.Str("")),
         )
 
-    source = field_str(_CREATE, "source")
-    prog = source
-    if prose is not None:
-        # A prose cell's prog is the snippet's. What the browser sends on a
-        # prose create is the tail of a split document, not a program.
-        prog = nu.If(nu.Eq(field_str(_CREATE, "tpl"), nu.Str(TPL_TEXT)), nu.Str(prose), source)
+    prog = _create_prog(snippets)
     create_page = field_str(_CREATE, "page_id")
     move_to = field_str(_MOVE, "to_page_id")
     return [
@@ -356,6 +375,7 @@ def viewer_feed(viewer: Ref, sid: nu.StrArg, snippets: Iterable[Snippet] = ()) -
         snippets: the registered snippets. The one named :data:`PROSE`
             marks prose cells.
     """
+    snippets = list(snippets)
     prose = prose_source(snippets)
     route = Space.connections[sid].route
     at = fresh("viewer_route")
@@ -374,4 +394,4 @@ def viewer_feed(viewer: Ref, sid: nu.StrArg, snippets: Iterable[Snippet] = ()) -
         [snap(route.on_change())],
         nu.Let(at, snap(text(route)), nu.IfDo(nu.Ne(plane, nu.Str("")), shown)),
     )
-    return nu.ParallelAsync(_arms.guard(routed, "route"), *_events(viewer, prose))
+    return nu.ParallelAsync(_arms.guard(routed, "route"), *_events(viewer, snippets))

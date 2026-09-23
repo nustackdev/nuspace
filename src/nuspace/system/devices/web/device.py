@@ -32,7 +32,7 @@ from nuspace.system.devices.web.session import served_sessions
 from nuspace.system.devices.web.shell import Shell
 from nuspace.system.devices.web.sidebar import sidebar_feed
 from nuspace.system.devices.web.utils import Arms, cells_ui, field_str
-from nuspace.system.devices.web.viewer import on_select, starters, viewer_feed
+from nuspace.system.devices.web.viewer import on_select, slash_entries, starters, viewer_feed
 from nuspace.system.kernel.space import free_port
 from nuspace.system.kernel.utils import Now, snap
 from nuspace.system.services.nav import clear_connections
@@ -111,10 +111,10 @@ def connection(
     Args:
         sid: the connection id.
         apps: the registered apps, for the sidebar's sections.
-        snippets: the registered snippets, for the viewer's starters.
+        snippets: the registered snippets, for the viewer's starters and menu.
         shell: the shell every tab holds.
     """
-    feeds = shell.boot(starters(snippets)) >> nu.ParallelAsync(
+    feeds = shell.boot(starters(snippets), slash_entries(snippets)) >> nu.ParallelAsync(
         sidebar_feed(shell.sidebar, apps),
         viewer_feed(shell.viewer, sid, snippets),
     )

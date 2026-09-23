@@ -20,7 +20,7 @@
 //
 // Actions split by what they do to document structure. A "prefix" item is
 // pure text: it rewrites the current line's markdown and the block stays one
-// block. "text" / "program" / "split" are structural: they split the block at
+// block. The snippet rows and "split" are structural: they split the block at
 // the caret, which is the only way a new block is ever born out of text.
 // Splitting is always explicit -- that is the rule the block model rests on.
 //
@@ -54,11 +54,12 @@ import {
 	docSlashMenuItemLabel,
 	docSlashMenuLabel,
 } from "../../design";
+import type { SlashSnippet } from "./state";
 
 export type SlashAction =
 	| { act: "prefix"; prefix: string }
 	| { act: "literal"; text: string }
-	| { act: "split"; insert: "text" | "program" | null };
+	| { act: "split"; insert: string | null };
 
 /** Which surface the menu is open on, and so which items it may offer. */
 export type SlashMode = "inline" | "ghost";
@@ -81,7 +82,8 @@ export type SlashItem = {
 	action: SlashAction;
 };
 
-export const SLASH_ITEMS: SlashItem[] = [
+/** The block rows when no snippets were seeded. */
+const FALLBACK_BLOCKS: SlashItem[] = [
 	{
 		id: "text",
 		label: "Text",
@@ -100,6 +102,27 @@ export const SLASH_ITEMS: SlashItem[] = [
 		icon: SquareTerminal,
 		action: { act: "split", insert: "program" },
 	},
+];
+
+/**
+ * One block row per registered snippet (D19). The prose one inserts "text",
+ * which is prose's wire tpl; every other one inserts its own name, which the
+ * create carries as `tpl` and the server resolves to that snippet's prog.
+ */
+function snippetItems(snippets: SlashSnippet[]): SlashItem[] {
+	return snippets.map((s) => ({
+		id: `snippet:${s.name}`,
+		label: s.label,
+		hint: s.text ? "text" : s.name,
+		group: "blocks",
+		keywords: `${s.name} ${s.label}`.toLowerCase() + (s.text ? " text paragraph prose p" : ""),
+		icon: s.text ? Type : SquareTerminal,
+		action: { act: "split", insert: s.text ? "text" : s.name },
+	}));
+}
+
+/** Rows every menu carries whatever is registered. */
+const FIXED_ITEMS: SlashItem[] = [
 	{
 		id: "split",
 		label: "Split here",
@@ -184,7 +207,17 @@ export const SLASH_ITEMS: SlashItem[] = [
 ];
 
 /** What the inline trigger may offer. Built once: it never varies. */
-const PROSE_ITEMS = SLASH_ITEMS.filter((i) => i.group === "prose");
+const PROSE_ITEMS = FIXED_ITEMS.filter((i) => i.group === "prose");
+
+/** The whole ghost menu: the snippets' block rows, then the fixed rows.
+ *  Falls back to plain Text / Program when nothing was seeded. */
+export function buildSlashItems(snippets: SlashSnippet[]): SlashItem[] {
+	const blocks = snippets.length ? snippetItems(snippets) : FALLBACK_BLOCKS;
+	return [...blocks, ...FIXED_ITEMS];
+}
+
+/** The menu with nothing registered. */
+export const SLASH_ITEMS: SlashItem[] = buildSlashItems([]);
 
 /**
  * The rows this context may show, narrowed by what has been typed.
@@ -193,8 +226,12 @@ const PROSE_ITEMS = SLASH_ITEMS.filter((i) => i.group === "prose");
  * against: an inline `/` cannot reach a "blocks" item however precisely it is
  * spelled, because that item does not mean anything where the caret is.
  */
-export function filterSlash(query: string, mode: SlashMode): SlashItem[] {
-	const pool = mode === "inline" ? PROSE_ITEMS : SLASH_ITEMS;
+export function filterSlash(
+	query: string,
+	mode: SlashMode,
+	items: SlashItem[] = SLASH_ITEMS,
+): SlashItem[] {
+	const pool = mode === "inline" ? PROSE_ITEMS : items;
 	const q = query.trim().toLowerCase();
 	if (!q) return pool;
 	return pool.filter(

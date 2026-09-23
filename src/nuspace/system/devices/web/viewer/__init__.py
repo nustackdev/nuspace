@@ -35,7 +35,7 @@ from nuspace.system.devices.web.viewer.interactions import (
     set_page,
     set_status,
 )
-from nuspace.system.devices.web.viewer.ref import ViewerRef, starters
+from nuspace.system.devices.web.viewer.ref import ViewerRef, slash_entries, starters
 
 
 __all__ = [
@@ -60,6 +60,7 @@ __all__ = [
     "prose_source",
     "set_page",
     "set_status",
+    "slash_entries",
     "starters",
     "statuses",
     "viewer_feed",
