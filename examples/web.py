@@ -19,6 +19,7 @@ A browser opens on http://127.0.0.1:8080. Ctrl+C stops it.
 from __future__ import annotations
 
 import logging
+import os
 from pathlib import Path
 
 import nu
@@ -34,7 +35,7 @@ logging.getLogger("invisibles").setLevel(logging.CRITICAL)
 
 
 STORE = str(Path(__file__).parent / "v4.db")
-PORT = 8080
+PORT = int(os.environ.get("NUSPACE_PORT", "8080"))
 
 COUNTER, TICK = "counter", "tick"
 
