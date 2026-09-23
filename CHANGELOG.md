@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Clear the v3 source out of the way for the v4 rewrite
 - Opening a page no longer slows down with each extra cell on it
 - Navigating away clears the old page at once instead of blinking through it
 - Keep workers ready in advance, so opening a plane no longer waits for one to start
