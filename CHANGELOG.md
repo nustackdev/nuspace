@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Serve the browser from a device that tracks tabs and never runs planes
 - Start, restart, reload and route planes through ordinary services on workers
 - Run cells on workers through one kernel that records, stops and reaps every run
 - Add the operations every part of a space is built from
