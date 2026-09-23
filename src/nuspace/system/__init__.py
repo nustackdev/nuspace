@@ -1,11 +1,12 @@
 """Layer two: the system, built from ops.
 
 - :mod:`nuspace.system.kernel`: starts, stops, records and reaps runs.
+- :mod:`nuspace.system.services`: init, nav, supervisor, reload, as cells.
 
-Services and devices come next, on top of the same ops.
+Devices come next, on top of the same ops.
 """
 
-from . import kernel
+from . import kernel, services
 
 
-__all__ = ["kernel"]
+__all__ = ["kernel", "services"]

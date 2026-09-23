@@ -18,7 +18,10 @@ the kernel beside a body.
 
 from __future__ import annotations
 
+import shutil
 import socket
+import tempfile
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import nu
@@ -45,6 +48,7 @@ if TYPE_CHECKING:
 __all__ = [
     "DEFAULT_NAME",
     "DEFAULT_SPARES",
+    "Throwaway",
     "Warmed",
     "free_port",
     "open_kernel",
@@ -71,19 +75,53 @@ def free_port() -> int:
         return int(sock.getsockname()[1])
 
 
+class Throwaway:
+    """A store directory that goes when its bracket closes. Binds nothing anyone reads.
+
+    Outside the store's own brackets, so rocksdb has closed by the time the
+    directory is removed.
+
+    Args:
+        path: the directory, made if missing (a term run twice finds it gone).
+    """
+
+    def __init__(self, path: str) -> None:
+        self.path = path
+
+    def setup(self, ctx: Context) -> None:
+        """Make the directory again if an earlier run of the term removed it."""
+        Path(self.path).mkdir(parents=True, exist_ok=True)
+
+    async def asetup(self, ctx: Context) -> None:
+        """Async shim: making a directory is sync work."""
+        self.setup(ctx)
+
+    def cleanup(self) -> None:
+        """Remove the directory and everything the store left in it."""
+        shutil.rmtree(self.path, ignore_errors=True)
+
+
 def store(path: str | None = None) -> nu.With:
-    """The storage stack, tagged :class:`~nuspace.shapes.Space`.
+    """The storage stack, tagged :class:`~nuspace.shapes.Space`. Always rocksdb (D29).
 
     kv refs find their navigator by root shape class, so the tag is load
     bearing: a served navigator told the wrong tag fails before anything boots.
 
+    Never the pure memory store: it holds objects as they are, so a list a
+    worker writes through the proxy would be stored as a live reference into
+    that worker.
+
     Args:
-        path: the store directory, created if missing. None is in memory,
-            gone with the process.
+        path: the store directory, created if missing. None is a throwaway
+            directory, removed when the bracket closes.
     """
-    if path is None:
-        return nustd.kv.memory_navigator(tags=(Space,))
-    return nustd.kv.rocksdb_navigator(path, tags=(Space,))
+    if path is not None:
+        return nustd.kv.rocksdb_navigator(path, tags=(Space,))
+    tmp = tempfile.mkdtemp(prefix="nuspace-")
+    return nu.With(
+        nu.Provide(Throwaway, {"path": tmp}),
+        nustd.kv.rocksdb_navigator(tmp, tags=(Space,)),
+    )
 
 
 def served_navigator(address: str) -> nu.Provide:
@@ -190,7 +228,7 @@ def open_kernel(
 
     Args:
         body: what runs in the host beside the kernel.
-        path: the store directory. None is in memory.
+        path: the store directory. None is a throwaway one, see :func:`store`.
         spares: idle workers to keep up. Zero is every take cold.
         envs: env factories by name, see :mod:`nuspace.system.kernel.envs`.
         space_envs: env specs applied to every run, outermost.

@@ -1,6 +1,6 @@
 """The kernel with real workers, headless: runs start, end, stop, fail and are reaped.
 
-One kernel for the module, in memory, with two spares: every test asks for
+One kernel for the module, on a throwaway store, with two spares: every test asks for
 its own worker and plane, writes requests through ops, and polls the store
 until the kernel has made them true. Reconcile runs against a bare store.
 """
