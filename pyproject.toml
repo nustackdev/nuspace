@@ -50,8 +50,9 @@ classifiers = [
 [project.urls]
 Repository = "https://github.com/nustackdev/nuspace"
 
-[project.scripts]
-nuspace = "nuspace.cli:main"
+# restored in P4: nuspace.cli is not rebuilt yet
+# [project.scripts]
+# nuspace = "nuspace.cli:main"
 
 [tool.hatch.build.targets.wheel]
 # Whole directories, not python files: the agent's system prompt is prose in
