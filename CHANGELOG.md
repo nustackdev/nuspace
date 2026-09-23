@@ -4,6 +4,7 @@
 
 - **nuspace** (the runtime, the `nuspace` command) — 0.3.1
 - **nuspace-ui** (the compiled web bundle) — 0.3.0
+- **nuverse** (the apps and snippets a space ships with) — 0.1.0
 
 Below is the changelog for **nuspace** - the full commit stream. Newest first.
 The `nuspace-ui` wheel is the same source tree's vite output and is not tracked
@@ -11,6 +12,7 @@ separately here.
 
 ## Unreleased
 
+- Publish nuverse on its own tag so the extensions ship separately
 - Pick any registered snippet from the / menu
 - An open page runs every cell as soon as you land on it, even after a restart
 - Ship apps and snippets as nuverse, a separate package found on install

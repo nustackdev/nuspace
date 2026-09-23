@@ -1,0 +1,88 @@
+# Publishes the `nuverse` distribution to PyPI on a tag push like `nuverse@0.1.0`.
+# Manual "Run workflow" dispatch builds only, unless you tick `publish`.
+#
+# nuverse is the extensions package: the apps (`+`) and snippets (`/`) a space
+# offers out of the box. nuspace finds it through the `nuspace.extensions`
+# entry point and hard-depends on it. It carries python source only, no node
+# toolchain needed.
+#
+# `nuspace` tags own release semantics for the repo (GitHub Release). This tag
+# does not cut a release, same as `nuspace-ui`.
+#
+# Setup once (PyPI trusted publisher / OIDC, no secrets):
+#   pypi.org -> account -> Publishing -> Add pending publisher
+#     PyPI project name: nuverse
+#     Owner: nustackdev
+#     Repository name: nuspace
+#     Workflow name: publish-nuverse.yml
+#     Environment name: (leave blank)
+#
+# Ordering on a coordinated release: nuverse depends on nuspace and nuspace on
+# nuverse, so push `nuverse@` first, then `nuspace@`. pip resolves the cycle
+# once both are on the index.
+#
+# Release flow:
+#   1. Bump `version` in `pkgs/nuverse/pyproject.toml`.
+#   2. Commit and push to main.
+#   3. `git tag nuverse@X.Y.Z && git push origin nuverse@X.Y.Z`.
+name: Publish nuverse to PyPI
+
+on:
+  push:
+    tags: ["nuverse@*"]
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "Publish to PyPI (otherwise build only)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  id-token: write   # PyPI trusted publishing (OIDC)
+
+concurrency:
+  group: publish-nuverse
+  cancel-in-progress: false
+
+env:
+  PKG_DIR: pkgs/nuverse
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: verify tag matches pyproject.toml version
+        if: startsWith(github.ref, 'refs/tags/nuverse@')
+        working-directory: ${{ env.PKG_DIR }}
+        run: |
+          TAG_VERSION="${GITHUB_REF#refs/tags/nuverse@}"
+          PKG_VERSION=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
+            echo "tag nuverse@$TAG_VERSION does not match pyproject.toml version $PKG_VERSION"
+            exit 1
+          fi
+
+      # The workspace source for nuspace is dev-only; a hatchling build is
+      # metadata-only, so the wheel carries the plain PyPI requirement.
+      - name: build distribution
+        working-directory: ${{ env.PKG_DIR }}
+        run: uv build --out-dir dist
+
+      - name: publish nuverse
+        if: >-
+          startsWith(github.ref, 'refs/tags/nuverse@') || inputs.publish
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: pkgs/nuverse/dist
+          skip-existing: true
