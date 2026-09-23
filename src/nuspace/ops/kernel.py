@@ -63,8 +63,13 @@ _kernel = Space.kernel
 # --- workers -------------------------------------------------------------------
 
 
-def worker(kind: nu.StrArg = KIND_LOCAL) -> nu.Nu:
+def worker(kind: nu.StrArg = KIND_LOCAL, *, held: nu.BoolArg = False) -> nu.Nu:
     """Ask for a worker of ``kind``. The kernel takes a spare or makes one.
+
+    Args:
+        kind: what kind of worker.
+        held: keep it out of idle GC (D40). A held worker lives until someone
+            :func:`kill_worker`'s it, or it crashes.
 
     Yields:
         The worker's store id, minted when this is evaluated.
@@ -74,6 +79,7 @@ def worker(kind: nu.StrArg = KIND_LOCAL) -> nu.Nu:
         row = _kernel.workers[w]
         return (
             row.kind.set(kind)
+            >> row.held.set(held)
             >> row.status.set(STATUS_STARTING)
             >> _kernel.active.set_item(w, nu.Bool(True))
         )

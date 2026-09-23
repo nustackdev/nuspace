@@ -220,19 +220,19 @@ async def test_nav_follows_the_open_planes_cells(space):
 
 
 @module_loop
-async def test_nav_takes_a_new_worker_once_an_emptied_plane_gets_a_cell(space):
+async def test_nav_keeps_its_worker_once_an_emptied_plane_gets_a_cell(space):
     p, (c1,) = await space.plane(READS_SESSION)
     sid = "conn-4"
     await space.run(atomic(Space.connections[sid].route.set(p)))
     (r1,) = await runs_of(space, p, lambda rs: rs and _up(rs[0]))
 
-    # The last cell gone, its worker had a run and has none: idle GC takes it.
+    # The last cell gone, its worker had a run and has none: held, idle GC skips it.
     await space.run(ops.remove_cell(p, c1))
-    await space.worker_row(r1["worker"], _dead)
+    await space.run_row(r1["id"], _dead)
 
     c2 = await space.run(ops.add_cell(p, READS_SESSION))
     (r2,) = await space.until(ops.runs(plane=p, cell=c2), lambda rs: rs and _up(rs[0]), SLOW)
-    assert r2["worker"] != r1["worker"]
+    assert r2["worker"] == r1["worker"]
 
     await space.run(atomic(Space.connections.del_item(sid)))
     assert (await space.run_row(r2["id"], _dead))["exit"] == EXIT_KILLED

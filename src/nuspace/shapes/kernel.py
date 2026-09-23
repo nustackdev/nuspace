@@ -83,9 +83,13 @@ class Worker(nu.Shape):
 
     ``error`` says why it died when nobody asked it to: a crash, or a kind
     the kernel cannot make.
+
+    ``held`` keeps it out of idle GC (D9, D40): it lives until someone kills
+    it, or it crashes.
     """
 
     kind = nustd.kv.StrRef.slot()
+    held = nustd.kv.BoolRef.slot()
     wid = nustd.kv.IntRef.slot()
     status = nustd.kv.StrRef.slot()
     error = nustd.kv.StrRef.slot()

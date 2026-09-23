@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- An open page runs every cell as soon as you land on it, even after a restart
 - Ship apps and snippets as nuverse, a separate package found on install
 - Run a cell the moment it is added to an open page, and stop it when removed
 - Forget old browser tabs on open, and give the web example prose and program cells

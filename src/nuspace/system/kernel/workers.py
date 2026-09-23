@@ -9,7 +9,7 @@ An arm makes its worker true and keeps it true::
       (a) Wait for the process to exit, Kill to drop the handle, reap
       (b) watch status: stopping -> Kill, and (a) reaps
       (c) fold over this worker's live runs: dispatch each once
-      (d) idle GC: had runs, has none -> stopping (D9)
+      (d) idle GC: had runs, has none -> stopping (D9), unless held (D40)
 
 (a) is the only arm that ends, so the race ends when the process is gone,
 however it went. ``Wait`` starts with the race, before anything can
@@ -26,7 +26,7 @@ from __future__ import annotations
 import nu
 import nustd.mp_pool
 from nuspace.ops import kill_worker
-from nuspace.ops.utils import atomic, fresh, text
+from nuspace.ops.utils import atomic, flag, fresh, text
 from nuspace.shapes import (
     EXIT_FAILED,
     EXIT_KILLED,
@@ -231,7 +231,12 @@ def worker_arm(worker: nu.StrArg) -> nu.Nu:
         _run_arm(nu.StrAttrRef(item), wid),
         item,
     )
-    idle = _idle(worker) >> nu.ReactForever(snap(_kernel.live.on_children_change()), _idle(worker))
+    # Held is written with the worker, so one read says it for life.
+    idle = nu.IfDo(
+        snap(flag(row.held, False)),
+        park(),
+        _idle(worker) >> nu.ReactForever(snap(_kernel.live.on_children_change()), _idle(worker)),
+    )
     alive = nu.Let(
         _WID,
         snap(row.wid),

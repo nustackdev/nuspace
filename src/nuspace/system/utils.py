@@ -10,14 +10,95 @@ bracket and never holds a transaction open across a wait.
 
 from __future__ import annotations
 
+import asyncio
+from typing import TYPE_CHECKING, Any
+
 import nu
+from nu.lang import ScalarQuery
+from nu.lang.sentinels import EMPTY, INVALID
 from nuspace.ops.utils import text
 
 from .kernel.body import WATCH_SECONDS
 from .kernel.utils import park, snap
 
 
-__all__ = ["follows", "moved", "park", "snap", "wake"]
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from nu.lang.runtime import Runtime
+
+
+__all__ = ["Ticking", "follows", "moved", "park", "snap", "wake"]
+
+
+class _TickingSubscription:
+    """A subscription that also fires every ``seconds``, with key ``None``."""
+
+    def __init__(self, inner: Any, seconds: float) -> None:  # noqa: ANN401 -- any Subscription
+        self._inner = inner
+        self._seconds = seconds
+        self._ticks: dict[int, asyncio.TimerHandle] = {}
+
+    def bind(self, receiver: Callable[[Any], None]) -> None:
+        self._inner.bind(receiver)
+        loop = asyncio.get_running_loop()
+
+        def tick() -> None:
+            self._ticks[id(receiver)] = loop.call_later(self._seconds, tick)
+            receiver(None)
+
+        self._ticks[id(receiver)] = loop.call_later(self._seconds, tick)
+
+    def unbind(self, receiver: Callable[[Any], None]) -> None:
+        handle = self._ticks.pop(id(receiver), None)
+        if handle is not None:
+            handle.cancel()
+        self._inner.unbind(receiver)
+
+    def close(self) -> None:
+        for handle in self._ticks.values():
+            handle.cancel()
+        self._ticks.clear()
+        self._inner.close()
+
+
+class Ticking(ScalarQuery):
+    """``change``, firing as well every :data:`WATCH_SECONDS` (D38).
+
+    What a fold subscribes with: ``ForEachParReactive`` reads its elements
+    again only when its subscription fires, so a write the subscription
+    missed (landing before it was bound, or a receiver the host's feed
+    dropped) would never be seen. A tick makes it late at worst, never lost.
+
+    Args:
+        change: a subscription, eg ``ref.on_children_change()``.
+
+    Yields:
+        The subscription, wrapped. INVALID when ``change`` is.
+    """
+
+    def __init__(self, change: nu.Nu, seconds: float = WATCH_SECONDS) -> None:
+        super().__init__(change)
+        self._payload = {"seconds": float(seconds)}
+
+    def _compile(self, nid: int, children: tuple[Callable, ...]) -> Callable:
+        def thunk(rt: Runtime) -> object:
+            msg = "Ticking requires an async runtime; use arun"
+            raise RuntimeError(msg)
+
+        return thunk
+
+    def _acompile(self, nid: int, children: tuple[Callable, ...]) -> Callable:
+        (change,) = children
+        seconds = self._payload["seconds"]
+
+        async def athunk(rt: Runtime) -> object:
+            sub = await change(rt)
+            if sub is EMPTY or sub is INVALID:
+                return INVALID
+            return _TickingSubscription(sub, seconds)
+
+        return athunk
 
 
 def wake(change: nu.Nu) -> nu.Nu:

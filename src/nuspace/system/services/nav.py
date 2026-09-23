@@ -5,8 +5,8 @@ and the host empties at open. An arm follows its connection's ``route``: a user 
 comes up on a worker of its own, inside the ``session`` env bound to the
 connection, and stays following the plane's cells while the route holds:
 
-    route set     w = worker(); one arm per cell of the plane:
-                    up(route, [cell], worker=w, envs=[session:sid]), held
+    route set     w = worker(held=True); one arm per cell of the plane:
+                    up(route, [cell], worker=w, envs=[session:sid]), parked
     cell added    its arm ups it on w
     cell removed  its arm is cancelled, its run downed (if the removal
                     did not already stop it)
@@ -14,20 +14,16 @@ connection, and stays following the plane's cells while the route holds:
     connection    kill_worker(w)
       gone
 
-Killing happens on every way out of the turn (``finally_``), so a route
-change, a connection going and nav itself stopping all leave nothing
-behind. An arm downs its run only when its cell is gone: when the turn
-ends the kill takes every run, and a down racing it is what to avoid
-(see :func:`_cell_arm`).
+The worker is held (D40): idle GC never takes it, so a plane whose runs all
+ended (its last cell removed, or every cell finished) keeps its worker, and
+a cell added after runs on it. Killing happens on every way out of the turn
+(``finally_``), so a route change, a connection going and nav itself
+stopping all leave nothing behind. An arm downs its run only when its cell
+is gone: when the turn ends the kill takes every run, and a down racing it
+is what to avoid (see :func:`_cell_arm`).
 
-Idle GC (D9) takes a worker that had runs and has none, so a plane whose
-last run ended (its cells removed or all finished) loses its worker. The
-turn then waits for a cell that has not run yet, and only then takes a new
-one: a plane with no cells never has a run, so its worker idles rather than
-churns, and cells that already ran to an end are not run again because a
-sibling was added. A cell counts as run once its run came up on the worker:
-one upped on a worker already going (the orphan sweep fails it unstarted),
-or added after the worker went, runs on the next.
+Both folds subscribe through :class:`~..utils.Ticking`: a connection or a
+cell whose write the subscription missed is picked up on the next tick.
 
 A connection outlives no open: :func:`clear_connections` runs before init
 starts nav (D34), so a tab from a previous run never brings a plane up.
@@ -41,7 +37,7 @@ from nuspace.ops.utils import atomic, flag, fresh, text
 from nuspace.shapes import STATUS_DEAD, STATUS_STARTING, STATUS_STOPPING, STATUS_UP, Space
 
 from ..kernel.body import until
-from ..utils import follows, park, snap, wake
+from ..utils import Ticking, follows, park, snap
 
 
 __all__ = ["BY", "CELL", "PLANE", "SESSION", "SHIM", "clear_connections", "program"]
@@ -74,8 +70,6 @@ _ROUTE = "nuspace.nav.route"
 _WORKER = "nuspace.nav.worker"
 _CELL = "nuspace.nav.cell"
 _RUN = "nuspace.nav.run"
-_DONE = "nuspace.nav.done"
-_RUNS = "nuspace.nav.runs"
 
 
 def clear_connections() -> nu.Nu:
@@ -122,8 +116,8 @@ def _down_running(run_ids: nu.Nu) -> nu.Nu:
     )
 
 
-def _cell_arm(route: nu.StrAttrRef, envs: nu.Nu) -> nu.Nu:
-    """One cell: up on the turn's worker, held, its run downed once the cell is gone.
+def _cell_arm(route: nu.StrAttrRef, worker_id: nu.StrAttrRef, envs: nu.Nu) -> nu.Nu:
+    """One cell: up on the turn's worker, parked, its run downed once the cell is gone.
 
     The ops that take a cell away stop its runs in the same commit, so the
     down here is for a cell gone some other way. Cancelled with its cell
@@ -131,98 +125,48 @@ def _cell_arm(route: nu.StrAttrRef, envs: nu.Nu) -> nu.Nu:
     after it takes the run. Downing it then as well would race that kill: a
     run killed while writing its own end leaves the kernel's reap of its
     worker waiting on the store.
-
-    A cell in ``_DONE`` came up on an earlier worker, so it already ran
-    and is not run again. The run id goes on the turn's ``_RUNS``, one list
-    every arm shares, so the turn can tell which cells came up.
     """
     cell = nu.StrAttrRef(_CELL)
-    run = up(route, nu.List.of(cell), worker=nu.StrAttrRef(_WORKER), envs=envs, by=BY)
+    run = up(route, nu.List.of(cell), worker=worker_id, envs=envs, by=BY)
     gone = nu.Not(snap(cell_exists(route, cell)))
-    held = nu.Let(
-        _RUN,
-        run,
-        nu.ListAttrRef(_RUNS).extend(nu.ListAttrRef(_RUN))
-        >> nu.TryCatch(park(), finally_=nu.IfDo(gone, _down_running(nu.ListAttrRef(_RUN)))),
+    return nu.Let(
+        _RUN, run, nu.TryCatch(park(), finally_=nu.IfDo(gone, _down_running(nu.ListAttrRef(_RUN))))
     )
-    return nu.IfDo(nu.Not(nu.ListAttrRef(_DONE).contains(cell)), held, park())
 
 
-def _cells_fold(route: nu.StrAttrRef, envs: nu.Nu) -> nu.Nu:
-    """:func:`_cell_arm` per cell of the routed plane, births and deaths included.
+def _cells_fold(route: nu.StrAttrRef, worker_id: nu.StrAttrRef, envs: nu.Nu) -> nu.Nu:
+    """:func:`_cell_arm` per cell of the routed plane, births and deaths included. Never returns.
 
     The subscription is length exact: an edited cell is not a birth. The cell
     container is made real first, a subscription over one that is not there
-    never fires.
+    never fires. A plane gone parks: nothing to follow until the route moves.
     """
     cells = Space.planes[route].cells
     return atomic(nu.IfDo(plane_exists(route), cells.init(nu.Dict.create()))) >> nu.IfDo(
         snap(plane_exists(route)),
         nu.ForEachParReactive(
             snap(_cell_ids(route)),
-            snap(cells.on_children_change()),
-            _cell_arm(route, envs),
+            Ticking(snap(cells.on_children_change())),
+            _cell_arm(route, worker_id, envs),
             _CELL,
         ),
         park(),
     )
 
 
-def _ran(route: nu.StrAttrRef) -> nu.Nu:
-    """The routed plane's cells in ``_DONE`` or with a run in ``_RUNS`` that came up. Unbracketed.
-
-    Came up is ``started`` written: the body writes it with ``up``, a run the
-    orphan sweep failed never has it.
-    """
-    item = fresh("nav_ran")
-    rid = fresh("nav_rid")
-    cell = nu.StrAttrRef(item)
-    row = Space.kernel.runs[nu.StrAttrRef(rid)]
-    came_up = nu.Filter(
-        nu.ListAttrRef(_RUNS),
-        nu.And(nu.Eq(text(row.cell), cell), row.started.exists()),
-        key=rid,
-    )
-    ran = nu.Or(
-        nu.ListAttrRef(_DONE).contains(cell),
-        nu.Gt(nu.List(nu.Collect(came_up)).len(), nu.Int(0)),
-    )
-    return nu.List(nu.Collect(nu.Filter(_cell_ids(route), ran, key=item)))
-
-
-def _new_cell(route: nu.StrAttrRef) -> nu.Nu:
-    """Whether the routed plane is there and has a cell not in ``_DONE``."""
-    item = fresh("nav_new")
-    new = nu.Filter(
-        _cell_ids(route),
-        nu.Not(nu.ListAttrRef(_DONE).contains(nu.StrAttrRef(item))),
-        key=item,
-    )
-    return nu.And(plane_exists(route), nu.Gt(nu.List(nu.Collect(new)).len(), nu.Int(0)))
-
-
 def _open(sid: nu.StrAttrRef, route: nu.StrAttrRef) -> nu.Nu:
-    """The route's plane followed cell by cell on a worker, held until cancelled.
+    """The route's plane followed cell by cell on a held worker, killed on every way out.
 
-    Each pass takes a worker and runs the cells fold on it until the worker
-    is dead (idle GC, a crash), killing it on every way out. Then it waits
-    for a cell that has not come up yet before taking the next worker.
+    A worker that crashes ends the turn: the plane stays down until the
+    route moves (renavigation brings it back).
     """
     w = nu.StrAttrRef(_WORKER)
-    done = nu.ListAttrRef(_DONE)
     envs = nu.List.of(nu.List.of(nu.Str(SESSION), sid))
-    held = nu.Race(_cells_fold(route, envs), until(Space.kernel.workers[w].status, STATUS_DEAD))
-    pass_ = nu.Let(_WORKER, worker(), nu.TryCatch(held, finally_=kill_worker(w)))
-    turn = nu.Let(_RUNS, nu.List.of(), pass_ >> nu.SetCmd(done, snap(_ran(route)))) >> nu.WhileDo(
-        nu.Not(snap(_new_cell(route))),
-        # A plane gone parks: nothing to wait on until the route moves.
-        nu.IfDo(
-            snap(plane_exists(route)),
-            wake(Space.planes[route].cells.on_children_change()),
-            park(),
-        ),
+    followed = nu.Race(
+        _cells_fold(route, w, envs), until(Space.kernel.workers[w].status, STATUS_DEAD)
     )
-    return nu.IfDo(snap(_shown(route)), nu.Let(_DONE, nu.List.of(), nu.ForeverDo(turn)))
+    turn = nu.Let(_WORKER, worker(held=True), nu.TryCatch(followed, finally_=kill_worker(w)))
+    return nu.IfDo(snap(_shown(route)), turn)
 
 
 def _arm(sid: nu.StrAttrRef) -> nu.Nu:
@@ -239,7 +183,7 @@ def program() -> nu.Nu:
     connections = Space.connections
     return atomic(connections.init(nu.Dict.create())) >> nu.ForEachParReactive(
         snap(nu.list(connections.keys())),
-        snap(connections.on_children_change()),
+        Ticking(snap(connections.on_children_change())),
         _arm(nu.StrAttrRef(_SID)),
         _SID,
     )
