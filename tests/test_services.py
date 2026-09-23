@@ -196,6 +196,68 @@ async def test_nav_skips_missing_and_system_planes(space):
     await runs_of(space, p, lambda rs: _dead(rs[0]))
 
 
+@module_loop
+async def test_nav_follows_the_open_planes_cells(space):
+    p, _ = await space.plane(READS_SESSION)
+    sid = "conn-3"
+    await space.run(atomic(Space.connections[sid].route.set(p)))
+    (r1,) = await runs_of(space, p, lambda rs: rs and _up(rs[0]))
+
+    c2 = await space.run(ops.add_cell(p, READS_SESSION))
+    (r2,) = await space.until(ops.runs(plane=p, cell=c2), lambda rs: rs and _up(rs[0]), SLOW)
+    assert (r2["worker"], r2["by"], r2["envs"]) == (
+        r1["worker"],
+        nav_service.BY,
+        [["session", sid]],
+    )
+
+    await space.run(ops.remove_cell(p, c2))
+    assert (await space.run_row(r2["id"], _dead))["exit"] == EXIT_STOPPED
+    assert _up(await space.run_row(r1["id"], _up))
+
+    await space.run(atomic(Space.connections.del_item(sid)))
+    assert (await space.run_row(r1["id"], _dead))["exit"] == EXIT_KILLED
+
+
+@module_loop
+async def test_nav_takes_a_new_worker_once_an_emptied_plane_gets_a_cell(space):
+    p, (c1,) = await space.plane(READS_SESSION)
+    sid = "conn-4"
+    await space.run(atomic(Space.connections[sid].route.set(p)))
+    (r1,) = await runs_of(space, p, lambda rs: rs and _up(rs[0]))
+
+    # The last cell gone, its worker had a run and has none: idle GC takes it.
+    await space.run(ops.remove_cell(p, c1))
+    await space.worker_row(r1["worker"], _dead)
+
+    c2 = await space.run(ops.add_cell(p, READS_SESSION))
+    (r2,) = await space.until(ops.runs(plane=p, cell=c2), lambda rs: rs and _up(rs[0]), SLOW)
+    assert r2["worker"] != r1["worker"]
+
+    await space.run(atomic(Space.connections.del_item(sid)))
+    assert (await space.run_row(r2["id"], _dead))["exit"] == EXIT_KILLED
+
+
+@module_loop
+async def test_nav_runs_a_cell_that_replaces_the_last_one(space):
+    p, (c1,) = await space.plane(READS_SESSION)
+    sid = "conn-5"
+    await space.run(atomic(Space.connections[sid].route.set(p)))
+    (r1,) = await runs_of(space, p, lambda rs: rs and _up(rs[0]))
+
+    # Added right after the removal: its first run may land on the worker
+    # idle GC is taking (or beat GC to it), and either way it comes up.
+    await space.run(ops.remove_cell(p, c1))
+    c2 = await space.run(ops.add_cell(p, READS_SESSION))
+    rows = await space.until(ops.runs(plane=p, cell=c2), lambda rs: any(_up(r) for r in rs), SLOW)
+    (r2,) = [r for r in rows if _up(r)]
+    assert r2["by"] == nav_service.BY
+    assert r1["id"] not in [r["id"] for r in rows]
+
+    await space.run(atomic(Space.connections.del_item(sid)))
+    assert (await space.run_row(r2["id"], _dead))["exit"] == EXIT_KILLED
+
+
 def _state(cells: dict) -> list:
     return [c.get("state", {}).get("s") for c in cells.values()]
 
