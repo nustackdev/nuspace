@@ -4,10 +4,11 @@
 // the Viewer claiming the rest. It owns only the frame - how the window splits
 // and how each side claims its share.
 //
-// The window has no chrome of its own at all. The connection pill and the theme
-// flip are the only two controls left and they sit in the rail's footer: they
-// used to float over the canvas, which is two controls with nothing holding
-// them, and the rail already has an edge for them.
+// The window has no chrome of its own. The connection dot and the theme flip
+// sit in the rail's bottom bar: they used to float over the canvas, which is
+// two controls with nothing holding them, and the rail already has an edge for
+// them. The one exception is the button that brings a collapsed rail back,
+// which has nowhere else to be.
 //
 // Everything resolves to kit L2/L4 semantic names. No raw hex, nothing off the
 // 4px grid.
@@ -25,8 +26,19 @@ import { resizeHandle } from "./resize";
 /** The window. Owns the viewport height so every region inside can go flex. */
 export const shellRoot = "flex h-screen bg-bg-canvas text-text-primary";
 
-/** Everything beside the sidebar. */
-export const shellMain = "flex min-h-0 min-w-0 flex-1";
+/**
+ * Everything beside the sidebar. `group/main` with `data-rail="collapsed"`
+ * while the rail is hidden, so the bars along the top can make room for the
+ * reopen button (see `paneBar`, `tabBar`).
+ */
+export const shellMain = "group/main relative flex min-h-0 min-w-0 flex-1";
+
+/**
+ * The reopen button's slot, over the top left corner of the main strip and
+ * centred on the chrome line. Its glyph lands where the rail's collapse
+ * button had it. The button is `railChromeButton`.
+ */
+export const shellRailOpen = "absolute top-0 left-rail-bar-pad z-20 flex h-chrome items-center";
 
 /**
  * A full-bleed region. `min-w-0` so a wide child scrolls inside itself instead

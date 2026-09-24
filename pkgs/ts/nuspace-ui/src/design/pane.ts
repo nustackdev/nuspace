@@ -12,10 +12,14 @@
 
 import { cn } from "@nustackdev/ui-kit";
 
-/** The bar. `h-chrome`, like the rail's header strip, so the two tops line up. */
+/**
+ * The bar. `h-chrome`, like the rail's header strip, so the two tops line up.
+ * With the rail collapsed the reopen button sits over its left end, so the
+ * title steps right past it.
+ */
 export const paneBar = cn(
 	"flex h-chrome shrink-0 items-center gap-0.5",
-	"bg-bg-canvas pl-4 pr-1.5",
+	"bg-bg-canvas pl-4 pr-1.5 group-data-[rail=collapsed]/main:pl-12",
 );
 
 /**

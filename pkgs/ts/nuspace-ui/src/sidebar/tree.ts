@@ -28,9 +28,13 @@ export type VisibleRow = {
 	size: number;
 };
 
-/** Whether a row folds: it has children to show. */
-export function folds(row: VisibleRow): boolean {
-	return row.hasKids;
+/**
+ * Whether an open row shows the "No planes inside" line under it. Every plane
+ * folds and unfolds, leaf or not, the way Notion's pages do; a leaf that is
+ * open has nothing to show but that line.
+ */
+export function showsNoPlanes(row: VisibleRow): boolean {
+	return row.open && !row.hasKids;
 }
 
 /** Walk the tree into the flat list of rows the current fold state shows. */

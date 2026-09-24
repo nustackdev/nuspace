@@ -7,6 +7,12 @@
 // anchor is not a thing; per-Plane actions live in a kit `DropdownMenu` off the
 // `...` and in a kit `ContextMenu` off a right-click on the row.
 //
+// The lane is Notion's: every row shows its plane's icon at rest, and while
+// the row is hovered or keyboard focused the icon swaps, in place, for the
+// fold chevron. Leaves too: unfolding a leaf shows "No planes inside". The
+// swap is pure CSS (`railIcon` / `railTwisty` in design/rail.ts). The chevron
+// only folds: it never opens the plane and never starts a drag.
+//
 // The hover `+` adds a Plane under this one, through the one Add plane popup.
 
 import {
@@ -24,12 +30,12 @@ import { ChevronRight, Columns2, Ellipsis, FileText, PenLine, Plus, Trash2 } fro
 import type * as React from "react";
 import { useCallback } from "react";
 import { closePanes, hrefFor, onNavClick, openPane, replacePane } from "../core/router";
-import { railAction, railLeafIcon, railTwisty } from "../design";
+import { railAction, railChevron, railIcon, railTwisty } from "../design";
 import { openAddPlane } from "./add";
 import type { Notify } from "./ops";
 import { RailRow, RailRowLink } from "./RailRow";
 import { RailRowInput } from "./RailRowInput";
-import { folds, subtreeOf, type VisibleRow } from "./tree";
+import { subtreeOf, type VisibleRow } from "./tree";
 import type { PlaneTree } from "./types";
 
 export function PlaneRow({
@@ -41,6 +47,7 @@ export function PlaneRow({
 	tabbable,
 	renaming,
 	drag,
+	dragging,
 	className,
 	onToggle,
 	reveal,
@@ -54,7 +61,7 @@ export function PlaneRow({
 }: {
 	row: VisibleRow;
 	index: number;
-	/** The leaf icon: the one its registered Plane names. */
+	/** The row's icon: the one its registered Plane names. */
 	icon: LucideIcon;
 	/** The focused pane's Plane. */
 	selected: boolean;
@@ -63,6 +70,8 @@ export function PlaneRow({
 	tabbable: boolean;
 	renaming: boolean;
 	drag: React.ComponentProps<typeof RailRow>["drag"];
+	/** Some row is being dragged, so no row takes its hover look. */
+	dragging: boolean;
 	className?: string;
 	onToggle: (key: string) => void;
 	reveal: (key: string) => void;
@@ -75,7 +84,6 @@ export function PlaneRow({
 	tree: PlaneTree;
 }) {
 	const { key, id, depth, title, hasKids, open, pos, size } = row;
-	const foldable = folds(row);
 	const navClick = onNavClick(id);
 
 	const remove = useCallback(() => {
@@ -103,29 +111,37 @@ export function PlaneRow({
 			level={depth + 1}
 			posinset={pos}
 			setsize={size}
-			expanded={foldable ? open : undefined}
+			expanded={open}
 			drag={renaming ? undefined : drag}
 			className={className}
 			onFocus={() => onFocus(key)}
 			onKeyDown={(e) => onKeyDown(e, row, index)}
 			lane={
-				foldable ? (
+				<>
+					<Icon className={railIcon(!dragging)} aria-hidden="true" />
 					<IconButton
 						variant="ghost"
 						size="sm"
-						tabIndex={-1}
-						aria-label={open ? `Collapse ${title}` : `Expand ${title}`}
+						tabIndex={tabbable ? 0 : -1}
+						aria-label={open ? "Collapse" : "Expand"}
 						aria-expanded={open}
-						onClick={() => onToggle(key)}
-						className={railTwisty}
+						// No focus on a click (so nothing lingers once the pointer
+						// leaves) and no drag of the row from here.
+						onMouseDown={(e) => e.preventDefault()}
+						onClick={(e) => {
+							e.stopPropagation();
+							onToggle(key);
+						}}
+						// Enter and Space press the button. Kept from the row, whose
+						// Enter opens the plane and would cancel the press.
+						onKeyDown={(e) => {
+							if (e.key === "Enter" || e.key === " ") e.stopPropagation();
+						}}
+						className={railTwisty(!dragging)}
 					>
-						<ChevronRight
-							className={`transition-transform duration-fast ease-out ${open ? "rotate-90" : ""}`}
-						/>
+						<ChevronRight className={railChevron(open)} />
 					</IconButton>
-				) : (
-					<Icon className={railLeafIcon} aria-hidden="true" />
-				)
+				</>
 			}
 			label={
 				renaming ? (

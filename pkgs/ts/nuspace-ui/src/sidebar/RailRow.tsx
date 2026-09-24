@@ -17,15 +17,7 @@ import {
 	NavLink,
 } from "@nustackdev/ui-kit";
 import type * as React from "react";
-import {
-	railActions,
-	railIndent,
-	railLabel,
-	railLane,
-	railLaneStyle,
-	railRow,
-	railTitle,
-} from "../design";
+import { railActions, railIndent, railLabel, railLane, railRow, railTitle } from "../design";
 
 export function RailRow({
 	rowKey,
@@ -59,9 +51,9 @@ export function RailRow({
 	level: number;
 	posinset: number;
 	setsize: number;
-	/** Only for a row that has children. Leave it off for a leaf. */
+	/** Whether the row is unfolded. Leave it off for a row that never folds. */
 	expanded?: boolean;
-	/** The fixed-width lane: a twisty, a leaf icon, a status dot. */
+	/** The fixed-width lane: the icon, and the chevron that stacks in its place. */
 	lane: React.ReactNode;
 	/** The label lane: usually a `RailRowLink` or a `RailRowInput`. */
 	label: React.ReactNode;
@@ -95,9 +87,7 @@ export function RailRow({
 			onKeyDown={onKeyDown}
 			{...drag}
 		>
-			<span className={railLane} style={railLaneStyle}>
-				{lane}
-			</span>
+			<span className={railLane}>{lane}</span>
 			{label}
 			<div className={railActions}>{actions}</div>
 		</div>

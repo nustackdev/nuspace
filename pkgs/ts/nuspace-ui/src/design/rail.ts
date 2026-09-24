@@ -1,20 +1,28 @@
 // Rail class recipes + geometry. The sidebar's whole vocabulary.
 //
 // The rail is the one place in nuspace where three things share a 28px line
-// - a disclosure lane, a truncating label, and a hover-revealed action lane -
-// and every "it feels off" bug in the rail traced back to those three lanes
-// being positioned against each other by hand instead of by a stated geometry.
+// - an icon lane, a truncating label, and a hover-revealed action lane - and
+// every "it feels off" bug in the rail traced back to those three lanes being
+// positioned against each other by hand instead of by a stated geometry.
 //
 // So the geometry is stated once, here, and the row is laid out in normal flow
 // against it. No absolute positioning, no magic offsets, nothing that can drift
 // into the title.
 //
-// The row's left inset is carried by the `inset` argument on `railRow` /
-// `railSkeletonRow`. A tree row gets its left offset from `railIndent(depth)`;
-// a flat row has no indent to stand in for it and pays for the inset itself.
+// The look is Notion's sidebar: 14px labels in the secondary text tier, a
+// plane icon on every row that turns into the fold chevron on hover, `+` and
+// `...` only on hover, and a quiet gray fill for the open row. No accent hue
+// anywhere in the tree: the rail is navigation, the accent belongs to the
+// document.
 //
-// Everything resolves to kit L2/L4 semantic names or the doc-* names in
-// ./tokens.css. No raw hex, nothing off the 4px grid.
+// Every length is a `--rail-*` token in ./tokens.css, which is where to tune
+// them; that file also states the one left edge and the one right edge the
+// top bar, the rows and the bottom bar share. A tree row gets its left pad,
+// plus its depth, from `railIndent(depth)`; a flat row has no indent and pays
+// for the pad with the `inset` argument on `railRow` / `railSkeletonRow`.
+//
+// Everything resolves to kit L2/L4 semantic names or the doc-* and rail-*
+// names in ./tokens.css. No raw hex, nothing off the 4px grid.
 //
 // Source docs (do not paraphrase without re-reading):
 //   go/projects/nustackdev/design/space-radius.md   §4 row heights, §1 grid
@@ -27,34 +35,25 @@ import { resizeHandle } from "./resize";
 
 /* ============================== Geometry ================================= */
 
-/**
- * The three lanes of a row, in px, all on the 4px grid.
+/*
+ * The three lanes of a row. The lengths are tokens (tokens.css, `--rail-*`).
  *
  * ```
- *  |<- depth*INDENT ->|<- LANE ->|<- GAP ->| title ...       |<- ACTIONS ->|
- *  |                  | chevron  |         | truncates       | +   ...     |
+ *  |<- row-pad + depth*indent ->|<- lane ->|<- gap ->| title ... |<- actions ->|
+ *  |                            | icon  or |         | truncates | +   ...     |
+ *  |                            | chevron  |         |           |             |
  * ```
  *
- * `LANE` and `GAP` are why the twisty used to sit on top of the first letter:
- * the old row put the chevron at `depth*12 + 2` with a 20px box and started the
- * title at `depth*12 + 20`, so the box overhung the text by 2px and the glyph
- * itself landed a pixel into it. Stating the lanes and laying them out in flow
- * makes that class of bug unrepresentable.
+ * The lane holds the plane's icon, and the fold chevron in its place (the two
+ * share one grid cell, see `railLane`). It is a fixed width whether or not it
+ * holds a control, which is what keeps titles at every depth on one left
+ * edge. Laid out in flow, never positioned, so the twisty can not land on the
+ * first letter of the title again.
  */
-export const RAIL = {
-	/** Indent per tree level. 12 = spacing 3. */
-	INDENT: 12,
-	/** Disclosure / plane-icon lane. 20 = a `sm` IconButton shrunk to the row. */
-	LANE: 20,
-	/** Lane-to-title gap. 4 = spacing 1. */
-	GAP: 4,
-	/** Row height. 28 = space-radius.md's "dense list row". */
-	ROW: 28,
-} as const;
 
-/** Left inset for a row at `depth`, as an inline style (depth is data). */
+/** Left pad for a row at `depth`, as an inline style (depth is data). */
 export function railIndent(depth: number): { paddingLeft: string } {
-	return { paddingLeft: `${depth * RAIL.INDENT}px` };
+	return { paddingLeft: `calc(var(--rail-row-pad) + ${depth} * var(--rail-indent))` };
 }
 
 /* ============================== The aside =============================== */
@@ -63,57 +62,105 @@ export function railIndent(depth: number): { paddingLeft: string } {
 export const RAIL_WIDTH = { MIN: 180, DEFAULT: 240, MAX: 480 } as const;
 
 /**
- * The rail itself. Its own surface, hairline edge. The width is inline (the
- * user drags it, see sidebar/useRailWidth.ts), so none is set here.
+ * The rail itself. Its own surface, a hairline edge on `rail-edge` so it holds
+ * in light too. The width is inline (the user drags it, see
+ * sidebar/useRailWidth.ts), so none is set here.
+ *
+ * Collapsed, it is `hidden` rather than unmounted: the Add plane popup lives
+ * in the rail and a pane's `...` still has to open it.
  */
-export const railAside = cn(
-	"relative flex shrink-0 flex-col",
-	"border-r border-border-subtle bg-bg-surface",
-);
+export function railAside(collapsed: boolean): string {
+	return cn(
+		"relative flex shrink-0 flex-col",
+		"border-r border-rail-edge bg-bg-surface",
+		collapsed && "hidden",
+	);
+}
 
 /** The drag strip on the rail's right edge. See ./resize.ts. */
 export const railResizeHandle = resizeHandle("right");
 
-/** Header strip. `h-chrome`, like the pane bar and the tab bar, so the rules line up. */
-export const railHeader = cn(
-	"flex h-chrome shrink-0 items-center gap-1",
-	"border-b border-border-subtle pl-3 pr-1.5",
-);
-
-export const railHeaderLabel = cn(
-	"flex-1 select-none text-xs font-medium uppercase tracking-[0.06em]",
-	"text-text-muted no-underline hover:text-text-primary aria-[current=page]:text-text-primary",
-);
+/**
+ * Top bar. `h-chrome`, like the pane bar and the tab bar, so the tops line up.
+ * No rule under it: the tree starts `rail-top-gap` below and a line would
+ * only box it. `rail-bar-pad` puts a button's glyph on the rows' icon edge.
+ */
+export const railHeader = "flex h-chrome shrink-0 items-center gap-0.5 px-rail-bar-pad";
 
 /**
- * Footer strip. The window's own chrome, which used to float in the bottom
- * right corner of the canvas: a connection pill and a theme flip sitting over
- * a document are two controls with nothing holding them, and the rail already
- * has an edge to put them on.
+ * The free middle of the top bar, between the collapse button and the create
+ * one. Empty for now; search goes here.
  */
-export const railFooter = cn(
-	"flex h-chrome shrink-0 items-center justify-between gap-1",
-	"border-t border-border-subtle pl-3 pr-1.5",
+export const railHeaderSpace = "min-w-0 flex-1";
+
+/**
+ * Bottom bar: links on the left, the window's own state on the right. No rule
+ * over it, same as the top bar.
+ */
+export const railFooter = "flex h-chrome shrink-0 items-center gap-0.5 px-rail-bar-pad";
+
+/** The bottom bar's free middle, where a settings button can go later. */
+export const railFooterSpace = "min-w-0 flex-1";
+
+/**
+ * A top or bottom bar button, on top of a kit `IconButton ghost`. 28px with a
+ * 16px glyph, muted until hovered, and hovered on the rail's own gray rather
+ * than `bg-elevated`, which is white on a white rail in light.
+ */
+export const railChromeButton = cn(
+	"size-7 rounded-md text-text-muted",
+	"hover:bg-rail-hover hover:text-text-primary active:bg-doc-active",
+	"focus-visible:ring-offset-0",
+	"[&_svg]:size-4",
 );
 
-/** Scroll body. `px-1.5` keeps a row's wash off the rail's own border. */
-export const railScroll =
-	"flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden px-1.5 py-1";
+/** The shortcut after a chrome button's tooltip, a tier back. */
+export const railTooltipHint = "ml-1 text-text-muted";
+
+/**
+ * The connection state, as a dot in a button-sized box so its tooltip has
+ * something to hang on and a keyboard can reach it.
+ */
+export const railStatus = cn(
+	"flex size-7 shrink-0 items-center justify-center rounded-md",
+	"focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring",
+);
+
+/** Healthy is the quiet case, so its green steps back; trouble is full strength. */
+const STATUS_DOT: Record<"ok" | "info" | "warn" | "danger", string> = {
+	ok: "bg-status-ok/50",
+	info: "bg-status-info",
+	warn: "bg-status-warn",
+	danger: "bg-status-danger",
+};
+
+/** The dot itself. 6px; it pulses while the socket is trying. */
+export function railStatusDot(tone: "ok" | "info" | "warn" | "danger", busy: boolean): string {
+	return cn("size-1.5 rounded-full", STATUS_DOT[tone], busy && "animate-pulse");
+}
+
+/**
+ * Scroll body. `rail-inset` keeps a row's fill off both rail edges, and
+ * `rail-top-gap` gives the first row air under the top bar.
+ */
+export const railScroll = cn(
+	"flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden",
+	"px-rail-inset pt-rail-top-gap pb-1",
+);
+
+/** The tree itself: rows a hairline apart, so two fills never merge. */
+export const railTreeList = "flex flex-col gap-rail-row-gap";
 
 /* ============================== The row ================================= */
 
 /**
  * The row shell. This is what paints hover and selection, not the link inside
- * it, so the wash spans the whole line including the disclosure and the action
- * lane. A wash that stops short of the controls sitting on it reads as two
- * elements, which is most of what "a bit off" was.
+ * it, so the wash spans the whole line including the icon and the action lane.
+ * A wash that stops short of the controls sitting on it reads as two elements.
  *
- * Hover is neutral (`doc-hover`), selection is accent (`doc-selected`). The kit
- * only has `accent-wash` and uses it for both, which makes a hovered row
- * indistinguishable from the open one - see tokens.css.
- *
- * With a split open, every open Plane's row is washed and the focused pane's
- * row is washed strongest.
+ * Every tier is a neutral gray (`rail-*` in tokens.css): hover, a plane open
+ * in some other pane, and the focused pane's plane, strongest. The text never
+ * changes hue, only steps up to the primary tier.
  *
  * `inset` pads the row's own left edge. A tree row leaves it off because
  * `railIndent(depth)` already supplies the offset; a flat row turns it on.
@@ -121,61 +168,106 @@ export const railScroll =
 export function railRow(selected: boolean, inset = false, open = false): string {
 	return cn(
 		"group/row relative flex items-center rounded-md",
-		"h-7 pr-1",
-		inset && "pl-1.5",
+		"h-rail-row pr-rail-row-pad-end",
+		inset && "pl-rail-row-pad",
 		"transition-colors duration-fast ease-out",
 		// The row is the tree item, so the row carries the focus ring. Offset 0:
 		// the kit's 2px offset gets clipped by the rail's own overflow.
 		"focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0",
-		// `open` is a Plane showing in a pane that is not the focused one: the
-		// same accent, half the wash, so the focused row stays the strongest.
 		selected
-			? "bg-doc-selected"
+			? "bg-rail-selected"
 			: open
-				? "bg-doc-selected/50"
-				: "hover:bg-doc-hover active:bg-doc-active",
+				? "bg-rail-open hover:bg-rail-hover"
+				: "hover:bg-rail-hover active:bg-doc-active",
 	);
 }
 
 /**
- * The disclosure / plane-icon lane. Fixed width whether or not it holds a
- * control, which is what keeps titles at every depth on one left edge.
+ * The icon lane: one grid cell the plane's icon and the fold chevron stack
+ * into, so they swap in place with no layout shift and no positioning. It is
+ * also the `lane` group, which is how the icon hears that the chevron beside
+ * it has keyboard focus.
  */
-export const railLane = "flex shrink-0 items-center justify-center";
+export const railLane = cn(
+	"group/lane grid w-rail-lane shrink-0 place-items-center *:[grid-area:1/1]",
+	"mr-rail-gap",
+);
 
-export const railLaneStyle = { width: `${RAIL.LANE}px`, marginRight: `${RAIL.GAP}px` };
+/*
+ * The swap, in CSS only. At rest every row shows its icon, parent or leaf,
+ * folded or open. While the row is hovered, or it or its chevron has keyboard
+ * focus, the chevron shows instead. JS hover state is not used on purpose: it
+ * flickers, and it sticks after a drag because the browser never sends the
+ * leave. `group-hover/row` is scoped to the nearest row by name, and the rows
+ * are flat siblings in the tree (see sidebar/RailTree.tsx), so hovering one
+ * row never swaps another.
+ *
+ * `swap` is off while a drag is in flight, so no row sits in its hover look
+ * while a plane travels over it.
+ */
+const ICON_OUT =
+	"group-hover/row:opacity-0 group-focus-visible/row:opacity-0 group-has-focus-visible/lane:opacity-0";
+const CHEVRON_IN =
+	"group-hover/row:opacity-100 group-focus-visible/row:opacity-100 focus-visible:opacity-100";
 
 /**
- * The twisty, on top of a kit `IconButton ghost`. Shrunk to the lane and
- * re-tinted: `ghost` hovers to `bg-elevated`, which inside an already-washed
- * row reads as a separate chip stuck to the label.
+ * The plane's icon. Not a control: it takes no pointer events, so even at
+ * opacity 0 (which lifts it into its own stacking layer, on top of the
+ * chevron) it never catches the chevron's click.
  */
-export const railTwisty = cn(
-	"size-5 rounded-sm text-text-muted",
-	"hover:bg-doc-active hover:text-text-primary",
-	"focus-visible:ring-offset-0",
-	"[&_svg]:size-3.5",
-);
+export function railIcon(swap: boolean): string {
+	return cn(
+		"pointer-events-none size-4 shrink-0 text-text-muted",
+		"transition-opacity duration-fast ease-out",
+		swap && ICON_OUT,
+	);
+}
 
-/** Leaf marker. Not a control, so it is not a button and takes no hit area. */
-export const railLeafIcon = cn(
-	"size-3.5 shrink-0 text-text-muted/70",
-	"transition-colors duration-fast ease-out",
-);
+/**
+ * The fold chevron, on top of a kit `IconButton ghost`, in the icon's place.
+ * Hidden at rest, shown by the swap above. A 20px box that only fills when
+ * the pointer is on the chevron itself. `ghost` hovers to `bg-elevated`,
+ * which inside an already-washed row reads as a chip stuck to the label, so
+ * it is re-tinted onto the neutral tier.
+ */
+export function railTwisty(swap: boolean): string {
+	return cn(
+		"size-5 rounded-sm text-text-muted opacity-0",
+		"transition-[opacity,background-color,color] duration-fast ease-out",
+		swap && CHEVRON_IN,
+		"hover:bg-doc-active hover:text-text-primary",
+		"focus-visible:ring-offset-0",
+		"[&_svg]:size-3.5",
+	);
+}
+
+/** The chevron glyph: points right when folded, down when open. */
+export function railChevron(open: boolean): string {
+	return cn("transition-transform duration-fast ease-out", open && "rotate-90");
+}
+
+/**
+ * What an open plane with no planes inside shows under itself: one muted,
+ * non-interactive line at the child's indent. Pair with `railIndent(depth + 1)`.
+ */
+export const railNoPlanes = "flex h-rail-row select-none items-center text-base text-text-muted";
 
 /**
  * The label, on top of a kit `NavLink`. NavLink stays because it is a real
- * anchor (cmd-click, middle-click, `aria-current="page"` for free) and it owns
- * the text tiers. What it does not own here is the background: the row shell
- * paints that, so both of NavLink's washes are zeroed out.
+ * anchor (cmd-click, middle-click, `aria-current="page"` for free). What it
+ * does not own here is the look: the row shell paints the background, so both
+ * of NavLink's washes are zeroed, and the open row's text steps up to the
+ * primary tier instead of turning accent. 14px, regular weight.
  *
  * `ring-offset-0` because the kit's 2px focus offset gets clipped by the
  * rail's own overflow.
  */
 export const railLabel = cn(
 	"h-full min-w-0 flex-1 gap-0 px-0",
-	"bg-transparent hover:bg-transparent",
-	"aria-[current=page]:bg-transparent data-[active=true]:bg-transparent",
+	"text-lg font-normal text-text-secondary",
+	"bg-transparent hover:bg-transparent hover:text-text-primary group-hover/row:text-text-primary",
+	"aria-[current=page]:bg-transparent aria-[current=page]:font-normal aria-[current=page]:text-text-primary",
+	"data-[active=true]:bg-transparent data-[active=true]:font-normal data-[active=true]:text-text-primary",
 	"focus-visible:ring-offset-0",
 );
 
@@ -189,43 +281,34 @@ export const railTitleEmpty = cn(railTitle, "text-text-muted");
  * truncates against a stable edge and nothing reflows on hover; only the
  * opacity moves. Hidden controls are also click-through, because an invisible
  * button that still eats a click is worse than no button.
+ *
+ * Keyboard focus shows it too, but a mouse click does not: clicking a row
+ * focuses it, and the open row should not keep its buttons up after.
  */
 export const railActions = cn(
-	"flex shrink-0 items-center gap-0.5",
+	"flex shrink-0 items-center gap-px",
 	"pointer-events-none opacity-0",
 	"transition-opacity duration-fast ease-out",
 	"group-hover/row:pointer-events-auto group-hover/row:opacity-100",
-	"group-focus-within/row:pointer-events-auto group-focus-within/row:opacity-100",
+	"group-focus-visible/row:pointer-events-auto group-focus-visible/row:opacity-100",
+	"has-focus-visible:pointer-events-auto has-focus-visible:opacity-100",
 	// Keep them up while a menu they opened is still open
 	"[&:has([data-state=open])]:pointer-events-auto [&:has([data-state=open])]:opacity-100",
 );
 
-/** Same shrink + re-tint as the twisty, for the two action buttons. */
+/**
+ * Same re-tint as the twisty, for `+` and `...`. 16px glyph in a 24px box; the
+ * `...` glyph lands on the rail's right edge (tokens.css).
+ */
 export const railAction = cn(
-	"size-5 rounded-sm",
+	"size-6 rounded-sm text-text-muted",
 	"hover:bg-doc-active hover:text-text-primary",
 	"focus-visible:ring-offset-0",
-	"[&_svg]:size-3.5",
+	"[&_svg]:size-4",
 );
 
-/**
- * Wrapper that puts the indent guides *behind* the row. Both interaction
- * washes are translucent color-mixes, so a guide under a hovered or open row
- * stays legible but drops back a tier instead of scratching across it.
- */
+/** Wrapper around a row, which the drop line positions against. */
 export const railRowWrap = "relative";
-
-/**
- * Indent guide. One hairline per crossed level, drawn down the middle of that
- * level's disclosure lane so it lines up with the ancestor chevrons it belongs
- * to. IDE trees (VSCode, Fleet) all carry these; three levels into a 240px
- * rail, indent alone stops being readable.
- */
-export const railGuide = "pointer-events-none absolute inset-y-0 w-px bg-border-subtle";
-
-export function railGuideStyle(level: number): { left: string } {
-	return { left: `${level * RAIL.INDENT + Math.floor(RAIL.LANE / 2)}px` };
-}
 
 /* ============================== Inline edit ============================= */
 
@@ -237,26 +320,27 @@ export function railGuideStyle(level: number): { left: string } {
  */
 export const railInputBox = "flex min-w-0 flex-1 items-center";
 
-export const railInput = cn("h-6 min-w-0 flex-1 px-1 py-0 text-sm", "focus-visible:ring-offset-0");
+export const railInput = cn("h-6 min-w-0 flex-1 px-1 py-0 text-lg", "focus-visible:ring-offset-0");
 
 /* ============================== Empty + loading ========================= */
 
 /** Row-shaped placeholder, so the rail does not resize when the list lands. */
 export function railSkeletonRow(inset = false): string {
-	return cn("flex h-7 items-center", inset ? "px-1.5" : "pr-1");
+	return cn("flex h-rail-row items-center pr-rail-row-pad-end", inset && "pl-rail-row-pad");
 }
 
 /** The bar inside a skeleton row, on top of a kit `Skeleton`. */
 export const railSkeletonBar = "h-3 w-full rounded-sm";
 
-export const railEmpty = cn("select-none px-2 py-3 text-sm text-text-muted");
+export const railEmpty = cn("select-none px-rail-row-pad py-2 text-base text-text-muted");
 
 /* ============================== Drag and drop =========================== */
 
 /**
  * Where a dragged row would land. A thin accent line between rows for a
  * sibling drop, drawn at the target row's indent so it says which level the
- * row lands on; the whole target row washed for a drop into it.
+ * row lands on; the whole target row ringed for a drop into it. The accent is
+ * fine here: a drag is a moment, not a resting state.
  */
 export function railDropLine(edge: "before" | "after"): string {
 	return cn(
@@ -267,7 +351,9 @@ export function railDropLine(edge: "before" | "after"): string {
 
 /** The line's left edge, at the title of a row at `depth`. */
 export function railDropLineStyle(depth: number): { left: string } {
-	return { left: `${depth * RAIL.INDENT + RAIL.LANE}px` };
+	return {
+		left: `calc(var(--rail-row-pad) + ${depth} * var(--rail-indent) + var(--rail-lane))`,
+	};
 }
 
 /** A row being dropped into: ringed, so it reads apart from the selection wash. */

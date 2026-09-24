@@ -1,13 +1,6 @@
 // A cell's gutter: every affordance it has, hung outside the reading column.
 
-import {
-	IconButton,
-	Toggle,
-	Tooltip,
-	TooltipContent,
-	TooltipProvider,
-	TooltipTrigger,
-} from "@nustackdev/ui-kit";
+import { IconButton, Toggle, Tooltip, TooltipContent, TooltipTrigger } from "@nustackdev/ui-kit";
 import { Check, Code, GripVertical, Hash, Plus } from "lucide-react";
 import type * as React from "react";
 import { useCallback, useState } from "react";
@@ -73,78 +66,63 @@ export function Gutter({
 	return (
 		<div className={docGutter}>
 			<span className={docStatusRail(state, pinned)} title={CELL_STATUS[state].label} />
-			{/* Slower than the kit's 200ms, and with no instant reopen. The gutter
-			    is a stack you walk THROUGH to reach one control, so at the kit's
-			    delay a tooltip fires on every glyph you cross and lands portalled
-			    over the cells below. 700ms is long enough that passing through
-			    says nothing and resting says "tell me what this is"; the 0 skip
-			    window is what stops the second and third from arriving instantly
-			    once the first has spoken. Scoped here so the shell strip and the
-			    rails keep the kit's snappier feel. */}
-			<TooltipProvider delayDuration={700} skipDelayDuration={0}>
-				<div className={docGutterAffordances(pinned)}>
-					<div className={docGutterRow}>
-						<Tooltip>
-							<TooltipTrigger asChild>
-								<IconButton
-									variant="ghost"
-									size="sm"
-									aria-label="Add a line below"
-									onClick={onPlus}
-								>
-									<Plus />
-								</IconButton>
-							</TooltipTrigger>
-							<TooltipContent side="top">Add a line below</TooltipContent>
-						</Tooltip>
-						<Tooltip>
-							<TooltipTrigger asChild>
-								<IconButton
-									variant="ghost"
-									size="sm"
-									aria-label="Drag to reorder, click to select"
-									onPointerDown={onDrag}
-									onClick={onSelect}
-									data-cell-grip=""
-									className={docDragHandle}
-								>
-									<GripVertical />
-								</IconButton>
-							</TooltipTrigger>
-							<TooltipContent side="top">Drag to reorder, click to select</TooltipContent>
-						</Tooltip>
-					</div>
-					<div className={docGutterRow}>
-						<Tooltip>
-							<TooltipTrigger asChild>
-								<IconButton
-									variant="ghost"
-									size="sm"
-									aria-label="Copy this cell's cell id"
-									onClick={copyId}
-								>
-									{copied ? <Check className="text-status-ok" /> : <Hash />}
-								</IconButton>
-							</TooltipTrigger>
-							<TooltipContent side="top">{copied ? "Copied" : "Copy cell id"}</TooltipContent>
-						</Tooltip>
-						<Tooltip>
-							<TooltipTrigger asChild>
-								<Toggle
-									size="sm"
-									pressed={editing}
-									onPressedChange={onSetEditing}
-									aria-label="Show this cell's source"
-									className={docGutterToggle}
-								>
-									<Code />
-								</Toggle>
-							</TooltipTrigger>
-							<TooltipContent side="top">{editing ? "Hide source" : "Show source"}</TooltipContent>
-						</Tooltip>
-					</div>
+			<div className={docGutterAffordances(pinned)}>
+				<div className={docGutterRow}>
+					<Tooltip>
+						<TooltipTrigger asChild>
+							<IconButton variant="ghost" size="sm" aria-label="Add a line below" onClick={onPlus}>
+								<Plus />
+							</IconButton>
+						</TooltipTrigger>
+						<TooltipContent side="top">Add a line below</TooltipContent>
+					</Tooltip>
+					<Tooltip>
+						<TooltipTrigger asChild>
+							<IconButton
+								variant="ghost"
+								size="sm"
+								aria-label="Drag to reorder, click to select"
+								onPointerDown={onDrag}
+								onClick={onSelect}
+								data-cell-grip=""
+								className={docDragHandle}
+							>
+								<GripVertical />
+							</IconButton>
+						</TooltipTrigger>
+						<TooltipContent side="top">Drag to reorder, click to select</TooltipContent>
+					</Tooltip>
 				</div>
-			</TooltipProvider>
+				<div className={docGutterRow}>
+					<Tooltip>
+						<TooltipTrigger asChild>
+							<IconButton
+								variant="ghost"
+								size="sm"
+								aria-label="Copy this cell's cell id"
+								onClick={copyId}
+							>
+								{copied ? <Check className="text-status-ok" /> : <Hash />}
+							</IconButton>
+						</TooltipTrigger>
+						<TooltipContent side="top">{copied ? "Copied" : "Copy cell id"}</TooltipContent>
+					</Tooltip>
+					<Tooltip>
+						<TooltipTrigger asChild>
+							<Toggle
+								size="sm"
+								pressed={editing}
+								onPressedChange={onSetEditing}
+								aria-label="Show this cell's source"
+								className={docGutterToggle}
+							>
+								<Code />
+							</Toggle>
+						</TooltipTrigger>
+						<TooltipContent side="top">{editing ? "Hide source" : "Show source"}</TooltipContent>
+					</Tooltip>
+				</div>
+			</div>
 		</div>
 	);
 }

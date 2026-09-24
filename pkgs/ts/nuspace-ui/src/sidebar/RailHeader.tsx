@@ -1,39 +1,67 @@
-// The rail's header strip: what this whole rail is, the way home, and the `+`
-// that adds a Plane at the top level.
+// The rail's top bar: collapse on the left, a new plane at the top level on
+// the right, and room in between for search.
 //
-// The wordmark is an anchor to "/", the home Plane. A plain click goes home,
-// alone in one pane; cmd/ctrl-click opens it as a split, like any row.
+// No wordmark and no way home up here: home is an ordinary row in the tree.
 
-import { IconButton } from "@nustackdev/ui-kit";
-import { Plus } from "lucide-react";
-import { HOME, hrefFor, onHomeClick, useFocusedRoute } from "../core/router";
-import { railAction, railHeader, railHeaderLabel } from "../design";
+import { IconButton, Tooltip, TooltipContent, TooltipTrigger } from "@nustackdev/ui-kit";
+import { PanelLeft, SquarePen } from "lucide-react";
+import { railChromeButton, railHeader, railHeaderSpace, railTooltipHint } from "../design";
 import { openAddPlane } from "./add";
+import { focusRailToggle, RAIL_SHORTCUT, setRailCollapsed } from "./collapse";
 import { ROOT_ID } from "./types";
 
-export function RailHeader({ label }: { label: string }) {
-	const home = useFocusedRoute() === HOME;
+export function RailHeader() {
 	return (
 		<div className={railHeader}>
-			<a
-				href={hrefFor(HOME)}
-				onClick={onHomeClick}
-				aria-current={home ? "page" : undefined}
-				title="Home"
-				className={railHeaderLabel}
-			>
-				{label}
-			</a>
-			<IconButton
-				variant="ghost"
-				size="sm"
-				aria-label="Add plane"
-				title="Add plane"
-				onClick={() => openAddPlane({ parent: ROOT_ID })}
-				className={railAction}
-			>
-				<Plus />
-			</IconButton>
+			<RailToggle
+				label="Hide sidebar"
+				onClick={() => {
+					setRailCollapsed(true);
+					focusRailToggle();
+				}}
+			/>
+			<div className={railHeaderSpace} />
+			<Tooltip>
+				<TooltipTrigger asChild>
+					<IconButton
+						variant="ghost"
+						size="sm"
+						aria-label="New plane"
+						onClick={() => openAddPlane({ parent: ROOT_ID })}
+						className={railChromeButton}
+					>
+						<SquarePen />
+					</IconButton>
+				</TooltipTrigger>
+				<TooltipContent side="bottom">New plane</TooltipContent>
+			</Tooltip>
 		</div>
+	);
+}
+
+/**
+ * The `panel-left` button, in the rail's top bar and, while the rail is
+ * collapsed, over the main strip's top left corner (../shell/Shell.tsx).
+ */
+export function RailToggle({ label, onClick }: { label: string; onClick: () => void }) {
+	return (
+		<Tooltip>
+			<TooltipTrigger asChild>
+				<IconButton
+					variant="ghost"
+					size="sm"
+					aria-label={label}
+					data-rail-toggle=""
+					onClick={onClick}
+					className={railChromeButton}
+				>
+					<PanelLeft />
+				</IconButton>
+			</TooltipTrigger>
+			<TooltipContent side="bottom">
+				{label}
+				<span className={railTooltipHint}>{RAIL_SHORTCUT}</span>
+			</TooltipContent>
+		</Tooltip>
 	);
 }

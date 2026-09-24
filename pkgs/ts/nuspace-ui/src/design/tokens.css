@@ -52,6 +52,50 @@
 	/* The caret's cell: no fill, just a hairline rail in the gutter */
 	--doc-focus-rail: var(--border-strong);
 
+	/* --- Sidebar rail -----------------------------------------------------
+	 * The rail is navigation, not a document, and it stays quiet: every tier
+	 * is a neutral gray off --text-primary, and the open row is marked by a
+	 * fill, never by an accent hue. Three steps so hover, "open in another
+	 * pane" and "the focused pane's plane" all read apart.
+	 *
+	 * The edge is --border-default and not --border-subtle: in light, subtle
+	 * is gray-100, the same gray as bg-sunken, so a subtle line vanishes.
+	 * --------------------------------------------------------------------- */
+	--rail-hover: var(--doc-hover);
+	--rail-open: color-mix(in oklab, var(--text-primary) 3%, transparent);
+	--rail-selected: color-mix(in oklab, var(--text-primary) 7%, transparent);
+	--rail-edge: var(--border-default);
+
+	/* --- Sidebar rail geometry --------------------------------------------
+	 * Every length the rail is laid out by, in one place so it can be tuned
+	 * without touching a recipe. Not theme dependent; here in :root and not
+	 * only in @theme because design/rail.ts computes the indent and the drop
+	 * line from them inline (depth is data).
+	 *
+	 * One left edge runs down the whole rail: a top bar button's glyph, a
+	 * row's icon and a bottom bar button's glyph all sit 18px in.
+	 *   row:  inset 8 + row pad 8 + (lane 20 - icon 16) / 2 = 18
+	 *   bars: bar pad 12 + (button 28 - glyph 16) / 2      = 18
+	 * And one right edge, 18px in, for `new plane`, a row's `...` and the
+	 * theme flip:
+	 *   row:  inset 8 + row pad end 6 + (button 24 - glyph 16) / 2 = 18
+	 *   bars: bar pad 12 + 6                                       = 18
+	 *
+	 * Measured off Notion's sidebar: a 30px row on a 31px pitch, the fill
+	 * inset 8px from both rail edges, 8px of air between icon and title.
+	 * --------------------------------------------------------------------- */
+	--rail-inset: 0.5rem; /* 8   the fill's inset from the rail's edges     */
+	--rail-row: 1.875rem; /* 30  row height                                 */
+	--rail-row-gap: 1px; /*  1   between rows, so two fills never touch     */
+	--rail-row-pad: 0.5rem; /* 8 row inner pad, before the icon lane        */
+	--rail-row-pad-end: 0.375rem; /* 6 row inner pad after the actions     */
+	--rail-lane: 1.25rem; /* 20  icon / chevron lane, the chevron's box     */
+	--rail-gap: 0.5rem; /* 8     lane to title                              */
+	--rail-indent: 1.25rem; /* 20 per level: a child's icon clears its
+	                         * parent's by a whole lane                     */
+	--rail-bar-pad: 0.75rem; /* 12 top and bottom bar side padding          */
+	--rail-top-gap: 0.5rem; /* 8 between the top bar and the first row      */
+
 	/* --- Cell status ----------------------------------------------------
 	 * A nuspace cell is a live program. Six states, all pointing at existing
 	 * status roles. No new hues.
@@ -97,13 +141,16 @@
 }
 
 /* ============================== L2.5: document roles (dark) ===============
- * Only the neutral interaction tier needs a per-theme value: the same alpha
+ * Only the neutral interaction tiers need a per-theme value: the same alpha
  * that reads on white is invisible on #0a0a0d. Everything else is an alias
  * onto a kit role that already flipped.
  * ==========================================================================*/
 .dark {
 	--doc-hover: color-mix(in oklab, var(--text-primary) 6%, transparent);
 	--doc-active: color-mix(in oklab, var(--text-primary) 10%, transparent);
+
+	--rail-open: color-mix(in oklab, var(--text-primary) 4%, transparent);
+	--rail-selected: color-mix(in oklab, var(--text-primary) 9%, transparent);
 }
 
 /* ============================== L3: Tailwind v4 ===========================*/
@@ -116,6 +163,23 @@
 	--color-doc-selected-line: var(--doc-selected-line);
 	--color-doc-drop-line: var(--doc-drop-line);
 	--color-doc-focus-rail: var(--doc-focus-rail);
+
+	/* --- Sidebar rail --> bg-rail-hover, border-rail-edge, ... ----------- */
+	--color-rail-hover: var(--rail-hover);
+	--color-rail-open: var(--rail-open);
+	--color-rail-selected: var(--rail-selected);
+	--color-rail-edge: var(--rail-edge);
+
+	/* --- Sidebar rail geometry --> h-rail-row, px-rail-inset, ... -------- */
+	--spacing-rail-inset: var(--rail-inset);
+	--spacing-rail-row: var(--rail-row);
+	--spacing-rail-row-gap: var(--rail-row-gap);
+	--spacing-rail-row-pad: var(--rail-row-pad);
+	--spacing-rail-row-pad-end: var(--rail-row-pad-end);
+	--spacing-rail-lane: var(--rail-lane);
+	--spacing-rail-gap: var(--rail-gap);
+	--spacing-rail-bar-pad: var(--rail-bar-pad);
+	--spacing-rail-top-gap: var(--rail-top-gap);
 
 	/* --- Cell status --> text-cell-running, bg-cell-failed-wash --*/
 	--color-cell-invalid: var(--cell-invalid);

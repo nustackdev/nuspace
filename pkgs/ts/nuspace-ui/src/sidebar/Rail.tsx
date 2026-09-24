@@ -1,4 +1,4 @@
-// The sidebar rail: a fixed header, the tree, a fixed footer.
+// The sidebar rail: a top bar, the tree, a bottom bar.
 //
 // Planes only. Cells are parts of a Plane, not navigable entities, so they
 // never appear here.
@@ -12,15 +12,17 @@
 // ## One tree
 //
 // Every Plane that draws, by parent, in sibling order. The server invents one
-// row for the Space, the tree's root, which is never drawn: the header strip
-// is what a person sees in its place. Grouping is nesting, and a Plane with no
-// cells works as a folder. Rows move freely by drag and drop.
+// row for the Space, the tree's root, which is never drawn. Grouping is
+// nesting, and a Plane with no cells works as a folder. Rows move freely by
+// drag and drop.
 //
 // ## Where the parts are
 //
 //   Rail.tsx          this: the aside, its three strips, the resize edge
-//   RailTree.tsx      the tree: keyboard, guides, drop marks
-//   PlaneRow.tsx      one row: twisty, label, actions, menus
+//   RailHeader.tsx    the top bar: collapse, new plane
+//   RailFooter.tsx    the bottom bar: links, connection, theme
+//   RailTree.tsx      the tree: keyboard, drop marks
+//   PlaneRow.tsx      one row: icon and twisty, label, actions, menus
 //   RailRow.tsx       the row shell the three lanes sit in
 //   AddPlane.tsx      the Add plane popup, and ./add.ts for who opened it
 //   tree.ts           flatten, and the row shape it produces
@@ -29,6 +31,7 @@
 //   useDraft.ts       inline rename
 //   useRailFocus.ts   the one tab stop
 //   useRailWidth.ts   the drag-resized width
+//   collapse.ts       hidden or not, and cmd/ctrl+\
 //
 // Every class string and the geometry are in design/rail.ts.
 
@@ -44,6 +47,7 @@ import {
 	railSkeletonRow,
 } from "../design";
 import { AddPlane } from "./AddPlane";
+import { useRailCollapsed } from "./collapse";
 import type { Notify } from "./ops";
 import { RailFooter } from "./RailFooter";
 import { RailHeader } from "./RailHeader";
@@ -52,8 +56,6 @@ import { visibleRows } from "./tree";
 import { childrenOf, type PlaneTree, type Registered, rootId } from "./types";
 import { useRailWidth } from "./useRailWidth";
 import { useReveal } from "./useReveal";
-
-const RAIL_LABEL = "nuspace";
 
 export function Rail({
 	tree,
@@ -74,6 +76,7 @@ export function Rail({
 	// The focused pane's Plane is the cursor; the others are merely open.
 	const selKey = useFocusedRoute();
 	const { width, onResizeStart, onResizeReset } = useRailWidth();
+	const collapsed = useRailCollapsed();
 	const root = rootId(tree);
 	// The tree lands in one `set_tree`; until it does there is nothing to draw
 	// and the honest thing is row-shaped placeholders, not a fake empty tree.
@@ -87,8 +90,10 @@ export function Rail({
 	const reveal = useReveal({ tree, root, routes, selKey, expanded, onToggle });
 
 	return (
-		<aside className={railAside} style={{ width }}>
-			<RailHeader label={RAIL_LABEL} />
+		// Collapsed is hidden, not unmounted: the Add plane popup lives here and
+		// a pane's `...` still opens it.
+		<aside aria-label="Sidebar" className={railAside(collapsed)} style={{ width }}>
+			<RailHeader />
 			<nav aria-label="Planes" className={railScroll}>
 				{loading ? (
 					<RailSkeleton />

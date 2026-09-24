@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { visibleRows } from "./tree";
+import { showsNoPlanes, visibleRows } from "./tree";
 import { childrenOf, coerceTree, ROOT_ID } from "./types";
 import { dropMove } from "./useRailDrag";
 
@@ -57,5 +57,17 @@ describe("sidebar tree", () => {
 	it("says nothing moves when the row lands where it is", () => {
 		expect(dropMove(tree, "a", { key: "home", edge: "after" }, row("home"))).toBeNull();
 		expect(dropMove(tree, "b", { key: "", edge: "after" }, undefined)).toBeNull();
+	});
+
+	it("unfolds a leaf into the no planes line, and only a leaf", () => {
+		const open = visibleRows(tree, childrenOf(tree, ROOT_ID), new Set(["a", "b"]));
+		const at = (key: string) => open.find((r) => r.key === key);
+		expect(open.map((r) => r.key)).toEqual(["home", "a", "a1", "a2", "b"]);
+		const b = at("b");
+		const a = at("a");
+		expect(b && showsNoPlanes(b)).toBe(true);
+		expect(a && showsNoPlanes(a)).toBe(false);
+		const home = at("home");
+		expect(home && showsNoPlanes(home)).toBe(false);
 	});
 });

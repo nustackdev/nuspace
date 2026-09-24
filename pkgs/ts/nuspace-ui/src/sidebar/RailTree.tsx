@@ -1,5 +1,5 @@
-// The rail's tree: the visible rows, the keyboard, the indent guides, and
-// where a dragged row would land.
+// The rail's tree: the visible rows, the keyboard, and where a dragged row
+// would land.
 //
 // ## The interaction model
 //
@@ -9,8 +9,16 @@
 //     shows them. It never hides them - a click that sometimes opens and
 //     sometimes closes, depending on where you happened to be standing, is
 //     what made this feel broken. Reveal is idempotent.
-//   * **the twisty only folds.** It toggles both ways and never navigates, so
-//     you can look inside a branch without leaving the Plane you are reading.
+//   * **the chevron only folds.** It toggles both ways and never navigates,
+//     so you can look inside a branch without leaving the Plane you are
+//     reading. It shows in the icon's place while the row is hovered. Every
+//     plane folds, leaf or not; an open leaf shows "No planes inside".
+//
+// The rows are flat siblings, never nested in each other's DOM, so a row's
+// `group/row` hover is its own and hovering a child leaves its parent alone.
+//
+// No indent guides: the indent alone carries the depth, and a hairline per
+// level was the loudest thing in a quiet rail.
 //
 // The tree is one tab stop; `useRailFocus` owns the tab stop, the by-key
 // focus and the four moves. What this adds on top is the two arrows that fold
@@ -18,7 +26,7 @@
 // insertion line and its target.
 
 import type * as React from "react";
-import { useCallback, useEffect, useMemo } from "react";
+import { Fragment, useCallback, useEffect, useMemo } from "react";
 import { openPane, replacePane } from "../core/router";
 import {
 	railDragging,
@@ -27,15 +35,16 @@ import {
 	railDropLineStyle,
 	railDropTail,
 	railEmpty,
-	railGuide,
-	railGuideStyle,
+	railIndent,
+	railNoPlanes,
 	railRowWrap,
+	railTreeList,
 } from "../design";
 import { clearPendingRename, usePendingRename } from "./add";
 import { iconFor } from "./icons";
 import type { Notify } from "./ops";
 import { PlaneRow } from "./PlaneRow";
-import { folds, type VisibleRow } from "./tree";
+import { showsNoPlanes, type VisibleRow } from "./tree";
 import type { PlaneTree, Registered } from "./types";
 import { useDraft } from "./useDraft";
 import { useRailDrag } from "./useRailDrag";
@@ -82,18 +91,17 @@ export function RailTree({
 	const onKeyDown = useCallback(
 		(e: React.KeyboardEvent, row: VisibleRow, index: number) => {
 			if (handleArrows(e, index)) return;
-			const foldable = folds(row);
 			switch (e.key) {
 				case "ArrowRight":
-					// Open a folded branch; step into an open one.
+					// Unfold a folded row; step into an open one's first child.
 					e.preventDefault();
-					if (foldable && !row.open) onToggle(row.key);
+					if (!row.open) onToggle(row.key);
 					else if (row.hasKids) focusIndex(index + 1);
 					break;
 				case "ArrowLeft":
-					// Fold an open branch; otherwise climb to the parent.
+					// Fold an open row; otherwise climb to the parent.
 					e.preventDefault();
-					if (foldable && row.open) onToggle(row.key);
+					if (row.open) onToggle(row.key);
 					else if (row.parent !== null) focusKey(row.parent);
 					break;
 				case "Enter":
@@ -118,42 +126,49 @@ export function RailTree({
 
 	return (
 		<>
-			<div role="tree" aria-label="Planes" ref={containerRef}>
+			<div role="tree" aria-label="Planes" ref={containerRef} className={railTreeList}>
 				{rows.map((row, index) => {
 					const aimed = target?.key === row.key ? target.edge : null;
 					return (
-						<div key={row.key} role="none" className={railRowWrap}>
-							<Guides depth={row.depth} />
-							<PlaneRow
-								row={row}
-								index={index}
-								icon={iconFor(registered, row.made_by)}
-								selected={row.key === selKey}
-								open={routes.includes(row.id)}
-								tabbable={row.key === tabKey}
-								renaming={draft?.key === row.key}
-								drag={rowProps(row.key)}
-								className={
-									aimed === "into" ? railDropInto : dragKey === row.key ? railDragging : undefined
-								}
-								onToggle={onToggle}
-								reveal={reveal}
-								onFocus={setActiveKey}
-								onKeyDown={onKeyDown}
-								onRename={startRename}
-								onCommit={commitDraft}
-								onCancel={cancelDraft}
-								notify={notify}
-								tree={tree}
-							/>
-							{aimed === "before" || aimed === "after" ? (
-								<span
-									className={railDropLine(aimed)}
-									style={railDropLineStyle(row.depth)}
-									aria-hidden="true"
+						<Fragment key={row.key}>
+							<div role="none" className={railRowWrap}>
+								<PlaneRow
+									row={row}
+									index={index}
+									icon={iconFor(registered, row.made_by)}
+									selected={row.key === selKey}
+									open={routes.includes(row.id)}
+									tabbable={row.key === tabKey}
+									renaming={draft?.key === row.key}
+									drag={rowProps(row.key)}
+									dragging={dragKey !== null}
+									className={
+										aimed === "into" ? railDropInto : dragKey === row.key ? railDragging : undefined
+									}
+									onToggle={onToggle}
+									reveal={reveal}
+									onFocus={setActiveKey}
+									onKeyDown={onKeyDown}
+									onRename={startRename}
+									onCommit={commitDraft}
+									onCancel={cancelDraft}
+									notify={notify}
+									tree={tree}
 								/>
+								{aimed === "before" || aimed === "after" ? (
+									<span
+										className={railDropLine(aimed)}
+										style={railDropLineStyle(row.depth)}
+										aria-hidden="true"
+									/>
+								) : null}
+							</div>
+							{showsNoPlanes(row) ? (
+								<div role="none" className={railNoPlanes} style={railIndent(row.depth + 1)}>
+									No planes inside
+								</div>
 							) : null}
-						</div>
+						</Fragment>
 					);
 				})}
 				{rows.length === 0 ? <p className={railEmpty}>Nothing here yet</p> : null}
@@ -164,25 +179,6 @@ export function RailTree({
 					<span className={railDropLine("before")} style={railDropLineStyle(0)} />
 				) : null}
 			</div>
-		</>
-	);
-}
-
-/**
- * One hairline per crossed level, running down the ancestors' twisty lanes.
- *
- * Levels start at 1, not 0: a guide marking the top level's lane carries no
- * information and only reads as a second rail border. A depth-1 row therefore
- * gets no guide at all.
- */
-function Guides({ depth }: { depth: number }) {
-	if (depth < 2) return null;
-	return (
-		<>
-			{Array.from({ length: depth - 1 }, (_, i) => (
-				// biome-ignore lint/suspicious/noArrayIndexKey: the index IS the level
-				<span key={i} className={railGuide} style={railGuideStyle(i + 1)} aria-hidden="true" />
-			))}
 		</>
 	);
 }

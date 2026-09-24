@@ -3,17 +3,16 @@
 // Only drawn with two or more panes, and then it replaces every pane's own bar
 // (./pane.ts): one title, one `...` and one close per pane, in one place.
 //
-// Flat, hairline chrome, `h-chrome` tall so its bottom rule runs straight on
-// from the rail header's. Tabs are a fixed `w-tab` and cut their title off
-// with an ellipsis.
+// Flat, hairline chrome, `h-chrome` tall so it lines up with the rail's top
+// bar. Tabs are a fixed `w-tab` and cut their title off with an ellipsis.
 //
 // Focus is a surface, not a line. The bar and every tab but the active one
 // sit a step down on `bg-sunken`, like the unfocused panes under them; the
 // active tab keeps the canvas, and so does its pane (shell.ts). One
 // continuous bottom rule runs under the whole bar, the active tab included,
-// level with the rail header's, and a rule separates every tab. Both are
-// `border-default`, not the rail's `border-subtle`: in light, subtle is the
-// same gray as `bg-sunken`, so on the inactive tabs it vanished.
+// and a rule separates every tab. Both are `border-default`, not
+// `border-subtle`: in light, subtle is the same gray as `bg-sunken`, so on the
+// inactive tabs it vanished.
 //
 // Everything resolves to kit L2/L4 semantic names or the doc-* names in
 // ./tokens.css. No raw hex, nothing off the 4px grid.
@@ -29,11 +28,12 @@ import { cn } from "@nustackdev/ui-kit";
 
 /**
  * The bar. Scrolls sideways when the tabs overflow, with no scrollbar drawn,
- * the same way the strip of panes under it does.
+ * the same way the strip of panes under it does. With the rail collapsed the
+ * first tab starts past the reopen button.
  */
 export const tabBar = cn(
 	"flex h-chrome shrink-0 items-stretch bg-bg-sunken",
-	"border-b border-border-default",
+	"border-b border-border-default group-data-[rail=collapsed]/main:pl-11",
 	"overflow-x-auto overflow-y-hidden overscroll-x-contain",
 	"[scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
 );

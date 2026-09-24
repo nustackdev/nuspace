@@ -1,9 +1,11 @@
 // The shell: the sidebar and the main strip, side by side, and nothing else.
 //
-// There is no top strip, no surface switcher and no chrome in the corner,
-// because there is no third region to switch to and the two controls the window
-// still has (the connection pill and the theme flip) sit in the sidebar's
-// footer. The sidebar lists every Plane that draws, under a cell per group,
+// There is no top strip and no surface switcher, because there is no third
+// region to switch to, and the two controls the window still has (the
+// connection dot and the theme flip) sit in the sidebar's bottom bar. The one
+// piece of chrome the shell draws itself is the button that brings a collapsed
+// sidebar back, over the main strip's top left corner, since the sidebar's own
+// is hidden with it. The sidebar lists every Plane that draws, under a cell per group,
 // and the main strip draws whichever ones the URL names, so navigation is
 // entirely the sidebar's and the shell only places the two.
 //
@@ -23,12 +25,21 @@ import { NodeView } from "@nustackdev/ui-kit";
 import { useEffect, useRef } from "react";
 import { routeAnchorClick } from "../core/router";
 import { useTypePath } from "../core/surfaces";
-import { shellMain, shellMissing, shellRoot } from "../design";
+import { shellMain, shellMissing, shellRailOpen, shellRoot } from "../design";
+import {
+	focusRailToggle,
+	setRailCollapsed,
+	useRailCollapsed,
+	useRailShortcut,
+} from "../sidebar/collapse";
+import { RailToggle } from "../sidebar/RailHeader";
 
 export function Shell() {
 	const sidebar = useTypePath("SidebarRef");
 	const viewer = useTypePath("ViewerRef");
 	const mainRef = useRef<HTMLElement | null>(null);
+	const collapsed = useRailCollapsed() && sidebar !== null;
+	useRailShortcut();
 
 	useEffect(() => {
 		const main = mainRef.current;
@@ -43,7 +54,18 @@ export function Shell() {
 	return (
 		<div className={shellRoot}>
 			{sidebar ? <NodeView path={sidebar} /> : null}
-			<main ref={mainRef} className={shellMain}>
+			<main ref={mainRef} className={shellMain} data-rail={collapsed ? "collapsed" : undefined}>
+				{collapsed ? (
+					<div className={shellRailOpen}>
+						<RailToggle
+							label="Show sidebar"
+							onClick={() => {
+								setRailCollapsed(false);
+								focusRailToggle();
+							}}
+						/>
+					</div>
+				) : null}
 				{viewer ? (
 					<NodeView path={viewer} />
 				) : (
