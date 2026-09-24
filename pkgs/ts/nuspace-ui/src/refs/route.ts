@@ -8,12 +8,13 @@
 // Pulled, never pushed. There is no `write` handler, so a server that tried to
 // move somebody's tab gets the store's "op not supported" rather than a silent
 // navigation; and there is no notify on navigation either, because every arm
-// that cares reads the route when it runs. `page.select` is what tells the
+// that cares reads the route when it runs. `pages.open` is what tells the
 // server a tab moved, and it is a ViewerRef op, not a route one.
 //
-// The shape is `{page_id}`: the Plane the URL names, empty when it names none.
-// An empty kv key segment is not a key, so the server treats "" as "no Plane"
-// rather than as something to look up.
+// The shape is `{page_ids, page_id}`: every Plane the URL names, left to
+// right, and the leftmost as `page_id` for a reader that wants just one, empty
+// when it names none. An empty kv key segment is not a key, so the server
+// treats "" as "no Plane" rather than as something to look up.
 //
 // Not `NavRef`: the kit registers one of those, the last registration for a
 // name wins, and a bare `NavRef` here would replace it without saying so.
@@ -24,14 +25,9 @@
 
 import { OPS } from "@nustackdev/ui-core";
 import type { NodeEntry } from "@nustackdev/ui-kit";
+import { currentRoutes } from "../app/router";
 
-export type Route = { page_id: string };
-
-/** The Plane the URL names. Read directly: the read path is not in a render. */
-function currentPlane(): string {
-	const parts = window.location.pathname.split("/").filter((s) => s.length > 0);
-	return parts.length === 1 ? decodeURIComponent(parts[0]) : "";
-}
+export type Route = { page_ids: string[]; page_id: string };
 
 /** Structural: bound to the URL, renders nothing into the visible tree. */
 function RouteView() {
@@ -42,7 +38,9 @@ export const RouteRef: NodeEntry = {
 	component: RouteView,
 	handlers: {
 		read: (ctx) => {
-			ctx.send(OPS.read, { page_id: currentPlane() } satisfies Route, ctx.frame.id);
+			// Read directly off the URL: the read path is not in a render.
+			const page_ids = currentRoutes();
+			ctx.send(OPS.read, { page_ids, page_id: page_ids[0] ?? "" } satisfies Route, ctx.frame.id);
 		},
 	},
 };

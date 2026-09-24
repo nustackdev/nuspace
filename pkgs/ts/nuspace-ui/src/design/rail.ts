@@ -129,10 +129,13 @@ export const railSectionTitle = cn(
  * only has `accent-wash` and uses it for both, which makes a hovered row
  * indistinguishable from the open one - see tokens.css.
  *
+ * With a split open, every open Plane's row is washed and the focused pane's
+ * row is washed strongest.
+ *
  * `inset` pads the row's own left edge. A tree row leaves it off because
  * `railIndent(depth)` already supplies the offset; a flat row turns it on.
  */
-export function railRow(selected: boolean, inset = false): string {
+export function railRow(selected: boolean, inset = false, open = false): string {
 	return cn(
 		"group/row relative flex items-center rounded-md",
 		"h-7 pr-1",
@@ -141,7 +144,13 @@ export function railRow(selected: boolean, inset = false): string {
 		// The row is the tree item, so the row carries the focus ring. Offset 0:
 		// the kit's 2px offset gets clipped by the rail's own overflow.
 		"focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0",
-		selected ? "bg-doc-selected" : "hover:bg-doc-hover active:bg-doc-active",
+		// `open` is a Plane showing in a pane that is not the focused one: the
+		// same accent, half the wash, so the focused row stays the strongest.
+		selected
+			? "bg-doc-selected"
+			: open
+				? "bg-doc-selected/50"
+				: "hover:bg-doc-hover active:bg-doc-active",
 	);
 }
 

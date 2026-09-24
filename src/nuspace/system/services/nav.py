@@ -1,29 +1,31 @@
-"""nav: what runs for each connection is the plane its route names (D12, D14).
+"""nav: what runs for each connection is the planes its routes name (D12, D14).
 
 One arm per connection in ``Space.connections``, which the device writes
-and the host empties at open. An arm follows its connection's ``route``: a user plane named there
-comes up on a worker of its own, inside the ``session`` env bound to the
-connection, and stays following the plane's cells while the route holds:
+and the host empties at open. A connection's arm runs one arm per plane in
+its ``routes`` (its panes, left to right): a user plane named there comes up
+on a worker of its own, inside the ``session`` env bound to the connection,
+and stays following the plane's cells while it stays in ``routes``:
 
-    route set     w = worker(held=True); one arm per cell of the plane:
-                    up(route, [cell], worker=w, envs=[session:sid]), parked
-    cell added    its arm ups it on w
-    cell removed  its arm is cancelled, its run downed (if the removal
-                    did not already stop it)
-    route moved   kill_worker(w), then the same for the new route
-    connection    kill_worker(w)
+    plane opened   w = worker(held=True); one arm per cell of the plane:
+                     up(plane, [cell], worker=w, envs=[session:sid]), parked
+    cell added     its arm ups it on w
+    cell removed   its arm is cancelled, its run downed (if the removal
+                     did not already stop it)
+    plane closed   kill_worker(w); the other panes' workers are untouched
+    connection     kill_worker(w) for every open plane
       gone
 
 The worker is held (D40): idle GC never takes it, so a plane whose runs all
 ended (its last cell removed, or every cell finished) keeps its worker, and
 a cell added after runs on it. Killing happens on every way out of the turn
-(``finally_``), so a route change, a connection going and nav itself
+(``finally_``), so a plane closed, a connection going and nav itself
 stopping all leave nothing behind. An arm downs its run only when its cell
 is gone: when the turn ends the kill takes every run, and a down racing it
 is what to avoid (see :func:`_cell_arm`).
 
-Both folds subscribe through :class:`~..utils.Ticking`: a connection or a
-cell whose write the subscription missed is picked up on the next tick.
+Every fold subscribes through :class:`~..utils.Ticking`: a connection, a
+route or a cell whose write the subscription missed is picked up on the
+next tick.
 
 A connection outlives no open: :func:`clear_connections` runs before init
 starts nav (D34), so a tab from a previous run never brings a plane up.
@@ -33,11 +35,11 @@ from __future__ import annotations
 
 import nu
 from nuspace.ops import cell_exists, kill_worker, plane_exists, up, worker
-from nuspace.ops.utils import atomic, flag, fresh, text
+from nuspace.ops.utils import atomic, flag, fresh, or_else, text
 from nuspace.shapes import STATUS_DEAD, STATUS_STARTING, STATUS_STOPPING, STATUS_UP, Space
 
 from ..kernel.body import until
-from ..utils import Ticking, follows, park, snap, wake
+from ..utils import Ticking, park, snap, wake
 
 
 __all__ = ["BY", "CELL", "PLANE", "SESSION", "SHIM", "clear_connections", "program"]
@@ -155,12 +157,12 @@ def _cells_fold(route: nu.StrAttrRef, worker_id: nu.StrAttrRef, envs: nu.Nu) -> 
 
 
 def _open(sid: nu.StrAttrRef, route: nu.StrAttrRef) -> nu.Nu:
-    """The route's plane followed cell by cell on a held worker, killed on every way out.
+    """One open plane followed cell by cell on a held worker, killed on every way out.
 
     Waits for the plane first when the route names one not there yet.
 
-    A worker that crashes ends the turn: the plane stays down until the
-    route moves (renavigation brings it back).
+    A worker that crashes ends the turn and the arm parks: the plane stays
+    down until it is closed and opened again (renavigation brings it back).
     """
     w = nu.StrAttrRef(_WORKER)
     envs = nu.List.of(nu.List.of(nu.Str(SESSION), sid))
@@ -169,19 +171,35 @@ def _open(sid: nu.StrAttrRef, route: nu.StrAttrRef) -> nu.Nu:
     )
     turn = nu.Let(_WORKER, worker(held=True), nu.TryCatch(followed, finally_=kill_worker(w)))
     # A route can name a plane before the plane is written: the browser mints
-    # a new page's id and selects it while its create is still in flight. So
-    # wait for the plane rather than giving up on the route; the route will
-    # not move again to retry.
+    # a new page's id and opens it while its create is still in flight. So
+    # wait for the plane rather than giving up on the route; the routes will
+    # not change again to retry.
     shown = nu.WhileDo(nu.Not(snap(_shown(route))), wake(Space.planes.on_children_change()))
-    return shown >> turn
+    return shown >> turn >> park()
+
+
+def _routes(sid: nu.StrAttrRef) -> nu.Nu:
+    """A connection's open plane ids, ``[]`` before any are written. Unbracketed."""
+    return nu.List(or_else(Space.connections[sid].routes, []))
 
 
 def _arm(sid: nu.StrAttrRef) -> nu.Nu:
-    """One connection: its route followed, the plane behind it kept up."""
-    route = nu.StrAttrRef(_ROUTE)
-    connections = Space.connections
-    return follows(
-        connections[sid].route, _ROUTE, _open(sid, route), alive=connections.contains(sid)
+    """One connection: :func:`_open` per plane in its routes, opens and closes included.
+
+    A plane leaving ``routes`` cancels its arm, which kills its worker. A
+    connection gone parks rather than subscribing to a row that is not there,
+    and waits for the fold over connections to cancel it.
+    """
+    routes = Space.connections[sid].routes
+    return nu.IfDo(
+        snap(Space.connections.contains(sid)),
+        nu.ForEachParReactive(
+            snap(_routes(sid)),
+            Ticking(snap(routes.on_change())),
+            _open(sid, nu.StrAttrRef(_ROUTE)),
+            _ROUTE,
+        ),
+        park(),
     )
 
 

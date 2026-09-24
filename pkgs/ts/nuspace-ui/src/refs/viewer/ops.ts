@@ -12,7 +12,7 @@
 // file is where the other side fails to compile.
 //
 // Every Cell write is here and every Plane write is in ../sidebar/ops.ts. That
-// is the whole line between the two refs, and `page.select` is on this side of
+// is the whole line between the two refs, and `pages.open` is on this side of
 // it because what the URL names is a fact about what the Viewer has open.
 //
 // ## Ids are minted here
@@ -24,8 +24,12 @@
 
 /** Every op the Viewer sends, with its argument shape. */
 export type Ops = {
-	/** No kv write: the answer is a `set_page` plus a `set_status`. */
-	"page.select": { page_id: string };
+	/**
+	 * The full ordered list of open panes, left to right, sent whenever it
+	 * changes and on load. No kv write: the answer is a `set_page` plus a
+	 * `set_status` per Plane.
+	 */
+	"pages.open": { page_ids: string[] };
 	"section.create": {
 		page_id: string;
 		section_id: string;

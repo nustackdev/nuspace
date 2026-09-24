@@ -12,6 +12,7 @@ separately here.
 
 ## Unreleased
 
+- Open several pages side by side in one tab, each running on its own
 - Watch live runs, workers and planes from their own sidebar pages
 - Tests split per package, with shared helpers in one place
 - One example opens a space with the bundled extensions and nothing else

@@ -8,7 +8,7 @@
 //
 // What changed with the tree: a ref address is a list of segments, not a
 // dot-joined string. So the op path is built by appending, and the op name
-// stays ONE segment even though it has a dot in it -- "page.select" is a
+// stays ONE segment even though it has a dot in it -- "pages.open" is a
 // name, not a two-level path, and a segment may hold any character. That is
 // the whole reason `Path` is a list end to end.
 

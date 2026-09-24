@@ -5,12 +5,13 @@ Every name here is the wire spelling: a plane is a ``page``, a cell a
 
 - **Events**, browser to host. One path per op under ``<viewer>.ops.``.
 - **Writes**, host to browser. Two, on the viewer's own path, tagged with an
-  ``op`` key. ``set_status`` patches what ``set_page`` landed, so the two go
-  in that order.
+  ``op`` key, and keyed by ``page_id``: several planes can be open at once,
+  one pane each. ``set_status`` patches what ``set_page`` landed for the same
+  page, so the two go in that order.
 
 Nothing here reads or writes a store. Which op an event runs is
-:mod:`.feed`. ``page.select`` is the viewer's: what the URL names is a fact
-about what the viewer has open.
+:mod:`.feed`. ``pages.open`` is the viewer's: which panes are open is a
+fact about the viewer.
 """
 
 from __future__ import annotations
@@ -35,8 +36,8 @@ __all__ = [
     "on_create_cell",
     "on_delete_cell",
     "on_move_cell",
+    "on_open",
     "on_reorder_cells",
-    "on_select",
     "on_update_cell",
     "set_page",
     "set_status",
@@ -73,29 +74,32 @@ def set_page(
     editable: BoolArg,
     cells: ListArg[dict],
 ) -> Nu:
-    """Replace what the viewer draws: one plane and its cells, in order.
+    """Replace what one pane draws: one plane and its cells, in order.
 
-    A cell is ``{id, name, source}``. Every select is answered with one,
-    even for something that is not a plane, or the viewer loads forever.
+    A cell is ``{id, name, source}``. Every open plane is answered with one,
+    even for something that is not a plane, or its pane loads forever.
     """
     return write(viewer, "set_page", page_id=plane_id, title=title, editable=editable, blocks=cells)
 
 
-def set_status(viewer: Ref, statuses: ListArg[dict]) -> Nu:
-    """Patch what the viewer says about its cells.
+def set_status(viewer: Ref, plane_id: StrArg, statuses: ListArg[dict]) -> Nu:
+    """Patch what one pane says about its cells.
 
     An entry is ``{section_id, state, error, started_at}``. A patch into the
-    page already landed, so it follows a :func:`set_page`.
+    page already landed, so it follows a :func:`set_page` for the same plane.
     """
-    return write(viewer, "set_status", statuses=statuses)
+    return write(viewer, "set_status", page_id=plane_id, statuses=statuses)
 
 
 # --- events: browser -> host --------------------------------------------------
 
 
-def on_select(viewer: Ref) -> Changed:
-    """The browser navigated to a plane. ``{page_id}``."""
-    return event(viewer, "page.select")
+def on_open(viewer: Ref) -> Changed:
+    """The planes the browser has open, as panes. ``{page_ids}``.
+
+    The full ordered list every time, left to right, not a delta.
+    """
+    return event(viewer, "pages.open")
 
 
 def on_create_cell(viewer: Ref) -> Changed:

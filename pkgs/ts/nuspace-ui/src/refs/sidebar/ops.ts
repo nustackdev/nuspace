@@ -17,7 +17,7 @@
 // ## What is NOT here
 //
 // Opening a Plane. The sidebar moves the browser's URL, and what the URL now
-// names is a fact about what the Viewer has open, so `page.select` is the
+// names is a fact about what the Viewer has open, so `pages.open` is the
 // Viewer's op.
 
 /** Every op the sidebar sends, with its argument shape. */

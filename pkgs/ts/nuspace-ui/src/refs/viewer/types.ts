@@ -42,7 +42,9 @@ export type ActivePage = {
 	blocks: Block[];
 };
 
-export type ViewerValue = { page: ActivePage | null };
+/** Every open Plane that has landed, by id. A pane whose id is missing is
+ *  still loading. */
+export type ViewerValue = { pages: Record<string, ActivePage> };
 
 /** `invalid` never compiled; `failed` ran and died. They read differently. */
 export function isBad(s: SectionState): boolean {

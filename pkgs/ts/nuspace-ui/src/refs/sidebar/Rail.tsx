@@ -3,9 +3,11 @@
 // Planes only. Cells are parts of a Plane, not navigable entities, so they
 // never appear here.
 //
-// Selection is router-owned: the URL /<plane id> is the cursor, the row click
-// drives navigate(), and the Viewer ships `page.select` off the route. The rail
-// itself holds no selection state.
+// Selection is router-owned: the URL /<id1>+<id2>+... is the cursor, one id
+// per pane, and the Viewer ships `pages.open` off the route. A plain row click
+// replaces the focused pane (or opens the first), cmd/ctrl-click or the row's
+// split button appends a pane. Every open Plane's row is washed, the focused
+// pane's strongest. The rail itself holds no selection state.
 //
 // Rows are flat on the wire -- one row each, hierarchy in `parent` and
 // `children` -- so a row is keyed by its id and nothing here carries a path.
@@ -76,11 +78,19 @@ import {
 	IconButton,
 	Skeleton,
 } from "@nustackdev/ui-kit";
-import { ChevronRight, Ellipsis, FileText, PenLine, Plus, Trash2 } from "lucide-react";
+import { ChevronRight, Columns2, Ellipsis, FileText, PenLine, Plus, Trash2 } from "lucide-react";
 import type * as React from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { mintId } from "../../app/ids";
-import { hrefFor, navigate, onNavClick, useRoute } from "../../app/router";
+import {
+	closePanes,
+	hrefFor,
+	onNavClick,
+	openPane,
+	replacePane,
+	useFocusedRoute,
+	useRoutes,
+} from "../../app/router";
 import {
 	railAction,
 	railAside,
@@ -186,12 +196,15 @@ export function Rail({
 	onToggle: (key: string) => void;
 	notify: Notify;
 }) {
-	const route = useRoute();
+	const routes = useRoutes();
+	const focusedRoute = useFocusedRoute();
 	const { width: railWidth, onResizeStart, onResizeReset } = useRailWidth();
 	const root = rootId(tree);
 	// A bare "/" has nothing open, and no row stands in for that: the row that
-	// stands for the Space is the tree's root and is not drawn.
-	const selKey = route;
+	// stands for the Space is the tree's root and is not drawn. The focused
+	// pane's Plane is the cursor; the others are merely open.
+	const selKey = focusedRoute;
+	const routesKey = routes.join("+");
 	// The tree lands in one `set_tree`; until it does there is nothing to draw
 	// and the honest thing is row-shaped placeholders, not a fake empty tree.
 	const loading = !loaded || !root;
@@ -247,8 +260,9 @@ export function Rail({
 	useEffect(() => {
 		if (!root) return;
 		for (const section of childrenOf(tree, root)) reveal(section.id);
-		for (const row of ancestorsOf(tree, selKey)) if (row.id !== root) reveal(row.id);
-	}, [selKey, root, reveal]);
+		for (const id of routes)
+			for (const row of ancestorsOf(tree, id)) if (row.id !== root) reveal(row.id);
+	}, [routesKey, selKey, root, reveal]);
 
 	// -- focus ----------------------------------------------------------------
 	//
@@ -303,12 +317,17 @@ export function Rail({
 				// moment the server confirms it rather than guessed at. `group`
 				// is what decides what gets built; `parent_id` is where the row
 				// would sit, and nothing nests yet.
+				// Then open it in the focused pane, as a plain click would. The
+				// frames go out in order, so the server has made it by the time
+				// `pages.open` names it.
+				const pageId = mintId("p");
 				notify("page.create", {
-					page_id: mintId("p"),
+					page_id: pageId,
 					parent_id: "",
 					group: d.group,
 					title: next,
 				});
+				replacePane(pageId);
 			}
 		},
 		[draft, notify],
@@ -344,12 +363,13 @@ export function Rail({
 				case "Enter":
 				case " ":
 					// Same contract as the click: a section only folds, a Plane
-					// opens and reveals what is inside it.
+					// opens and reveals what is inside it. Cmd/ctrl opens a split.
 					e.preventDefault();
 					if (row.kind === KIND_GROUP) onToggle(row.key);
 					else {
 						if (row.hasKids) reveal(row.key);
-						navigate(row.id);
+						if (e.metaKey || e.ctrlKey) openPane(row.id);
+						else replacePane(row.id);
 					}
 					break;
 				case "F2":
@@ -390,6 +410,7 @@ export function Rail({
 										row={row}
 										index={index}
 										selected={row.key === selKey}
+										open={routes.includes(row.id)}
 										tabbable={row.key === tabKey}
 										renaming={draft?.kind === "rename" && draft.key === row.key}
 										onToggle={onToggle}
@@ -401,6 +422,7 @@ export function Rail({
 										onCommit={commitDraft}
 										onCancel={cancelDraft}
 										notify={notify}
+										tree={tree}
 									/>
 								</div>
 								{draft?.kind === "create" && draft.key === row.key ? (
@@ -462,10 +484,18 @@ function Guides({ depth }: { depth: number }) {
 	);
 }
 
+/** A row and everything under it, which is what a delete takes. */
+function subtreeOf(tree: PageTree, id: string): string[] {
+	const out = [id];
+	for (const kid of childrenOf(tree, id)) out.push(...subtreeOf(tree, kid.id));
+	return out;
+}
+
 function Row({
 	row,
 	index,
 	selected,
+	open: isOpen,
 	tabbable,
 	renaming,
 	onToggle,
@@ -477,10 +507,14 @@ function Row({
 	onCommit,
 	onCancel,
 	notify,
+	tree,
 }: {
 	row: VisibleRow;
 	index: number;
+	/** The focused pane's Plane. */
 	selected: boolean;
+	/** Showing in some pane. */
+	open: boolean;
 	tabbable: boolean;
 	renaming: boolean;
 	onToggle: (key: string) => void;
@@ -492,6 +526,7 @@ function Row({
 	onCommit: (title: string) => void;
 	onCancel: () => void;
 	notify: Notify;
+	tree: PageTree;
 }) {
 	const { key, id, kind, depth, title, hasKids, open, pos, size } = row;
 	const section = kind === KIND_GROUP;
@@ -501,12 +536,21 @@ function Row({
 	const remove = useCallback(() => {
 		if (!window.confirm(`delete "${title}" and everything under it?`)) return;
 		notify("page.delete", { page_id: id });
-	}, [id, notify, title]);
+		// Its panes go too, and so do its children's. Replace, not push: the
+		// back button should not bring back a Plane that no longer exists.
+		closePanes(subtreeOf(tree, id), true);
+	}, [id, notify, title, tree]);
+
+	const split = useCallback(() => {
+		if (hasKids) reveal(key);
+		openPane(id);
+	}, [hasKids, id, key, reveal]);
 
 	return (
 		<RailRow
 			rowKey={key}
 			selected={selected}
+			open={isOpen && !selected}
 			tabbable={tabbable}
 			indent={depth}
 			level={depth + 1}
@@ -572,30 +616,43 @@ function Row({
 						<Plus />
 					</IconButton>
 				) : (
-					<DropdownMenu>
-						<DropdownMenuTrigger asChild>
-							<IconButton
-								variant="ghost"
-								size="sm"
-								tabIndex={tabbable ? 0 : -1}
-								aria-label={`Actions for ${title}`}
-								className={railAction}
-							>
-								<Ellipsis />
-							</IconButton>
-						</DropdownMenuTrigger>
-						<DropdownMenuContent align="start" className="min-w-40">
-							<DropdownMenuItem onSelect={() => onRename(row)}>
-								<PenLine />
-								Rename
-							</DropdownMenuItem>
-							<DropdownMenuSeparator />
-							<DropdownMenuItem variant="danger" onSelect={remove}>
-								<Trash2 />
-								Delete
-							</DropdownMenuItem>
-						</DropdownMenuContent>
-					</DropdownMenu>
+					<>
+						<IconButton
+							variant="ghost"
+							size="sm"
+							tabIndex={-1}
+							aria-label={`Open ${title} in split`}
+							title="Open in split"
+							onClick={split}
+							className={railAction}
+						>
+							<Columns2 />
+						</IconButton>
+						<DropdownMenu>
+							<DropdownMenuTrigger asChild>
+								<IconButton
+									variant="ghost"
+									size="sm"
+									tabIndex={tabbable ? 0 : -1}
+									aria-label={`Actions for ${title}`}
+									className={railAction}
+								>
+									<Ellipsis />
+								</IconButton>
+							</DropdownMenuTrigger>
+							<DropdownMenuContent align="start" className="min-w-40">
+								<DropdownMenuItem onSelect={() => onRename(row)}>
+									<PenLine />
+									Rename
+								</DropdownMenuItem>
+								<DropdownMenuSeparator />
+								<DropdownMenuItem variant="danger" onSelect={remove}>
+									<Trash2 />
+									Delete
+								</DropdownMenuItem>
+							</DropdownMenuContent>
+						</DropdownMenu>
+					</>
 				)
 			}
 			menu={
@@ -606,9 +663,13 @@ function Row({
 					</ContextMenuItem>
 				) : (
 					<>
-						<ContextMenuItem onSelect={() => navigate(id)}>
+						<ContextMenuItem onSelect={() => replacePane(id)}>
 							<FileText />
 							Open
+						</ContextMenuItem>
+						<ContextMenuItem onSelect={split}>
+							<Columns2 />
+							Open in split
 						</ContextMenuItem>
 						<ContextMenuSeparator />
 						<ContextMenuItem onSelect={() => onRename(row)}>

@@ -170,7 +170,7 @@ async def test_open_space_headless_runs_a_booted_plane(tmp_path, monkeypatch):
         seed
         >> ops.add_plane(TAB)
         >> ops.add_cell(TAB, SET_42, cell_id="c")
-        >> atomic(stale.opened.set(nu.Float(0.0)) >> stale.route.set(nu.Str(TAB)))
+        >> atomic(stale.opened.set(nu.Float(0.0)) >> stale.routes.set(nu.Literal([TAB])))
         # nuverse's starter program runs headless too.
         >> ops.add_plane(STARTER)
         >> ops.add_cell(STARTER, nuverse_program.SOURCE, cell_id="c")

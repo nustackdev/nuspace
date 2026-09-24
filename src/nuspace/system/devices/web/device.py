@@ -2,19 +2,21 @@
 
 A device owns an external resource and makes it bindable. It never runs a
 cell (D1): which plane runs for a tab is the nav service's call, made from
-``connections[sid].route``, which this device writes and nobody else (D14).
+``connections[sid].routes``, which this device writes and nobody else (D14).
 
 Per connection, one arm:
 
-1. ``connections[sid] = {opened: now, route: ""}``;
+1. ``connections[sid] = {opened: now, routes: []}``;
 2. in parallel: the route arm, and the shell boot followed by the sidebar
    and viewer feeds. The route arm subscribes beside the boot rather than
-   after it, so the browser's first ``page.select`` cannot land before
+   after it, so the browser's first ``pages.open`` cannot land before
    anybody listens;
 3. on every way out, ``connections[sid]`` is deleted.
 
-The route arm (D15): on the viewer's ``page.select`` for a plane other than
-the current route, erase the page as drawn, then write the route.
+The route arm (D15): the viewer's ``pages.open`` carries the full ordered
+list of open planes (its panes, left to right). Deduped with order kept and
+empty ids dropped, it is written whole as ``routes``. Every plane that left
+the list has its cells erased as drawn first.
 
 What a run needs to draw on a tab is the session env, returned beside the
 term for the host to register with the kernel.
@@ -25,14 +27,15 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import nu
-from nuspace.ops.utils import atomic, text
+from nuspace import ops
+from nuspace.ops.utils import atomic, fresh, or_else
 from nuspace.shapes import Space
 from nuspace.system.devices.web.env import SESSION_ENV, session_env
 from nuspace.system.devices.web.session import served_sessions
 from nuspace.system.devices.web.shell import Shell
 from nuspace.system.devices.web.sidebar import sidebar_feed
-from nuspace.system.devices.web.utils import Arms, cells_ui, field_str
-from nuspace.system.devices.web.viewer import on_select, slash_entries, viewer_feed
+from nuspace.system.devices.web.utils import Arms, cell_ui, field_ids
+from nuspace.system.devices.web.viewer import on_open, slash_entries, viewer_feed
 from nuspace.system.kernel.space import free_port
 from nuspace.system.kernel.utils import Now, snap
 from nuspace.system.services.nav import clear_connections
@@ -68,9 +71,9 @@ _connections = Space.connections
 
 
 def open_connection(sid: nu.StrArg) -> nu.Nu:
-    """Publish connection ``sid``: opened now, on no route. One commit."""
+    """Publish connection ``sid``: opened now, no plane open. One commit."""
     row = _connections[sid]
-    return atomic(row.opened.set(Now()) >> row.route.set(nu.Str("")))
+    return atomic(row.opened.set(Now()) >> row.routes.set(nu.Literal([])))
 
 
 def close_connection(sid: nu.StrArg) -> nu.Nu:
@@ -78,25 +81,47 @@ def close_connection(sid: nu.StrArg) -> nu.Nu:
     return atomic(nu.IfDo(_connections.contains(sid), _connections.del_item(sid)))
 
 
-def route_arm(viewer: Ref, sid: nu.StrArg) -> nu.Nu:
-    """Route ``sid`` to the plane the viewer selects (D15). Never ends.
+def _erase(viewer: Ref, plane: nu.Nu) -> nu.Nu:
+    """A plane's cells erased as drawn, so nothing of a closed pane stays on screen."""
+    cell = fresh("web_erase_cell")
+    ids = nu.If(ops.plane_exists(plane), ops.cells(plane), nu.List.of())
+    return nu.ForEachDo(snap(ids), cell_ui(viewer, nu.StrAttrRef(cell)).erase(), item=cell)
 
-    The page as drawn is erased before the route moves, so nothing of the
-    plane being left stays on screen. A select for the plane already routed
-    changes nothing.
+
+def route_arm(viewer: Ref, sid: nu.StrArg) -> nu.Nu:
+    """Route ``sid`` to the planes the viewer has open (D15). Never ends.
+
+    ``pages.open`` is the full list every time. The cells of every plane
+    leaving it are erased as drawn before ``routes`` is written, so nothing
+    of a closed pane stays on screen.
     """
     row = _connections[sid]
-    plane = field_str(_ROUTE, "page_id")
-    moved = nu.And(nu.Ne(plane, nu.Str("")), nu.Ne(plane, snap(text(row.route))))
-    return _arms.event(
-        _ROUTE,
-        on_select(viewer),
-        nu.IfDo(
-            moved,
-            cells_ui(viewer).erase()
-            >> atomic(nu.IfDo(_connections.contains(sid), row.route.set(plane))),
-        ),
+    item, wanted, left = fresh("web_open"), fresh("web_open_ids"), fresh("web_closed")
+    at = nu.AnyAttrRef(item)
+    ids = nu.List(
+        nu.Collect(
+            nu.Unique(
+                nu.Filter(
+                    nu.Map(field_ids(_ROUTE, "page_ids"), nu.ToStr(at), key=item),
+                    nu.Ne(at, nu.Str("")),
+                    key=item,
+                )
+            )
+        )
     )
+    kept = nu.ListAttrRef(wanted)
+    closed = nu.Filter(
+        nu.List(snap(or_else(row.routes, []))),
+        nu.Not(kept.contains(nu.AnyAttrRef(left))),
+        key=left,
+    )
+    body = nu.Let(
+        wanted,
+        ids,
+        nu.ForEachDo(nu.List(nu.Collect(closed)), _erase(viewer, nu.StrAttrRef(left)), item=left)
+        >> atomic(nu.IfDo(_connections.contains(sid), row.routes.set(kept))),
+    )
+    return _arms.event(_ROUTE, on_open(viewer), body)
 
 
 def connection(

@@ -156,21 +156,25 @@ async def test_init_brings_up_its_boot_list(space):
 
 
 @module_loop
-async def test_nav_follows_a_connections_route(space):
+async def test_nav_runs_each_open_plane_on_its_own_worker(space):
     a, _ = await space.plane(READS_SESSION)
     b, _ = await space.plane(READS_SESSION)
     sid = "conn-1"
-    route = Space.connections[sid].route
-    await space.run(atomic(route.set(a) >> Space.connections[sid].opened.set(time.time())))
+    routes = Space.connections[sid].routes
+    await space.run(atomic(routes.set([a, b]) >> Space.connections[sid].opened.set(time.time())))
     (ra,) = await runs_of(space, a, lambda rs: rs and _up(rs[0]))
+    (rb,) = await runs_of(space, b, lambda rs: rs and _up(rs[0]))
     assert (ra["by"], ra["envs"]) == (nav_service.BY, [["session", sid]])
+    assert (rb["by"], rb["envs"]) == (nav_service.BY, [["session", sid]])
+    assert ra["worker"] != rb["worker"]
     await space.until(Space.planes[a].cells.extract(), lambda cs: _state(cs) == [sid])
 
-    await space.run(atomic(route.set(b)))
+    # Closing a kills only its worker: b keeps its run.
+    await space.run(atomic(routes.set([b])))
     assert (await space.worker_row(ra["worker"], _dead))["status"] == STATUS_DEAD
     assert (await space.run_row(ra["id"], _dead))["exit"] == EXIT_KILLED
-    (rb,) = await runs_of(space, b, lambda rs: rs and _up(rs[0]))
-    assert rb["worker"] != ra["worker"]
+    assert _up(await space.run_row(rb["id"], _up))
+    assert (await space.worker_row(rb["worker"], lambda w: True))["status"] == STATUS_UP
 
     await space.run(atomic(Space.connections.del_item(sid)))
     await space.worker_row(rb["worker"], _dead)
@@ -178,12 +182,28 @@ async def test_nav_follows_a_connections_route(space):
 
 
 @module_loop
+async def test_nav_kills_every_open_planes_worker_when_the_connection_goes(space):
+    a, _ = await space.plane(READS_SESSION)
+    b, _ = await space.plane(READS_SESSION)
+    sid = "conn-both"
+    await space.run(atomic(Space.connections[sid].routes.set([a, b])))
+    (ra,) = await runs_of(space, a, lambda rs: rs and _up(rs[0]))
+    (rb,) = await runs_of(space, b, lambda rs: rs and _up(rs[0]))
+    assert ra["worker"] != rb["worker"]
+
+    await space.run(atomic(Space.connections.del_item(sid)))
+    for r in (ra, rb):
+        await space.worker_row(r["worker"], _dead)
+        assert (await space.run_row(r["id"], _dead))["exit"] == EXIT_KILLED
+
+
+@module_loop
 async def test_nav_skips_missing_and_system_planes(space):
     sid = "conn-2"
-    await space.run(atomic(Space.connections[sid].route.set("reload")))
-    await space.run(atomic(Space.connections[sid].route.set("ghost")))
+    await space.run(atomic(Space.connections[sid].routes.set(["reload"])))
+    await space.run(atomic(Space.connections[sid].routes.set(["ghost"])))
     p, _ = await space.plane(READS_SESSION)
-    await space.run(atomic(Space.connections[sid].route.set(p)))
+    await space.run(atomic(Space.connections[sid].routes.set([p])))
     await runs_of(space, p, lambda rs: rs and _up(rs[0]))
     reloads = await space.read(ops.runs(plane="reload"))
     assert [r["by"] for r in reloads] == [init.BY]
@@ -195,8 +215,8 @@ async def test_nav_skips_missing_and_system_planes(space):
 async def test_nav_waits_for_a_routed_plane_not_written_yet(space):
     """A new page is selected before its create lands: nav waits, not gives up."""
     sid = "conn-early"
-    await space.run(atomic(Space.connections[sid].route.set("early")))
-    # Past a tick, so nav has seen the route and found no plane behind it.
+    await space.run(atomic(Space.connections[sid].routes.set(["early"])))
+    # Past a tick, so nav has seen the routes and found no plane behind it.
     await asyncio.sleep(1.5)
     await space.run(ops.add_plane("early"))
     await space.run(ops.add_cell("early", READS_SESSION))
@@ -209,7 +229,7 @@ async def test_nav_waits_for_a_routed_plane_not_written_yet(space):
 async def test_nav_follows_the_open_planes_cells(space):
     p, _ = await space.plane(READS_SESSION)
     sid = "conn-3"
-    await space.run(atomic(Space.connections[sid].route.set(p)))
+    await space.run(atomic(Space.connections[sid].routes.set([p])))
     (r1,) = await runs_of(space, p, lambda rs: rs and _up(rs[0]))
 
     c2 = await space.run(ops.add_cell(p, READS_SESSION))
@@ -232,7 +252,7 @@ async def test_nav_follows_the_open_planes_cells(space):
 async def test_nav_keeps_its_worker_once_an_emptied_plane_gets_a_cell(space):
     p, (c1,) = await space.plane(READS_SESSION)
     sid = "conn-4"
-    await space.run(atomic(Space.connections[sid].route.set(p)))
+    await space.run(atomic(Space.connections[sid].routes.set([p])))
     (r1,) = await runs_of(space, p, lambda rs: rs and _up(rs[0]))
 
     # The last cell gone, its worker had a run and has none: held, idle GC skips it.
@@ -251,7 +271,7 @@ async def test_nav_keeps_its_worker_once_an_emptied_plane_gets_a_cell(space):
 async def test_nav_runs_a_cell_that_replaces_the_last_one(space):
     p, (c1,) = await space.plane(READS_SESSION)
     sid = "conn-5"
-    await space.run(atomic(Space.connections[sid].route.set(p)))
+    await space.run(atomic(Space.connections[sid].routes.set([p])))
     (r1,) = await runs_of(space, p, lambda rs: rs and _up(rs[0]))
 
     # Added right after the removal: its first run may land on the worker

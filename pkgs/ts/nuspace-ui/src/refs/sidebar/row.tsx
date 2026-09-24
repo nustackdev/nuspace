@@ -25,6 +25,7 @@ import {
 export function RailRow({
 	rowKey,
 	selected,
+	open = false,
 	tabbable,
 	indent,
 	level,
@@ -40,7 +41,10 @@ export function RailRow({
 }: {
 	/** What `useRailFocus` addresses this row by. */
 	rowKey: string;
+	/** The focused pane's Plane. */
 	selected: boolean;
+	/** Showing in a pane that is not the focused one. */
+	open?: boolean;
 	tabbable: boolean;
 	/** Tree depth, for the left offset. A flat rail leaves it off. */
 	indent?: number;
@@ -66,7 +70,7 @@ export function RailRow({
 			// A tree row takes its left offset from railIndent, so it needs no
 			// inset. A flat rail leaves indent off and pays for the offset
 			// itself, which is what the inset is.
-			className={railRow(selected, indent === undefined)}
+			className={railRow(selected, indent === undefined, open)}
 			style={indent === undefined ? undefined : railIndent(indent)}
 			role="treeitem"
 			tabIndex={tabbable ? 0 : -1}

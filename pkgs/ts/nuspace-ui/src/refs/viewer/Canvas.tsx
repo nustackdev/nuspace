@@ -100,9 +100,10 @@ export function Canvas({
 	editable: boolean;
 	notify: Notify;
 }) {
-	const editor = useEditorState(refPath);
 	const blocks = page.blocks;
 	const pageId = page.page_id;
+	// Per pane: two canvases side by side never share a selection or a ghost.
+	const editor = useEditorState(refPath, pageId);
 	const refKey = pathKey(refPath);
 
 	const rootRef = useRef<HTMLDivElement | null>(null);
@@ -121,8 +122,8 @@ export function Canvas({
 	// biome-ignore lint/correctness/useExhaustiveDependencies: path is compared by value.
 	const patch = useCallback(
 		(p: Partial<EditorState> | ((e: EditorState) => Partial<EditorState>)) =>
-			patchEditor(refPath, p),
-		[refKey],
+			patchEditor(refPath, pageId, p),
+		[refKey, pageId],
 	);
 
 	// -- focus routing --------------------------------------------------------

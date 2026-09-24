@@ -1,13 +1,15 @@
 // The ViewerRef node: what the wire writes, and all the browser-owned editor
 // state.
 //
-// The wire half is the open Plane and its blocks, replaced wholesale by
-// `set_page` and patched by `set_status`. It lands in props.
+// The wire half is every open Plane and its blocks, as a map by page id in
+// `props.pages`: one entry replaced wholesale by that page's `set_page` and
+// patched by its `set_status`. Entries for Planes no longer open are dropped.
 //
 // The browser half is caret intent, block selection, which blocks are open in
 // code mode, the slash menu, the drag in flight. The server never sees
 // any of it, none of it survives a reload, and none of it should. It lives in
-// the node's `local` prop (see app/local.ts).
+// the node's `local` prop (see app/local.ts), as a map by page id, so each
+// pane's selection, ghost, slash menu and code toggles are its own.
 //
 // ## Blocks used to be registered here. They are not any more.
 //
@@ -27,9 +29,9 @@
 // else is in a position to notice.
 
 import type { Path, Props } from "@nustackdev/ui-core";
-import { useProps } from "@nustackdev/ui-kit";
+import { nodeAt, tree, useProps } from "@nustackdev/ui-kit";
 import { useMemo } from "react";
-import { localOf, patchLocal, useLocalSlot } from "../../app/local";
+import { LOCAL, localOf, patchLocal, useLocalSlot } from "../../app/local";
 import {
 	type ActivePage,
 	type Block,
@@ -122,13 +124,41 @@ export const EMPTY_LOCAL: EditorState = {
 
 // -- the write handler's body ------------------------------------------------
 
-/** Apply one inbound payload to this node's props. Pure, so it is testable. */
-export function applyViewerWrite(props: Props, payload: unknown): void {
+/** Every open Plane that has landed, by id, off the node's props. */
+function pagesOf(props: Props): Record<string, ActivePage> {
+	return (props.pages as Record<string, ActivePage> | undefined) ?? {};
+}
+
+/** Every pane's editor state, by Plane id, off the node's props. */
+function panesOf(props: Props): Record<string, EditorState> {
+	return localOf<Record<string, EditorState>>(props, {});
+}
+
+/** Keep only the entries for Planes in `open`. Same object when nothing goes. */
+function keepOpen<T>(byId: Record<string, T>, open: string[]): Record<string, T> {
+	const keys = Object.keys(byId);
+	if (keys.every((k) => open.includes(k))) return byId;
+	const out: Record<string, T> = {};
+	for (const k of keys) if (open.includes(k)) out[k] = byId[k];
+	return out;
+}
+
+/**
+ * Apply one inbound payload to this node's props. Pure given `open`, the
+ * Planes the URL names, so it is testable.
+ *
+ * Both ops are keyed by page. A `set_page` for a Plane that is no longer open
+ * is a reply to a pane already closed and is dropped, and every write prunes
+ * what belongs to closed panes.
+ */
+export function applyViewerWrite(props: Props, payload: unknown, open: string[]): void {
 	const p = (payload ?? {}) as Record<string, unknown>;
 	const op = String(p.op ?? "");
+	const pageId = String(p.page_id ?? "");
 
 	if (op === "set_status") {
-		const page = props.page as ActivePage | undefined;
+		const pages = pagesOf(props);
+		const page = pages[pageId];
 		if (!page) return;
 		const byId = new Map<string, SectionStatus>();
 		for (const raw of Array.isArray(p.statuses) ? p.statuses : []) {
@@ -136,46 +166,79 @@ export function applyViewerWrite(props: Props, payload: unknown): void {
 			if (st?.section_id) byId.set(st.section_id, st);
 		}
 		if (byId.size === 0) return;
-		props.page = {
-			...page,
-			blocks: page.blocks.map((b) =>
-				byId.has(b.id) ? { ...b, status: byId.get(b.id) ?? b.status } : b,
-			),
-		} satisfies ActivePage;
+		props.pages = {
+			...pages,
+			[pageId]: {
+				...page,
+				blocks: page.blocks.map((b) =>
+					byId.has(b.id) ? { ...b, status: byId.get(b.id) ?? b.status } : b,
+				),
+			} satisfies ActivePage,
+		};
 		return;
 	}
 
 	if (op !== "set_page") return;
 
+	const pages = keepOpen(pagesOf(props), open);
+	const panes = keepOpen(panesOf(props), open);
+	if (!pageId || !open.includes(pageId)) {
+		props.pages = pages;
+		props.local = panes;
+		return;
+	}
+
 	const blocks = coerceBlocks(p.blocks);
-	props.page = {
-		page_id: String(p.page_id ?? ""),
-		title: String(p.title ?? ""),
-		editable: p.editable === true,
-		blocks,
-	} satisfies ActivePage;
+	props.pages = {
+		...pages,
+		[pageId]: {
+			page_id: pageId,
+			title: String(p.title ?? ""),
+			editable: p.editable === true,
+			blocks,
+		} satisfies ActivePage,
+	};
 
 	// Prune local state that points at blocks which no longer exist. Focus and
 	// drag are dropped outright -- a re-ship means the document moved under
 	// them and guessing is worse than nothing.
 	const live = new Set(blocks.map((b: Block) => b.id));
-	const local = localOf(props, EMPTY_LOCAL);
+	const local = panes[pageId] ?? EMPTY_LOCAL;
 	props.local = {
-		...local,
-		focus: local.focus && live.has(local.focus.blockId) ? local.focus : null,
-		focused: local.focused && live.has(local.focused) ? local.focused : null,
-		selected: local.selected.filter((id) => live.has(id)),
-		anchor: local.anchor && live.has(local.anchor) ? local.anchor : null,
-		editing: local.editing.filter((id) => live.has(id)),
-		// A null `blockId` is a ghost at the top of an empty page, which no
-		// block list can invalidate.
-		slash:
-			local.slash && (local.slash.blockId === null || live.has(local.slash.blockId))
-				? local.slash
-				: null,
-		ghost: local.ghost && live.has(local.ghost) ? local.ghost : null,
-		drag: null,
-	} satisfies EditorState;
+		...panes,
+		[pageId]: {
+			...local,
+			focus: local.focus && live.has(local.focus.blockId) ? local.focus : null,
+			focused: local.focused && live.has(local.focused) ? local.focused : null,
+			selected: local.selected.filter((id) => live.has(id)),
+			anchor: local.anchor && live.has(local.anchor) ? local.anchor : null,
+			editing: local.editing.filter((id) => live.has(id)),
+			// A null `blockId` is a ghost at the top of an empty page, which no
+			// block list can invalidate.
+			slash:
+				local.slash && (local.slash.blockId === null || live.has(local.slash.blockId))
+					? local.slash
+					: null,
+			ghost: local.ghost && live.has(local.ghost) ? local.ghost : null,
+			drag: null,
+		} satisfies EditorState,
+	};
+}
+
+/**
+ * Drop the pages and editor state of panes that are no longer open. Run when
+ * the route changes, so a closed pane's data does not linger until the next
+ * `set_page` happens to prune it.
+ */
+export function pruneViewer(path: Path, open: string[]): void {
+	const node = nodeAt(path);
+	if (!node) return;
+	const pages = pagesOf(node.props);
+	const panes = panesOf(node.props);
+	const nextPages = keepOpen(pages, open);
+	const nextPanes = keepOpen(panes, open);
+	if (nextPages === pages && nextPanes === panes) return;
+	tree.getState().setProps(path, { pages: nextPages, [LOCAL]: nextPanes });
 }
 
 // -- reads -------------------------------------------------------------------
@@ -203,31 +266,45 @@ export function useSnippets(path: Path): SlashSnippet[] {
 	}, [raw]);
 }
 
+const NO_PAGES: Record<string, ActivePage> = {};
+
 export function useViewerValue(path: Path): ViewerValue {
 	const props = useProps(path);
-	const page = (props.page as ActivePage | undefined) ?? null;
-	return useMemo(() => ({ page }), [page]);
+	const pages = (props.pages as Record<string, ActivePage> | undefined) ?? NO_PAGES;
+	return useMemo(() => ({ pages }), [pages]);
 }
 
-export function useEditorState(path: Path): EditorState {
-	return useLocalSlot(path, EMPTY_LOCAL, (local) => local);
+/** One pane's editor state. Keyed by the Plane the pane shows. */
+function paneOf(local: Record<string, EditorState>, pageId: string): EditorState {
+	return local[pageId] ?? EMPTY_LOCAL;
+}
+
+const NO_PANES: Record<string, EditorState> = {};
+
+export function useEditorState(path: Path, pageId: string): EditorState {
+	return useLocalSlot(path, NO_PANES, (local) => paneOf(local, pageId));
 }
 
 /** Narrow subscription so a keystroke in one block does not rerender the rest. */
-export function useEditorSlot<T>(path: Path, pick: (e: EditorState) => T): T {
-	return useLocalSlot(path, EMPTY_LOCAL, pick);
+export function useEditorSlot<T>(path: Path, pageId: string, pick: (e: EditorState) => T): T {
+	return useLocalSlot(path, NO_PANES, (local) => pick(paneOf(local, pageId)));
 }
 
 // -- writes ------------------------------------------------------------------
 
 /**
- * Patch the browser-owned editor state. Module-level rather than a hook so
- * event handlers deep in the tree can call it without prop-drilling, and so
- * it never participates in a render.
+ * Patch one pane's browser-owned editor state. Module-level rather than a
+ * hook so event handlers deep in the tree can call it without prop-drilling,
+ * and so it never participates in a render.
  */
 export function patchEditor(
 	path: Path,
+	pageId: string,
 	patch: Partial<EditorState> | ((e: EditorState) => Partial<EditorState>),
 ): void {
-	patchLocal(path, EMPTY_LOCAL, patch);
+	patchLocal<Record<string, EditorState>>(path, NO_PANES, (local) => {
+		const current = paneOf(local, pageId);
+		const next = typeof patch === "function" ? patch(current) : patch;
+		return { [pageId]: { ...current, ...next } };
+	});
 }

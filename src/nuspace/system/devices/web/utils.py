@@ -8,7 +8,7 @@ the arm factory, and the total readers an arm reads a browser event with.
 
 - an event rides a path of its own, ``(*<ref>, "ops", <op>)``, so the path is
   the discrimination and a feed binds one arm per op. The op name is one
-  segment and keeps its dots: ``page.select`` is a name, not two levels.
+  segment and keeps its dots: ``pages.open`` is a name, not two levels.
 - a write rides the ref's own path, tagged with an ``op`` key in the payload,
   because the browser registers one handler per node and a write to a path
   with no handler is dropped.

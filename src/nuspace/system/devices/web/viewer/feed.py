@@ -3,15 +3,15 @@
 Two families:
 
 - **browser to store.** A viewer event runs one op over its own fields.
-- **store to browser.** The open plane or its runs changed; the arm ships
-  the page or the statuses again.
+- **store to browser.** An open plane or its runs changed; its arm ships
+  the page or the statuses again, keyed by ``page_id``.
 
-**Which plane is open** is ``connections[sid].route``, written by the
-device's route arm (D15), never read off the browser. The feed re-enters
-when the route moves, so every subscription below it is about the one plane
-on screen and dies with it.
+**Which planes are open** is ``connections[sid].routes``, written by the
+device's route arm (D15), never read off the browser. One arm per plane in
+it: every subscription below an arm is about that one pane, and dies with it
+when the plane leaves ``routes``.
 
-**Narrow watch.** The page is shipped again when the open plane's row, name,
+**Narrow watch.** A page is shipped again when its plane's row, name,
 meta, order or cells (their set, names and progs) change; the statuses when
 any run's ``status`` moves. A cell writing its state or a run writing its
 output wakes neither.
@@ -28,7 +28,7 @@ from typing import TYPE_CHECKING
 
 import nu
 from nuspace import ops
-from nuspace.ops.utils import fresh, text
+from nuspace.ops.utils import fresh, or_else, text
 from nuspace.shapes import (
     EXIT_FAILED,
     EXIT_KILLED,
@@ -39,7 +39,7 @@ from nuspace.shapes import (
     STATUS_UP,
     Space,
 )
-from nuspace.system.devices.web.utils import Arms, field_ids, field_index, field_str, watch
+from nuspace.system.devices.web.utils import Arms, field_ids, field_index, field_str
 from nuspace.system.devices.web.viewer import interactions
 from nuspace.system.devices.web.viewer.interactions import (
     STATE_FAILED,
@@ -96,8 +96,8 @@ def blocks(plane_id: nu.StrArg) -> nu.Nu:
 def page(plane_id: nu.StrArg) -> nu.Nu:
     """``{title, editable, blocks}`` for a plane. Bare read.
 
-    A plane that is not there reads as an empty untitled page, so a select
-    for it is still answered.
+    A plane that is not there reads as an empty untitled page, so a pane
+    open on it is still answered.
     """
     row = Space.planes[plane_id]
     return nu.If(
@@ -219,7 +219,7 @@ def _ship_page(viewer: Ref, plane: nu.Nu) -> nu.Nu:
 def _ship_status(viewer: Ref, plane: nu.Nu) -> nu.Nu:
     held = fresh("viewer_status")
     read = nu.If(ops.plane_exists(plane), statuses(plane), nu.List.of())
-    return nu.Let(held, snap(read), interactions.set_status(viewer, nu.ListAttrRef(held)))
+    return nu.Let(held, snap(read), interactions.set_status(viewer, plane, nu.ListAttrRef(held)))
 
 
 def _page_changes(plane: nu.Nu) -> list[nu.Nu]:
@@ -339,12 +339,12 @@ def viewer_feed(viewer: Ref, sid: nu.StrArg, snippets: Iterable[Snippet] = ()) -
 
     Args:
         viewer: the shell's viewer ref.
-        sid: the connection id, whose ``connections[sid].route`` says which
-            plane is open. The row must exist before this runs.
+        sid: the connection id, whose ``connections[sid].routes`` says which
+            planes are open. The row must exist before this runs.
         snippets: the registered snippets, what a created cell stores.
     """
     snippets = list(snippets)
-    route = Space.connections[sid].route
+    routes = Space.connections[sid].routes
     at = fresh("viewer_route")
     plane = nu.StrAttrRef(at)
     shown = nu.ParallelAsync(
@@ -355,10 +355,10 @@ def viewer_feed(viewer: Ref, sid: nu.StrArg, snippets: Iterable[Snippet] = ()) -
         ),
         _arms.state("status", _status_changes(), _ship_status(viewer, plane)),
     )
-    # Re-entered on every route move, which tears down the old plane's
-    # subscriptions and opens the new one's. An empty route shows nothing.
-    routed = watch(
-        [snap(route.on_change())],
-        nu.Let(at, snap(text(route)), nu.IfDo(nu.Ne(plane, nu.Str("")), shown)),
+    # One arm per open plane: a plane opened gets its page and statuses
+    # shipped, a plane closed has its subscriptions torn down, and the other
+    # panes' arms are untouched.
+    routed = nu.ForEachParReactive(
+        snap(nu.List(or_else(routes, []))), snap(routes.on_change()), shown, at
     )
-    return nu.ParallelAsync(_arms.guard(routed, "route"), *_events(viewer, snippets))
+    return nu.ParallelAsync(_arms.guard(routed, "routes"), *_events(viewer, snippets))

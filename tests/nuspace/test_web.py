@@ -309,7 +309,7 @@ async def test_connections_open_close_clear(store):
     conns = Space.connections
     await store.run(open_connection("s1") >> open_connection("s2"))
     assert sorted(await store.read(nu.list(conns.keys()))) == ["s1", "s2"]
-    assert await store.read(ops.utils.text(conns["s1"].route)) == ""
+    assert await store.read(conns["s1"].routes) == []
     assert isinstance(await store.read(conns["s1"].opened), float)
 
     await store.run(close_connection("s1") >> close_connection("gone"))
@@ -375,13 +375,13 @@ async def test_connection_live(store):
             "job",
             "p1",
         ]
-        assert await store.read(ops.utils.text(conns["s1"].route)) == ""
+        assert await store.read(conns["s1"].routes) == []
 
-        # page.select: the page erased, the route written, the page shipped.
-        session.notify(("viewer", "ops", "page.select"), {"page_id": "p1"})
+        # pages.open: deduped with order kept, empty ids dropped, the page shipped.
+        session.notify(("viewer", "ops", "pages.open"), {"page_ids": ["p1", "", "p1"]})
         await _until(lambda: session.writes("set_status"))
-        assert any(f.op == "remove" and f.ref == ("viewer", "sections") for f in session.frames)
-        assert await store.read(ops.utils.text(conns["s1"].route)) == "p1"
+        assert await store.read(conns["s1"].routes) == ["p1"]
+        assert session.writes("set_status")[-1]["page_id"] == "p1"
         shown = session.writes("set_page")[-1]
         assert shown["page_id"] == "p1" and shown["title"] == "Notes" and shown["editable"]
         assert [b["id"] for b in shown["blocks"]] == ["c1"]
@@ -434,3 +434,69 @@ async def test_connection_live(store):
         await asyncio.gather(task, return_exceptions=True)
     # Every way out drops the connection.
     assert await store.read(nu.list(conns.keys())) == []
+
+
+async def test_connection_panes(store):
+    from nuspace.system.devices.web.device import connection
+
+    await _plane(store, "p1", "One", {"ui": True, "made_by": "page"})
+    await _plane(store, "p2", "Two", {"ui": True, "made_by": "page"})
+    await store.run(ops.add_cell("p1", "x = 1", cell_id="a1"))
+    await store.run(ops.add_cell("p2", "y = 2", cell_id="b1"))
+    session = FakeSession()
+    ctx = store.ctx.bind(Session, session)
+    task = asyncio.create_task(nu.arun(connection(nu.Str("s1"), apps=APPS, snippets=SNIPPETS), ctx))
+    conns = Space.connections
+
+    def pages() -> dict:
+        return {w["page_id"]: w for w in session.writes("set_page")}
+
+    def status_pages() -> set:
+        return {w["page_id"] for w in session.writes("set_status")}
+
+    try:
+        await _until(lambda: session.writes("set_tree"))
+        # Two panes: each gets its own page and statuses, keyed by page_id.
+        session.notify(("viewer", "ops", "pages.open"), {"page_ids": ["p2", "p1"]})
+        await _until(lambda: {"p1", "p2"} <= status_pages())
+        assert await store.read(conns["s1"].routes) == ["p2", "p1"]
+        got = pages()
+        assert (got["p1"]["title"], [b["id"] for b in got["p1"]["blocks"]]) == ("One", ["a1"])
+        assert (got["p2"]["title"], [b["id"] for b in got["p2"]["blocks"]]) == ("Two", ["b1"])
+
+        # A change on one plane reships only its pane.
+        before = len(session.writes("set_page"))
+        await store.run(ops.add_cell("p1", "z = 3", cell_id="a2"))
+        await _until(lambda: len(pages()["p1"]["blocks"]) == 2)
+        assert {w["page_id"] for w in session.writes("set_page")[before:]} == {"p1"}
+
+        # Closing p2: its cells erased as drawn, p1's left alone, nothing more shipped for p2.
+        session.notify(("viewer", "ops", "pages.open"), {"page_ids": ["p1"]})
+        await _until(
+            lambda: any(
+                f.op == "remove" and f.ref == ("viewer", "sections", "b1") for f in session.frames
+            )
+        )
+        assert not any(
+            f.op == "remove" and f.ref in {("viewer", "sections"), ("viewer", "sections", "a1")}
+            for f in session.frames
+        )
+        assert await store.read(conns["s1"].routes) == ["p1"]
+        await asyncio.sleep(0.05)
+        before = len(session.writes("set_page"))
+        await store.run(ops.add_cell("p2", "w = 4", cell_id="b2"))
+        await store.run(ops.add_cell("p1", "v = 5", cell_id="a3"))
+        await _until(lambda: len(pages()["p1"]["blocks"]) == 3)
+        assert {w["page_id"] for w in session.writes("set_page")[before:]} == {"p1"}
+
+        # No pane open: an empty list closes the last one.
+        session.notify(("viewer", "ops", "pages.open"), {"page_ids": []})
+        await _until(
+            lambda: any(
+                f.op == "remove" and f.ref == ("viewer", "sections", "a1") for f in session.frames
+            )
+        )
+        assert await store.read(conns["s1"].routes) == []
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)

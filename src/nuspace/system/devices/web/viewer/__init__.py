@@ -1,4 +1,4 @@
-"""The viewer: the open plane's cells, drawn. One, never one per kind.
+"""The viewer: the open planes' cells, drawn, one pane per plane. One, never one per kind.
 
 ``ref``
     The node the browser draws, mounted with the snippets' ``/`` menu.
@@ -20,8 +20,8 @@ from nuspace.system.devices.web.viewer.interactions import (
     on_create_cell,
     on_delete_cell,
     on_move_cell,
+    on_open,
     on_reorder_cells,
-    on_select,
     on_update_cell,
     set_page,
     set_status,
@@ -41,8 +41,8 @@ __all__ = [
     "on_create_cell",
     "on_delete_cell",
     "on_move_cell",
+    "on_open",
     "on_reorder_cells",
-    "on_select",
     "on_update_cell",
     "page",
     "set_page",

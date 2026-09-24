@@ -1,6 +1,7 @@
 """The viewer as one node on the browser's tree.
 
-A component ref like ``ButtonRef``, only wider: it renders one plane's cells.
+A component ref like ``ButtonRef``, only wider: it renders the open planes'
+cells, one pane per plane.
 It never asks what kind of plane it draws; the one bit it reads off the
 plane is ``editable``, which arrives with the page like anything else.
 
@@ -36,7 +37,7 @@ def slash_entries(snippets: Iterable[Snippet]) -> list[dict]:
 
 
 class ViewerRef(SpaceRef):
-    """One plane's cells, as one browser node."""
+    """The open planes' cells, as one browser node."""
 
     _wire_type: ClassVar[str] = "ViewerRef"
 
@@ -53,16 +54,16 @@ class ViewerRef(SpaceRef):
         editable: BoolArg,
         blocks: ListArg[dict],
     ) -> Nu:
-        """Replace what is drawn: one plane, and its cells in order."""
+        """Replace what one pane draws: one plane, and its cells in order."""
         return interactions.set_page(self, page_id, title=title, editable=editable, cells=blocks)
 
-    def set_status(self, statuses: ListArg[dict]) -> Nu:
-        """Patch what the viewer says about its cells."""
-        return interactions.set_status(self, statuses)
+    def set_status(self, page_id: StrArg, statuses: ListArg[dict]) -> Nu:
+        """Patch what one pane says about its cells."""
+        return interactions.set_status(self, page_id, statuses)
 
-    def on_select(self) -> Changed:
-        """``{page_id}``."""
-        return interactions.on_select(self)
+    def on_open(self) -> Changed:
+        """``{page_ids}``, the full ordered list."""
+        return interactions.on_open(self)
 
     def on_create_section(self) -> Changed:
         """``{page_id, section_id, name, index}``."""
