@@ -102,6 +102,11 @@ dev = [
 testpaths = [
     "tests",
 ]
+# `tests/_lib` is the only test directory on sys.path, and `_support` the only
+# thing in it: shared helpers, importable by spawned workers too.
+pythonpath = [
+    "tests/_lib",
+]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]

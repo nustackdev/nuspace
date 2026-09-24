@@ -11,9 +11,9 @@ import asyncio
 import subprocess
 import sys
 import warnings
-from pathlib import Path
 
 import pytest
+from _support.kernel import SET_42, Kernel, _Hold
 from click.testing import CliRunner
 
 import nu
@@ -30,10 +30,6 @@ from nuspace.system.kernel.body import Bracketed, Rewrites
 from nuspace.system.services import BOOTED, SERVICES, ensure_system, init
 from nuverse.snippets import program as nuverse_program
 from nuverse.snippets import prose as nuverse_prose
-
-
-sys.path.insert(0, str(Path(__file__).parent))
-from test_kernel import SET_42, Kernel, _Hold
 
 
 def _app(name: str, label: str = "") -> App:

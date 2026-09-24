@@ -19,7 +19,7 @@ from nuspace.host import discover, space_registry
 from nuverse import apps, snippets
 
 
-ROOT = Path(__file__).parents[1]
+ROOT = Path(__file__).parents[2]
 
 
 def _run(code: str) -> str:

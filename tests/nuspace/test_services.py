@@ -10,12 +10,11 @@ list ops run against a bare store.
 from __future__ import annotations
 
 import asyncio
-import sys
 import time
-from pathlib import Path
 
 import pytest
 import pytest_asyncio
+from _support.kernel import SET_42, Kernel, _dead, _up, opened, prog, workers_named
 
 import nu
 from nuspace import ops
@@ -45,10 +44,6 @@ from nuspace.system.services import (
 )
 from nuspace.system.services import nav as nav_service
 from nuspace.system.services import supervisor as supervisor_service
-
-
-sys.path.insert(0, str(Path(__file__).parent))
-from test_kernel import SET_42, Kernel, _dead, _up, opened, prog, workers_named
 
 
 module_loop = pytest.mark.asyncio(loop_scope="module")

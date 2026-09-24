@@ -1,8 +1,8 @@
 """Env pieces the kernel tests register. A module of its own so a worker can import it.
 
 A rewrite crosses into the worker inside the body, so pickle has to find its
-class by module name there. The test module puts this directory on
-``sys.path`` before the pool spawns, and spawned workers inherit it.
+class by module name there. ``tests/_lib`` is on ``sys.path`` (pytest's
+``pythonpath``), and spawned workers inherit it.
 """
 
 from __future__ import annotations
