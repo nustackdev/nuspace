@@ -13,6 +13,7 @@
 //   tokens.css         document + section-status tokens, both themes
 //   shell.ts           the window frame: sidebar beside the strip of panes
 //   pane.ts            one pane's top bar and its settings menu
+//   tabs.ts            the tab bar over a split, one tab per pane
 //   document.ts        class recipes for the document surface, title included
 //   rail.ts            the sidebar rail
 //   resize.ts          the drag handle every resizable edge shares
@@ -34,3 +35,4 @@ export * from "./rail";
 export * from "./resize";
 export * from "./section-status";
 export * from "./shell";
+export * from "./tabs";

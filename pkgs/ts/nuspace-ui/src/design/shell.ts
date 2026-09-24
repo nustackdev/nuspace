@@ -17,6 +17,7 @@
 //   go/projects/nustackdev/design/palette.md        §2.2 text tiers
 
 import { cn } from "@nustackdev/ui-kit";
+import { docPageSurface } from "./document";
 import { resizeHandle } from "./resize";
 
 /* ============================== the frame ================================ */
@@ -43,6 +44,12 @@ export const shellSurface = "flex min-h-0 min-w-0 flex-1";
 export const PANE_MIN_WIDTH = 640;
 
 /**
+ * The Viewer: the tab bar (only with a split, see ./tabs.ts) over the strip
+ * of panes.
+ */
+export const shellStrip = "flex min-h-0 min-w-0 flex-1 flex-col";
+
+/**
  * The Viewer's strip of panes. When the panes' minimums add up to more than
  * the window has, it scrolls sideways (trackpad, shift-wheel) with no
  * scrollbar drawn: the panes' own borders already say there is more.
@@ -59,25 +66,28 @@ export const shellPanes = cn(
  * the split minimum are inline (see main/usePaneWidths.ts). Every pane after
  * the first draws the divider on its left edge, which is where the resize
  * handle sits.
+ *
+ * The pane paints its own background, and that is the focus mark: with a
+ * split, every pane but the focused one sits a step down on `bg-sunken`, and
+ * the focused one keeps the canvas, the same surface as its tab above it
+ * (./tabs.ts). Only the surface dims, never the content, so text keeps its
+ * contrast. A single pane is never dimmed and looks as it always did.
+ * `duration-fast`; the kit's reduced-motion rule flattens it to instant.
  */
-export function shellPane(divided: boolean): string {
+export function shellPane(divided: boolean, dimmed: boolean): string {
 	return cn(
 		"group/pane relative flex min-h-0 min-w-0 flex-col",
+		"transition-colors duration-fast ease-out",
+		dimmed ? "bg-bg-sunken" : "bg-bg-canvas",
 		divided && "border-l border-border-default",
 	);
 }
 
 /**
- * The focus mark: a 2px line across the top of the focused pane. Only drawn
- * with more than one pane, so a single pane looks exactly as it always did.
+ * The page's scroll host inside a pane. Transparent, so the pane's own
+ * background (canvas, or sunken when dimmed) is the one that shows.
  */
-export function shellPaneFocusLine(focused: boolean): string {
-	return cn(
-		"pointer-events-none absolute inset-x-0 top-0 z-20 h-0.5",
-		"transition-colors duration-fast ease-out",
-		focused ? "bg-doc-selected-line" : "bg-transparent",
-	);
-}
+export const shellPanePage = cn(docPageSurface, "bg-transparent");
 
 /**
  * The zero-width slot between two panes that holds their resize handle. In

@@ -12,6 +12,7 @@ separately here.
 
 ## Unreleased
 
+- Split panes get a tab bar to switch, rename and close them
 - A compact page setting tightens the header and drops the space below
 - Panes get a settings menu, resize handles and side scrolling when crowded
 - Pages keep their own settings, like editable and full width, apart from system ones

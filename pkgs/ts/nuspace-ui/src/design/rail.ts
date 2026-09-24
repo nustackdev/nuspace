@@ -74,9 +74,9 @@ export const railAside = cn(
 /** The drag strip on the rail's right edge. See ./resize.ts. */
 export const railResizeHandle = resizeHandle("right");
 
-/** Header strip. Same 36px as the shell's top strip so the two rules line up. */
+/** Header strip. `h-chrome`, like the pane bar and the tab bar, so the rules line up. */
 export const railHeader = cn(
-	"flex h-9 shrink-0 items-center gap-1",
+	"flex h-chrome shrink-0 items-center gap-1",
 	"border-b border-border-subtle pl-3 pr-1.5",
 );
 
@@ -92,7 +92,7 @@ export const railHeaderLabel = cn(
  * has an edge to put them on.
  */
 export const railFooter = cn(
-	"flex h-9 shrink-0 items-center justify-between gap-1",
+	"flex h-chrome shrink-0 items-center justify-between gap-1",
 	"border-t border-border-subtle pl-3 pr-1.5",
 );
 

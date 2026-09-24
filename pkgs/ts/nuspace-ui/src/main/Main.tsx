@@ -12,10 +12,15 @@
 // borders. With a split every pane keeps at least the page's measure, the
 // strip scrolls sideways when they do not fit, and the borders between panes
 // drag. We never remount a pane that stays open.
+//
+// With a split a tab bar runs across the top (./TabBar.tsx), one tab per
+// pane, and the panes drop their own bars. Renaming from a tab sends the
+// sidebar's own `page.rename`, so the server has one way in for a rename.
 
 import { type NodeProps, pathKey } from "@nustackdev/ui-kit";
 import { Fragment, useCallback, useEffect, useRef } from "react";
 import { useFocusedRoute, useRoutes } from "../app/router";
+import { useTypePath } from "../app/surfaces";
 import { notifyOp } from "../app/wire";
 import {
 	docPageLoading,
@@ -23,11 +28,14 @@ import {
 	shellPaneDivider,
 	shellPaneResize,
 	shellPanes,
+	shellStrip,
 	shellSurface,
 } from "../design";
 import type { Ops } from "../page/ops";
 import { Pane } from "../pane/Pane";
-import { patchPageMeta, pruneViewer, usePages, useSnippets } from "./state";
+import type { Ops as SidebarOps } from "../sidebar/ops";
+import { patchPageMeta, patchPageTitle, pruneViewer, usePages, useSnippets } from "./state";
+import { TabBar } from "./TabBar";
 import { usePaneWidths } from "./usePaneWidths";
 
 /** Nothing is open. A fact, not an error, so it says so and stops. */
@@ -38,6 +46,7 @@ export function Main({ path }: NodeProps) {
 	const snippets = useSnippets(path);
 	const routes = useRoutes();
 	const focused = useFocusedRoute();
+	const sidebar = useTypePath("SidebarRef");
 	const key = pathKey(path);
 	const routesKey = routes.join("+");
 	const stripRef = useRef<HTMLDivElement | null>(null);
@@ -80,6 +89,19 @@ export function Main({ path }: NodeProps) {
 		[key, notify],
 	);
 
+	// Optimistic like `onMeta`. The op is the sidebar's: it is the one that
+	// already renames a Plane, and the tree it reships carries the new title.
+	// biome-ignore lint/correctness/useExhaustiveDependencies: paths are compared by value.
+	const onRename = useCallback(
+		(pageId: string, title: string) => {
+			patchPageTitle(path, pageId, title);
+			if (sidebar) {
+				notifyOp<SidebarOps, "page.rename">(sidebar, "page.rename", { page_id: pageId, title });
+			}
+		},
+		[key, sidebar ? pathKey(sidebar) : ""],
+	);
+
 	if (routes.length === 0) {
 		return (
 			<div className={shellSurface}>
@@ -91,34 +113,48 @@ export function Main({ path }: NodeProps) {
 	}
 
 	const split = routes.length > 1;
+	// Always the same wrapper, so a pane is never remounted when the tab bar
+	// comes or goes.
 	return (
-		<div ref={stripRef} className={shellPanes}>
-			{routes.map((id, i) => (
-				<Fragment key={id}>
-					{i > 0 ? (
-						<div className={shellPaneDivider}>
-							<div
-								aria-hidden="true"
-								className={shellPaneResize}
-								onPointerDown={(e) => onResizeStart(e, i)}
-								onDoubleClick={onResizeReset}
-							/>
-						</div>
-					) : null}
-					<Pane
-						viewerPath={path}
-						pageId={id}
-						page={pages[id] ?? null}
-						snippets={snippets}
-						notify={notify}
-						onMeta={onMeta}
-						split={split}
-						divided={i > 0}
-						focused={id === focused}
-						style={styleOf(i)}
-					/>
-				</Fragment>
-			))}
+		<div className={shellStrip}>
+			{split ? (
+				<TabBar
+					routes={routes}
+					pages={pages}
+					focused={focused}
+					stripRef={stripRef}
+					onMeta={onMeta}
+					onRename={onRename}
+				/>
+			) : null}
+			<div ref={stripRef} className={shellPanes}>
+				{routes.map((id, i) => (
+					<Fragment key={id}>
+						{i > 0 ? (
+							<div className={shellPaneDivider}>
+								<div
+									aria-hidden="true"
+									className={shellPaneResize}
+									onPointerDown={(e) => onResizeStart(e, i)}
+									onDoubleClick={onResizeReset}
+								/>
+							</div>
+						) : null}
+						<Pane
+							viewerPath={path}
+							pageId={id}
+							page={pages[id] ?? null}
+							snippets={snippets}
+							notify={notify}
+							onMeta={onMeta}
+							split={split}
+							divided={i > 0}
+							focused={id === focused}
+							style={styleOf(i)}
+						/>
+					</Fragment>
+				))}
+			</div>
 		</div>
 	);
 }

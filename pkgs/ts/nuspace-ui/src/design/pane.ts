@@ -3,7 +3,8 @@
 //
 // The bar is window chrome, not document: it stays put while the page under it
 // scrolls, and it is quiet enough that a single pane still reads as a page
-// with nothing around it. No border, a muted title, ghost buttons.
+// with nothing around it. No border, a muted title, ghost buttons. It only
+// draws over a lone pane: a split gets the tab bar (./tabs.ts) instead.
 //
 // Source docs (do not paraphrase without re-reading):
 //   go/projects/nustackdev/design/space-radius.md   §4 row heights
@@ -11,26 +12,34 @@
 
 import { cn } from "@nustackdev/ui-kit";
 
-/** The bar. Same 36px as the rail's header strip, so the two tops line up. */
-export const paneBar = cn("flex h-9 shrink-0 items-center gap-0.5", "bg-bg-canvas pl-4 pr-1.5");
+/** The bar. `h-chrome`, like the rail's header strip, so the two tops line up. */
+export const paneBar = cn(
+	"flex h-chrome shrink-0 items-center gap-0.5",
+	"bg-bg-canvas pl-4 pr-1.5",
+);
 
 /**
- * The bar's title. Muted at rest; the focused pane of a split brings its
- * title up a tier, the same fact the focus line says across the top.
+ * The bar's title, muted. The bar only draws over a lone pane (a split gets
+ * the tab bar instead), so there is no focused title to bring up a tier.
  */
-export function paneBarTitle(strong: boolean): string {
-	return cn(
-		"min-w-0 flex-1 select-none truncate text-sm",
-		"transition-colors duration-fast ease-out",
-		strong ? "text-text-primary" : "text-text-muted",
-	);
-}
+export const paneBarTitle = cn("min-w-0 flex-1 select-none truncate text-sm", "text-text-muted");
 
 /** The bar's two buttons: the kit's ghost `sm`, a tier back until hovered. */
 export const paneBarButton = "text-text-muted hover:text-text-primary";
 
 /** The settings popover. Narrow, and a list rather than a padded card. */
 export const paneMenu = "w-64 p-1";
+
+/** A plain action row, above the settings (Rename, off a tab). */
+export const paneMenuAction = cn(
+	"flex h-8 w-full cursor-default select-none items-center rounded-md px-2",
+	"text-left text-sm text-text-primary",
+	"transition-colors duration-fast ease-out hover:bg-doc-hover",
+	"focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+);
+
+/** The hairline between the actions and the settings. */
+export const paneMenuSeparator = "-mx-1 my-1 h-px bg-border-subtle";
 
 /** A setting's row: label on the left, its control on the right. */
 export const paneMenuRow = cn(

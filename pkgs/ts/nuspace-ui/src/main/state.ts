@@ -146,6 +146,20 @@ export function patchPageMeta(path: Path, pageId: string, meta: Record<string, u
 	});
 }
 
+/**
+ * Set one page's title, locally. The optimistic half of a rename from a tab:
+ * the tab and the page's heading change now, and the server's next
+ * `set_page` replaces the page with what it actually stored.
+ */
+export function patchPageTitle(path: Path, pageId: string, title: string): void {
+	const node = nodeAt(path);
+	if (!node) return;
+	const pages = pagesOf(node.props);
+	const page = pages[pageId];
+	if (!page || page.title === title) return;
+	tree.getState().setProps(path, { pages: { ...pages, [pageId]: { ...page, title } } });
+}
+
 // -- reads -------------------------------------------------------------------
 
 const NO_PAGES: Record<string, ActivePage> = {};

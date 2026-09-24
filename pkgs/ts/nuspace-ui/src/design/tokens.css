@@ -154,6 +154,16 @@
 	 * document is not a place to spend spacing tokens.
 	 * --------------------------------------------------------------------- */
 
+	/* h-chrome: the one height every strip of window chrome shares - the
+	 * rail's header and footer, a lone pane's bar, the tab bar over a split.
+	 * One token so the rules across the top of the window line up by
+	 * construction, not by two files happening to say h-9. 36 = spacing 9. */
+	--spacing-chrome: 2.25rem;
+
+	/* w-tab: one tab in the tab bar. Fixed, so tabs do not shuffle as titles
+	 * change; a title cuts off with an ellipsis. 192 = spacing 48. */
+	--spacing-tab: 12rem;
+
 	/* max-w-doc / max-w-doc-wide */
 	--container-doc: 40rem; /* 640, == kit container-prose  */
 	--container-doc-wide: 60rem; /* 960, == kit container-panel, for program

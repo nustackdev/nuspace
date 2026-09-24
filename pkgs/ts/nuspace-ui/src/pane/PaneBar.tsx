@@ -1,4 +1,5 @@
 // The bar across a pane's top: the page's title, its settings, and close.
+// Only over a lone pane; a split gets the tab bar (../main/TabBar.tsx).
 //
 // Outside the page's scroll, so it stays put while the page moves under it.
 
@@ -11,21 +12,18 @@ import { PaneMenu } from "./PaneMenu";
 export function PaneBar({
 	title,
 	meta,
-	strong,
 	onMeta,
 	onClose,
 }: {
 	title: string;
 	/** Null while the page is loading. */
 	meta: PageMeta | null;
-	/** The focused pane of a split. */
-	strong: boolean;
 	onMeta: (patch: Record<string, unknown>) => void;
 	onClose: () => void;
 }) {
 	return (
 		<header className={paneBar}>
-			<span className={paneBarTitle(strong)} title={title}>
+			<span className={paneBarTitle} title={title}>
 				{title}
 			</span>
 			<PaneMenu meta={meta} onChange={onMeta} />

@@ -1,23 +1,17 @@
 // One pane: a page's frame. The bar on top, the page under it in its own
-// scroll host.
+// scroll host. With a split the bar goes: the tab bar over the strip carries
+// every pane's title, settings and close instead.
 //
 // The pane last clicked (or tabbed into) is the focused one: that is the pane
-// a plain sidebar click replaces. With more than one pane open the focused
-// one wears a line across its top.
+// a plain sidebar click replaces. With more than one pane open the others
+// sit on a dimmed surface and the focused one keeps the canvas.
 
 import type { Path } from "@nustackdev/ui-core";
 import { Spinner } from "@nustackdev/ui-kit";
 import type * as React from "react";
 import { useCallback } from "react";
 import { closePane, focusPane } from "../app/router";
-import {
-	docPageLoading,
-	docPageSurface,
-	docTitle,
-	docTitleHead,
-	shellPane,
-	shellPaneFocusLine,
-} from "../design";
+import { docPageLoading, docTitle, docTitleHead, shellPane, shellPanePage } from "../design";
 import type { Notify } from "../page/ops";
 import { Page } from "../page/Page";
 import type { ActivePage, SlashSnippet } from "../page/types";
@@ -25,7 +19,7 @@ import { PaneBar } from "./PaneBar";
 
 // The Plane the server inits with no name shows this instead. A placeholder,
 // muted, so it cannot be mistaken for a title that is really there.
-const TITLE_FALLBACK = "Untitled";
+export const TITLE_FALLBACK = "Untitled";
 
 export function Pane({
 	viewerPath,
@@ -47,7 +41,7 @@ export function Pane({
 	notify: Notify;
 	/** Change this page's settings. */
 	onMeta: (pageId: string, patch: Record<string, unknown>) => void;
-	/** More than one pane is open. */
+	/** More than one pane is open: no bar, the tab bar stands in for it. */
 	split: boolean;
 	/** Draws the divider on its left edge. */
 	divided: boolean;
@@ -65,21 +59,21 @@ export function Pane({
 	return (
 		<section
 			data-pane={pageId}
-			className={shellPane(divided)}
+			className={shellPane(divided, split && !focused)}
 			style={style}
 			aria-label={title}
 			onPointerDownCapture={claim}
 			onFocusCapture={claim}
 		>
-			{split ? <div className={shellPaneFocusLine(focused)} aria-hidden="true" /> : null}
-			<PaneBar
-				title={title}
-				meta={page?.meta ?? null}
-				strong={split && focused}
-				onMeta={(patch) => onMeta(pageId, patch)}
-				onClose={() => closePane(pageId)}
-			/>
-			<div className={docPageSurface}>
+			{split ? null : (
+				<PaneBar
+					title={title}
+					meta={page?.meta ?? null}
+					onMeta={(patch) => onMeta(pageId, patch)}
+					onClose={() => closePane(pageId)}
+				/>
+			)}
+			<div className={shellPanePage}>
 				{page == null ? (
 					<div className={docPageLoading}>
 						<Spinner size="sm" tone="neutral" label="Loading" />
