@@ -28,4 +28,10 @@ export const PAGE_SETTINGS: readonly PageSetting[] = [
 		label: "Full width",
 		hint: "Use the whole pane",
 	},
+	{
+		kind: "switch",
+		key: "compact",
+		label: "Compact",
+		hint: "Tight header, no space under the last block",
+	},
 ];

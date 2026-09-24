@@ -60,6 +60,7 @@ export function Pane({
 	const claim = useCallback(() => focusPane(pageId), [pageId]);
 	const title = page?.title || TITLE_FALLBACK;
 	const wide = page?.meta.full_width === true;
+	const compact = page?.meta.compact === true;
 
 	return (
 		<section
@@ -86,8 +87,8 @@ export function Pane({
 					</div>
 				) : (
 					<>
-						<header className={docTitleHead(wide)}>
-							<h1 className={docTitle} data-placeholder={TITLE_FALLBACK}>
+						<header className={docTitleHead(wide, compact)}>
+							<h1 className={docTitle(compact)} data-placeholder={TITLE_FALLBACK}>
 								{page.title}
 							</h1>
 						</header>
@@ -97,6 +98,7 @@ export function Pane({
 							snippets={snippets}
 							editable={page.meta.editable}
 							wide={wide}
+							compact={compact}
 							notify={notify}
 						/>
 					</>

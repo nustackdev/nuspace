@@ -46,6 +46,7 @@ export function Page({
 	snippets = NO_SNIPPETS,
 	editable,
 	wide,
+	compact,
 	notify,
 }: {
 	/** The ViewerRef node, which holds every pane's editor state and roots
@@ -58,6 +59,8 @@ export function Page({
 	editable: boolean;
 	/** The page's full-width setting. */
 	wide: boolean;
+	/** The page's compact setting: no run-off under the last block. */
+	compact: boolean;
 	notify: Notify;
 }) {
 	const blocks = page.blocks;
@@ -153,7 +156,7 @@ export function Page({
 			onKeyDown={editable ? onBlockKeys : undefined}
 			onFocus={onPageFocus}
 			onBlur={onPageBlur}
-			className={`${docColumn(wide)} outline-none`}
+			className={`${docColumn(wide, compact)} outline-none`}
 		>
 			{blocks.map((block, i) => {
 				const selected = selectedIds.includes(block.id);
@@ -217,23 +220,23 @@ export function Page({
 
 			{/* The permanent ghost is how an empty Plane is written on without
 			    hunting for a control, so it goes with the rest of the authoring
-			    affordances. The run-off under it is only there to aim at it. */}
-			{editable ? (
-				<>
-					<Ghost {...ghostProps(lastId, false)} />
-					{/* biome-ignore lint/a11y/noStaticElementInteractions: the run-off under a document is a click target, not a control -- the keyboard reaches the same ghost by arrowing down */}
-					<div
-						className={docTail}
-						onMouseDown={(e) => {
-							// mousedown and not click, and preventDefault: the caret has to
-							// land in the ghost, not in the empty div that was clicked.
-							if (e.button !== 0) return;
-							e.preventDefault();
-							endGhost.current?.focus();
-						}}
-					/>
-				</>
-			) : null}
+			    affordances. */}
+			{editable ? <Ghost {...ghostProps(lastId, false)} /> : null}
+			{/* The run-off under the last block is the page's compact setting, not
+			    its editable one. Clicking it aims at the ghost when there is one. */}
+			{compact ? null : (
+				// biome-ignore lint/a11y/noStaticElementInteractions: the run-off under a document is a click target, not a control -- the keyboard reaches the same ghost by arrowing down
+				<div
+					className={docTail}
+					onMouseDown={(e) => {
+						// mousedown and not click, and preventDefault: the caret has to
+						// land in the ghost, not in the empty div that was clicked.
+						if (!editable || e.button !== 0) return;
+						e.preventDefault();
+						endGhost.current?.focus();
+					}}
+				/>
+			)}
 
 			{editable && slash ? (
 				<SlashMenu

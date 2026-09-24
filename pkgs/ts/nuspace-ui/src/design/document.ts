@@ -33,11 +33,11 @@ const docPage = cn(
  * `wide` is the page's full-width setting: the column spans the pane instead
  * of stopping at the reading measure.
  */
-export function docColumn(wide = false): string {
+export function docColumn(wide = false, compact = false): string {
 	return cn(
 		"relative mx-auto w-full",
 		wide ? "max-w-none" : "max-w-doc",
-		"px-doc-pad-x pt-doc-pad-y pb-doc-pad-y",
+		compact ? "px-doc-pad-x pt-3 pb-3" : "px-doc-pad-x pt-doc-pad-y pb-doc-pad-y",
 		"flex flex-col gap-doc-block-gap",
 	);
 }
@@ -117,11 +117,13 @@ export const docTail = "h-doc-tail w-full shrink-0 cursor-text";
  * later in the DOM, so without it the padding eats every click meant for the
  * heading.
  */
-export function docTitleHead(wide = false): string {
+export function docTitleHead(wide = false, compact = false): string {
 	return cn(
 		"relative z-10 mx-auto w-full",
 		wide ? "max-w-none" : "max-w-doc",
-		"px-doc-pad-x pt-4 -mb-8",
+		// Compact: no run-up above the title and no overlap into the column,
+		// whose own top pad shrinks with it (see `docColumn`).
+		compact ? "px-doc-pad-x pt-3" : "px-doc-pad-x pt-4 -mb-8",
 	);
 }
 
@@ -158,13 +160,16 @@ export const docTrail = "px-doc-block-x";
 // the class reaches the bundle, and the title still renders at body size.
 // Nothing else in here conflicts, so appending it afterwards is safe. Any
 // future custom type token meeting a text colour has the same problem.
-export const docTitle = `${cn(
-	"mt-doc-title-gap block w-full px-doc-block-x py-0.5",
-	"font-bold text-text-primary",
-	"cursor-text whitespace-pre-wrap break-words outline-none",
-	"empty:before:pointer-events-none empty:before:text-text-muted",
-	"empty:before:content-[attr(data-placeholder)]",
-)} text-doc-title`;
+export function docTitle(compact = false): string {
+	return `${cn(
+		compact ? "mt-0" : "mt-doc-title-gap",
+		"block w-full px-doc-block-x py-0.5",
+		"font-bold text-text-primary",
+		"cursor-text whitespace-pre-wrap break-words outline-none",
+		"empty:before:pointer-events-none empty:before:text-text-muted",
+		"empty:before:content-[attr(data-placeholder)]",
+	)} text-doc-title`;
+}
 
 /** Code inside a block. Editor tier is 14px mono, per typography.md §1. */
 export const docCode = "font-mono text-lg text-text-primary";

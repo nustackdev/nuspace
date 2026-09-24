@@ -44,6 +44,8 @@ export type PageMeta = Record<string, unknown> & {
 	editable: boolean;
 	/** The page spans its pane instead of the reading measure. */
 	full_width: boolean;
+	/** A tight head and no run-off under the last block. */
+	compact: boolean;
 };
 
 export type ActivePage = {
@@ -73,7 +75,12 @@ const STATES: SectionState[] = ["invalid", "idle", "starting", "running", "stopp
 export function coerceMeta(raw: unknown): PageMeta {
 	const r =
 		raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
-	return { ...r, editable: r.editable === true, full_width: r.full_width === true };
+	return {
+		...r,
+		editable: r.editable === true,
+		full_width: r.full_width === true,
+		compact: r.compact === true,
+	};
 }
 
 export function coerceStatus(raw: unknown): SectionStatus | null {
