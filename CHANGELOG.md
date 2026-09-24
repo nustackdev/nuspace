@@ -12,6 +12,7 @@ separately here.
 
 ## Unreleased
 
+- Watch live runs, workers and planes from their own sidebar pages
 - Tests split per package, with shared helpers in one place
 - One example opens a space with the bundled extensions and nothing else
 - A page opened before it finishes being created still comes up

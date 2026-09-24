@@ -42,7 +42,7 @@ def _nuverse() -> Extension:
 def test_discovery_finds_nuverse():
     ext = _nuverse()
     assert ext == replace(nuverse.extension(), name="nuverse")
-    assert [a.name for a in ext.apps] == ["page"]
+    assert [a.name for a in ext.apps] == ["page", "runs", "workers", "planes"]
     assert [s.name for s in ext.snippets] == ["prose", "program", "ticker"]
     assert dict(ext.envs) == {}
 
@@ -55,7 +55,7 @@ def test_open_space_registers_nuverse_by_default():
 
 
 def test_apps_are_well_formed():
-    assert apps.APPS == (apps.page.APP,)
+    assert apps.APPS == (apps.page.APP, apps.runs.APP, apps.workers.APP, apps.planes.APP)
     # Placeholders are left out until they are filled in.
     assert (apps.job.APP, apps.chat.APP) == (None, None)
     for app in apps.APPS:
@@ -108,4 +108,4 @@ def test_example_defines_nothing_of_its_own():
         print("APPS" in space, "SNIPPETS" in space, sorted(reg.apps), sorted(reg.snippets))
         """
     )
-    assert out.startswith("False False ['page']")
+    assert out.startswith("False False ['page', 'planes', 'runs', 'workers']")
