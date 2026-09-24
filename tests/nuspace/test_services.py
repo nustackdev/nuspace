@@ -108,6 +108,19 @@ async def test_supervise_writes_the_policy(store):
     assert await store.read(policy.extract()) == {"p/d": "always"}
 
 
+async def test_supervise_sets_and_clears_a_fixed_delay(store):
+    delays = reroot(supervisor_service.Policy.delays, supervisor_service.PLANE, "main")
+    await store.run(supervise("p", "c", ALWAYS, delay=2) >> supervise("p", "d", delay=0.5))
+    assert await store.read(delays.extract()) == {"p/c": 2.0, "p/d": 0.5}
+    assert await store.read(supervisor_service.delay_of("p", "c")) == 2.0
+    assert await store.read(supervisor_service.policy_of("p", "c")) == ALWAYS
+    # Supervised again with no delay backs off, unsupervised drops both.
+    await store.run(supervise("p", "c", ALWAYS) >> unsupervise("p", "d"))
+    assert await store.read(delays.extract()) == {}
+    assert await store.read(supervisor_service.delay_of("p", "c")) == -1.0
+    assert await store.read(supervisor_service.policy_of("p", "d")) == ""
+
+
 async def test_unboot_without_a_list(store):
     await store.run(unboot("a"))
     assert await store.read(boot_list()) == []
@@ -339,6 +352,24 @@ async def test_supervisor_always_restarts_on_a_worker_still_serving(space):
     assert all(r["exit"] == EXIT_OK for r in rows[:2])
     await space.run(ops.kill_worker(w))
     await space.worker_row(w, _dead, SLOW)
+
+
+@module_loop
+async def test_supervisor_always_with_a_delay_is_periodic(space):
+    delay = 0.6
+    p, (c,) = await space.plane(SET_42)
+    await space.run(supervise(p, c, ALWAYS, delay=delay))
+    w = await space.run(ops.worker())
+    await space.run(ops.up(p, [c], worker=w, by="test"))
+    rows = await space.until(
+        ops.runs(plane=p), lambda rs: len(rs) >= 3 and all(_dead(r) for r in rs[:3]), SLOW
+    )
+    await space.run(unsupervise(p, c))
+    assert [r["by"] for r in rows[:3]] == ["test", supervisor_service.BY, supervisor_service.BY]
+    assert all(r["exit"] == EXIT_OK for r in rows[:3])
+    # The fixed wait every time, where the backoff would be 0.25s after an ok exit.
+    gaps = [rows[i + 1]["started"] - rows[i]["ended"] for i in range(2)]
+    assert all(delay <= gap < delay + 2.0 for gap in gaps), gaps
 
 
 @module_loop

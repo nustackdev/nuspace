@@ -16,7 +16,19 @@ from nuspace.shapes import CellState, Space, reroot
 from ..utils import park, snap
 
 
-__all__ = ["BOOTED", "BY", "CELL", "PLANE", "SHIM", "Boot", "boot", "program", "seed", "unboot"]
+__all__ = [
+    "BOOTED",
+    "BY",
+    "CELL",
+    "PLANE",
+    "SHIM",
+    "Boot",
+    "boot",
+    "booted",
+    "program",
+    "seed",
+    "unboot",
+]
 
 
 #: The plane id, fixed (D31).
@@ -84,6 +96,11 @@ def unboot(plane_id: nu.StrArg) -> nu.Nu:
     """Take a plane off init's boot list. A no-op when it is not listed."""
     listed = Boot.planes
     return atomic(_here(nu.IfDo(listed.contains(plane_id), listed.remove(plane_id))))
+
+
+def booted() -> nu.Nu:
+    """The boot list, from anywhere. Bare read, ``[]`` when there is none."""
+    return nu.list(_here(Boot.planes))
 
 
 def program() -> nu.Nu:

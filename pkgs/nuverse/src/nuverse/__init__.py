@@ -1,7 +1,7 @@
 """nuverse: the extensions a space offers out of the box.
 
-- :mod:`.planes`: what ``+`` creates: ``plain``, ``runs``, ``workers``,
-  ``planes``.
+- :mod:`.planes`: what ``+`` creates: ``plain``, ``jobs``, ``runs``,
+  ``workers``, ``planes``.
 - :mod:`.snippets`: what ``/`` inserts: ``prose``, ``program``, ``ticker``,
   and later ``heading``, ``monaco``.
 

@@ -12,6 +12,8 @@ separately here.
 
 ## Unreleased
 
+- A Jobs plane makes headless planes and sets their code, boot and restart
+- Supervised cells can restart after a fixed delay, so a job can run periodically
 - Plane rows open in split from a hover button, and cut-off names show in tooltips
 - The sidebar shows the nuspace wordmark, and planes no longer jump when scrolling starts
 - A calmer, collapsible sidebar with hover chevrons and GitHub and docs links

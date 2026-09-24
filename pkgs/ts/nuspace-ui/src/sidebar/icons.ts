@@ -5,12 +5,13 @@
 // use: importing lucide's whole set to look names up would put every icon in
 // the bundle. A name not in the map, or "", is the default document icon.
 
-import { Activity, Cpu, FileText, Folder, Layers, type LucideIcon } from "lucide-react";
+import { Activity, Briefcase, Cpu, FileText, Folder, Layers, type LucideIcon } from "lucide-react";
 import type { Registered } from "./types";
 
 const ICONS: Record<string, LucideIcon> = {
 	"file-text": FileText,
 	activity: Activity,
+	briefcase: Briefcase,
 	cpu: Cpu,
 	layers: Layers,
 	folder: Folder,
