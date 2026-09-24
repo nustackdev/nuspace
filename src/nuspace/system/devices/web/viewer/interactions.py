@@ -22,7 +22,7 @@ from nuspace.system.devices.web.utils import event, write
 
 
 if TYPE_CHECKING:
-    from nu.lang import BoolArg, ListArg, Nu, StrArg
+    from nu.lang import DictArg, ListArg, Nu, StrArg
     from nustd.ui.core import Changed, Ref
 
 
@@ -38,6 +38,7 @@ __all__ = [
     "on_move_cell",
     "on_open",
     "on_reorder_cells",
+    "on_set_meta",
     "on_update_cell",
     "set_page",
     "set_status",
@@ -71,15 +72,17 @@ def set_page(
     plane_id: StrArg,
     *,
     title: StrArg,
-    editable: BoolArg,
+    meta: DictArg[str, object],
     cells: ListArg[dict],
 ) -> Nu:
     """Replace what one pane draws: one plane and its cells, in order.
 
-    A cell is ``{id, name, source}``. Every open plane is answered with one,
-    even for something that is not a plane, or its pane loads forever.
+    ``meta`` is the plane's whole meta, ``editable`` and ``full_width`` at
+    least. A cell is ``{id, name, source}``. Every open plane is answered
+    with one, even for something that is not a plane, or its pane loads
+    forever.
     """
-    return write(viewer, "set_page", page_id=plane_id, title=title, editable=editable, blocks=cells)
+    return write(viewer, "set_page", page_id=plane_id, title=title, meta=meta, blocks=cells)
 
 
 def set_status(viewer: Ref, plane_id: StrArg, statuses: ListArg[dict]) -> Nu:
@@ -128,3 +131,8 @@ def on_move_cell(viewer: Ref) -> Changed:
 def on_reorder_cells(viewer: Ref) -> Changed:
     """``{page_id, section_ids}``. One plane's cells, in the new order."""
     return event(viewer, "section.reorder")
+
+
+def on_set_meta(viewer: Ref) -> Changed:
+    """``{page_id, meta}``. Merges ``meta``'s keys into the plane's meta, shallow."""
+    return event(viewer, "page.meta")

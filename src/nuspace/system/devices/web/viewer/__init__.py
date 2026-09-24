@@ -9,7 +9,7 @@
     page or the statuses again.
 """
 
-from nuspace.system.devices.web.viewer.feed import blocks, page, statuses, viewer_feed
+from nuspace.system.devices.web.viewer.feed import PAGE_META, blocks, page, statuses, viewer_feed
 from nuspace.system.devices.web.viewer.interactions import (
     STATE_FAILED,
     STATE_IDLE,
@@ -22,6 +22,7 @@ from nuspace.system.devices.web.viewer.interactions import (
     on_move_cell,
     on_open,
     on_reorder_cells,
+    on_set_meta,
     on_update_cell,
     set_page,
     set_status,
@@ -30,6 +31,7 @@ from nuspace.system.devices.web.viewer.ref import ViewerRef, slash_entries
 
 
 __all__ = [
+    "PAGE_META",
     "STATES",
     "STATE_FAILED",
     "STATE_IDLE",
@@ -43,6 +45,7 @@ __all__ = [
     "on_move_cell",
     "on_open",
     "on_reorder_cells",
+    "on_set_meta",
     "on_update_cell",
     "page",
     "set_page",

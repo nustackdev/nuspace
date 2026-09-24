@@ -7,11 +7,11 @@ Two families:
 
 **Sections are apps** (D18). One section row per app with ``section=True``,
 in the order the apps were given. A plane is listed when it is not a system
-plane, its ``meta.ui`` is truthy, and its ``meta.made_by`` names a section
+plane, its ``props.ui`` is set, and its ``props.made_by`` names a section
 app; it hangs under that section. ``+`` under a section runs its app.
 
 **Narrow watch.** The list is shipped again when the set of planes, a
-plane's name, meta or system flag changes, and nothing else: a cell writing
+plane's name or props change, and nothing else: a cell writing
 its state or the kernel writing a run never wakes it.
 """
 
@@ -65,10 +65,9 @@ def _text(row: nu.Nu, field: str) -> nu.Nu:
     return nu.ToStr(row.get_item(nu.Str(field), nu.Str("")))
 
 
-def _meta(row: nu.Nu, field: str, default: object) -> nu.Nu:
-    """One field of a plane row's meta. ``default`` when meta or the field is absent."""
-    meta = nu.Dict(row.get_item(nu.Str("meta"), nu.Dict.of()))
-    return meta.get_item(nu.Str(field), nu.Literal(default))
+def _prop(row: nu.Nu, field: str) -> nu.Nu:
+    """One of a plane row's props. The row carries them whole, defaults filled in."""
+    return nu.Dict(row.get_item(nu.Str("props"), nu.Dict.of())).get_item(nu.Str(field))
 
 
 def rows(apps: Sequence[App]) -> nu.Nu:
@@ -92,9 +91,9 @@ def rows(apps: Sequence[App]) -> nu.Nu:
             nu.Filter(
                 ops.plane_rows(),
                 nu.And(
-                    nu.Not(nu.ToBool(picked.get_item(nu.Str("system"), nu.Bool(False)))),
-                    nu.ToBool(_meta(picked, "ui", False)),
-                    names.contains(nu.ToStr(_meta(picked, "made_by", ""))),
+                    nu.Not(nu.ToBool(_prop(picked, "system"))),
+                    nu.ToBool(_prop(picked, "ui")),
+                    names.contains(nu.ToStr(_prop(picked, "made_by"))),
                 ),
                 key=pick,
             )
@@ -106,7 +105,7 @@ def rows(apps: Sequence[App]) -> nu.Nu:
         return nu.List(
             nu.Collect(
                 nu.Map(
-                    nu.Filter(held, nu.Eq(nu.ToStr(_meta(picked, "made_by", "")), group), key=pick),
+                    nu.Filter(held, nu.Eq(nu.ToStr(_prop(picked, "made_by")), group), key=pick),
                     _text(row, "id"),
                     key=each,
                 )
@@ -139,7 +138,7 @@ def rows(apps: Sequence[App]) -> nu.Nu:
                     id=_text(row, "id"),
                     kind=nu.Str(KIND_PLANE),
                     title=_text(row, "name"),
-                    parent=nu.ToStr(_meta(row, "made_by", "")),
+                    parent=nu.ToStr(_prop(row, "made_by")),
                     # Nesting is not drawn yet: every plane is a leaf of its section.
                     children=nu.List.of(),
                 ),
@@ -173,14 +172,13 @@ def create_plane(
 
 
 def _changes() -> list[nu.Nu]:
-    """What reships the list: the set of planes, their names, meta and system flag."""
+    """What reships the list: the set of planes, their names and props."""
     planes = Space.planes
     return [
         snap(planes.on_children_change()),
         snap(planes.on_descendants_change("*", "name")),
-        snap(planes.on_descendants_change("*", "system")),
-        snap(planes.on_descendants_change("*", "meta")),
-        snap(planes.on_descendants_change("*", "meta", "*")),
+        snap(planes.on_descendants_change("*", "props")),
+        snap(planes.on_descendants_change("*", "props", "*")),
     ]
 
 

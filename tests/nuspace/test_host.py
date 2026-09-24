@@ -154,7 +154,7 @@ async def test_boot_before_the_first_open_keeps_the_services(store):
         {"id": "main", "name": "main", "prog": init.SHIM, "meta": {}}
     ]
     rows = {r["id"]: r for r in await store.read(ops.plane_rows())}
-    assert (rows[init.PLANE]["name"], rows[init.PLANE]["system"]) == (init.PLANE, True)
+    assert (rows[init.PLANE]["name"], rows[init.PLANE]["props"]["system"]) == (init.PLANE, True)
     boot_list = reroot(init.Boot.planes, init.PLANE, init.CELL)
     assert await store.read(nu.list(boot_list)) == [*BOOTED, USER]
 

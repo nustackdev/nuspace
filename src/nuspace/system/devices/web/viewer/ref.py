@@ -2,8 +2,9 @@
 
 A component ref like ``ButtonRef``, only wider: it renders the open planes'
 cells, one pane per plane.
-It never asks what kind of plane it draws; the one bit it reads off the
-plane is ``editable``, which arrives with the page like anything else.
+It never asks what kind of plane it draws; what it reads off the plane is
+its meta (``editable``, ``full_width``), which arrives with the page like
+anything else, and goes back through ``page.meta``.
 
 It is mounted with one prop off the registered snippets (D19):
 ``snippets``, the ``/`` menu's entries in order. Seeded when the shell boots,
@@ -23,7 +24,7 @@ from nuspace.system.devices.web.viewer import interactions
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping, Sequence
 
-    from nu.lang import BoolArg, ListArg, Nu, StrArg
+    from nu.lang import DictArg, ListArg, Nu, StrArg
     from nuspace.ops import Snippet
     from nustd.ui.core import Changed
 
@@ -51,11 +52,11 @@ class ViewerRef(SpaceRef):
         page_id: StrArg,
         *,
         title: StrArg,
-        editable: BoolArg,
+        meta: DictArg[str, object],
         blocks: ListArg[dict],
     ) -> Nu:
-        """Replace what one pane draws: one plane, and its cells in order."""
-        return interactions.set_page(self, page_id, title=title, editable=editable, cells=blocks)
+        """Replace what one pane draws: one plane, its meta, and its cells in order."""
+        return interactions.set_page(self, page_id, title=title, meta=meta, cells=blocks)
 
     def set_status(self, page_id: StrArg, statuses: ListArg[dict]) -> Nu:
         """Patch what one pane says about its cells."""
@@ -84,3 +85,7 @@ class ViewerRef(SpaceRef):
     def on_reorder_sections(self) -> Changed:
         """``{page_id, section_ids}``."""
         return interactions.on_reorder_cells(self)
+
+    def on_set_meta(self) -> Changed:
+        """``{page_id, meta}``."""
+        return interactions.on_set_meta(self)

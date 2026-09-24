@@ -71,8 +71,9 @@ async def test_each_app_makes_a_listed_page_with_its_cells(store, module):
     made = await store.run(ops.run_app(app, plane_id="p1", name="Live"))
     assert made == "p1"
     (row,) = [r for r in await store.read(ops.plane_rows()) if r["id"] == "p1"]
-    assert (row["name"], row["system"]) == ("Live", False)
-    assert row["meta"] == {"ui": True, "made_by": app.name, "editable": True}
+    assert row["name"] == "Live"
+    assert row["props"] == {"system": False, "ui": True, "made_by": app.name}
+    assert row["meta"] == {"editable": True, "full_width": False}
     cells = await store.read(ops.cell_rows("p1"))
     assert [(c["name"], c["prog"]) for c in cells] == CELLS[app.name]
 

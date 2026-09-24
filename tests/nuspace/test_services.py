@@ -81,8 +81,8 @@ async def test_bootstrap_makes_the_services_and_is_idempotent(store):
     rows = {r["id"]: r for r in await store.read(ops.plane_rows())}
     assert set(rows) == {plane for plane, _ in SERVICES}
     for plane, shim in SERVICES:
-        assert rows[plane]["system"] is True
-        assert rows[plane]["meta"] == {"ui": False}
+        assert rows[plane]["props"] == {"system": True, "ui": False, "made_by": ""}
+        assert rows[plane]["meta"] == {}
         assert await store.read(ops.cell_rows(plane)) == [
             {"id": "main", "name": "main", "prog": shim, "meta": {}}
         ]

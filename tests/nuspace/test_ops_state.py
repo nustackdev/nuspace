@@ -76,7 +76,7 @@ async def test_run_app_builds_and_runs_its_tree(store):
         pid = nu.StrAttrRef("app_plane")
         return nu.Let(
             "app_plane",
-            ops.add_plane(name=title, meta={"made_by": "page"}),
+            ops.add_plane(name=title, made_by="page", meta={"k": 1}),
             ops.add_cell(pid, "src", name="body"),
         )
 
@@ -84,7 +84,7 @@ async def test_run_app_builds_and_runs_its_tree(store):
     assert app.section is True
     await store.run(ops.run_app(app, title="notes"))
     (row,) = await store.read(ops.plane_rows())
-    assert (row["name"], row["meta"]) == ("notes", {"made_by": "page"})
+    assert (row["name"], row["props"]["made_by"], row["meta"]) == ("notes", "page", {"k": 1})
     assert [c["name"] for c in await store.read(ops.cell_rows(row["id"]))] == ["body"]
 
 

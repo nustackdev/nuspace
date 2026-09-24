@@ -31,22 +31,19 @@ SERVICES = (
 #: What init's boot list starts as: every service but init itself.
 BOOTED = init.BOOTED
 
-#: Structural extras on a service plane: kept out of the shell.
-META = {"ui": False}
-
 
 def _service(plane_id: str, shim: str) -> nu.Nu:
     """A service plane and its cell, each made only when missing.
 
     Only when missing, because ``add_plane`` on an existing id rewrites its
-    name and flags, and ``add_cell`` its prog. Missing means never made by
+    name and props, and ``add_cell`` its prog. Missing means never made by
     those ops, not an absent row: :func:`~.init.boot` before the first open
     writes init's cell state, which leaves a row with no name and no prog.
     """
     row = Space.planes[plane_id]
     return nu.IfDo(
         snap(nu.Not(row.contains("name"))),
-        add_plane(plane_id, name=plane_id, system=True, meta=META),
+        add_plane(plane_id, name=plane_id, system=True),
     ) >> nu.IfDo(
         snap(nu.Not(row.cells[init.CELL].contains("prog"))),
         add_cell(plane_id, shim, cell_id=init.CELL, name=init.CELL),

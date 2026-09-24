@@ -94,7 +94,10 @@ def prog(plane_id: nu.StrArg, cell_id: nu.StrArg) -> nu.Nu:
 
 
 def plane_rows() -> nu.Nu:
-    """Every plane as ``id, name, system, meta, parent``. One read fills a sidebar."""
+    """Every plane as ``id, name, props, meta, parent``. One read fills a sidebar.
+
+    ``props`` is always whole, ``{system, ui, made_by}``, defaults filled in.
+    """
     item = fresh("plane_rows")
     at = nu.StrAttrRef(item)
     plane = Space.planes[at]
@@ -104,7 +107,11 @@ def plane_rows() -> nu.Nu:
             nu.Dict.of(
                 id=at,
                 name=text(plane.name),
-                system=flag(plane.system, False),
+                props=nu.Dict.of(
+                    system=flag(plane.props.system, False),
+                    ui=flag(plane.props.ui, False),
+                    made_by=text(plane.props.made_by),
+                ),
                 meta=plane.meta.extract(),
                 parent=parent(at),
             ),

@@ -29,8 +29,11 @@ from nuspace import ops
 
 
 def section(p):
-    meta = nu.Dict(p.get_item(nu.Str("meta"), nu.Dict.of()))
-    return nu.If(p["system"], nu.Str("system"), nu.ToStr(meta.get_item(nu.Str("made_by"), "-")))
+    props = nu.Dict(p["props"])
+    made_by = nu.ToStr(props["made_by"])
+    return nu.If(
+        props["system"], nu.Str("system"), nu.If(nu.Eq(made_by, ""), nu.Str("-"), made_by)
+    )
 
 
 def cell_count(pid):
@@ -73,8 +76,8 @@ import nuspace
 from nuspace import ops
 
 
-def made_by(p):
-    return nu.Dict(p.get_item(nu.Str("meta"), nu.Dict.of())).get_item(nu.Str("made_by"), "")
+def prop(p, name):
+    return nu.Dict(p["props"])[name]
 
 
 def cell_count(pid):
@@ -84,7 +87,7 @@ def cell_count(pid):
 def draw():
     p = nu.DictAttrRef("p")
     row = nu.List.of(
-        p["name"], made_by(p), nu.If(p["system"], "yes", "no"), cell_count(p["id"])
+        p["name"], prop(p, "made_by"), nu.If(prop(p, "system"), "yes", "no"), cell_count(p["id"])
     )
     table = nustd.ui.TableRef("planes").set(
         nu.Dict.of(

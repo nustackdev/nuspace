@@ -13,12 +13,20 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
 
 
-__all__ = ["live_page", "meta"]
+__all__ = ["META", "live_page", "plane"]
 
 
-def meta(app: str) -> dict[str, object]:
-    """The meta a section app marks its planes with: drawn, listed under ``app``, editable."""
-    return {"ui": True, "made_by": app, "editable": True}
+#: What a section app's planes start with: editable, not full width.
+META = {"editable": True, "full_width": False}
+
+
+def plane(app: str, plane_id: nu.StrArg | None, name: nu.StrArg) -> nu.Nu:
+    """A plane for section ``app``: drawn, listed under ``app``, editable.
+
+    Yields:
+        The plane id, as :func:`~nuspace.ops.add_plane` does.
+    """
+    return ops.add_plane(plane_id, name=name, ui=True, made_by=app, meta=META)
 
 
 def live_page(
@@ -38,4 +46,4 @@ def live_page(
             *(ops.add_cell(nu.StrAttrRef(pid), source, name=cell) for cell, source in cells)
         )
 
-    return binding(ops.add_plane(plane_id, name=name, meta=meta(app)), fill, tag="live")
+    return binding(plane(app, plane_id, name), fill, tag="live")

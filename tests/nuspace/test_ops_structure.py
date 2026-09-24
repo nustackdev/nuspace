@@ -22,11 +22,14 @@ async def cell(store, plane_id, prog="def out(): pass", **kw):
     return await store.run(ops.add_cell(plane_id, prog, **kw))
 
 
+NO_PROPS = {"system": False, "ui": False, "made_by": ""}
+
+
 # --- planes --------------------------------------------------------------------
 
 
 async def test_add_plane_writes_the_row_and_links_under_root(store):
-    p = await plane(store, "notes", meta={"made_by": "page"})
+    p = await plane(store, "notes", ui=True, made_by="page", meta={"editable": True})
     assert p.startswith("p_")
     assert await store.read(ops.planes()) == [p]
     assert await store.read(ops.plane_exists(p)) is True
@@ -34,7 +37,13 @@ async def test_add_plane_writes_the_row_and_links_under_root(store):
     assert await store.read(ops.children()) == [p]
     assert await store.read(ops.parent(p)) == ROOT
     assert await store.read(ops.plane_rows()) == [
-        {"id": p, "name": "notes", "system": False, "meta": {"made_by": "page"}, "parent": ROOT}
+        {
+            "id": p,
+            "name": "notes",
+            "props": {"system": False, "ui": True, "made_by": "page"},
+            "meta": {"editable": True},
+            "parent": ROOT,
+        }
     ]
 
 
@@ -84,9 +93,20 @@ async def test_rename_plane(store):
 
 
 async def test_set_plane_meta_merges(store):
-    p = await plane(store, meta={"a": 1, "b": 2})
-    await store.run(ops.set_plane_meta(p, {"b": 3, "c": {"d": 4}}))
-    assert (await store.read(ops.plane_rows()))[0]["meta"] == {"a": 1, "b": 3, "c": {"d": 4}}
+    p = await plane(store, made_by="page", meta={"a": 1, "b": 2})
+    await store.run(ops.set_plane_meta(p, {"b": 3, "c": {"d": 4}, "made_by": "x"}))
+    (row,) = await store.read(ops.plane_rows())
+    assert row["meta"] == {"a": 1, "b": 3, "c": {"d": 4}, "made_by": "x"}
+    # A meta key named like a prop is only meta.
+    assert row["props"] == {"system": False, "ui": False, "made_by": "page"}
+
+
+async def test_add_plane_again_rewrites_props_and_merges_meta(store):
+    p = await plane(store, system=True, ui=True, made_by="a", meta={"x": 1})
+    await store.run(ops.add_plane(p, name="b", made_by="b", meta={"y": 2}))
+    (row,) = await store.read(ops.plane_rows())
+    assert row["props"] == {"system": False, "ui": False, "made_by": "b"}
+    assert row["meta"] == {"x": 1, "y": 2}
 
 
 async def test_remove_plane_drops_it_and_its_subtree(store):
@@ -272,8 +292,8 @@ async def test_structure_round_trips_through_rocksdb(disk):
     await disk.run(nustd.kv.Transaction(state.set_item("n", {"deep": [3]}), scope=Space))
     await disk.run(ops.move_cell(p, c, q))
     assert await disk.read(ops.plane_rows()) == [
-        {"id": p, "name": "p", "system": False, "meta": {"a": {"b": 1}}, "parent": ROOT},
-        {"id": q, "name": "q", "system": False, "meta": {}, "parent": p},
+        {"id": p, "name": "p", "props": NO_PROPS, "meta": {"a": {"b": 1}}, "parent": ROOT},
+        {"id": q, "name": "q", "props": NO_PROPS, "meta": {}, "parent": p},
     ]
     assert await disk.read(ops.cell_rows(q)) == [
         {"id": c, "name": "", "prog": "src", "meta": {"m": [1, 2]}}

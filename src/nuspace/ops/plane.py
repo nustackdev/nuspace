@@ -1,5 +1,8 @@
 """Plane ops: make one, name it, annotate it, drop it.
 
+Its props (``system``, ``ui``, ``made_by``) are set when it is made. Its meta
+is free and merged into any time.
+
 A plane is structure only, so nothing here says how anything runs. Which
 cells are on it and in what order is :mod:`nuspace.ops.cell`; where it hangs
 is :mod:`nuspace.ops.tree`.
@@ -31,8 +34,10 @@ def add_plane(
     *,
     name: nu.StrArg = "",
     parent: nu.StrArg = ROOT,
-    meta: dict[str, Any] | nu.Nu | None = None,
     system: nu.BoolArg = False,
+    ui: nu.BoolArg = False,
+    made_by: nu.StrArg = "",
+    meta: dict[str, Any] | nu.Nu | None = None,
 ) -> nu.Nu:
     """Make a plane with no cells and hang it under ``parent``, in one commit.
 
@@ -43,8 +48,15 @@ def add_plane(
         name: what to call it.
         parent: the tree node to hang it under, ``ROOT`` or a plane id. A
             parent that does not exist falls back to ``ROOT``.
+        system: prop, a protected plane, eg a service. ``remove_plane``
+            refuses it.
+        ui: prop, the shell draws it.
+        made_by: prop, the app that made it, the sidebar section it is
+            listed under.
         meta: fields to merge into its meta.
-        system: a protected plane, eg a service. ``remove_plane`` refuses it.
+
+    The props are written every time, so an existing plane given again takes
+    the ones passed now.
 
     Yields:
         The plane id.
@@ -59,7 +71,9 @@ def add_plane(
         writes = (
             nu.IfDo(nu.Not(plane_exists(pid)), row.order.set(nu.Literal([])))
             >> row.name.set(name)
-            >> row.system.set(system)
+            >> row.props.system.set(system)
+            >> row.props.ui.set(ui)
+            >> row.props.made_by.set(made_by)
         )
         if meta is not None:
             writes = writes >> _merge(row.meta, meta)
@@ -87,7 +101,9 @@ def remove_plane(plane_id: nu.StrArg) -> nu.Nu:
             item = fresh("drop")
             at = nu.StrAttrRef(item)
             system = nu.List(
-                nu.Collect(nu.Filter(nu.List(ids), flag(Space.planes[at].system, False), key=item))
+                nu.Collect(
+                    nu.Filter(nu.List(ids), flag(Space.planes[at].props.system, False), key=item)
+                )
             )
             gone = nu.List(ids)
             each = fresh("drop_each")
@@ -114,5 +130,8 @@ def rename_plane(plane_id: nu.StrArg, name: nu.StrArg) -> nu.Nu:
 
 
 def set_plane_meta(plane_id: nu.StrArg, fields: dict[str, Any] | nu.Nu) -> nu.Nu:
-    """Merge ``fields`` into a plane's meta. A no-op when it is missing."""
+    """Merge ``fields`` into a plane's meta, shallow. A no-op when it is missing.
+
+    Props are not reachable from here: they are set by :func:`add_plane`.
+    """
     return atomic(nu.IfDo(plane_exists(plane_id), _merge(Space.planes[plane_id].meta, fields)))

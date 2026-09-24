@@ -44,7 +44,7 @@ def make_page(kind: str):
     """An app build: a ui plane under ``kind``'s section."""
 
     def build(plane_id=None, name=""):
-        return ops.add_plane(plane_id, name=name, meta={"ui": True, "made_by": kind})
+        return ops.add_plane(plane_id, name=name, ui=True, made_by=kind)
 
     return build
 
@@ -136,19 +136,21 @@ def test_device_term_compiles_and_validates():
 # --- sidebar rows ------------------------------------------------------------------
 
 
-async def _plane(store, pid, name, meta=None, system=False):
-    await store.run(ops.add_plane(pid, name=name, meta=meta, system=system))
+async def _plane(store, pid, name, meta=None, **props):
+    await store.run(ops.add_plane(pid, name=name, meta=meta, **props))
 
 
 async def test_sidebar_rows(store):
-    await _plane(store, "p1", "One", {"ui": True, "made_by": "page"})
-    await _plane(store, "p2", "Two", {"ui": True, "made_by": "job"})
-    await _plane(store, "p3", "Hidden", {"ui": False, "made_by": "page"})
-    await _plane(store, "p4", "System", {"ui": True, "made_by": "page"}, system=True)
-    await _plane(store, "p5", "Chat", {"ui": True, "made_by": "chat"})
-    await _plane(store, "p6", "Stray", {"ui": True, "made_by": "nobody"})
+    await _plane(store, "p1", "One", ui=True, made_by="page")
+    await _plane(store, "p2", "Two", ui=True, made_by="job")
+    await _plane(store, "p3", "Hidden", ui=False, made_by="page")
+    await _plane(store, "p4", "System", ui=True, made_by="page", system=True)
+    await _plane(store, "p5", "Chat", ui=True, made_by="chat")
+    await _plane(store, "p6", "Stray", ui=True, made_by="nobody")
     await _plane(store, "p7", "Bare")
-    await _plane(store, "p8", "Three", {"ui": True, "made_by": "page"})
+    await _plane(store, "p8", "Three", ui=True, made_by="page")
+    # Meta is free: keys named like props mean nothing to the sidebar.
+    await _plane(store, "p9", "Meta", {"ui": True, "made_by": "page"})
 
     got = await store.read(rows(APPS))
 
@@ -175,7 +177,7 @@ async def test_sidebar_rows(store):
 
 
 async def test_sidebar_rows_with_no_sections(store):
-    await _plane(store, "p1", "One", {"ui": True, "made_by": "page"})
+    await _plane(store, "p1", "One", ui=True, made_by="page")
     got = await store.read(rows([]))
     assert got == [{"id": "space", "kind": "space", "title": "", "parent": "space", "children": []}]
 
@@ -186,9 +188,9 @@ async def test_create_runs_the_group_app(store):
     got = await store.read(ops.plane_rows())
     by_id = {row["id"]: row for row in got}
     assert by_id["pj"]["name"] == "Made"
-    assert by_id["pj"]["meta"]["made_by"] == "job"
+    assert by_id["pj"]["props"]["made_by"] == "job"
     # chat is no section: an unknown group runs the first section app.
-    assert by_id["pc"]["meta"]["made_by"] == "page"
+    assert by_id["pc"]["props"]["made_by"] == "page"
     assert create_plane([APPS[2]], "x", "y", "z") is None
 
 
@@ -196,7 +198,7 @@ async def test_create_runs_the_group_app(store):
 
 
 async def test_viewer_page(store):
-    await _plane(store, "p1", "Notes", {"ui": True, "editable": True})
+    await _plane(store, "p1", "Notes", {"editable": True, "tone": "calm"}, ui=True)
     await store.run(ops.add_cell("p1", PROSE_SRC, cell_id="c1", name="intro"))
     await store.run(ops.add_cell("p1", "x = 1", cell_id="c2", name="code"))
     await store.run(ops.add_cell("p1", "y = 2", cell_id="c0", name="first", index=0))
@@ -205,7 +207,7 @@ async def test_viewer_page(store):
 
     assert got == {
         "title": "Notes",
-        "editable": True,
+        "meta": {"editable": True, "full_width": False, "tone": "calm"},
         "blocks": [
             {"id": "c0", "name": "first", "source": "y = 2"},
             {"id": "c1", "name": "intro", "source": PROSE_SRC},
@@ -214,10 +216,11 @@ async def test_viewer_page(store):
     }
 
 
-async def test_viewer_page_missing_and_not_editable(store):
+async def test_viewer_page_missing_and_meta_defaults(store):
     await _plane(store, "p1", "Plain")
-    assert await store.read(page("p1")) == {"title": "Plain", "editable": False, "blocks": []}
-    assert await store.read(page("nope")) == {"title": "", "editable": False, "blocks": []}
+    plain = {"editable": False, "full_width": False}
+    assert await store.read(page("p1")) == {"title": "Plain", "meta": plain, "blocks": []}
+    assert await store.read(page("nope")) == {"title": "", "meta": plain, "blocks": []}
 
 
 # --- viewer statuses ---------------------------------------------------------------
@@ -355,7 +358,7 @@ async def _until(check, timeout: float = 3.0) -> None:
 async def test_connection_live(store):
     from nuspace.system.devices.web.device import connection
 
-    await _plane(store, "p1", "Notes", {"ui": True, "made_by": "page", "editable": True})
+    await _plane(store, "p1", "Notes", {"editable": True}, ui=True, made_by="page")
     await store.run(ops.add_cell("p1", "x = 1", cell_id="c1", name="one"))
     session = FakeSession()
     ctx = store.ctx.bind(Session, session)
@@ -383,7 +386,9 @@ async def test_connection_live(store):
         assert await store.read(conns["s1"].routes) == ["p1"]
         assert session.writes("set_status")[-1]["page_id"] == "p1"
         shown = session.writes("set_page")[-1]
-        assert shown["page_id"] == "p1" and shown["title"] == "Notes" and shown["editable"]
+        assert shown["page_id"] == "p1" and shown["title"] == "Notes"
+        assert shown["meta"] == {"editable": True, "full_width": False}
+        assert "editable" not in shown
         assert [b["id"] for b in shown["blocks"]] == ["c1"]
         assert session.writes("set_status")[-1]["statuses"][0]["state"] == "idle"
 
@@ -402,6 +407,24 @@ async def test_connection_live(store):
         assert len(session.writes("set_page")) == pages
         assert len(session.writes("set_status")) == stats
         assert len(session.writes("set_tree")) == trees
+
+        # page.meta merges into meta, reships the page, and never reaches props.
+        # A missing plane is ignored.
+        session.notify(
+            ("viewer", "ops", "page.meta"),
+            {"page_id": "p1", "meta": {"full_width": True, "ui": False, "system": True}},
+        )
+        session.notify(("viewer", "ops", "page.meta"), {"page_id": "nope", "meta": {"x": 1}})
+        await _until(lambda: session.writes("set_page")[-1]["meta"]["full_width"])
+        assert session.writes("set_page")[-1]["meta"] == {
+            "editable": True,
+            "full_width": True,
+            "ui": False,
+            "system": True,
+        }
+        (row,) = [r for r in await store.read(ops.plane_rows()) if r["id"] == "p1"]
+        assert row["props"] == {"system": False, "ui": True, "made_by": "page"}
+        assert await store.read(ops.plane_exists("nope")) is False
 
         # Browser events run ops. A create stores the named snippet's prog, an
         # unknown name a blank program.
@@ -439,8 +462,8 @@ async def test_connection_live(store):
 async def test_connection_panes(store):
     from nuspace.system.devices.web.device import connection
 
-    await _plane(store, "p1", "One", {"ui": True, "made_by": "page"})
-    await _plane(store, "p2", "Two", {"ui": True, "made_by": "page"})
+    await _plane(store, "p1", "One", ui=True, made_by="page")
+    await _plane(store, "p2", "Two", ui=True, made_by="page")
     await store.run(ops.add_cell("p1", "x = 1", cell_id="a1"))
     await store.run(ops.add_cell("p2", "y = 2", cell_id="b1"))
     session = FakeSession()

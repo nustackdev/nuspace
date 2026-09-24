@@ -87,7 +87,7 @@ def _shown(route: nu.StrAttrRef) -> nu.Nu:
     return nu.And(
         nu.Ne(route, nu.Str("")),
         plane_exists(route),
-        nu.Not(flag(Space.planes[route].system, False)),
+        nu.Not(flag(Space.planes[route].props.system, False)),
     )
 
 

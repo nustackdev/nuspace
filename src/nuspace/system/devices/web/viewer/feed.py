@@ -16,6 +16,10 @@ meta, order or cells (their set, names and progs) change; the statuses when
 any run's ``status`` moves. A cell writing its state or a run writing its
 output wakes neither.
 
+**Meta goes both ways.** A page carries its plane's whole meta, and a
+``page.meta`` event merges keys into it. Props never reach the browser and
+are never written from it.
+
 **Statuses come from runs.** Per cell: its live run if it has one, else its
 most recent. ``starting`` is starting, ``up`` and ``stopping`` are running,
 a dead run is idle when it exited ``ok``, stopped when ``stopped`` or
@@ -58,7 +62,7 @@ if TYPE_CHECKING:
     from nustd.ui.core import Ref
 
 
-__all__ = ["blocks", "page", "statuses", "viewer_feed"]
+__all__ = ["PAGE_META", "blocks", "page", "statuses", "viewer_feed"]
 
 
 _arms = Arms("viewer")
@@ -71,6 +75,10 @@ _UPDATE = "nuspace.web.viewer.update"
 _DELETE = "nuspace.web.viewer.delete"
 _MOVE = "nuspace.web.viewer.move"
 _REORDER = "nuspace.web.viewer.reorder"
+_META = "nuspace.web.viewer.meta"
+
+#: What a page's meta says where its plane does not: the keys the browser reads.
+PAGE_META = {"editable": False, "full_width": False}
 
 
 # --- what the browser is handed: bare reads ----------------------------------
@@ -94,22 +102,21 @@ def blocks(plane_id: nu.StrArg) -> nu.Nu:
 
 
 def page(plane_id: nu.StrArg) -> nu.Nu:
-    """``{title, editable, blocks}`` for a plane. Bare read.
+    """``{title, meta, blocks}`` for a plane. Bare read.
 
-    A plane that is not there reads as an empty untitled page, so a pane
-    open on it is still answered.
+    ``meta`` is the plane's whole meta over :data:`PAGE_META`. A plane that
+    is not there reads as an empty untitled page, so a pane open on it is
+    still answered.
     """
     row = Space.planes[plane_id]
     return nu.If(
         ops.plane_exists(plane_id),
         nu.Dict.of(
             title=text(row.name),
-            editable=nu.ToBool(
-                nu.Dict(row.meta.extract()).get_item(nu.Str("editable"), nu.Bool(False))
-            ),
+            meta=nu.Dict(nu.Literal(PAGE_META)).merge(row.meta.extract()),
             blocks=blocks(plane_id),
         ),
-        nu.Dict.of(title=nu.Str(""), editable=nu.Bool(False), blocks=nu.List.of()),
+        nu.Dict.of(title=nu.Str(""), meta=nu.Literal(PAGE_META), blocks=nu.List.of()),
     )
 
 
@@ -210,7 +217,7 @@ def _ship_page(viewer: Ref, plane: nu.Nu) -> nu.Nu:
             viewer,
             plane,
             title=nu.ToStr(got.get_item(nu.Str("title"), nu.Str(""))),
-            editable=nu.ToBool(got.get_item(nu.Str("editable"), nu.Bool(False))),
+            meta=nu.Dict(got.get_item(nu.Str("meta"), nu.Dict.of())),
             cells=nu.List(got.get_item(nu.Str("blocks"), nu.List.of())),
         ),
     )
@@ -318,6 +325,17 @@ def _events(viewer: Ref, snippets: Sequence[Snippet]) -> list[nu.Nu]:
                     field_str(_MOVE, "section_id"),
                     move_to,
                     index=field_index(_MOVE, "index", nu.Len(ops.cells(move_to))),
+                ),
+            ),
+        ),
+        _arms.event(
+            _META,
+            interactions.on_set_meta(viewer),
+            nu.IfDo(
+                nu.Ne(field_str(_META, "page_id"), nu.Str("")),
+                ops.set_plane_meta(
+                    field_str(_META, "page_id"),
+                    nu.Dict(nu.DictAttrRef(_META).get_item(nu.Str("meta"), nu.Dict.of())),
                 ),
             ),
         ),

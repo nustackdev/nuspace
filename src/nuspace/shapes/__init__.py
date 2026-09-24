@@ -6,7 +6,8 @@ reads it and it reads nothing back::
     Space
       planes        id -> Plane
         <p>
-          name, system, meta
+          name, meta
+          props     system, ui, made_by
           state     PlaneState shapes, rerooted here
           cells     id -> Cell
             <c>
@@ -46,7 +47,7 @@ from .kernel import (
     Run,
     Worker,
 )
-from .plane import Plane
+from .plane import Plane, PlaneProps
 from .reroot import Reroot, reroot, reroot_base
 from .space import Space
 from .state import CellState, PlaneState
@@ -75,6 +76,7 @@ __all__ = [
     "Kernel",
     "Node",
     "Plane",
+    "PlaneProps",
     "PlaneState",
     "Reroot",
     "Run",
