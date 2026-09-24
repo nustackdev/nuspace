@@ -167,11 +167,13 @@ async def test_sidebar_rows(store):
             "kind": "group",
             "title": "Pages",
             "parent": "space",
-            "children": ["p1", "p8"],
+            "children": ["p1", "p4", "p8"],
         },
         {"id": "job", "kind": "group", "title": "Jobs", "parent": "space", "children": ["p2"]},
         {"id": "p1", "kind": "plane", "title": "One", "parent": "page", "children": []},
         {"id": "p2", "kind": "plane", "title": "Two", "parent": "job", "children": []},
+        # System only protects it: a system ui plane in a section is listed.
+        {"id": "p4", "kind": "plane", "title": "System", "parent": "page", "children": []},
         {"id": "p8", "kind": "plane", "title": "Three", "parent": "page", "children": []},
     ]
 

@@ -82,7 +82,7 @@ export const railHeader = cn(
 
 export const railHeaderLabel = cn(
 	"flex-1 select-none text-xs font-medium uppercase tracking-[0.06em]",
-	"text-text-muted",
+	"text-text-muted no-underline hover:text-text-primary aria-[current=page]:text-text-primary",
 );
 
 /**

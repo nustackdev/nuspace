@@ -11,11 +11,41 @@ from .plane import Plane
 from .tree import Node
 
 
-__all__ = ["Space"]
+__all__ = ["RECENTS_CAP", "Space", "SpaceInfo", "SpaceState"]
+
+
+#: How many plane ids ``SpaceState.recents`` keeps.
+RECENTS_CAP = 20
+
+
+class SpaceInfo(nu.Shape):
+    """What the host says about the space it opened. Written once per open.
+
+    ``path`` is the store directory, ``""`` for a throwaway one. ``opened``
+    is when this open started, in seconds since the epoch. ``versions`` maps
+    a package name (``nuspace``, and ``nuverse`` when installed) to its
+    installed version.
+    """
+
+    path = nustd.kv.StrRef.slot()
+    opened = nustd.kv.FloatRef.slot()
+    versions = nustd.kv.DictRef.slot(str)
+
+
+class SpaceState(nu.Shape):
+    """Space wide state: things about the space as a whole, not one plane.
+
+    ``recents`` is the plane ids opened in a tab, newest first, deduped and
+    capped at :data:`RECENTS_CAP`, written whole (D24) by the web device.
+    ``info`` is written by the host at open.
+    """
+
+    recents = nustd.kv.PrimitiveListRef.slot()
+    info = nustd.kv.ShapeRef.slot(SpaceInfo)
 
 
 class Space(nu.Shape):
-    """Planes, the tree between them, the kernel's records, device state.
+    """Planes, the tree between them, the kernel's records, device and space state.
 
     ``planes`` is flat, so a plane is one lookup away and a route addresses it
     directly. Nesting is ``tree``, keyed by plane id plus
@@ -23,7 +53,7 @@ class Space(nu.Shape):
 
     One writer per subtree: people, apps and services write ``planes`` and
     ``tree`` through ops, the kernel writes ``kernel``, the web device writes
-    ``connections``.
+    ``connections`` and ``state.recents``, the host writes ``state.info``.
 
     ``Space`` is also the store's tag. kv refs find their navigator by root
     shape class, so the store is bound under this class and anything rerooted
@@ -34,3 +64,4 @@ class Space(nu.Shape):
     tree = nustd.kv.ShapesDictRef.slot(Node)
     kernel = nustd.kv.ShapeRef.slot(Kernel)
     connections = nustd.kv.ShapesDictRef.slot(Connection)
+    state = nustd.kv.ShapeRef.slot(SpaceState)

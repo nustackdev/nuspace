@@ -48,9 +48,9 @@ def add_plane(
         name: what to call it.
         parent: the tree node to hang it under, ``ROOT`` or a plane id. A
             parent that does not exist falls back to ``ROOT``.
-        system: prop, a protected plane, eg a service. ``remove_plane``
-            refuses it.
-        ui: prop, the shell draws it.
+        system: prop, a protected plane, eg a service or home.
+            ``remove_plane`` refuses it.
+        ui: prop, the shell draws it and nav brings it up when routed.
         made_by: prop, the app that made it, the sidebar section it is
             listed under.
         meta: fields to merge into its meta.

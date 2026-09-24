@@ -10,19 +10,40 @@
 // Both are found BY TYPE (see app/surfaces.ts), not by a slot name. Where
 // python hangs them is python's call, and the wire type is the one thing about
 // a region both sides already agree on.
+//
+// Links a cell draws (the kit's LinkRef, a markdown link) are plain anchors.
+// One listener on the main strip routes a click on a same-origin one to /<id>
+// or /<a>+<b> through the router (app/router.ts `routeAnchorClick`), so it
+// switches panes instead of reloading the tab, and cmd/ctrl-click opens a
+// split as in the sidebar. Native, not React: it has to see anchors the kit
+// renders without handlers of ours, and it runs before the browser follows
+// them.
 
 import { NodeView } from "@nustackdev/ui-kit";
+import { useEffect, useRef } from "react";
+import { routeAnchorClick } from "../app/router";
 import { useTypePath } from "../app/surfaces";
 import { shellMain, shellMissing, shellRoot } from "../design";
 
 export function Shell() {
 	const sidebar = useTypePath("SidebarRef");
 	const viewer = useTypePath("ViewerRef");
+	const mainRef = useRef<HTMLElement | null>(null);
+
+	useEffect(() => {
+		const main = mainRef.current;
+		if (!main) return;
+		const onClick = (e: MouseEvent) => {
+			routeAnchorClick(e);
+		};
+		main.addEventListener("click", onClick);
+		return () => main.removeEventListener("click", onClick);
+	}, []);
 
 	return (
 		<div className={shellRoot}>
 			{sidebar ? <NodeView path={sidebar} /> : null}
-			<main className={shellMain}>
+			<main ref={mainRef} className={shellMain}>
 				{viewer ? (
 					<NodeView path={viewer} />
 				) : (

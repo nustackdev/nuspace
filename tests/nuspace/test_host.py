@@ -25,6 +25,7 @@ from nuspace.host.registry import GROUP, Registry, RegistryWarning, discover
 from nuspace.host.space import space_registry
 from nuspace.ops.utils import atomic
 from nuspace.shapes import STATUS_UP, Reroot, Space, reroot
+from nuspace.system import home
 from nuspace.system.kernel import Env, store
 from nuspace.system.kernel.body import Bracketed, Rewrites
 from nuspace.system.services import BOOTED, SERVICES, ensure_system, init
@@ -168,7 +169,7 @@ async def test_open_space_headless_runs_a_booted_plane(tmp_path, monkeypatch):
     stale = Space.connections["stale"]
     seed = (
         seed
-        >> ops.add_plane(TAB)
+        >> ops.add_plane(TAB, ui=True)
         >> ops.add_cell(TAB, SET_42, cell_id="c")
         >> atomic(stale.opened.set(nu.Float(0.0)) >> stale.routes.set(nu.Literal([TAB])))
         # nuverse's starter program runs headless too.
@@ -201,6 +202,13 @@ async def test_open_space_headless_runs_a_booted_plane(tmp_path, monkeypatch):
         # Cleared before init started nav: the stale tab brought nothing up.
         assert await space.read(nu.list(Space.connections.keys())) == []
         assert await space.read(ops.runs(plane=TAB)) == []
+        # Home seeded, and this open's info written by the host.
+        assert await space.read(ops.cells(home.PLANE)) == [cell for cell, _ in home.CELLS]
+        info = await space.read(Space.state.info.extract())
+        assert info["path"] == str(tmp_path / "space")
+        assert info["opened"] > 0
+        assert info["versions"] == home.versions()
+        assert set(info["versions"]) == {"nuspace", "nuverse"}
     finally:
         await space.close()
 

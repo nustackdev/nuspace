@@ -110,7 +110,7 @@ class Kernel:
         return _by_id(rows, wid)
 
     async def plane(self, *progs: str) -> tuple[str, list[str]]:
-        p = await self.run(ops.add_plane())
+        p = await self.run(ops.add_plane(ui=True))
         return p, [await self.run(ops.add_cell(p, src)) for src in progs]
 
     async def close(self) -> None:

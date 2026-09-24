@@ -14,10 +14,11 @@ __all__ = ["Plane", "PlaneProps"]
 class PlaneProps(nu.Shape):
     """What nuspace itself reads off a plane to work. Typed, unlike ``meta``.
 
-    ``system`` marks a protected plane, eg a service: ``remove_plane``
-    refuses it and nav never brings it up. ``ui`` says the shell draws it,
-    and ``made_by`` names the app that made it, the sidebar section it is
-    listed under.
+    ``system`` marks a protected plane, eg a service or home:
+    ``remove_plane`` refuses it, and that is all it means. ``ui`` says the
+    shell draws it, and nav brings a routed plane up iff it is set.
+    ``made_by`` names the app that made it, the sidebar section it is listed
+    under (``""`` is under none).
     """
 
     system = nustd.kv.BoolRef.slot()

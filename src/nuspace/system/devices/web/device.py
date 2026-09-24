@@ -16,7 +16,8 @@ Per connection, one arm:
 The route arm (D15): the viewer's ``pages.open`` carries the full ordered
 list of open planes (its panes, left to right). Deduped with order kept and
 empty ids dropped, it is written whole as ``routes``. Every plane that left
-the list has its cells erased as drawn first.
+the list has its cells erased as drawn first. The planes newly in the list
+are pushed onto ``Space.state.recents`` in the same commit (:func:`remember`).
 
 What a run needs to draw on a tab is the session env, returned beside the
 term for the host to register with the kernel.
@@ -28,14 +29,15 @@ from typing import TYPE_CHECKING
 
 import nu
 from nuspace import ops
-from nuspace.ops.utils import atomic, fresh, or_else
-from nuspace.shapes import Space
+from nuspace.ops.utils import atomic, flag, fresh, or_else
+from nuspace.shapes import RECENTS_CAP, Space
 from nuspace.system.devices.web.env import SESSION_ENV, session_env
 from nuspace.system.devices.web.session import served_sessions
 from nuspace.system.devices.web.shell import Shell
 from nuspace.system.devices.web.sidebar import sidebar_feed
 from nuspace.system.devices.web.utils import Arms, cell_ui, field_ids
 from nuspace.system.devices.web.viewer import on_open, slash_entries, viewer_feed
+from nuspace.system.home import PLANE as HOME
 from nuspace.system.kernel.space import free_port
 from nuspace.system.kernel.utils import Now, snap
 from nuspace.system.services.nav import clear_connections
@@ -57,6 +59,7 @@ __all__ = [
     "close_connection",
     "connection",
     "open_connection",
+    "remember",
     "route_arm",
     "serve_web",
 ]
@@ -88,15 +91,49 @@ def _erase(viewer: Ref, plane: nu.Nu) -> nu.Nu:
     return nu.ForEachDo(snap(ids), cell_ui(viewer, nu.StrAttrRef(cell)).erase(), item=cell)
 
 
+def _remembered(plane: nu.Nu) -> nu.Nu:
+    """Whether an opened plane goes in recents: not home, and not a system plane that is not ui.
+
+    A plane not written yet counts: a new page is routed before its create
+    lands (D41), and the home cell drops ids that never came to exist.
+    """
+    props = Space.planes[plane].props
+    return nu.And(
+        nu.Ne(plane, nu.Str(HOME)),
+        nu.Not(nu.And(flag(props.system, False), nu.Not(flag(props.ui, False)))),
+    )
+
+
+def remember(opened: nu.Nu) -> nu.Nu:
+    """Push plane ids onto ``Space.state.recents``, newest first. Unbracketed.
+
+    ``opened`` is a list in pane order, so its last one is the newest. Those
+    :func:`_remembered` skips are left out; the list is deduped and capped at
+    :data:`~nuspace.shapes.RECENTS_CAP`, and written whole (D24).
+    """
+    recents = Space.state.recents
+    item, new = fresh("web_recent"), fresh("web_recent_new")
+    at = nu.AnyAttrRef(item)
+    fresh_ids = nu.ListAttrRef(new)
+    kept = nu.Filter(nu.List(or_else(recents, [])), nu.Not(fresh_ids.contains(at)), key=item)
+    wanted = nu.List(
+        nu.Collect(nu.Reversed(nu.Filter(nu.List(opened), _remembered(nu.ToStr(at)), key=item)))
+    )
+    merged = nu.List(fresh_ids + nu.List(nu.Collect(kept)))[0:RECENTS_CAP]
+    return nu.Let(new, wanted, nu.IfDo(nu.Gt(fresh_ids.len(), nu.Int(0)), recents.set(merged)))
+
+
 def route_arm(viewer: Ref, sid: nu.StrArg) -> nu.Nu:
     """Route ``sid`` to the planes the viewer has open (D15). Never ends.
 
     ``pages.open`` is the full list every time. The cells of every plane
     leaving it are erased as drawn before ``routes`` is written, so nothing
-    of a closed pane stays on screen.
+    of a closed pane stays on screen. The planes entering it are pushed onto
+    recents in the same commit as ``routes``.
     """
     row = _connections[sid]
     item, wanted, left = fresh("web_open"), fresh("web_open_ids"), fresh("web_closed")
+    was, entered = fresh("web_was"), fresh("web_entered")
     at = nu.AnyAttrRef(item)
     ids = nu.List(
         nu.Collect(
@@ -111,15 +148,20 @@ def route_arm(viewer: Ref, sid: nu.StrArg) -> nu.Nu:
     )
     kept = nu.ListAttrRef(wanted)
     closed = nu.Filter(
-        nu.List(snap(or_else(row.routes, []))),
-        nu.Not(kept.contains(nu.AnyAttrRef(left))),
-        key=left,
+        nu.List(snap(or_else(row.routes, []))), nu.Not(kept.contains(nu.AnyAttrRef(left))), key=left
     )
+    # Read inside the commit, so a burst of opens never pushes one twice.
+    opened = nu.Filter(
+        kept, nu.Not(nu.List(or_else(row.routes, [])).contains(nu.AnyAttrRef(entered))), key=entered
+    )
+    write = nu.Let(
+        was, nu.List(nu.Collect(opened)), remember(nu.ListAttrRef(was))
+    ) >> row.routes.set(kept)
     body = nu.Let(
         wanted,
         ids,
         nu.ForEachDo(nu.List(nu.Collect(closed)), _erase(viewer, nu.StrAttrRef(left)), item=left)
-        >> atomic(nu.IfDo(_connections.contains(sid), row.routes.set(kept))),
+        >> atomic(nu.IfDo(_connections.contains(sid), write)),
     )
     return _arms.event(_ROUTE, on_open(viewer), body)
 

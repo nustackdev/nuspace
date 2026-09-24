@@ -83,11 +83,15 @@ def clear_connections() -> nu.Nu:
 
 
 def _shown(route: nu.StrAttrRef) -> nu.Nu:
-    """Whether a route names a plane nav brings up: one that exists and is not a system plane."""
+    """Whether a route names a plane nav brings up: one that exists and is drawn (``props.ui``).
+
+    ``system`` is not asked: it only means protected, so a system ui plane
+    (home) comes up, and a service (``ui`` unset) never does.
+    """
     return nu.And(
         nu.Ne(route, nu.Str("")),
         plane_exists(route),
-        nu.Not(flag(Space.planes[route].props.system, False)),
+        flag(Space.planes[route].props.ui, False),
     )
 
 

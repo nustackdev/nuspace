@@ -21,6 +21,9 @@ reads it and it reads nothing back::
         live        run id -> worker id
         active      worker id -> True
       connections   id -> Connection
+      state         SpaceState
+        recents     [plane id], newest first
+        info        path, opened, versions
 
 Plane and cell hold structure only. How and when a cell runs is the caller's
 argument, and what it did is a run.
@@ -49,7 +52,7 @@ from .kernel import (
 )
 from .plane import Plane, PlaneProps
 from .reroot import Reroot, reroot, reroot_base
-from .space import Space
+from .space import RECENTS_CAP, Space, SpaceInfo, SpaceState
 from .state import CellState, PlaneState
 from .tree import ROOT, Node
 
@@ -64,6 +67,7 @@ __all__ = [
     "KIND_DOCKER",
     "KIND_LOCAL",
     "KIND_REMOTE",
+    "RECENTS_CAP",
     "ROOT",
     "STATUSES",
     "STATUS_DEAD",
@@ -81,6 +85,8 @@ __all__ = [
     "Reroot",
     "Run",
     "Space",
+    "SpaceInfo",
+    "SpaceState",
     "Worker",
     "reroot",
     "reroot_base",

@@ -6,11 +6,15 @@ inside :func:`~nuspace.system.kernel.open_kernel` after reconcile:
 
 1. :func:`~nuspace.system.services.ensure_system`: the service planes, made
    where missing;
-2. :func:`~nuspace.system.services.nav.clear_connections`: tabs of a previous
+2. :func:`~nuspace.system.home.ensure_home`: the home plane, made where
+   missing, so it exists before the web device serves ``/``;
+3. :func:`~nuspace.system.home.write_info`: ``Space.state.info`` for this
+   open (store path, when, versions);
+4. :func:`~nuspace.system.services.nav.clear_connections`: tabs of a previous
    run dropped, so nav never brings a plane up for one (D34);
-3. init started by the kernel's own :func:`~nuspace.system.kernel.init_start`,
+5. init started by the kernel's own :func:`~nuspace.system.kernel.init_start`,
    which brings up its boot list (nav, supervisor, reload by default);
-4. the web device and ``body``, beside the kernel.
+6. the web device and ``body``, beside the kernel.
 
 The kernel's ``init=`` would start init beside the body, before the service
 planes are sure to exist on a first open, so the start is sequenced here
@@ -26,6 +30,7 @@ import warnings
 from typing import TYPE_CHECKING
 
 import nu
+from nuspace.system.home import ensure_home, write_info
 from nuspace.system.kernel import DEFAULT_SPARES, init_start, open_kernel
 from nuspace.system.services import ensure_system
 from nuspace.system.services import init as init_service
@@ -145,7 +150,12 @@ def open_space(
     beside = arms[0] if len(arms) == 1 else nu.Race(*arms)
     kwargs = {} if name is None else {"name": name}
     return open_kernel(
-        ensure_system() >> clear_connections() >> init_start(init_service.PLANE) >> beside,
+        ensure_system()
+        >> ensure_home()
+        >> write_info(path)
+        >> clear_connections()
+        >> init_start(init_service.PLANE)
+        >> beside,
         path=path,
         spares=spares,
         envs=factories,

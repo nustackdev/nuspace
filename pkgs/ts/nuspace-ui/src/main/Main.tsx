@@ -5,8 +5,8 @@
 //
 // Selection is router-owned: the URL /<id1>+<id2>+... is the cursor, left to
 // right, the sidebar drives it, and the route effect here ships `pages.open`
-// with the full list whenever it changes. The bare "/" names no Plane, which
-// is a real route and not a loading state.
+// with the full list whenever it changes. The bare "/" is home, the Plane the
+// host seeds, so there is always at least one pane.
 //
 // A single pane is the page as it always was: the whole strip, centred, no
 // borders. With a split every pane keeps at least the page's measure, the
@@ -38,7 +38,8 @@ import { patchPageMeta, patchPageTitle, pruneViewer, usePages, useSnippets } fro
 import { TabBar } from "./TabBar";
 import { usePaneWidths } from "./usePaneWidths";
 
-/** Nothing is open. A fact, not an error, so it says so and stops. */
+/** Nothing is open. Unreachable while "/" routes home, kept as the honest
+ *  fallback should a route ever come back empty. */
 const NOTHING_OPEN = "pick a Plane";
 
 export function Main({ path }: NodeProps) {

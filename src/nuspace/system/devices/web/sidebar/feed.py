@@ -6,9 +6,11 @@ Two families:
 - **store to browser.** The plane list changed; the arm ships it again.
 
 **Sections are apps** (D18). One section row per app with ``section=True``,
-in the order the apps were given. A plane is listed when it is not a system
-plane, its ``props.ui`` is set, and its ``props.made_by`` names a section
-app; it hangs under that section. ``+`` under a section runs its app.
+in the order the apps were given. A plane is listed when its ``props.ui``
+is set and its ``props.made_by`` names a section app; it hangs under that
+section. ``+`` under a section runs its app. ``system`` is not asked, it
+only means protected: home is a system ui plane with ``made_by`` empty, so
+it is under no section, and the space header is its way in.
 
 **Narrow watch.** The list is shipped again when the set of planes, a
 plane's name or props change, and nothing else: a cell writing
@@ -91,7 +93,6 @@ def rows(apps: Sequence[App]) -> nu.Nu:
             nu.Filter(
                 ops.plane_rows(),
                 nu.And(
-                    nu.Not(nu.ToBool(_prop(picked, "system"))),
                     nu.ToBool(_prop(picked, "ui")),
                     names.contains(nu.ToStr(_prop(picked, "made_by"))),
                 ),

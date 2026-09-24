@@ -72,9 +72,10 @@ export function Rail({
 	notify: Notify;
 }) {
 	const routes = useRoutes();
-	// A bare "/" has nothing open, and no row stands in for that: the row that
-	// stands for the Space is the tree's root and is not drawn. The focused
-	// pane's Plane is the cursor; the others are merely open.
+	// A bare "/" is home, and the header stands in for it: home is listed
+	// under no section, and the row that stands for the Space is the tree's
+	// root and is not drawn. The focused pane's Plane is the cursor; the
+	// others are merely open.
 	const selKey = useFocusedRoute();
 	const { width, onResizeStart, onResizeReset } = useRailWidth();
 	const root = rootId(tree);

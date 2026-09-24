@@ -12,6 +12,7 @@ separately here.
 
 ## Unreleased
 
+- A home page shows recent pages, a live overview and how to get started
 - Split panes get a tab bar to switch, rename and close them
 - A compact page setting tightens the header and drops the space below
 - Panes get a settings menu, resize handles and side scrolling when crowded

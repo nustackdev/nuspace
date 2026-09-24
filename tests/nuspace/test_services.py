@@ -212,13 +212,27 @@ async def test_nav_skips_missing_and_system_planes(space):
 
 
 @module_loop
+async def test_nav_brings_up_a_system_ui_plane_and_never_a_service(space):
+    """``system`` only protects: a system ui plane (home) comes up, a service never does."""
+    sid = "conn-system-ui"
+    p = await space.run(ops.add_plane(system=True, ui=True))
+    await space.run(ops.add_cell(p, READS_SESSION))
+    await space.run(atomic(Space.connections[sid].routes.set(["reload", p])))
+    await runs_of(space, p, lambda rs: rs and _up(rs[0]))
+    reloads = await space.read(ops.runs(plane="reload"))
+    assert [r["by"] for r in reloads] == [init.BY]
+    await space.run(atomic(Space.connections.del_item(sid)))
+    await runs_of(space, p, lambda rs: _dead(rs[0]))
+
+
+@module_loop
 async def test_nav_waits_for_a_routed_plane_not_written_yet(space):
     """A new page is selected before its create lands: nav waits, not gives up."""
     sid = "conn-early"
     await space.run(atomic(Space.connections[sid].routes.set(["early"])))
     # Past a tick, so nav has seen the routes and found no plane behind it.
     await asyncio.sleep(1.5)
-    await space.run(ops.add_plane("early"))
+    await space.run(ops.add_plane("early", ui=True))
     await space.run(ops.add_cell("early", READS_SESSION))
     await runs_of(space, "early", lambda rs: rs and _up(rs[0]))
     await space.run(atomic(Space.connections.del_item(sid)))
