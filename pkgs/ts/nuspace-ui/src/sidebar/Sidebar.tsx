@@ -1,4 +1,4 @@
-// The sidebar: every Plane that draws, as one list. One per tab.
+// The sidebar: every Plane that draws, as one tree. One per tab.
 //
 // The only thing in nuspace that navigates. A row click replaces the focused
 // pane or, with cmd/ctrl, opens a split; the URL is the cursor, and the Viewer
@@ -11,13 +11,13 @@
 import type { NodeProps } from "@nustackdev/ui-kit";
 import { pathKey } from "@nustackdev/ui-kit";
 import { useCallback, useMemo } from "react";
-import { notifyOp } from "../app/wire";
+import { notifyOp } from "../core/wire";
 import type { Ops } from "./ops";
 import { Rail } from "./Rail";
 import { patchSidebar, useExpanded, useSidebarValue } from "./state";
 
 export function Sidebar({ path }: NodeProps) {
-	const { tree, loaded } = useSidebarValue(path);
+	const { tree, loaded, registered } = useSidebarValue(path);
 	const expandedList = useExpanded(path);
 	const key = pathKey(path);
 
@@ -48,6 +48,7 @@ export function Sidebar({ path }: NodeProps) {
 		<Rail
 			tree={tree}
 			loaded={loaded}
+			registered={registered}
 			expanded={expanded}
 			onToggle={toggleExpanded}
 			notify={notify}

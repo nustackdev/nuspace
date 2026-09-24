@@ -18,7 +18,7 @@ import { IconButton, Input } from "@nustackdev/ui-kit";
 import { X } from "lucide-react";
 import type * as React from "react";
 import { useEffect, useRef, useState } from "react";
-import { closePane, focusPane } from "../app/router";
+import { closePane, focusPane } from "../core/router";
 import {
 	paneBarButton,
 	tabActions,
@@ -29,9 +29,9 @@ import {
 	tabTitle,
 	tabTrigger,
 } from "../design";
-import type { ActivePage } from "../page/types";
 import { TITLE_FALLBACK } from "../pane/Pane";
 import { PaneMenu } from "../pane/PaneMenu";
+import type { ActivePlane } from "../plane/types";
 
 /** Smooth, unless the user asked for less motion (motion.md). */
 function scrollBehavior(): ScrollBehavior {
@@ -47,19 +47,19 @@ function reveal(host: HTMLElement | null, attr: string, id: string): void {
 
 export function TabBar({
 	routes,
-	pages,
+	planes,
 	focused,
 	stripRef,
 	onMeta,
 	onRename,
 }: {
 	routes: string[];
-	pages: Record<string, ActivePage>;
+	planes: Record<string, ActivePlane>;
 	focused: string;
 	/** The strip of panes, to scroll a pane into view. */
 	stripRef: React.RefObject<HTMLDivElement | null>;
-	onMeta: (pageId: string, patch: Record<string, unknown>) => void;
-	onRename: (pageId: string, title: string) => void;
+	onMeta: (planeId: string, patch: Record<string, unknown>) => void;
+	onRename: (planeId: string, title: string) => void;
 }) {
 	const barRef = useRef<HTMLDivElement | null>(null);
 	const [editing, setEditing] = useState<string | null>(null);
@@ -108,7 +108,7 @@ export function TabBar({
 		else if (e.key === "End") next = routes.length - 1;
 		else if (e.key === "F2") {
 			e.preventDefault();
-			if (pages[id]) setEditing(id);
+			if (planes[id]) setEditing(id);
 			return;
 		} else if (e.key === "Delete") {
 			e.preventDefault();
@@ -116,7 +116,7 @@ export function TabBar({
 			return;
 		} else if (e.key === "ContextMenu" || (e.key === "F10" && e.shiftKey)) {
 			e.preventDefault();
-			if (pages[id]) setMenuOf(id);
+			if (planes[id]) setMenuOf(id);
 			return;
 		} else return;
 		e.preventDefault();
@@ -125,10 +125,10 @@ export function TabBar({
 	};
 
 	return (
-		<div ref={barRef} role="tablist" aria-label="Open pages" className={tabBar}>
+		<div ref={barRef} role="tablist" aria-label="Open planes" className={tabBar}>
 			{routes.map((id, i) => {
-				const page = pages[id] ?? null;
-				const title = page?.title || TITLE_FALLBACK;
+				const plane = planes[id] ?? null;
+				const title = plane?.title || TITLE_FALLBACK;
 				const active = id === focused;
 				return (
 					// biome-ignore lint/a11y/noStaticElementInteractions: middle-click close is a mouse shortcut on the whole cell; the keyboard closes with Delete on the tab
@@ -150,12 +150,12 @@ export function TabBar({
 					>
 						{editing === id ? (
 							<TabRenameInput
-								initial={page?.title ?? ""}
+								initial={plane?.title ?? ""}
 								label={`Rename ${title}`}
 								onCommit={(value, byKey) => {
 									setEditing(null);
 									const next = value.trim();
-									if (next && next !== (page?.title ?? "").trim()) onRename(id, next);
+									if (next && next !== (plane?.title ?? "").trim()) onRename(id, next);
 									if (byKey) focusTab(id);
 								}}
 								onCancel={() => {
@@ -173,7 +173,7 @@ export function TabBar({
 								className={tabTrigger}
 								onClick={() => activate(id)}
 								onDoubleClick={() => {
-									if (page) setEditing(id);
+									if (plane) setEditing(id);
 								}}
 								onKeyDown={(e) => onKeyDown(e, i)}
 							>
@@ -182,7 +182,8 @@ export function TabBar({
 						)}
 						<span className={tabActions(active)}>
 							<PaneMenu
-								meta={page?.meta ?? null}
+								planeId={id}
+								meta={plane?.meta ?? null}
 								onChange={(patch) => onMeta(id, patch)}
 								onRename={() => setEditing(id)}
 								open={menuOf === id}

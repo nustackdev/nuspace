@@ -9,11 +9,11 @@ Per connection, one arm:
 1. ``connections[sid] = {opened: now, routes: []}``;
 2. in parallel: the route arm, and the shell boot followed by the sidebar
    and viewer feeds. The route arm subscribes beside the boot rather than
-   after it, so the browser's first ``pages.open`` cannot land before
+   after it, so the browser's first ``planes.open`` cannot land before
    anybody listens;
 3. on every way out, ``connections[sid]`` is deleted.
 
-The route arm (D15): the viewer's ``pages.open`` carries the full ordered
+The route arm (D15): the viewer's ``planes.open`` carries the full ordered
 list of open planes (its panes, left to right). Deduped with order kept and
 empty ids dropped, it is written whole as ``routes``. Every plane that left
 the list has its cells erased as drawn first. The planes newly in the list
@@ -34,7 +34,7 @@ from nuspace.shapes import RECENTS_CAP, Space
 from nuspace.system.devices.web.env import SESSION_ENV, session_env
 from nuspace.system.devices.web.session import served_sessions
 from nuspace.system.devices.web.shell import Shell
-from nuspace.system.devices.web.sidebar import sidebar_feed
+from nuspace.system.devices.web.sidebar import registered_entries, sidebar_feed
 from nuspace.system.devices.web.utils import Arms, cell_ui, field_ids
 from nuspace.system.devices.web.viewer import on_open, slash_entries, viewer_feed
 from nuspace.system.home import PLANE as HOME
@@ -48,7 +48,7 @@ from nustd.ws_server import SID_ATTR, listen, run_once, session_for, sessions_fo
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
-    from nuspace.ops import App, Snippet
+    from nuspace.ops import Plane, Snippet
     from nuspace.system.kernel import EnvFactory
     from nustd.ui.core import Ref
 
@@ -94,7 +94,7 @@ def _erase(viewer: Ref, plane: nu.Nu) -> nu.Nu:
 def _remembered(plane: nu.Nu) -> nu.Nu:
     """Whether an opened plane goes in recents: not home, and not a system plane that is not ui.
 
-    A plane not written yet counts: a new page is routed before its create
+    A plane not written yet counts: a new plane is routed before its create
     lands (D41), and the home cell drops ids that never came to exist.
     """
     props = Space.planes[plane].props
@@ -126,7 +126,7 @@ def remember(opened: nu.Nu) -> nu.Nu:
 def route_arm(viewer: Ref, sid: nu.StrArg) -> nu.Nu:
     """Route ``sid`` to the planes the viewer has open (D15). Never ends.
 
-    ``pages.open`` is the full list every time. The cells of every plane
+    ``planes.open`` is the full list every time. The cells of every plane
     leaving it are erased as drawn before ``routes`` is written, so nothing
     of a closed pane stays on screen. The planes entering it are pushed onto
     recents in the same commit as ``routes``.
@@ -139,7 +139,7 @@ def route_arm(viewer: Ref, sid: nu.StrArg) -> nu.Nu:
         nu.Collect(
             nu.Unique(
                 nu.Filter(
-                    nu.Map(field_ids(_ROUTE, "page_ids"), nu.ToStr(at), key=item),
+                    nu.Map(field_ids(_ROUTE, "plane_ids"), nu.ToStr(at), key=item),
                     nu.Ne(at, nu.Str("")),
                     key=item,
                 )
@@ -169,7 +169,7 @@ def route_arm(viewer: Ref, sid: nu.StrArg) -> nu.Nu:
 def connection(
     sid: nu.StrArg,
     *,
-    apps: Sequence[App] = (),
+    planes: Sequence[Plane] = (),
     snippets: Sequence[Snippet] = (),
     shell: type[Shell] = Shell,
 ) -> nu.Nu:
@@ -177,12 +177,12 @@ def connection(
 
     Args:
         sid: The connection id.
-        apps: The registered apps, for the sidebar's sections.
+        planes: The registered Planes, what the sidebar can create.
         snippets: The registered snippets, for the viewer's ``/`` menu.
         shell: The shell every tab holds.
     """
-    feeds = shell.boot(slash_entries(snippets)) >> nu.ParallelAsync(
-        sidebar_feed(shell.sidebar, apps),
+    feeds = shell.boot(slash_entries(snippets), registered_entries(planes)) >> nu.ParallelAsync(
+        sidebar_feed(shell.sidebar, planes),
         viewer_feed(shell.viewer, sid, snippets),
     )
     return nu.TryCatch(
@@ -193,7 +193,7 @@ def connection(
 
 def serve_web(
     *,
-    apps: Sequence[App] = (),
+    planes: Sequence[Plane] = (),
     snippets: Sequence[Snippet] = (),
     host: str = "127.0.0.1",
     port: int = 8080,
@@ -211,8 +211,7 @@ def serve_web(
     store brackets (``open_kernel``).
 
     Args:
-        apps: The registered apps. Those with ``section=True`` are sidebar
-            sections.
+        planes: The registered Planes, what the sidebar can create.
         snippets: The registered snippets: the viewer's ``/`` menu, and what
             a cell made from each entry stores.
         host: The interface the server binds.
@@ -247,7 +246,7 @@ def serve_web(
                 # Once per connection: the fold respawns ended arms on every
                 # connect or disconnect anywhere, and a tab rebooted because
                 # somebody else opened one is wiped for no reason.
-                run_once(connection(sid, apps=apps, snippets=snippets)),
+                run_once(connection(sid, planes=planes, snippets=snippets)),
             )
         ),
     )

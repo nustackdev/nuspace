@@ -43,7 +43,7 @@ from .registry import Extension, Registry, RegistryWarning
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
 
-    from nuspace.ops import App, Snippet
+    from nuspace.ops import Plane, Snippet
     from nuspace.system.kernel import EnvFactory
 
 
@@ -52,7 +52,7 @@ __all__ = ["open_space", "space_registry"]
 
 def space_registry(
     *,
-    apps: Sequence[App] = (),
+    planes: Sequence[Plane] = (),
     snippets: Sequence[Snippet] = (),
     envs: Mapping[str, EnvFactory] | None = None,
     extensions: Sequence[Extension] | None = None,
@@ -61,13 +61,13 @@ def space_registry(
     """What a space registers: the loose arguments, then ``extensions``, then installed ones.
 
     Args:
-        apps: Apps passed directly, ahead of everything.
+        planes: Planes passed directly, ahead of everything.
         snippets: Snippets passed directly.
         envs: Env factories passed directly.
         extensions: Explicit extensions, after the loose arguments.
         discover: Also load the ``nuspace.extensions`` entry points.
     """
-    loose = Extension(tuple(apps), tuple(snippets), dict(envs or {}), name="open_space")
+    loose = Extension(tuple(planes), tuple(snippets), dict(envs or {}), name="open_space")
     return Registry.build([loose, *(extensions or ())], discovered=None if discover else [])
 
 
@@ -94,7 +94,7 @@ def open_space(
     open_browser: bool = True,
     static: str | None = "nuspace_ui",
     spares: int = DEFAULT_SPARES,
-    apps: Sequence[App] = (),
+    planes: Sequence[Plane] = (),
     snippets: Sequence[Snippet] = (),
     envs: Mapping[str, EnvFactory] | None = None,
     space_envs: Sequence[Sequence[str] | str] = (),
@@ -118,7 +118,7 @@ def open_space(
         static: The wheel shipping the browser bundle. None serves the
             socket alone, eg for a vite dev server.
         spares: Idle workers to keep up.
-        apps: Apps registered directly, ahead of any extension.
+        planes: Planes registered directly, ahead of any extension.
         snippets: Snippets registered directly.
         envs: Env factories registered directly.
         space_envs: Env specs every run executes inside, outermost.
@@ -129,7 +129,7 @@ def open_space(
         name: Process name prefix for workers.
     """
     reg = space_registry(
-        apps=apps, snippets=snippets, envs=envs, extensions=extensions, discover=discover
+        planes=planes, snippets=snippets, envs=envs, extensions=extensions, discover=discover
     )
     factories = dict(reg.envs)
     arms: list[nu.Nu] = []
@@ -137,7 +137,7 @@ def open_space(
         from nuspace.system.devices.web.device import serve_web
 
         served, web_envs = serve_web(
-            apps=list(reg.apps.values()),
+            planes=list(reg.planes.values()),
             snippets=list(reg.snippets.values()),
             host=host,
             port=port,

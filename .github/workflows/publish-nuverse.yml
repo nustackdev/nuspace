@@ -1,7 +1,7 @@
 # Publishes the `nuverse` distribution to PyPI on a tag push like `nuverse@0.1.0`.
 # Manual "Run workflow" dispatch builds only, unless you tick `publish`.
 #
-# nuverse is the extensions package: the apps (`+`) and snippets (`/`) a space
+# nuverse is the extensions package: the Planes (`+`) and snippets (`/`) a space
 # offers out of the box. nuspace finds it through the `nuspace.extensions`
 # entry point and hard-depends on it. It carries python source only, no node
 # toolchain needed.

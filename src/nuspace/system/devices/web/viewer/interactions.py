@@ -1,16 +1,13 @@
 """Everything the viewer says and hears, in the browser's own words.
 
-Every name here is the wire spelling: a plane is a ``page``, a cell a
-``section``.
-
 - **Events**, browser to host. One path per op under ``<viewer>.ops.``.
 - **Writes**, host to browser. Two, on the viewer's own path, tagged with an
-  ``op`` key, and keyed by ``page_id``: several planes can be open at once,
-  one pane each. ``set_status`` patches what ``set_page`` landed for the same
-  page, so the two go in that order.
+  ``op`` key, and keyed by ``plane_id``: several planes can be open at once,
+  one pane each. ``set_status`` patches what ``set_plane`` landed for the
+  same plane, so the two go in that order.
 
 Nothing here reads or writes a store. Which op an event runs is
-:mod:`.feed`. ``pages.open`` is the viewer's: which panes are open is a
+:mod:`.feed`. ``planes.open`` is the viewer's: which panes are open is a
 fact about the viewer.
 """
 
@@ -40,7 +37,7 @@ __all__ = [
     "on_reorder_cells",
     "on_set_meta",
     "on_update_cell",
-    "set_page",
+    "set_plane",
     "set_status",
 ]
 
@@ -67,7 +64,7 @@ STATES = (STATE_IDLE, STATE_STARTING, STATE_RUNNING, STATE_STOPPED, STATE_FAILED
 # --- Writes: host -> browser --------------------------------------------------
 
 
-def set_page(
+def set_plane(
     viewer: Ref,
     plane_id: StrArg,
     *,
@@ -82,57 +79,57 @@ def set_page(
     with one, even for something that is not a plane, or its pane loads
     forever.
     """
-    return write(viewer, "set_page", page_id=plane_id, title=title, meta=meta, blocks=cells)
+    return write(viewer, "set_plane", plane_id=plane_id, title=title, meta=meta, cells=cells)
 
 
 def set_status(viewer: Ref, plane_id: StrArg, statuses: ListArg[dict]) -> Nu:
     """Patch what one pane says about its cells.
 
-    An entry is ``{section_id, state, error, started_at}``. A patch into the
-    page already landed, so it follows a :func:`set_page` for the same plane.
+    An entry is ``{cell_id, state, error, started_at}``. A patch into the
+    plane already landed, so it follows a :func:`set_plane` for the same plane.
     """
-    return write(viewer, "set_status", page_id=plane_id, statuses=statuses)
+    return write(viewer, "set_status", plane_id=plane_id, statuses=statuses)
 
 
 # --- Events: browser -> host --------------------------------------------------
 
 
 def on_open(viewer: Ref) -> Changed:
-    """The planes the browser has open, as panes. ``{page_ids}``.
+    """The planes the browser has open, as panes. ``{plane_ids}``.
 
     The full ordered list every time, left to right, not a delta.
     """
-    return event(viewer, "pages.open")
+    return event(viewer, "planes.open")
 
 
 def on_create_cell(viewer: Ref) -> Changed:
-    """``{page_id, section_id, name, index}``. Browser minted id.
+    """``{plane_id, cell_id, name, index}``. Browser minted id.
 
     ``name`` names a snippet: the cell stores its prog and takes its name.
     """
-    return event(viewer, "section.create")
+    return event(viewer, "cell.create")
 
 
 def on_update_cell(viewer: Ref) -> Changed:
-    """``{page_id, section_id, source}``. Replaces the prog, nothing else."""
-    return event(viewer, "section.update")
+    """``{plane_id, cell_id, source}``. Replaces the prog, nothing else."""
+    return event(viewer, "cell.update")
 
 
 def on_delete_cell(viewer: Ref) -> Changed:
-    """``{page_id, section_id}``."""
-    return event(viewer, "section.delete")
+    """``{plane_id, cell_id}``."""
+    return event(viewer, "cell.delete")
 
 
 def on_move_cell(viewer: Ref) -> Changed:
-    """``{page_id, section_id, to_page_id, index}``. Keeps the cell's id."""
-    return event(viewer, "section.move")
+    """``{plane_id, cell_id, to_plane_id, index}``. Keeps the cell's id."""
+    return event(viewer, "cell.move")
 
 
 def on_reorder_cells(viewer: Ref) -> Changed:
-    """``{page_id, section_ids}``. One plane's cells, in the new order."""
-    return event(viewer, "section.reorder")
+    """``{plane_id, cell_ids}``. One plane's cells, in the new order."""
+    return event(viewer, "cell.reorder")
 
 
 def on_set_meta(viewer: Ref) -> Changed:
-    """``{page_id, meta}``. Merges ``meta``'s keys into the plane's meta, shallow."""
-    return event(viewer, "page.meta")
+    """``{plane_id, meta}``. Merges ``meta``'s keys into the plane's meta, shallow."""
+    return event(viewer, "plane.meta")

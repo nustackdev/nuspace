@@ -12,43 +12,56 @@
 // itself.
 //
 // There is no path to a Plane. It is addressed by id at a fixed depth however
-// it is grouped, so the URL is /<plane id> and an op carries an id.
+// deep it is nested, so the URL is /<plane id> and an op carries an id.
 //
-// ## Three kinds of row, two of them shims
+// ## Two kinds of row
 //
-// A row says what it is in `kind`, and only `plane` is a thing in the store.
-// The Space and each section are rows the server invents so the browser has a
-// root and a place to hang a Plane. Told apart by the field and never by the
-// id: a section's id is its group name and a Plane could be called anything.
+// A row says what it is in `kind`. `plane` is a Plane in the store; `space` is
+// the one row the server invents so the tree has a root, with the id
+// `ROOT_ID`, parenting itself. There is no grouping row: grouping is nesting,
+// and a Plane with no cells works as a folder.
 //
-// An unknown `kind` is dropped rather than bucketed. Same for a row whose
-// parent this build has no row for: a Plane in a group the server did not ship
-// a section for is simply not in the tree.
+// An unknown `kind` is dropped rather than bucketed. A row whose parent this
+// build has no row for is simply not in the tree.
 
-/** What a row is. The Space, a section, or a Plane. */
+/** What a row is. The Space, or a Plane. */
 export const KIND_SPACE = "space";
-export const KIND_GROUP = "group";
 export const KIND_PLANE = "plane";
 
-export type RowKind = typeof KIND_SPACE | typeof KIND_GROUP | typeof KIND_PLANE;
+export type RowKind = typeof KIND_SPACE | typeof KIND_PLANE;
 
-const KINDS: readonly string[] = [KIND_SPACE, KIND_GROUP, KIND_PLANE];
+const KINDS: readonly string[] = [KIND_SPACE, KIND_PLANE];
+
+/** The Space row's id, and the `parent_id` that means "at the top". */
+export const ROOT_ID = "space";
 
 /** One row, as the server ships it. The root row is its own parent. */
-export type PageRow = {
+export type TreeRow = {
 	id: string;
 	kind: RowKind;
 	title: string;
 	parent: string;
+	/** Already in sibling order. */
 	children: string[];
+	/** The registered Plane it was created from, "" when none. Picks the icon. */
+	made_by: string;
+};
+
+/** One registered Plane, as the Add plane popup offers it. Seeded at boot. */
+export type Registered = {
+	name: string;
+	label: string;
+	/** A lucide icon name, "" for the default. */
+	icon: string;
+	description: string;
 };
 
 /** Every Plane that draws, keyed by id. What the sidebar walks. */
-export type PageTree = Record<string, PageRow>;
+export type PlaneTree = Record<string, TreeRow>;
 
-export type SidebarValue = { tree: PageTree; loaded: boolean };
+export type SidebarValue = { tree: PlaneTree; loaded: boolean; registered: Registered[] };
 
-export const EMPTY_TREE: PageTree = {};
+export const EMPTY_TREE: PlaneTree = {};
 
 // -- Tree walking ------------------------------------------------------------
 
@@ -58,7 +71,7 @@ export const EMPTY_TREE: PageTree = {};
  * Found rather than hardcoded: the root is the one row that parents itself,
  * which is exactly the invariant the server maintains.
  */
-export function rootId(tree: PageTree): string {
+export function rootId(tree: PlaneTree): string {
 	for (const id in tree) {
 		if (tree[id].parent === id) return id;
 	}
@@ -66,10 +79,10 @@ export function rootId(tree: PageTree): string {
 }
 
 /** A row's children as rows, skipping ids the tree does not hold. */
-export function childrenOf(tree: PageTree, id: string): PageRow[] {
+export function childrenOf(tree: PlaneTree, id: string): TreeRow[] {
 	const row = tree[id];
 	if (!row) return [];
-	const out: PageRow[] = [];
+	const out: TreeRow[] = [];
 	for (const kid of row.children) {
 		const r = tree[kid];
 		if (r) out.push(r);
@@ -83,8 +96,8 @@ export function childrenOf(tree: PageTree, id: string): PageRow[] {
  * Bounded by the number of rows: a cycle in `parent` would otherwise spin here,
  * and the browser is not the place to trust the server's invariants.
  */
-export function ancestorsOf(tree: PageTree, id: string): PageRow[] {
-	const out: PageRow[] = [];
+export function ancestorsOf(tree: PlaneTree, id: string): TreeRow[] {
+	const out: TreeRow[] = [];
 	const seen = new Set<string>([id]);
 	let at = tree[id]?.parent ?? "";
 	while (at && tree[at] && !seen.has(at)) {
@@ -101,18 +114,16 @@ export function coerceStrs(raw: unknown): string[] {
 	return Array.isArray(raw) ? raw.map((s) => String(s)) : [];
 }
 
-export function coerceTree(raw: unknown): PageTree {
+export function coerceTree(raw: unknown): PlaneTree {
 	if (!Array.isArray(raw)) return {};
-	const out: PageTree = {};
+	const out: PlaneTree = {};
 	for (const p of raw) {
 		if (!p || typeof p !== "object") continue;
 		const r = p as Record<string, unknown>;
 		const id = String(r.id ?? "");
 		if (!id) continue;
-		// A row whose kind this build does not know is dropped. It cannot be
-		// drawn (there is no rule for what it looks like) and it cannot be
-		// bucketed (there is no such thing as an other section), so the honest
-		// answer is that it is not in the tree.
+		// A row whose kind this build does not know is dropped: there is no
+		// rule for what it looks like.
 		const kind = String(r.kind ?? KIND_PLANE);
 		if (!KINDS.includes(kind)) continue;
 		out[id] = {
@@ -121,7 +132,26 @@ export function coerceTree(raw: unknown): PageTree {
 			title: String(r.title ?? ""),
 			parent: String(r.parent ?? id),
 			children: coerceStrs(r.children),
+			made_by: String(r.made_by ?? ""),
 		};
+	}
+	return out;
+}
+
+export function coerceRegistered(raw: unknown): Registered[] {
+	if (!Array.isArray(raw)) return [];
+	const out: Registered[] = [];
+	for (const e of raw) {
+		if (!e || typeof e !== "object") continue;
+		const r = e as Record<string, unknown>;
+		const name = String(r.name ?? "");
+		if (!name) continue;
+		out.push({
+			name,
+			label: String(r.label ?? name),
+			icon: String(r.icon ?? ""),
+			description: String(r.description ?? ""),
+		});
 	}
 	return out;
 }

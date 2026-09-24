@@ -3,8 +3,8 @@
 A component ref like ``ButtonRef``, only wider: it renders the open planes'
 cells, one pane per plane.
 It never asks what kind of plane it draws; what it reads off the plane is
-its meta (``editable``, ``full_width``), which arrives with the page like
-anything else, and goes back through ``page.meta``.
+its meta (``editable``, ``full_width``), which arrives with the plane like
+anything else, and goes back through ``plane.meta``.
 
 It is mounted with one prop off the registered snippets (D19):
 ``snippets``, the ``/`` menu's entries in order. Seeded when the shell boots,
@@ -47,45 +47,45 @@ class ViewerRef(SpaceRef):
         """Mount the viewer, seeded with the ``/`` menu."""
         return super().slot(snippets=[dict(s) for s in snippets or ()])
 
-    def set_page(
+    def set_plane(
         self,
-        page_id: StrArg,
+        plane_id: StrArg,
         *,
         title: StrArg,
         meta: DictArg[str, object],
-        blocks: ListArg[dict],
+        cells: ListArg[dict],
     ) -> Nu:
         """Replace what one pane draws: one plane, its meta, and its cells in order."""
-        return interactions.set_page(self, page_id, title=title, meta=meta, cells=blocks)
+        return interactions.set_plane(self, plane_id, title=title, meta=meta, cells=cells)
 
-    def set_status(self, page_id: StrArg, statuses: ListArg[dict]) -> Nu:
+    def set_status(self, plane_id: StrArg, statuses: ListArg[dict]) -> Nu:
         """Patch what one pane says about its cells."""
-        return interactions.set_status(self, page_id, statuses)
+        return interactions.set_status(self, plane_id, statuses)
 
     def on_open(self) -> Changed:
-        """``{page_ids}``, the full ordered list."""
+        """``{plane_ids}``, the full ordered list."""
         return interactions.on_open(self)
 
-    def on_create_section(self) -> Changed:
-        """``{page_id, section_id, name, index}``."""
+    def on_create_cell(self) -> Changed:
+        """``{plane_id, cell_id, name, index}``."""
         return interactions.on_create_cell(self)
 
-    def on_update_section(self) -> Changed:
-        """``{page_id, section_id, source}``."""
+    def on_update_cell(self) -> Changed:
+        """``{plane_id, cell_id, source}``."""
         return interactions.on_update_cell(self)
 
-    def on_delete_section(self) -> Changed:
-        """``{page_id, section_id}``."""
+    def on_delete_cell(self) -> Changed:
+        """``{plane_id, cell_id}``."""
         return interactions.on_delete_cell(self)
 
-    def on_move_section(self) -> Changed:
-        """``{page_id, section_id, to_page_id, index}``."""
+    def on_move_cell(self) -> Changed:
+        """``{plane_id, cell_id, to_plane_id, index}``."""
         return interactions.on_move_cell(self)
 
-    def on_reorder_sections(self) -> Changed:
-        """``{page_id, section_ids}``."""
+    def on_reorder_cells(self) -> Changed:
+        """``{plane_id, cell_ids}``."""
         return interactions.on_reorder_cells(self)
 
     def on_set_meta(self) -> Changed:
-        """``{page_id, meta}``."""
+        """``{plane_id, meta}``."""
         return interactions.on_set_meta(self)

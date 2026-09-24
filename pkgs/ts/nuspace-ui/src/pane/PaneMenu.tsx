@@ -1,16 +1,17 @@
-// The `...` off a pane's bar or its tab: a small popover of page settings.
+// The `...` off a pane's bar or its tab: a small popover of plane settings.
 //
 // A list of rows, one per entry in ./settings.ts, each a label and a control.
 // The whole row is the hit target for a switch, so it can be flipped from the
 // label as well as the track.
 //
-// The tab bar opens the same menu with two extras: a Rename row on top (only
+// Above the settings, "Add plane" opens the Add plane popup for a child of
+// this pane's Plane, opened in this pane. The tab bar adds a Rename row (only
 // when `onRename` is given), and `open` / `onOpenChange` so a key on the tab
 // can open it.
 
 import { IconButton, Popover, PopoverContent, PopoverTrigger, Switch } from "@nustackdev/ui-kit";
 import { Ellipsis } from "lucide-react";
-import { useId, useRef } from "react";
+import { useId, useRef, useState } from "react";
 import {
 	paneBarButton,
 	paneMenu,
@@ -21,10 +22,12 @@ import {
 	paneMenuSeparator,
 	paneMenuText,
 } from "../design";
-import type { PageMeta } from "../page/types";
-import { PAGE_SETTINGS, type PageSetting } from "./settings";
+import type { PlaneMeta } from "../plane/types";
+import { openAddPlane } from "../sidebar/add";
+import { PLANE_SETTINGS, type PlaneSetting } from "./settings";
 
 export function PaneMenu({
+	planeId,
 	meta,
 	onChange,
 	onRename,
@@ -33,8 +36,10 @@ export function PaneMenu({
 	className = paneBarButton,
 	tabIndex,
 }: {
-	/** Null until the page lands; the menu stays shut until then. */
-	meta: PageMeta | null;
+	/** The pane's Plane, the parent "Add plane" makes a child of. */
+	planeId: string;
+	/** Null until the plane lands; the menu stays shut until then. */
+	meta: PlaneMeta | null;
 	onChange: (patch: Record<string, unknown>) => void;
 	/** Adds a Rename row on top. The caller owns the inline editor. */
 	onRename?: () => void;
@@ -50,13 +55,17 @@ export function PaneMenu({
 	// focus back to the trigger on close, which blurs, and so commits, that
 	// input the moment it opens.
 	const renaming = useRef(false);
+	// Uncontrolled unless the caller says, so "Add plane" can shut it either way.
+	const [own, setOwn] = useState(false);
+	const isOpen = open ?? own;
+	const setOpen = onOpenChange ?? setOwn;
 	return (
-		<Popover open={open} onOpenChange={onOpenChange}>
+		<Popover open={isOpen} onOpenChange={setOpen}>
 			<PopoverTrigger asChild>
 				<IconButton
 					variant="ghost"
 					size="sm"
-					aria-label="Page settings"
+					aria-label="Plane settings"
 					disabled={meta === null}
 					className={className}
 					tabIndex={tabIndex}
@@ -73,24 +82,34 @@ export function PaneMenu({
 					e.preventDefault();
 				}}
 			>
-				{meta && onRename ? (
-					<>
-						<button
-							type="button"
-							className={paneMenuAction}
-							onClick={() => {
-								renaming.current = true;
-								onOpenChange?.(false);
-								onRename();
-							}}
-						>
-							Rename
-						</button>
-						<div className={paneMenuSeparator} aria-hidden="true" />
-					</>
+				{meta ? (
+					<button
+						type="button"
+						className={paneMenuAction}
+						onClick={() => {
+							setOpen(false);
+							openAddPlane({ parent: planeId, pane: planeId });
+						}}
+					>
+						Add plane
+					</button>
 				) : null}
+				{meta && onRename ? (
+					<button
+						type="button"
+						className={paneMenuAction}
+						onClick={() => {
+							renaming.current = true;
+							setOpen(false);
+							onRename();
+						}}
+					>
+						Rename
+					</button>
+				) : null}
+				{meta ? <div className={paneMenuSeparator} aria-hidden="true" /> : null}
 				{meta
-					? PAGE_SETTINGS.map((s) => (
+					? PLANE_SETTINGS.map((s) => (
 							<SettingRow key={s.key} setting={s} meta={meta} onChange={onChange} />
 						))
 					: null}
@@ -104,8 +123,8 @@ function SettingRow({
 	meta,
 	onChange,
 }: {
-	setting: PageSetting;
-	meta: PageMeta;
+	setting: PlaneSetting;
+	meta: PlaneMeta;
 	onChange: (patch: Record<string, unknown>) => void;
 }) {
 	const id = useId();

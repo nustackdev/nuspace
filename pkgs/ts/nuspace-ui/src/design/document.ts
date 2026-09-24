@@ -1,36 +1,36 @@
 // Document-surface class recipes.
 //
 // The editor shell is written from zero (task-139 part 2), but its *styling*
-// is not. These are the recipes every block, gutter, handle and menu reaches
+// is not. These are the recipes every cell, gutter, handle and menu reaches
 // for, so the shell never picks a token at the call site and we do not end up
 // with forty one-off className strings that have to be unwound later.
 //
 // Everything below resolves to kit L2/L4 semantic names or the doc-* /
-// section-* names declared in ./tokens.css. No raw hex, no arbitrary values
+// cell-* names declared in ./tokens.css. No raw hex, no arbitrary values
 // off the 4px grid.
 //
 // Density note. A document is not a panel. Horizontally it uses kit density
-// (a block's inner chrome is chrome: 32px rows, 6px radii). Vertically it is
+// (a cell's inner chrome is chrome: 32px rows, 6px radii). Vertically it is
 // looser, but the air comes from the 16px/1.55 body line box, not from
 // padding. See tokens.css for the full rule.
 
 import { cn } from "@nustackdev/ui-kit";
 
-import type { SectionStatus } from "./section-status";
+import type { CellStatus } from "./cell-status";
 
-/* ============================== Page + column ============================ */
+/* ============================== Plane + column ============================ */
 
-/** Outer scroll surface. Canvas, not surface: the page IS the background. */
-const docPage = cn(
+/** Outer scroll surface. Canvas, not surface: the plane IS the background. */
+const docPlane = cn(
 	"relative h-full w-full overflow-y-auto overflow-x-hidden",
 	"bg-bg-canvas text-text-primary font-display",
 );
 
 /**
- * The reading column. Blocks sit inside; the gutter hangs off the left edge
- * into the page padding, which is why pad-x is doc-pad-x and not zero.
+ * The reading column. Cells sit inside; the gutter hangs off the left edge
+ * into the plane padding, which is why pad-x is doc-pad-x and not zero.
  *
- * `wide` is the page's full-width setting: the column spans the pane instead
+ * `wide` is the plane's full-width setting: the column spans the pane instead
  * of stopping at the reading measure.
  */
 export function docColumn(wide = false, compact = false): string {
@@ -38,7 +38,7 @@ export function docColumn(wide = false, compact = false): string {
 		"relative mx-auto w-full",
 		wide ? "max-w-none" : "max-w-doc",
 		compact ? "px-doc-pad-x pt-3 pb-3" : "px-doc-pad-x pt-doc-pad-y pb-doc-pad-y",
-		"flex flex-col gap-doc-block-gap",
+		"flex flex-col gap-doc-cell-gap",
 	);
 }
 
@@ -50,23 +50,23 @@ export function docColumn(wide = false, compact = false): string {
  * too narrow to centre the column with air to spare the gutter used to hang
  * past the pane's left edge and get cut off. Padding the surface by the
  * difference (plus 8px of air off the pane border) means the gutter always
- * lands inside the pane. Symmetric, so a centred page stays centred; on a
+ * lands inside the pane. Symmetric, so a centred plane stays centred; on a
  * wide pane it changes nothing.
  */
-export const docPageSurface = cn(
-	docPage,
+export const docPlaneSurface = cn(
+	docPlane,
 	"flex min-w-0 flex-1 flex-col",
 	"px-[calc(var(--spacing-doc-gutter)_-_var(--spacing-doc-pad-x)_+_0.5rem)]",
 );
 
-/** Before a page's value lands. Same quiet as the shell's boot state. */
-export const docPageLoading = "flex items-center gap-2 p-8 text-base text-text-muted";
+/** Before a plane's value lands. Same quiet as the shell's boot state. */
+export const docPlaneLoading = "flex items-center gap-2 p-8 text-base text-text-muted";
 
 /**
- * A ghost input: the line where a block will be, before there is one.
+ * A ghost input: the line where a cell will be, before there is one.
  *
  * It says nothing at rest. A permanent control sitting at the foot of every
- * document repeating its own instructions is the loudest thing on a page
+ * document repeating its own instructions is the loudest thing on a plane
  * whose job is to be quiet, and the affordance costs nothing to defer -- the
  * hint arrives the instant the caret does, which is the only moment it is an
  * answer to anything. Hence the transparent placeholder rather than a
@@ -75,33 +75,33 @@ export const docPageLoading = "flex items-center gap-2 p-8 text-base text-text-m
  */
 export const docGhost = cn(
 	"w-full rounded-sm border-0 bg-transparent outline-none",
-	"px-doc-block-x py-doc-block-y",
+	"px-doc-cell-x py-doc-cell-y",
 	"text-xl leading-relaxed text-text-primary",
 	"placeholder:text-transparent focus:placeholder:text-text-muted",
 );
 
 /**
- * The run-off under the last block, and the click target that opens it.
+ * The run-off under the last cell, and the click target that opens it.
  *
  * Two jobs, one box. A document wants air past its end -- ending flush with
  * the window bottom reads as truncation -- and that air is also the only
  * large, obvious place to click to start writing, which is what every
  * document surface people already use does. `cursor-text` is the promise;
- * `docGhost` below the last block is what the click lands in.
+ * `docGhost` below the last cell is what the click lands in.
  */
 export const docTail = "h-doc-tail w-full shrink-0 cursor-text";
 
-/* ============================== Page head ================================ */
+/* ============================== Plane head ================================ */
 //
-// A page opens with where it is and what it is called, and nothing else. No
+// A plane opens with where it is and what it is called, and nothing else. No
 // cover, no icon: a small trail at the top, then blank air, then the name of
 // the thing you are reading. What used to sit up here was chrome describing a
 // document rather than the document, and it pushed the first line of actual
 // writing off the fold.
 //
-// One left edge runs through all three of these and the blocks below. A
-// block's text starts at the column's 24px side gutter plus the block's own
-// 8px inset, so the trail and the title pay the same 8px -- `px-doc-block-x`
+// One left edge runs through all three of these and the cells below. A
+// cell's text starts at the column's 24px side gutter plus the cell's own
+// 8px inset, so the trail and the title pay the same 8px -- `px-doc-cell-x`
 // on both is alignment, not padding for its own sake.
 
 /**
@@ -109,7 +109,7 @@ export const docTail = "h-doc-tail w-full shrink-0 cursor-text";
  * as `docColumn`, so the two columns are one column.
  *
  * The negative bottom margin eats half of the document column's own 64px top
- * pad. Without it the title and the first block sit 64px apart on top of this
+ * pad. Without it the title and the first cell sit 64px apart on top of this
  * band's own trailing space, which reads as two documents rather than one.
  *
  * The `z-10` is load-bearing, not decoration: that same negative margin makes
@@ -130,13 +130,13 @@ export function docTitleHead(wide = false, compact = false): string {
 /**
  * The trail, riding at the top of the band. It stays in the document rather
  * than moving up into the shell strip: the strip belongs to the window and
- * this says where one page sits among the others, which is a fact about the
+ * this says where one plane sits among the others, which is a fact about the
  * document.
  *
  * Small and quiet on purpose. It is the one thing up here you can click, and
  * the whole point of the air under it is that the title arrives on its own.
  */
-export const docTrail = "px-doc-block-x";
+export const docTrail = "px-doc-cell-x";
 
 /**
  * The editable title. It is an `h1` with `contenteditable`, not an input and
@@ -147,7 +147,7 @@ export const docTrail = "px-doc-block-x";
  * here rather than as pad on the band so the trail sits above it and the air
  * lands between the two.
  *
- * No focus ring. A ring around a 40px heading is a box drawn around the page's
+ * No focus ring. A ring around a 40px heading is a box drawn around the plane's
  * name, and the caret already says where you are. The placeholder is a `::before` on the empty element
  * rather than a second absolutely positioned node, so it can never fall out of
  * alignment with that caret.
@@ -163,7 +163,7 @@ export const docTrail = "px-doc-block-x";
 export function docTitle(compact = false): string {
 	return `${cn(
 		compact ? "mt-0" : "mt-doc-title-gap",
-		"block w-full px-doc-block-x py-0.5",
+		"block w-full px-doc-cell-x py-0.5",
 		"font-bold text-text-primary",
 		"cursor-text whitespace-pre-wrap break-words outline-none",
 		"empty:before:pointer-events-none empty:before:text-text-muted",
@@ -171,53 +171,53 @@ export function docTitle(compact = false): string {
 	)} text-doc-title`;
 }
 
-/** Code inside a block. Editor tier is 14px mono, per typography.md §1. */
+/** Code inside a cell. Editor tier is 14px mono, per typography.md §1. */
 export const docCode = "font-mono text-lg text-text-primary";
 
-/* ============================== Block ==================================== */
+/* ============================== Cell ==================================== */
 
-export interface BlockStateFlags {
-	/** The caret lives in this block. No fill, gutter rail only. */
+export interface CellStateFlags {
+	/** The caret lives in this cell. No fill, gutter rail only. */
 	focused?: boolean;
-	/** Block-level selection (across an island boundary). Accent fill. */
+	/** Whole-cell selection (across an island boundary). Accent fill. */
 	selected?: boolean;
-	/** Part of a multi-block selection. Stronger accent fill. */
+	/** Part of a multi-cell selection. Stronger accent fill. */
 	selectedStrong?: boolean;
-	/** This block is the one being dragged. Ghosted while it travels. */
+	/** This cell is the one being dragged. Ghosted while it travels. */
 	dragging?: boolean;
 }
 
 /**
- * One block. The content flows normally at full measure; the gutter is hung
- * outside the block's left edge (see `docGutter`), so nothing the gutter
+ * One cell. The content flows normally at full measure; the gutter is hung
+ * outside the cell's left edge (see `docGutter`), so nothing the gutter
  * renders can shift the reading column.
  *
  * Hover and pressed are NEUTRAL (doc-hover / doc-active); selection is the
  * accent tier. That split is deliberate - on a document, hovering every
  * paragraph in purple would make hover indistinguishable from selection.
  *
- * The block does NOT tint on its own hover. Reading is the primary act on
- * this surface and the pointer crosses every block on the way to anywhere,
- * so a fill that follows the cursor down the page is noise against the one
+ * The cell does NOT tint on its own hover. Reading is the primary act on
+ * this surface and the pointer crosses every cell on the way to anywhere,
+ * so a fill that follows the cursor down the plane is noise against the one
  * thing the reader is trying to do. The tint is scoped to the drag handle
  * instead: it fires when the pointer is on the affordance that acts on the
- * whole block, which is the only moment "this block" is the unit you mean.
+ * whole cell, which is the only moment "this cell" is the unit you mean.
  * `:has()` rather than a React hover flag, because tracking pointer-enter
- * per block would rerender the document on every mouse move.
+ * per cell would rerender the document on every mouse move.
  */
-export function docBlock(state: BlockStateFlags = {}): string {
+export function docCell(state: CellStateFlags = {}): string {
 	return cn(
-		"group/block relative w-full rounded-sm",
-		"px-doc-block-x",
-		"py-doc-block-y-program",
+		"group/cell relative w-full rounded-sm",
+		"px-doc-cell-x",
+		"py-doc-cell-y-program",
 		"transition-colors duration-fast ease-out",
-		// The hovered block rides above its neighbours, so a gutter stack that
-		// overhangs a short block stays on top of the next block's lane.
+		// The hovered cell rides above its neighbours, so a gutter stack that
+		// overhangs a short cell stays on top of the next cell's lane.
 		"hover:z-20",
-		!state.selected && "has-[[data-block-grip]:hover]:bg-doc-hover",
+		!state.selected && "has-[[data-cell-grip]:hover]:bg-doc-hover",
 		state.selected && "bg-doc-selected",
 		state.selectedStrong && "bg-doc-selected-strong",
-		// The caret's block gets no fill: it is already marked by the caret.
+		// The caret's cell gets no fill: it is already marked by the caret.
 		// Its status rail is pinned instead, see `docStatusRail`.
 		state.focused && "z-10",
 		state.dragging && "opacity-40",
@@ -225,41 +225,41 @@ export function docBlock(state: BlockStateFlags = {}): string {
 }
 
 /**
- * The gutter. Hangs off the block's left edge into the page padding and holds
- * every affordance the block has: add and drag, copy the section id, open the
- * source. Hidden at rest and revealed on block hover or keyboard focus - a
+ * The gutter. Hangs off the cell's left edge into the plane padding and holds
+ * every affordance the cell has: add and drag, copy the cell id, open the
+ * source. Hidden at rest and revealed on cell hover or keyboard focus - a
  * document at rest shows text, not controls.
  *
  * Sized to hold the widest row - two `sm` IconButtons side by side (24px each
  * + a 2px gap) - which is what makes the gutter one lane instead of two
- * overlapping ones. The top offset lines the first row up with the block's
+ * overlapping ones. The top offset lines the first row up with the cell's
  * output, which sits 8px in.
  *
  * The lane itself is inert. Three stacked rows are 76px tall (3x24 + 2x2),
- * taller than a one-line block, so a block's gutter hangs past the bottom of
- * the block it belongs to and straight across the next block's gutter slot. If
+ * taller than a one-line cell, so a cell's gutter hangs past the bottom of
+ * the cell it belongs to and straight across the next cell's gutter slot. If
  * both were live hit targets the lower one would win by document order and
  * moving down your own controls would hand you the neighbour's - which is
  * exactly what it did. `pointer-events-none` here and on the hidden stack
- * means only the revealed stack takes the pointer, so at most one block's
+ * means only the revealed stack takes the pointer, so at most one cell's
  * controls are live at a time and the overhang unambiguously belongs to the
- * block that is showing. See `docGutterAffordances`.
+ * cell that is showing. See `docGutterAffordances`.
  *
  * The 4px that holds the controls off the text is padding INSIDE the stack,
  * not padding on the lane. On the lane it was a dead strip: the stack's hit
- * rect stopped 4px short of the block's left edge, and that strip is inert,
- * so walking from the text out to the controls dropped the block's `:hover`
+ * rect stopped 4px short of the cell's left edge, and that strip is inert,
+ * so walking from the text out to the controls dropped the cell's `:hover`
  * before the stack was reached and the stack went inert with it. The pointer
  * is only hit-tested where it is sampled, so a fast enough swipe jumped the
  * strip and worked while a slow one did not. The two rects touch now, and
  * the walk is continuous at any speed.
  */
 //
-// The lane is a live hover target now, spanning the block's full height (and
-// at least the stack's height, min-h-14). It is a descendant of the block, so
-// standing anywhere in the column keeps the block's `group-hover/block`, and
+// The lane is a live hover target now, spanning the cell's full height (and
+// at least the stack's height, min-h-14). It is a descendant of the cell, so
+// standing anywhere in the column keeps the cell's `group-hover/cell`, and
 // the controls stay pinned at the top via pt-2. The overhang problem above is
-// handled by `hover:z-20` on the block: the hovered block paints over the next
+// handled by `hover:z-20` on the cell: the hovered cell paints over the next
 // one, so its overhanging lane and stack win the hit test.
 export const docGutter = cn(
 	"absolute right-full top-0 bottom-0 min-h-14 w-doc-gutter pt-2",
@@ -268,23 +268,23 @@ export const docGutter = cn(
 
 /**
  * Wrapper for the hover-only affordances inside the gutter. One reveal for all
- * three rows, so the block's chrome arrives and leaves as a single object
+ * three rows, so the cell's chrome arrives and leaves as a single object
  * rather than as six loose glyphs fading independently.
  *
  * Revealed and live are the same state, always. Hidden means `pointer-events:
  * none`, which is what keeps a neighbour's invisible stack from stealing the
  * pointer (see `docGutter`). Hover survives the walk out into the lane because
  * `:hover` follows the DOM, not the box: the stack is a descendant of the
- * block, so standing on it keeps the block hovered even though it is painted
- * outside the block's rect. And the wrapper is one rect covering all three
+ * cell, so standing on it keeps the cell hovered even though it is painted
+ * outside the cell's rect. And the wrapper is one rect covering all three
  * rows, so sliding between rows never crosses a dead strip even where a row is
  * narrower than the lane.
  *
  * Reveal rules, in order of how they burn:
  *  - Hover, the ordinary one.
- *  - Focus-within scoped to the STACK, not to the block. Block-scoped
+ *  - Focus-within scoped to the STACK, not to the cell. Cell-scoped
  *    focus-within pinned the controls open for as long as the caret sat in the
- *    block, which is most of the time you are writing; a keyboard user who has
+ *    cell, which is most of the time you are writing; a keyboard user who has
  *    tabbed onto one of these buttons still keeps them.
  *  - An open menu or popover. Tooltips cannot pin it: Radix reports them as
  *    `delayed-open`/`instant-open` and portals the content out of this
@@ -292,15 +292,15 @@ export const docGutter = cn(
  */
 export function docGutterAffordances(pinned = false): string {
 	return cn(
-		// Sticky: in a tall block the stack rides the top of the viewport while
-		// the block is on screen, and the full-height lane is its track.
+		// Sticky: in a tall cell the stack rides the top of the viewport while
+		// the cell is on screen, and the full-height lane is its track.
 		"sticky top-2 flex flex-col items-end gap-0.5 pr-1",
 		"transition-opacity duration-fast ease-out",
 		pinned
 			? "pointer-events-auto opacity-100"
 			: cn(
 					"pointer-events-none opacity-0",
-					"group-hover/block:pointer-events-auto group-hover/block:opacity-100",
+					"group-hover/cell:pointer-events-auto group-hover/cell:opacity-100",
 					// Keyboard focus only: a mouse click leaves focus on the button and must
 					// not pin the stack open after the pointer leaves.
 					"has-[:focus-visible]:pointer-events-auto has-[:focus-visible]:opacity-100",
@@ -326,25 +326,25 @@ export const docGutterToggle = "px-1";
  */
 export const docDragHandle = "cursor-grab active:cursor-grabbing";
 
-/** Drop indicator drawn between two blocks during a drag. 2px accent line. */
+/** Drop indicator drawn between two cells during a drag. 2px accent line. */
 export const docDropIndicator = cn(
 	"pointer-events-none absolute inset-x-0 h-doc-rail -translate-y-1/2",
 	"rounded-full bg-doc-drop-line",
 );
 
-/* ============================== Block interior =========================== */
+/* ============================== Cell interior =========================== */
 //
-// Every block is a live section, so its interior is kit density even though the page around it is not: the type
-// inside it is chrome type, and the code box gets the same bordered-and-sunken
-// treatment an app's editor gets. What makes it a document block and not a
-// panel is the outside - the gutter, the measure, the block padding - and that
-// is `docBlock`'s job.
+// Every cell is a live program, so its interior is kit density even though the
+// plane around it is not: the type inside it is chrome type, and the code box
+// gets the same bordered-and-sunken treatment an editor in a tool gets. What makes it a document cell and not a
+// panel is the outside - the gutter, the measure, the cell padding - and that
+// is `docCell`'s job.
 //
-// The block has no control row of its own. Status, the id and the code toggle
-// all live in the gutter now, on the same three rows every block gets, so what
-// is left inside the block is only what the program produced.
+// The cell has no control row of its own. Status, the id and the code toggle
+// all live in the gutter now, on the same three rows every cell gets, so what
+// is left inside the cell is only what the program produced.
 
-/** The block's own stack: alert, editor, fields. All output, no chrome. */
+/** The cell's own stack: alert, editor, fields. All output, no chrome. */
 export const docProgram = "flex flex-col gap-1";
 
 /**
@@ -355,16 +355,16 @@ export const docProgram = "flex flex-col gap-1";
  */
 export const docSourceDirty = "flex items-center gap-1 self-end text-xs text-text-muted";
 
-/** The block's mounted ui refs. Looser gap: these are whole widgets. */
+/** The cell's mounted ui refs. Looser gap: these are whole widgets. */
 export const docProgramFields = "flex flex-col gap-3 py-1";
 
-/** The "runs headless" line, when a block mounts nothing. */
+/** The "runs headless" line, when a cell mounts nothing. */
 export const docProgramHeadless = "py-1 text-base text-text-muted";
 
 /**
  * The code box around Monaco. Bordered and sunken, so a source editor looks
  * like a source editor wherever it turns up. It sizes to its content rather
- * than filling: a block is one of many on the Plane and there is something
+ * than filling: a cell is one of many on the Plane and there is something
  * below it to make room for.
  */
 export const docCodeBox = cn(
@@ -376,29 +376,29 @@ export const docCodeBox = cn(
 
 /**
  * The status rail: a 2px line down the gutter lane's inner edge (beside the
- * block, not on it), in the section's hue, running the lane's full height. It
- * is the block's one state indicator, so every state paints one, idle
- * included (muted gray). Same visibility as the gutter controls: block hover,
- * or pinned while the source is open or the block is selected.
+ * cell, not on it), in the cell's hue, running the lane's full height. It
+ * is the cell's one state indicator, so every state paints one, idle
+ * included (muted gray). Same visibility as the gutter controls: cell hover,
+ * or pinned while the source is open or the cell is selected.
  */
-export function docStatusRail(status: SectionStatus, pinned = false): string {
+export function docStatusRail(status: CellStatus, pinned = false): string {
 	return cn(
 		"absolute right-0 top-0 bottom-0 w-doc-rail rounded-full",
 		"transition-[color,background-color,opacity] duration-fast ease-out",
-		pinned ? "opacity-100" : "opacity-0 group-hover/block:opacity-100",
+		pinned ? "opacity-100" : "opacity-0 group-hover/cell:opacity-100",
 		{
-			invalid: "bg-section-invalid",
-			idle: "bg-section-idle",
-			starting: "bg-section-starting",
-			running: "bg-section-running",
-			stopped: "bg-section-stopped",
-			failed: "bg-section-failed",
+			invalid: "bg-cell-invalid",
+			idle: "bg-cell-idle",
+			starting: "bg-cell-starting",
+			running: "bg-cell-running",
+			stopped: "bg-cell-stopped",
+			failed: "bg-cell-failed",
 		}[status],
 	);
 }
 
 /**
- * The traceback / diagnostic body inside a block's status panel. The panel
+ * The traceback / diagnostic body inside a cell's status panel. The panel
  * itself is the kit's `Alert` (it already owns the wash, the line, the tone
  * icon and `role="alert"`); all that is left for the document layer is the
  * fact that a python traceback is preformatted text and has to be able to
@@ -414,7 +414,7 @@ export const docStatusTrace = cn(
 /**
  * Slash menu surface. Same surface grammar as a kit DropdownMenu (elevated,
  * default border, lg radius) so it does not read as a foreign widget on a
- * page that also hosts kit primitives.
+ * plane that also hosts kit primitives.
  */
 export const docSlashMenu = cn(
 	"z-50 min-w-56 max-h-80 overflow-y-auto",

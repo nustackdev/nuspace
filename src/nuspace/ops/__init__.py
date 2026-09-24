@@ -1,7 +1,7 @@
 """Layer one: the ops, nuspace's language.
 
-Every op is a function returning a Nu term. Apps, services, the agent and
-the shell compose these and nothing narrower.
+Every op is a function returning a Nu term. Planes' cells, services, the
+agent and the shell compose these and nothing narrower.
 
 - **Writes are one commit each.** An op brackets itself in a kv transaction
   over :class:`~nuspace.shapes.Space`, retried on conflict, so nothing reads
@@ -26,7 +26,7 @@ from .cell import (
     set_cell_meta,
     set_prog,
 )
-from .extend import App, Snippet, insert_snippet, run_app
+from .extend import Plane, Snippet, create_plane, insert_snippet
 from .kernel import (
     CELL_ATTR,
     PLANE_ATTR,
@@ -55,7 +55,7 @@ from .read import (
     prog,
 )
 from .state import CellState, PlaneState, clear_state, sibling
-from .tree import nest, unnest
+from .tree import move_plane
 from .utils import mint_ordered_id
 
 
@@ -63,8 +63,8 @@ __all__ = [
     "CELL_ATTR",
     "PLANE_ATTR",
     "RUN_ATTR",
-    "App",
     "CellState",
+    "Plane",
     "PlaneState",
     "Snippet",
     "active_workers",
@@ -75,6 +75,7 @@ __all__ = [
     "cells",
     "children",
     "clear_state",
+    "create_plane",
     "down",
     "env",
     "insert_snippet",
@@ -82,7 +83,7 @@ __all__ = [
     "live_runs",
     "mint_ordered_id",
     "move_cell",
-    "nest",
+    "move_plane",
     "parent",
     "plane_exists",
     "plane_rows",
@@ -93,13 +94,11 @@ __all__ = [
     "rename_cell",
     "rename_plane",
     "reorder_cells",
-    "run_app",
     "runs",
     "set_cell_meta",
     "set_plane_meta",
     "set_prog",
     "sibling",
-    "unnest",
     "up",
     "up_plane",
     "worker",

@@ -1,6 +1,6 @@
 """The registry: what a space can make and what its runs can be plugged into.
 
-An :class:`Extension` is a bundle of apps, snippets and env factories. A
+An :class:`Extension` is a bundle of Planes, snippets and env factories. A
 package ships one through the ``nuspace.extensions`` entry point group, the
 same way nuverse does and a third party would; the host passes its own
 straight to :func:`~nuspace.host.space.open_space`.
@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping
 
-    from nuspace.ops import App, Snippet
+    from nuspace.ops import Plane, Snippet
     from nuspace.system.kernel import EnvFactory
 
 
@@ -38,17 +38,17 @@ class RegistryWarning(UserWarning):
 
 @dataclass(frozen=True)
 class Extension:
-    """Apps, snippets and env factories, registered together.
+    """Planes, snippets and env factories, registered together.
 
     Args:
-        apps: What ``+`` can make.
+        planes: What ``+`` can create.
         snippets: What ``/`` can insert.
         envs: Env factories by name, see :mod:`nuspace.system.kernel.envs`.
         name: Where it came from, for warnings. An entry point's name when
             discovered and left empty.
     """
 
-    apps: tuple[App, ...] = ()
+    planes: tuple[Plane, ...] = ()
     snippets: tuple[Snippet, ...] = ()
     envs: Mapping[str, EnvFactory] = field(default_factory=dict)
     name: str = ""
@@ -108,12 +108,12 @@ class Registry:
     """Everything a space registered, merged, one entry per name and kind.
 
     Args:
-        apps: By name.
+        planes: By name, in registration order.
         snippets: By name.
         envs: Env factories by name.
     """
 
-    apps: Mapping[str, App] = field(default_factory=dict)
+    planes: Mapping[str, Plane] = field(default_factory=dict)
     snippets: Mapping[str, Snippet] = field(default_factory=dict)
     envs: Mapping[str, EnvFactory] = field(default_factory=dict)
 
@@ -122,7 +122,7 @@ class Registry:
         """Extensions in precedence order merged: the first to name a thing keeps it."""
         exts = list(extensions)
         return cls(
-            apps=_merge("app", ((a.name, e.name, a) for e in exts for a in e.apps)),
+            planes=_merge("plane", ((p.name, e.name, p) for e in exts for p in e.planes)),
             snippets=_merge("snippet", ((s.name, e.name, s) for e in exts for s in e.snippets)),
             envs=_merge("env", ((n, e.name, f) for e in exts for n, f in e.envs.items())),
         )

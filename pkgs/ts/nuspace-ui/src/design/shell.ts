@@ -17,7 +17,7 @@
 //   go/projects/nustackdev/design/palette.md        §2.2 text tiers
 
 import { cn } from "@nustackdev/ui-kit";
-import { docPageSurface } from "./document";
+import { docPlaneSurface } from "./document";
 import { resizeHandle } from "./resize";
 
 /* ============================== The frame ================================ */
@@ -37,8 +37,8 @@ export const shellSurface = "flex min-h-0 min-w-0 flex-1";
 /* ============================== Panes ==================================== */
 
 /**
- * A pane's narrowest, px: the page's reading measure (`max-w-doc`, 40rem in
- * tokens.css), so a split never squeezes a page under the width it is written
+ * A pane's narrowest, px: the plane's reading measure (`max-w-doc`, 40rem in
+ * tokens.css), so a split never squeezes a plane under the width it is written
  * for. A number and not a class because the strip's resize math needs it too.
  */
 export const PANE_MIN_WIDTH = 640;
@@ -61,7 +61,7 @@ export const shellPanes = cn(
 );
 
 /**
- * One pane: its top bar over its own scroll host. `min-w-0` lets a wide block
+ * One pane: its top bar over its own scroll host. `min-w-0` lets a wide cell
  * scroll inside the pane instead of pushing the neighbour out; the share and
  * the split minimum are inline (see main/usePaneWidths.ts). Every pane after
  * the first draws the divider on its left edge, which is where the resize
@@ -84,10 +84,10 @@ export function shellPane(divided: boolean, dimmed: boolean): string {
 }
 
 /**
- * The page's scroll host inside a pane. Transparent, so the pane's own
+ * The plane's scroll host inside a pane. Transparent, so the pane's own
  * background (canvas, or sunken when dimmed) is the one that shows.
  */
-export const shellPanePage = cn(docPageSurface, "bg-transparent");
+export const shellPanePlane = cn(docPlaneSurface, "bg-transparent");
 
 /**
  * The zero-width slot between two panes that holds their resize handle. In

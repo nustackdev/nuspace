@@ -15,7 +15,7 @@
 #
 # Three distributions ship from this repo, on independent tags:
 #   .                  -> nuspace     (the runtime + the `nuspace` command)
-#   pkgs/nuverse       -> nuverse     (the extensions: apps, snippets)
+#   pkgs/nuverse       -> nuverse     (the extensions: Planes, snippets)
 #   pkgs/ts/nuspace-ui -> nuspace-ui  (the compiled vite bundle)
 #
 # They version independently. `nuspace` hard-depends on `nuspace-ui>=X.Y.Z` and

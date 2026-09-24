@@ -4,7 +4,7 @@
 // the Planes the URL has open right now.
 
 import type { NodeEntry } from "@nustackdev/ui-kit";
-import { currentRoutes } from "../app/router";
+import { currentRoutes } from "../core/router";
 import { Main } from "../main/Main";
 import { applyViewerWrite } from "../main/state";
 

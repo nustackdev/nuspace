@@ -33,7 +33,7 @@ export default defineConfig({
 				inline: [/zustand/, /prosemirror-/, /radix-ui/],
 			},
 		},
-		// jsdom, because the block-boundary keyboard is a DOM ordering claim
+		// jsdom, because the cell-boundary keyboard is a DOM ordering claim
 		// (see refs/viewer/ProseRef.tsx) and there is no other way to check it.
 		// It lays nothing out, so anything that needs real geometry --
 		// `endOfTextblock`, `coordsAtPos` -- is out of reach here and is

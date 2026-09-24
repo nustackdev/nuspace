@@ -1,7 +1,7 @@
 {
 	"name": "nuspace-ui",
 	"private": true,
-	"description": "The nuspace app: hosted web shell for the nuspace runtime. Bundled by vite; served by the nuspace core.",
+	"description": "The nuspace web shell for the nuspace runtime. Bundled by vite; served by the nuspace core.",
 	"version": "0.3.0",
 	"type": "module",
 	"scripts": {

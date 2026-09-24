@@ -1,4 +1,4 @@
-"""The app frame: what a browser tab holds before any plane is drawn.
+"""The frame: what a browser tab holds before any plane is drawn.
 
 :class:`Shell` is the top of the tree and its class body is the two regions:
 the sidebar and the viewer. A ref's wire address is its chain and only its
@@ -7,11 +7,11 @@ lands two levels below.
 
 There is no route slot. The routes live in the store
 (``connections[sid].routes``), written by the device from the viewer's
-``pages.open`` (D15); nothing reads them off the browser.
+``planes.open`` (D15); nothing reads them off the browser.
 
 :class:`Boot` seeds one tab. The shell is a static class, because a worker
 unpickles cell chains rooted on it, so what varies per space (the viewer's
-``/`` menu) is seeded here, as init frame props, rather than declared on the
+``/`` menu, the sidebar's registered Planes) is seeded here, as init frame props, rather than declared on the
 slot. Chain props are a create time seed in the browser, so writes that come
 later carry the slot's own props and change nothing.
 """
@@ -102,12 +102,19 @@ class Shell(nu.Shape):
     viewer = ViewerRef.slot()
 
     @classmethod
-    def boot(cls, snippets: Sequence[Mapping[str, Any]] | None = None) -> Boot:
+    def boot(
+        cls,
+        snippets: Sequence[Mapping[str, Any]] | None = None,
+        registered: Sequence[Mapping[str, Any]] | None = None,
+    ) -> Boot:
         """This shell's slots as the batch that seeds a tab.
 
         Args:
             snippets: The ``/`` menu's entries, ``{name, label}`` in order,
                 mounted on the viewer.
+            registered: The add plane popup's entries, ``{name, label, icon,
+                description}`` in order, mounted on the sidebar.
         """
         viewer = {"snippets": [dict(s) for s in snippets or ()]}
-        return Boot(cls, {"viewer": viewer})
+        sidebar = {"registered": [dict(r) for r in registered or ()]}
+        return Boot(cls, {"viewer": viewer, "sidebar": sidebar})

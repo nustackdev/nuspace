@@ -6,7 +6,7 @@
 // was no keyboard model at all. Off a flat list it is a `role="tree"` with a
 // roving tabindex and the usual four arrows.
 
-import { childrenOf, KIND_GROUP, type PageTree, type RowKind } from "./types";
+import { childrenOf, type PlaneTree, type RowKind } from "./types";
 
 /** One visible line of the tree, in render order. */
 export type VisibleRow = {
@@ -14,10 +14,10 @@ export type VisibleRow = {
 	key: string;
 	id: string;
 	kind: RowKind;
-	/** The section this row is in. A section's own group is itself. */
-	group: string;
 	depth: number;
 	title: string;
+	/** The registered Plane it was made from, for its icon. */
+	made_by: string;
 	hasKids: boolean;
 	open: boolean;
 	/** Row key of the parent, or null at the top. */
@@ -28,16 +28,15 @@ export type VisibleRow = {
 	size: number;
 };
 
-/** Whether a row folds. A section always does, even while it holds nothing. */
+/** Whether a row folds: it has children to show. */
 export function folds(row: VisibleRow): boolean {
-	return row.kind === KIND_GROUP || row.hasKids;
+	return row.hasKids;
 }
 
 /** Walk the tree into the flat list of rows the current fold state shows. */
 function flatten(
-	tree: PageTree,
+	tree: PlaneTree,
 	id: string,
-	group: string,
 	depth: number,
 	parent: string | null,
 	pos: number,
@@ -53,9 +52,9 @@ function flatten(
 		key: id,
 		id,
 		kind: row.kind,
-		group,
 		depth,
 		title: row.title || "Untitled",
+		made_by: row.made_by,
 		hasKids: kids.length > 0,
 		open,
 		parent,
@@ -64,29 +63,28 @@ function flatten(
 	});
 	if (!open) return;
 	kids.forEach((kid, i) => {
-		flatten(tree, kid.id, group, depth + 1, id, i + 1, kids.length, expanded, out);
+		flatten(tree, kid.id, depth + 1, id, i + 1, kids.length, expanded, out);
 	});
 }
 
 /**
- * Every visible row under `sections`, which are the top level: the root is
- * walked through rather than drawn, so each section names the group
- * everything under it belongs to.
+ * Every visible row under `top`, the root's children: the root is walked
+ * through rather than drawn, since the header strip stands in for it.
  */
 export function visibleRows(
-	tree: PageTree,
-	sections: { id: string }[],
+	tree: PlaneTree,
+	top: { id: string }[],
 	expanded: Set<string>,
 ): VisibleRow[] {
 	const out: VisibleRow[] = [];
-	sections.forEach((section, i) => {
-		flatten(tree, section.id, section.id, 0, null, i + 1, sections.length, expanded, out);
+	top.forEach((row, i) => {
+		flatten(tree, row.id, 0, null, i + 1, top.length, expanded, out);
 	});
 	return out;
 }
 
 /** A row and everything under it, which is what a delete takes. */
-export function subtreeOf(tree: PageTree, id: string): string[] {
+export function subtreeOf(tree: PlaneTree, id: string): string[] {
 	const out = [id];
 	for (const kid of childrenOf(tree, id)) out.push(...subtreeOf(tree, kid.id));
 	return out;

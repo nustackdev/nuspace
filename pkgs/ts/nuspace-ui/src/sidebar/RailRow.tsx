@@ -9,7 +9,13 @@
 // aria-expanded. The anchor stays a real anchor (cmd-click, middle-click,
 // aria-current) but drops out of the tab order.
 
-import { ContextMenu, ContextMenuContent, ContextMenuTrigger, NavLink } from "@nustackdev/ui-kit";
+import {
+	ContextMenu,
+	ContextMenuContent,
+	ContextMenuTrigger,
+	cn,
+	NavLink,
+} from "@nustackdev/ui-kit";
 import type * as React from "react";
 import {
 	railActions,
@@ -18,7 +24,6 @@ import {
 	railLane,
 	railLaneStyle,
 	railRow,
-	railSectionTitle,
 	railTitle,
 } from "../design";
 
@@ -36,6 +41,8 @@ export function RailRow({
 	label,
 	actions,
 	menu,
+	drag,
+	className,
 	onFocus,
 	onKeyDown,
 }: {
@@ -62,6 +69,10 @@ export function RailRow({
 	actions: React.ReactNode;
 	/** Items for the right-click menu. */
 	menu: React.ReactNode;
+	/** Drag and drop handlers, see ./useRailDrag.ts. */
+	drag?: React.HTMLAttributes<HTMLDivElement> & { draggable?: boolean };
+	/** Extra classes, eg while dragged or dropped into. */
+	className?: string;
 	onFocus: () => void;
 	onKeyDown: (e: React.KeyboardEvent) => void;
 }) {
@@ -70,7 +81,7 @@ export function RailRow({
 			// A tree row takes its left offset from railIndent, so it needs no
 			// inset. A flat rail leaves indent off and pays for the offset
 			// itself, which is what the inset is.
-			className={railRow(selected, indent === undefined, open)}
+			className={cn(railRow(selected, indent === undefined, open), className)}
 			style={indent === undefined ? undefined : railIndent(indent)}
 			role="treeitem"
 			tabIndex={tabbable ? 0 : -1}
@@ -82,6 +93,7 @@ export function RailRow({
 			aria-setsize={setsize}
 			onFocus={onFocus}
 			onKeyDown={onKeyDown}
+			{...drag}
 		>
 			<span className={railLane} style={railLaneStyle}>
 				{lane}
@@ -132,17 +144,5 @@ export function RailRowLink({
 		>
 			<span className={titleClassName}>{label}</span>
 		</NavLink>
-	);
-}
-
-/**
- * A section's label. Not an anchor, because a section is not a place: it is a
- * row that folds, and the only thing it opens is itself.
- */
-export function RailSectionLabel({ label }: { label: string }) {
-	return (
-		<span className={railSectionTitle} title={label}>
-			{label}
-		</span>
 	);
 }

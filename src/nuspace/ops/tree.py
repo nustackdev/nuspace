@@ -3,6 +3,9 @@
 Nesting is a relation between planes and lives in ``Space.tree``, so every
 plane stays one lookup away in ``Space.planes`` and moving a subtree is two
 list edits: unlink from the old node, link under the new one.
+
+A node's ``children`` is also its sibling order: a new plane is appended,
+a move puts it where it is asked, a removal drops it and closes the gap.
 """
 
 from __future__ import annotations
@@ -20,7 +23,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
 
-__all__ = ["nest", "unnest"]
+__all__ = ["move_plane"]
 
 
 def subtree(plane_id: nu.StrArg, body: Callable[[nu.ListAttrRef], nu.Nu]) -> nu.Nu:
@@ -77,37 +80,35 @@ def link(plane_id: nu.StrArg, node_id: nu.StrArg, index: nu.IntArg | None = None
     return kids.append(plane_id) if index is None else kids.insert(index, plane_id)
 
 
-def nest(child: nu.StrArg, parent: nu.StrArg, index: nu.IntArg | None = None) -> nu.Nu:
-    """Make ``child`` a child of ``parent`` (a plane id or ``ROOT``), at ``index``.
+def move_plane(
+    plane_id: nu.StrArg, *, parent: nu.StrArg = ROOT, index: nu.IntArg | None = None
+) -> nu.Nu:
+    """Hang ``plane_id`` under ``parent`` (a plane id or ``ROOT``) at ``index``.
 
-    Refused when either is missing, when they are the same, or when
-    ``parent`` sits below ``child``: that would make a cycle.
+    Reparents and reorders in one: ``index`` is a position among
+    ``parent``'s children once the plane is out of them, the end when None.
+    Anything moves, system planes and home too. Refused when either is
+    missing, or when ``parent`` is the plane or sits below it: that would
+    make a cycle.
 
     Yields:
-        True when nested, False when refused.
+        True when moved, False when refused.
     """
-    return atomic(binding(nu.Bool(False), lambda out: _nest_body(child, parent, index, out)))
+    return atomic(binding(nu.Bool(False), lambda out: _move_body(plane_id, parent, index, out)))
 
 
-def _nest_body(child: nu.StrArg, parent: nu.StrArg, index: nu.IntArg | None, out: str) -> nu.Nu:
-    """Decide into the attr ``out``, then move the child when it said yes."""
+def _move_body(plane_id: nu.StrArg, parent: nu.StrArg, index: nu.IntArg | None, out: str) -> nu.Nu:
+    """Decide into the attr ``out``, then move the plane when it said yes."""
     flag_ref = nu.BoolAttrRef(out)
 
     def check(ids: nu.ListAttrRef) -> nu.Nu:
         ok = nu.And(
-            plane_exists(child),
+            plane_exists(plane_id),
             nu.Or(nu.Eq(parent, nu.Str(ROOT)), plane_exists(parent)),
             nu.Not(nu.List(ids).contains(parent)),
         )
         return nu.SetCmd(flag_ref, ok)
 
-    return subtree(child, check) >> nu.IfDo(flag_ref, unlink(child) >> link(child, parent, index))
-
-
-def unnest(child: nu.StrArg) -> nu.Nu:
-    """Move ``child`` back to the top level, under ``ROOT``.
-
-    Yields:
-        True when moved, False when there is no such plane.
-    """
-    return nest(child, ROOT)
+    return subtree(plane_id, check) >> nu.IfDo(
+        flag_ref, unlink(plane_id) >> link(plane_id, parent, index)
+    )

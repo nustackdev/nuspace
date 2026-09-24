@@ -10,7 +10,7 @@ import pytest
 import nu
 import nustd.kv
 from nuspace import ops
-from nuspace.ops import App
+from nuspace.ops import Plane
 from nuspace.ops.utils import atomic
 from nuspace.shapes import RECENTS_CAP, Reroot, Space
 from nuspace.system import home
@@ -21,11 +21,11 @@ from nustd.ui import Session
 from nustd.ui.core import OP_NOTIFY, Frame, WsSession
 
 
-def _page(plane_id=None, name=""):
-    return ops.add_plane(plane_id, name=name, ui=True, made_by="page")
+def _drawn(plane_id=None, name=""):
+    return ops.add_plane(plane_id, name=name, ui=True, made_by="plain")
 
 
-APPS = [App("page", "Pages", _page)]
+PLANES = [Plane("plain", "Plain")]
 
 
 # --- The seed ---------------------------------------------------------------------
@@ -57,10 +57,10 @@ async def test_home_is_seeded_once_and_left_alone_after_edits(store):
     assert await store.run(ops.remove_plane(home.PLANE)) is False
 
 
-async def test_home_is_under_no_sidebar_section(store):
-    await store.run(home.ensure_home() >> _page("p1", "One"))
-    got = await store.read(rows(APPS))
-    assert [r["id"] for r in got] == ["space", "page", "p1"]
+async def test_home_is_first_in_the_sidebar_tree(store):
+    await store.run(home.ensure_home() >> _drawn("p1", "One"))
+    (space, *_) = await store.read(rows())
+    assert space["children"] == [home.PLANE, "p1"]
 
 
 async def test_write_info(store, tmp_path):
@@ -90,8 +90,8 @@ async def test_remember_dedupes_caps_and_skips(store):
         home.ensure_home()
         >> ops.add_plane("svc", system=True)
         >> ops.add_plane("hidden")
-        >> _page("a")
-        >> _page("b")
+        >> _drawn("a")
+        >> _drawn("b")
     )
     recents = Space.state.recents
 
@@ -139,18 +139,18 @@ async def _until(store, term: nu.Nu, check, timeout: float = 3.0) -> object:
         await asyncio.sleep(0.01)
 
 
-async def test_pages_open_pushes_recents(store):
+async def test_planes_open_pushes_recents(store):
     from nuspace.system.devices.web.device import connection
 
-    await store.run(home.ensure_home() >> _page("p1", "One") >> _page("p2", "Two"))
+    await store.run(home.ensure_home() >> _drawn("p1", "One") >> _drawn("p2", "Two"))
     session = _FakeSession()
     ctx = store.ctx.bind(Session, session)
-    task = asyncio.create_task(nu.arun(connection(nu.Str("s1"), apps=APPS), ctx))
+    task = asyncio.create_task(nu.arun(connection(nu.Str("s1"), planes=PLANES), ctx))
     recents = Space.state.recents
     routes = Space.connections["s1"].routes
 
     def opened(*ids: str) -> None:
-        session.notify(("viewer", "ops", "pages.open"), {"page_ids": list(ids)})
+        session.notify(("viewer", "ops", "planes.open"), {"plane_ids": list(ids)})
 
     try:
         await asyncio.sleep(0.2)
@@ -232,8 +232,8 @@ async def test_header_on_a_store_never_opened(store):
 
 async def test_recent_links_the_planes_that_still_exist(store):
     await store.run(
-        _page("a", "Alpha")
-        >> _page("b", "")
+        _drawn("a", "Alpha")
+        >> _drawn("b", "")
         >> atomic(Space.state.recents.set(nu.Literal(["gone", "b", "a"])))
     )
     got = await _frames(store, home.RECENT)
@@ -253,7 +253,7 @@ async def test_recent_with_nothing_opened(store):
 async def test_recent_shows_at_most_eight(store):
     ids = [f"p{i}" for i in range(12)]
     await store.run(
-        nu.Sequential(*[_page(pid, pid.upper()) for pid in ids])
+        nu.Sequential(*[_drawn(pid, pid.upper()) for pid in ids])
         >> atomic(Space.state.recents.set(nu.Literal(ids)))
     )
     got = await _frames(store, home.RECENT)
@@ -289,18 +289,18 @@ def _tiles(got: dict) -> dict:
 async def test_glance_draws_plain_tiles(store):
     await store.run(
         home.ensure_home()
-        >> _page("a")
-        >> _page("b")
+        >> _drawn("a")
+        >> _drawn("b")
         >> ops.add_plane("svc", system=True)
         >> ops.add_plane("hidden")
         >> _seed_kernel()
     )
     got = await _frames(store, home.GLANCE)
-    assert _tiles(got) == {"pages": "2", "live": "1", "workers": "1", "failed": "1"}
+    assert _tiles(got) == {"planes": "2", "live": "1", "workers": "1", "failed": "1"}
     assert [got[("links", name)] for name in ("runs", "workers", "planes")] == [None] * 3
 
 
-async def test_glance_links_the_live_pages_there_are(store):
+async def test_glance_links_the_live_planes_there_are(store):
     await store.run(
         ops.add_plane("r1", name="R", ui=True, made_by="runs")
         >> ops.add_plane("r2", name="R2", ui=True, made_by="runs")
@@ -310,7 +310,7 @@ async def test_glance_links_the_live_pages_there_are(store):
     assert got[("links", "runs")] == {"href": "/r1", "label": "Runs"}
     assert got[("links", "workers")] is None
     assert got[("links", "planes")] == {"href": "/pl", "label": "Planes"}
-    assert _tiles(got)["pages"] == "3"
+    assert _tiles(got)["planes"] == "3"
 
 
 async def test_start_draws_its_text(store):

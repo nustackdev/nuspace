@@ -3,17 +3,17 @@
 // There is no top strip, no surface switcher and no chrome in the corner,
 // because there is no third region to switch to and the two controls the window
 // still has (the connection pill and the theme flip) sit in the sidebar's
-// footer. The sidebar lists every Plane that draws, under a section per group,
+// footer. The sidebar lists every Plane that draws, under a cell per group,
 // and the main strip draws whichever ones the URL names, so navigation is
 // entirely the sidebar's and the shell only places the two.
 //
-// Both are found BY TYPE (see app/surfaces.ts), not by a slot name. Where
+// Both are found BY TYPE (see core/surfaces.ts), not by a slot name. Where
 // python hangs them is python's call, and the wire type is the one thing about
 // a region both sides already agree on.
 //
 // Links a cell draws (the kit's LinkRef, a markdown link) are plain anchors.
 // One listener on the main strip routes a click on a same-origin one to /<id>
-// or /<a>+<b> through the router (app/router.ts `routeAnchorClick`), so it
+// or /<a>+<b> through the router (core/router.ts `routeAnchorClick`), so it
 // switches panes instead of reloading the tab, and cmd/ctrl-click opens a
 // split as in the sidebar. Native, not React: it has to see anchors the kit
 // renders without handlers of ours, and it runs before the browser follows
@@ -21,8 +21,8 @@
 
 import { NodeView } from "@nustackdev/ui-kit";
 import { useEffect, useRef } from "react";
-import { routeAnchorClick } from "../app/router";
-import { useTypePath } from "../app/surfaces";
+import { routeAnchorClick } from "../core/router";
+import { useTypePath } from "../core/surfaces";
 import { shellMain, shellMissing, shellRoot } from "../design";
 
 export function Shell() {

@@ -1,6 +1,7 @@
 """nuverse: the extensions a space offers out of the box.
 
-- :mod:`.apps`: what ``+`` makes: ``page``, and later ``job``, ``chat``.
+- :mod:`.planes`: what ``+`` creates: ``plain``, ``runs``, ``workers``,
+  ``planes``.
 - :mod:`.snippets`: what ``/`` inserts: ``prose``, ``program``, ``ticker``,
   and later ``heading``, ``monaco``.
 
@@ -22,10 +23,10 @@ __all__ = ["extension"]
 
 
 def extension() -> Extension:
-    """Every nuverse app and snippet, as one extension."""
+    """Every nuverse Plane and snippet, as one extension."""
     from nuspace import Extension
 
-    from .apps import APPS
+    from .planes import PLANES
     from .snippets import SNIPPETS
 
-    return Extension(apps=APPS, snippets=SNIPPETS, envs={})
+    return Extension(planes=PLANES, snippets=SNIPPETS, envs={})

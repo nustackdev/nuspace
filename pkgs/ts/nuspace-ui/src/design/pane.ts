@@ -1,8 +1,8 @@
 // Pane class recipes: the bar across a pane's top and the settings menu off
 // its `...`.
 //
-// The bar is window chrome, not document: it stays put while the page under it
-// scrolls, and it is quiet enough that a single pane still reads as a page
+// The bar is window chrome, not document: it stays put while the plane under it
+// scrolls, and it is quiet enough that a single pane still reads as a plane
 // with nothing around it. No border, a muted title, ghost buttons. It only
 // draws over a lone pane: a split gets the tab bar (./tabs.ts) instead.
 //

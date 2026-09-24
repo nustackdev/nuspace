@@ -5,7 +5,7 @@ GREEN := \033[0;32m
 YELLOW := \033[1;33m
 NC := \033[0m
 
-UI_APP := pkgs/ts/nuspace-ui
+UI_DIR := pkgs/ts/nuspace-ui
 
 help:
 	@echo "$(BLUE)nuspace$(NC)"
@@ -28,7 +28,7 @@ help:
 	@echo "$(GREEN)nuspace-ui web:$(NC)"
 	@echo "  make web-install     npm install in the ui workspace"
 	@echo "  make web-dev         Run vite dev server"
-	@echo "  make web-build       Build the vite bundle into $(UI_APP)/dist"
+	@echo "  make web-build       Build the vite bundle into $(UI_DIR)/dist"
 	@echo ""
 	@echo "$(GREEN)Packages:$(NC)"
 	@echo "  make build-nuspace   Build the nuspace wheel"
@@ -88,17 +88,17 @@ check: format-check lint
 
 web-install:
 	@echo "$(BLUE)Installing ui deps...$(NC)"
-	cd $(UI_APP) && npm install
+	cd $(UI_DIR) && npm install
 	@echo "$(GREEN)Installed$(NC)"
 
 web-dev:
 	@echo "$(BLUE)Starting vite dev server...$(NC)"
-	cd $(UI_APP) && npm run dev
+	cd $(UI_DIR) && npm run dev
 
 web-build:
 	@echo "$(BLUE)Building nuspace-ui web bundle...$(NC)"
-	cd $(UI_APP) && npm run build
-	@echo "$(GREEN)Built: $(UI_APP)/dist/$(NC)"
+	cd $(UI_DIR) && npm run build
+	@echo "$(GREEN)Built: $(UI_DIR)/dist/$(NC)"
 
 build-nuspace:
 	@echo "$(BLUE)Building nuspace wheel...$(NC)"
@@ -109,8 +109,8 @@ build-ui: web-build
 	@echo "$(BLUE)Building nuspace-ui web-bundle wheel...$(NC)"
 	# --out-dir keeps the wheel out of dist/, which IS the vite output we
 	# force-include into it. Writing there packages the last wheel into the next.
-	cd $(UI_APP) && uv build --wheel --out-dir wheel-dist
-	@echo "$(GREEN)Built: $(UI_APP)/wheel-dist/$(NC)"
+	cd $(UI_DIR) && uv build --wheel --out-dir wheel-dist
+	@echo "$(GREEN)Built: $(UI_DIR)/wheel-dist/$(NC)"
 
 build-all: build-nuspace build-ui
 	@echo "$(GREEN)Both wheels built$(NC)"

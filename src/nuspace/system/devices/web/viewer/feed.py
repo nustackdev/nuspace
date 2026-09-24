@@ -4,20 +4,20 @@ Two families:
 
 - **browser to store.** A viewer event runs one op over its own fields.
 - **store to browser.** An open plane or its runs changed; its arm ships
-  the page or the statuses again, keyed by ``page_id``.
+  the plane or the statuses again, keyed by ``plane_id``.
 
 **Which planes are open** is ``connections[sid].routes``, written by the
 device's route arm (D15), never read off the browser. One arm per plane in
 it: every subscription below an arm is about that one pane, and dies with it
 when the plane leaves ``routes``.
 
-**Narrow watch.** A page is shipped again when its plane's row, name,
+**Narrow watch.** A plane is shipped again when its plane's row, name,
 meta, order or cells (their set, names and progs) change; the statuses when
 any run's ``status`` moves. A cell writing its state or a run writing its
 output wakes neither.
 
-**Meta goes both ways.** A page carries its plane's whole meta, and a
-``page.meta`` event merges keys into it. Props never reach the browser and
+**Meta goes both ways.** A shipped plane carries its whole meta, and a
+``plane.meta`` event merges keys into it. Props never reach the browser and
 are never written from it.
 
 **Statuses come from runs.** Per cell: its live run if it has one, else its
@@ -62,7 +62,7 @@ if TYPE_CHECKING:
     from nustd.ui.core import Ref
 
 
-__all__ = ["PAGE_META", "blocks", "page", "statuses", "viewer_feed"]
+__all__ = ["PLANE_META", "plane_cells", "plane_view", "statuses", "viewer_feed"]
 
 
 _arms = Arms("viewer")
@@ -77,16 +77,16 @@ _MOVE = "nuspace.web.viewer.move"
 _REORDER = "nuspace.web.viewer.reorder"
 _META = "nuspace.web.viewer.meta"
 
-#: What a page's meta says where its plane does not: the keys the browser reads.
-PAGE_META = {"editable": False, "full_width": False}
+#: What a shipped plane's meta says where the stored one does not: the keys the browser reads.
+PLANE_META = {"editable": False, "full_width": False}
 
 
 # --- What the browser is handed: bare reads ----------------------------------
 
 
-def blocks(plane_id: nu.StrArg) -> nu.Nu:
+def plane_cells(plane_id: nu.StrArg) -> nu.Nu:
     """A plane's cells as ``{id, name, source}``, in order. Bare read."""
-    item = fresh("viewer_block")
+    item = fresh("viewer_cell")
     row = nu.DictAttrRef(item)
     return nu.Collect(
         nu.Map(
@@ -101,11 +101,11 @@ def blocks(plane_id: nu.StrArg) -> nu.Nu:
     )
 
 
-def page(plane_id: nu.StrArg) -> nu.Nu:
-    """``{title, meta, blocks}`` for a plane. Bare read.
+def plane_view(plane_id: nu.StrArg) -> nu.Nu:
+    """``{title, meta, cells}`` for a plane. Bare read.
 
-    ``meta`` is the plane's whole meta over :data:`PAGE_META`. A plane that
-    is not there reads as an empty untitled page, so a pane open on it is
+    ``meta`` is the plane's whole meta over :data:`PLANE_META`. A plane that
+    is not there reads as an empty untitled one, so a pane open on it is
     still answered.
     """
     row = Space.planes[plane_id]
@@ -113,10 +113,10 @@ def page(plane_id: nu.StrArg) -> nu.Nu:
         ops.plane_exists(plane_id),
         nu.Dict.of(
             title=text(row.name),
-            meta=nu.Dict(nu.Literal(PAGE_META)).merge(row.meta.extract()),
-            blocks=blocks(plane_id),
+            meta=nu.Dict(nu.Literal(PLANE_META)).merge(row.meta.extract()),
+            cells=plane_cells(plane_id),
         ),
-        nu.Dict.of(title=nu.Str(""), meta=nu.Literal(PAGE_META), blocks=nu.List.of()),
+        nu.Dict.of(title=nu.Str(""), meta=nu.Literal(PLANE_META), cells=nu.List.of()),
     )
 
 
@@ -150,7 +150,7 @@ def _state(run_id: nu.Nu) -> nu.Nu:
 
 
 def statuses(plane_id: nu.StrArg) -> nu.Nu:
-    """A plane's cells as ``{section_id, state, error, started_at}``, in order. Bare read.
+    """A plane's cells as ``{cell_id, state, error, started_at}``, in order. Bare read.
 
     One pass over the run records picks the plane's, then per cell its live
     run or else its most recent (minted ids sort by creation).
@@ -194,7 +194,7 @@ def statuses(plane_id: nu.StrArg) -> nu.Nu:
     picked = nu.StrAttrRef(pick)
     said = nu.StrAttrRef(state)
     row = nu.Dict.of(
-        section_id=nu.StrAttrRef(cell),
+        cell_id=nu.StrAttrRef(cell),
         state=said,
         error=nu.If(nu.Eq(said, nu.Str(STATE_FAILED)), text(_runs[picked].error), nu.Str("")),
         # Nothing reads it yet. The browser keeps only a positive number.
@@ -207,18 +207,18 @@ def statuses(plane_id: nu.StrArg) -> nu.Nu:
 # --- Shipping ------------------------------------------------------------------
 
 
-def _ship_page(viewer: Ref, plane: nu.Nu) -> nu.Nu:
-    held = fresh("viewer_page")
+def _ship_plane(viewer: Ref, plane: nu.Nu) -> nu.Nu:
+    held = fresh("viewer_plane")
     got = nu.DictAttrRef(held)
     return nu.Let(
         held,
-        snap(page(plane)),
-        interactions.set_page(
+        snap(plane_view(plane)),
+        interactions.set_plane(
             viewer,
             plane,
             title=nu.ToStr(got.get_item(nu.Str("title"), nu.Str(""))),
             meta=nu.Dict(got.get_item(nu.Str("meta"), nu.Dict.of())),
-            cells=nu.List(got.get_item(nu.Str("blocks"), nu.List.of())),
+            cells=nu.List(got.get_item(nu.Str("cells"), nu.List.of())),
         ),
     )
 
@@ -229,8 +229,8 @@ def _ship_status(viewer: Ref, plane: nu.Nu) -> nu.Nu:
     return nu.Let(held, snap(read), interactions.set_status(viewer, plane, nu.ListAttrRef(held)))
 
 
-def _page_changes(plane: nu.Nu) -> list[nu.Nu]:
-    """What reships the page: the plane's row, name, meta, order and cells."""
+def _plane_changes(plane: nu.Nu) -> list[nu.Nu]:
+    """What reships the plane: the plane's row, name, meta, order and cells."""
     planes = Space.planes
     patterns = [
         ("name",),
@@ -273,13 +273,13 @@ def _events(viewer: Ref, snippets: Sequence[Snippet]) -> list[nu.Nu]:
 
     def named(name: str) -> nu.Nu:
         return nu.And(
-            nu.Ne(field_str(name, "page_id"), nu.Str("")),
-            nu.Ne(field_str(name, "section_id"), nu.Str("")),
+            nu.Ne(field_str(name, "plane_id"), nu.Str("")),
+            nu.Ne(field_str(name, "cell_id"), nu.Str("")),
         )
 
     prog = _create_prog(snippets)
-    create_page = field_str(_CREATE, "page_id")
-    move_to = field_str(_MOVE, "to_page_id")
+    create_in = field_str(_CREATE, "plane_id")
+    move_to = field_str(_MOVE, "to_plane_id")
     return [
         _arms.event(
             _CREATE,
@@ -287,11 +287,11 @@ def _events(viewer: Ref, snippets: Sequence[Snippet]) -> list[nu.Nu]:
             nu.IfDo(
                 named(_CREATE),
                 ops.add_cell(
-                    create_page,
+                    create_in,
                     prog,
-                    cell_id=field_str(_CREATE, "section_id"),
+                    cell_id=field_str(_CREATE, "cell_id"),
                     name=field_str(_CREATE, "name"),
-                    index=field_index(_CREATE, "index", nu.Len(ops.cells(create_page))),
+                    index=field_index(_CREATE, "index", nu.Len(ops.cells(create_in))),
                 ),
             ),
         ),
@@ -301,8 +301,8 @@ def _events(viewer: Ref, snippets: Sequence[Snippet]) -> list[nu.Nu]:
             nu.IfDo(
                 named(_UPDATE),
                 ops.set_prog(
-                    field_str(_UPDATE, "page_id"),
-                    field_str(_UPDATE, "section_id"),
+                    field_str(_UPDATE, "plane_id"),
+                    field_str(_UPDATE, "cell_id"),
                     field_str(_UPDATE, "source"),
                 ),
             ),
@@ -312,7 +312,7 @@ def _events(viewer: Ref, snippets: Sequence[Snippet]) -> list[nu.Nu]:
             interactions.on_delete_cell(viewer),
             nu.IfDo(
                 named(_DELETE),
-                ops.remove_cell(field_str(_DELETE, "page_id"), field_str(_DELETE, "section_id")),
+                ops.remove_cell(field_str(_DELETE, "plane_id"), field_str(_DELETE, "cell_id")),
             ),
         ),
         _arms.event(
@@ -321,8 +321,8 @@ def _events(viewer: Ref, snippets: Sequence[Snippet]) -> list[nu.Nu]:
             nu.IfDo(
                 nu.And(named(_MOVE), nu.Ne(move_to, nu.Str(""))),
                 ops.move_cell(
-                    field_str(_MOVE, "page_id"),
-                    field_str(_MOVE, "section_id"),
+                    field_str(_MOVE, "plane_id"),
+                    field_str(_MOVE, "cell_id"),
                     move_to,
                     index=field_index(_MOVE, "index", nu.Len(ops.cells(move_to))),
                 ),
@@ -332,9 +332,9 @@ def _events(viewer: Ref, snippets: Sequence[Snippet]) -> list[nu.Nu]:
             _META,
             interactions.on_set_meta(viewer),
             nu.IfDo(
-                nu.Ne(field_str(_META, "page_id"), nu.Str("")),
+                nu.Ne(field_str(_META, "plane_id"), nu.Str("")),
                 ops.set_plane_meta(
-                    field_str(_META, "page_id"),
+                    field_str(_META, "plane_id"),
                     nu.Dict(nu.DictAttrRef(_META).get_item(nu.Str("meta"), nu.Dict.of())),
                 ),
             ),
@@ -343,10 +343,8 @@ def _events(viewer: Ref, snippets: Sequence[Snippet]) -> list[nu.Nu]:
             _REORDER,
             interactions.on_reorder_cells(viewer),
             nu.IfDo(
-                nu.Ne(field_str(_REORDER, "page_id"), nu.Str("")),
-                ops.reorder_cells(
-                    field_str(_REORDER, "page_id"), field_ids(_REORDER, "section_ids")
-                ),
+                nu.Ne(field_str(_REORDER, "plane_id"), nu.Str("")),
+                ops.reorder_cells(field_str(_REORDER, "plane_id"), field_ids(_REORDER, "cell_ids")),
             ),
         ),
     ]
@@ -367,13 +365,13 @@ def viewer_feed(viewer: Ref, sid: nu.StrArg, snippets: Iterable[Snippet] = ()) -
     plane = nu.StrAttrRef(at)
     shown = nu.ParallelAsync(
         _arms.state(
-            "page",
-            _page_changes(plane),
-            _ship_page(viewer, plane) >> _ship_status(viewer, plane),
+            "plane",
+            _plane_changes(plane),
+            _ship_plane(viewer, plane) >> _ship_status(viewer, plane),
         ),
         _arms.state("status", _status_changes(), _ship_status(viewer, plane)),
     )
-    # One arm per open plane: a plane opened gets its page and statuses
+    # One arm per open plane: a plane opened gets itself and its statuses
     # shipped, a plane closed has its subscriptions torn down, and the other
     # panes' arms are untouched.
     routed = nu.ForEachParReactive(

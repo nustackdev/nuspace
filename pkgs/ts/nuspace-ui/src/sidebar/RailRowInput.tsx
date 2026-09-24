@@ -1,4 +1,4 @@
-// The in-row editor the rail renames and creates through.
+// The in-row editor the rail renames through.
 
 import { Input } from "@nustackdev/ui-kit";
 import { useEffect, useRef } from "react";

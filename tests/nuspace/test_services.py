@@ -227,7 +227,7 @@ async def test_nav_brings_up_a_system_ui_plane_and_never_a_service(space):
 
 @module_loop
 async def test_nav_waits_for_a_routed_plane_not_written_yet(space):
-    """A new page is selected before its create lands: nav waits, not gives up."""
+    """A new plane is selected before its create lands: nav waits, not gives up."""
     sid = "conn-early"
     await space.run(atomic(Space.connections[sid].routes.set(["early"])))
     # Past a tick, so nav has seen the routes and found no plane behind it.

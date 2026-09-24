@@ -16,7 +16,7 @@
 @import "./design/tokens.css";
 
 /* ProseMirror's own base rules (selection, pre-wrap, caret plumbing), for
- * the kit's ProseRef editor when a block mounts one. It ships no colors and
+ * the kit's ProseRef editor when a cell mounts one. It ships no colors and
  * no type; the kit's own look arrives with the kit stylesheet above. */
 @import "prosemirror-view/style/prosemirror.css";
 
@@ -27,7 +27,7 @@
 @custom-variant dark (&:is(.dark *));
 
 /* The document surface is its own scroll host (see design/document.ts
- * `docPage`), which needs a full-height chain to size against. */
+ * `docPlane`), which needs a full-height chain to size against. */
 html,
 body,
 #root {

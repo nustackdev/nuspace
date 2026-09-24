@@ -8,11 +8,11 @@
 // Pulled, never pushed. There is no `write` handler, so a server that tried to
 // move somebody's tab gets the store's "op not supported" rather than a silent
 // navigation; and there is no notify on navigation either, because every arm
-// that cares reads the route when it runs. `pages.open` is what tells the
+// that cares reads the route when it runs. `planes.open` is what tells the
 // server a tab moved, and it is a ViewerRef op, not a route one.
 //
-// The shape is `{page_ids, page_id}`: every Plane the URL names, left to
-// right, and the leftmost as `page_id` for a reader that wants just one, empty
+// The shape is `{plane_ids, plane_id}`: every Plane the URL names, left to
+// right, and the leftmost as `plane_id` for a reader that wants just one, empty
 // when it names none. An empty kv key segment is not a key, so the server
 // treats "" as "no Plane" rather than as something to look up.
 //
@@ -25,9 +25,9 @@
 
 import { OPS } from "@nustackdev/ui-core";
 import type { NodeEntry } from "@nustackdev/ui-kit";
-import { currentRoutes } from "../app/router";
+import { currentRoutes } from "../core/router";
 
-export type Route = { page_ids: string[]; page_id: string };
+export type Route = { plane_ids: string[]; plane_id: string };
 
 /** Structural: bound to the URL, renders nothing into the visible tree. */
 function RouteView() {
@@ -39,8 +39,8 @@ export const RouteRef: NodeEntry = {
 	handlers: {
 		read: (ctx) => {
 			// Read directly off the URL: the read path is not in a render.
-			const page_ids = currentRoutes();
-			ctx.send(OPS.read, { page_ids, page_id: page_ids[0] ?? "" } satisfies Route, ctx.frame.id);
+			const plane_ids = currentRoutes();
+			ctx.send(OPS.read, { plane_ids, plane_id: plane_ids[0] ?? "" } satisfies Route, ctx.frame.id);
 		},
 	},
 };

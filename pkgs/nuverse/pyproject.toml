@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "nuverse"
 version = "0.1.0"
-description = "nuspace extensions: the apps and snippets a space offers out of the box."
+description = "nuspace extensions: the Planes and snippets a space offers out of the box."
 readme = "README.md"
 license = "AGPL-3.0-or-later"
 authors = [{ name = "Gor Arakelyan", email = "gorarkln@gmail.com" }]

@@ -44,7 +44,7 @@ import { resizeHandle } from "./resize";
 export const RAIL = {
 	/** Indent per tree level. 12 = spacing 3. */
 	INDENT: 12,
-	/** Disclosure / page-icon lane. 20 = a `sm` IconButton shrunk to the row. */
+	/** Disclosure / plane-icon lane. 20 = a `sm` IconButton shrunk to the row. */
 	LANE: 20,
 	/** Lane-to-title gap. 4 = spacing 1. */
 	GAP: 4,
@@ -97,17 +97,8 @@ export const railFooter = cn(
 );
 
 /** Scroll body. `px-1.5` keeps a row's wash off the rail's own border. */
-export const railScroll = "min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-1.5 py-1";
-
-/**
- * A section's own title, on the row shell every other row uses. One tier back
- * and cased like the header strip, so a section reads as a label with rows
- * under it rather than as the first row of the list.
- */
-export const railSectionTitle = cn(
-	"min-w-0 flex-1 select-none truncate",
-	"text-xs font-medium uppercase tracking-[0.06em] text-text-muted",
-);
+export const railScroll =
+	"flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden px-1.5 py-1";
 
 /* ============================== The row ================================= */
 
@@ -147,7 +138,7 @@ export function railRow(selected: boolean, inset = false, open = false): string 
 }
 
 /**
- * The disclosure / page-icon lane. Fixed width whether or not it holds a
+ * The disclosure / plane-icon lane. Fixed width whether or not it holds a
  * control, which is what keeps titles at every depth on one left edge.
  */
 export const railLane = "flex shrink-0 items-center justify-center";
@@ -239,10 +230,10 @@ export function railGuideStyle(level: number): { left: string } {
 /* ============================== Inline edit ============================= */
 
 /**
- * Rename and create both happen in place, in the row, on top of a kit `Input`
- * shrunk to the row. The rail used to reach for `window.prompt`, which blocks
- * the whole tab, cannot be styled, cannot be themed, and drops you out of the
- * document you were reading. It is not a dialog, it is an absence of one.
+ * Rename happens in place, in the row, on top of a kit `Input` shrunk to the
+ * row. The rail used to reach for `window.prompt`, which freezes the whole
+ * tab, cannot be styled, cannot be themed, and drops you out of the document
+ * you were reading. It is not a dialog, it is an absence of one.
  */
 export const railInputBox = "flex min-w-0 flex-1 items-center";
 
@@ -259,3 +250,42 @@ export function railSkeletonRow(inset = false): string {
 export const railSkeletonBar = "h-3 w-full rounded-sm";
 
 export const railEmpty = cn("select-none px-2 py-3 text-sm text-text-muted");
+
+/* ============================== Drag and drop =========================== */
+
+/**
+ * Where a dragged row would land. A thin accent line between rows for a
+ * sibling drop, drawn at the target row's indent so it says which level the
+ * row lands on; the whole target row washed for a drop into it.
+ */
+export function railDropLine(edge: "before" | "after"): string {
+	return cn(
+		"pointer-events-none absolute right-0 h-0.5 rounded-full bg-accent",
+		edge === "before" ? "-top-px" : "-bottom-px",
+	);
+}
+
+/** The line's left edge, at the title of a row at `depth`. */
+export function railDropLineStyle(depth: number): { left: string } {
+	return { left: `${depth * RAIL.INDENT + RAIL.LANE}px` };
+}
+
+/** A row being dropped into: ringed, so it reads apart from the selection wash. */
+export const railDropInto = "rounded-md ring-2 ring-accent ring-inset";
+
+/** The row being dragged, dimmed while it travels. */
+export const railDragging = "opacity-50";
+
+/** The space under the last row. A drop here moves the row to the top level, last. */
+export const railDropTail = "relative min-h-8 flex-1";
+
+/* ============================== Add plane =============================== */
+
+/** One registered Plane in the Add plane popup: icon, label, description. */
+export const addPlaneItem = "items-start [&_svg]:mt-0.5";
+
+export const addPlaneText = "flex min-w-0 flex-col";
+
+export const addPlaneLabel = "truncate text-sm text-text-primary";
+
+export const addPlaneDescription = "truncate text-xs text-text-muted";

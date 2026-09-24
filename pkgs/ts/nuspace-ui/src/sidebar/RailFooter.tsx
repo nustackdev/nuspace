@@ -2,8 +2,8 @@
 //
 // Both belong to the window rather than to the sidebar, and neither belongs to
 // the space: the server writes no node for either, and a reconnect is the one
-// thing in the app nobody on the other end knows about. They live down here
-// because the rail is the only edge the app has left, and two controls floating
+// thing in the shell nobody on the other end knows about. They live down here
+// because the rail is the only edge the shell has left, and two controls floating
 // over a document you are writing in are two controls with nothing holding
 // them.
 
@@ -15,8 +15,8 @@ import {
 	TooltipTrigger,
 } from "@nustackdev/ui-kit";
 import { Moon, Sun } from "lucide-react";
-import { useConnectionStatus } from "../app/connection";
-import { toggleTheme, useTheme } from "../app/theme";
+import { useConnectionStatus } from "../core/connection";
+import { toggleTheme, useTheme } from "../core/theme";
 import { railFooter } from "../design";
 
 /** Wire status -> the kit's five status tones. */

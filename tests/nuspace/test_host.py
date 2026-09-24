@@ -18,7 +18,7 @@ from click.testing import CliRunner
 
 import nu
 import nustd.kv
-from nuspace import App, Extension, Snippet, boot, open_space, ops
+from nuspace import Extension, Plane, Snippet, boot, open_space, ops
 from nuspace.host import registry as registry_module
 from nuspace.host.cli import cli
 from nuspace.host.registry import GROUP, Registry, RegistryWarning, discover
@@ -33,8 +33,8 @@ from nuverse.snippets import program as nuverse_program
 from nuverse.snippets import prose as nuverse_prose
 
 
-def _app(name: str, label: str = "") -> App:
-    return App(name, label or name, lambda **_: nu.Noop())
+def _plane(name: str, label: str = "") -> Plane:
+    return Plane(name, label or name)
 
 
 def _snippet(name: str, source: str = "") -> Snippet:
@@ -71,9 +71,11 @@ def _points(monkeypatch, points: list[_Point]) -> list[str]:
 
 
 def test_merge_keeps_the_first_per_name_and_warns():
-    first = Extension((_app("page", "Mine"),), (_snippet("prose", "a"),), {"db": _env("mine")}, "a")
+    first = Extension(
+        (_plane("plain", "Mine"),), (_snippet("prose", "a"),), {"db": _env("mine")}, "a"
+    )
     second = Extension(
-        (_app("page", "Theirs"), _app("job")),
+        (_plane("plain", "Theirs"), _plane("jobs")),
         (_snippet("prose", "b"), _snippet("heading")),
         {"db": _env("theirs"), "llm": _env("llm")},
         "b",
@@ -81,9 +83,9 @@ def test_merge_keeps_the_first_per_name_and_warns():
     with pytest.warns(RegistryWarning) as caught:
         reg = Registry.merge([first, second])
     assert len(caught) == 3
-    assert "'page' from b ignored: a registered it first" in str(caught[0].message)
-    assert list(reg.apps) == ["page", "job"]
-    assert reg.apps["page"].label == "Mine"
+    assert "'plain' from b ignored: a registered it first" in str(caught[0].message)
+    assert list(reg.planes) == ["plain", "jobs"]
+    assert reg.planes["plain"].label == "Mine"
     assert reg.snippets["prose"].source == "a"
     assert list(reg.snippets) == ["prose", "heading"]
     assert reg.envs["db"]().label == "mine"
@@ -94,7 +96,7 @@ def test_discover_loads_extensions_and_factories_and_skips_the_broken(monkeypatc
     def broken():
         raise ImportError("no such module")
 
-    ext = Extension(apps=(_app("page"),))
+    ext = Extension(planes=(_plane("plain"),))
     asked = _points(
         monkeypatch,
         [
@@ -108,7 +110,7 @@ def test_discover_loads_extensions_and_factories_and_skips_the_broken(monkeypatc
         found = discover()
     assert asked == [GROUP]
     assert [e.name for e in found] == ["plain", "factory"]
-    assert found[0].apps == ext.apps
+    assert found[0].planes == ext.planes
     assert [s.name for s in found[1].snippets] == ["prose"]
     said = [str(w.message) for w in caught]
     assert any("'broken' failed to load" in s for s in said)
@@ -116,29 +118,31 @@ def test_discover_loads_extensions_and_factories_and_skips_the_broken(monkeypatc
 
 
 def test_explicit_wins_over_discovered(monkeypatch):
-    installed = Extension((_app("page", "Installed"), _app("job")), (), {"db": _env("installed")})
+    installed = Extension(
+        (_plane("plain", "Installed"), _plane("jobs")), (), {"db": _env("installed")}
+    )
     _points(monkeypatch, [_Point("nuverse", lambda: installed)])
-    mine = Extension((_app("chat"),), (), {}, name="mine")
+    mine = Extension((_plane("chat"),), (), {}, name="mine")
     with pytest.warns(RegistryWarning) as caught:
         reg = space_registry(
-            apps=[_app("page", "Loose")], envs={"db": _env("loose")}, extensions=[mine]
+            planes=[_plane("plain", "Loose")], envs={"db": _env("loose")}, extensions=[mine]
         )
     assert {str(w.message) for w in caught} == {
-        "App 'page' from nuverse ignored: open_space registered it first",
+        "Plane 'plain' from nuverse ignored: open_space registered it first",
         "Env 'db' from nuverse ignored: open_space registered it first",
     }
-    assert list(reg.apps) == ["page", "chat", "job"]
-    assert reg.apps["page"].label == "Loose"
+    assert list(reg.planes) == ["plain", "chat", "jobs"]
+    assert reg.planes["plain"].label == "Loose"
     assert reg.envs["db"]().label == "loose"
 
 
 def test_discovery_can_be_turned_off(monkeypatch):
-    asked = _points(monkeypatch, [_Point("nuverse", lambda: Extension((_app("page"),)))])
+    asked = _points(monkeypatch, [_Point("nuverse", lambda: Extension((_plane("plain"),)))])
     with warnings.catch_warnings():
         warnings.simplefilter("error")
         reg = space_registry(snippets=[_snippet("prose")], discover=False)
     assert asked == []
-    assert (list(reg.apps), list(reg.snippets)) == ([], ["prose"])
+    assert (list(reg.planes), list(reg.snippets)) == ([], ["prose"])
 
 
 # --- open_space ------------------------------------------------------------------
@@ -235,7 +239,7 @@ async def test_nuverse_prose_loads_through_the_kernel_rewrites(store):
 
 def test_open_space_with_web_compiles(monkeypatch):
     _points(monkeypatch, [])
-    term = open_space(apps=[_app("page")], snippets=[_snippet("prose")], open_browser=False)
+    term = open_space(planes=[_plane("plain")], snippets=[_snippet("prose")], open_browser=False)
     nu.validate(nu.compile(term))
 
 

@@ -28,11 +28,11 @@ export default defineConfig({
 		rollupOptions: {
 			output: {
 				// The prose editor's engine. Unlike Monaco this cannot be lazy:
-				// a text block is live the moment the page paints, and the
+				// a text cell is live the moment the tab paints, and the
 				// whole point of dropping the old textarea is that there is no
 				// second rendering to show while something loads. So it stays a
 				// static import, but in its own chunk -- it changes on a
-				// dependency bump and never on an app edit, so it caches on its
+				// dependency bump and never on a nuspace edit, so it caches on its
 				// own clock.
 				manualChunks(id: string) {
 					if (id.includes("node_modules/prosemirror-")) return "prosemirror";

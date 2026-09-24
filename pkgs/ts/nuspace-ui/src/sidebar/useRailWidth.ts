@@ -5,7 +5,7 @@
 
 import type * as React from "react";
 import { useCallback, useState } from "react";
-import { trackColDrag } from "../app/drag";
+import { trackColDrag } from "../core/drag";
 import { RAIL_WIDTH } from "../design";
 
 const KEY = "nuspace.rail.width";

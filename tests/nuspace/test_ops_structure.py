@@ -29,7 +29,7 @@ NO_PROPS = {"system": False, "ui": False, "made_by": ""}
 
 
 async def test_add_plane_writes_the_row_and_links_under_root(store):
-    p = await plane(store, "notes", ui=True, made_by="page", meta={"editable": True})
+    p = await plane(store, "notes", ui=True, made_by="plain", meta={"editable": True})
     assert p.startswith("p_")
     assert await store.read(ops.planes()) == [p]
     assert await store.read(ops.plane_exists(p)) is True
@@ -40,7 +40,7 @@ async def test_add_plane_writes_the_row_and_links_under_root(store):
         {
             "id": p,
             "name": "notes",
-            "props": {"system": False, "ui": True, "made_by": "page"},
+            "props": {"system": False, "ui": True, "made_by": "plain"},
             "meta": {"editable": True},
             "parent": ROOT,
         }
@@ -93,12 +93,12 @@ async def test_rename_plane(store):
 
 
 async def test_set_plane_meta_merges(store):
-    p = await plane(store, made_by="page", meta={"a": 1, "b": 2})
+    p = await plane(store, made_by="plain", meta={"a": 1, "b": 2})
     await store.run(ops.set_plane_meta(p, {"b": 3, "c": {"d": 4}, "made_by": "x"}))
     (row,) = await store.read(ops.plane_rows())
     assert row["meta"] == {"a": 1, "b": 3, "c": {"d": 4}, "made_by": "x"}
     # A meta key named like a prop is only meta.
-    assert row["props"] == {"system": False, "ui": False, "made_by": "page"}
+    assert row["props"] == {"system": False, "ui": False, "made_by": "plain"}
 
 
 async def test_add_plane_again_rewrites_props_and_merges_meta(store):
@@ -252,31 +252,58 @@ async def test_move_cell_refuses_same_plane_and_missing(store):
 # --- Tree ----------------------------------------------------------------------
 
 
-async def test_nest_and_unnest(store):
+async def test_move_plane_reparents_and_reorders(store):
     a, b, c = await plane(store), await plane(store), await plane(store)
-    assert await store.run(ops.nest(b, a)) is True
-    assert await store.run(ops.nest(c, a, 0)) is True
+    assert await store.run(ops.move_plane(b, parent=a)) is True
+    assert await store.run(ops.move_plane(c, parent=a, index=0)) is True
     assert await store.read(ops.children()) == [a]
     assert await store.read(ops.children(a)) == [c, b]
-    assert await store.run(ops.unnest(b)) is True
+    assert await store.run(ops.move_plane(b)) is True
     assert await store.read(ops.children()) == [a, b]
     assert await store.read(ops.children(a)) == [c]
     assert await store.read(ops.parent(c)) == a
+    # Within one parent: the index is taken with the plane out of the list.
+    assert await store.run(ops.move_plane(b, parent=ROOT, index=0)) is True
+    assert await store.read(ops.children()) == [b, a]
 
 
-async def test_nest_refuses_cycles(store):
+async def test_move_plane_refuses_cycles(store):
     a = await plane(store)
     b = await store.run(ops.add_plane(parent=a))
     c = await store.run(ops.add_plane(parent=b))
-    assert await store.run(ops.nest(a, c)) is False
-    assert await store.run(ops.nest(a, b)) is False
-    assert await store.run(ops.nest(a, a)) is False
-    assert await store.run(ops.nest(a, "nope")) is False
-    assert await store.run(ops.nest("nope", ROOT)) is False
+    assert await store.run(ops.move_plane(a, parent=c)) is False
+    assert await store.run(ops.move_plane(a, parent=b)) is False
+    assert await store.run(ops.move_plane(a, parent=a)) is False
+    assert await store.run(ops.move_plane(a, parent="nope")) is False
+    assert await store.run(ops.move_plane("nope")) is False
     assert await store.read(ops.children()) == [a]
     assert await store.read(ops.children(b)) == [c]
-    assert await store.run(ops.nest(c, a)) is True
+    assert await store.run(ops.move_plane(c, parent=a)) is True
     assert await store.read(ops.children(a)) == [b, c]
+
+
+async def test_move_plane_moves_system_planes_too(store):
+    svc = await plane(store, system=True)
+    top = await plane(store)
+    assert await store.run(ops.move_plane(svc, parent=top)) is True
+    assert await store.read(ops.children(top)) == [svc]
+
+
+async def test_sibling_order_after_add_remove_and_move(store):
+    a, b, c = await plane(store, "a"), await plane(store, "b"), await plane(store, "c")
+    # New planes append.
+    assert await store.read(ops.children()) == [a, b, c]
+    d = await plane(store, "d")
+    assert await store.read(ops.children()) == [a, b, c, d]
+    # A move places, a removal closes the gap, and the rest keep their order.
+    await store.run(ops.move_plane(d, index=1))
+    assert await store.read(ops.children()) == [a, d, b, c]
+    await store.run(ops.remove_plane(b))
+    assert await store.read(ops.children()) == [a, d, c]
+    kid = await store.run(ops.add_plane(name="kid", parent=d))
+    await store.run(ops.move_plane(c, parent=d, index=0))
+    assert await store.read(ops.children(d)) == [c, kid]
+    assert await store.read(ops.children()) == [a, d]
 
 
 async def test_parent_of_an_unlinked_plane(store):

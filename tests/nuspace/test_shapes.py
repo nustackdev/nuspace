@@ -50,7 +50,7 @@ class Movies(nu.Shape):
     count = nustd.kv.IntRef.slot()
 
 
-class Page(nu.Shape):
+class Form(nu.Shape):
     inp = nustd.ui.InputRef.slot()
 
 
@@ -200,7 +200,7 @@ def test_foreign_chains_come_back_as_the_same_object():
     for term in (
         Movies.count.set(Movies.count + 1),
         Space.planes["p"].name.set("x"),
-        Page.inp.set("hi"),
+        Form.inp.set("hi"),
         Space.planes[Movies.count].name,
     ):
         assert reroot(term, "p", "c") is term

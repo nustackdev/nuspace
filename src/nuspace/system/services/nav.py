@@ -175,7 +175,7 @@ def _open(sid: nu.StrAttrRef, route: nu.StrAttrRef) -> nu.Nu:
     )
     turn = nu.Let(_WORKER, worker(held=True), nu.TryCatch(followed, finally_=kill_worker(w)))
     # A route can name a plane before the plane is written: the browser mints
-    # a new page's id and opens it while its create is still in flight. So
+    # a new plane's id and opens it while its create is still in flight. So
     # wait for the plane rather than giving up on the route; the routes will
     # not change again to retry.
     shown = nu.WhileDo(nu.Not(snap(_shown(route))), wake(Space.planes.on_children_change()))

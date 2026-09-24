@@ -8,7 +8,7 @@ the arm factory, and the total readers an arm reads a browser event with.
 
 - An event rides a path of its own, ``(*<ref>, "ops", <op>)``, so the path is
   the discrimination and a feed binds one arm per op. The op name is one
-  segment and keeps its dots: ``pages.open`` is a name, not two levels.
+  segment and keeps its dots: ``planes.open`` is a name, not two levels.
 - A write rides the ref's own path, tagged with an ``op`` key in the payload,
   because the browser registers one handler per node and a write to a path
   with no handler is dropped.
@@ -64,9 +64,9 @@ __all__ = [
 OPS = "ops"
 
 #: The segment a cell's own node sits under, one level below the viewer. The
-#: browser's spelling (``pkgs/ts/nuspace-ui/src/refs/viewer/blocks.ts``):
+#: browser's spelling (``pkgs/ts/nuspace-ui/src/plane/cell/address.ts``):
 #: moving it here without moving it there breaks drawing.
-CELLS = "sections"
+CELLS = "cells"
 
 #: How long a parked branch sleeps between doing nothing.
 PARK_SECONDS = 3600.0
@@ -112,9 +112,9 @@ def rooted(ref: StructuredRef) -> bool:
 
 
 def cells_ui(viewer: Ref) -> SectionRef:
-    """Every drawn cell's node under ``viewer``, as one ref: the page, as drawn.
+    """Every drawn cell's node under ``viewer``, as one ref: the plane, as drawn.
 
-    Erasing it takes the page off screen in one frame.
+    Erasing it takes the plane off screen in one frame.
     """
     return SectionRef(CELLS, section_cls=nustd.ui.Column, parent_ref=viewer)
 

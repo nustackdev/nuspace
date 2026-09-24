@@ -51,7 +51,7 @@ class Space(nu.Shape):
     directly. Nesting is ``tree``, keyed by plane id plus
     :data:`~nuspace.shapes.tree.ROOT`.
 
-    One writer per subtree: people, apps and services write ``planes`` and
+    One writer per subtree: people, cells and services write ``planes`` and
     ``tree`` through ops, the kernel writes ``kernel``, the web device writes
     ``connections`` and ``state.recents``, the host writes ``state.info``.
 

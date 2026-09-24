@@ -1,23 +1,25 @@
-// The bar across a pane's top: the page's title, its settings, and close.
+// The bar across a pane's top: the plane's title, its settings, and close.
 // Only over a lone pane; a split gets the tab bar (../main/TabBar.tsx).
 //
-// Outside the page's scroll, so it stays put while the page moves under it.
+// Outside the plane's scroll, so it stays put while the plane moves under it.
 
 import { IconButton } from "@nustackdev/ui-kit";
 import { X } from "lucide-react";
 import { paneBar, paneBarButton, paneBarTitle } from "../design";
-import type { PageMeta } from "../page/types";
+import type { PlaneMeta } from "../plane/types";
 import { PaneMenu } from "./PaneMenu";
 
 export function PaneBar({
+	planeId,
 	title,
 	meta,
 	onMeta,
 	onClose,
 }: {
+	planeId: string;
 	title: string;
-	/** Null while the page is loading. */
-	meta: PageMeta | null;
+	/** Null while the plane is loading. */
+	meta: PlaneMeta | null;
 	onMeta: (patch: Record<string, unknown>) => void;
 	onClose: () => void;
 }) {
@@ -26,7 +28,7 @@ export function PaneBar({
 			<span className={paneBarTitle} title={title}>
 				{title}
 			</span>
-			<PaneMenu meta={meta} onChange={onMeta} />
+			<PaneMenu planeId={planeId} meta={meta} onChange={onMeta} />
 			<IconButton
 				variant="ghost"
 				size="sm"

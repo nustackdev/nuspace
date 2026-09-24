@@ -51,8 +51,8 @@ def add_plane(
         system: Prop, a protected plane, eg a service or home.
             ``remove_plane`` refuses it.
         ui: Prop, the shell draws it and nav brings it up when routed.
-        made_by: Prop, the app that made it, the sidebar section it is
-            listed under.
+        made_by: Prop, the registered Plane it was created from. Nothing
+            groups by it.
         meta: Fields to merge into its meta.
 
     The props are written every time, so an existing plane given again takes

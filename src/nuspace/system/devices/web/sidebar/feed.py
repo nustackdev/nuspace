@@ -3,18 +3,17 @@
 Two families:
 
 - **browser to store.** A sidebar event runs one op over its own fields.
-- **store to browser.** The plane list changed; the arm ships it again.
+- **store to browser.** The tree changed; the arm ships it again.
 
-**Sections are apps** (D18). One section row per app with ``section=True``,
-in the order the apps were given. A plane is listed when its ``props.ui``
-is set and its ``props.made_by`` names a section app; it hangs under that
-section. ``+`` under a section runs its app. ``system`` is not asked, it
-only means protected: home is a system ui plane with ``made_by`` empty, so
-it is under no section, and the space header is its way in.
+**One tree.** Every plane with ``props.ui`` is listed, under its parent in
+``Space.tree`` and in that node's sibling order, top level planes under the
+space row. ``made_by`` and ``system`` group nothing. A drawn plane whose
+parent is not drawn (a service's child, or one no node lists) is shown at the
+top level, after the rest, so nothing drawn goes missing.
 
-**Narrow watch.** The list is shipped again when the set of planes, a
-plane's name or props change, and nothing else: a cell writing
-its state or the kernel writing a run never wakes it.
+**Narrow watch.** The tree is shipped again when the set of planes, a
+plane's name or props, or a tree node change, and nothing else: a cell
+writing its state or the kernel writing a run never wakes it.
 """
 
 from __future__ import annotations
@@ -23,15 +22,10 @@ from typing import TYPE_CHECKING
 
 import nu
 from nuspace import ops
-from nuspace.ops.utils import fresh
-from nuspace.shapes import Space
+from nuspace.ops.utils import flag, fresh
+from nuspace.shapes import ROOT, Space
 from nuspace.system.devices.web.sidebar import interactions
-from nuspace.system.devices.web.sidebar.interactions import (
-    KIND_GROUP,
-    KIND_PLANE,
-    KIND_SPACE,
-    ROOT_ID,
-)
+from nuspace.system.devices.web.sidebar.interactions import KIND_PLANE, KIND_SPACE, ROOT_ID
 from nuspace.system.devices.web.utils import Arms, field_str
 from nuspace.system.kernel.utils import snap
 
@@ -39,11 +33,11 @@ from nuspace.system.kernel.utils import snap
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
-    from nuspace.ops import App
+    from nuspace.ops import Plane
     from nustd.ui.core import Ref
 
 
-__all__ = ["create_plane", "rows", "sections", "sidebar_feed"]
+__all__ = ["create", "move", "node", "rows", "sidebar_feed"]
 
 
 _arms = Arms("sidebar")
@@ -52,15 +46,7 @@ _arms = Arms("sidebar")
 _CREATE = "nuspace.web.sidebar.create"
 _RENAME = "nuspace.web.sidebar.rename"
 _DELETE = "nuspace.web.sidebar.delete"
-
-
-def sections(apps: Sequence[App]) -> list[App]:
-    """The apps that declare a sidebar section, in order."""
-    return [app for app in apps if app.section]
-
-
-def _any(conds: list[nu.Nu]) -> nu.Nu:
-    return conds[0] if len(conds) == 1 else nu.Or(*conds)
+_MOVE = "nuspace.web.sidebar.move"
 
 
 def _text(row: nu.Nu, field: str) -> nu.Nu:
@@ -72,65 +58,60 @@ def _prop(row: nu.Nu, field: str) -> nu.Nu:
     return nu.Dict(row.get_item(nu.Str("props"), nu.Dict.of())).get_item(nu.Str(field))
 
 
-def rows(apps: Sequence[App]) -> nu.Nu:
-    """The space, its sections and every listed plane, as browser rows. Bare read.
+def node(parent_id: nu.Nu) -> nu.Nu:
+    """The store's tree node for a browser parent id: :data:`ROOT_ID` and ``""`` are ``ROOT``."""
+    top = nu.Or(nu.Eq(parent_id, nu.Str(ROOT_ID)), nu.Eq(parent_id, nu.Str("")))
+    return nu.If(top, nu.Str(ROOT), parent_id)
+
+
+def _drawn(plane_id: nu.Nu) -> nu.Nu:
+    return flag(Space.planes[plane_id].props.ui, False)
+
+
+def rows() -> nu.Nu:
+    """The space and every drawn plane, as browser rows. Bare read.
 
     ``parent`` is on every row: the browser defaults it to the row's own id
     and takes the first self parenting row as the root, so a plane row
     without one would become the root.
 
     Yields:
-        ``[space, *sections, *planes]``, each ``{id, kind, title, parent,
-        children}``. Planes in creation order.
+        ``[space, *planes]``, each ``{id, kind, title, parent, children}``,
+        planes with ``made_by`` too. Planes in creation order, ``children``
+        in sibling order.
     """
-    groups = sections(apps)
-    names = nu.List.of(*[nu.Str(app.name) for app in groups])
-    pick, each, listed = fresh("sidebar_pick"), fresh("sidebar_row"), fresh("sidebar_listed")
-    picked = nu.DictAttrRef(pick)
-    row = nu.DictAttrRef(each)
+    pick, each, kid = fresh("sidebar_pick"), fresh("sidebar_row"), fresh("sidebar_kid")
+    listed, known = fresh("sidebar_listed"), fresh("sidebar_known")
+    picked, row = nu.DictAttrRef(pick), nu.DictAttrRef(each)
+    held, ids = nu.ListAttrRef(listed), nu.ListAttrRef(known)
     shown = nu.List(
-        nu.Collect(
-            nu.Filter(
-                ops.plane_rows(),
-                nu.And(
-                    nu.ToBool(_prop(picked, "ui")),
-                    names.contains(nu.ToStr(_prop(picked, "made_by"))),
-                ),
-                key=pick,
-            )
-        )
+        nu.Collect(nu.Filter(ops.plane_rows(), nu.ToBool(_prop(picked, "ui")), key=pick))
     )
-    held = nu.ListAttrRef(listed)
 
-    def ids(group: str) -> nu.Nu:
+    def kids(node_id: nu.Nu) -> nu.Nu:
         return nu.List(
-            nu.Collect(
-                nu.Map(
-                    nu.Filter(held, nu.Eq(nu.ToStr(_prop(picked, "made_by")), group), key=pick),
-                    _text(row, "id"),
-                    key=each,
-                )
-            )
+            nu.Collect(nu.Filter(ops.children(node_id), ids.contains(nu.AnyAttrRef(kid)), key=kid))
         )
 
+    def listed_under(row: nu.Nu) -> nu.Nu:
+        """Whether the row's parent is drawn too, so the row hangs under it."""
+        return ids.contains(_text(row, "parent"))
+
+    # Drawn planes whose parent is neither drawn nor the root: shown at the top.
+    stray = nu.Filter(
+        held,
+        nu.And(nu.Ne(_text(picked, "parent"), nu.Str(ROOT)), nu.Not(listed_under(picked))),
+        key=pick,
+    )
     space = nu.Dict.of(
         id=nu.Str(ROOT_ID),
         kind=nu.Str(KIND_SPACE),
         # Empty: the browser draws its own word for the space here.
         title=nu.Str(""),
         parent=nu.Str(ROOT_ID),
-        children=nu.List.of(*[nu.Str(app.name) for app in groups]),
+        children=kids(nu.Str(ROOT))
+        + nu.List(nu.Collect(nu.Map(stray, _text(row, "id"), key=each))),
     )
-    grouped = [
-        nu.Dict.of(
-            id=nu.Str(app.name),
-            kind=nu.Str(KIND_GROUP),
-            title=nu.Str(app.label),
-            parent=nu.Str(ROOT_ID),
-            children=ids(app.name),
-        )
-        for app in groups
-    ]
     planes = nu.List(
         nu.Collect(
             nu.Map(
@@ -139,75 +120,130 @@ def rows(apps: Sequence[App]) -> nu.Nu:
                     id=_text(row, "id"),
                     kind=nu.Str(KIND_PLANE),
                     title=_text(row, "name"),
-                    parent=nu.ToStr(_prop(row, "made_by")),
-                    # Nesting is not drawn yet: every plane is a leaf of its section.
-                    children=nu.List.of(),
+                    parent=nu.If(listed_under(row), _text(row, "parent"), nu.Str(ROOT_ID)),
+                    children=kids(_text(row, "id")),
+                    made_by=nu.ToStr(_prop(row, "made_by")),
                 ),
                 key=each,
             )
         )
     )
-    return nu.Let(listed, shown, nu.List.of(space, *grouped) + planes)
+    body = nu.Let(
+        known,
+        nu.List(nu.Collect(nu.Map(held, _text(picked, "id"), key=pick))),
+        nu.List.of(space) + planes,
+    )
+    return nu.Let(listed, shown, body)
 
 
-def create_plane(
-    apps: Sequence[App], group: nu.StrArg, plane_id: nu.StrArg, name: nu.StrArg
+def create(
+    planes: Sequence[Plane], made_by: nu.Nu, plane_id: nu.Nu, parent_id: nu.Nu, title: nu.Nu
 ) -> nu.Nu | None:
-    """Run the section app ``group`` names, making ``plane_id`` called ``name``.
+    """Create ``plane_id`` from the registered Plane ``made_by`` names.
 
-    A group no section app answers to runs the first one. None when there is
-    no section app at all.
+    A name nothing registered answers to creates the first Plane. An empty
+    ``title`` takes the Plane's label. None when nothing is registered.
     """
-    groups = sections(apps)
-    if not groups:
+    if not planes:
         return None
-    named = [nu.Eq(group, nu.Str(app.name)) for app in groups]
+    named = [nu.Eq(made_by, nu.Str(spec.name)) for spec in planes]
+    unknown = nu.Not(named[0] if len(named) == 1 else nu.Or(*named))
     branches = [
         nu.IfDo(
-            nu.Or(named[0], nu.Not(_any(named))) if i == 0 else named[i],
-            ops.run_app(app, plane_id=plane_id, name=name),
+            nu.Or(named[0], unknown) if i == 0 else named[i],
+            ops.create_plane(
+                spec,
+                parent=node(parent_id),
+                name=nu.If(nu.Eq(title, nu.Str("")), nu.Str(spec.label), title),
+                plane_id=plane_id,
+            ),
         )
-        for i, app in enumerate(groups)
+        for i, spec in enumerate(planes)
     ]
     return branches[0] if len(branches) == 1 else nu.Sequential(*branches)
 
 
+def move(plane_id: nu.Nu, parent_id: nu.Nu, index: nu.Nu) -> nu.Nu:
+    """Move a plane to ``index`` among the drawn children of ``parent_id``.
+
+    The browser counts only what it draws, the store's node holds planes it
+    does not (services, for one). The position goes in before the drawn
+    sibling the browser named, or at the end when it named none.
+    """
+    under, others, drawn = fresh("sidebar_under"), fresh("sidebar_others"), fresh("sidebar_drawn")
+    at = fresh("sidebar_at")
+    item = nu.AnyAttrRef(at)
+    everyone = nu.List(
+        nu.Collect(nu.Filter(ops.children(nu.StrAttrRef(under)), nu.Ne(item, plane_id), key=at))
+    )
+    shown = nu.List(nu.Collect(nu.Filter(nu.ListAttrRef(others), _drawn(nu.ToStr(item)), key=at)))
+    rest, seen = nu.ListAttrRef(others), nu.ListAttrRef(drawn)
+    position = nu.If(
+        nu.And(nu.Ge(index, nu.Int(0)), nu.Lt(index, seen.len())),
+        rest.index(seen[index]),
+        rest.len(),
+    )
+    return nu.Let(
+        under,
+        node(parent_id),
+        nu.Let(
+            others,
+            snap(everyone),
+            nu.Let(
+                drawn,
+                snap(shown),
+                ops.move_plane(plane_id, parent=nu.StrAttrRef(under), index=position),
+            ),
+        ),
+    )
+
+
 def _changes() -> list[nu.Nu]:
-    """What reships the list: the set of planes, their names and props."""
-    planes = Space.planes
+    """What reships the tree: the set of planes, their names and props, the tree nodes."""
+    planes, tree = Space.planes, Space.tree
     return [
         snap(planes.on_children_change()),
         snap(planes.on_descendants_change("*", "name")),
         snap(planes.on_descendants_change("*", "props")),
         snap(planes.on_descendants_change("*", "props", "*")),
+        snap(tree.on_children_change()),
+        snap(tree.on_descendants_change("*", "children")),
+        snap(tree.on_descendants_change("*", "children", "*")),
     ]
 
 
-def _ship(sidebar: Ref, apps: Sequence[App]) -> nu.Nu:
+def _ship(sidebar: Ref) -> nu.Nu:
     held = fresh("sidebar_ship")
-    return nu.Let(held, snap(rows(apps)), interactions.set_tree(sidebar, nu.ListAttrRef(held)))
+    return nu.Let(held, snap(rows()), interactions.set_tree(sidebar, nu.ListAttrRef(held)))
 
 
-def sidebar_feed(sidebar: Ref, apps: Sequence[App]) -> nu.Nu:
+def sidebar_feed(sidebar: Ref, planes: Sequence[Plane]) -> nu.Nu:
     """The sidebar, live, as one term. Built per connection, never ends.
 
     Args:
         sidebar: The shell's sidebar ref.
-        apps: The registered apps. Those with ``section=True`` are sections.
+        planes: The registered Planes, what ``plane.create`` can create.
     """
-    arms = [_arms.state("tree", _changes(), _ship(sidebar, apps))]
-    page_id = field_str(_CREATE, "page_id")
-    create = create_plane(apps, field_str(_CREATE, "group"), page_id, field_str(_CREATE, "title"))
-    if create is not None:
+    arms = [_arms.state("tree", _changes(), _ship(sidebar))]
+    plane_id = field_str(_CREATE, "plane_id")
+    made = create(
+        planes,
+        field_str(_CREATE, "made_by"),
+        plane_id,
+        field_str(_CREATE, "parent_id"),
+        field_str(_CREATE, "title"),
+    )
+    if made is not None:
         arms.append(
             _arms.event(
                 _CREATE,
                 interactions.on_create_plane(sidebar),
-                nu.IfDo(nu.Ne(page_id, nu.Str("")), create),
+                nu.IfDo(nu.Ne(plane_id, nu.Str("")), made),
             )
         )
-    renamed = field_str(_RENAME, "page_id")
-    deleted = field_str(_DELETE, "page_id")
+    renamed = field_str(_RENAME, "plane_id")
+    deleted = field_str(_DELETE, "plane_id")
+    moved = field_str(_MOVE, "plane_id")
     arms += [
         _arms.event(
             _RENAME,
@@ -221,6 +257,18 @@ def sidebar_feed(sidebar: Ref, apps: Sequence[App]) -> nu.Nu:
             _DELETE,
             interactions.on_delete_plane(sidebar),
             nu.IfDo(nu.Ne(deleted, nu.Str("")), ops.remove_plane(deleted)),
+        ),
+        _arms.event(
+            _MOVE,
+            interactions.on_move_plane(sidebar),
+            nu.IfDo(
+                nu.Ne(moved, nu.Str("")),
+                move(
+                    moved,
+                    field_str(_MOVE, "parent_id"),
+                    nu.ToInt(nu.DictAttrRef(_MOVE).get_item(nu.Str("index"), nu.Int(-1))),
+                ),
+            ),
         ),
     ]
     return nu.ParallelAsync(*arms)

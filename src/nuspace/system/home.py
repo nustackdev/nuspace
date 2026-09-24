@@ -1,20 +1,20 @@
 """Home: the plane ``/`` opens, seeded by the host at open when missing.
 
 A system ui plane with a fixed id: ``remove_plane`` refuses it, nav brings it
-up like any other drawn plane, and with ``made_by`` empty the sidebar lists
-it under no section (the space header is its way in). Its cells are ordinary
+up like any other drawn plane, and the sidebar lists it like one, first at the
+top level since it is made before anything else is. Its cells are ordinary
 cells, seeded once: after that they are the owner's to edit, and a store
 that has a home keeps it as it is.
 
 Four cells, read only. All but ``start`` redraw once a second from one
-snapshot of the store, like the nuverse live apps:
+snapshot of the store, like the nuverse live planes:
 
 - ``header``: the space, its store path, versions and uptime, off
   ``Space.state.info``;
 - ``recent``: the last :data:`RECENT_SHOWN` planes of ``Space.state.recents``
   that still exist, as links;
-- ``glance``: pages, live runs, workers up and runs failed in the last hour,
-  with links to the first Runs, Workers and Planes pages there are;
+- ``glance``: planes, live runs, workers up and runs failed in the last hour,
+  with links to the first Runs, Workers and Planes planes there are;
 - ``start``: how the shell works, static.
 
 Core only: the cells import ``nu``, ``nustd`` and ``nuspace``, never nuverse,
@@ -58,7 +58,7 @@ PLANE = "home"
 #: What the plane is called.
 NAME = "Home"
 
-#: The plane's meta, as a section app's pages start.
+#: The plane's meta, as nuverse's live planes start.
 META = {"editable": True, "full_width": False}
 
 #: The packages whose versions the header shows, when installed.
@@ -173,7 +173,7 @@ from nuspace import ops
 
 
 class Tiles(nustd.ui.Row):
-    pages = nustd.ui.StatRef.slot(label="Pages")
+    planes = nustd.ui.StatRef.slot(label="Planes")
     live = nustd.ui.StatRef.slot(label="Live runs")
     workers = nustd.ui.StatRef.slot(label="Workers up")
     failed = nustd.ui.StatRef.slot(label="Failed, last hour")
@@ -194,7 +194,7 @@ def prop(p, name):
     return nu.Dict(p["props"])[name]
 
 
-def pages(planes):
+def drawn(planes):
     p = nu.DictAttrRef("p")
     drawn = nu.And(nu.ToBool(prop(p, "ui")), nu.Not(nu.ToBool(prop(p, "system"))))
     return nu.Count(nu.Filter(nu.Iter(planes), nu.And(drawn, nu.Ne(p["id"], "home")), key="p"))
@@ -216,26 +216,26 @@ def failed_recently():
     return nu.Count(nu.Filter(failed, nu.Ge(r["ended"], since), key="r"))
 
 
-def first(planes, app):
+def first(planes, made_by):
     p = nu.DictAttrRef("p")
     made = nu.Filter(
         nu.Iter(planes),
-        nu.And(nu.Eq(nu.ToStr(prop(p, "made_by")), app), nu.ToBool(prop(p, "ui"))),
+        nu.And(nu.Eq(nu.ToStr(prop(p, "made_by")), made_by), nu.ToBool(prop(p, "ui"))),
         key="p",
     )
     ids = nu.List(nu.Collect(nu.Map(made, p["id"], key="p")))
     return nu.If(nu.Gt(nu.Len(ids), 0), nu.ToStr(ids[0]), nu.Str(""))
 
 
-def link(ref, planes, app, label):
-    pid = first(planes, app)
+def link(ref, planes, made_by, label):
+    pid = first(planes, made_by)
     return nu.IfDo(nu.Ne(pid, ""), ref.set(href=nu.Str("/") + pid, label=label), ref.erase())
 
 
 def draw():
     planes = nu.ListAttrRef("planes")
     tiles = (
-        Glance.tiles.pages.set(nu.ToStr(pages(planes)))
+        Glance.tiles.planes.set(nu.ToStr(drawn(planes)))
         >> Glance.tiles.live.set(nu.ToStr(nu.Len(ops.live_runs())))
         >> Glance.tiles.workers.set(nu.ToStr(workers_up()))
         >> Glance.tiles.failed.set(nu.ToStr(failed_recently()))
@@ -261,10 +261,11 @@ import nustd.ui
 TEXT = """\\
 ### Getting started
 
-- `+` next to a section in the sidebar makes a page.
-- `/` in a page adds a cell.
-- Cmd/Ctrl-click a page in the sidebar opens it as a split.
-- `⋯` on a page holds its settings.
+- `+` in the sidebar, on a plane row or in a plane's `⋯` menu adds a plane.
+- Drag a plane in the sidebar to reorder it or nest it under another.
+- `/` in a plane adds a cell.
+- Cmd/Ctrl-click a plane in the sidebar opens it as a split.
+- `⋯` on a plane holds its settings.
 - The code button on a cell edits it in place.
 """
 

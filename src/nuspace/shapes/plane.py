@@ -17,8 +17,8 @@ class PlaneProps(nu.Shape):
     ``system`` marks a protected plane, eg a service or home:
     ``remove_plane`` refuses it, and that is all it means. ``ui`` says the
     shell draws it, and nav brings a routed plane up iff it is set.
-    ``made_by`` names the app that made it, the sidebar section it is listed
-    under (``""`` is under none).
+    ``made_by`` names the registered Plane it was created from (``""`` for
+    none). A record, nothing groups by it.
     """
 
     system = nustd.kv.BoolRef.slot()

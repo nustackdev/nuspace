@@ -1,6 +1,6 @@
 """A space in the browser, with nuverse and nothing else.
 
-Every app and snippet comes from nuverse, found through its entry point. The
+Every Plane and snippet comes from nuverse, found through its entry point. The
 store is ``examples/space.db``, kept between runs.
 
 Run it::

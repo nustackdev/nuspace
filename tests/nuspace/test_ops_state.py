@@ -5,7 +5,7 @@ from __future__ import annotations
 import nu
 import nustd.kv
 from nuspace import ops
-from nuspace.shapes import CellState, PlaneState, Space, reroot
+from nuspace.shapes import ROOT, CellState, PlaneState, Space, reroot
 
 
 class Tick(CellState):
@@ -71,21 +71,44 @@ async def test_clear_state(store):
 # --- extend ---------------------------------------------------------------------
 
 
-async def test_run_app_builds_and_runs_its_tree(store):
-    def build(title="page"):
-        pid = nu.StrAttrRef("app_plane")
-        return nu.Let(
-            "app_plane",
-            ops.add_plane(name=title, made_by="page", meta={"k": 1}),
-            ops.add_cell(pid, "src", name="body"),
-        )
+async def test_create_plane_seeds_cells_and_nested_children(store):
+    leaf = ops.Plane("leaf", "Leaf", cells=(("note", "n"),))
+    mid = ops.Plane("mid", "Mid", meta={"editable": True}, children=(leaf,))
+    spec = ops.Plane(
+        "tracker",
+        "Tracker",
+        icon="list",
+        meta={"k": 1},
+        cells=(("form", "f"), ("list", "l")),
+        children=(mid, leaf),
+    )
+    top = await store.run(ops.add_plane(name="top"))
+    made = await store.run(ops.create_plane(spec, parent=top))
+    assert await store.read(ops.children(top)) == [made]
+    rows = {r["id"]: r for r in await store.read(ops.plane_rows())}
+    assert (rows[made]["name"], rows[made]["meta"]) == ("Tracker", {"k": 1})
+    assert rows[made]["props"] == {"system": False, "ui": True, "made_by": "tracker"}
+    assert [(c["name"], c["prog"]) for c in await store.read(ops.cell_rows(made))] == [
+        ("form", "f"),
+        ("list", "l"),
+    ]
+    m, lone = await store.read(ops.children(made))
+    assert [rows[m]["name"], rows[lone]["name"]] == ["Mid", "Leaf"]
+    assert rows[m]["meta"] == {"editable": True}
+    (deep,) = await store.read(ops.children(m))
+    assert rows[deep]["props"]["made_by"] == "leaf"
+    assert [c["name"] for c in await store.read(ops.cell_rows(deep))] == ["note"]
 
-    app = ops.App("page", "Page", build, description="a page")
-    assert app.section is True
-    await store.run(ops.run_app(app, title="notes"))
+
+async def test_create_plane_name_and_id(store):
+    plain = ops.Plane("plain", "Plain")
+    assert await store.run(ops.create_plane(plain, name="Notes", plane_id="p1")) == "p1"
     (row,) = await store.read(ops.plane_rows())
-    assert (row["name"], row["props"]["made_by"], row["meta"]) == ("notes", "page", {"k": 1})
-    assert [c["name"] for c in await store.read(ops.cell_rows(row["id"]))] == ["body"]
+    assert (row["name"], row["parent"]) == ("Notes", ROOT)
+    assert await store.read(ops.cells("p1")) == []
+    # A term built once creates a new plane each time it runs.
+    term = ops.create_plane(plain)
+    assert await store.run(term) != await store.run(term)
 
 
 async def test_insert_snippet(store):

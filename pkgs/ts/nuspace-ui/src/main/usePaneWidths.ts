@@ -17,7 +17,7 @@
 
 import type * as React from "react";
 import { useCallback, useState } from "react";
-import { trackColDrag } from "../app/drag";
+import { trackColDrag } from "../core/drag";
 import { PANE_MIN_WIDTH } from "../design";
 
 type Widths = { key: string; px: number[] };
@@ -39,7 +39,7 @@ export function usePaneWidths(
 
 	const styleOf = useCallback(
 		(i: number): React.CSSProperties => {
-			// A lone pane is the page as it always was: the whole strip, no floor.
+			// A lone pane is the plane as it always was: the whole strip, no floor.
 			if (!split) return { flex: "1 1 0px" };
 			const w = widths?.[i];
 			return w === undefined

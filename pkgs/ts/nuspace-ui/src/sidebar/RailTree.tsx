@@ -1,5 +1,5 @@
-// The rail's tree: the visible rows, the keyboard, the indent guides, and the
-// phantom row a create types into.
+// The rail's tree: the visible rows, the keyboard, the indent guides, and
+// where a dragged row would land.
 //
 // ## The interaction model
 //
@@ -14,42 +14,46 @@
 //
 // The tree is one tab stop; `useRailFocus` owns the tab stop, the by-key
 // focus and the four moves. What this adds on top is the two arrows that fold
-// and open-and-reveal.
+// and open-and-reveal. Drag and drop is ./useRailDrag.ts; this draws its
+// insertion line and its target.
 
-import { FileText } from "lucide-react";
 import type * as React from "react";
-import { useCallback, useMemo } from "react";
-import { openPane, replacePane } from "../app/router";
+import { useCallback, useEffect, useMemo } from "react";
+import { openPane, replacePane } from "../core/router";
 import {
+	railDragging,
+	railDropInto,
+	railDropLine,
+	railDropLineStyle,
+	railDropTail,
 	railEmpty,
 	railGuide,
 	railGuideStyle,
-	railIndent,
-	railLane,
-	railLaneStyle,
-	railLeafIcon,
-	railRow,
 	railRowWrap,
 } from "../design";
+import { clearPendingRename, usePendingRename } from "./add";
+import { iconFor } from "./icons";
 import type { Notify } from "./ops";
 import { PlaneRow } from "./PlaneRow";
-import { RailRowInput } from "./RailRowInput";
 import { folds, type VisibleRow } from "./tree";
-import { KIND_GROUP, type PageTree } from "./types";
+import type { PlaneTree, Registered } from "./types";
 import { useDraft } from "./useDraft";
+import { useRailDrag } from "./useRailDrag";
 import { useRailFocus } from "./useRailFocus";
 
 export function RailTree({
 	tree,
 	rows,
+	registered,
 	routes,
 	selKey,
 	onToggle,
 	reveal,
 	notify,
 }: {
-	tree: PageTree;
+	tree: PlaneTree;
 	rows: VisibleRow[];
+	registered: Registered[];
 	routes: string[];
 	/** The focused pane's Plane, which is the cursor. */
 	selKey: string;
@@ -62,11 +66,18 @@ export function RailTree({
 		keys,
 		selKey,
 	);
-	const { draft, startRename, startCreate, commitDraft, cancelDraft } = useDraft({
-		reveal,
-		notify,
-		focusKey,
-	});
+	const { draft, startRename, commitDraft, cancelDraft } = useDraft({ notify, focusKey });
+	const { dragKey, target, rowProps, tailProps } = useRailDrag({ tree, rows, notify, reveal });
+
+	// A Plane made from the Add plane popup is renamed as soon as its row shows.
+	const pending = usePendingRename();
+	useEffect(() => {
+		if (!pending) return;
+		const row = rows.find((r) => r.key === pending);
+		if (!row) return;
+		clearPendingRename();
+		startRename(row);
+	}, [pending, rows, startRename]);
 
 	const onKeyDown = useCallback(
 		(e: React.KeyboardEvent, row: VisibleRow, index: number) => {
@@ -87,19 +98,16 @@ export function RailTree({
 					break;
 				case "Enter":
 				case " ":
-					// Same contract as the click: a section only folds, a Plane
-					// opens and reveals what is inside it. Cmd/ctrl opens a split.
+					// Same contract as the click: open it and reveal what is
+					// inside it. Cmd/ctrl opens a split.
 					e.preventDefault();
-					if (row.kind === KIND_GROUP) onToggle(row.key);
-					else {
-						if (row.hasKids) reveal(row.key);
-						if (e.metaKey || e.ctrlKey) openPane(row.id);
-						else replacePane(row.id);
-					}
+					if (row.hasKids) reveal(row.key);
+					if (e.metaKey || e.ctrlKey) openPane(row.id);
+					else replacePane(row.id);
 					break;
 				case "F2":
 					e.preventDefault();
-					if (row.kind !== KIND_GROUP) startRename(row);
+					startRename(row);
 					break;
 				default:
 					break;
@@ -109,56 +117,54 @@ export function RailTree({
 	);
 
 	return (
-		<div role="tree" aria-label="Planes" ref={containerRef}>
-			{rows.map((row, index) => (
-				<div key={row.key} role="none">
-					<div className={railRowWrap}>
-						<Guides depth={row.depth} />
-						<PlaneRow
-							row={row}
-							index={index}
-							selected={row.key === selKey}
-							open={routes.includes(row.id)}
-							tabbable={row.key === tabKey}
-							renaming={draft?.kind === "rename" && draft.key === row.key}
-							onToggle={onToggle}
-							reveal={reveal}
-							onFocus={setActiveKey}
-							onKeyDown={onKeyDown}
-							onRename={startRename}
-							onCreate={startCreate}
-							onCommit={commitDraft}
-							onCancel={cancelDraft}
-							notify={notify}
-							tree={tree}
-						/>
-					</div>
-					{draft?.kind === "create" && draft.key === row.key ? (
-						<div className={railRowWrap}>
-							<Guides depth={row.depth + 1} />
-							<div className={railRow(false)} style={railIndent(row.depth + 1)}>
-								<span className={railLane} style={railLaneStyle}>
-									<FileText className={railLeafIcon} aria-hidden="true" />
-								</span>
-								<RailRowInput
-									initial={draft.initial}
-									label="Title for the new plane"
-									onCommit={commitDraft}
-									onCancel={cancelDraft}
+		<>
+			<div role="tree" aria-label="Planes" ref={containerRef}>
+				{rows.map((row, index) => {
+					const aimed = target?.key === row.key ? target.edge : null;
+					return (
+						<div key={row.key} role="none" className={railRowWrap}>
+							<Guides depth={row.depth} />
+							<PlaneRow
+								row={row}
+								index={index}
+								icon={iconFor(registered, row.made_by)}
+								selected={row.key === selKey}
+								open={routes.includes(row.id)}
+								tabbable={row.key === tabKey}
+								renaming={draft?.key === row.key}
+								drag={rowProps(row.key)}
+								className={
+									aimed === "into" ? railDropInto : dragKey === row.key ? railDragging : undefined
+								}
+								onToggle={onToggle}
+								reveal={reveal}
+								onFocus={setActiveKey}
+								onKeyDown={onKeyDown}
+								onRename={startRename}
+								onCommit={commitDraft}
+								onCancel={cancelDraft}
+								notify={notify}
+								tree={tree}
+							/>
+							{aimed === "before" || aimed === "after" ? (
+								<span
+									className={railDropLine(aimed)}
+									style={railDropLineStyle(row.depth)}
+									aria-hidden="true"
 								/>
-							</div>
+							) : null}
 						</div>
-					) : null}
-					{/* Only under a section that is open and genuinely
-					    empty. A folded one draws a row too, and
-					    "Nothing here yet" under a branch you just
-					    folded shut is a lie. */}
-					{row.kind === KIND_GROUP && row.open && !row.hasKids && draft?.key !== row.key ? (
-						<p className={railEmpty}>Nothing here yet</p>
-					) : null}
-				</div>
-			))}
-		</div>
+					);
+				})}
+				{rows.length === 0 ? <p className={railEmpty}>Nothing here yet</p> : null}
+			</div>
+			{/* The rest of the rail: a drop here goes to the top level, last. */}
+			<div className={railDropTail} {...tailProps}>
+				{target?.key === "" ? (
+					<span className={railDropLine("before")} style={railDropLineStyle(0)} />
+				) : null}
+			</div>
+		</>
 	);
 }
 

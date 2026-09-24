@@ -6,15 +6,15 @@
  * off the 4px grid in space-radius.md. Layer-1 hexes stay in
  * @nustackdev/ui-kit/src/index.css and nowhere else.
  *
- * Why this file exists at all: the design system describes app chrome. nudle
- * apps are panels. A nuspace page is a document you write in, and a document
- * surface has vocabulary the kit has never had to name - a block gutter, a
- * drag handle, block-level selection, a slash menu, and a reading measure
+ * Why this file exists at all: the design system describes tool chrome. nudle
+ * tools are panels. A nuspace plane is a document you write in, and a document
+ * surface has vocabulary the kit has never had to name - a cell gutter, a
+ * drag handle, whole-cell selection, a slash menu, and a reading measure
  * instead of a panel width. Those are the tokens here.
  *
  * Layers, mirroring the kit:
  *   L2.5  :root / .dark   document roles, aliased onto kit L2 roles
- *   L3    @theme inline   exposed as Tailwind utility names (doc-*, section-*)
+ *   L3    @theme inline   exposed as Tailwind utility names (doc-*, cell-*)
  *
  * Source docs (do not paraphrase without re-reading):
  *   go/projects/nustackdev/design/palette.md
@@ -28,7 +28,7 @@
 :root {
 	/* --- Interaction tiers -------------------------------------------------
 	 * The kit has an accent interaction tier (accent-wash / accent-soft) but
-	 * no NEUTRAL one. On app chrome that is fine: a list row hovers in accent
+	 * no NEUTRAL one. On tool chrome that is fine: a list row hovers in accent
 	 * and there is nothing else competing. On a document it is not - every
 	 * paragraph would flash purple on mouse-over, and hover would then be
 	 * indistinguishable from selection, which is the higher-signal state.
@@ -40,7 +40,7 @@
 	--doc-hover: color-mix(in oklab, var(--text-primary) 4%, transparent);
 	--doc-active: color-mix(in oklab, var(--text-primary) 7%, transparent);
 
-	/* Block-level selection is the accent tier, straight off the kit */
+	/* Whole-cell selection is the accent tier, straight off the kit */
 	--doc-selected: var(--accent-wash);
 	--doc-selected-strong: var(--accent-soft);
 	--doc-selected-line: var(--accent-line);
@@ -49,16 +49,16 @@
 	 * own text and hover tiers; only the drop line is ours. */
 	--doc-drop-line: var(--accent);
 
-	/* The caret's block: no fill, just a hairline rail in the gutter */
+	/* The caret's cell: no fill, just a hairline rail in the gutter */
 	--doc-focus-rail: var(--border-strong);
 
-	/* --- Section status ----------------------------------------------------
-	 * A nuspace block is a live program. Six states, all pointing at existing
+	/* --- Cell status ----------------------------------------------------
+	 * A nuspace cell is a live program. Six states, all pointing at existing
 	 * status roles. No new hues.
 	 *
 	 *   invalid   warn      Source never compiled. Author's problem, lint
 	 *                       register. Yellow, deliberately NOT red.
-	 *   idle      muted     Never started. Quietest thing on the page.
+	 *   idle      muted     Never started. Quietest thing on the plane.
 	 *   starting  info      Transient, pairs with a spinner.
 	 *   running   ok        Live.
 	 *   stopped   secondary Ran and finished cleanly. One text tier above
@@ -71,29 +71,29 @@
 	 * legend. Color is never the only cue - every state also ships a label
 	 * and a distinct dot shape (a11y.md §7).
 	 * --------------------------------------------------------------------- */
-	--section-invalid: var(--status-warn);
-	--section-invalid-wash: var(--status-warn-wash);
-	--section-invalid-line: var(--status-warn-line);
+	--cell-invalid: var(--status-warn);
+	--cell-invalid-wash: var(--status-warn-wash);
+	--cell-invalid-line: var(--status-warn-line);
 
-	--section-idle: var(--text-muted);
-	--section-idle-wash: transparent;
-	--section-idle-line: var(--border-default);
+	--cell-idle: var(--text-muted);
+	--cell-idle-wash: transparent;
+	--cell-idle-line: var(--border-default);
 
-	--section-starting: var(--status-info);
-	--section-starting-wash: var(--status-info-wash);
-	--section-starting-line: var(--status-info-line);
+	--cell-starting: var(--status-info);
+	--cell-starting-wash: var(--status-info-wash);
+	--cell-starting-line: var(--status-info-line);
 
-	--section-running: var(--status-ok);
-	--section-running-wash: var(--status-ok-wash);
-	--section-running-line: var(--status-ok-line);
+	--cell-running: var(--status-ok);
+	--cell-running-wash: var(--status-ok-wash);
+	--cell-running-line: var(--status-ok-line);
 
-	--section-stopped: var(--text-secondary);
-	--section-stopped-wash: transparent;
-	--section-stopped-line: var(--border-strong);
+	--cell-stopped: var(--text-secondary);
+	--cell-stopped-wash: transparent;
+	--cell-stopped-line: var(--border-strong);
 
-	--section-failed: var(--status-danger);
-	--section-failed-wash: var(--status-danger-wash);
-	--section-failed-line: var(--status-danger-line);
+	--cell-failed: var(--status-danger);
+	--cell-failed-wash: var(--status-danger-wash);
+	--cell-failed-line: var(--status-danger-line);
 }
 
 /* ============================== L2.5: document roles (dark) ===============
@@ -117,39 +117,39 @@
 	--color-doc-drop-line: var(--doc-drop-line);
 	--color-doc-focus-rail: var(--doc-focus-rail);
 
-	/* --- Section status --> text-section-running, bg-section-failed-wash --*/
-	--color-section-invalid: var(--section-invalid);
-	--color-section-invalid-wash: var(--section-invalid-wash);
-	--color-section-invalid-line: var(--section-invalid-line);
+	/* --- Cell status --> text-cell-running, bg-cell-failed-wash --*/
+	--color-cell-invalid: var(--cell-invalid);
+	--color-cell-invalid-wash: var(--cell-invalid-wash);
+	--color-cell-invalid-line: var(--cell-invalid-line);
 
-	--color-section-idle: var(--section-idle);
-	--color-section-idle-wash: var(--section-idle-wash);
-	--color-section-idle-line: var(--section-idle-line);
+	--color-cell-idle: var(--cell-idle);
+	--color-cell-idle-wash: var(--cell-idle-wash);
+	--color-cell-idle-line: var(--cell-idle-line);
 
-	--color-section-starting: var(--section-starting);
-	--color-section-starting-wash: var(--section-starting-wash);
-	--color-section-starting-line: var(--section-starting-line);
+	--color-cell-starting: var(--cell-starting);
+	--color-cell-starting-wash: var(--cell-starting-wash);
+	--color-cell-starting-line: var(--cell-starting-line);
 
-	--color-section-running: var(--section-running);
-	--color-section-running-wash: var(--section-running-wash);
-	--color-section-running-line: var(--section-running-line);
+	--color-cell-running: var(--cell-running);
+	--color-cell-running-wash: var(--cell-running-wash);
+	--color-cell-running-line: var(--cell-running-line);
 
-	--color-section-stopped: var(--section-stopped);
-	--color-section-stopped-wash: var(--section-stopped-wash);
-	--color-section-stopped-line: var(--section-stopped-line);
+	--color-cell-stopped: var(--cell-stopped);
+	--color-cell-stopped-wash: var(--cell-stopped-wash);
+	--color-cell-stopped-line: var(--cell-stopped-line);
 
-	--color-section-failed: var(--section-failed);
-	--color-section-failed-wash: var(--section-failed-wash);
-	--color-section-failed-line: var(--section-failed-line);
+	--color-cell-failed: var(--cell-failed);
+	--color-cell-failed-wash: var(--cell-failed-wash);
+	--color-cell-failed-line: var(--cell-failed-line);
 
 	/* --- Document geometry -------------------------------------------------
 	 * All on the 4px grid. These are step PICKS, not a new scale - same move
 	 * space-radius.md §1 makes with its density-override table.
 	 *
 	 * Density rule for a document surface, stated once: horizontally it is
-	 * the kit's density (a block's inner chrome is panel chrome and uses the
+	 * the kit's density (a cell's inner chrome is panel chrome and uses the
 	 * kit's 32px rows). Vertically it is looser than a panel, because reading
-	 * rhythm is set by line-height, not by padding. So block padding stays
+	 * rhythm is set by line-height, not by padding. So cell padding stays
 	 * tiny (4px) and the air comes from the 16px/1.55 body line box. A
 	 * document is not a place to spend spacing tokens.
 	 * --------------------------------------------------------------------- */
@@ -167,11 +167,11 @@
 	/* max-w-doc / max-w-doc-wide */
 	--container-doc: 40rem; /* 640, == kit container-prose  */
 	--container-doc-wide: 60rem; /* 960, == kit container-panel, for program
-	                              * blocks that opt out of the measure */
+	                              * cells that opt out of the measure */
 
 	/* p-doc-*, w-doc-*, gap-doc-* */
-	--spacing-doc-pad-x: 1.5rem; /* 24, spacing 6   page side gutter        */
-	--spacing-doc-pad-y: 4rem; /* 64, spacing 16  air above the first block */
+	--spacing-doc-pad-x: 1.5rem; /* 24, spacing 6   plane side gutter        */
+	--spacing-doc-pad-y: 4rem; /* 64, spacing 16  air above the first cell */
 	--spacing-doc-gutter: 3.5rem; /* 56            the gutter's WIDTH. The
 	                               * stack is three rows now; this is the
 	                               * widest of them, two kit `sm` IconButtons
@@ -181,12 +181,12 @@
 	                               * gutter stays one lane, not two that
 	                               * overlap. Height is content, not a token:
 	                               * see `docGutter` for what the overhang past
-	                               * a short block costs and how it is paid. */
-	--spacing-doc-block-x: 0.5rem; /* 8            wash overhangs the text  */
-	--spacing-doc-block-y: 0.25rem; /* 4           ghost line pad-y         */
-	--spacing-doc-block-y-program: 0.5rem; /* 8    block pad-y              */
-	--spacing-doc-block-gap: 0.125rem; /* 2        blocks are contiguous    */
-	--spacing-doc-tail: 30vh; /* The dead air under the last block. A document
+	                               * a short cell costs and how it is paid. */
+	--spacing-doc-cell-x: 0.5rem; /* 8            wash overhangs the text  */
+	--spacing-doc-cell-y: 0.25rem; /* 4           ghost line pad-y         */
+	--spacing-doc-cell-y-program: 0.5rem; /* 8    cell pad-y              */
+	--spacing-doc-cell-gap: 0.125rem; /* 2        cells are contiguous    */
+	--spacing-doc-tail: 30vh; /* The dead air under the last cell. A document
 	                           * that ends at the window bottom has nowhere to
 	                           * click to start writing, and reads as though it
 	                           * were cut off rather than finished. Viewport
@@ -194,22 +194,22 @@
 	                           * you can see, not a distance, so it stays a
 	                           * comfortable run-off on a laptop and on a 4k
 	                           * panel alike. Clicking it lands in the
-	                           * end-of-page ghost -- see `docTail`.          */
+	                           * end-of-plane ghost -- see `docTail`.          */
 	--spacing-doc-dot: 0.5rem; /* 8               status dot                */
 	--spacing-doc-rail: 0.125rem; /* 2            status / focus rail width */
 	--spacing-doc-title-gap: 8rem; /* 128         blank air above the title.
-	                                * A page with no cover still opens on
+	                                * A plane with no cover still opens on
 	                                * emptiness rather than on ink: the run-up
 	                                * is what tells you the title is the top of
 	                                * a document and not a toolbar label. Sized
-	                                * by eye against the 30vh tail, so the page
+	                                * by eye against the 30vh tail, so the plane
 	                                * is bracketed by air at both ends, and
-	                                * short enough that the first block is
-	                                * still on screen when a page opens.     */
+	                                * short enough that the first cell is
+	                                * still on screen when a plane opens.     */
 
 	/* --- Title type ---------------------------------------------------------
 	 * The one size the kit's scale does not carry. typography.md tops out at
-	 * `display` (32) and that is the hero tier for app chrome, where the thing
+	 * `display` (32) and that is the hero tier for tool chrome, where the thing
 	 * above it is a window. On a document the title has to out-rank the
 	 * document's own h1 (`text-3xl`, 24) by more than the body's own steps do,
 	 * or the first heading you write reads as a second title. 40 is the next

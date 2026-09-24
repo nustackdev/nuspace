@@ -29,7 +29,7 @@ def out():
     held = nu.If(Doc.text.exists(), nu.ToStr(Doc.text), nu.Str(""))
     return (
         body.set(held)
-        >> body.set_placeholder(nu.Str("Write, or press / for blocks"))
+        >> body.set_placeholder(nu.Str("Write, or press / for cells"))
         >> nu.ParallelAsync(
             # This tab typed: keep it. Every other tab on the plane hears it
             # through the store.

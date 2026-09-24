@@ -6,10 +6,16 @@
     Everything that node says and hears, in the browser's words.
 ``feed``
     One arm per interaction. An event runs one op, a store change ships the
-    page or the statuses again.
+    plane or the statuses again.
 """
 
-from nuspace.system.devices.web.viewer.feed import PAGE_META, blocks, page, statuses, viewer_feed
+from nuspace.system.devices.web.viewer.feed import (
+    PLANE_META,
+    plane_cells,
+    plane_view,
+    statuses,
+    viewer_feed,
+)
 from nuspace.system.devices.web.viewer.interactions import (
     STATE_FAILED,
     STATE_IDLE,
@@ -24,14 +30,14 @@ from nuspace.system.devices.web.viewer.interactions import (
     on_reorder_cells,
     on_set_meta,
     on_update_cell,
-    set_page,
+    set_plane,
     set_status,
 )
 from nuspace.system.devices.web.viewer.ref import ViewerRef, slash_entries
 
 
 __all__ = [
-    "PAGE_META",
+    "PLANE_META",
     "STATES",
     "STATE_FAILED",
     "STATE_IDLE",
@@ -39,7 +45,6 @@ __all__ = [
     "STATE_STARTING",
     "STATE_STOPPED",
     "ViewerRef",
-    "blocks",
     "on_create_cell",
     "on_delete_cell",
     "on_move_cell",
@@ -47,8 +52,9 @@ __all__ = [
     "on_reorder_cells",
     "on_set_meta",
     "on_update_cell",
-    "page",
-    "set_page",
+    "plane_cells",
+    "plane_view",
+    "set_plane",
     "set_status",
     "slash_entries",
     "statuses",

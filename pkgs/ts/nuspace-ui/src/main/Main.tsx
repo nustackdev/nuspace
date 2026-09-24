@@ -4,37 +4,37 @@
 // renders one Plane's Cells and roots their refs, every Cell the same way.
 //
 // Selection is router-owned: the URL /<id1>+<id2>+... is the cursor, left to
-// right, the sidebar drives it, and the route effect here ships `pages.open`
+// right, the sidebar drives it, and the route effect here ships `planes.open`
 // with the full list whenever it changes. The bare "/" is home, the Plane the
 // host seeds, so there is always at least one pane.
 //
-// A single pane is the page as it always was: the whole strip, centred, no
-// borders. With a split every pane keeps at least the page's measure, the
+// A single pane is the plane as it always was: the whole strip, centred, no
+// borders. With a split every pane keeps at least the plane's measure, the
 // strip scrolls sideways when they do not fit, and the borders between panes
 // drag. We never remount a pane that stays open.
 //
 // With a split a tab bar runs across the top (./TabBar.tsx), one tab per
 // pane, and the panes drop their own bars. Renaming from a tab sends the
-// sidebar's own `page.rename`, so the server has one way in for a rename.
+// sidebar's own `plane.rename`, so the server has one way in for a rename.
 
 import { type NodeProps, pathKey } from "@nustackdev/ui-kit";
 import { Fragment, useCallback, useEffect, useRef } from "react";
-import { useFocusedRoute, useRoutes } from "../app/router";
-import { useTypePath } from "../app/surfaces";
-import { notifyOp } from "../app/wire";
+import { useFocusedRoute, useRoutes } from "../core/router";
+import { useTypePath } from "../core/surfaces";
+import { notifyOp } from "../core/wire";
 import {
-	docPageLoading,
-	docPageSurface,
+	docPlaneLoading,
+	docPlaneSurface,
 	shellPaneDivider,
 	shellPaneResize,
 	shellPanes,
 	shellStrip,
 	shellSurface,
 } from "../design";
-import type { Ops } from "../page/ops";
 import { Pane } from "../pane/Pane";
+import type { Ops } from "../plane/ops";
 import type { Ops as SidebarOps } from "../sidebar/ops";
-import { patchPageMeta, patchPageTitle, pruneViewer, usePages, useSnippets } from "./state";
+import { patchPlaneMeta, patchPlaneTitle, pruneViewer, usePlanes, useSnippets } from "./state";
 import { TabBar } from "./TabBar";
 import { usePaneWidths } from "./usePaneWidths";
 
@@ -43,7 +43,7 @@ import { usePaneWidths } from "./usePaneWidths";
 const NOTHING_OPEN = "pick a Plane";
 
 export function Main({ path }: NodeProps) {
-	const pages = usePages(path);
+	const planes = usePlanes(path);
 	const snippets = useSnippets(path);
 	const routes = useRoutes();
 	const focused = useFocusedRoute();
@@ -62,11 +62,11 @@ export function Main({ path }: NodeProps) {
 	);
 
 	// The full list, every time it changes and once on load -- an empty one
-	// included, so the server stops shipping a Plane nobody has open. Pages
+	// included, so the server stops shipping a Plane nobody has open. Planes
 	// and editor state of panes that closed go at the same moment.
 	// biome-ignore lint/correctness/useExhaustiveDependencies: routes is compared by its joined key; path by value.
 	useEffect(() => {
-		notify("pages.open", { page_ids: routes });
+		notify("planes.open", { plane_ids: routes });
 		pruneViewer(path, routes);
 	}, [routesKey, notify]);
 
@@ -80,12 +80,12 @@ export function Main({ path }: NodeProps) {
 			?.scrollIntoView({ inline: "nearest", block: "nearest" });
 	}, [routesKey]);
 
-	// Optimistic: the switch moves now, the next `set_page` confirms it.
+	// Optimistic: the switch moves now, the next `set_plane` confirms it.
 	// biome-ignore lint/correctness/useExhaustiveDependencies: path is compared by value.
 	const onMeta = useCallback(
-		(pageId: string, meta: Record<string, unknown>) => {
-			patchPageMeta(path, pageId, meta);
-			notify("page.meta", { page_id: pageId, meta });
+		(planeId: string, meta: Record<string, unknown>) => {
+			patchPlaneMeta(path, planeId, meta);
+			notify("plane.meta", { plane_id: planeId, meta });
 		},
 		[key, notify],
 	);
@@ -94,10 +94,10 @@ export function Main({ path }: NodeProps) {
 	// already renames a Plane, and the tree it reships carries the new title.
 	// biome-ignore lint/correctness/useExhaustiveDependencies: paths are compared by value.
 	const onRename = useCallback(
-		(pageId: string, title: string) => {
-			patchPageTitle(path, pageId, title);
+		(planeId: string, title: string) => {
+			patchPlaneTitle(path, planeId, title);
 			if (sidebar) {
-				notifyOp<SidebarOps, "page.rename">(sidebar, "page.rename", { page_id: pageId, title });
+				notifyOp<SidebarOps, "plane.rename">(sidebar, "plane.rename", { plane_id: planeId, title });
 			}
 		},
 		[key, sidebar ? pathKey(sidebar) : ""],
@@ -106,8 +106,8 @@ export function Main({ path }: NodeProps) {
 	if (routes.length === 0) {
 		return (
 			<div className={shellSurface}>
-				<div className={docPageSurface}>
-					<div className={docPageLoading}>{NOTHING_OPEN}</div>
+				<div className={docPlaneSurface}>
+					<div className={docPlaneLoading}>{NOTHING_OPEN}</div>
 				</div>
 			</div>
 		);
@@ -121,7 +121,7 @@ export function Main({ path }: NodeProps) {
 			{split ? (
 				<TabBar
 					routes={routes}
-					pages={pages}
+					planes={planes}
 					focused={focused}
 					stripRef={stripRef}
 					onMeta={onMeta}
@@ -143,8 +143,8 @@ export function Main({ path }: NodeProps) {
 						) : null}
 						<Pane
 							viewerPath={path}
-							pageId={id}
-							page={pages[id] ?? null}
+							planeId={id}
+							plane={planes[id] ?? null}
 							snippets={snippets}
 							notify={notify}
 							onMeta={onMeta}

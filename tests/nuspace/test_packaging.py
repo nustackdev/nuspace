@@ -14,9 +14,9 @@ from pathlib import Path
 
 import nu
 import nuverse
-from nuspace import App, Extension, Snippet
+from nuspace import Extension, Plane, Snippet
 from nuspace.host import discover, space_registry
-from nuverse import apps, snippets
+from nuverse import planes, snippets
 
 
 ROOT = Path(__file__).parents[2]
@@ -42,27 +42,34 @@ def _nuverse() -> Extension:
 def test_discovery_finds_nuverse():
     ext = _nuverse()
     assert ext == replace(nuverse.extension(), name="nuverse")
-    assert [a.name for a in ext.apps] == ["page", "runs", "workers", "planes"]
+    assert [p.name for p in ext.planes] == ["plain", "runs", "workers", "planes"]
     assert [s.name for s in ext.snippets] == ["prose", "program", "ticker"]
     assert dict(ext.envs) == {}
 
 
 def test_open_space_registers_nuverse_by_default():
     reg = space_registry()
-    assert {"page"} <= set(reg.apps)
+    assert next(iter(reg.planes)) == "plain"
     assert {"prose", "program", "ticker"} <= set(reg.snippets)
-    assert space_registry(discover=False).apps == {}
+    assert space_registry(discover=False).planes == {}
 
 
-def test_apps_are_well_formed():
-    assert apps.APPS == (apps.page.APP, apps.runs.APP, apps.workers.APP, apps.planes.APP)
-    # Placeholders are left out until they are filled in.
-    assert (apps.job.APP, apps.chat.APP) == (None, None)
-    for app in apps.APPS:
-        assert isinstance(app, App)
-        assert app.name and app.label
-        assert isinstance(app.build(plane_id="p", name="P"), nu.Nu)
-    assert len({a.name for a in apps.APPS}) == len(apps.APPS)
+def test_planes_are_well_formed():
+    assert planes.PLANES == (
+        planes.plain.PLANE,
+        planes.runs.PLANE,
+        planes.workers.PLANE,
+        planes.planes.PLANE,
+    )
+    plain = planes.plain.PLANE
+    assert (plain.label, plain.cells, plain.children) == ("Plain", (), ())
+    for plane in planes.PLANES:
+        assert isinstance(plane, Plane)
+        assert plane.name and plane.label and plane.description
+        assert plane.meta == {"editable": True, "full_width": False}
+        for name, source in plane.cells:
+            assert name and "def out():" in source
+    assert len({p.name for p in planes.PLANES}) == len(planes.PLANES)
 
 
 def test_snippets_are_well_formed():
@@ -98,14 +105,14 @@ def test_importing_nuverse_loads_no_server():
 
 
 def test_example_defines_nothing_of_its_own():
-    """The example registers no apps or snippets: nuverse is found on install."""
+    """The example registers no Planes or snippets: nuverse is found on install."""
     out = _run(
         """
         import runpy
         space = runpy.run_path("examples/space.py")
         from nuspace.host import space_registry
         reg = space_registry()
-        print("APPS" in space, "SNIPPETS" in space, sorted(reg.apps), sorted(reg.snippets))
+        print("PLANES" in space, "SNIPPETS" in space, sorted(reg.planes), sorted(reg.snippets))
         """
     )
-    assert out.startswith("False False ['page', 'planes', 'runs', 'workers']")
+    assert out.startswith("False False ['plain', 'planes', 'runs', 'workers']")

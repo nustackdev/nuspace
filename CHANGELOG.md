@@ -4,7 +4,7 @@
 
 - **nuspace** (the runtime, the `nuspace` command) — 0.3.1
 - **nuspace-ui** (the compiled web bundle) — 0.3.0
-- **nuverse** (the apps and snippets a space ships with) — 0.1.0
+- **nuverse** (the Planes and snippets a space ships with) — 0.1.0
 
 Below is the changelog for **nuspace** - the full commit stream. Newest first.
 The `nuspace-ui` wheel is the same source tree's vite output and is not tracked
@@ -12,6 +12,9 @@ separately here.
 
 ## Unreleased
 
+- Apps become Planes: registered data seeded with cells, created from one add plane popup
+- The sidebar is one tree of planes, reordered and nested by dragging rows
+- Everything is called a plane or a cell, across the interface, wire and code
 - Interface text, labels and messages now use normal sentence case
 - A home page shows recent pages, a live overview and how to get started
 - Split panes get a tab bar to switch, rename and close them

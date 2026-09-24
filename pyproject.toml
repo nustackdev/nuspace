@@ -5,14 +5,14 @@ build-backend = "hatchling.build"
 [project]
 name = "nuspace"
 version = "0.3.1"
-description = "Nu runtime built on Nu. A self-hosted programmable space that runs Nu apps in a tree of containers and applications."
+description = "Nu runtime built on Nu. A self-hosted programmable space that runs Nu programs as a tree of planes and cells."
 readme = "README.md"
 license = "AGPL-3.0-or-later"
 authors = [{ name = "Gor Arakelyan", email = "gorarkln@gmail.com" }]
 requires-python = ">=3.10"
 dependencies = [
-    # The whole stack, every extra. A space runs arbitrary Nu apps and its own
-    # sections in pool workers, so it reaches most fabrics: kv for the store,
+    # The whole stack, every extra. A space runs arbitrary Nu programs and its own
+    # services in pool workers, so it reaches most fabrics: kv for the store,
     # ui for the browser, proxy (invisibles) for the worker's session, mp_pool
     # for the workers themselves. Picking extras just means discovering the
     # missing one at import time.
@@ -22,7 +22,7 @@ dependencies = [
     # project size and a SPA rebuilt on every UI tweak would eat the quota --
     # not optional. `pip install nuspace` gives you the browser.
     "nuspace-ui>=0.3.0",
-    # The extensions a space offers out of the box: apps, snippets. Always
+    # The extensions a space offers out of the box: Planes, snippets. Always
     # pulled, split into extras when its deps grow. nuspace never imports it:
     # it is found through the `nuspace.extensions` entry point, like any
     # third party.

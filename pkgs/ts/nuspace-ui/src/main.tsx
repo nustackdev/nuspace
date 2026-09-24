@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import "@nustackdev/ui-kit/styles";
 import "./index.css";
 import { App } from "./App";
-import { ensureLanding } from "./app/router";
+import { ensureLanding } from "./core/router";
 // Registers every nuspace node type. Side-effect import, before the socket
 // opens: the store autovivifies a node the moment a write names it, and it
 // resolves the type through the registry the same instant.
