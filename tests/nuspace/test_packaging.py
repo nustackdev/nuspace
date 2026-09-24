@@ -42,8 +42,8 @@ def _nuverse() -> Extension:
 def test_discovery_finds_nuverse():
     ext = _nuverse()
     assert ext == replace(nuverse.extension(), name="nuverse")
-    assert [p.name for p in ext.planes] == ["plain", "runs", "workers", "planes"]
-    assert [s.name for s in ext.snippets] == ["prose", "program", "ticker"]
+    assert [p.name for p in ext.planes] == ["plain", "jobs", "runs", "workers", "planes"]
+    assert [s.name for s in ext.snippets] == ["prose", "program", "ticker", "lens"]
     assert dict(ext.envs) == {}
 
 
@@ -57,6 +57,7 @@ def test_open_space_registers_nuverse_by_default():
 def test_planes_are_well_formed():
     assert planes.PLANES == (
         planes.plain.PLANE,
+        planes.jobs.PLANE,
         planes.runs.PLANE,
         planes.workers.PLANE,
         planes.planes.PLANE,
@@ -77,6 +78,7 @@ def test_snippets_are_well_formed():
         snippets.prose.SNIPPET,
         snippets.program.SNIPPET,
         snippets.ticker.SNIPPET,
+        snippets.lens.SNIPPET,
     )
     assert (snippets.heading.SNIPPET, snippets.monaco.SNIPPET) == (None, None)
     for snippet in snippets.SNIPPETS:
@@ -115,4 +117,4 @@ def test_example_defines_nothing_of_its_own():
         print("PLANES" in space, "SNIPPETS" in space, sorted(reg.planes), sorted(reg.snippets))
         """
     )
-    assert out.startswith("False False ['plain', 'planes', 'runs', 'workers']")
+    assert out.startswith("False False ['jobs', 'plain', 'planes', 'runs', 'workers']")

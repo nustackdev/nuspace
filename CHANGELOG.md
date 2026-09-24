@@ -12,6 +12,7 @@ separately here.
 
 ## Unreleased
 
+- A Lens snippet browses any shape in the store as cascading columns
 - A Jobs plane makes headless planes and sets their code, boot and restart
 - Supervised cells can restart after a fixed delay, so a job can run periodically
 - Plane rows open in split from a hover button, and cut-off names show in tooltips
