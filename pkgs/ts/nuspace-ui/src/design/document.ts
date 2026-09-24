@@ -29,18 +29,35 @@ const docPage = cn(
 /**
  * The reading column. Blocks sit inside; the gutter hangs off the left edge
  * into the page padding, which is why pad-x is doc-pad-x and not zero.
+ *
+ * `wide` is the page's full-width setting: the column spans the pane instead
+ * of stopping at the reading measure.
  */
-export const docColumn = cn(
-	"relative mx-auto w-full max-w-doc",
-	"px-doc-pad-x pt-doc-pad-y pb-doc-pad-y",
-	"flex flex-col gap-doc-block-gap",
+export function docColumn(wide = false): string {
+	return cn(
+		"relative mx-auto w-full",
+		wide ? "max-w-none" : "max-w-doc",
+		"px-doc-pad-x pt-doc-pad-y pb-doc-pad-y",
+		"flex flex-col gap-doc-block-gap",
+	);
+}
+
+/**
+ * The scroll surface as the flex child a pane mounts it as.
+ *
+ * The side padding is the gutter's room. The gutter is `doc-gutter` wide and
+ * hangs off the column into its `doc-pad-x`, which is narrower, so in a pane
+ * too narrow to centre the column with air to spare the gutter used to hang
+ * past the pane's left edge and get cut off. Padding the surface by the
+ * difference (plus 8px of air off the pane border) means the gutter always
+ * lands inside the pane. Symmetric, so a centred page stays centred; on a
+ * wide pane it changes nothing.
+ */
+export const docPageSurface = cn(
+	docPage,
+	"flex min-w-0 flex-1 flex-col",
+	"px-[calc(var(--spacing-doc-gutter)_-_var(--spacing-doc-pad-x)_+_0.5rem)]",
 );
-
-/** A program block that opts out of the reading measure (charts, tables). */
-export const docColumnWide = cn(docColumn, "max-w-doc-wide");
-
-/** The scroll surface as the flex child the Viewer mounts it as. */
-export const docPageSurface = cn(docPage, "flex min-w-0 flex-1 flex-col");
 
 /** Before a page's value lands. Same quiet as the shell's boot state. */
 export const docPageLoading = "flex items-center gap-2 p-8 text-base text-text-muted";
@@ -100,7 +117,13 @@ export const docTail = "h-doc-tail w-full shrink-0 cursor-text";
  * later in the DOM, so without it the padding eats every click meant for the
  * heading.
  */
-export const docTitleHead = cn("relative z-10 mx-auto w-full max-w-doc", "px-doc-pad-x pt-4 -mb-8");
+export function docTitleHead(wide = false): string {
+	return cn(
+		"relative z-10 mx-auto w-full",
+		wide ? "max-w-none" : "max-w-doc",
+		"px-doc-pad-x pt-4 -mb-8",
+	);
+}
 
 /**
  * The trail, riding at the top of the band. It stays in the document rather

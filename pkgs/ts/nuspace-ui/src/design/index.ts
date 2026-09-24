@@ -11,16 +11,17 @@
 // Plus the section status set, which is aliased onto the existing status hues.
 //
 //   tokens.css         document + section-status tokens, both themes
-//   shell.ts           the window frame: sidebar beside Viewer
+//   shell.ts           the window frame: sidebar beside the strip of panes
+//   pane.ts            one pane's top bar and its settings menu
 //   document.ts        class recipes for the document surface, title included
 //   rail.ts            the sidebar rail
+//   resize.ts          the drag handle every resizable edge shares
 //   section-status.ts  the six-state vocabulary
 //
 // Two rules hold this directory together:
 //
-//   no jsx            a recipe is a string. Anything that renders lives in
-//                     ../components or with its ref. That is why
-//                     section-status-dot.tsx is not here.
+//   no jsx            a recipe is a string. Anything that renders lives with
+//                     the feature that renders it.
 //   no wire words     nothing in here reads a field off the wire. Design only
 //                     maps a name to a class string.
 //
@@ -28,6 +29,8 @@
 // Anything in here that turns out to be generic graduates to ui-kit.
 
 export * from "./document";
+export * from "./pane";
 export * from "./rail";
+export * from "./resize";
 export * from "./section-status";
 export * from "./shell";

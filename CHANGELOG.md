@@ -12,6 +12,7 @@ separately here.
 
 ## Unreleased
 
+- Panes get a settings menu, resize handles and side scrolling when crowded
 - Pages keep their own settings, like editable and full width, apart from system ones
 - Open several pages side by side in one tab, each running on its own
 - Watch live runs, workers and planes from their own sidebar pages

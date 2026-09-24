@@ -17,6 +17,7 @@
 //   go/projects/nustackdev/design/palette.md        §2.2 text tiers
 
 import { cn } from "@nustackdev/ui-kit";
+import { resizeHandle } from "./resize";
 
 /* ============================== the frame ================================ */
 
@@ -29,27 +30,40 @@ export const shellMain = "flex min-h-0 min-w-0 flex-1";
 /**
  * A full-bleed region. `min-w-0` so a wide child scrolls inside itself instead
  * of pushing the window sideways.
- *
- * Used twice, deliberately the same box: the shell's slot, and the region's own
- * root.
  */
 export const shellSurface = "flex min-h-0 min-w-0 flex-1";
 
 /* ============================== panes ==================================== */
 
-/** The Viewer's row of panes. Equal shares, each one its own scroll host. */
-export const shellPanes = "flex min-h-0 min-w-0 flex-1";
+/**
+ * A pane's narrowest, px: the page's reading measure (`max-w-doc`, 40rem in
+ * tokens.css), so a split never squeezes a page under the width it is written
+ * for. A number and not a class because the strip's resize math needs it too.
+ */
+export const PANE_MIN_WIDTH = 640;
 
 /**
- * One pane. `basis-0` + `flex-1` is what makes the shares equal whatever each
- * holds; `min-w-0` lets a wide block scroll inside its pane instead of
- * pushing the neighbour out. Every pane after the first draws the hairline
- * divider on its left edge.
+ * The Viewer's strip of panes. When the panes' minimums add up to more than
+ * the window has, it scrolls sideways (trackpad, shift-wheel) with no
+ * scrollbar drawn: the panes' own borders already say there is more.
+ */
+export const shellPanes = cn(
+	"flex min-h-0 min-w-0 flex-1",
+	"overflow-x-auto overflow-y-hidden overscroll-x-contain",
+	"[scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+);
+
+/**
+ * One pane: its top bar over its own scroll host. `min-w-0` lets a wide block
+ * scroll inside the pane instead of pushing the neighbour out; the share and
+ * the split minimum are inline (see main/usePaneWidths.ts). Every pane after
+ * the first draws the divider on its left edge, which is where the resize
+ * handle sits.
  */
 export function shellPane(divided: boolean): string {
 	return cn(
-		"group/pane relative flex min-h-0 min-w-0 flex-1 basis-0",
-		divided && "border-l border-border-subtle",
+		"group/pane relative flex min-h-0 min-w-0 flex-col",
+		divided && "border-l border-border-default",
 	);
 }
 
@@ -66,18 +80,13 @@ export function shellPaneFocusLine(focused: boolean): string {
 }
 
 /**
- * The pane's close button, top right. Hover-revealed on a lone pane so the
- * page reads as it always did; always there, quietly, once there is a split.
+ * The zero-width slot between two panes that holds their resize handle. In
+ * flow so it sits exactly on the divider, zero-width so it takes no share.
  */
-export function shellPaneClose(split: boolean): string {
-	return cn(
-		"absolute top-2 right-3 z-20 text-text-muted",
-		"transition-opacity duration-fast ease-out",
-		split
-			? "opacity-60 hover:opacity-100 focus-visible:opacity-100"
-			: "opacity-0 group-hover/pane:opacity-100 focus-visible:opacity-100",
-	);
-}
+export const shellPaneDivider = "relative w-0 shrink-0";
+
+/** The handle itself, centred on the divider. See ./resize.ts. */
+export const shellPaneResize = resizeHandle("left");
 
 /* ============================== states =================================== */
 

@@ -5,6 +5,9 @@
 // answers itself, and a dispose if it holds a resource. Data and behaviour do
 // not share an object; a node's state IS its props.
 //
+// The modules in this directory are adapters and nothing more: each maps a
+// wire type onto a feature (../sidebar, ../main) and holds no logic of its own.
+//
 // Every key here is a `_wire_type` on the python side and the two spellings
 // have to match exactly. A write addressed at a type nobody registered is
 // dropped in silence.
@@ -14,8 +17,8 @@
 
 import { type NodeEntry, register } from "@nustackdev/ui-kit";
 import { RouteRef } from "./route";
-import { SidebarRef } from "./sidebar/sidebar";
-import { ViewerRef } from "./viewer/viewer";
+import { SidebarRef } from "./sidebar";
+import { ViewerRef } from "./viewer";
 
 export const nuspaceEntries: Record<string, NodeEntry> = {
 	SidebarRef,

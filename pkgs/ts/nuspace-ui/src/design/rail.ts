@@ -23,6 +23,7 @@
 //   go/projects/nustackdev/design/a11y.md           §4 aria, §5 focus ring
 
 import { cn } from "@nustackdev/ui-kit";
+import { resizeHandle } from "./resize";
 
 /* ============================== geometry ================================= */
 
@@ -63,24 +64,15 @@ export const RAIL_WIDTH = { MIN: 180, DEFAULT: 240, MAX: 480 } as const;
 
 /**
  * The rail itself. Its own surface, hairline edge. The width is inline (the
- * user drags it, see refs/sidebar/resize.ts), so none is set here.
+ * user drags it, see sidebar/useRailWidth.ts), so none is set here.
  */
 export const railAside = cn(
 	"relative flex shrink-0 flex-col",
 	"border-r border-border-subtle bg-bg-surface",
 );
 
-/**
- * The drag strip on the rail's right edge. 8px wide, centred on the hairline,
- * so it is easy to hit without eating the rail's content. A 2px accent line
- * fades in on hover and while dragging.
- */
-export const railResizeHandle = cn(
-	"group/resize absolute inset-y-0 -right-1 z-20 w-2 cursor-col-resize touch-none",
-	"after:absolute after:inset-y-0 after:left-1/2 after:w-0.5 after:-translate-x-1/2",
-	"after:bg-accent after:opacity-0 after:transition-opacity after:duration-fast",
-	"hover:after:opacity-60 active:after:opacity-100",
-);
+/** The drag strip on the rail's right edge. See ./resize.ts. */
+export const railResizeHandle = resizeHandle("right");
 
 /** Header strip. Same 36px as the shell's top strip so the two rules line up. */
 export const railHeader = cn(

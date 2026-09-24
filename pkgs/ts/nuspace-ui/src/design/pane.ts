@@ -1,0 +1,46 @@
+// Pane class recipes: the bar across a pane's top and the settings menu off
+// its `...`.
+//
+// The bar is window chrome, not document: it stays put while the page under it
+// scrolls, and it is quiet enough that a single pane still reads as a page
+// with nothing around it. No border, a muted title, ghost buttons.
+//
+// Source docs (do not paraphrase without re-reading):
+//   go/projects/nustackdev/design/space-radius.md   §4 row heights
+//   go/projects/nustackdev/design/palette.md        §2.2 text tiers
+
+import { cn } from "@nustackdev/ui-kit";
+
+/** The bar. Same 36px as the rail's header strip, so the two tops line up. */
+export const paneBar = cn("flex h-9 shrink-0 items-center gap-0.5", "bg-bg-canvas pl-4 pr-1.5");
+
+/**
+ * The bar's title. Muted at rest; the focused pane of a split brings its
+ * title up a tier, the same fact the focus line says across the top.
+ */
+export function paneBarTitle(strong: boolean): string {
+	return cn(
+		"min-w-0 flex-1 select-none truncate text-sm",
+		"transition-colors duration-fast ease-out",
+		strong ? "text-text-primary" : "text-text-muted",
+	);
+}
+
+/** The bar's two buttons: the kit's ghost `sm`, a tier back until hovered. */
+export const paneBarButton = "text-text-muted hover:text-text-primary";
+
+/** The settings popover. Narrow, and a list rather than a padded card. */
+export const paneMenu = "w-64 p-1";
+
+/** A setting's row: label on the left, its control on the right. */
+export const paneMenuRow = cn(
+	"flex min-h-8 w-full cursor-default select-none items-center gap-3",
+	"rounded-md px-2 py-1.5",
+	"transition-colors duration-fast ease-out hover:bg-doc-hover",
+);
+
+export const paneMenuText = "flex min-w-0 flex-1 flex-col";
+
+export const paneMenuLabel = "text-sm text-text-primary";
+
+export const paneMenuHint = "text-xs text-text-muted";
