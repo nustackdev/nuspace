@@ -197,6 +197,20 @@ async def test_nav_skips_missing_and_system_planes(space):
 
 
 @module_loop
+async def test_nav_waits_for_a_routed_plane_not_written_yet(space):
+    """A new page is selected before its create lands: nav waits, not gives up."""
+    sid = "conn-early"
+    await space.run(atomic(Space.connections[sid].route.set("early")))
+    # Past a tick, so nav has seen the route and found no plane behind it.
+    await asyncio.sleep(1.5)
+    await space.run(ops.add_plane("early"))
+    await space.run(ops.add_cell("early", READS_SESSION))
+    await runs_of(space, "early", lambda rs: rs and _up(rs[0]))
+    await space.run(atomic(Space.connections.del_item(sid)))
+    await runs_of(space, "early", lambda rs: _dead(rs[0]))
+
+
+@module_loop
 async def test_nav_follows_the_open_planes_cells(space):
     p, _ = await space.plane(READS_SESSION)
     sid = "conn-3"

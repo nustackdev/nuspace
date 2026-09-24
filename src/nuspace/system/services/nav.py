@@ -37,7 +37,7 @@ from nuspace.ops.utils import atomic, flag, fresh, text
 from nuspace.shapes import STATUS_DEAD, STATUS_STARTING, STATUS_STOPPING, STATUS_UP, Space
 
 from ..kernel.body import until
-from ..utils import Ticking, follows, park, snap
+from ..utils import Ticking, follows, park, snap, wake
 
 
 __all__ = ["BY", "CELL", "PLANE", "SESSION", "SHIM", "clear_connections", "program"]
@@ -157,6 +157,8 @@ def _cells_fold(route: nu.StrAttrRef, worker_id: nu.StrAttrRef, envs: nu.Nu) -> 
 def _open(sid: nu.StrAttrRef, route: nu.StrAttrRef) -> nu.Nu:
     """The route's plane followed cell by cell on a held worker, killed on every way out.
 
+    Waits for the plane first when the route names one not there yet.
+
     A worker that crashes ends the turn: the plane stays down until the
     route moves (renavigation brings it back).
     """
@@ -166,7 +168,12 @@ def _open(sid: nu.StrAttrRef, route: nu.StrAttrRef) -> nu.Nu:
         _cells_fold(route, w, envs), until(Space.kernel.workers[w].status, STATUS_DEAD)
     )
     turn = nu.Let(_WORKER, worker(held=True), nu.TryCatch(followed, finally_=kill_worker(w)))
-    return nu.IfDo(snap(_shown(route)), turn)
+    # A route can name a plane before the plane is written: the browser mints
+    # a new page's id and selects it while its create is still in flight. So
+    # wait for the plane rather than giving up on the route; the route will
+    # not move again to retry.
+    shown = nu.WhileDo(nu.Not(snap(_shown(route))), wake(Space.planes.on_children_change()))
+    return shown >> turn
 
 
 def _arm(sid: nu.StrAttrRef) -> nu.Nu:
