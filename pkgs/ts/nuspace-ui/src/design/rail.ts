@@ -285,16 +285,17 @@ export const railTitle = "min-w-0 flex-1 truncate";
 export const railTitleEmpty = cn(railTitle, "text-text-muted");
 
 /**
- * The action lane. Always in flow and always the same width, so the title
- * truncates against a stable edge and nothing reflows on hover; only the
- * opacity moves. Hidden controls are also click-through, because an invisible
+ * The action lane. Always in flow and always the same width (--rail-actions,
+ * room for its three buttons), so the title truncates against a stable edge
+ * and nothing reflows on hover; only the opacity moves. The buttons sit at
+ * its right end, so the `...` stays on the rail's right edge. Hidden controls are also click-through, because an invisible
  * button that still eats a click is worse than no button.
  *
  * Keyboard focus shows it too, but a mouse click does not: clicking a row
  * focuses it, and the open row should not keep its buttons up after.
  */
 export const railActions = cn(
-	"flex shrink-0 items-center gap-px",
+	"flex w-rail-actions shrink-0 items-center justify-end gap-px",
 	"pointer-events-none opacity-0",
 	"transition-opacity duration-fast ease-out",
 	"group-hover/row:pointer-events-auto group-hover/row:opacity-100",
@@ -305,7 +306,7 @@ export const railActions = cn(
 );
 
 /**
- * Same re-tint as the twisty, for `+` and `...`. 16px glyph in a 24px box; the
+ * Same re-tint as the twisty, for split, `+` and `...`. 16px glyph in a 24px box; the
  * `...` glyph lands on the rail's right edge (tokens.css).
  */
 export const railAction = cn(

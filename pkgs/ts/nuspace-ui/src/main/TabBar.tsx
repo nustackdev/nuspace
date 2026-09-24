@@ -32,6 +32,7 @@ import {
 import { TITLE_FALLBACK } from "../pane/Pane";
 import { PaneMenu } from "../pane/PaneMenu";
 import type { ActivePlane } from "../plane/types";
+import { OverflowTooltip } from "../shell/OverflowTooltip";
 
 /** Smooth, unless the user asked for less motion (motion.md). */
 function scrollBehavior(): ScrollBehavior {
@@ -164,21 +165,22 @@ export function TabBar({
 								}}
 							/>
 						) : (
-							<button
-								type="button"
-								role="tab"
-								aria-selected={active}
-								tabIndex={active ? 0 : -1}
-								title={title}
-								className={tabTrigger}
-								onClick={() => activate(id)}
-								onDoubleClick={() => {
-									if (plane) setEditing(id);
-								}}
-								onKeyDown={(e) => onKeyDown(e, i)}
-							>
-								<span className={tabTitle}>{title}</span>
-							</button>
+							<OverflowTooltip label={title} side="bottom">
+								<button
+									type="button"
+									role="tab"
+									aria-selected={active}
+									tabIndex={active ? 0 : -1}
+									className={tabTrigger}
+									onClick={() => activate(id)}
+									onDoubleClick={() => {
+										if (plane) setEditing(id);
+									}}
+									onKeyDown={(e) => onKeyDown(e, i)}
+								>
+									<span className={tabTitle}>{title}</span>
+								</button>
+							</OverflowTooltip>
 						)}
 						<span className={tabActions(active)}>
 							<PaneMenu

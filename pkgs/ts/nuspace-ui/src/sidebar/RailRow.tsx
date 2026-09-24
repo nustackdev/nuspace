@@ -18,6 +18,7 @@ import {
 } from "@nustackdev/ui-kit";
 import type * as React from "react";
 import { railActions, railIndent, railLabel, railLane, railRow, railTitle } from "../design";
+import { OverflowTooltip } from "../shell/OverflowTooltip";
 
 export function RailRow({
 	rowKey,
@@ -103,13 +104,15 @@ export function RailRow({
 
 /**
  * The row's label: a real anchor that is not a tab stop, because the row it
- * sits in is the one.
+ * sits in is the one. A name cut off by the rail's width shows whole in a
+ * tooltip; one that fits shows none.
  */
 export function RailRowLink({
 	href,
 	label,
 	selected,
 	titleClassName = railTitle,
+	dragging = false,
 	onClick,
 	onDoubleClick,
 }: {
@@ -118,21 +121,24 @@ export function RailRowLink({
 	selected: boolean;
 	/** Override only to drop the title a tier, e.g. for a row with no name. */
 	titleClassName?: string;
+	/** Some row is being dragged, so the tooltip stays shut. */
+	dragging?: boolean;
 	onClick: (e: React.MouseEvent<HTMLElement>) => void;
 	onDoubleClick: () => void;
 }) {
 	return (
-		<NavLink
-			size="sm"
-			active={selected}
-			href={href}
-			title={label}
-			tabIndex={-1}
-			onClick={onClick}
-			onDoubleClick={onDoubleClick}
-			className={railLabel}
-		>
-			<span className={titleClassName}>{label}</span>
-		</NavLink>
+		<OverflowTooltip label={label} disabled={dragging}>
+			<NavLink
+				size="sm"
+				active={selected}
+				href={href}
+				tabIndex={-1}
+				onClick={onClick}
+				onDoubleClick={onDoubleClick}
+				className={railLabel}
+			>
+				<span className={titleClassName}>{label}</span>
+			</NavLink>
+		</OverflowTooltip>
 	);
 }

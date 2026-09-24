@@ -65,7 +65,12 @@ export function Gutter({
 
 	return (
 		<div className={docGutter}>
-			<span className={docStatusRail(state, pinned)} title={CELL_STATUS[state].label} />
+			<Tooltip>
+				<TooltipTrigger asChild>
+					<span className={docStatusRail(state, pinned)} />
+				</TooltipTrigger>
+				<TooltipContent side="top">{CELL_STATUS[state].label}</TooltipContent>
+			</Tooltip>
 			<div className={docGutterAffordances(pinned)}>
 				<div className={docGutterRow}>
 					<Tooltip>

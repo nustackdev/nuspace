@@ -89,6 +89,8 @@
 	--rail-row-gap: 1px; /*  1   between rows, so two fills never touch     */
 	--rail-row-pad: 0.5rem; /* 8 row inner pad, before the icon lane        */
 	--rail-row-pad-end: 0.375rem; /* 6 row inner pad after the actions     */
+	--rail-actions: 4.625rem; /* 74 the action lane: split, add, more, at
+	                           * 24 each with a 1px gap between            */
 	--rail-lane: 1.25rem; /* 20  icon / chevron lane, the chevron's box     */
 	--rail-gap: 0.5rem; /* 8     lane to title                              */
 	--rail-indent: 1.25rem; /* 20 per level: a child's icon clears its
@@ -176,6 +178,7 @@
 	--spacing-rail-row-gap: var(--rail-row-gap);
 	--spacing-rail-row-pad: var(--rail-row-pad);
 	--spacing-rail-row-pad-end: var(--rail-row-pad-end);
+	--spacing-rail-actions: var(--rail-actions);
 	--spacing-rail-lane: var(--rail-lane);
 	--spacing-rail-gap: var(--rail-gap);
 	--spacing-rail-bar-pad: var(--rail-bar-pad);

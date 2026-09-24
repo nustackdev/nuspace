@@ -13,7 +13,10 @@
 // swap is pure CSS (`railIcon` / `railTwisty` in design/rail.ts). The chevron
 // only folds: it never opens the plane and never starts a drag.
 //
-// The hover `+` adds a Plane under this one, through the one Add plane popup.
+// The hover split opens the plane in a new pane beside the others, the same as
+// the menus' "Open in split". The hover `+` adds a Plane under this one,
+// through the one Add plane popup. All three actions carry a kit tooltip; the
+// title carries one only when it is cut off (see ../shell/OverflowTooltip.tsx).
 
 import {
 	ContextMenuItem,
@@ -24,11 +27,14 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 	IconButton,
+	Tooltip,
+	TooltipContent,
+	TooltipTrigger,
 } from "@nustackdev/ui-kit";
 import type { LucideIcon } from "lucide-react";
 import { ChevronRight, Columns2, Ellipsis, FileText, PenLine, Plus, Trash2 } from "lucide-react";
 import type * as React from "react";
-import { useCallback } from "react";
+import { useCallback, useRef, useState } from "react";
 import { closePanes, hrefFor, onNavClick, openPane, replacePane } from "../core/router";
 import { railAction, railChevron, railIcon, railTwisty } from "../design";
 import { openAddPlane } from "./add";
@@ -156,6 +162,7 @@ export function PlaneRow({
 						href={hrefFor(id)}
 						label={title}
 						selected={selected}
+						dragging={dragging}
 						onClick={(e) => {
 							// Opening a Plane reveals what is inside it. It never folds
 							// it: a click that toggles is a click you cannot predict.
@@ -168,49 +175,55 @@ export function PlaneRow({
 			}
 			actions={
 				<>
-					<IconButton
-						variant="ghost"
-						size="sm"
-						tabIndex={-1}
-						aria-label={`Add plane in ${title}`}
-						title="Add plane"
-						onClick={add}
-						className={railAction}
-					>
-						<Plus />
-					</IconButton>
-					<DropdownMenu>
-						<DropdownMenuTrigger asChild>
+					<Tooltip>
+						<TooltipTrigger asChild>
 							<IconButton
 								variant="ghost"
 								size="sm"
-								tabIndex={tabbable ? 0 : -1}
-								aria-label={`Actions for ${title}`}
+								tabIndex={-1}
+								aria-label={`Open ${title} in split`}
+								onClick={split}
 								className={railAction}
 							>
-								<Ellipsis />
-							</IconButton>
-						</DropdownMenuTrigger>
-						<DropdownMenuContent align="start" className="min-w-40">
-							<DropdownMenuItem onSelect={split}>
 								<Columns2 />
-								Open in split
-							</DropdownMenuItem>
-							<DropdownMenuItem onSelect={add}>
+							</IconButton>
+						</TooltipTrigger>
+						<TooltipContent side="bottom">Open in split</TooltipContent>
+					</Tooltip>
+					<Tooltip>
+						<TooltipTrigger asChild>
+							<IconButton
+								variant="ghost"
+								size="sm"
+								tabIndex={-1}
+								aria-label={`Add plane in ${title}`}
+								onClick={add}
+								className={railAction}
+							>
 								<Plus />
-								Add plane
-							</DropdownMenuItem>
-							<DropdownMenuItem onSelect={() => onRename(row)}>
-								<PenLine />
-								Rename
-							</DropdownMenuItem>
-							<DropdownMenuSeparator />
-							<DropdownMenuItem variant="danger" onSelect={remove}>
-								<Trash2 />
-								Delete
-							</DropdownMenuItem>
-						</DropdownMenuContent>
-					</DropdownMenu>
+							</IconButton>
+						</TooltipTrigger>
+						<TooltipContent side="bottom">Add plane inside</TooltipContent>
+					</Tooltip>
+					<MoreMenu title={title} tabbable={tabbable} dragging={dragging}>
+						<DropdownMenuItem onSelect={split}>
+							<Columns2 />
+							Open in split
+						</DropdownMenuItem>
+						<DropdownMenuItem onSelect={add}>
+							<Plus />
+							Add plane
+						</DropdownMenuItem>
+						<DropdownMenuItem onSelect={() => onRename(row)}>
+							<PenLine />
+							Rename
+						</DropdownMenuItem>
+						<DropdownMenuSeparator />
+						<DropdownMenuItem variant="danger" onSelect={remove}>
+							<Trash2 />
+							Delete
+						</DropdownMenuItem>
+					</MoreMenu>
 				</>
 			}
 			menu={
@@ -240,5 +253,71 @@ export function PlaneRow({
 				</>
 			}
 		/>
+	);
+}
+
+/**
+ * The `...` and its dropdown. Its "More" tooltip never shows over the open
+ * menu, nor on the focus the menu hands back to it when it closes: that one
+ * waits until the pointer comes back or focus moves on.
+ */
+function MoreMenu({
+	title,
+	tabbable,
+	dragging,
+	children,
+}: {
+	title: string;
+	tabbable: boolean;
+	dragging: boolean;
+	/** The dropdown's items. */
+	children: React.ReactNode;
+}) {
+	const [menu, setMenu] = useState(false);
+	const [tip, setTip] = useState(false);
+	const handedBack = useRef(false);
+
+	const onMenu = useCallback((next: boolean) => {
+		setMenu(next);
+		setTip(false);
+		if (!next) handedBack.current = true;
+	}, []);
+
+	const onTip = useCallback(
+		(next: boolean) => setTip(next && !menu && !dragging && !handedBack.current),
+		[menu, dragging],
+	);
+
+	return (
+		<DropdownMenu open={menu} onOpenChange={onMenu}>
+			<Tooltip open={tip && !menu && !dragging} onOpenChange={onTip}>
+				{/* The menu's trigger outside the tooltip's, so the row's action
+				    lane still sees the menu's data-state and stays up while it is
+				    open. */}
+				<DropdownMenuTrigger asChild>
+					<TooltipTrigger asChild>
+						<IconButton
+							variant="ghost"
+							size="sm"
+							tabIndex={tabbable ? 0 : -1}
+							aria-label={`Actions for ${title}`}
+							onPointerEnter={() => {
+								handedBack.current = false;
+							}}
+							onBlur={() => {
+								handedBack.current = false;
+							}}
+							className={railAction}
+						>
+							<Ellipsis />
+						</IconButton>
+					</TooltipTrigger>
+				</DropdownMenuTrigger>
+				<TooltipContent side="bottom">More</TooltipContent>
+			</Tooltip>
+			<DropdownMenuContent align="start" className="min-w-40">
+				{children}
+			</DropdownMenuContent>
+		</DropdownMenu>
 	);
 }

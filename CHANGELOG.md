@@ -12,6 +12,7 @@ separately here.
 
 ## Unreleased
 
+- Plane rows open in split from a hover button, and cut-off names show in tooltips
 - The sidebar shows the nuspace wordmark, and planes no longer jump when scrolling starts
 - A calmer, collapsible sidebar with hover chevrons and GitHub and docs links
 - Tooltips wait a moment before showing, the same everywhere

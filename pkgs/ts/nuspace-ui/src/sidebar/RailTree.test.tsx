@@ -4,6 +4,10 @@
 // hover, one row at a time) is checked in a real browser. What is checked here
 // is everything the swap stands on: every row carries both the icon and a real
 // chevron button, the button only folds, and an open leaf says so.
+//
+// The tooltips are opened by focus, which opens a kit tooltip at once where a
+// hover would wait out the delay. jsdom lays nothing out, so every box reads
+// 0 wide and fits; a cut-off title is faked by stubbing its widths.
 
 import { TooltipProvider } from "@nustackdev/ui-kit";
 import { act } from "react";
@@ -50,6 +54,37 @@ function render(expanded: string[]) {
 const rowOf = (key: string) =>
 	host.querySelector<HTMLElement>(`[role="treeitem"][data-rail-key="${key}"]`);
 const chevronOf = (key: string) => rowOf(key)?.querySelector<HTMLButtonElement>("button");
+const linkOf = (key: string) => rowOf(key)?.querySelector<HTMLAnchorElement>("a");
+const moreOf = (key: string) =>
+	rowOf(key)?.querySelector<HTMLButtonElement>('button[aria-label^="Actions for"]');
+/** The open tooltip's text, or null. */
+const tooltip = () => document.querySelector('[role="tooltip"]')?.textContent ?? null;
+
+/** Make `key`'s title read as cut off by the ellipsis. */
+function truncate(key: string) {
+	const span = linkOf(key)?.querySelector("span");
+	if (!span) throw new Error(`no title for ${key}`);
+	Object.defineProperty(span, "scrollWidth", { configurable: true, value: 240 });
+	Object.defineProperty(span, "clientWidth", { configurable: true, value: 120 });
+}
+
+/** A native drag event on `el`, with the one bit of dataTransfer a row uses. */
+function drag(el: Element | null | undefined, type: "dragstart" | "dragend") {
+	const e = new Event(type, { bubbles: true, cancelable: true });
+	Object.defineProperty(e, "dataTransfer", {
+		value: { effectAllowed: "", dropEffect: "", setData: () => {} },
+	});
+	act(() => {
+		el?.dispatchEvent(e);
+	});
+}
+
+// The tooltip's popper sizes itself with a ResizeObserver, which jsdom lacks.
+globalThis.ResizeObserver ??= class {
+	observe() {}
+	unobserve() {}
+	disconnect() {}
+} as unknown as typeof ResizeObserver;
 
 beforeEach(() => {
 	window.history.replaceState({}, "", "/");
@@ -142,5 +177,81 @@ describe("rail icon and chevron slot", () => {
 			rowOf("b")?.dispatchEvent(left);
 		});
 		expect(onToggle).toHaveBeenCalledTimes(2);
+	});
+});
+
+describe("rail actions", () => {
+	it("hangs split, add and more, in that order, in a fixed-width lane", () => {
+		render([]);
+		const lane = moreOf("b")?.parentElement;
+		const labels = [...(lane?.querySelectorAll("button") ?? [])].map((b) =>
+			b.getAttribute("aria-label"),
+		);
+		expect(labels).toEqual(["Open B in split", "Add plane in B", "Actions for B"]);
+		// Sized for all three, so a title truncates at the same edge on every row.
+		expect(lane?.className).toContain("w-rail-actions");
+	});
+
+	it("gives split and add a tooltip", () => {
+		render([]);
+		const lane = moreOf("b")?.parentElement;
+		const [split, add] = lane?.querySelectorAll("button") ?? [];
+		act(() => (split as HTMLElement).focus());
+		expect(tooltip()).toBe("Open in split");
+		act(() => (add as HTMLElement).focus());
+		expect(tooltip()).toBe("Add plane inside");
+	});
+});
+
+describe("rail tooltips", () => {
+	it("drops the native title for a kit tooltip", () => {
+		render([]);
+		expect(host.querySelector("[title]")).toBeNull();
+	});
+
+	it("shows a title only when it is cut off", () => {
+		render([]);
+		act(() => linkOf("b")?.focus());
+		expect(tooltip()).toBeNull();
+		act(() => linkOf("b")?.blur());
+
+		truncate("a");
+		act(() => linkOf("a")?.focus());
+		expect(tooltip()).toBe("A");
+	});
+
+	it("closes a title's tooltip on a drag and keeps it shut after", () => {
+		render([]);
+		truncate("a");
+		act(() => linkOf("a")?.focus());
+		expect(tooltip()).toBe("A");
+
+		drag(rowOf("a"), "dragstart");
+		expect(tooltip()).toBeNull();
+		drag(rowOf("a"), "dragend");
+		expect(tooltip()).toBeNull();
+	});
+
+	it("keeps More off the open menu and off the focus it hands back", async () => {
+		render([]);
+		act(() => moreOf("b")?.focus());
+		expect(tooltip()).toBe("More");
+
+		const enter = new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true });
+		act(() => {
+			moreOf("b")?.dispatchEvent(enter);
+		});
+		expect(document.querySelector('[role="menu"]')).not.toBeNull();
+		expect(tooltip()).toBeNull();
+
+		const esc = new KeyboardEvent("keydown", { key: "Escape", bubbles: true });
+		act(() => {
+			document.activeElement?.dispatchEvent(esc);
+		});
+		expect(document.querySelector('[role="menu"]')).toBeNull();
+		// The menu hands focus back on the next tick.
+		await act(() => new Promise((done) => setTimeout(done, 0)));
+		expect(document.activeElement).toBe(moreOf("b"));
+		expect(tooltip()).toBeNull();
 	});
 });

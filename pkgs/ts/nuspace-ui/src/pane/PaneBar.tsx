@@ -7,6 +7,7 @@ import { IconButton } from "@nustackdev/ui-kit";
 import { X } from "lucide-react";
 import { paneBar, paneBarButton, paneBarTitle } from "../design";
 import type { PlaneMeta } from "../plane/types";
+import { OverflowTooltip } from "../shell/OverflowTooltip";
 import { PaneMenu } from "./PaneMenu";
 
 export function PaneBar({
@@ -25,9 +26,9 @@ export function PaneBar({
 }) {
 	return (
 		<header className={paneBar}>
-			<span className={paneBarTitle} title={title}>
-				{title}
-			</span>
+			<OverflowTooltip label={title}>
+				<span className={paneBarTitle}>{title}</span>
+			</OverflowTooltip>
 			<PaneMenu planeId={planeId} meta={meta} onChange={onMeta} />
 			<IconButton
 				variant="ghost"
