@@ -88,6 +88,14 @@ export const railResizeHandle = resizeHandle("right");
 export const railHeader = "flex h-chrome shrink-0 items-center gap-0.5 px-rail-bar-pad";
 
 /**
+ * The wordmark beside the collapse button: NUSPACE, the "nu" in accent and
+ * the rest in the primary text color, so it reads white in dark theme.
+ */
+export const railWordmark =
+	"ml-1.5 select-none font-semibold text-sm text-text-primary uppercase tracking-wider";
+export const railWordmarkNu = "text-accent";
+
+/**
  * The free middle of the top bar, between the collapse button and the create
  * one. Empty for now; search goes here.
  */
@@ -144,7 +152,7 @@ export function railStatusDot(tone: "ok" | "info" | "warn" | "danger", busy: boo
  * `rail-top-gap` gives the first row air under the top bar.
  */
 export const railScroll = cn(
-	"flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden",
+	"flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden [scrollbar-gutter:stable]",
 	"px-rail-inset pt-rail-top-gap pb-1",
 );
 
@@ -372,6 +380,6 @@ export const addPlaneItem = "items-start [&_svg]:mt-0.5";
 
 export const addPlaneText = "flex min-w-0 flex-col";
 
-export const addPlaneLabel = "truncate text-sm text-text-primary";
+export const addPlaneLabel = "truncate text-sm text-text-primary uppercase tracking-wider";
 
 export const addPlaneDescription = "truncate text-xs text-text-muted";

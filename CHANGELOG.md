@@ -12,8 +12,9 @@ separately here.
 
 ## Unreleased
 
+- The sidebar shows the nuspace wordmark, and planes no longer jump when scrolling starts
 - A calmer, collapsible sidebar with hover chevrons and GitHub and docs links
-- Tooltips wait a second before showing, the same everywhere
+- Tooltips wait a moment before showing, the same everywhere
 - Apps become Planes: registered data seeded with cells, created from one add plane popup
 - The sidebar is one tree of planes, reordered and nested by dragging rows
 - Everything is called a plane or a cell, across the interface, wire and code

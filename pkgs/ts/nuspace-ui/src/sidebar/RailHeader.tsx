@@ -1,11 +1,18 @@
-// The rail's top bar: collapse on the left, a new plane at the top level on
-// the right, and room in between for search.
+// The rail's top bar: collapse and the wordmark on the left, a new plane at
+// the top level on the right, and room in between for search.
 //
-// No wordmark and no way home up here: home is an ordinary row in the tree.
+// No way home up here: home is an ordinary row in the tree.
 
 import { IconButton, Tooltip, TooltipContent, TooltipTrigger } from "@nustackdev/ui-kit";
 import { PanelLeft, SquarePen } from "lucide-react";
-import { railChromeButton, railHeader, railHeaderSpace, railTooltipHint } from "../design";
+import {
+	railChromeButton,
+	railHeader,
+	railHeaderSpace,
+	railTooltipHint,
+	railWordmark,
+	railWordmarkNu,
+} from "../design";
 import { openAddPlane } from "./add";
 import { focusRailToggle, RAIL_SHORTCUT, setRailCollapsed } from "./collapse";
 import { ROOT_ID } from "./types";
@@ -20,6 +27,9 @@ export function RailHeader() {
 					focusRailToggle();
 				}}
 			/>
+			<span className={railWordmark}>
+				<span className={railWordmarkNu}>nu</span>space
+			</span>
 			<div className={railHeaderSpace} />
 			<Tooltip>
 				<TooltipTrigger asChild>

@@ -24,7 +24,7 @@ export function App() {
 	}
 
 	return (
-		<TooltipProvider delayDuration={1000} skipDelayDuration={300}>
+		<TooltipProvider delayDuration={800} skipDelayDuration={300}>
 			<Shell />
 		</TooltipProvider>
 	);

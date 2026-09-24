@@ -20,9 +20,13 @@ import type { CellStatus } from "./cell-status";
 
 /* ============================== Plane + column ============================ */
 
-/** Outer scroll surface. Canvas, not surface: the plane IS the background. */
+/**
+ * Outer scroll surface. Canvas, not surface: the plane IS the background.
+ * The scrollbar's lane is always reserved, so the column doesn't jump sideways
+ * when the plane grows past the window and the bar appears.
+ */
 const docPlane = cn(
-	"relative h-full w-full overflow-y-auto overflow-x-hidden",
+	"relative h-full w-full overflow-y-auto overflow-x-hidden [scrollbar-gutter:stable]",
 	"bg-bg-canvas text-text-primary font-display",
 );
 
