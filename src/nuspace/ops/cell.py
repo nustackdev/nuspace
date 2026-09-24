@@ -55,12 +55,12 @@ def add_cell(
     """Write a cell onto a plane and place it at ``index``, in one commit.
 
     Args:
-        plane_id: the plane. Nothing is written when it is missing.
-        prog: the cell's source.
-        cell_id: its id. Minted when the term is evaluated when absent.
-        name: what to call it.
-        index: where in the plane's order. The end when absent.
-        meta: fields to merge into its meta.
+        plane_id: The plane. Nothing is written when it is missing.
+        prog: The cell's source.
+        cell_id: Its id. Minted when the term is evaluated when absent.
+        name: What to call it.
+        index: Where in the plane's order. The end when absent.
+        meta: Fields to merge into its meta.
 
     Yields:
         The cell id, ``""`` when the plane is missing.

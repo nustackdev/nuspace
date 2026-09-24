@@ -26,7 +26,7 @@ function save(w: number): void {
 	try {
 		window.localStorage.setItem(KEY, String(w));
 	} catch {
-		// nothing to do: the width just will not survive a reload
+		// Nothing to do: the width just will not survive a reload
 	}
 }
 

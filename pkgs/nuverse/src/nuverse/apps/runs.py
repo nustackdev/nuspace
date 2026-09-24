@@ -32,17 +32,17 @@ def count(runs, exit):
     return nu.Count(nu.Filter(nu.Iter(runs), nu.Eq(nu.DictAttrRef("r")["exit"], exit), key="r"))
 
 
-def tile(name, value):
-    return nustd.ui.StatRef(name).set(nu.ToStr(value), label=name)
+def tile(name, label, value):
+    return nustd.ui.StatRef(name).set(nu.ToStr(value), label=label)
 
 
 def draw():
     runs = nu.ListAttrRef("runs")
     tiles = (
-        tile("live", nu.Len(ops.live_runs()))
-        >> tile("ok", count(runs, "ok"))
-        >> tile("failed", count(runs, "failed"))
-        >> tile("killed", count(runs, "killed"))
+        tile("live", "Live", nu.Len(ops.live_runs()))
+        >> tile("ok", "OK", count(runs, "ok"))
+        >> tile("failed", "Failed", count(runs, "failed"))
+        >> tile("killed", "Killed", count(runs, "killed"))
     )
     return nustd.kv.Snapshot(nu.Let("runs", ops.runs(), tiles), scope=nuspace.Space)
 
@@ -79,7 +79,7 @@ def draw():
     )
     table = nustd.ui.TableRef("live runs").set(
         nu.Dict.of(
-            columns=["plane", "cell", "worker", "by", "status", "age"],
+            columns=["Plane", "Cell", "Worker", "By", "Status", "Age"],
             rows=nu.Collect(nu.Map(live, row, key="r")),
         )
     )
@@ -119,7 +119,7 @@ def draw():
     )
     table = nustd.ui.TableRef("finished runs").set(
         nu.Dict.of(
-            columns=["plane", "cell", "exit", "error", "ended"],
+            columns=["Plane", "Cell", "Exit", "Error", "Ended"],
             rows=nu.Collect(nu.Map(nu.Iter(newest), row, key="r")),
         )
     )

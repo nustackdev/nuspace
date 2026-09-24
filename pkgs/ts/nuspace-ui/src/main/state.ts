@@ -52,7 +52,7 @@ function keepOpen<T>(byId: Record<string, T>, open: string[]): Record<string, T>
 	return out;
 }
 
-// -- the write handler's body ------------------------------------------------
+// -- The write handler's body ------------------------------------------------
 
 /**
  * Apply one inbound payload to this node's props. Pure given `open`, the
@@ -160,7 +160,7 @@ export function patchPageTitle(path: Path, pageId: string, title: string): void 
 	tree.getState().setProps(path, { pages: { ...pages, [pageId]: { ...page, title } } });
 }
 
-// -- reads -------------------------------------------------------------------
+// -- Reads -------------------------------------------------------------------
 
 const NO_PAGES: Record<string, ActivePage> = {};
 

@@ -192,8 +192,8 @@ def sidebar_feed(sidebar: Ref, apps: Sequence[App]) -> nu.Nu:
     """The sidebar, live, as one term. Built per connection, never ends.
 
     Args:
-        sidebar: the shell's sidebar ref.
-        apps: the registered apps. Those with ``section=True`` are sections.
+        sidebar: The shell's sidebar ref.
+        apps: The registered apps. Those with ``section=True`` are sections.
     """
     arms = [_arms.state("tree", _changes(), _ship(sidebar, apps))]
     page_id = field_str(_CREATE, "page_id")

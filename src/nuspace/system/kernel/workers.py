@@ -128,10 +128,10 @@ def _start(worker: nu.StrArg) -> nu.Nu:
             >> nu.IfDo(nu.Eq(text(row.status), nu.Str(STATUS_STARTING)), row.status.set(STATUS_UP))
         ),
     )
-    refuse = _reap(worker, nu.Str("no worker of kind ") + text(row.kind))
+    refuse = _reap(worker, nu.Str("No worker of kind ") + text(row.kind))
     failed = nu.Let(
         _WHY,
-        nu.Str("worker failed to start: ") + ErrorText(nu.AnyAttrRef(_ERROR)),
+        nu.Str("Worker failed to start: ") + ErrorText(nu.AnyAttrRef(_ERROR)),
         _reap(worker, nu.StrAttrRef(_WHY)),
     )
     return nu.IfDo(
@@ -221,7 +221,7 @@ def worker_arm(worker: nu.StrArg) -> nu.Nu:
         _CODE,
         _pool.wait(wid),
         _pool.kill(wid)
-        >> _reap(worker, nu.Str("worker exited: ") + nu.ToStr(nu.AnyAttrRef(_CODE))),
+        >> _reap(worker, nu.Str("Worker exited: ") + nu.ToStr(nu.AnyAttrRef(_CODE))),
     )
     stop = until(row.status, STATUS_STOPPING) >> _pool.kill(wid) >> park()
     item = fresh("runs")
@@ -246,7 +246,7 @@ def worker_arm(worker: nu.StrArg) -> nu.Nu:
     # Not up and not dead: stopping before a spare was taken. Nothing to kill.
     gone = nu.IfDo(
         nu.Ne(snap(text(row.status)), nu.Str(STATUS_DEAD)),
-        _reap(worker, nu.Str("worker stopped before it started")),
+        _reap(worker, nu.Str("Worker stopped before it started")),
     )
     return _start(worker) >> nu.IfDo(up, alive, gone) >> park()
 
@@ -269,7 +269,7 @@ def orphans() -> nu.Nu:
                 nu.list(_kernel.live.keys()),
                 nu.IfDo(
                     nu.Not(_kernel.active.contains(owner)),
-                    run.error.set(nu.Str("worker is not running: ") + nu.ToStr(owner))
+                    run.error.set(nu.Str("Worker is not running: ") + nu.ToStr(owner))
                     >> run.exit.set(EXIT_FAILED)
                     >> run.status.set(STATUS_DEAD)
                     >> run.ended.set(Now())

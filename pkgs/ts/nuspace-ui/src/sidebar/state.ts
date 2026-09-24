@@ -20,7 +20,7 @@ import { useMemo } from "react";
 import { patchLocal, useLocalSlot } from "../app/local";
 import { coerceTree, EMPTY_TREE, type SidebarValue } from "./types";
 
-// -- browser-owned state ------------------------------------------------------
+// -- Browser-owned state ------------------------------------------------------
 
 export type SidebarState = {
 	/** Rows whose children are showing. A Plane id per entry. */
@@ -29,7 +29,7 @@ export type SidebarState = {
 
 export const EMPTY_LOCAL: SidebarState = { expanded: [] };
 
-// -- the write handler's body -------------------------------------------------
+// -- The write handler's body -------------------------------------------------
 
 /** Apply one inbound payload to this node's props. Pure, so it is testable. */
 export function applySidebarWrite(props: Props, payload: unknown): void {
@@ -39,7 +39,7 @@ export function applySidebarWrite(props: Props, payload: unknown): void {
 	props.loaded = true;
 }
 
-// -- reads --------------------------------------------------------------------
+// -- Reads --------------------------------------------------------------------
 
 export function useSidebarValue(path: Path): SidebarValue {
 	const props = useProps(path);
@@ -52,7 +52,7 @@ export function useExpanded(path: Path): string[] {
 	return useLocalSlot(path, EMPTY_LOCAL, (s) => s.expanded);
 }
 
-// -- writes -------------------------------------------------------------------
+// -- Writes -------------------------------------------------------------------
 
 /**
  * Patch the browser-owned fold state. Module-level rather than a hook so event

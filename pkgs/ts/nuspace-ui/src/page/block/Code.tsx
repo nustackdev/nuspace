@@ -23,7 +23,7 @@ export type CodeBoxProps = {
 	source: string;
 	focusReq: FocusReq | null;
 	onFocusConsumed: () => void;
-	/** cmd+enter, escape, or blur with changes. Restarts this block only. */
+	/** Cmd+Enter, Escape, or blur with changes. Restarts this block only. */
 	onCommit: (source: string) => void;
 	onExit: (dir: ExitDir, column: number | undefined) => void;
 	onEscape: () => void;

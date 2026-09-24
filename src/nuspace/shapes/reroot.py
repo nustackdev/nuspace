@@ -54,10 +54,10 @@ def reroot_base(term: nu.Nu, base: type[nu.Shape], at: nu.Nu) -> nu.Nu:
     program's state somewhere other than its own cell (eg a sibling's).
 
     Args:
-        term: any Nu term.
+        term: Any Nu term.
         base: :class:`CellState` or :class:`PlaneState`. Chains rooted at
             any other shape are left alone.
-        at: the ref the chains land under, eg ``Space.planes[p].state``.
+        at: The ref the chains land under, eg ``Space.planes[p].state``.
 
     Returns:
         The rewritten term, or ``term`` itself when nothing matched.
@@ -69,10 +69,10 @@ def reroot(term: nu.Nu, plane: nu.StrArg, cell: nu.StrArg) -> nu.Nu:
     """``term`` with its state chains spliced under ``plane`` and ``cell``.
 
     Args:
-        term: any Nu term, typically a loaded program.
-        plane: the plane id. Any ``StrArg``, since the kernel binds it at run
+        term: Any Nu term, typically a loaded program.
+        plane: The plane id. Any ``StrArg``, since the kernel binds it at run
             time (eg ``nu.StrAttrRef``).
-        cell: the cell id, same.
+        cell: The cell id, same.
 
     Returns:
         The rewritten term. ``term`` itself is untouched, and a term with no
@@ -90,8 +90,8 @@ class Reroot:
     the body that loads the program.
 
     Args:
-        plane: the plane id, as a ``StrArg``.
-        cell: the cell id, as a ``StrArg``.
+        plane: The plane id, as a ``StrArg``.
+        cell: The cell id, as a ``StrArg``.
     """
 
     __slots__ = ("cell", "plane")

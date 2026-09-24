@@ -3,10 +3,10 @@
 // Inside a block's open source editor you get a caret. Across a block
 // boundary you get *block* selection:
 //
-//   - arrowing out of an editor's first or last line moves to the next block
-//   - if that block is open in code mode, the caret enters it, carrying its
+//   - Arrowing out of an editor's first or last line moves to the next block
+//   - If that block is open in code mode, the caret enters it, carrying its
 //     column
-//   - otherwise the block gets *selected* and the page takes keyboard focus
+//   - Otherwise the block gets *selected* and the page takes keyboard focus
 
 import { useCallback } from "react";
 import type { PageModel } from "./model";

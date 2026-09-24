@@ -20,7 +20,7 @@ import { cn } from "@nustackdev/ui-kit";
 import { docPageSurface } from "./document";
 import { resizeHandle } from "./resize";
 
-/* ============================== the frame ================================ */
+/* ============================== The frame ================================ */
 
 /** The window. Owns the viewport height so every region inside can go flex. */
 export const shellRoot = "flex h-screen bg-bg-canvas text-text-primary";
@@ -34,7 +34,7 @@ export const shellMain = "flex min-h-0 min-w-0 flex-1";
  */
 export const shellSurface = "flex min-h-0 min-w-0 flex-1";
 
-/* ============================== panes ==================================== */
+/* ============================== Panes ==================================== */
 
 /**
  * A pane's narrowest, px: the page's reading measure (`max-w-doc`, 40rem in
@@ -98,7 +98,7 @@ export const shellPaneDivider = "relative w-0 shrink-0";
 /** The handle itself, centred on the divider. See ./resize.ts. */
 export const shellPaneResize = resizeHandle("left");
 
-/* ============================== states =================================== */
+/* ============================== States =================================== */
 
 /** Before the first write lands. Centred, quiet, the whole window. */
 export const shellBooting = cn(

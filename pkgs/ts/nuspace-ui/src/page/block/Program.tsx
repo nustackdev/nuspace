@@ -84,7 +84,7 @@ export function ProgramBlock(props: ProgramProps) {
 				<Alert tone={token.tone}>
 					<AlertIcon />
 					<div className="min-w-0 flex-1">
-						<AlertTitle>{state === "invalid" ? "does not compile" : "ran and died"}</AlertTitle>
+						<AlertTitle>{state === "invalid" ? "Does not compile" : "Ran and died"}</AlertTitle>
 						<AlertDescription className={docStatusTrace}>{status.error}</AlertDescription>
 					</div>
 				</Alert>
@@ -106,7 +106,7 @@ export function ProgramBlock(props: ProgramProps) {
 					<NodeView path={uiPath} />
 				</div>
 			) : editable && !editing && !status?.error ? (
-				<div className={docProgramHeadless}>no ui refs, this block runs headless</div>
+				<div className={docProgramHeadless}>No UI refs, this block runs headless</div>
 			) : null}
 		</div>
 	);

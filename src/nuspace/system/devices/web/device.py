@@ -176,10 +176,10 @@ def connection(
     """What one browser tab runs, with its session bound. Never ends.
 
     Args:
-        sid: the connection id.
-        apps: the registered apps, for the sidebar's sections.
-        snippets: the registered snippets, for the viewer's ``/`` menu.
-        shell: the shell every tab holds.
+        sid: The connection id.
+        apps: The registered apps, for the sidebar's sections.
+        snippets: The registered snippets, for the viewer's ``/`` menu.
+        shell: The shell every tab holds.
     """
     feeds = shell.boot(slash_entries(snippets)) >> nu.ParallelAsync(
         sidebar_feed(shell.sidebar, apps),
@@ -211,16 +211,16 @@ def serve_web(
     store brackets (``open_kernel``).
 
     Args:
-        apps: the registered apps. Those with ``section=True`` are sidebar
+        apps: The registered apps. Those with ``section=True`` are sidebar
             sections.
-        snippets: the registered snippets: the viewer's ``/`` menu, and what
+        snippets: The registered snippets: the viewer's ``/`` menu, and what
             a cell made from each entry stores.
-        host: the interface the server binds.
-        port: the port the server binds.
-        static: the wheel shipping the browser bundle. None serves the socket
+        host: The interface the server binds.
+        port: The port the server binds.
+        static: The wheel shipping the browser bundle. None serves the socket
             alone, eg for a vite dev server.
-        open_browser: open the URL once the server is up.
-        log_level: how much the server says.
+        open_browser: Open the URL once the server is up.
+        log_level: How much the server says.
         session_address: ``host:port`` for the connection socket. A free port
             by default.
 

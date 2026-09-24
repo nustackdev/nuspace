@@ -28,8 +28,8 @@ def sibling(cell_id: nu.StrArg, term: nu.Nu) -> nu.Nu:
     ``PlaneState`` chains are untouched and land at the shared plane state.
 
     Args:
-        cell_id: the sibling's id. Ids, not names: names are not unique.
-        term: what to read or write there, eg ``Tick.n``.
+        cell_id: The sibling's id. Ids, not names: names are not unique.
+        term: What to read or write there, eg ``Tick.n``.
     """
     plane = nu.StrAttrRef(PLANE_ATTR)
     return reroot_base(term, CellState, Space.planes[plane].cells[cell_id].state)

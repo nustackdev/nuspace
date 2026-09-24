@@ -42,18 +42,18 @@ def add_plane(
     """Make a plane with no cells and hang it under ``parent``, in one commit.
 
     Args:
-        plane_id: its id. Minted when the term is evaluated when absent. An
+        plane_id: Its id. Minted when the term is evaluated when absent. An
             existing plane given again keeps its cells and is rewritten and
             moved.
-        name: what to call it.
-        parent: the tree node to hang it under, ``ROOT`` or a plane id. A
+        name: What to call it.
+        parent: The tree node to hang it under, ``ROOT`` or a plane id. A
             parent that does not exist falls back to ``ROOT``.
-        system: prop, a protected plane, eg a service or home.
+        system: Prop, a protected plane, eg a service or home.
             ``remove_plane`` refuses it.
-        ui: prop, the shell draws it and nav brings it up when routed.
-        made_by: prop, the app that made it, the sidebar section it is
+        ui: Prop, the shell draws it and nav brings it up when routed.
+        made_by: Prop, the app that made it, the sidebar section it is
             listed under.
-        meta: fields to merge into its meta.
+        meta: Fields to merge into its meta.
 
     The props are written every time, so an existing plane given again takes
     the ones passed now.

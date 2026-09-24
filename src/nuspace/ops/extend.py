@@ -26,12 +26,12 @@ class App:
     """Something ``+`` makes: a Nu tree over ops, built on demand.
 
     Args:
-        name: registry key.
-        label: what the picker shows.
+        name: Registry key.
+        label: What the picker shows.
         build: ``build(**kwargs) -> Nu``, the tree to run. Makes a plane,
             linked planes, anything the ops allow.
-        section: whether the sidebar lists a section for what it made.
-        description: one line for the picker.
+        section: Whether the sidebar lists a section for what it made.
+        description: One line for the picker.
     """
 
     name: str
@@ -46,9 +46,9 @@ class Snippet:
     """Source for one cell, offered from the ``/`` menu.
 
     Args:
-        name: registry key, and the new cell's name.
-        label: what the menu shows.
-        source: the cell's prog.
+        name: Registry key, and the new cell's name.
+        label: What the menu shows.
+        source: The cell's prog.
     """
 
     name: str

@@ -25,7 +25,7 @@
 import { cn } from "@nustackdev/ui-kit";
 import { resizeHandle } from "./resize";
 
-/* ============================== geometry ================================= */
+/* ============================== Geometry ================================= */
 
 /**
  * The three lanes of a row, in px, all on the 4px grid.
@@ -57,7 +57,7 @@ export function railIndent(depth: number): { paddingLeft: string } {
 	return { paddingLeft: `${depth * RAIL.INDENT}px` };
 }
 
-/* ============================== the aside =============================== */
+/* ============================== The aside =============================== */
 
 /** Rail width bounds, px. DEFAULT is the old fixed w-60. */
 export const RAIL_WIDTH = { MIN: 180, DEFAULT: 240, MAX: 480 } as const;
@@ -109,7 +109,7 @@ export const railSectionTitle = cn(
 	"text-xs font-medium uppercase tracking-[0.06em] text-text-muted",
 );
 
-/* ============================== the row ================================= */
+/* ============================== The row ================================= */
 
 /**
  * The row shell. This is what paints hover and selection, not the link inside
@@ -205,7 +205,7 @@ export const railActions = cn(
 	"transition-opacity duration-fast ease-out",
 	"group-hover/row:pointer-events-auto group-hover/row:opacity-100",
 	"group-focus-within/row:pointer-events-auto group-focus-within/row:opacity-100",
-	// keep them up while a menu they opened is still open
+	// Keep them up while a menu they opened is still open
 	"[&:has([data-state=open])]:pointer-events-auto [&:has([data-state=open])]:opacity-100",
 );
 
@@ -236,7 +236,7 @@ export function railGuideStyle(level: number): { left: string } {
 	return { left: `${level * RAIL.INDENT + Math.floor(RAIL.LANE / 2)}px` };
 }
 
-/* ============================== inline edit ============================= */
+/* ============================== Inline edit ============================= */
 
 /**
  * Rename and create both happen in place, in the row, on top of a kit `Input`
@@ -248,7 +248,7 @@ export const railInputBox = "flex min-w-0 flex-1 items-center";
 
 export const railInput = cn("h-6 min-w-0 flex-1 px-1 py-0 text-sm", "focus-visible:ring-offset-0");
 
-/* ============================== empty + loading ========================= */
+/* ============================== Empty + loading ========================= */
 
 /** Row-shaped placeholder, so the rail does not resize when the list lands. */
 export function railSkeletonRow(inset = false): string {

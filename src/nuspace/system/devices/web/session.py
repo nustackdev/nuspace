@@ -57,7 +57,7 @@ __all__ = [
 SESSION_ATTR = "nuspace.session"
 
 
-# --- worker side -----------------------------------------------------------------
+# --- Worker side -----------------------------------------------------------------
 
 
 class FrameCodec:
@@ -119,7 +119,7 @@ class Connections:
         """The connection ``sid`` names, as something a ui ref draws on.
 
         Raises:
-            LookupError: no such connection. Ordinary: a tab can close
+            LookupError: No such connection. Ordinary: a tab can close
                 between a run being dispatched and the worker asking.
         """
         raise NotImplementedError
@@ -149,7 +149,7 @@ def proxied_session(address: str, body: nu.Nu) -> nu.With:
 
     Args:
         address: ``host:port`` where :func:`served_sessions` listens.
-        body: what runs with the connection bound. Pickled into the worker.
+        body: What runs with the connection bound. Pickled into the worker.
     """
     return nu.With(
         nu.Provide(FrameCodec, {}),
@@ -162,7 +162,7 @@ def proxied_session(address: str, body: nu.Nu) -> nu.With:
     )
 
 
-# --- host side -------------------------------------------------------------------
+# --- Host side -------------------------------------------------------------------
 
 
 class HostedSession(Session):
@@ -213,14 +213,14 @@ class Sessions(Connections):
         """The connection ``sid`` names, callable from another process.
 
         Raises:
-            LookupError: the connection is gone, or no server was bound.
+            LookupError: The connection is gone, or no server was bound.
         """
         if self._server is None or self._loop is None:
             msg = "Sessions was asked for a connection before the server was bound"
             raise LookupError(msg)
         session = self._server.session(sid)
         if session is None:
-            msg = f"no live connection for {sid!r}"
+            msg = f"No live connection for {sid!r}"
             raise LookupError(msg)
         return HostedSession(session, self._loop)
 

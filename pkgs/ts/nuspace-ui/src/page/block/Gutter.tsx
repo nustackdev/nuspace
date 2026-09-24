@@ -18,6 +18,7 @@ import {
 	docGutterRow,
 	docGutterToggle,
 	docStatusRail,
+	SECTION_STATUS,
 } from "../../design";
 import type { SectionState } from "../types";
 
@@ -71,7 +72,7 @@ export function Gutter({
 
 	return (
 		<div className={docGutter}>
-			<span className={docStatusRail(state, pinned)} title={state} />
+			<span className={docStatusRail(state, pinned)} title={SECTION_STATUS[state].label} />
 			{/* Slower than the kit's 200ms, and with no instant reopen. The gutter
 			    is a stack you walk THROUGH to reach one control, so at the kit's
 			    delay a tooltip fires on every glyph you cross and lands portalled
@@ -94,7 +95,7 @@ export function Gutter({
 									<Plus />
 								</IconButton>
 							</TooltipTrigger>
-							<TooltipContent side="top">add a line below</TooltipContent>
+							<TooltipContent side="top">Add a line below</TooltipContent>
 						</Tooltip>
 						<Tooltip>
 							<TooltipTrigger asChild>
@@ -110,7 +111,7 @@ export function Gutter({
 									<GripVertical />
 								</IconButton>
 							</TooltipTrigger>
-							<TooltipContent side="top">drag to reorder, click to select</TooltipContent>
+							<TooltipContent side="top">Drag to reorder, click to select</TooltipContent>
 						</Tooltip>
 					</div>
 					<div className={docGutterRow}>
@@ -125,7 +126,7 @@ export function Gutter({
 									{copied ? <Check className="text-status-ok" /> : <Hash />}
 								</IconButton>
 							</TooltipTrigger>
-							<TooltipContent side="top">{copied ? "copied" : "copy section id"}</TooltipContent>
+							<TooltipContent side="top">{copied ? "Copied" : "Copy section id"}</TooltipContent>
 						</Tooltip>
 						<Tooltip>
 							<TooltipTrigger asChild>
@@ -139,7 +140,7 @@ export function Gutter({
 									<Code />
 								</Toggle>
 							</TooltipTrigger>
-							<TooltipContent side="top">{editing ? "hide source" : "show source"}</TooltipContent>
+							<TooltipContent side="top">{editing ? "Hide source" : "Show source"}</TooltipContent>
 						</Tooltip>
 					</div>
 				</div>

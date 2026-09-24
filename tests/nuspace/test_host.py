@@ -67,7 +67,7 @@ def _points(monkeypatch, points: list[_Point]) -> list[str]:
     return asked
 
 
-# --- the registry ----------------------------------------------------------------
+# --- The registry ----------------------------------------------------------------
 
 
 def test_merge_keeps_the_first_per_name_and_warns():
@@ -124,8 +124,8 @@ def test_explicit_wins_over_discovered(monkeypatch):
             apps=[_app("page", "Loose")], envs={"db": _env("loose")}, extensions=[mine]
         )
     assert {str(w.message) for w in caught} == {
-        "app 'page' from nuverse ignored: open_space registered it first",
-        "env 'db' from nuverse ignored: open_space registered it first",
+        "App 'page' from nuverse ignored: open_space registered it first",
+        "Env 'db' from nuverse ignored: open_space registered it first",
     }
     assert list(reg.apps) == ["page", "chat", "job"]
     assert reg.apps["page"].label == "Loose"
@@ -239,7 +239,7 @@ def test_open_space_with_web_compiles(monkeypatch):
     nu.validate(nu.compile(term))
 
 
-# --- the command line ------------------------------------------------------------
+# --- The command line ------------------------------------------------------------
 
 
 @pytest.mark.parametrize("args", [["--help"], ["serve", "--help"], ["run", "--help"]])

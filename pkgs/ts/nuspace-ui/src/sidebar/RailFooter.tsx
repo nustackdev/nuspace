@@ -27,6 +27,14 @@ const CONNECTION_TONE: Record<string, "ok" | "info" | "warn" | "danger"> = {
 	disconnected: "danger",
 };
 
+/** Wire status -> the words the pill shows. */
+const CONNECTION_LABEL: Record<string, string> = {
+	connected: "Connected",
+	connecting: "Connecting",
+	reconnecting: "Reconnecting",
+	disconnected: "Disconnected",
+};
+
 function ThemeToggle() {
 	const theme = useTheme();
 	const next = theme === "dark" ? "light" : "dark";
@@ -43,7 +51,7 @@ function ThemeToggle() {
 					<Icon />
 				</IconButton>
 			</TooltipTrigger>
-			<TooltipContent side="top">{next} theme</TooltipContent>
+			<TooltipContent side="top">{next === "dark" ? "Dark" : "Light"} theme</TooltipContent>
 		</Tooltip>
 	);
 }
@@ -53,7 +61,7 @@ export function RailFooter() {
 	return (
 		<div className={railFooter}>
 			<StatusPill tone={CONNECTION_TONE[status] ?? "danger"} size="sm">
-				{status}
+				{CONNECTION_LABEL[status] ?? status}
 			</StatusPill>
 			<ThemeToggle />
 		</div>

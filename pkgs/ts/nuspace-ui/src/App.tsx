@@ -18,7 +18,7 @@ export function App() {
 		return (
 			<div className={shellBooting}>
 				<Spinner size="sm" tone="neutral" label="Connecting" />
-				waiting for the tree...
+				Waiting for the tree...
 			</div>
 		);
 	}

@@ -15,7 +15,7 @@ node_modules
 !**/dist/.gitkeep
 dist-ssr
 
-# python wheel output
+# Python wheel output
 **/wheel-dist
 *.local
 

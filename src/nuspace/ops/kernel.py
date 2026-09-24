@@ -60,15 +60,15 @@ RUN_ATTR = "nuspace.run"
 _kernel = Space.kernel
 
 
-# --- workers -------------------------------------------------------------------
+# --- Workers -------------------------------------------------------------------
 
 
 def worker(kind: nu.StrArg = KIND_LOCAL, *, held: nu.BoolArg = False) -> nu.Nu:
     """Ask for a worker of ``kind``. The kernel takes a spare or makes one.
 
     Args:
-        kind: what kind of worker.
-        held: keep it out of idle GC (D40). A held worker lives until someone
+        kind: What kind of worker.
+        held: Keep it out of idle GC (D40). A held worker lives until someone
             :func:`kill_worker`'s it, or it crashes.
 
     Yields:
@@ -106,7 +106,7 @@ def kill_worker(worker_id: nu.StrArg) -> nu.Nu:
     )
 
 
-# --- runs ----------------------------------------------------------------------
+# --- Runs ----------------------------------------------------------------------
 
 
 def env(name: str, *args: str) -> list[str]:
@@ -170,12 +170,12 @@ def up(
     """Ask for one run per cell, on ``worker``, inside ``envs``.
 
     Args:
-        plane_id: the plane the cells are on.
-        cell_ids: the cells, a python list or a term yielding one. Ids with
+        plane_id: The plane the cells are on.
+        cell_ids: The cells, a python list or a term yielding one. Ids with
             no cell behind them are skipped.
-        worker: the worker's store id, eg what :func:`worker` yielded.
-        envs: env specs, outermost first, each ``env(name, *args)``.
-        by: who asked, eg ``nav``.
+        worker: The worker's store id, eg what :func:`worker` yielded.
+        envs: Env specs, outermost first, each ``env(name, *args)``.
+        by: Who asked, eg ``nav``.
 
     Yields:
         The new run ids, one per cell that exists, minted at evaluation.
@@ -231,7 +231,7 @@ def down(run_ids: Sequence[nu.StrArg] | nu.Nu) -> nu.Nu:
     )
 
 
-# --- reads ---------------------------------------------------------------------
+# --- Reads ---------------------------------------------------------------------
 
 
 def _run_row(rid: nu.StrAttrRef) -> nu.Nu:

@@ -28,7 +28,7 @@ def _page(plane_id=None, name=""):
 APPS = [App("page", "Pages", _page)]
 
 
-# --- the seed ---------------------------------------------------------------------
+# --- The seed ---------------------------------------------------------------------
 
 
 async def test_home_is_seeded_once_and_left_alone_after_edits(store):
@@ -80,7 +80,7 @@ def test_versions_leaves_out_what_is_not_installed():
     assert list(got) == ["nuspace"]
 
 
-# --- recents ----------------------------------------------------------------------
+# --- Recents ----------------------------------------------------------------------
 
 
 async def test_remember_dedupes_caps_and_skips(store):
@@ -175,7 +175,7 @@ async def test_pages_open_pushes_recents(store):
         await asyncio.gather(task, return_exceptions=True)
 
 
-# --- the cells --------------------------------------------------------------------
+# --- The cells --------------------------------------------------------------------
 
 
 @pytest.mark.parametrize("cell", home.CELLS, ids=lambda c: c[0])
@@ -222,12 +222,12 @@ async def test_header_draws_the_space_line(store, tmp_path):
     assert parts[0] == "nuspace"
     assert parts[1] == str(tmp_path)
     assert parts[2].startswith("nuspace ")
-    assert parts[3] == "up 1h 2m"
+    assert parts[3] == "Up 1h 2m"
 
 
 async def test_header_on_a_store_never_opened(store):
     (line,) = (await _frames(store, home.HEADER)).values()
-    assert line == "nuspace  ·  throwaway store"
+    assert line == "nuspace  ·  Throwaway store"
 
 
 async def test_recent_links_the_planes_that_still_exist(store):

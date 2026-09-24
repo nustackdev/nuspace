@@ -164,10 +164,10 @@ def build_body(run_id: str, plane: str, cell: str, envs: Sequence[Env] = ()) -> 
     """One run's whole life in its worker, as a term to dispatch.
 
     Args:
-        run_id: the run's store id.
-        plane: the plane id.
-        cell: the cell id.
-        envs: resolved envs, outermost first. Their wraps are applied here,
+        run_id: The run's store id.
+        plane: The plane id.
+        cell: The cell id.
+        envs: Resolved envs, outermost first. Their wraps are applied here,
             in the host, their rewrites ride along into the worker.
 
     Returns:

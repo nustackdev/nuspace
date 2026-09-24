@@ -100,10 +100,10 @@ def versions(v):
 def draw():
     info = nuspace.Space.state.info
     path = nu.If(info.path.exists(), nu.ToStr(info.path), nu.Str(""))
-    where = nu.If(nu.Eq(path, ""), nu.Str("throwaway store"), path)
+    where = nu.If(nu.Eq(path, ""), nu.Str("Throwaway store"), path)
     up = nu.If(
         info.opened.exists(),
-        nu.Str("up ") + uptime(nustd.time.time() - info.opened),
+        nu.Str("Up ") + uptime(nustd.time.time() - info.opened),
         nu.Str(""),
     )
     parts = nu.List.of(nu.Str("nuspace"), where, versions(info.versions), up)
@@ -173,10 +173,10 @@ from nuspace import ops
 
 
 class Tiles(nustd.ui.Row):
-    pages = nustd.ui.StatRef.slot(label="pages")
-    live = nustd.ui.StatRef.slot(label="live runs")
-    workers = nustd.ui.StatRef.slot(label="workers up")
-    failed = nustd.ui.StatRef.slot(label="failed, last hour")
+    pages = nustd.ui.StatRef.slot(label="Pages")
+    live = nustd.ui.StatRef.slot(label="Live runs")
+    workers = nustd.ui.StatRef.slot(label="Workers up")
+    failed = nustd.ui.StatRef.slot(label="Failed, last hour")
 
 
 class Links(nustd.ui.Row):
@@ -311,7 +311,7 @@ def write_info(path: str | None) -> nu.Nu:
     """``Space.state.info`` for this open: the store path, now, the versions. One commit.
 
     Args:
-        path: the store directory, None for a throwaway one (written ``""``).
+        path: The store directory, None for a throwaway one (written ``""``).
     """
     info = Space.state.info
     where = "" if path is None else str(Path(path).resolve())

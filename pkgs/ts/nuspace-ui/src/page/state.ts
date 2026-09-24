@@ -117,7 +117,7 @@ export function pruneEditor(local: EditorState, live: Set<string>): EditorState 
 	};
 }
 
-// -- reads -------------------------------------------------------------------
+// -- Reads -------------------------------------------------------------------
 
 /** One pane's editor state. Keyed by the Plane the pane shows. */
 function paneOf(local: Record<string, EditorState>, pageId: string): EditorState {
@@ -130,7 +130,7 @@ export function useEditorState(path: Path, pageId: string): EditorState {
 	return useLocalSlot(path, NO_PANES, (local) => paneOf(local, pageId));
 }
 
-// -- writes ------------------------------------------------------------------
+// -- Writes ------------------------------------------------------------------
 
 /**
  * Patch one pane's browser-owned editor state. Module-level rather than a

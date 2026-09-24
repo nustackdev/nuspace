@@ -50,7 +50,7 @@ export type SidebarValue = { tree: PageTree; loaded: boolean };
 
 export const EMPTY_TREE: PageTree = {};
 
-// -- tree walking ------------------------------------------------------------
+// -- Tree walking ------------------------------------------------------------
 
 /**
  * The root row's id, or "" when the tree has not landed.
@@ -95,7 +95,7 @@ export function ancestorsOf(tree: PageTree, id: string): PageRow[] {
 	return out.reverse();
 }
 
-// -- coercion ----------------------------------------------------------------
+// -- Coercion ----------------------------------------------------------------
 
 export function coerceStrs(raw: unknown): string[] {
 	return Array.isArray(raw) ? raw.map((s) => String(s)) : [];

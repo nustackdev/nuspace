@@ -61,11 +61,11 @@ def space_registry(
     """What a space registers: the loose arguments, then ``extensions``, then installed ones.
 
     Args:
-        apps: apps passed directly, ahead of everything.
-        snippets: snippets passed directly.
-        envs: env factories passed directly.
-        extensions: explicit extensions, after the loose arguments.
-        discover: also load the ``nuspace.extensions`` entry points.
+        apps: Apps passed directly, ahead of everything.
+        snippets: Snippets passed directly.
+        envs: Env factories passed directly.
+        extensions: Explicit extensions, after the loose arguments.
+        discover: Also load the ``nuspace.extensions`` entry points.
     """
     loose = Extension(tuple(apps), tuple(snippets), dict(envs or {}), name="open_space")
     return Registry.build([loose, *(extensions or ())], discovered=None if discover else [])
@@ -77,7 +77,7 @@ def _with_session(envs: Mapping[str, EnvFactory], web: Mapping[str, EnvFactory])
     for name, factory in web.items():
         if name in merged:
             warnings.warn(
-                f"env {name!r} is the web device's, the registered one is ignored",
+                f"Env {name!r} is the web device's, the registered one is ignored",
                 RegistryWarning,
                 stacklevel=3,
             )
@@ -110,23 +110,23 @@ def open_space(
     the main module.
 
     Args:
-        path: the store directory. None is a throwaway one, gone at close.
-        web: serve the browser shell. False is headless: kernel and services.
-        host: the interface the web server binds.
-        port: the port the web server binds.
-        open_browser: open a tab once the server is up.
-        static: the wheel shipping the browser bundle. None serves the
+        path: The store directory. None is a throwaway one, gone at close.
+        web: Serve the browser shell. False is headless: kernel and services.
+        host: The interface the web server binds.
+        port: The port the web server binds.
+        open_browser: Open a tab once the server is up.
+        static: The wheel shipping the browser bundle. None serves the
             socket alone, eg for a vite dev server.
-        spares: idle workers to keep up.
-        apps: apps registered directly, ahead of any extension.
-        snippets: snippets registered directly.
-        envs: env factories registered directly.
-        space_envs: env specs every run executes inside, outermost.
-        extensions: extensions registered explicitly, ahead of discovered ones.
-        discover: also register the extensions installed under the
+        spares: Idle workers to keep up.
+        apps: Apps registered directly, ahead of any extension.
+        snippets: Snippets registered directly.
+        envs: Env factories registered directly.
+        space_envs: Env specs every run executes inside, outermost.
+        extensions: Extensions registered explicitly, ahead of discovered ones.
+        discover: Also register the extensions installed under the
             ``nuspace.extensions`` entry point group.
-        body: host Nu run beside everything. The space closes when it returns.
-        name: process name prefix for workers.
+        body: Host Nu run beside everything. The space closes when it returns.
+        name: Process name prefix for workers.
     """
     reg = space_registry(
         apps=apps, snippets=snippets, envs=envs, extensions=extensions, discover=discover

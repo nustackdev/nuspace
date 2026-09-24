@@ -36,7 +36,7 @@ def count(workers, status):
 def draw():
     workers = nu.ListAttrRef("workers")
     tiles = [
-        nustd.ui.StatRef(status).set(nu.ToStr(count(workers, status)), label=status)
+        nustd.ui.StatRef(status).set(nu.ToStr(count(workers, status)), label=status.capitalize())
         for status in ("starting", "up", "stopping", "dead")
     ]
     return nustd.kv.Snapshot(
@@ -77,7 +77,7 @@ def draw():
     )
     table = nustd.ui.TableRef("workers").set(
         nu.Dict.of(
-            columns=["id", "kind", "status", "held", "live runs", "age"],
+            columns=["ID", "Kind", "Status", "Held", "Live runs", "Age"],
             rows=nu.Collect(nu.Map(nu.Iter(newest), row, key="w")),
         )
     )

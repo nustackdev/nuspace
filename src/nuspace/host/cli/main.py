@@ -53,7 +53,7 @@ def _path_argument(fn: click.Command) -> click.Command:
 
 def _announce(path: str | None, how: str) -> None:
     """Say which space this is and how it is open."""
-    where = path or "throwaway store, gone at close"
+    where = path or "Throwaway store, gone at close"
     console.print(Text.assemble(("nuspace", f"bold {PURPLE}"), ("  ", ""), (where, "dim")))
     console.print(f"[dim]{how}, Ctrl+C to stop[/dim]")
 
@@ -63,7 +63,7 @@ def _hold(term: nu.Nu) -> None:
     try:
         nu.run_in_loop(term, nu.Context())
     except KeyboardInterrupt:
-        console.print("[dim]stopped[/dim]")
+        console.print("[dim]Stopped[/dim]")
 
 
 @click.group(
@@ -94,7 +94,7 @@ def serve(path: str | None, host: str, port: int, no_browser: bool) -> None:
 @_path_argument
 def run(path: str | None) -> None:
     """Run until Ctrl+C."""
-    _announce(path, "headless")
+    _announce(path, "Headless")
     _hold(open_space(path, web=False))
 
 

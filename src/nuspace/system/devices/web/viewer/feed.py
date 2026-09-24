@@ -81,7 +81,7 @@ _META = "nuspace.web.viewer.meta"
 PAGE_META = {"editable": False, "full_width": False}
 
 
-# --- what the browser is handed: bare reads ----------------------------------
+# --- What the browser is handed: bare reads ----------------------------------
 
 
 def blocks(plane_id: nu.StrArg) -> nu.Nu:
@@ -204,7 +204,7 @@ def statuses(plane_id: nu.StrArg) -> nu.Nu:
     return nu.Let(held, plane_runs, nu.Collect(nu.Map(ops.cells(plane_id), per_cell, key=cell)))
 
 
-# --- shipping ------------------------------------------------------------------
+# --- Shipping ------------------------------------------------------------------
 
 
 def _ship_page(viewer: Ref, plane: nu.Nu) -> nu.Nu:
@@ -253,7 +253,7 @@ def _status_changes() -> list[nu.Nu]:
     return [snap(_runs.on_descendants_change("*", "status"))]
 
 
-# --- the composition -------------------------------------------------------------
+# --- The composition -------------------------------------------------------------
 
 
 def _create_prog(snippets: Sequence[Snippet]) -> nu.Nu:
@@ -356,10 +356,10 @@ def viewer_feed(viewer: Ref, sid: nu.StrArg, snippets: Iterable[Snippet] = ()) -
     """The viewer, live, as one term. Built per connection, never ends.
 
     Args:
-        viewer: the shell's viewer ref.
-        sid: the connection id, whose ``connections[sid].routes`` says which
+        viewer: The shell's viewer ref.
+        sid: The connection id, whose ``connections[sid].routes`` says which
             planes are open. The row must exist before this runs.
-        snippets: the registered snippets, what a created cell stores.
+        snippets: The registered snippets, what a created cell stores.
     """
     snippets = list(snippets)
     routes = Space.connections[sid].routes

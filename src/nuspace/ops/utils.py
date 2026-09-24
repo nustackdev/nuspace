@@ -52,7 +52,7 @@ def mint_ordered_id(prefix: str) -> str:
     minted give creation order with nothing storing it.
 
     Args:
-        prefix: what the id starts with, eg ``p`` for a plane.
+        prefix: What the id starts with, eg ``p`` for a plane.
     """
     stamp = format(int(time.time() * 1000), "012x")
     # The counter separates two ids in one millisecond, the random tail two
@@ -76,7 +76,7 @@ class MintId(ScalarQuery):
     Hand written rather than ``nu.host`` so a term holding it pickles.
 
     Args:
-        prefix: the id's prefix.
+        prefix: The id's prefix.
 
     Yields:
         The id, a str. INVALID when the prefix is a sentinel.
@@ -113,7 +113,7 @@ class PopAttr(ScalarAction):
     whole op an Action, so it chains and it binds.
 
     Args:
-        name: the attr to take.
+        name: The attr to take.
 
     Yields:
         The value bound under ``name``, EMPTY when nothing was.
@@ -225,10 +225,10 @@ def keep_order(
     """Rewrite ``current`` as ``wanted``, members only, then whatever was left.
 
     Args:
-        current: the list ref being reordered.
-        wanted: the ids to put first, in the order given. A python sequence
+        current: The list ref being reordered.
+        wanted: The ids to put first, in the order given. A python sequence
             or a Nu term yielding a list.
-        member: the collection that decides whether an id is real.
+        member: The collection that decides whether an id is real.
     """
     item = fresh("order")
     at = nu.AnyAttrRef(item)

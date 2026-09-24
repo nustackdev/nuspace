@@ -45,12 +45,12 @@ class DispatchRun(Command):
     share attrs.
 
     Args:
-        run_id: the run's store id, any ``StrArg``.
-        wid: the pool's worker id, any ``IntArg``.
+        run_id: The run's store id, any ``StrArg``.
+        wid: The pool's worker id, any ``IntArg``.
 
     Raises:
-        UnknownEnvError: a spec names no registered env.
-        WorkerGone: the worker died before it took the body.
+        UnknownEnvError: A spec names no registered env.
+        WorkerGone: The worker died before it took the body.
     """
 
     _mutates = Declared(value=frozenset({0}), name="mutates")

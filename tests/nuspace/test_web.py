@@ -60,7 +60,7 @@ SNIPPETS = [
 ]
 
 
-# --- the session env -------------------------------------------------------------
+# --- The session env -------------------------------------------------------------
 
 
 def _body():
@@ -133,7 +133,7 @@ def test_device_term_compiles_and_validates():
     nu.validate(nu.compile(term))
 
 
-# --- sidebar rows ------------------------------------------------------------------
+# --- Sidebar rows ------------------------------------------------------------------
 
 
 async def _plane(store, pid, name, meta=None, **props):
@@ -196,7 +196,7 @@ async def test_create_runs_the_group_app(store):
     assert create_plane([APPS[2]], "x", "y", "z") is None
 
 
-# --- viewer page -------------------------------------------------------------------
+# --- Viewer page -------------------------------------------------------------------
 
 
 async def test_viewer_page(store):
@@ -225,7 +225,7 @@ async def test_viewer_page_missing_and_meta_defaults(store):
     assert await store.read(page("nope")) == {"title": "", "meta": plain, "blocks": []}
 
 
-# --- viewer statuses ---------------------------------------------------------------
+# --- Viewer statuses ---------------------------------------------------------------
 
 
 def _run(rid, cell, status, exit_="", error="", *, plane="p1"):
@@ -301,7 +301,7 @@ async def test_viewer_statuses(store):
     ]
 
 
-# --- connections ---------------------------------------------------------------------
+# --- Connections ---------------------------------------------------------------------
 
 
 async def test_connections_open_close_clear(store):
@@ -326,7 +326,7 @@ async def test_connections_open_close_clear(store):
     await store.run(clear_connections())
 
 
-# --- a connection, live, over a fake session ----------------------------------------
+# --- A connection, live, over a fake session ----------------------------------------
 
 
 class FakeSession(WsSession):

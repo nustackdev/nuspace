@@ -56,7 +56,7 @@ KINDS = (KIND_SPACE, KIND_GROUP, KIND_PLANE)
 ROOT_ID = "space"
 
 
-# --- writes: host -> browser --------------------------------------------------
+# --- Writes: host -> browser --------------------------------------------------
 
 
 def set_tree(sidebar: Ref, rows: ListArg[dict]) -> Nu:
@@ -64,7 +64,7 @@ def set_tree(sidebar: Ref, rows: ListArg[dict]) -> Nu:
     return write(sidebar, "set_tree", pages=rows)
 
 
-# --- events: browser -> host --------------------------------------------------
+# --- Events: browser -> host --------------------------------------------------
 
 
 def on_create_plane(sidebar: Ref) -> Changed:

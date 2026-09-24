@@ -21,9 +21,9 @@
 //
 // Two rules hold this directory together:
 //
-//   no jsx            a recipe is a string. Anything that renders lives with
+//   No JSX            A recipe is a string. Anything that renders lives with
 //                     the feature that renders it.
-//   no wire words     nothing in here reads a field off the wire. Design only
+//   No wire words     Nothing in here reads a field off the wire. Design only
 //                     maps a name to a class string.
 //
 // This barrel is the import path. Nobody reaches past it into a module.

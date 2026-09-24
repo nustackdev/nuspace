@@ -25,7 +25,7 @@ async def cell(store, plane_id, prog="def out(): pass", **kw):
 NO_PROPS = {"system": False, "ui": False, "made_by": ""}
 
 
-# --- planes --------------------------------------------------------------------
+# --- Planes --------------------------------------------------------------------
 
 
 async def test_add_plane_writes_the_row_and_links_under_root(store):
@@ -147,7 +147,7 @@ async def test_remove_plane_downs_live_runs(store):
     assert status[theirs[0]] == "starting"
 
 
-# --- cells ---------------------------------------------------------------------
+# --- Cells ---------------------------------------------------------------------
 
 
 async def test_add_cell_places_by_index(store):
@@ -249,7 +249,7 @@ async def test_move_cell_refuses_same_plane_and_missing(store):
     assert await store.read(ops.cells(p)) == [a]
 
 
-# --- tree ----------------------------------------------------------------------
+# --- Tree ----------------------------------------------------------------------
 
 
 async def test_nest_and_unnest(store):

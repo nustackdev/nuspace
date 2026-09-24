@@ -113,7 +113,7 @@ async def test_unboot_without_a_list(store):
     assert await store.read(boot_list()) == []
 
 
-# --- the space ------------------------------------------------------------------------------
+# --- The space ------------------------------------------------------------------------------
 
 
 @pytest_asyncio.fixture(loop_scope="module", scope="module")

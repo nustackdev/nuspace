@@ -53,7 +53,7 @@ async def space():
     await k.close()
 
 
-# --- runs ---------------------------------------------------------------------------
+# --- Runs ---------------------------------------------------------------------------
 
 
 @module_loop
@@ -145,7 +145,7 @@ async def test_kill_worker_kills_its_runs(space):
     await space.run(ops.kill_worker(w))
     row = await space.run_row(r, _dead)
     assert row["exit"] == EXIT_KILLED
-    assert row["error"].startswith("worker exited")
+    assert row["error"].startswith("Worker exited")
     assert _dead(await space.worker_row(w, _dead))
     assert r not in await space.read(ops.live_runs())
 

@@ -211,9 +211,9 @@ class TakeOut(ScalarAction):
     """The run's output so far, what ``Run.out`` is set to. Marks it flushed.
 
     Args:
-        extra: text appended first as one stderr entry, eg a traceback.
+        extra: Text appended first as one stderr entry, eg a traceback.
             EMPTY or "" appends nothing.
-        final: take unfinished lines too.
+        final: Take unfinished lines too.
 
     Yields:
         A tuple of ``(ts, stream, text)``, ``()`` outside a run.
@@ -250,8 +250,8 @@ class ErrorText(_Pure):
     """A caught error as text: ``Type: message``, or its whole traceback.
 
     Args:
-        error: what ``TryCatch`` bound, a ``CaughtError``.
-        full: the traceback rather than the one line.
+        error: What ``TryCatch`` bound, a ``CaughtError``.
+        full: The traceback rather than the one line.
     """
 
     def __init__(self, error: object, *, full: bool = False) -> None:

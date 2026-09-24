@@ -132,8 +132,8 @@ def supervise(plane_id: nu.StrArg, cell_id: nu.StrArg, policy: nu.StrArg = ON_FA
     """Put a cell under the supervisor, or change its policy.
 
     Args:
-        plane_id: the cell's plane.
-        cell_id: the cell.
+        plane_id: The cell's plane.
+        cell_id: The cell.
         policy: :data:`ON_FAILURE` or :data:`ALWAYS`.
     """
     cells = Policy.cells
@@ -147,7 +147,7 @@ def unsupervise(plane_id: nu.StrArg, cell_id: nu.StrArg) -> nu.Nu:
     return atomic(_here(nu.IfDo(cells.contains(key), cells.del_item(key))))
 
 
-# --- one cell ------------------------------------------------------------------
+# --- One cell ------------------------------------------------------------------
 
 
 def _of_cell(ids: nu.Nu, plane: nu.StrArg, cell: nu.StrArg) -> nu.Nu:

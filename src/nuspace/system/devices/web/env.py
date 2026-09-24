@@ -34,8 +34,8 @@ class SessionWrap:
     """``body -> body``: the run inside connection ``sid``, its cell's ui cleared.
 
     Args:
-        address: where the host serves its connections.
-        sid: the connection id.
+        address: Where the host serves its connections.
+        sid: The connection id.
     """
 
     __slots__ = ("address", "sid")

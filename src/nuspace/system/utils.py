@@ -71,7 +71,7 @@ class Ticking(ScalarQuery):
     dropped) would never be seen. A tick makes it late at worst, never lost.
 
     Args:
-        change: a subscription, eg ``ref.on_children_change()``.
+        change: A subscription, eg ``ref.on_children_change()``.
 
     Yields:
         The subscription, wrapped. INVALID when ``change`` is.
@@ -105,7 +105,7 @@ def wake(change: nu.Nu) -> nu.Nu:
     """Return on one notification from ``change``, or after a watch period.
 
     Args:
-        change: a subscription, eg ``ref.on_change()``. Unbracketed: it is
+        change: A subscription, eg ``ref.on_change()``. Unbracketed: it is
             snapshotted here.
     """
     return nu.Timeout(WATCH_SECONDS, nu.React(snap(change)), on_timeout=nu.Delay(0.0))
@@ -128,10 +128,10 @@ def follows(ref: nu.Nu, name: str, body: nu.Nu, *, alive: nu.Nu | None = None) -
     Never returns.
 
     Args:
-        ref: a str leaf in the store.
-        name: the attr the value is bound under, per turn.
-        body: what runs while the value holds.
-        alive: whether ``ref``'s row is still there, read per turn. Once it
+        ref: A str leaf in the store.
+        name: The attr the value is bound under, per turn.
+        body: What runs while the value holds.
+        alive: Whether ``ref``'s row is still there, read per turn. Once it
             reads False the turn parks rather than subscribing to a row that
             is gone, and waits to be cancelled (eg by the fold over the rows).
     """

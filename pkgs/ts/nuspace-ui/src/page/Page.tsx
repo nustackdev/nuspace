@@ -106,7 +106,7 @@ export function Page({
 	);
 	const ghostProps = useGhosts(model, { focusBlock, createAfter, slashKey });
 
-	// -- where the caret actually is ------------------------------------------
+	// -- Where the caret actually is ------------------------------------------
 	//
 	// `editor.focus` is an intent and is consumed the instant a block honours
 	// it, so it cannot answer "which block is the caret in" -- which is what
@@ -134,7 +134,7 @@ export function Page({
 		[patch],
 	);
 
-	// -- render ---------------------------------------------------------------
+	// -- Render ---------------------------------------------------------------
 
 	const setEl = useCallback((id: string, el: HTMLElement | null) => {
 		if (el) elRefs.current.set(id, el);

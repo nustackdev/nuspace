@@ -41,10 +41,10 @@ class Extension:
     """Apps, snippets and env factories, registered together.
 
     Args:
-        apps: what ``+`` can make.
-        snippets: what ``/`` can insert.
-        envs: env factories by name, see :mod:`nuspace.system.kernel.envs`.
-        name: where it came from, for warnings. An entry point's name when
+        apps: What ``+`` can make.
+        snippets: What ``/`` can insert.
+        envs: Env factories by name, see :mod:`nuspace.system.kernel.envs`.
+        name: Where it came from, for warnings. An entry point's name when
             discovered and left empty.
     """
 
@@ -59,14 +59,14 @@ def _load(point: object) -> Extension | None:
     try:
         loaded = point.load()
         ext = loaded if isinstance(loaded, Extension) else loaded()
-    except Exception as exc:  # a broken extension must not stop the space
+    except Exception as exc:  # A broken extension must not stop the space
         warnings.warn(
-            f"extension {point.name!r} failed to load: {exc!r}", RegistryWarning, stacklevel=3
+            f"Extension {point.name!r} failed to load: {exc!r}", RegistryWarning, stacklevel=3
         )
         return None
     if not isinstance(ext, Extension):
         warnings.warn(
-            f"extension {point.name!r} is not an Extension: {type(ext).__name__}",
+            f"Extension {point.name!r} is not an Extension: {type(ext).__name__}",
             RegistryWarning,
             stacklevel=3,
         )
@@ -92,7 +92,7 @@ def _merge(kind: str, entries: Iterable[tuple[str, str, object]]) -> dict[str, o
     for name, where, entry in entries:
         if name in kept:
             warnings.warn(
-                f"{kind} {name!r} from {where or 'unnamed'} ignored:"
+                f"{kind.capitalize()} {name!r} from {where or 'unnamed'} ignored:"
                 f" {source[name] or 'unnamed'} registered it first",
                 RegistryWarning,
                 stacklevel=4,
@@ -108,9 +108,9 @@ class Registry:
     """Everything a space registered, merged, one entry per name and kind.
 
     Args:
-        apps: by name.
-        snippets: by name.
-        envs: env factories by name.
+        apps: By name.
+        snippets: By name.
+        envs: Env factories by name.
     """
 
     apps: Mapping[str, App] = field(default_factory=dict)
@@ -134,8 +134,8 @@ class Registry:
         """The explicit extensions, then the discovered ones.
 
         Args:
-            explicit: what the host passed, first wins among them too.
-            discovered: installed extensions. None runs :func:`discover`.
+            explicit: What the host passed, first wins among them too.
+            discovered: Installed extensions. None runs :func:`discover`.
         """
         found = discover() if discovered is None else list(discovered)
         return cls.merge([*explicit, *found])

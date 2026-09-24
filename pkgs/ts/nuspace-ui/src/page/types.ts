@@ -67,7 +67,7 @@ export function isLive(s: SectionState): boolean {
 	return s === "running" || s === "starting";
 }
 
-// -- coercion ----------------------------------------------------------------
+// -- Coercion ----------------------------------------------------------------
 
 const STATES: SectionState[] = ["invalid", "idle", "starting", "running", "stopped", "failed"];
 

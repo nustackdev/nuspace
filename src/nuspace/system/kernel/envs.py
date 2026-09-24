@@ -38,9 +38,9 @@ class Env:
 
     Args:
         wrap: ``body -> body``, run in the host at dispatch. None wraps nothing.
-        rewrite: a picklable ``Nu -> Nu`` over the loaded program, applied in
+        rewrite: A picklable ``Nu -> Nu`` over the loaded program, applied in
             the worker after reroot. None rewrites nothing.
-        label: what it is called, for reading and errors.
+        label: What it is called, for reading and errors.
     """
 
     wrap: Callable[[nu.Nu], nu.Nu] | None = None
@@ -63,8 +63,8 @@ class KernelConfig:
     python callables and never cross.
 
     Args:
-        envs: factories by name.
-        space_envs: specs applied to every run, outermost first. A bare str
+        envs: Factories by name.
+        space_envs: Specs applied to every run, outermost first. A bare str
             is a spec with no args.
     """
 
@@ -82,12 +82,12 @@ class KernelConfig:
         """One spec as an env.
 
         Raises:
-            UnknownEnvError: nothing registered under its name.
+            UnknownEnvError: Nothing registered under its name.
         """
         name, *args = spec
         factory = self.envs.get(name)
         if factory is None:
-            msg = f"no env registered as {name!r}"
+            msg = f"No env registered as {name!r}"
             raise UnknownEnvError(msg)
         return factory(*args)
 

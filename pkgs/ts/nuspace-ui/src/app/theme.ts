@@ -25,7 +25,7 @@ function stored(): Theme | null {
 		const v = window.localStorage.getItem(KEY);
 		return v === "dark" || v === "light" ? v : null;
 	} catch {
-		// private mode / storage disabled. The default is still reachable.
+		// Private mode / storage disabled. The default is still reachable.
 		return null;
 	}
 }
@@ -53,7 +53,7 @@ export function setTheme(theme: Theme): void {
 	try {
 		window.localStorage.setItem(KEY, theme);
 	} catch {
-		// preference is not persisted; the session still honours it.
+		// Preference is not persisted; the session still honours it.
 	}
 	for (const cb of subscribers) cb();
 }

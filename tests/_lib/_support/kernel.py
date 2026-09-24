@@ -24,7 +24,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
 
-# --- programs ------------------------------------------------------------------
+# --- Programs ------------------------------------------------------------------
 
 _HEAD = """
 import nu
@@ -50,7 +50,7 @@ FOREVER = prog('print("built")', 'return nu.print("tick") >> nu.ForeverDo(nu.Del
 READS_TAG = prog('return Tick.s.set(nu.StrAttrRef("test.tag"))')
 
 
-# --- the harness ------------------------------------------------------------------
+# --- The harness ------------------------------------------------------------------
 
 
 class _Hold(ScalarQuery):

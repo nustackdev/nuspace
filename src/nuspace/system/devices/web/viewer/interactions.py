@@ -64,7 +64,7 @@ STATE_FAILED = "failed"
 STATES = (STATE_IDLE, STATE_STARTING, STATE_RUNNING, STATE_STOPPED, STATE_FAILED)
 
 
-# --- writes: host -> browser --------------------------------------------------
+# --- Writes: host -> browser --------------------------------------------------
 
 
 def set_page(
@@ -94,7 +94,7 @@ def set_status(viewer: Ref, plane_id: StrArg, statuses: ListArg[dict]) -> Nu:
     return write(viewer, "set_status", page_id=plane_id, statuses=statuses)
 
 
-# --- events: browser -> host --------------------------------------------------
+# --- Events: browser -> host --------------------------------------------------
 
 
 def on_open(viewer: Ref) -> Changed:

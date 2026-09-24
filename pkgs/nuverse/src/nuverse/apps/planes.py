@@ -56,7 +56,7 @@ def draw():
     sections = nu.Unique(nu.Map(nu.Iter(planes), p["section"], key="p"))
     table = nustd.ui.TableRef("sections").set(
         nu.Dict.of(
-            columns=["section", "planes", "cells"],
+            columns=["Section", "Planes", "Cells"],
             rows=nu.Collect(nu.Map(sections, row, key="s")),
         )
     )
@@ -91,7 +91,7 @@ def draw():
     )
     table = nustd.ui.TableRef("planes").set(
         nu.Dict.of(
-            columns=["name", "made_by", "system", "cells"],
+            columns=["Name", "Made by", "System", "Cells"],
             rows=nu.Collect(nu.Map(ops.plane_rows(), row, key="p")),
         )
     )

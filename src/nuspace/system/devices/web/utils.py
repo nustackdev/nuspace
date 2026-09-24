@@ -6,10 +6,10 @@ the arm factory, and the total readers an arm reads a browser event with.
 
 **The two halves**, stated once so neither region respells them:
 
-- an event rides a path of its own, ``(*<ref>, "ops", <op>)``, so the path is
+- An event rides a path of its own, ``(*<ref>, "ops", <op>)``, so the path is
   the discrimination and a feed binds one arm per op. The op name is one
   segment and keeps its dots: ``pages.open`` is a name, not two levels.
-- a write rides the ref's own path, tagged with an ``op`` key in the payload,
+- A write rides the ref's own path, tagged with an ``op`` key in the payload,
   because the browser registers one handler per node and a write to a path
   with no handler is dropped.
 
@@ -98,7 +98,7 @@ def write(ref: Ref, op: str, **fields: object) -> nu.Nu:
     return Write(ref, nu.Dict.of(op=op, **fields))
 
 
-# --- where a cell's ui lands -------------------------------------------------
+# --- Where a cell's ui lands -------------------------------------------------
 
 
 def rooted(ref: StructuredRef) -> bool:
@@ -123,8 +123,8 @@ def cell_ui(viewer: Ref, cell: nu.StrArg) -> SectionRef:
     """One cell's own node under ``viewer``.
 
     Args:
-        viewer: the ref cells are drawn on, bound to its place on the shell.
-        cell: the cell id, any ``StrArg`` (eg ``nu.StrAttrRef(CELL_ATTR)``).
+        viewer: The ref cells are drawn on, bound to its place on the shell.
+        cell: The cell id, any ``StrArg`` (eg ``nu.StrAttrRef(CELL_ATTR)``).
     """
     return SectionRef(cell, section_cls=nustd.ui.Column, parent_ref=cells_ui(viewer))
 
@@ -136,8 +136,8 @@ class CellRoot:
     worker with the body that loads the program.
 
     Args:
-        viewer: the ref cells are drawn on.
-        cell: the cell id, as whatever the worker binds it to.
+        viewer: The ref cells are drawn on.
+        cell: The cell id, as whatever the worker binds it to.
     """
 
     __slots__ = ("_under",)
@@ -150,7 +150,7 @@ class CellRoot:
         return nu.shape.reroot(term, self._under, rooted=rooted)
 
 
-# --- arms ----------------------------------------------------------------------
+# --- Arms ----------------------------------------------------------------------
 
 
 def park() -> nu.Nu:
@@ -167,9 +167,9 @@ def watch(changes: Sequence[nu.Nu], ship: nu.Nu) -> nu.Nu:
     down, so a burst reships once rather than once per key.
 
     Args:
-        changes: subscriptions, each built fresh (two positions holding one
+        changes: Subscriptions, each built fresh (two positions holding one
             node hold one handle). Opened before the ship reads.
-        ship: reads the store and writes the browser. Should be guarded: a
+        ship: Reads the store and writes the browser. Should be guarded: a
             raise ends the race.
     """
     return nu.ForeverDo(nu.Race(*[nu.React(change) for change in changes], ship >> park()))
@@ -203,10 +203,10 @@ class Arms:
         the tab's other arms with it.
 
         Args:
-            name: the attr the event binds under, and what failures say.
+            name: The attr the event binds under, and what failures say.
                 Unique per arm: parallel arms share one ``ctx.attrs``.
-            change: the subscription, built fresh per arm.
-            body: what runs per event, reading it via ``nu.DictAttrRef(name)``.
+            change: The subscription, built fresh per arm.
+            body: What runs per event, reading it via ``nu.DictAttrRef(name)``.
         """
         return self.guard(nu.ReactForever(change, self.guard(body, name), changed_key=name), name)
 
@@ -215,7 +215,7 @@ class Arms:
         return self.guard(watch(changes, self.guard(ship, name)), name)
 
 
-# --- reading one event's fields ---------------------------------------------
+# --- Reading one event's fields ---------------------------------------------
 #
 # Total on purpose: a field the browser left out reads as its default, not as
 # EMPTY, so an op is handed a string where it wants one.

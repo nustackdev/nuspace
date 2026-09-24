@@ -26,7 +26,7 @@
 
 /* ============================== L2.5: document roles (light) ===============*/
 :root {
-	/* --- interaction tiers -------------------------------------------------
+	/* --- Interaction tiers -------------------------------------------------
 	 * The kit has an accent interaction tier (accent-wash / accent-soft) but
 	 * no NEUTRAL one. On app chrome that is fine: a list row hovers in accent
 	 * and there is nothing else competing. On a document it is not - every
@@ -40,31 +40,31 @@
 	--doc-hover: color-mix(in oklab, var(--text-primary) 4%, transparent);
 	--doc-active: color-mix(in oklab, var(--text-primary) 7%, transparent);
 
-	/* block-level selection is the accent tier, straight off the kit */
+	/* Block-level selection is the accent tier, straight off the kit */
 	--doc-selected: var(--accent-wash);
 	--doc-selected-strong: var(--accent-soft);
 	--doc-selected-line: var(--accent-line);
 
-	/* drag + drop. The handles themselves are kit IconButtons and bring their
+	/* Drag + drop. The handles themselves are kit IconButtons and bring their
 	 * own text and hover tiers; only the drop line is ours. */
 	--doc-drop-line: var(--accent);
 
-	/* the caret's block: no fill, just a hairline rail in the gutter */
+	/* The caret's block: no fill, just a hairline rail in the gutter */
 	--doc-focus-rail: var(--border-strong);
 
-	/* --- section status ----------------------------------------------------
+	/* --- Section status ----------------------------------------------------
 	 * A nuspace block is a live program. Six states, all pointing at existing
 	 * status roles. No new hues.
 	 *
-	 *   invalid   warn      source never compiled. author's problem, lint
-	 *                       register. yellow, deliberately NOT red.
-	 *   idle      muted     never started. quietest thing on the page.
-	 *   starting  info      transient, pairs with a spinner.
-	 *   running   ok        live.
-	 *   stopped   secondary ran and finished cleanly. one text tier above
+	 *   invalid   warn      Source never compiled. Author's problem, lint
+	 *                       register. Yellow, deliberately NOT red.
+	 *   idle      muted     Never started. Quietest thing on the page.
+	 *   starting  info      Transient, pairs with a spinner.
+	 *   running   ok        Live.
+	 *   stopped   secondary Ran and finished cleanly. One text tier above
 	 *                       idle so "has run" reads more present than
 	 *                       "never ran", without earning a hue.
-	 *   failed    danger    ran and died. red.
+	 *   failed    danger    Ran and died. Red.
 	 *
 	 * invalid vs failed is the distinction that matters to a person: one
 	 * never ran, one ran and died. Yellow vs red carries that without a
@@ -108,7 +108,7 @@
 
 /* ============================== L3: Tailwind v4 ===========================*/
 @theme inline {
-	/* --- document colors --> bg-doc-hover, bg-doc-selected, ... ---------- */
+	/* --- Document colors --> bg-doc-hover, bg-doc-selected, ... ---------- */
 	--color-doc-hover: var(--doc-hover);
 	--color-doc-active: var(--doc-active);
 	--color-doc-selected: var(--doc-selected);
@@ -117,7 +117,7 @@
 	--color-doc-drop-line: var(--doc-drop-line);
 	--color-doc-focus-rail: var(--doc-focus-rail);
 
-	/* --- section status --> text-section-running, bg-section-failed-wash --*/
+	/* --- Section status --> text-section-running, bg-section-failed-wash --*/
 	--color-section-invalid: var(--section-invalid);
 	--color-section-invalid-wash: var(--section-invalid-wash);
 	--color-section-invalid-line: var(--section-invalid-line);
@@ -142,7 +142,7 @@
 	--color-section-failed-wash: var(--section-failed-wash);
 	--color-section-failed-line: var(--section-failed-line);
 
-	/* --- document geometry -------------------------------------------------
+	/* --- Document geometry -------------------------------------------------
 	 * All on the 4px grid. These are step PICKS, not a new scale - same move
 	 * space-radius.md §1 makes with its density-override table.
 	 *
@@ -186,7 +186,7 @@
 	--spacing-doc-block-y: 0.25rem; /* 4           ghost line pad-y         */
 	--spacing-doc-block-y-program: 0.5rem; /* 8    block pad-y              */
 	--spacing-doc-block-gap: 0.125rem; /* 2        blocks are contiguous    */
-	--spacing-doc-tail: 30vh; /* the dead air under the last block. A document
+	--spacing-doc-tail: 30vh; /* The dead air under the last block. A document
 	                           * that ends at the window bottom has nowhere to
 	                           * click to start writing, and reads as though it
 	                           * were cut off rather than finished. Viewport
@@ -207,7 +207,7 @@
 	                                * short enough that the first block is
 	                                * still on screen when a page opens.     */
 
-	/* --- title type ---------------------------------------------------------
+	/* --- Title type ---------------------------------------------------------
 	 * The one size the kit's scale does not carry. typography.md tops out at
 	 * `display` (32) and that is the hero tier for app chrome, where the thing
 	 * above it is a window. On a document the title has to out-rank the

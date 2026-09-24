@@ -37,16 +37,16 @@ export type SectionStatus = (typeof SECTION_STATUSES)[number];
  * X or a checkmark turns to mush at this size, a silhouette does not.
  */
 export type SectionDotShape =
-	| "hollow" // outline circle          -> never ran
-	| "pulse" // filled circle, breathing -> coming up
-	| "solid" // filled circle            -> live
-	| "square" // filled square            -> ran, now over
-	| "triangle" // filled triangle          -> will not compile
-	| "diamond"; // filled diamond           -> ran and died
+	| "hollow" // Outline circle          -> never ran
+	| "pulse" // Filled circle, breathing -> coming up
+	| "solid" // Filled circle            -> live
+	| "square" // Filled square            -> ran, now over
+	| "triangle" // Filled triangle          -> will not compile
+	| "diamond"; // Filled diamond           -> ran and died
 
 export interface SectionStatusToken {
 	status: SectionStatus;
-	/** Word shown in the pill. Lowercase: this is IDE chrome, not prose. */
+	/** Word shown in the pill. */
 	label: string;
 	/** One line for a tooltip. Says what happened, not what color it is. */
 	hint: string;
@@ -66,8 +66,8 @@ export interface SectionStatusToken {
 export const SECTION_STATUS: Record<SectionStatus, SectionStatusToken> = {
 	invalid: {
 		status: "invalid",
-		label: "invalid",
-		hint: "source does not compile",
+		label: "Invalid",
+		hint: "Source does not compile",
 		tone: "warn",
 		shape: "triangle",
 		fg: "text-section-invalid",
@@ -78,8 +78,8 @@ export const SECTION_STATUS: Record<SectionStatus, SectionStatusToken> = {
 	},
 	idle: {
 		status: "idle",
-		label: "idle",
-		hint: "not started",
+		label: "Idle",
+		hint: "Not started",
 		tone: "neutral",
 		shape: "hollow",
 		fg: "text-section-idle",
@@ -90,8 +90,8 @@ export const SECTION_STATUS: Record<SectionStatus, SectionStatusToken> = {
 	},
 	starting: {
 		status: "starting",
-		label: "starting",
-		hint: "worker is coming up",
+		label: "Starting",
+		hint: "Worker is coming up",
 		tone: "info",
 		shape: "pulse",
 		fg: "text-section-starting",
@@ -102,8 +102,8 @@ export const SECTION_STATUS: Record<SectionStatus, SectionStatusToken> = {
 	},
 	running: {
 		status: "running",
-		label: "running",
-		hint: "live",
+		label: "Running",
+		hint: "Live",
 		tone: "ok",
 		shape: "solid",
 		fg: "text-section-running",
@@ -114,8 +114,8 @@ export const SECTION_STATUS: Record<SectionStatus, SectionStatusToken> = {
 	},
 	stopped: {
 		status: "stopped",
-		label: "stopped",
-		hint: "finished cleanly",
+		label: "Stopped",
+		hint: "Finished cleanly",
 		tone: "neutral",
 		shape: "square",
 		fg: "text-section-stopped",
@@ -126,8 +126,8 @@ export const SECTION_STATUS: Record<SectionStatus, SectionStatusToken> = {
 	},
 	failed: {
 		status: "failed",
-		label: "failed",
-		hint: "ran and died",
+		label: "Failed",
+		hint: "Ran and died",
 		tone: "danger",
 		shape: "diamond",
 		fg: "text-section-failed",

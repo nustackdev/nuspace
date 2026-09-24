@@ -20,7 +20,7 @@ import type { ExitDir } from "./types";
 /** What a ghost offers before anything has happened in it. */
 const GHOST_HINT = "/ for blocks";
 /** ...and once the menu is open, which is the whole of what changed. */
-const GHOST_SEARCH = "type to search";
+const GHOST_SEARCH = "Type to search";
 
 export type GhostProps = {
 	hostRef: React.RefObject<HTMLInputElement | null>;

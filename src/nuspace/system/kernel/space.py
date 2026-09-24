@@ -82,7 +82,7 @@ class Throwaway:
     directory is removed.
 
     Args:
-        path: the directory, made if missing (a term run twice finds it gone).
+        path: The directory, made if missing (a term run twice finds it gone).
     """
 
     def __init__(self, path: str) -> None:
@@ -112,7 +112,7 @@ def store(path: str | None = None) -> nu.With:
     that worker.
 
     Args:
-        path: the store directory, created if missing. None is a throwaway
+        path: The store directory, created if missing. None is a throwaway
             directory, removed when the bracket closes.
     """
     if path is not None:
@@ -190,8 +190,8 @@ def worker_context(address: str, feed_address: str) -> nu.With:
     fallback.
 
     Args:
-        address: where :func:`served_navigator` listens.
-        feed_address: where :func:`served_feed` listens.
+        address: Where :func:`served_navigator` listens.
+        feed_address: Where :func:`served_feed` listens.
     """
     return nu.With(
         nustd.kv.proxy_observer(feed_address),
@@ -205,9 +205,9 @@ def worker_pool(address: str, feed_address: str, *, name: str = DEFAULT_NAME) ->
     """The fleet, every worker holding :func:`worker_context`. Closing kills them all.
 
     Args:
-        address: where :func:`served_navigator` listens.
-        feed_address: where :func:`served_feed` listens.
-        name: process name prefix.
+        address: Where :func:`served_navigator` listens.
+        feed_address: Where :func:`served_feed` listens.
+        name: Process name prefix.
     """
     return nu.Provide(
         nustd.mp_pool.WorkerPool,
@@ -235,13 +235,13 @@ def open_kernel(
     closes when ``body`` returns; a server's body never does.
 
     Args:
-        body: what runs in the host beside the kernel.
-        path: the store directory. None is a throwaway one, see :func:`store`.
-        spares: idle workers to keep up. Zero is every take cold.
-        envs: env factories by name, see :mod:`nuspace.system.kernel.envs`.
-        space_envs: env specs applied to every run, outermost.
-        init: a plane to bring up once reconciled, see :func:`~.kernel.kernel`.
-        name: process name prefix for workers.
+        body: What runs in the host beside the kernel.
+        path: The store directory. None is a throwaway one, see :func:`store`.
+        spares: Idle workers to keep up. Zero is every take cold.
+        envs: Env factories by name, see :mod:`nuspace.system.kernel.envs`.
+        space_envs: Env specs applied to every run, outermost.
+        init: A plane to bring up once reconciled, see :func:`~.kernel.kernel`.
+        name: Process name prefix for workers.
     """
     address = f"127.0.0.1:{free_port()}"
     feed_address = f"127.0.0.1:{free_port()}"

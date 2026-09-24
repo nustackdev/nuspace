@@ -71,7 +71,7 @@ export function PlaneRow({
 	const navClick = onNavClick(id);
 
 	const remove = useCallback(() => {
-		if (!window.confirm(`delete "${title}" and everything under it?`)) return;
+		if (!window.confirm(`Delete "${title}" and everything under it?`)) return;
 		notify("page.delete", { page_id: id });
 		// Its panes go too, and so do its children's. Replace, not push: the
 		// back button should not bring back a Plane that no longer exists.

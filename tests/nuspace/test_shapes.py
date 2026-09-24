@@ -86,7 +86,7 @@ def _store(tmp_path):
     return write, read
 
 
-# --- the spike ---------------------------------------------------------------
+# --- The spike ---------------------------------------------------------------
 
 
 async def test_cell_state_persists_under_the_cell(tmp_path):
@@ -161,7 +161,7 @@ async def test_a_cell_does_not_hear_its_siblings_cell_state(tmp_path, target, ex
     assert await read(seen) == expected
 
 
-# --- run time ids -------------------------------------------------------------
+# --- Run time ids -------------------------------------------------------------
 
 
 async def test_plane_and_cell_can_be_attrs_bound_at_run_time(tmp_path):
@@ -193,7 +193,7 @@ async def test_a_rerooted_term_survives_a_pickle(tmp_path):
     assert await read(cell_state("p", "c")["n"]) == 1
 
 
-# --- what is left alone --------------------------------------------------------
+# --- What is left alone --------------------------------------------------------
 
 
 def test_foreign_chains_come_back_as_the_same_object():

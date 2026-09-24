@@ -18,7 +18,7 @@ import { cn } from "@nustackdev/ui-kit";
 
 import type { SectionStatus } from "./section-status";
 
-/* ============================== page + column ============================ */
+/* ============================== Page + column ============================ */
 
 /** Outer scroll surface. Canvas, not surface: the page IS the background. */
 const docPage = cn(
@@ -91,7 +91,7 @@ export const docGhost = cn(
  */
 export const docTail = "h-doc-tail w-full shrink-0 cursor-text";
 
-/* ============================== page head ================================ */
+/* ============================== Page head ================================ */
 //
 // A page opens with where it is and what it is called, and nothing else. No
 // cover, no icon: a small trail at the top, then blank air, then the name of
@@ -174,7 +174,7 @@ export function docTitle(compact = false): string {
 /** Code inside a block. Editor tier is 14px mono, per typography.md §1. */
 export const docCode = "font-mono text-lg text-text-primary";
 
-/* ============================== block ==================================== */
+/* ============================== Block ==================================== */
 
 export interface BlockStateFlags {
 	/** The caret lives in this block. No fill, gutter rail only. */
@@ -211,13 +211,13 @@ export function docBlock(state: BlockStateFlags = {}): string {
 		"px-doc-block-x",
 		"py-doc-block-y-program",
 		"transition-colors duration-fast ease-out",
-		// the hovered block rides above its neighbours, so a gutter stack that
+		// The hovered block rides above its neighbours, so a gutter stack that
 		// overhangs a short block stays on top of the next block's lane.
 		"hover:z-20",
 		!state.selected && "has-[[data-block-grip]:hover]:bg-doc-hover",
 		state.selected && "bg-doc-selected",
 		state.selectedStrong && "bg-doc-selected-strong",
-		// the caret's block gets no fill: it is already marked by the caret.
+		// The caret's block gets no fill: it is already marked by the caret.
 		// Its status rail is pinned instead, see `docStatusRail`.
 		state.focused && "z-10",
 		state.dragging && "opacity-40",
@@ -281,18 +281,18 @@ export const docGutter = cn(
  * narrower than the lane.
  *
  * Reveal rules, in order of how they burn:
- *  - hover, the ordinary one.
- *  - focus-within scoped to the STACK, not to the block. Block-scoped
+ *  - Hover, the ordinary one.
+ *  - Focus-within scoped to the STACK, not to the block. Block-scoped
  *    focus-within pinned the controls open for as long as the caret sat in the
  *    block, which is most of the time you are writing; a keyboard user who has
  *    tabbed onto one of these buttons still keeps them.
- *  - an open menu or popover. Tooltips cannot pin it: Radix reports them as
+ *  - An open menu or popover. Tooltips cannot pin it: Radix reports them as
  *    `delayed-open`/`instant-open` and portals the content out of this
  *    subtree, so neither half of the selector can see one.
  */
 export function docGutterAffordances(pinned = false): string {
 	return cn(
-		// sticky: in a tall block the stack rides the top of the viewport while
+		// Sticky: in a tall block the stack rides the top of the viewport while
 		// the block is on screen, and the full-height lane is its track.
 		"sticky top-2 flex flex-col items-end gap-0.5 pr-1",
 		"transition-opacity duration-fast ease-out",
@@ -301,7 +301,7 @@ export function docGutterAffordances(pinned = false): string {
 			: cn(
 					"pointer-events-none opacity-0",
 					"group-hover/block:pointer-events-auto group-hover/block:opacity-100",
-					// keyboard focus only: a mouse click leaves focus on the button and must
+					// Keyboard focus only: a mouse click leaves focus on the button and must
 					// not pin the stack open after the pointer leaves.
 					"has-[:focus-visible]:pointer-events-auto has-[:focus-visible]:opacity-100",
 					"[&:has([data-state=open])]:pointer-events-auto [&:has([data-state=open])]:opacity-100",
@@ -332,7 +332,7 @@ export const docDropIndicator = cn(
 	"rounded-full bg-doc-drop-line",
 );
 
-/* ============================== block interior =========================== */
+/* ============================== Block interior =========================== */
 //
 // Every block is a live section, so its interior is kit density even though the page around it is not: the type
 // inside it is chrome type, and the code box gets the same bordered-and-sunken
@@ -372,7 +372,7 @@ export const docCodeBox = cn(
 	"border border-border-default bg-bg-sunken",
 );
 
-/* ============================== status ================================== */
+/* ============================== Status ================================== */
 
 /**
  * The status rail: a 2px line down the gutter lane's inner edge (beside the
@@ -409,7 +409,7 @@ export const docStatusTrace = cn(
 	"max-h-64 overflow-auto",
 );
 
-/* ============================== slash menu =============================== */
+/* ============================== Slash menu =============================== */
 
 /**
  * Slash menu surface. Same surface grammar as a kit DropdownMenu (elevated,

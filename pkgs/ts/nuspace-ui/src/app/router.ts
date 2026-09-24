@@ -75,7 +75,7 @@ export function routesOfHref(href: string): string[] | null {
 	return splitRoutes(url.pathname);
 }
 
-// -- the store ---------------------------------------------------------------
+// -- The store ---------------------------------------------------------------
 
 const subscribers = new Set<() => void>();
 
@@ -134,7 +134,7 @@ export function useFocusedRoute(): string {
 	return useSyncExternalStore(subscribe, getFocus, getFocus);
 }
 
-// -- moves -------------------------------------------------------------------
+// -- Moves -------------------------------------------------------------------
 
 function go(ids: string[], replace = false): void {
 	const url = hrefFor(ids);

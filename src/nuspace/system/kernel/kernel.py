@@ -54,6 +54,6 @@ def kernel(init: str | None = None) -> nu.Nu:
     the pool, spares, and a :class:`~.envs.KernelConfig`.
 
     Args:
-        init: a plane to bring up once reconciled. Skipped if it does not exist.
+        init: A plane to bring up once reconciled. Skipped if it does not exist.
     """
     return reconcile() >> kernel_loop(init)

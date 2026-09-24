@@ -142,7 +142,7 @@ export function RailTree({
 								</span>
 								<RailRowInput
 									initial={draft.initial}
-									label="Title for the new Plane"
+									label="Title for the new plane"
 									onCommit={commitDraft}
 									onCancel={cancelDraft}
 								/>
@@ -151,10 +151,10 @@ export function RailTree({
 					) : null}
 					{/* Only under a section that is open and genuinely
 					    empty. A folded one draws a row too, and
-					    "nothing here yet" under a branch you just
+					    "Nothing here yet" under a branch you just
 					    folded shut is a lie. */}
 					{row.kind === KIND_GROUP && row.open && !row.hasKids && draft?.key !== row.key ? (
-						<p className={railEmpty}>nothing here yet</p>
+						<p className={railEmpty}>Nothing here yet</p>
 					) : null}
 				</div>
 			))}

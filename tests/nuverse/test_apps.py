@@ -124,7 +124,7 @@ async def test_runs_draws_counts_and_tables(store):
         "killed": "0",
     }
     (live,) = (await _frames(store, runs.LIVE)).values()
-    assert live["columns"] == ["plane", "cell", "worker", "by", "status", "age"]
+    assert live["columns"] == ["Plane", "Cell", "Worker", "By", "Status", "Age"]
     ((plane, cell, worker, by, status, age),) = live["rows"]
     assert (plane, cell, worker, by, status) == ("p", "c", "w1", "nav", "up")
     assert age.endswith("s")

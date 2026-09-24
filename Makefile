@@ -20,7 +20,7 @@ help:
 	@echo "  make test-cov        Run tests with coverage"
 	@echo "  make test-fast       Run tests (fail fast)"
 	@echo ""
-	@echo "$(GREEN)Code Quality:$(NC)"
+	@echo "$(GREEN)Code quality:$(NC)"
 	@echo "  make lint            Check code with ruff"
 	@echo "  make format          Format code with ruff"
 	@echo "  make check           Run format-check + lint"

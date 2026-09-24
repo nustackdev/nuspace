@@ -12,6 +12,7 @@ separately here.
 
 ## Unreleased
 
+- Interface text, labels and messages now use normal sentence case
 - A home page shows recent pages, a live overview and how to get started
 - Split panes get a tab bar to switch, rename and close them
 - A compact page setting tightens the header and drops the space below

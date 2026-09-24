@@ -56,8 +56,8 @@ class Boot(Command):
     while the browser still holds every node of the last one.
 
     Args:
-        shape_cls: the shell whose slots seed the tree.
-        seeds: extra props per top level slot, eg the viewer's ``/`` menu.
+        shape_cls: The shell whose slots seed the tree.
+        seeds: Extra props per top level slot, eg the viewer's ``/`` menu.
     """
 
     # A Command names a slot it writes through. What this one moves is a
@@ -77,7 +77,7 @@ class Boot(Command):
 
     def _compile(self, nid: int, children: tuple[Callable, ...]) -> Callable:
         def thunk(rt: Runtime) -> None:
-            msg = "the web device is async only; use nu.arun"
+            msg = "The web device is async only; use nu.arun"
             raise RuntimeError(msg)
 
         return thunk
@@ -106,7 +106,7 @@ class Shell(nu.Shape):
         """This shell's slots as the batch that seeds a tab.
 
         Args:
-            snippets: the ``/`` menu's entries, ``{name, label}`` in order,
+            snippets: The ``/`` menu's entries, ``{name, label}`` in order,
                 mounted on the viewer.
         """
         viewer = {"snippets": [dict(s) for s in snippets or ()]}
