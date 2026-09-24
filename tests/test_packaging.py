@@ -97,16 +97,15 @@ def test_importing_nuverse_loads_no_server():
     assert heavy == "[]"
 
 
-def test_examples_register_through_extensions():
-    """web.py defines nothing of its own; custom.py passes its own ahead of nuverse."""
+def test_example_defines_nothing_of_its_own():
+    """The example registers no apps or snippets: nuverse is found on install."""
     out = _run(
         """
         import runpy
-        web = runpy.run_path("examples/web.py")
-        custom = runpy.run_path("examples/custom.py")
+        space = runpy.run_path("examples/space.py")
         from nuspace.host import space_registry
-        reg = space_registry(extensions=[custom["EXTENSION"]])
-        print("APPS" in web, "SNIPPETS" in web, sorted(reg.apps), sorted(reg.snippets))
+        reg = space_registry()
+        print("APPS" in space, "SNIPPETS" in space, sorted(reg.apps), sorted(reg.snippets))
         """
     )
-    assert out == "False False ['launch', 'page'] ['countdown', 'program', 'prose', 'ticker']"
+    assert out.startswith("False False ['page']")

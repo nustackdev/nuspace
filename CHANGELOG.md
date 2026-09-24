@@ -12,6 +12,7 @@ separately here.
 
 ## Unreleased
 
+- One example opens a space with the bundled extensions and nothing else
 - A page opened before it finishes being created still comes up
 - Resize the sidebar, and cell controls show on hover and stay in view
 - A cell finishing no longer breaks drawing for the other cells on its page
