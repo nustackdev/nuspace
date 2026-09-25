@@ -37,6 +37,12 @@ export function useRailWidth(): {
 } {
 	const [width, setWidth] = useState(load);
 
+	/** A click on the edge (or a double-click) snaps back to the default. */
+	const onResizeReset = useCallback(() => {
+		setWidth(RAIL_WIDTH.DEFAULT);
+		save(RAIL_WIDTH.DEFAULT);
+	}, []);
+
 	const onResizeStart = useCallback(
 		(e: React.PointerEvent) => {
 			const startW = width;
@@ -48,16 +54,11 @@ export function useRailWidth(): {
 					setWidth(last);
 				},
 				() => save(last),
+				onResizeReset,
 			);
 		},
-		[width],
+		[width, onResizeReset],
 	);
-
-	/** Double-click the edge to snap back to the default. */
-	const onResizeReset = useCallback(() => {
-		setWidth(RAIL_WIDTH.DEFAULT);
-		save(RAIL_WIDTH.DEFAULT);
-	}, []);
 
 	return { width, onResizeStart, onResizeReset };
 }

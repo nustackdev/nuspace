@@ -49,6 +49,9 @@ export function usePaneWidths(
 		[split, widths],
 	);
 
+	/** A click on a border (or a double-click) evens the panes out again. */
+	const onResizeReset = useCallback(() => setState(null), []);
+
 	const onResizeStart = useCallback(
 		(e: React.PointerEvent, i: number) => {
 			const strip = stripRef.current;
@@ -58,18 +61,21 @@ export function usePaneWidths(
 			if (start.length !== routes.length) return;
 			const left = i - 1;
 			const right = i;
-			trackColDrag(e, (dx) => {
-				const d = Math.max(dx, PANE_MIN_WIDTH - start[left]);
-				const px = [...start];
-				px[left] = start[left] + d;
-				px[right] = Math.max(PANE_MIN_WIDTH, start[right] - d);
-				setState({ key, px });
-			});
+			trackColDrag(
+				e,
+				(dx) => {
+					const d = Math.max(dx, PANE_MIN_WIDTH - start[left]);
+					const px = [...start];
+					px[left] = start[left] + d;
+					px[right] = Math.max(PANE_MIN_WIDTH, start[right] - d);
+					setState({ key, px });
+				},
+				undefined,
+				onResizeReset,
+			);
 		},
-		[stripRef, routes.length, key],
+		[stripRef, routes.length, key, onResizeReset],
 	);
-
-	const onResizeReset = useCallback(() => setState(null), []);
 
 	return { styleOf, onResizeStart, onResizeReset };
 }

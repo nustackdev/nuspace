@@ -12,6 +12,7 @@ separately here.
 
 ## Unreleased
 
+- A wider sidebar by default, and clicking a resize handle resets its width
 - The plane icon sits in the gutter beside the title, and the emoji tab opens first
 - Planes lay out on one grid, so gutters never hang past a narrow pane
 - Empty planes show how to start, and the cell menu says when nothing matches
