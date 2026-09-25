@@ -3,7 +3,7 @@
 - :mod:`.planes`: what ``+`` creates: ``plain``, ``jobs``, ``runs``,
   ``workers``, ``planes``.
 - :mod:`.snippets`: what ``/`` inserts: ``prose``, ``program``, ``ticker``,
-  and later ``heading``, ``monaco``.
+  ``lens``, ``plane_lens``, ``cell_lens``, and later ``heading``, ``monaco``.
 
 nuspace finds this package through the ``nuspace.extensions`` entry point,
 which names :func:`extension`. Nothing is imported here at module scope:

@@ -13,6 +13,7 @@ separately here.
 ## Unreleased
 
 - Rename a plane by editing its title in place, on any plane
+- New lens snippets browse the current plane, or a cell picked from a dropdown
 - A Lens snippet browses any shape in the store as cascading columns
 - A Jobs plane makes headless planes and sets their code, boot and restart
 - Supervised cells can restart after a fixed delay, so a job can run periodically

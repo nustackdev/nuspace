@@ -7,7 +7,7 @@ which is left out.
 
 from __future__ import annotations
 
-from . import heading, lens, monaco, program, prose, ticker
+from . import cell_lens, heading, lens, monaco, plane_lens, program, prose, ticker
 
 
 __all__ = ["SNIPPETS"]
@@ -16,6 +16,6 @@ __all__ = ["SNIPPETS"]
 #: Every snippet ready to register, in menu order.
 SNIPPETS = tuple(
     module.SNIPPET
-    for module in (prose, heading, program, ticker, lens, monaco)
+    for module in (prose, heading, program, ticker, lens, plane_lens, cell_lens, monaco)
     if module.SNIPPET is not None
 )

@@ -6,6 +6,7 @@ registers is well formed, and importing it keeps a worker light.
 
 from __future__ import annotations
 
+import inspect
 import subprocess
 import sys
 import textwrap
@@ -43,7 +44,14 @@ def test_discovery_finds_nuverse():
     ext = _nuverse()
     assert ext == replace(nuverse.extension(), name="nuverse")
     assert [p.name for p in ext.planes] == ["plain", "jobs", "runs", "workers", "planes"]
-    assert [s.name for s in ext.snippets] == ["prose", "program", "ticker", "lens"]
+    assert [s.name for s in ext.snippets] == [
+        "prose",
+        "program",
+        "ticker",
+        "lens",
+        "plane_lens",
+        "cell_lens",
+    ]
     assert dict(ext.envs) == {}
 
 
@@ -79,6 +87,8 @@ def test_snippets_are_well_formed():
         snippets.program.SNIPPET,
         snippets.ticker.SNIPPET,
         snippets.lens.SNIPPET,
+        snippets.plane_lens.SNIPPET,
+        snippets.cell_lens.SNIPPET,
     )
     assert (snippets.heading.SNIPPET, snippets.monaco.SNIPPET) == (None, None)
     for snippet in snippets.SNIPPETS:
@@ -86,8 +96,12 @@ def test_snippets_are_well_formed():
         assert snippet.name and snippet.label
         namespace: dict = {}
         exec(compile(snippet.source, snippet.name, "exec"), namespace)  # noqa: S102
-        assert callable(namespace["out"])
-        assert isinstance(namespace["out"](), nu.Nu)
+        out = namespace["out"]
+        assert callable(out)
+        # The kernel offers plane and cell by name; out takes the ones it names.
+        offered = {"plane": "p", "cell": "c"}
+        wanted = {k: v for k, v in offered.items() if k in inspect.signature(out).parameters}
+        assert isinstance(out(**wanted), nu.Nu)
     assert len({s.name for s in snippets.SNIPPETS}) == len(snippets.SNIPPETS)
 
 
