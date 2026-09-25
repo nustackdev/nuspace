@@ -26,6 +26,7 @@
 // insertion line and its target, and drops them once the drag leaves for the
 // pinned row.
 
+import { EmptyState } from "@nustackdev/ui-kit";
 import type * as React from "react";
 import { Fragment, useCallback, useEffect, useMemo } from "react";
 import { replacePane } from "../core/router";
@@ -35,7 +36,6 @@ import {
 	railDropLine,
 	railDropLineStyle,
 	railDropTail,
-	railEmpty,
 	railIndent,
 	railNoPlanes,
 	railRowWrap,
@@ -175,14 +175,19 @@ export function RailTree({
 								) : null}
 							</div>
 							{showsNoPlanes(row) ? (
-								<div role="none" className={railNoPlanes} style={railIndent(row.depth + 1)}>
+								<EmptyState
+									role="none"
+									size="sm"
+									className={railNoPlanes}
+									style={railIndent(row.depth + 1)}
+								>
 									No planes inside
-								</div>
+								</EmptyState>
 							) : null}
 						</Fragment>
 					);
 				})}
-				{rows.length === 0 ? <p className={railEmpty}>Nothing here yet</p> : null}
+				{rows.length === 0 ? <EmptyState size="sm">Nothing here yet</EmptyState> : null}
 			</div>
 			{/* The rest of the rail: a drop here goes to the top level, last. */}
 			<div className={railDropTail} {...tailProps}>

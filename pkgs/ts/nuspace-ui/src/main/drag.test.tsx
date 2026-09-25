@@ -212,7 +212,7 @@ describe("pane menu", () => {
 		act(() => {
 			root.render(<PaneMenu planeId="a" meta={coerceMeta({})} onChange={() => {}} open />);
 		});
-		const item = [...document.querySelectorAll("button")].find(
+		const item = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
 			(b) => b.textContent === "Open in new tab",
 		);
 		act(() => item?.click());

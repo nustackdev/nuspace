@@ -3,6 +3,7 @@
 // The server refuses a system Plane's delete, so neither place offers one.
 
 import { closePanes } from "../core/router";
+import { confirm } from "../shell/confirm";
 import type { Notify } from "./ops";
 import { subtreeOf } from "./tree";
 import type { PlaneTree } from "./types";
@@ -18,8 +19,18 @@ export function canDelete(tree: PlaneTree, id: string): boolean {
  * when none is left the router lands on "/". Replace, not push: the back
  * button should not bring back a Plane that no longer exists.
  */
-export function deletePlane(notify: Notify, tree: PlaneTree, id: string, title: string): void {
-	if (!window.confirm(`Delete "${title}" and everything under it?`)) return;
+export async function deletePlane(
+	notify: Notify,
+	tree: PlaneTree,
+	id: string,
+	title: string,
+): Promise<void> {
+	const yes = await confirm({
+		title: "Delete plane",
+		description: `Delete "${title}" and everything under it?`,
+		action: "Delete",
+	});
+	if (!yes) return;
 	notify("plane.delete", { plane_id: id });
 	closePanes(subtreeOf(tree, id), true);
 }

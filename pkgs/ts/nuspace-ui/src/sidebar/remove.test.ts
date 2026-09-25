@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { confirm } from "../shell/confirm";
 import { canDelete, deletePlane } from "./remove";
 import { coerceTree, ROOT_ID } from "./types";
+
+vi.mock("../shell/confirm", () => ({ confirm: vi.fn() }));
 
 const tree = coerceTree([
 	{ id: ROOT_ID, kind: "space", title: "", parent: ROOT_ID, children: ["home", "a"] },
@@ -10,7 +13,7 @@ const tree = coerceTree([
 ]);
 
 describe("deleting a plane", () => {
-	afterEach(() => vi.restoreAllMocks());
+	afterEach(() => vi.resetAllMocks());
 
 	it("is not offered for a system plane or one the tree lacks", () => {
 		expect(tree.home.system).toBe(true);
@@ -20,20 +23,21 @@ describe("deleting a plane", () => {
 		expect(canDelete(tree, "a")).toBe(true);
 	});
 
-	it("sends one op and closes the subtree, landing home when nothing is left", () => {
+	it("sends one op and closes the subtree, landing home when nothing is left", async () => {
 		window.history.replaceState({}, "", "/a+a1");
-		vi.spyOn(window, "confirm").mockReturnValue(true);
+		vi.mocked(confirm).mockResolvedValue(true);
 		const notify = vi.fn();
-		deletePlane(notify, tree, "a", "A");
+		await deletePlane(notify, tree, "a", "A");
+		expect(confirm).toHaveBeenCalledWith(expect.objectContaining({ action: "Delete" }));
 		expect(notify).toHaveBeenCalledWith("plane.delete", { plane_id: "a" });
 		expect(window.location.pathname).toBe("/home");
 	});
 
-	it("does nothing when not confirmed", () => {
+	it("does nothing when not confirmed", async () => {
 		window.history.replaceState({}, "", "/a");
-		vi.spyOn(window, "confirm").mockReturnValue(false);
+		vi.mocked(confirm).mockResolvedValue(false);
 		const notify = vi.fn();
-		deletePlane(notify, tree, "a", "A");
+		await deletePlane(notify, tree, "a", "A");
 		expect(notify).not.toHaveBeenCalled();
 		expect(window.location.pathname).toBe("/a");
 	});

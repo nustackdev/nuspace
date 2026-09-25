@@ -14,7 +14,7 @@
 // looser, but the air comes from the 16px/1.55 body line box, not from
 // padding. See tokens.css for the full rule.
 
-import { cn } from "@nustackdev/ui-kit";
+import { cn, menuContentClasses } from "@nustackdev/ui-kit";
 
 import type { CellStatus } from "./cell-status";
 
@@ -85,21 +85,11 @@ export function docColumn(wide = false, compact = false): string {
 export const docPlaneSurface = cn(docPlane, "flex min-w-0 flex-1 flex-col px-2");
 
 /**
- * Before a plane's value lands. Same quiet as the shell's boot state, 72 in
- * from the pane's edge (the surface's 8 plus 64), where it always sat.
- */
-export const docPlaneLoading = "flex items-center gap-2 px-16 py-8 text-base text-text-muted";
-
-/**
  * A pane with no plane to draw: there is none by that id, or it runs without
- * a view. The loading state's quiet, centred on the document grid's content
- * track and in the pane's height, with its one way out under it.
+ * a view. The kit's `EmptyState` in the document grid's content track,
+ * centred in the pane's height, with its one way out under it.
  */
-export const docPlaneAbsent = cn(docRow, docPlaneWidth(false), "flex-1 content-center py-8");
-export const docPlaneAbsentBody = cn(
-	docContentTrack,
-	"flex flex-col items-center gap-3 text-center text-base text-text-muted",
-);
+export const docPlaneAbsent = cn(docRow, docPlaneWidth(false), "flex-1 content-center");
 
 /**
  * A ghost input: the line where a cell will be, before there is one.
@@ -436,14 +426,12 @@ export const docSourceDirty = "flex items-center gap-1 self-end text-xs text-tex
 export const docProgramFields = "flex flex-col gap-3 py-1";
 
 /**
- * The line a cell that mounts nothing keeps, one line high: a dashed chip,
- * the lens's empty value (ui-kit's lens columns) in the document's tokens.
+ * The line a cell that mounts nothing keeps, one line high: a kit `Badge
+ * dashed`, set in mono like the lens's empty value (ui-kit's lens columns).
+ * `leading-none` again because the badge's own is merged away by its size.
  */
 export const docProgramHeadless = "flex py-1";
-export const docProgramHeadlessChip = cn(
-	"inline-flex items-center rounded-sm border border-dashed px-1",
-	"font-mono text-xs leading-none text-text-muted select-none",
-);
+export const docProgramHeadlessChip = "select-none font-mono font-normal leading-none";
 
 /**
  * The code box around Monaco. Bordered and sunken, so a source editor looks
@@ -497,38 +485,11 @@ export const docStatusTrace = cn(
 /* ============================== Slash menu =============================== */
 
 /**
- * Slash menu surface. Same surface grammar as a kit DropdownMenu (elevated,
- * default border, lg radius) so it does not read as a foreign widget on a
- * plane that also hosts kit primitives.
+ * Slash menu surface: the kit's menu recipe, since focus stays in the ghost
+ * and a Radix menu would take it. Its rows are the kit's too, lit by
+ * `data-highlighted` like a real menu's. Placed in viewport coordinates.
  */
-export const docSlashMenu = cn(
-	"z-50 min-w-56 max-h-80 overflow-y-auto",
-	"rounded-lg border border-border-default bg-bg-elevated",
-	"p-1 shadow-lg",
-	"data-[state=open]:animate-in data-[state=open]:fade-in-0",
-	"data-[state=closed]:animate-out data-[state=closed]:fade-out-0",
-	"duration-base ease-out",
-);
-
-/**
- * One slash-menu row. 32px, the kit's default row height. Active row uses the
- * accent tier because here selection IS the only state - there is no
- * competing hover semantic inside a menu.
- */
-export const docSlashMenuItem = cn(
-	"flex h-8 w-full cursor-default select-none items-center gap-2",
-	"rounded-md px-2 text-base text-text-primary outline-none",
-	"transition-colors duration-fast ease-out",
-	"data-[selected=true]:bg-accent-wash data-[selected=true]:text-text-primary",
-	"data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
-	"[&>svg]:size-4 [&>svg]:shrink-0 [&>svg]:text-text-muted",
-);
+export const docSlashMenu = cn(menuContentClasses, "fixed min-w-56 max-h-80 overflow-y-auto");
 
 /** The row's label. Owns the line: it truncates, the hint never does. */
 export const docSlashMenuItemLabel = "flex-1 truncate text-left";
-
-/** Trailing hint on a slash-menu row (shortcut, category). Mono: it is a key. */
-export const docSlashMenuHint = "ml-auto font-mono text-xs text-text-muted";
-
-/** Empty state when the query matches nothing. */
-export const docSlashMenuEmpty = "px-2 py-6 text-center text-sm text-text-muted";

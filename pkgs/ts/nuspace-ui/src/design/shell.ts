@@ -68,8 +68,7 @@ export const shellStrip = "flex min-h-0 min-w-0 flex-1 flex-col";
  */
 export const shellPanes = cn(
 	"flex min-h-0 min-w-0 flex-1",
-	"overflow-x-auto overflow-y-hidden overscroll-x-contain",
-	"[scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+	"overflow-x-auto overflow-y-hidden overscroll-x-contain scrollbar-none",
 );
 
 /**
@@ -124,11 +123,8 @@ export function shellPaneDrop(edge: "before" | "after"): string {
 
 /* ============================== States =================================== */
 
-/** Before the first write lands. Centred, quiet, the whole window. */
-export const shellBooting = cn(
-	"flex min-h-screen items-center justify-center gap-2",
-	"bg-bg-canvas text-base text-text-muted",
-);
+/** Before the first write lands: the kit's `EmptyState`, over the whole window. */
+export const shellBooting = "min-h-screen bg-bg-canvas";
 
-/** A region the tree does not hold. A fact, not an error, so no tone. */
-export const shellMissing = "min-h-0 flex-1 p-6 text-base text-text-muted";
+/** A region the tree does not hold: the kit's `EmptyState`, filling the strip. */
+export const shellMissing = "min-h-0 flex-1";

@@ -20,6 +20,7 @@
 
 import {
 	Button,
+	EmptyState,
 	Input,
 	PopoverContent,
 	Spinner,
@@ -36,9 +37,6 @@ import {
 	iconPickerCell,
 	iconPickerGroup,
 	iconPickerHead,
-	iconPickerLoading,
-	iconPickerNote,
-	iconPickerRemove,
 	iconPickerRow,
 	iconPickerSearch,
 } from "../design";
@@ -248,16 +246,12 @@ export function IconPicker({
 
 	const body = () => {
 		if (tab === "emoji" && emoji === "loading") {
-			return (
-				<div className={iconPickerLoading}>
-					<Spinner size="sm" tone="neutral" label="Loading emoji" />
-				</div>
-			);
+			return <EmptyState icon={<Spinner size="sm" tone="neutral" label="Loading emoji" />} />;
 		}
 		if (tab === "emoji" && emoji === "failed") {
-			return <p className={iconPickerNote}>Emoji could not load</p>;
+			return <EmptyState size="sm">Emoji could not load</EmptyState>;
 		}
-		if (cells.length === 0) return <p className={iconPickerNote}>Nothing matches</p>;
+		if (cells.length === 0) return <EmptyState size="sm">Nothing matches</EmptyState>;
 		let base = 0;
 		return (
 			// biome-ignore lint/a11y/noStaticElementInteractions: the arrows land here from the cells, which are real buttons
@@ -315,7 +309,7 @@ export function IconPicker({
 						</TabsTrigger>
 					</TabsList>
 					{value.trim() ? (
-						<Button variant="ghost" size="sm" className={iconPickerRemove} onClick={onRemove}>
+						<Button variant="ghost" size="sm" onClick={onRemove}>
 							Remove
 						</Button>
 					) : null}

@@ -20,18 +20,17 @@ export function RailRowInput({
 	onCancel: () => void;
 }) {
 	const done = useRef(false);
-	// `Input` is a plain function component and takes no ref, so the caret is
-	// placed through the wrapper.
-	const box = useRef<HTMLSpanElement | null>(null);
+	const input = useRef<HTMLInputElement | null>(null);
 	useEffect(() => {
-		const el = box.current?.querySelector("input");
-		el?.focus();
-		el?.select();
+		input.current?.focus();
+		input.current?.select();
 	}, []);
 	return (
-		<span ref={box} className={railInputBox}>
+		<span className={railInputBox}>
 			<Input
+				ref={input}
 				size="sm"
+				ring="inset"
 				aria-label={label}
 				defaultValue={initial}
 				className={railInput}

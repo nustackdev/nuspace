@@ -22,7 +22,17 @@
 // died.
 
 import type { Path } from "@nustackdev/ui-core";
-import { Alert, AlertDescription, AlertIcon, AlertTitle, NodeView } from "@nustackdev/ui-kit";
+import {
+	Alert,
+	AlertDescription,
+	AlertIcon,
+	AlertTitle,
+	Badge,
+	NodeView,
+	Tooltip,
+	TooltipContent,
+	TooltipTrigger,
+} from "@nustackdev/ui-kit";
 import { useCallback } from "react";
 import {
 	CELL_STATUS,
@@ -107,9 +117,14 @@ export function ProgramCell(props: ProgramProps) {
 				</div>
 			) : !editing && !status?.error ? (
 				<div className={docProgramHeadless}>
-					<span className={docProgramHeadlessChip} title="This cell draws no ui refs">
-						No view
-					</span>
+					<Tooltip>
+						<TooltipTrigger asChild>
+							<Badge variant="dashed" size="sm" className={docProgramHeadlessChip}>
+								No view
+							</Badge>
+						</TooltipTrigger>
+						<TooltipContent side="bottom">This cell draws no ui refs</TooltipContent>
+					</Tooltip>
 				</div>
 			) : null}
 		</div>

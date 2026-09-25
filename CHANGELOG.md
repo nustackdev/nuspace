@@ -12,6 +12,7 @@ separately here.
 
 ## Unreleased
 
+- Menus, dialogs, empty states and chips now come from the shared kit
 - Opening a missing or headless plane says so instead of showing an empty page
 - Cells that draw nothing show a quiet No view chip on every plane
 - Drag planes into a split, drag tabs to reorder, cmd-click opens a browser tab

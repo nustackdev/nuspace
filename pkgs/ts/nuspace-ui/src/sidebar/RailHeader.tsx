@@ -3,7 +3,7 @@
 //
 // No way home up here: home is an ordinary row in the tree.
 
-import { IconButton, Tooltip, TooltipContent, TooltipTrigger } from "@nustackdev/ui-kit";
+import { IconButton, Kbd, Tooltip, TooltipContent, TooltipTrigger } from "@nustackdev/ui-kit";
 import { PanelLeft, SquarePen } from "lucide-react";
 import {
 	railChromeButton,
@@ -36,6 +36,7 @@ export function RailHeader() {
 					<IconButton
 						variant="ghost"
 						size="sm"
+						ring="inset"
 						aria-label="New plane"
 						onClick={() => openAddPlane({ parent: ROOT_ID })}
 						className={railChromeButton}
@@ -60,6 +61,7 @@ export function RailToggle({ label, onClick }: { label: string; onClick: () => v
 				<IconButton
 					variant="ghost"
 					size="sm"
+					ring="inset"
 					aria-label={label}
 					data-rail-toggle=""
 					onClick={onClick}
@@ -70,7 +72,7 @@ export function RailToggle({ label, onClick }: { label: string; onClick: () => v
 			</TooltipTrigger>
 			<TooltipContent side="bottom">
 				{label}
-				<span className={railTooltipHint}>{RAIL_SHORTCUT}</span>
+				<Kbd className={railTooltipHint}>{RAIL_SHORTCUT}</Kbd>
 			</TooltipContent>
 		</Tooltip>
 	);

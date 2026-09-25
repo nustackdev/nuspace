@@ -1,9 +1,9 @@
 // Pane class recipes: the bar across a pane's top and the settings menu off
-// its `...`.
+// its `...`, a kit dropdown.
 //
 // The bar is window chrome, not document: it stays put while the plane under it
 // scrolls, and it is quiet enough that a single pane still reads as a plane
-// with nothing around it. No border, a muted title, ghost buttons. It only
+// with nothing around it. No border, a muted title, the kit's ghost buttons. It only
 // draws over a lone pane: a split gets the tab bar (./tabs.ts) instead.
 //
 // Source docs (do not paraphrase without re-reading):
@@ -28,35 +28,17 @@ export const paneBar = cn(
  */
 export const paneBarTitle = cn("min-w-0 flex-1 select-none truncate text-sm", "text-text-muted");
 
-/** The bar's two buttons: the kit's ghost `sm`, a tier back until hovered. */
-export const paneBarButton = "text-text-muted hover:text-text-primary";
+/** The settings menu. Narrow, so a setting's hint wraps under its label. */
+export const paneMenu = "w-64";
 
-/** The settings popover. Narrow, and a list rather than a padded card. */
-export const paneMenu = "w-64 p-1";
-
-/** A plain action row, above the settings (Rename, off a tab). */
-export const paneMenuAction = cn(
-	"flex h-8 w-full cursor-default select-none items-center rounded-md px-2",
-	"text-left text-sm text-text-primary",
-	"transition-colors duration-fast ease-out hover:bg-doc-hover",
-	"focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
-);
-
-/** Delete plane: an action row in the danger tone. */
-export const paneMenuDanger = cn(paneMenuAction, "text-status-danger");
-
-/** The hairline between the actions and the settings. */
-export const paneMenuSeparator = "-mx-1 my-1 h-px bg-border-subtle";
-
-/** A setting's row: label on the left, its control on the right. */
-export const paneMenuRow = cn(
-	"flex min-h-8 w-full cursor-default select-none items-center gap-3",
-	"rounded-md px-2 py-1.5",
-	"transition-colors duration-fast ease-out hover:bg-doc-hover",
-);
+/** A setting's row, on a kit menu item: label on the left, its switch on the right. */
+export const paneMenuRow = "gap-3";
 
 export const paneMenuText = "flex min-w-0 flex-1 flex-col";
 
 export const paneMenuLabel = "text-sm text-text-primary";
 
 export const paneMenuHint = "text-xs text-text-muted";
+
+/** The row's switch only shows the state: the row takes the click. */
+export const paneMenuSwitch = "pointer-events-none";

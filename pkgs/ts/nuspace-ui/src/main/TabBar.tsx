@@ -18,13 +18,12 @@
 // the left half of a tab is before it, the right half after. Its drag carries
 // its own type, so the rail and the panes under the bar ignore it.
 
-import { cn, IconButton, Input } from "@nustackdev/ui-kit";
+import { cn, IconButton, Input, OverflowTooltip } from "@nustackdev/ui-kit";
 import { X } from "lucide-react";
 import type * as React from "react";
 import { useEffect, useRef, useState } from "react";
 import { closePane, focusPane, movePane } from "../core/router";
 import {
-	paneBarButton,
 	tabActions,
 	tabBar,
 	tabCell,
@@ -41,7 +40,6 @@ import { parseIcon } from "../icon/parse";
 import { paneTitle } from "../pane/Pane";
 import { PaneMenu } from "../pane/PaneMenu";
 import type { AbsentReason, ActivePlane } from "../plane/types";
-import { OverflowTooltip } from "../shell/OverflowTooltip";
 import { pinDropIndex } from "../sidebar/pin";
 import { edgeAt, type PaneEdge } from "./useCanvasDrop";
 
@@ -267,7 +265,6 @@ export function TabBar({
 								onDelete={deleteOf(id)}
 								open={menuOf === id}
 								onOpenChange={(open) => setMenuOf(open ? id : null)}
-								className={paneBarButton}
 								tabIndex={-1}
 							/>
 							<IconButton
@@ -276,7 +273,6 @@ export function TabBar({
 								aria-label={`Close ${title}`}
 								tabIndex={-1}
 								onClick={() => close(id)}
-								className={paneBarButton}
 							>
 								<X />
 							</IconButton>
@@ -307,17 +303,17 @@ function TabRenameInput({
 	onCancel: () => void;
 }) {
 	const done = useRef(false);
-	// `Input` takes no ref, so the caret is placed through the wrapper.
-	const box = useRef<HTMLSpanElement | null>(null);
+	const input = useRef<HTMLInputElement | null>(null);
 	useEffect(() => {
-		const el = box.current?.querySelector("input");
-		el?.focus();
-		el?.select();
+		input.current?.focus();
+		input.current?.select();
 	}, []);
 	return (
-		<span ref={box} className={tabInputBox}>
+		<span className={tabInputBox}>
 			<Input
+				ref={input}
 				size="sm"
+				ring="inset"
 				aria-label={label}
 				defaultValue={initial}
 				className={tabInput}

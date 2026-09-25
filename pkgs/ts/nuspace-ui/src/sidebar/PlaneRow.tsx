@@ -22,7 +22,7 @@
 // the menus' "Open in split" and a drag of the row onto the panes. "Open in new
 // tab" in both menus is the browser's tab, the same as a cmd-click. The hover `+` adds a Plane under this one,
 // through the one Add plane popup. All three actions carry a kit tooltip; the
-// title carries one only when it is cut off (see ../shell/OverflowTooltip.tsx).
+// title carries one only when it is cut off (the kit's `OverflowTooltip`).
 
 import {
 	ContextMenuItem,
@@ -118,7 +118,10 @@ export function PlaneRow({
 	const { key, id, depth, title, hasKids, open, pos, size } = row;
 	const navClick = onNavClick(id);
 
-	const remove = useCallback(() => deletePlane(notify, tree, id, title), [id, notify, title, tree]);
+	const remove = useCallback(
+		() => void deletePlane(notify, tree, id, title),
+		[id, notify, title, tree],
+	);
 	const removable = canDelete(tree, id);
 
 	const split = useCallback(() => {
@@ -197,7 +200,8 @@ export function PlaneRow({
 					</Popover>
 					<IconButton
 						variant="ghost"
-						size="sm"
+						size="xs"
+						ring="inset"
 						tabIndex={tabbable ? 0 : -1}
 						aria-label={open ? "Collapse" : "Expand"}
 						aria-expanded={open}
@@ -250,6 +254,7 @@ export function PlaneRow({
 							<IconButton
 								variant="ghost"
 								size="sm"
+								ring="inset"
 								tabIndex={-1}
 								aria-label={`Open ${title} in split`}
 								onClick={split}
@@ -265,6 +270,7 @@ export function PlaneRow({
 							<IconButton
 								variant="ghost"
 								size="sm"
+								ring="inset"
 								tabIndex={-1}
 								aria-label={`Add plane in ${title}`}
 								onClick={add}
@@ -409,6 +415,7 @@ function MoreMenu({
 						<IconButton
 							variant="ghost"
 							size="sm"
+							ring="inset"
 							tabIndex={tabbable ? 0 : -1}
 							aria-label={`Actions for ${title}`}
 							onPointerEnter={() => {

@@ -12,18 +12,12 @@
 // top. That Plane holds the space's settings only; the theme is the window's,
 // so it stays down here and in the browser.
 
-import { IconButton, Tooltip, TooltipContent, TooltipTrigger } from "@nustackdev/ui-kit";
+import { IconButton, StatusDot, Tooltip, TooltipContent, TooltipTrigger } from "@nustackdev/ui-kit";
 import type { LucideIcon } from "lucide-react";
 import { BookOpen, Github, Moon, Sun } from "lucide-react";
 import { useConnectionStatus } from "../core/connection";
 import { toggleTheme, useTheme } from "../core/theme";
-import {
-	railChromeButton,
-	railFooter,
-	railFooterSpace,
-	railStatus,
-	railStatusDot,
-} from "../design";
+import { railChromeButton, railFooter, railFooterSpace, railStatus } from "../design";
 
 const GITHUB_URL = "https://github.com/nustackdev/nuspace";
 /** The docs are not written yet; the site is the closest thing. */
@@ -64,6 +58,7 @@ function RailLink({
 				<IconButton
 					variant="ghost"
 					size="sm"
+					ring="inset"
 					aria-label={label}
 					className={railChromeButton}
 					asChild
@@ -89,7 +84,7 @@ function ConnectionDot() {
 			<TooltipTrigger asChild>
 				{/* biome-ignore lint/a11y/noNoninteractiveTabindex: a keyboard has to reach the tooltip */}
 				<span role="status" aria-label={label} tabIndex={0} className={railStatus}>
-					<span className={railStatusDot(tone, busy)} />
+					<StatusDot tone={tone} pulse={busy} />
 				</span>
 			</TooltipTrigger>
 			<TooltipContent side="top">{label}</TooltipContent>
@@ -107,6 +102,7 @@ function ThemeToggle() {
 				<IconButton
 					variant="ghost"
 					size="sm"
+					ring="inset"
 					aria-label={`Switch to ${next} theme`}
 					onClick={toggleTheme}
 					className={railChromeButton}

@@ -34,8 +34,7 @@ import { cn } from "@nustackdev/ui-kit";
 export const tabBar = cn(
 	"flex h-chrome shrink-0 items-stretch bg-bg-sunken",
 	"border-b border-border-default group-data-[rail=collapsed]/main:pl-11",
-	"overflow-x-auto overflow-y-hidden overscroll-x-contain",
-	"[scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+	"overflow-x-auto overflow-y-hidden overscroll-x-contain scrollbar-none",
 );
 
 /**
@@ -86,7 +85,7 @@ export function tabActions(active: boolean): string {
 /** The inline rename box, where the title was. */
 export const tabInputBox = "flex h-full min-w-0 flex-1 items-center pl-2";
 
-export const tabInput = cn("h-6 min-w-0 flex-1 px-1 py-0 text-sm", "focus-visible:ring-offset-0");
+export const tabInput = "h-6 min-w-0 flex-1 px-1 py-0 text-sm";
 
 /** A tab being dragged, dimmed while it travels. */
 export const tabDragging = "opacity-50";

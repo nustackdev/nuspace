@@ -15,10 +15,10 @@ import {
 	ContextMenuTrigger,
 	cn,
 	NavLink,
+	OverflowTooltip,
 } from "@nustackdev/ui-kit";
 import type * as React from "react";
 import { railActions, railIndent, railLabel, railLane, railRow, railTitle } from "../design";
-import { OverflowTooltip } from "../shell/OverflowTooltip";
 
 export function RailRow({
 	rowKey,
@@ -132,7 +132,7 @@ export function RailRowLink({
 	onDoubleClick: () => void;
 }) {
 	return (
-		<OverflowTooltip label={label} disabled={dragging}>
+		<OverflowTooltip label={label} side="right" disabled={dragging}>
 			<NavLink
 				size="sm"
 				active={selected}

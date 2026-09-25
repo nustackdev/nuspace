@@ -21,13 +21,12 @@
 // A plane dragged off the rail onto a pane opens beside it
 // (./useCanvasDrop.ts), and a tab dragged along the bar moves its pane.
 
-import { type NodeProps, pathKey } from "@nustackdev/ui-kit";
+import { EmptyState, type NodeProps, pathKey } from "@nustackdev/ui-kit";
 import { Fragment, useCallback, useEffect, useRef } from "react";
 import { useFocusedRoute, useRoutes } from "../core/router";
 import { useTypePath } from "../core/surfaces";
 import { notifyOp } from "../core/wire";
 import {
-	docPlaneLoading,
 	docPlaneSurface,
 	shellPaneDivider,
 	shellPaneResize,
@@ -141,14 +140,14 @@ export function Main({ path }: NodeProps) {
 		const notifySidebar: SidebarNotify = (op, args) =>
 			notifyOp<SidebarOps, typeof op>(sidebar, op, args);
 		const title = planes[planeId]?.title || tree[planeId]?.title || planeId;
-		return () => deletePlane(notifySidebar, tree, planeId, title);
+		return () => void deletePlane(notifySidebar, tree, planeId, title);
 	};
 
 	if (routes.length === 0) {
 		return (
 			<div className={shellSurface}>
 				<div className={docPlaneSurface}>
-					<div className={docPlaneLoading}>{NOTHING_OPEN}</div>
+					<EmptyState>{NOTHING_OPEN}</EmptyState>
 				</div>
 			</div>
 		);

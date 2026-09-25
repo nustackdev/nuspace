@@ -3,11 +3,10 @@
 //
 // Outside the plane's scroll, so it stays put while the plane moves under it.
 
-import { IconButton } from "@nustackdev/ui-kit";
+import { IconButton, OverflowTooltip } from "@nustackdev/ui-kit";
 import { X } from "lucide-react";
-import { paneBar, paneBarButton, paneBarTitle } from "../design";
+import { paneBar, paneBarTitle } from "../design";
 import type { PlaneMeta } from "../plane/types";
-import { OverflowTooltip } from "../shell/OverflowTooltip";
 import { PaneMenu } from "./PaneMenu";
 
 export function PaneBar({
@@ -29,17 +28,11 @@ export function PaneBar({
 }) {
 	return (
 		<header className={paneBar}>
-			<OverflowTooltip label={title}>
+			<OverflowTooltip label={title} side="right">
 				<span className={paneBarTitle}>{title}</span>
 			</OverflowTooltip>
 			<PaneMenu planeId={planeId} meta={meta} onChange={onMeta} onDelete={onDelete} />
-			<IconButton
-				variant="ghost"
-				size="sm"
-				aria-label={`Close ${title}`}
-				onClick={onClose}
-				className={paneBarButton}
-			>
+			<IconButton variant="ghost" size="sm" aria-label={`Close ${title}`} onClick={onClose}>
 				<X />
 			</IconButton>
 		</header>

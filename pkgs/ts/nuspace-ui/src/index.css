@@ -1,7 +1,9 @@
 /* nuspace stylesheet.
  *
- * Order matters. The kit lands first (L1 hexes, L2 semantic roles for both
- * themes, L3 Tailwind theme). Then ./design/tokens.css adds the L2.5
+ * Order matters. The kit lands first, ahead of Tailwind: its bundle carries
+ * L1 hexes, L2 semantic roles for both themes, every class kit components
+ * use, and the L3 Tailwind theme with the `dark` variant, so nuspace's own
+ * classes resolve the kit names. Then ./design/tokens.css adds the L2.5
  * document-surface roles on top, which are aliases onto the kit's roles and
  * contain no colors of their own.
  *
@@ -10,21 +12,14 @@
  * missing, it gets fixed in the design system and the kit, not here.
  * See go/projects/nustackdev/design/index.md. */
 
-@import "tailwindcss";
-@import "tw-animate-css";
 @import "@nustackdev/ui-kit/styles";
+@import "tailwindcss";
 @import "./design/tokens.css";
 
 /* ProseMirror's own base rules (selection, pre-wrap, caret plumbing), for
  * the kit's ProseRef editor when a cell mounts one. It ships no colors and
  * no type; the kit's own look arrives with the kit stylesheet above. */
 @import "prosemirror-view/style/prosemirror.css";
-
-/* Ensure utility classes used inside the kit primitives make it into the
- * final bundle. The npm package ships its src/ directly. */
-@source "../node_modules/@nustackdev/ui-kit/src/**/*.{ts,tsx}";
-
-@custom-variant dark (&:is(.dark *));
 
 /* The document surface is its own scroll host (see design/document.ts
  * `docPlane`), which needs a full-height chain to size against. */

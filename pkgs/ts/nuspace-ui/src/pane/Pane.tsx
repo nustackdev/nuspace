@@ -11,15 +11,14 @@
 // title or icon to edit. Its bar and tab carry the plane id.
 
 import type { Path } from "@nustackdev/ui-core";
-import { Button, Spinner } from "@nustackdev/ui-kit";
+import { Button, EmptyState, Spinner } from "@nustackdev/ui-kit";
 import type * as React from "react";
 import { useCallback, useRef } from "react";
 import { closePane, focusPane } from "../core/router";
 import { useTypePath } from "../core/surfaces";
 import {
+	docContentTrack,
 	docPlaneAbsent,
-	docPlaneAbsentBody,
-	docPlaneLoading,
 	docTitleHead,
 	docTitleRow,
 	shellPane,
@@ -135,18 +134,21 @@ export function Pane({
 			<div className={shellPanePlane} onPointerDown={(e) => selectBox.current?.(e)}>
 				{absent ? (
 					<div className={docPlaneAbsent}>
-						<div className={docPlaneAbsentBody}>
+						<EmptyState
+							className={docContentTrack}
+							action={
+								<Button variant="ghost" size="sm" onClick={() => closePane(planeId)}>
+									Close
+								</Button>
+							}
+						>
 							{ABSENT_TEXT[absent]}
-							<Button variant="ghost" size="sm" onClick={() => closePane(planeId)}>
-								Close
-							</Button>
-						</div>
+						</EmptyState>
 					</div>
 				) : plane == null ? (
-					<div className={docPlaneLoading}>
-						<Spinner size="sm" tone="neutral" label="Loading" />
+					<EmptyState icon={<Spinner size="sm" tone="neutral" label="Loading" />}>
 						loading...
-					</div>
+					</EmptyState>
 				) : (
 					<>
 						<header className={docTitleHead(wide, compact)}>

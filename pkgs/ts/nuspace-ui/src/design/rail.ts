@@ -111,41 +111,22 @@ export const railFooter = "flex h-chrome shrink-0 items-center gap-0.5 px-rail-b
 export const railFooterSpace = "min-w-0 flex-1";
 
 /**
- * A top or bottom bar button, on top of a kit `IconButton ghost`. 28px with a
- * 16px glyph, muted until hovered, and hovered on the rail's own gray rather
- * than `bg-elevated`, which is white on a white rail in light.
+ * A top or bottom bar button, on top of a kit `IconButton ghost sm` with the
+ * inset ring. The kit's look, one size up: 28px with a 16px glyph.
  */
-export const railChromeButton = cn(
-	"size-7 rounded-md text-text-muted",
-	"hover:bg-rail-hover hover:text-text-primary active:bg-doc-active",
-	"focus-visible:ring-offset-0",
-	"[&_svg]:size-4",
-);
+export const railChromeButton = "size-7 [&_svg]:size-4";
 
-/** The shortcut after a chrome button's tooltip, a tier back. */
-export const railTooltipHint = "ml-1 text-text-muted";
+/** The shortcut's `Kbd` after a chrome button's tooltip text. */
+export const railTooltipHint = "ml-1";
 
 /**
- * The connection state, as a dot in a button-sized box so its tooltip has
- * something to hang on and a keyboard can reach it.
+ * The connection state: the kit's `StatusDot` in a button-sized box, so its
+ * tooltip has something to hang on and a keyboard can reach it.
  */
 export const railStatus = cn(
 	"flex size-7 shrink-0 items-center justify-center rounded-md",
 	"focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring",
 );
-
-/** Healthy is the quiet case, so its green steps back; trouble is full strength. */
-const STATUS_DOT: Record<"ok" | "info" | "warn" | "danger", string> = {
-	ok: "bg-status-ok/50",
-	info: "bg-status-info",
-	warn: "bg-status-warn",
-	danger: "bg-status-danger",
-};
-
-/** The dot itself. 6px; it pulses while the socket is trying. */
-export function railStatusDot(tone: "ok" | "info" | "warn" | "danger", busy: boolean): string {
-	return cn("size-1.5 rounded-full", STATUS_DOT[tone], busy && "animate-pulse");
-}
 
 /**
  * Scroll body. `rail-inset` keeps a row's fill off both rail edges, and
@@ -232,20 +213,14 @@ export function railIcon(swap: boolean): string {
 }
 
 /**
- * The fold chevron, on top of a kit `IconButton ghost`, in the icon's place.
- * Hidden at rest, shown by the swap above. A 20px box that only fills when
- * the pointer is on the chevron itself. `ghost` hovers to `bg-elevated`,
- * which inside an already-washed row reads as a chip stuck to the label, so
- * it is re-tinted onto the neutral tier.
+ * The fold chevron, on top of a kit `IconButton ghost xs` (a 20px box that
+ * only fills when the pointer is on the chevron itself), in the icon's place.
+ * Hidden at rest, shown by the swap above.
  */
 export function railTwisty(swap: boolean): string {
 	return cn(
-		"size-5 rounded-sm text-text-muted opacity-0",
-		"transition-[opacity,background-color,color] duration-fast ease-out",
+		"opacity-0 transition-[opacity,background-color,color] duration-fast ease-out",
 		swap && CHEVRON_IN,
-		"hover:bg-doc-active hover:text-text-primary",
-		"focus-visible:ring-offset-0",
-		"[&_svg]:size-3.5",
 	);
 }
 
@@ -255,10 +230,11 @@ export function railChevron(open: boolean): string {
 }
 
 /**
- * What an open plane with no planes inside shows under itself: one muted,
- * non-interactive line at the child's indent. Pair with `railIndent(depth + 1)`.
+ * What an open plane with no planes inside shows under itself: the kit's
+ * `EmptyState`, one row tall and at the child's indent rather than centred.
+ * Pair with `railIndent(depth + 1)`.
  */
-export const railNoPlanes = "flex h-rail-row select-none items-center text-base text-text-muted";
+export const railNoPlanes = "h-rail-row items-start py-0";
 
 /**
  * The label, on top of a kit `NavLink`. NavLink stays because it is a real
@@ -306,15 +282,11 @@ export const railActions = cn(
 );
 
 /**
- * Same re-tint as the twisty, for split, `+` and `...`. 16px glyph in a 24px box; the
- * `...` glyph lands on the rail's right edge (tokens.css).
+ * Split, `+` and `...`, on top of a kit `IconButton ghost sm` with the inset
+ * ring: a 16px glyph in its 24px box, the `...` glyph on the rail's right
+ * edge (tokens.css).
  */
-export const railAction = cn(
-	"size-6 rounded-sm text-text-muted",
-	"hover:bg-doc-active hover:text-text-primary",
-	"focus-visible:ring-offset-0",
-	"[&_svg]:size-4",
-);
+export const railAction = "rounded-sm [&_svg]:size-4";
 
 /** Wrapper around a row, which the drop line positions against. */
 export const railRowWrap = "relative";
@@ -329,7 +301,7 @@ export const railRowWrap = "relative";
  */
 export const railInputBox = "flex min-w-0 flex-1 items-center";
 
-export const railInput = cn("h-6 min-w-0 flex-1 px-1 py-0 text-lg", "focus-visible:ring-offset-0");
+export const railInput = "h-6 min-w-0 flex-1 px-1 py-0 text-lg";
 
 /* ============================== Empty + loading ========================= */
 
@@ -340,8 +312,6 @@ export function railSkeletonRow(inset = false): string {
 
 /** The bar inside a skeleton row, on top of a kit `Skeleton`. */
 export const railSkeletonBar = "h-3 w-full rounded-sm";
-
-export const railEmpty = cn("select-none px-rail-row-pad py-2 text-base text-text-muted");
 
 /* ============================== Drag and drop =========================== */
 
@@ -386,8 +356,7 @@ export const railDropTail = "relative min-h-8 flex-1";
 /** The strip. Its mask is `railPinsFade`, inline, since which edges fade is data. */
 export const railPins = cn(
 	"flex shrink-0 items-center gap-0.5 overflow-x-auto overflow-y-hidden",
-	"px-rail-bar-pad py-0.5",
-	"[scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+	"px-rail-bar-pad py-0.5 scrollbar-none",
 );
 
 /**

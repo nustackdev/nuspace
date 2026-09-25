@@ -50,8 +50,6 @@ export const iconPicker = "flex w-82 flex-col p-0";
 /** Tabs on the left, "Remove" on the right. */
 export const iconPickerHead = "flex items-center justify-between gap-2 px-2 pt-1";
 
-export const iconPickerRemove = "text-text-muted hover:text-text-primary";
-
 export const iconPickerSearch = "px-2 pt-2 pb-1";
 
 /** The scrolling body. Tall enough for a few groups, never the whole screen. */
@@ -76,12 +74,6 @@ export function iconPickerCell(current: boolean): string {
 		current && "bg-doc-active text-text-primary",
 	);
 }
-
-/** The emoji are on their way: a small spinner where the grid goes. */
-export const iconPickerLoading = "flex justify-center py-8";
-
-/** Nothing matches, or the emoji failed to load. */
-export const iconPickerNote = "select-none px-1 py-8 text-center text-sm text-text-muted";
 
 /* ============================== Beside the title ======================== */
 

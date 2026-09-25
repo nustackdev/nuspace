@@ -21,7 +21,7 @@
 // renders without handlers of ours, and it runs before the browser follows
 // them.
 
-import { NodeView } from "@nustackdev/ui-kit";
+import { EmptyState, NodeView } from "@nustackdev/ui-kit";
 import { useEffect, useRef } from "react";
 import { routeAnchorClick } from "../core/router";
 import { useTypePath } from "../core/surfaces";
@@ -69,7 +69,7 @@ export function Shell() {
 				{viewer ? (
 					<NodeView path={viewer} />
 				) : (
-					<section className={shellMissing}>no Viewer on the tree</section>
+					<EmptyState className={shellMissing}>no Viewer on the tree</EmptyState>
 				)}
 			</main>
 		</div>

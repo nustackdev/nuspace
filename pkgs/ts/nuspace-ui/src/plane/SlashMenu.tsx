@@ -5,17 +5,13 @@
 // registry order, and nothing else: picking a row makes a cell from that
 // snippet. Focus stays in the ghost's own input (moving it would lose the
 // query), so this component has no keyboard of its own: it draws a list and
-// reports clicks, and the ghost forwards arrow/enter/escape.
+// reports clicks, and the ghost forwards arrow/enter/escape. It wears the
+// kit's menu classes, so it looks like every other menu without being one.
 
+import { EmptyState, menuItemClasses, menuShortcutClasses } from "@nustackdev/ui-kit";
 import { SquareTerminal } from "lucide-react";
 import { useEffect, useRef } from "react";
-import {
-	docSlashMenu,
-	docSlashMenuEmpty,
-	docSlashMenuHint,
-	docSlashMenuItem,
-	docSlashMenuItemLabel,
-} from "../design";
+import { docSlashMenu, docSlashMenuItemLabel } from "../design";
 import type { SlashSnippet } from "./types";
 
 /** The menu's rows, narrowed by what has been typed. */
@@ -51,8 +47,8 @@ export function SlashMenu({
 	const left = Math.min(anchor.x, window.innerWidth - 280);
 
 	return (
-		<div ref={ref} className={`${docSlashMenu} fixed outline-none`} style={{ top, left }}>
-			{items.length === 0 ? <div className={docSlashMenuEmpty}>Nothing matches</div> : null}
+		<div ref={ref} className={docSlashMenu} style={{ top, left }}>
+			{items.length === 0 ? <EmptyState size="sm">Nothing matches</EmptyState> : null}
 			{items.map((item, i) => (
 				<button
 					key={item.name}
@@ -65,12 +61,12 @@ export function SlashMenu({
 						onPick(item);
 					}}
 					onMouseEnter={() => onMove(i - index)}
-					data-selected={i === index}
-					className={docSlashMenuItem}
+					data-highlighted={i === index ? "" : undefined}
+					className={`${menuItemClasses} w-full`}
 				>
 					<SquareTerminal aria-hidden="true" />
 					<span className={docSlashMenuItemLabel}>{item.label}</span>
-					<span className={docSlashMenuHint}>{item.name}</span>
+					<span className={menuShortcutClasses}>{item.name}</span>
 				</button>
 			))}
 		</div>
