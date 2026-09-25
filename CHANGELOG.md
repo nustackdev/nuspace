@@ -2,15 +2,15 @@
 
 ## Packages shipped from this repo
 
-- **nuspace** (the runtime, the `nuspace` command) — 0.3.1
-- **nuspace-ui** (the compiled web bundle) — 0.3.0
-- **nuverse** (the Planes and snippets a space ships with) — 0.1.0
+- **nuspace** (the runtime, the `nuspace` command) — 0.4.0
+- **nuspace-ui** (the compiled web bundle) — 0.4.0
+- **nuverse** (the Planes and snippets a space ships with) — 0.2.0
 
 Below is the changelog for **nuspace** - the full commit stream. Newest first.
 The `nuspace-ui` wheel is the same source tree's vite output and is not tracked
 separately here.
 
-## Unreleased
+## 0.4.0 — 2026-09-25
 
 - Cells and planes still loading show skeletons, not blank space or No view
 - Browser tabs show the open plane's title and emoji, or the nu logo
