@@ -4,16 +4,18 @@
 // The whole row is the hit target for a switch, so it can be flipped from the
 // label as well as the track.
 //
-// Above the settings, "Add plane" opens the Add plane popup for a child of
-// this pane's Plane, opened in this pane, and "Pin" / "Unpin" puts the Plane
-// in the sidebar's pinned row or takes it out (a Plane the sidebar draws only). The tab bar adds a Rename row (only
-// when `onRename` is given), and `open` / `onOpenChange` so a key on the tab
-// can open it. "Delete plane" shows when `onDelete` is given, which it is not
+// Above the settings, "Open in new tab" opens the Plane's URL in a browser
+// tab, "Add plane" opens the Add plane popup for a child of this pane's Plane,
+// opened in this pane, and "Pin" / "Unpin" puts the Plane in the sidebar's
+// pinned row or takes it out (a Plane the sidebar draws only). The tab bar
+// adds a Rename row (only when `onRename` is given), and `open` /
+// `onOpenChange` so a key on the tab can open it. "Delete plane" shows when `onDelete` is given, which it is not
 // for a system Plane.
 
 import { IconButton, Popover, PopoverContent, PopoverTrigger, Switch } from "@nustackdev/ui-kit";
 import { Ellipsis } from "lucide-react";
 import { useId, useRef, useState } from "react";
+import { openInNewTab } from "../core/router";
 import {
 	paneBarButton,
 	paneMenu,
@@ -90,6 +92,18 @@ export function PaneMenu({
 					e.preventDefault();
 				}}
 			>
+				{meta ? (
+					<button
+						type="button"
+						className={paneMenuAction}
+						onClick={() => {
+							setOpen(false);
+							openInNewTab(planeId);
+						}}
+					>
+						Open in new tab
+					</button>
+				) : null}
 				{meta ? (
 					<button
 						type="button"

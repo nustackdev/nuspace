@@ -172,6 +172,53 @@ describe("rail icon and chevron slot", () => {
 		expect(pins.pin).toHaveBeenCalledWith("b");
 	});
 
+	it("opens a plane in a new browser tab from both menus", () => {
+		const open = vi.spyOn(window, "open").mockReturnValue(null);
+		render([]);
+		act(() => {
+			moreOf("b")?.dispatchEvent(
+				new PointerEvent("pointerdown", { bubbles: true, button: 0, pointerType: "mouse" }),
+			);
+		});
+		const items = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')];
+		const labels = items.map((i) => i.textContent);
+		expect(labels.indexOf("Open in new tab")).toBe(labels.indexOf("Open in split") + 1);
+		act(() => items.find((i) => i.textContent === "Open in new tab")?.click());
+		expect(open).toHaveBeenLastCalledWith("/b", "_blank", "noopener");
+
+		act(() => {
+			rowOf("a")?.dispatchEvent(
+				new MouseEvent("contextmenu", { bubbles: true, cancelable: true, button: 2 }),
+			);
+		});
+		const ctx = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')];
+		act(() => ctx.find((i) => i.textContent === "Open in new tab")?.click());
+		expect(open).toHaveBeenLastCalledWith("/a", "_blank", "noopener");
+		open.mockRestore();
+	});
+
+	it("leaves a cmd/ctrl-click on a row to the browser", () => {
+		render([]);
+		const seen: boolean[] = [];
+		const after = (e: Event) => {
+			seen.push(e.defaultPrevented);
+			e.preventDefault();
+		};
+		document.addEventListener("click", after);
+		for (const init of [{ metaKey: true }, { ctrlKey: true }]) {
+			act(() => {
+				linkOf("b")?.dispatchEvent(
+					new MouseEvent("click", { bubbles: true, cancelable: true, ...init }),
+				);
+			});
+		}
+		act(() => linkOf("b")?.click());
+		document.removeEventListener("click", after);
+		expect(seen).toEqual([false, false, true]);
+		expect(linkOf("b")?.getAttribute("href")).toBe("/b");
+		expect(window.location.pathname).toBe("/b");
+	});
+
 	it("folds on a chevron click and never navigates", () => {
 		render(["a"]);
 		const outer = vi.fn();

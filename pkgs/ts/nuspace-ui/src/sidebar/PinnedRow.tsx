@@ -3,8 +3,8 @@
 // nothing is pinned.
 //
 // An icon opens its Plane the way a tree row does, through the same handler:
-// a plain click in the focused pane, cmd/ctrl-click as a split. The name is
-// in its tooltip. The focused pane's Plane is washed like the selected row.
+// a plain click in the focused pane, cmd/ctrl-click in a browser tab. The name
+// is in its tooltip. The focused pane's Plane is washed like the selected row.
 //
 // The strip scrolls sideways with no scrollbar. While it overflows, a
 // vertical wheel scrolls it too, and an edge with more behind it fades.
@@ -13,6 +13,7 @@
 //
 //   a tree row dropped here      pinned where it lands, and left in the tree
 //   a pin dropped here           moved where it lands
+//   a pin dropped on the panes   opened there as a split (../main/useCanvasDrop.ts)
 //   a pin dropped anywhere else  nothing: the tree only takes its own rows
 //
 // Where a drop lands is read off the pointer against the icon under it: its
@@ -30,7 +31,7 @@ import type { PlaneTree, Registered } from "./types";
 import { PLANE_MIME } from "./useRailDrag";
 
 /** What a pin's drag carries, apart from a tree row's so the tree ignores it. */
-const PIN_MIME = "application/x-nuspace-pin";
+export const PIN_MIME = "application/x-nuspace-pin";
 
 /** Where a drop would land: beside the pin at `index`. */
 type PinTarget = { index: number; edge: "before" | "after" };

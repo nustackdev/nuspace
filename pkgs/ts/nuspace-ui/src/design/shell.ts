@@ -110,6 +110,18 @@ export const shellPaneDivider = "relative w-0 shrink-0";
 /** The handle itself, centred on the divider. See ./resize.ts. */
 export const shellPaneResize = resizeHandle("left");
 
+/**
+ * Where a plane dragged from the rail would open: the half of the pane it
+ * lands beside, washed in the accent, with a line on the edge the new pane
+ * goes in at. Over the plane, under nothing it would need to click.
+ */
+export function shellPaneDrop(edge: "before" | "after"): string {
+	return cn(
+		"pointer-events-none absolute inset-y-0 z-30 w-1/2 bg-accent-wash border-accent",
+		edge === "before" ? "left-0 border-l-2" : "right-0 border-r-2",
+	);
+}
+
 /* ============================== States =================================== */
 
 /** Before the first write lands. Centred, quiet, the whole window. */

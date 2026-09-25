@@ -12,7 +12,14 @@ import type * as React from "react";
 import { useCallback, useRef } from "react";
 import { closePane, focusPane } from "../core/router";
 import { useTypePath } from "../core/surfaces";
-import { docPlaneLoading, docTitleHead, docTitleRow, shellPane, shellPanePlane } from "../design";
+import {
+	docPlaneLoading,
+	docTitleHead,
+	docTitleRow,
+	shellPane,
+	shellPaneDrop,
+	shellPanePlane,
+} from "../design";
 import type { Notify } from "../plane/ops";
 import { Plane } from "../plane/Plane";
 import type { ActivePlane, SlashSnippet } from "../plane/types";
@@ -38,6 +45,7 @@ export function Pane({
 	split,
 	divided,
 	focused,
+	drop = null,
 	style,
 }: {
 	viewerPath: Path;
@@ -59,6 +67,8 @@ export function Pane({
 	/** Draws the divider on its left edge. */
 	divided: boolean;
 	focused: boolean;
+	/** A plane dragged off the rail would open on this side of it. */
+	drop?: "before" | "after" | null;
 	/** The pane's share of the strip. See ../main/usePaneWidths.ts. */
 	style: React.CSSProperties;
 }) {
@@ -139,6 +149,7 @@ export function Pane({
 					</>
 				)}
 			</div>
+			{drop ? <div className={shellPaneDrop(drop)} aria-hidden="true" /> : null}
 		</section>
 	);
 }

@@ -126,16 +126,29 @@ describe("pinned row", () => {
 		expect(pinOf("c")?.getAttribute("aria-current")).toBeNull();
 	});
 
-	it("opens like a tree row: a click in place, cmd/ctrl-click as a split", () => {
+	it("opens like a tree row: a click in place, cmd/ctrl-click left to the browser", () => {
 		render(["a", "b"]);
 		act(() => pinOf("a")?.click());
 		expect(window.location.pathname).toBe("/a");
-		act(() => {
-			pinOf("b")?.dispatchEvent(
-				new MouseEvent("click", { bubbles: true, cancelable: true, metaKey: true }),
-			);
-		});
-		expect(window.location.pathname).toBe("/a+b");
+		// Above the React root: records what the pin left, then keeps jsdom
+		// from following the link.
+		const seen: boolean[] = [];
+		const after = (e: Event) => {
+			seen.push(e.defaultPrevented);
+			e.preventDefault();
+		};
+		document.addEventListener("click", after);
+		for (const init of [{ metaKey: true }, { ctrlKey: true }]) {
+			act(() => {
+				pinOf("b")?.dispatchEvent(
+					new MouseEvent("click", { bubbles: true, cancelable: true, ...init }),
+				);
+			});
+		}
+		document.removeEventListener("click", after);
+		expect(seen).toEqual([false, false]);
+		expect(pinOf("b")?.getAttribute("href")).toBe("/b");
+		expect(window.location.pathname).toBe("/a");
 	});
 
 	it("pins a tree row where it is dropped, and leaves it to the tree", () => {

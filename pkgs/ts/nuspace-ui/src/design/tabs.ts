@@ -87,3 +87,14 @@ export function tabActions(active: boolean): string {
 export const tabInputBox = "flex h-full min-w-0 flex-1 items-center pl-2";
 
 export const tabInput = cn("h-6 min-w-0 flex-1 px-1 py-0 text-sm", "focus-visible:ring-offset-0");
+
+/** A tab being dragged, dimmed while it travels. */
+export const tabDragging = "opacity-50";
+
+/** Where a dragged tab lands: a thin accent line on one edge of a tab. */
+export function tabDropLine(edge: "before" | "after"): string {
+	return cn(
+		"pointer-events-none absolute inset-y-1 z-10 w-0.5 rounded-full bg-accent",
+		edge === "before" ? "-left-px" : "-right-px",
+	);
+}

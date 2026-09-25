@@ -19,7 +19,8 @@
 // "Pin" / "Unpin" in both menus puts it in the pinned row or takes it out.
 //
 // The hover split opens the plane in a new pane beside the others, the same as
-// the menus' "Open in split". The hover `+` adds a Plane under this one,
+// the menus' "Open in split" and a drag of the row onto the panes. "Open in new
+// tab" in both menus is the browser's tab, the same as a cmd-click. The hover `+` adds a Plane under this one,
 // through the one Add plane popup. All three actions carry a kit tooltip; the
 // title carries one only when it is cut off (see ../shell/OverflowTooltip.tsx).
 
@@ -42,6 +43,7 @@ import {
 	ChevronRight,
 	Columns2,
 	Ellipsis,
+	ExternalLink,
 	FileText,
 	PenLine,
 	Pin,
@@ -52,7 +54,7 @@ import {
 } from "lucide-react";
 import type * as React from "react";
 import { useCallback, useRef, useState } from "react";
-import { hrefFor, onNavClick, openPane, replacePane } from "../core/router";
+import { hrefFor, onNavClick, openInNewTab, openPane, replacePane } from "../core/router";
 import { railAction, railChevron, railIcon, railTwisty } from "../design";
 import { IconPickerContent } from "../icon/IconPicker";
 import { PlaneIcon } from "../icon/PlaneIcon";
@@ -123,6 +125,8 @@ export function PlaneRow({
 		if (hasKids) reveal(key);
 		openPane(id);
 	}, [hasKids, id, key, reveal]);
+
+	const newTab = useCallback(() => openInNewTab(id), [id]);
 
 	const add = useCallback(() => openAddPlane({ parent: id }), [id]);
 
@@ -281,6 +285,10 @@ export function PlaneRow({
 							<Columns2 />
 							Open in split
 						</DropdownMenuItem>
+						<DropdownMenuItem onSelect={newTab}>
+							<ExternalLink />
+							Open in new tab
+						</DropdownMenuItem>
 						<DropdownMenuItem onSelect={add}>
 							<Plus />
 							Add plane
@@ -318,6 +326,10 @@ export function PlaneRow({
 					<ContextMenuItem onSelect={split}>
 						<Columns2 />
 						Open in split
+					</ContextMenuItem>
+					<ContextMenuItem onSelect={newTab}>
+						<ExternalLink />
+						Open in new tab
 					</ContextMenuItem>
 					<ContextMenuSeparator />
 					<ContextMenuItem onSelect={add}>

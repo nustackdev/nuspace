@@ -12,6 +12,7 @@ separately here.
 
 ## Unreleased
 
+- Drag planes into a split, drag tabs to reorder, cmd-click opens a browser tab
 - Pin planes to a row at the top of the sidebar, reorder them by dragging
 - Home and settings start with their own icons, a house and a gear
 - A settings plane with a telemetry switch, and home lives at its own address

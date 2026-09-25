@@ -16,8 +16,8 @@
 // Links a cell draws (the kit's LinkRef, a markdown link) are plain anchors.
 // One listener on the main strip routes a click on a same-origin one to /<id>
 // or /<a>+<b> through the router (core/router.ts `routeAnchorClick`), so it
-// switches panes instead of reloading the tab, and cmd/ctrl-click opens a
-// split as in the sidebar. Native, not React: it has to see anchors the kit
+// switches panes instead of reloading the tab. A modified click is the
+// browser's, as in the sidebar. Native, not React: it has to see anchors the kit
 // renders without handlers of ours, and it runs before the browser follows
 // them.
 

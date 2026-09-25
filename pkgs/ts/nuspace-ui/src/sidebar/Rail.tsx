@@ -5,9 +5,10 @@
 //
 // Selection is router-owned: the URL /<id1>+<id2>+... is the cursor, one id
 // per pane, and the Viewer ships `planes.open` off the route. A plain row click
-// replaces the focused pane (or opens the first), cmd/ctrl-click or the row's
-// split item appends a pane. Every open Plane's row is washed, the focused
-// pane's strongest. The rail itself holds no selection state.
+// replaces the focused pane (or opens the first), cmd/ctrl-click opens it in a
+// browser tab, and the row's split item or a drag onto the panes adds a pane.
+// Every open Plane's row is washed, the focused pane's strongest. The rail
+// itself holds no selection state.
 //
 // ## One tree
 //

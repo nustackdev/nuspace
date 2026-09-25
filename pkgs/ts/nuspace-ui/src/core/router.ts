@@ -49,9 +49,9 @@ export function currentRoutes(): string[] {
 
 /**
  * The URL a list of Planes resolves to. Exported so the sidebar can render
- * real anchors (kit `NavLink` is an `<a>`): middle-click and the status bar
- * preview work, and the click handler only has to suppress the default
- * navigation.
+ * real anchors (kit `NavLink` is an `<a>`): cmd/ctrl-click and middle-click
+ * open a browser tab, the status bar previews it, and the click handler only
+ * has to suppress the default navigation of a plain click.
  */
 export function hrefFor(planeIds: string | string[]): string {
 	const ids = (Array.isArray(planeIds) ? planeIds : [planeIds]).filter(Boolean);
@@ -218,15 +218,45 @@ export function closePane(planeId: string): void {
 }
 
 /**
- * Follow a list of Planes the way the sidebar follows one: a plain click puts
- * a single Plane in the focused pane and replaces the panes with a longer
- * list, a split click appends each as a pane of its own.
+ * Open `planeId` as a new pane at `index` among the open ones, the end when out
+ * of range, and focus it. Already open: focus it, as `openPane` does.
  */
-export function followRoutes(ids: string[], split: boolean): void {
-	if (split) {
-		for (const id of ids) openPane(id);
+export function openPaneAt(planeId: string, index: number): void {
+	if (!planeId) return;
+	const routes = currentRoutes();
+	focusedRaw = planeId;
+	if (routes.includes(planeId)) {
+		emit();
 		return;
 	}
+	const next = [...routes];
+	next.splice(index >= 0 && index < next.length ? index : next.length, 0, planeId);
+	go(next);
+}
+
+/**
+ * Move an open pane to `index` among the others (counted without it), the end
+ * when out of range, and focus it. A history entry, like any other pane move.
+ */
+export function movePane(planeId: string, index: number): void {
+	const routes = currentRoutes();
+	if (!routes.includes(planeId)) return;
+	const next = routes.filter((id) => id !== planeId);
+	next.splice(index >= 0 && index < next.length ? index : next.length, 0, planeId);
+	focusedRaw = planeId;
+	go(next);
+}
+
+/** Open a Plane in a new browser tab, on its own URL. */
+export function openInNewTab(planeId: string): void {
+	window.open(hrefFor(planeId), "_blank", "noopener");
+}
+
+/**
+ * Follow a list of Planes the way the sidebar follows one: a single Plane goes
+ * in the focused pane, a longer list replaces the panes.
+ */
+export function followRoutes(ids: string[]): void {
 	if (ids.length === 1) {
 		replacePane(ids[0]);
 		return;
@@ -237,21 +267,19 @@ export function followRoutes(ids: string[], split: boolean): void {
 
 type Click = Pick<MouseEvent, "button" | "shiftKey" | "altKey" | "metaKey" | "ctrlKey">;
 
-/** A primary click with no modifier the browser owns (shift, alt). */
+/**
+ * A plain primary click. Any modifier or another button is the browser's: a
+ * new tab (cmd/ctrl, middle), a new window (shift), a download (alt).
+ */
 export function isNavClick(e: Click): boolean {
-	return e.button === 0 && !e.shiftKey && !e.altKey;
-}
-
-function isSplitClick(e: Click): boolean {
-	return e.metaKey || e.ctrlKey;
+	return e.button === 0 && !e.shiftKey && !e.altKey && !e.metaKey && !e.ctrlKey;
 }
 
 /**
  * Route a click on an anchor inside a cell's ui through the router, so a
  * same-origin link to /<id> or /<a>+<b> switches panes instead of reloading
- * the plane. Cmd/ctrl-click opens a split, as in the sidebar. Returns whether
- * it took the click; anything else (another origin, `_blank`, a download, a
- * modifier the browser owns) is left alone.
+ * the plane. Returns whether it took the click; anything else (another origin,
+ * `_blank`, a download, a modified click) is left to the browser.
  */
 export function routeAnchorClick(e: MouseEvent): boolean {
 	if (e.defaultPrevented || !isNavClick(e)) return false;
@@ -264,21 +292,20 @@ export function routeAnchorClick(e: MouseEvent): boolean {
 	const ids = routesOfHref(anchor.href);
 	if (!ids) return false;
 	e.preventDefault();
-	followRoutes(ids, isSplitClick(e));
+	followRoutes(ids);
 	return true;
 }
 
 /**
- * Click handler for an anchor that navigates inside nuspace. A plain click replaces
- * the focused pane, cmd/ctrl-click opens a split. Shift and alt clicks (new
- * window, download) and the middle button are left to the browser.
+ * Click handler for an anchor that navigates inside nuspace. A plain click
+ * replaces the focused pane. A modified click or another button is left to
+ * the browser, so cmd/ctrl-click and the middle button open a new tab.
  */
 export function onNavClick(planeId: string) {
 	return (e: React.MouseEvent<HTMLElement>) => {
 		if (e.defaultPrevented || !isNavClick(e)) return;
 		e.preventDefault();
-		if (isSplitClick(e)) openPane(planeId);
-		else replacePane(planeId);
+		replacePane(planeId);
 	};
 }
 

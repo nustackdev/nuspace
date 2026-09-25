@@ -1,8 +1,8 @@
 // The sidebar: every Plane that draws, as one tree. One per tab.
 //
 // The only thing in nuspace that navigates. A row click replaces the focused
-// pane or, with cmd/ctrl, opens a split; the URL is the cursor, and the Viewer
-// is what tells the server which Planes are open.
+// pane, a cmd/ctrl-click is the browser's new tab; the URL is the cursor, and
+// the Viewer is what tells the server which Planes are open.
 //
 // Planes are flat on the wire -- one row per Plane, hierarchy in `parent` and
 // `children` -- so the row the sidebar draws is keyed by a Plane id and nothing

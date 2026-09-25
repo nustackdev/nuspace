@@ -13,17 +13,23 @@
 // Tab leaves. On a tab, F2 renames, Delete closes, and Shift+F10 or the menu
 // key opens its settings. The `...` and close buttons stay out of the tab
 // order: they are the mouse's way to the same three things.
+//
+// A tab drags along the bar to move its pane, native like the rail's drags:
+// the left half of a tab is before it, the right half after. Its drag carries
+// its own type, so the rail and the panes under the bar ignore it.
 
-import { IconButton, Input } from "@nustackdev/ui-kit";
+import { cn, IconButton, Input } from "@nustackdev/ui-kit";
 import { X } from "lucide-react";
 import type * as React from "react";
 import { useEffect, useRef, useState } from "react";
-import { closePane, focusPane } from "../core/router";
+import { closePane, focusPane, movePane } from "../core/router";
 import {
 	paneBarButton,
 	tabActions,
 	tabBar,
 	tabCell,
+	tabDragging,
+	tabDropLine,
 	tabIcon,
 	tabInput,
 	tabInputBox,
@@ -36,6 +42,22 @@ import { TITLE_FALLBACK } from "../pane/Pane";
 import { PaneMenu } from "../pane/PaneMenu";
 import type { ActivePlane } from "../plane/types";
 import { OverflowTooltip } from "../shell/OverflowTooltip";
+import { pinDropIndex } from "../sidebar/pin";
+import { edgeAt, type PaneEdge } from "./useCanvasDrop";
+
+/** What a tab's drag carries: its pane's plane id. */
+export const TAB_MIME = "application/x-nuspace-tab";
+
+/** Where a dragged tab would land: beside the tab at `index`. */
+type TabTarget = { index: number; edge: PaneEdge };
+
+/**
+ * The index a tab `id` dropped on `target` moves to, counted without it. Null
+ * when it would stay where it is.
+ */
+export function tabDropIndex(routes: string[], id: string, target: TabTarget): number | null {
+	return pinDropIndex(routes, id, target.edge === "before" ? target.index : target.index + 1);
+}
 
 /** Smooth, unless the user asked for less motion (motion.md). */
 function scrollBehavior(): ScrollBehavior {
@@ -71,6 +93,13 @@ export function TabBar({
 	const barRef = useRef<HTMLDivElement | null>(null);
 	const [editing, setEditing] = useState<string | null>(null);
 	const [menuOf, setMenuOf] = useState<string | null>(null);
+	const [dragId, setDragId] = useState<string | null>(null);
+	const [target, setTarget] = useState<TabTarget | null>(null);
+
+	const endDrag = () => {
+		setDragId(null);
+		setTarget(null);
+	};
 
 	// Pane focus moved (a click, a caret tabbed in, a close, a new pane):
 	// bring its tab into view if the bar is scrolled away from it.
@@ -132,19 +161,53 @@ export function TabBar({
 	};
 
 	return (
-		<div ref={barRef} role="tablist" aria-label="Open planes" className={tabBar}>
+		<div
+			ref={barRef}
+			role="tablist"
+			aria-label="Open planes"
+			className={tabBar}
+			onDragLeave={(e) => {
+				if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setTarget(null);
+			}}
+		>
 			{routes.map((id, i) => {
 				const plane = planes[id] ?? null;
 				const title = plane?.title || TITLE_FALLBACK;
 				const active = id === focused;
 				const icon = parseIcon(plane?.meta.icon);
+				const aimed = target?.index === i ? target.edge : null;
 				return (
 					// biome-ignore lint/a11y/noStaticElementInteractions: middle-click close is a mouse shortcut on the whole cell; the keyboard closes with Delete on the tab
 					<div
 						key={id}
 						role="presentation"
 						data-tab={id}
-						className={tabCell(active)}
+						className={cn(tabCell(active), dragId === id && tabDragging)}
+						draggable={editing !== id}
+						onDragStart={(e) => {
+							e.dataTransfer.effectAllowed = "move";
+							e.dataTransfer.setData(TAB_MIME, id);
+							setDragId(id);
+						}}
+						onDragEnd={endDrag}
+						onDragOver={(e) => {
+							if (!dragId) return;
+							e.preventDefault();
+							e.dataTransfer.dropEffect = "move";
+							const edge = edgeAt(e.currentTarget, e.clientX);
+							if (target?.index !== i || target.edge !== edge) setTarget({ index: i, edge });
+						}}
+						onDrop={(e) => {
+							if (!dragId) return;
+							e.preventDefault();
+							const index = tabDropIndex(routes, dragId, {
+								index: i,
+								edge: edgeAt(e.currentTarget, e.clientX),
+							});
+							const moving = dragId;
+							endDrag();
+							if (index !== null) movePane(moving, index);
+						}}
 						// Middle-click closes. Swallow the press too, or the
 						// browser starts its autoscroll.
 						onMouseDown={(e) => {
@@ -213,6 +276,7 @@ export function TabBar({
 								<X />
 							</IconButton>
 						</span>
+						{aimed ? <span className={tabDropLine(aimed)} aria-hidden="true" /> : null}
 					</div>
 				);
 			})}

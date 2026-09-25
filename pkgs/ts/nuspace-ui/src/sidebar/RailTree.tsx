@@ -28,7 +28,7 @@
 
 import type * as React from "react";
 import { Fragment, useCallback, useEffect, useMemo } from "react";
-import { openPane, replacePane } from "../core/router";
+import { replacePane } from "../core/router";
 import {
 	railDragging,
 	railDropInto,
@@ -116,11 +116,10 @@ export function RailTree({
 				case "Enter":
 				case " ":
 					// Same contract as the click: open it and reveal what is
-					// inside it. Cmd/ctrl opens a split.
+					// inside it.
 					e.preventDefault();
 					if (row.hasKids) reveal(row.key);
-					if (e.metaKey || e.ctrlKey) openPane(row.id);
-					else replacePane(row.id);
+					replacePane(row.id);
 					break;
 				case "F2":
 					e.preventDefault();

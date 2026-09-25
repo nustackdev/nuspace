@@ -17,6 +17,9 @@
 // pane, and the panes drop their own bars. Renaming from a tab or from a
 // plane's title sends the sidebar's own `plane.rename`, so the server has one
 // way in for a rename.
+//
+// A plane dragged off the rail onto a pane opens beside it
+// (./useCanvasDrop.ts), and a tab dragged along the bar moves its pane.
 
 import { type NodeProps, pathKey } from "@nustackdev/ui-kit";
 import { Fragment, useCallback, useEffect, useRef } from "react";
@@ -39,6 +42,7 @@ import { canDelete, deletePlane } from "../sidebar/remove";
 import { usePlaneTree } from "../sidebar/state";
 import { patchPlaneMeta, patchPlaneTitle, pruneViewer, usePlanes, useSnippets } from "./state";
 import { TabBar } from "./TabBar";
+import { useCanvasDrop } from "./useCanvasDrop";
 import { usePaneWidths } from "./usePaneWidths";
 
 /** Nothing is open. Unreachable while "/" lands home, kept as the honest
@@ -56,6 +60,7 @@ export function Main({ path }: NodeProps) {
 	const routesKey = routes.join("+");
 	const stripRef = useRef<HTMLDivElement | null>(null);
 	const { styleOf, onResizeStart, onResizeReset } = usePaneWidths(stripRef, routes);
+	const { target: dropTarget, dropProps } = useCanvasDrop(routes);
 
 	// One ref per op: the op name is the tail of the wire path, not a key in
 	// the payload. `path` is this node's own address in the tree.
@@ -157,7 +162,7 @@ export function Main({ path }: NodeProps) {
 					deleteOf={deleteOf}
 				/>
 			) : null}
-			<div ref={stripRef} className={shellPanes}>
+			<div ref={stripRef} className={shellPanes} {...dropProps}>
 				{routes.map((id, i) => (
 					<Fragment key={id}>
 						{i > 0 ? (
@@ -183,6 +188,7 @@ export function Main({ path }: NodeProps) {
 							split={split}
 							divided={i > 0}
 							focused={id === focused}
+							drop={dropTarget?.id === id ? dropTarget.edge : null}
 							style={styleOf(i)}
 						/>
 					</Fragment>

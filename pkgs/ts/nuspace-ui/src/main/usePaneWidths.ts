@@ -12,15 +12,28 @@
 // down to its minimum, the pane on its right gives it back down to its own,
 // and past that the strip just grows (and scrolls).
 //
-// Held in memory and keyed by the open pane set: open or close a pane and the
-// widths go back to equal shares. Double-click a divider for the same.
+// Held in memory, by plane, and keyed by the open pane set but not its order:
+// open or close a pane and the widths go back to equal shares, move one (a tab
+// drag) and its width goes with it. Double-click a divider for the same reset.
 
 import type * as React from "react";
 import { useCallback, useState } from "react";
 import { trackColDrag } from "../core/drag";
 import { PANE_MIN_WIDTH } from "../design";
 
-type Widths = { key: string; px: number[] };
+export type Widths = { key: string; px: Record<string, number> };
+
+/** The pane set `routes` names, in any order. */
+function setKey(routes: string[]): string {
+	return [...routes].sort().join("+");
+}
+
+/** Each pane's width in `routes` order, or null for equal shares. */
+export function widthsOf(state: Widths | null, routes: string[]): number[] | null {
+	if (!state || state.key !== setKey(routes)) return null;
+	const px = routes.map((id) => state.px[id]);
+	return px.every((w) => w !== undefined) ? px : null;
+}
 
 export function usePaneWidths(
 	stripRef: React.RefObject<HTMLElement | null>,
@@ -32,10 +45,9 @@ export function usePaneWidths(
 	onResizeStart: (e: React.PointerEvent, i: number) => void;
 	onResizeReset: () => void;
 } {
-	const key = routes.join("+");
 	const split = routes.length > 1;
 	const [state, setState] = useState<Widths | null>(null);
-	const widths = state && state.key === key && state.px.length === routes.length ? state.px : null;
+	const widths = widthsOf(state, routes);
 
 	const styleOf = useCallback(
 		(i: number): React.CSSProperties => {
@@ -65,16 +77,19 @@ export function usePaneWidths(
 				e,
 				(dx) => {
 					const d = Math.max(dx, PANE_MIN_WIDTH - start[left]);
-					const px = [...start];
-					px[left] = start[left] + d;
-					px[right] = Math.max(PANE_MIN_WIDTH, start[right] - d);
-					setState({ key, px });
+					const px: Record<string, number> = {};
+					routes.forEach((id, j) => {
+						px[id] = start[j];
+					});
+					px[routes[left]] = start[left] + d;
+					px[routes[right]] = Math.max(PANE_MIN_WIDTH, start[right] - d);
+					setState({ key: setKey(routes), px });
 				},
 				undefined,
 				onResizeReset,
 			);
 		},
-		[stripRef, routes.length, key, onResizeReset],
+		[stripRef, routes, onResizeReset],
 	);
 
 	return { styleOf, onResizeStart, onResizeReset };
