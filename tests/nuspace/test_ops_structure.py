@@ -80,7 +80,7 @@ async def test_yielding_ops_chain_and_bind(store):
             "id": (await store.read(ops.cells(rows[1]["id"])))[0],
             "name": "c",
             "prog": "src",
-            "props": {"made_by": ""},
+            "props": {"made_by": "", "has_ui": False},
             "meta": {},
         }
     ]
@@ -163,9 +163,57 @@ async def test_add_cell_places_by_index(store):
         "id": c,
         "name": "c",
         "prog": "def out(): pass",
-        "props": {"made_by": ""},
+        "props": {"made_by": "", "has_ui": False},
         "meta": {"k": 1},
     }
+
+
+DRAWS = """\
+import nustd.ui
+
+
+def out(cell):
+    return nustd.ui.StatRef(cell).set_label("n")
+"""
+
+PLAIN = "import nu\n\n\ndef out():\n    return nu.Noop()\n"
+
+
+async def has_ui(store, p, c):
+    return (await store.read(ops.cell_rows(p)))[0]["props"]["has_ui"]
+
+
+async def test_add_cell_has_ui_when_its_tree_holds_a_ui_ref(store):
+    p = await plane(store)
+    c = await cell(store, p, DRAWS)
+    assert await has_ui(store, p, c) is True
+
+
+async def test_add_cell_has_no_ui_when_plain_or_broken(store):
+    p = await plane(store)
+    c = await cell(store, p, PLAIN)
+    assert await has_ui(store, p, c) is False
+    await store.run(ops.set_prog(p, c, "def out("))
+    assert await has_ui(store, p, c) is False
+
+
+async def test_set_prog_recomputes_has_ui(store):
+    p = await plane(store)
+    c = await cell(store, p, PLAIN)
+    await store.run(ops.set_prog(p, c, DRAWS))
+    assert await has_ui(store, p, c) is True
+    await store.run(ops.set_prog(p, c, PLAIN))
+    assert await has_ui(store, p, c) is False
+    await store.run(ops.add_cell(p, DRAWS, cell_id=c))
+    assert await has_ui(store, p, c) is True
+
+
+async def test_has_ui_reads_true_where_never_worked_out(store):
+    p = await plane(store)
+    c = await cell(store, p, PLAIN)
+    props = Space.planes[p].cells[c].props
+    await store.run(nustd.kv.Transaction(props.del_item("has_ui"), scope=Space))
+    assert await has_ui(store, p, c) is True
 
 
 async def test_add_cell_refuses_a_missing_plane(store):
@@ -372,7 +420,13 @@ async def test_structure_round_trips_through_rocksdb(disk):
         {"id": q, "name": "q", "props": NO_PROPS, "meta": {}, "parent": p},
     ]
     assert await disk.read(ops.cell_rows(q)) == [
-        {"id": c, "name": "", "prog": "src", "props": {"made_by": "m"}, "meta": {"m": [1, 2]}}
+        {
+            "id": c,
+            "name": "",
+            "prog": "src",
+            "props": {"made_by": "m", "has_ui": False},
+            "meta": {"m": [1, 2]},
+        }
     ]
     assert await disk.read(Space.planes[q].cells[c].state.extract()) == {"n": {"deep": [3]}}
     assert await disk.run(ops.remove_plane(p)) is True

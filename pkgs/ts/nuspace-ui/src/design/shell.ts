@@ -123,8 +123,5 @@ export function shellPaneDrop(edge: "before" | "after"): string {
 
 /* ============================== States =================================== */
 
-/** Before the first write lands: the kit's `EmptyState`, over the whole window. */
-export const shellBooting = "min-h-screen bg-bg-canvas";
-
 /** A region the tree does not hold: the kit's `EmptyState`, filling the strip. */
 export const shellMissing = "min-h-0 flex-1";

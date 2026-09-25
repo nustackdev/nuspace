@@ -270,9 +270,9 @@ async def test_viewer_plane(store):
         "title": "Notes",
         "meta": {"editable": True, "full_width": False, "tone": "calm"},
         "cells": [
-            {"id": "c0", "name": "first", "source": "y = 2", "made_by": ""},
-            {"id": "c1", "name": "intro", "source": PROSE_SRC, "made_by": "text"},
-            {"id": "c2", "name": "code", "source": "x = 1", "made_by": ""},
+            {"id": "c0", "name": "first", "source": "y = 2", "made_by": "", "has_ui": False},
+            {"id": "c1", "name": "intro", "source": PROSE_SRC, "made_by": "text", "has_ui": False},
+            {"id": "c2", "name": "code", "source": "x = 1", "made_by": "", "has_ui": False},
         ],
     }
 

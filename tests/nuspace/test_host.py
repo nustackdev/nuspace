@@ -156,7 +156,13 @@ STARTER = "starter"
 async def test_boot_before_the_first_open_keeps_the_services(store):
     await store.run(boot(USER) >> ensure_system())
     assert await store.read(ops.cell_rows(init.PLANE)) == [
-        {"id": "main", "name": "main", "prog": init.SHIM, "props": {"made_by": ""}, "meta": {}}
+        {
+            "id": "main",
+            "name": "main",
+            "prog": init.SHIM,
+            "props": {"made_by": "", "has_ui": False},
+            "meta": {},
+        }
     ]
     rows = {r["id"]: r for r in await store.read(ops.plane_rows())}
     assert (rows[init.PLANE]["name"], rows[init.PLANE]["props"]["system"]) == (init.PLANE, True)

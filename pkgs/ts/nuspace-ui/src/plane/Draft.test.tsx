@@ -63,6 +63,7 @@ function cell(id: string, made_by = TEXT): Cell {
 		name: made_by,
 		source: "",
 		made_by,
+		has_ui: null,
 		status: { cell_id: id, state: "running", error: null, started_at: null },
 	};
 }

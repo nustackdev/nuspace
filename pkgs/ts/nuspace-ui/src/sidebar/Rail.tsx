@@ -40,6 +40,7 @@
 
 import { Skeleton } from "@nustackdev/ui-kit";
 import { useMemo } from "react";
+import { useSkeleton } from "../core/delay";
 import { useFocusedRoute, useRoutes } from "../core/router";
 import {
 	railAside,
@@ -136,6 +137,26 @@ export function Rail({
 				onPointerDown={onResizeStart}
 				onDoubleClick={onResizeReset}
 			/>
+		</aside>
+	);
+}
+
+/**
+ * The rail before its node is on the tree, at boot: the aside, its two bars
+ * and skeleton rows, at the width the real one will take. The rows hold off
+ * like the viewer skeleton does, so a fast boot never flashes them.
+ */
+export function RailPlaceholder() {
+	const { width } = useRailWidth();
+	const collapsed = useRailCollapsed();
+	const shown = useSkeleton();
+	return (
+		<aside aria-label="Sidebar" className={railAside(collapsed)} style={{ width }}>
+			<RailHeader />
+			<nav aria-label="Planes" className={railScroll}>
+				{shown ? <RailSkeleton /> : null}
+			</nav>
+			<RailFooter />
 		</aside>
 	);
 }

@@ -11,6 +11,13 @@
 // keeps one quiet line, a "No view" chip, on any plane, so it is never an
 // invisible gap; an error or an open editor stands in for it.
 //
+// A cell whose view has not arrived yet is not the same as one that draws
+// nothing. The server says per cell whether its program holds ui refs at all
+// (`has_ui`). One that does not gets the chip at once. One that does (or an
+// older cell that never said) waits: nothing for `VIEW_LOADER_DELAY_MS`, so a
+// quick view never flashes a placeholder, then a skeleton until the view
+// lands. An error stands in for either.
+//
 // The chrome still consumes the fixed status contract:
 //
 //   { cell_id, state, error, started_at }
@@ -29,17 +36,22 @@ import {
 	AlertTitle,
 	Badge,
 	NodeView,
+	Skeleton,
 	Tooltip,
 	TooltipContent,
 	TooltipTrigger,
 } from "@nustackdev/ui-kit";
 import { useCallback } from "react";
+import { useAfter } from "../../core/delay";
 import {
 	CELL_STATUS,
 	docProgram,
 	docProgramFields,
 	docProgramHeadless,
 	docProgramHeadlessChip,
+	docProgramLoading,
+	docProgramLoadingLine,
+	docProgramLoadingLineShort,
 	docStatusTrace,
 } from "../../design";
 import type { FocusReq } from "../state";
@@ -47,8 +59,13 @@ import type { CellState, CellStatus, ExitDir } from "../types";
 import { useCellHasUi } from "./address";
 import { SourceEditor } from "./Code";
 
+/** How long a cell that draws may wait for its view before a skeleton shows. */
+export const VIEW_LOADER_DELAY_MS = 1000;
+
 export type ProgramProps = {
 	source: string;
+	/** Whether the program draws, per the server. Null: it never said. */
+	draws: boolean | null;
 	/** Where this cell's own refs live in the tree. See ./address.ts. */
 	uiPath: Path;
 	status: CellStatus | null;
@@ -64,6 +81,7 @@ export type ProgramProps = {
 export function ProgramCell(props: ProgramProps) {
 	const {
 		source,
+		draws,
 		uiPath,
 		status,
 		editing,
@@ -78,6 +96,9 @@ export function ProgramCell(props: ProgramProps) {
 	const hasUi = useCellHasUi(uiPath);
 	const state: CellState = status?.state ?? "idle";
 	const token = CELL_STATUS[state];
+	// No view mounted, nothing else in its place, and one may still come.
+	const waiting = !hasUi && !editing && !status?.error && draws !== false;
+	const loader = useAfter(waiting, VIEW_LOADER_DELAY_MS);
 
 	const leaveEditor = useCallback(() => {
 		onSetEditing(false);
@@ -115,6 +136,13 @@ export function ProgramCell(props: ProgramProps) {
 				<div className={docProgramFields} data-cell-ui="">
 					<NodeView path={uiPath} />
 				</div>
+			) : waiting ? (
+				loader ? (
+					<div className={docProgramLoading} aria-busy="true" data-view-loading="">
+						<Skeleton shape="text" className={docProgramLoadingLine} />
+						<Skeleton shape="text" className={docProgramLoadingLineShort} />
+					</div>
+				) : null
 			) : !editing && !status?.error ? (
 				<div className={docProgramHeadless}>
 					<Tooltip>

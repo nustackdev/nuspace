@@ -9,9 +9,12 @@
 // A pane whose Plane is absent (none by that id, or one that runs without a
 // view) says so in place of the cells, with a way to close it, and offers no
 // title or icon to edit. Its bar and tab carry the plane id.
+//
+// A pane whose Plane has not landed yet draws the viewer skeleton, the same
+// one the boot draws, so a switch and a first load look alike.
 
 import type { Path } from "@nustackdev/ui-core";
-import { Button, EmptyState, Spinner } from "@nustackdev/ui-kit";
+import { Button, EmptyState } from "@nustackdev/ui-kit";
 import type * as React from "react";
 import { useCallback, useRef } from "react";
 import { closePane, focusPane } from "../core/router";
@@ -32,6 +35,7 @@ import { useRegisteredIcon } from "../sidebar/state";
 import { PaneBar } from "./PaneBar";
 import { Title } from "./Title";
 import { TitleIcon } from "./TitleIcon";
+import { ViewerSkeleton } from "./ViewerSkeleton";
 
 // The Plane the server inits with no name shows this instead. A placeholder,
 // muted, so it cannot be mistaken for a title that is really there.
@@ -146,9 +150,7 @@ export function Pane({
 						</EmptyState>
 					</div>
 				) : plane == null ? (
-					<EmptyState icon={<Spinner size="sm" tone="neutral" label="Loading" />}>
-						loading...
-					</EmptyState>
+					<ViewerSkeleton />
 				) : (
 					<>
 						<header className={docTitleHead(wide, compact)}>

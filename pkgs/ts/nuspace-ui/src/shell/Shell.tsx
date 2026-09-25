@@ -20,26 +20,34 @@
 // browser's, as in the sidebar. Native, not React: it has to see anchors the kit
 // renders without handlers of ours, and it runs before the browser follows
 // them.
+//
+// Before the tree lands neither region is on it. The shell still draws: the
+// rail as its chrome with skeleton rows, the strip as the viewer skeleton, so
+// the boot and a plane switch look alike. Once anything has landed, a region
+// still missing is a real absence and says so.
 
 import { EmptyState, NodeView } from "@nustackdev/ui-kit";
 import { useEffect, useRef } from "react";
 import { routeAnchorClick } from "../core/router";
-import { useTypePath } from "../core/surfaces";
+import { useBooted, useTypePath } from "../core/surfaces";
 import { useTab } from "../core/tab";
-import { shellMain, shellMissing, shellRailOpen, shellRoot } from "../design";
+import { shellMain, shellMissing, shellPanePlane, shellRailOpen, shellRoot } from "../design";
+import { ViewerSkeleton } from "../pane/ViewerSkeleton";
 import {
 	focusRailToggle,
 	setRailCollapsed,
 	useRailCollapsed,
 	useRailShortcut,
 } from "../sidebar/collapse";
+import { RailPlaceholder } from "../sidebar/Rail";
 import { RailToggle } from "../sidebar/RailHeader";
 
 export function Shell() {
 	const sidebar = useTypePath("SidebarRef");
 	const viewer = useTypePath("ViewerRef");
 	const mainRef = useRef<HTMLElement | null>(null);
-	const collapsed = useRailCollapsed() && sidebar !== null;
+	const booted = useBooted();
+	const collapsed = useRailCollapsed() && (sidebar !== null || !booted);
 	useRailShortcut();
 	useTab(viewer, sidebar);
 
@@ -55,7 +63,7 @@ export function Shell() {
 
 	return (
 		<div className={shellRoot}>
-			{sidebar ? <NodeView path={sidebar} /> : null}
+			{sidebar ? <NodeView path={sidebar} /> : booted ? null : <RailPlaceholder />}
 			<main ref={mainRef} className={shellMain} data-rail={collapsed ? "collapsed" : undefined}>
 				{collapsed ? (
 					<div className={shellRailOpen}>
@@ -70,8 +78,12 @@ export function Shell() {
 				) : null}
 				{viewer ? (
 					<NodeView path={viewer} />
-				) : (
+				) : booted ? (
 					<EmptyState className={shellMissing}>no Viewer on the tree</EmptyState>
+				) : (
+					<div className={shellPanePlane}>
+						<ViewerSkeleton />
+					</div>
 				)}
 			</main>
 		</div>

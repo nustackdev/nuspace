@@ -434,6 +434,32 @@ export const docProgramHeadless = "flex py-1";
 export const docProgramHeadlessChip = "select-none font-mono font-normal leading-none";
 
 /**
+ * A cell whose view is on the way: two kit `Skeleton` text lines, the second
+ * shorter, like the rail's. Small, so a waiting cell never pushes the page.
+ */
+export const docProgramLoading = "flex flex-col gap-1.5 py-1";
+export const docProgramLoadingLine = "w-2/3";
+export const docProgramLoadingLineShort = "w-1/3";
+
+/* ============================== Viewer skeleton =========================== */
+
+// What a pane shows while its plane is on the way, at boot and on a switch
+// alike: the title row and a few cells, as kit `Skeleton` bars on the same
+// grid the real plane uses, so nothing moves sideways when it lands.
+
+/** The whole placeholder, filling the pane's scroll surface. */
+export const docSkeleton = "flex min-w-0 flex-1 flex-col";
+
+/** The bar where the title goes, in the title row's content track. */
+export const docSkeletonTitle = cn(docContentTrack, "h-9 w-1/2 self-center");
+
+/** One cell's worth: text lines in the content track, at the cell's pad. */
+export const docSkeletonCell = cn(
+	docContentTrack,
+	"flex flex-col gap-2 px-doc-cell-x py-doc-cell-y-program",
+);
+
+/**
  * The code box around Monaco. Bordered and sunken, so a source editor looks
  * like a source editor wherever it turns up. It sizes to its content rather
  * than filling: a cell is one of many on the Plane and there is something

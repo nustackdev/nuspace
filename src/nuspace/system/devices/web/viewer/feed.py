@@ -25,7 +25,7 @@ output wakes neither.
 
 **Meta goes both ways.** A shipped plane carries its whole meta, and a
 ``plane.meta`` event merges keys into it. A plane's props never reach the
-browser, a cell's ship as a flat ``made_by``, and neither is written from it.
+browser, a cell's ship as a flat ``made_by`` and ``has_ui``, and neither is written from it.
 
 **Statuses come from runs.** Per cell: its live run if it has one, else its
 most recent. ``starting`` is starting, ``up`` and ``stopping`` are running,
@@ -95,9 +95,10 @@ PLANE_META = {"editable": False, "full_width": False}
 
 
 def plane_cells(plane_id: nu.StrArg) -> nu.Nu:
-    """A plane's cells as ``{id, name, source, made_by}``, in order. Bare read.
+    """A plane's cells as ``{id, name, source, made_by, has_ui}``, in order. Bare read.
 
     ``made_by`` is the snippet the cell was made from, ``""`` when none.
+    ``has_ui`` is whether its program draws, True where never worked out.
     """
     item = fresh("viewer_cell")
     row = nu.DictAttrRef(item)
@@ -110,6 +111,7 @@ def plane_cells(plane_id: nu.StrArg) -> nu.Nu:
                 name=nu.ToStr(row.get_item(nu.Str("name"), nu.Str(""))),
                 source=nu.ToStr(row.get_item(nu.Str("prog"), nu.Str(""))),
                 made_by=nu.ToStr(props.get_item(nu.Str("made_by"), nu.Str(""))),
+                has_ui=nu.ToBool(props.get_item(nu.Str("has_ui"), nu.Bool(True))),
             ),
             key=item,
         )

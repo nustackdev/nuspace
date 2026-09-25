@@ -165,7 +165,7 @@ async def test_insert_snippet(store):
         "id": c,
         "name": "ticker",
         "prog": "def out(): ...",
-        "props": {"made_by": "ticker"},
+        "props": {"made_by": "ticker", "has_ui": False},
         "meta": {},
     }
 
@@ -176,5 +176,5 @@ async def test_snippet_cell_meta_stays_free(store):
     c = await store.run(ops.insert_snippet(p, ops.Snippet("ticker", "Ticker", "")))
     await store.run(ops.set_cell_meta(p, c, {"made_by": "x", "k": 1}))
     row = (await store.read(ops.cell_rows(p)))[0]
-    assert row["props"] == {"made_by": "ticker"}
+    assert row["props"] == {"made_by": "ticker", "has_ui": False}
     assert row["meta"] == {"made_by": "x", "k": 1}

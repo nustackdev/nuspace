@@ -10,7 +10,11 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 import nu
+import nu.prog
+import nu.tree
+from nu.lang import ScalarQuery
 from nuspace.shapes import Space
+from nustd.ui.core import Ref as UiRef
 
 from .kernel import stop_runs
 from .read import cell_exists, plane_exists
@@ -18,10 +22,13 @@ from .utils import MintId, atomic, binding, keep_order
 
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Callable, Sequence
+
+    from nu.lang.runtime import Runtime
 
 
 __all__ = [
+    "HasUi",
     "add_cell",
     "move_cell",
     "remove_cell",
@@ -30,6 +37,55 @@ __all__ = [
     "set_cell_meta",
     "set_prog",
 ]
+
+
+# In process: the host's own interpreter builds the term it inspects.
+_BRACE = nu.prog.PyBrace()
+
+
+def _draws(built: object) -> bool:
+    """A constructed term holding a ui ref anywhere. A failed build draws nothing."""
+    if not isinstance(built, nu.Nu):
+        return False
+    return nu.tree.find_first(built, lambda node: isinstance(node, UiRef)) is not None
+
+
+class HasUi(ScalarQuery):
+    """Whether ``prog`` draws: constructed, its tree holds a ui ref.
+
+    Construction runs the snippet's module code in this process, offered the
+    ``plane`` and ``cell`` a run offers. Source that does not construct reads
+    False: as it stands it draws nothing.
+
+    Builds the term itself rather than through a ``LoadNu``, so an op holding
+    it still loads inside a program whose load binds a rewrite.
+    """
+
+    def __init__(self, prog: nu.StrArg, plane_id: nu.StrArg, cell_id: nu.StrArg) -> None:
+        super().__init__(prog, plane_id, cell_id)
+
+    def _compile(self, nid: int, children: tuple[Callable, ...]) -> Callable:
+        prog, plane, cell = children
+
+        def thunk(rt: Runtime) -> object:
+            scope = {"plane": plane(rt), "cell": cell(rt)}
+            return _draws(_BRACE.construct(str(prog(rt)), scope=scope))
+
+        return thunk
+
+    def _acompile(self, nid: int, children: tuple[Callable, ...]) -> Callable:
+        prog, plane, cell = children
+
+        async def athunk(rt: Runtime) -> object:
+            scope = {"plane": await plane(rt), "cell": await cell(rt)}
+            return _draws(await _BRACE.aconstruct(str(await prog(rt)), scope=scope))
+
+        return athunk
+
+
+def _write_prog(row: nu.Nu, plane_id: nu.StrArg, cell_id: nu.StrArg, prog: nu.StrArg) -> nu.Nu:
+    """Set a cell's prog and the ``has_ui`` it implies, together."""
+    return row.prog.set(prog) >> row.props.has_ui.set(HasUi(prog, plane_id, cell_id))
 
 
 def _place(order: nu.ListRef, cell_id: nu.StrArg, index: nu.IntArg | None) -> nu.Nu:
@@ -64,7 +120,8 @@ def add_cell(
         made_by: Prop, the snippet it was made from, ``""`` for none.
         meta: Fields to merge into its meta.
 
-    The props are written every time, so an existing cell given again takes
+    ``has_ui`` is worked out from ``prog`` (:class:`HasUi`). The props are
+    written every time, so an existing cell given again takes
     the ones passed now.
 
     Yields:
@@ -75,7 +132,11 @@ def add_cell(
         cid = nu.StrAttrRef(cid_name)
         plane = Space.planes[plane_id]
         row = plane.cells[cid]
-        writes = row.name.set(name) >> row.prog.set(prog) >> row.props.made_by.set(made_by)
+        writes = (
+            row.name.set(name)
+            >> _write_prog(row, plane_id, cid, prog)
+            >> row.props.made_by.set(made_by)
+        )
         if meta is not None:
             writes = writes >> row.meta.update(meta)
         return nu.IfDo(
@@ -106,9 +167,14 @@ def rename_cell(plane_id: nu.StrArg, cell_id: nu.StrArg, name: nu.StrArg) -> nu.
 
 
 def set_prog(plane_id: nu.StrArg, cell_id: nu.StrArg, prog: nu.StrArg) -> nu.Nu:
-    """Replace a cell's source. Nothing validates: a broken prog stores fine."""
+    """Replace a cell's source, and its ``has_ui`` with it.
+
+    Nothing validates: a broken prog stores fine, and reads as not drawing.
+    """
     row = Space.planes[plane_id].cells[cell_id]
-    return atomic(nu.IfDo(cell_exists(plane_id, cell_id), row.prog.set(prog)))
+    return atomic(
+        nu.IfDo(cell_exists(plane_id, cell_id), _write_prog(row, plane_id, cell_id, prog))
+    )
 
 
 def set_cell_meta(plane_id: nu.StrArg, cell_id: nu.StrArg, fields: dict[str, Any] | nu.Nu) -> nu.Nu:

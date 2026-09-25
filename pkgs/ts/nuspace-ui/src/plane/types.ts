@@ -27,6 +27,9 @@ export type Cell = {
 	/** The snippet it was made from, "" when none. A cell made from the text
 	 *  snippet is a text cell (see ./useTextCells.ts). */
 	made_by: string;
+	/** Whether its program draws, as the server worked out from the source.
+	 *  Null when it never said (an older cell): it may draw. */
+	has_ui: boolean | null;
 	/** Never null. Every cell compiles, runs and is supervised. */
 	status: CellStatus;
 };
@@ -131,6 +134,7 @@ export function coerceCells(raw: unknown): Cell[] {
 			name: String(r.name ?? id),
 			source: String(r.source ?? ""),
 			made_by: String(r.made_by ?? ""),
+			has_ui: typeof r.has_ui === "boolean" ? r.has_ui : null,
 			status: coerceStatus(r.status) ?? {
 				cell_id: id,
 				state: "idle",

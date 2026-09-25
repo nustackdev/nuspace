@@ -14,9 +14,14 @@ class CellProps(nu.Shape):
 
     ``made_by`` names the snippet the cell was made from (``""`` for none).
     A cell without one is not of any snippet's type.
+
+    ``has_ui`` says whether the cell's program draws: its constructed tree
+    holds a ui ref. Worked out whenever the prog is written, never by hand.
+    Unwritten on cells older than it, which read as maybe drawing.
     """
 
     made_by = nustd.kv.StrRef.slot()
+    has_ui = nustd.kv.BoolRef.slot()
 
 
 class Cell(nu.Shape):
