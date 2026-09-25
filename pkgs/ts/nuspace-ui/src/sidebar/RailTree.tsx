@@ -40,8 +40,8 @@ import {
 	railRowWrap,
 	railTreeList,
 } from "../design";
+import { planeIcon } from "../icon/parse";
 import { clearPendingRename, usePendingRename } from "./add";
-import { iconFor } from "./icons";
 import type { Notify } from "./ops";
 import { PlaneRow } from "./PlaneRow";
 import { showsNoPlanes, type VisibleRow } from "./tree";
@@ -135,7 +135,7 @@ export function RailTree({
 								<PlaneRow
 									row={row}
 									index={index}
-									icon={iconFor(registered, row.made_by)}
+									icon={planeIcon(row.icon, registered.find((r) => r.name === row.made_by)?.icon)}
 									selected={row.key === selKey}
 									open={routes.includes(row.id)}
 									tabbable={row.key === tabKey}

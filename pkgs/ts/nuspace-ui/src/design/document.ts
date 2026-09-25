@@ -98,8 +98,8 @@ export const docTail = "h-doc-tail w-full shrink-0 cursor-text";
 /* ============================== Plane head ================================ */
 //
 // A plane opens with where it is and what it is called, and nothing else. No
-// cover, no icon: a small trail at the top, then blank air, then the name of
-// the thing you are reading. What used to sit up here was chrome describing a
+// cover: a small trail at the top, then blank air, then the plane's icon when
+// it has one (see ./icon.ts), then the name of the thing you are reading. What used to sit up here was chrome describing a
 // document rather than the document, and it pushed the first line of actual
 // writing off the fold.
 //
@@ -147,9 +147,10 @@ export const docTrail = "px-doc-cell-x";
  * not a button: the heading you read and the heading you type are the same
  * node, so there is no mode swap and no layout shift on click.
  *
- * The top margin is the blank run-up (see `--spacing-doc-title-gap`), carried
- * here rather than as pad on the band so the trail sits above it and the air
- * lands between the two.
+ * The blank run-up above it (see `--spacing-doc-title-gap`) is carried by
+ * `docTitleBlock`, the block it shares with the plane's icon, rather than as
+ * pad on the band, so the trail sits above it and the air lands between the
+ * two.
  *
  * No focus ring. A ring around a 40px heading is a box drawn around the plane's
  * name, and the caret already says where you are. The placeholder is a `::before` on the empty element
@@ -164,9 +165,8 @@ export const docTrail = "px-doc-cell-x";
 // the class reaches the bundle, and the title still renders at body size.
 // Nothing else in here conflicts, so appending it afterwards is safe. Any
 // future custom type token meeting a text colour has the same problem.
-export function docTitle(compact = false): string {
+export function docTitle(): string {
 	return `${cn(
-		compact ? "mt-0" : "mt-doc-title-gap",
 		"block w-full px-doc-cell-x py-0.5",
 		"font-bold text-text-primary",
 		"cursor-text whitespace-pre-wrap break-words outline-none",

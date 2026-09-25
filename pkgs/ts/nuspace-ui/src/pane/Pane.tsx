@@ -11,12 +11,13 @@ import { Spinner } from "@nustackdev/ui-kit";
 import type * as React from "react";
 import { useCallback, useRef } from "react";
 import { closePane, focusPane } from "../core/router";
-import { docPlaneLoading, docTitleHead, shellPane, shellPanePlane } from "../design";
+import { docPlaneLoading, docTitleBlock, docTitleHead, shellPane, shellPanePlane } from "../design";
 import type { Notify } from "../plane/ops";
 import { Plane } from "../plane/Plane";
 import type { ActivePlane, SlashSnippet } from "../plane/types";
 import { PaneBar } from "./PaneBar";
 import { Title } from "./Title";
+import { TitleIcon } from "./TitleIcon";
 
 // The Plane the server inits with no name shows this instead. A placeholder,
 // muted, so it cannot be mistaken for a title that is really there.
@@ -30,6 +31,7 @@ export function Pane({
 	notify,
 	onMeta,
 	onRename,
+	onIcon,
 	split,
 	divided,
 	focused,
@@ -45,6 +47,8 @@ export function Pane({
 	onMeta: (planeId: string, patch: Record<string, unknown>) => void;
 	/** Rename this plane. */
 	onRename: (planeId: string, title: string) => void;
+	/** Set this plane's icon: a stored spelling, "" for none. */
+	onIcon: (planeId: string, icon: string) => void;
 	/** More than one pane is open: no bar, the tab bar stands in for it. */
 	split: boolean;
 	/** Draws the divider on its left edge. */
@@ -89,13 +93,15 @@ export function Pane({
 				) : (
 					<>
 						<header className={docTitleHead(wide, compact)}>
-							<Title
-								value={plane.title}
-								placeholder={TITLE_FALLBACK}
-								compact={compact}
-								onCommit={(next) => onRename(planeId, next)}
-								onExit={() => enterCells.current?.() ?? false}
-							/>
+							<div className={docTitleBlock(compact)}>
+								<TitleIcon value={plane.meta.icon} onChange={(icon) => onIcon(planeId, icon)} />
+								<Title
+									value={plane.title}
+									placeholder={TITLE_FALLBACK}
+									onCommit={(next) => onRename(planeId, next)}
+									onExit={() => enterCells.current?.() ?? false}
+								/>
+							</div>
 						</header>
 						<Plane
 							viewerPath={viewerPath}

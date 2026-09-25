@@ -13,7 +13,7 @@ import nu
 from nuspace.shapes import ROOT
 
 from .cell import add_cell
-from .plane import add_plane
+from .plane import add_plane, plane_icon
 from .utils import binding
 
 
@@ -31,7 +31,9 @@ class Plane:
         name: Registry key, and what the planes created from it record as
             ``made_by``.
         label: What the picker shows, and a new plane's default name.
-        icon: A lucide icon name, ``""`` for the default.
+        icon: A lucide icon name, ``""`` for the default. ``"lucide:<name>"``
+            and ``"emoji:<char>"`` work too. A new plane's ``meta.icon``
+            starts as it, unless ``meta`` sets one.
         description: One line for the picker.
         meta: What a new plane's meta starts as.
         cells: ``(name, source)`` per cell, in order.
@@ -90,13 +92,16 @@ def create_plane(
         seeds += [create_plane(child, parent=pid) for child in spec.children]
         return nu.Sequential(*seeds) if seeds else nu.Noop()
 
+    meta = dict(spec.meta)
+    if spec.icon and "icon" not in meta:
+        meta["icon"] = plane_icon(spec.icon)
     made = add_plane(
         plane_id,
         name=spec.label if name is None else name,
         parent=parent,
         ui=True,
         made_by=spec.name,
-        meta=dict(spec.meta),
+        meta=meta,
     )
     return binding(made, fill, tag="create")
 

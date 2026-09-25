@@ -43,15 +43,17 @@ export type TreeRow = {
 	parent: string;
 	/** Already in sibling order. */
 	children: string[];
-	/** The registered Plane it was created from, "" when none. Picks the icon. */
+	/** The registered Plane it was created from, "" when none. Its icon is the fallback. */
 	made_by: string;
+	/** The plane's own `meta.icon`, "" when it has none. See ../icon/parse.ts. */
+	icon: string;
 };
 
 /** One registered Plane, as the Add plane popup offers it. Seeded at boot. */
 export type Registered = {
 	name: string;
 	label: string;
-	/** A lucide icon name, "" for the default. */
+	/** A lucide icon name, "" for the default. Any spelling ../icon/parse.ts reads. */
 	icon: string;
 	description: string;
 };
@@ -133,6 +135,7 @@ export function coerceTree(raw: unknown): PlaneTree {
 			parent: String(r.parent ?? id),
 			children: coerceStrs(r.children),
 			made_by: String(r.made_by ?? ""),
+			icon: typeof r.icon === "string" ? r.icon : "",
 		};
 	}
 	return out;

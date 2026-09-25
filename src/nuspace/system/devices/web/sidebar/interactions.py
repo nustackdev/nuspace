@@ -30,6 +30,7 @@ __all__ = [
     "on_delete_plane",
     "on_move_plane",
     "on_rename_plane",
+    "on_set_icon",
     "set_tree",
 ]
 
@@ -53,7 +54,7 @@ ROOT_ID = "space"
 
 
 def set_tree(sidebar: Ref, rows: ListArg[dict]) -> Nu:
-    """Replace the sidebar. A row is ``{id, kind, title, parent, children, made_by}``."""
+    """Replace the sidebar. A row is ``{id, kind, title, parent, children, made_by, icon}``."""
     return write(sidebar, "set_tree", planes=rows)
 
 
@@ -86,3 +87,8 @@ def on_move_plane(sidebar: Ref) -> Changed:
     draws them, the moved plane taken out.
     """
     return event(sidebar, "plane.move")
+
+
+def on_set_icon(sidebar: Ref) -> Changed:
+    """``{plane_id, icon}``. ``icon`` is ``lucide:<name>``, ``emoji:<char>`` or ``""``."""
+    return event(sidebar, "plane.icon")

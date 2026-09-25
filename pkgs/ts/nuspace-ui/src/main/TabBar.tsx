@@ -24,11 +24,14 @@ import {
 	tabActions,
 	tabBar,
 	tabCell,
+	tabIcon,
 	tabInput,
 	tabInputBox,
 	tabTitle,
 	tabTrigger,
 } from "../design";
+import { PlaneIcon } from "../icon/PlaneIcon";
+import { parseIcon } from "../icon/parse";
 import { TITLE_FALLBACK } from "../pane/Pane";
 import { PaneMenu } from "../pane/PaneMenu";
 import type { ActivePlane } from "../plane/types";
@@ -131,6 +134,7 @@ export function TabBar({
 				const plane = planes[id] ?? null;
 				const title = plane?.title || TITLE_FALLBACK;
 				const active = id === focused;
+				const icon = parseIcon(plane?.meta.icon);
 				return (
 					// biome-ignore lint/a11y/noStaticElementInteractions: middle-click close is a mouse shortcut on the whole cell; the keyboard closes with Delete on the tab
 					<div
@@ -178,6 +182,7 @@ export function TabBar({
 									}}
 									onKeyDown={(e) => onKeyDown(e, i)}
 								>
+									{icon ? <PlaneIcon icon={icon} className={tabIcon} /> : null}
 									<span className={tabTitle}>{title}</span>
 								</button>
 							</OverflowTooltip>

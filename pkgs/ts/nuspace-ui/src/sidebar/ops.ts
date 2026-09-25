@@ -36,6 +36,8 @@ export type Ops = {
 	 * server refuses a move into the Plane's own subtree.
 	 */
 	"plane.move": { plane_id: string; parent_id: string; index: number };
+	/** `icon` is a stored spelling (../icon/parse.ts), "" for the default. */
+	"plane.icon": { plane_id: string; icon: string };
 };
 
 /** Send one op. Threaded down from `Sidebar.tsx` into the rail. */

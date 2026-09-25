@@ -16,6 +16,7 @@
 //   tabs.ts            the tab bar over a split, one tab per pane
 //   document.ts        class recipes for the document surface, title included
 //   rail.ts            the sidebar rail
+//   icon.ts            plane icons: the glyph at each size, and the picker
 //   resize.ts          the drag handle every resizable edge shares
 //   cell-status.ts  the six-state vocabulary
 //
@@ -31,6 +32,7 @@
 
 export * from "./cell-status";
 export * from "./document";
+export * from "./icon";
 export * from "./pane";
 export * from "./rail";
 export * from "./resize";

@@ -10,7 +10,7 @@ const tree = coerceTree([
 	{ id: "a", kind: "plane", title: "A", parent: ROOT_ID, children: ["a1", "a2"] },
 	{ id: "a1", kind: "plane", title: "A1", parent: "a", children: [] },
 	{ id: "a2", kind: "plane", title: "A2", parent: "a", children: [] },
-	{ id: "b", kind: "plane", title: "B", parent: ROOT_ID, children: [], made_by: "runs" },
+	{ id: "b", kind: "plane", title: "B", parent: ROOT_ID, children: [], made_by: "runs", icon: "" },
 	{ id: "g", kind: "group", title: "Old", parent: ROOT_ID, children: [] },
 ]);
 

@@ -12,6 +12,7 @@ separately here.
 
 ## Unreleased
 
+- Planes take an icon or emoji, picked from the title or the sidebar menu
 - New cells from a snippet open showing what they draw, not their code
 - Rename a plane by editing its title in place, on any plane
 - New lens snippets browse the current plane, or a cell picked from a dropdown

@@ -42,7 +42,7 @@ from .kernel import (
     worker,
     workers,
 )
-from .plane import add_plane, remove_plane, rename_plane, set_plane_meta
+from .plane import add_plane, remove_plane, rename_plane, set_plane_icon, set_plane_meta
 from .read import (
     cell_exists,
     cell_rows,
@@ -96,6 +96,7 @@ __all__ = [
     "reorder_cells",
     "runs",
     "set_cell_meta",
+    "set_plane_icon",
     "set_plane_meta",
     "set_prog",
     "sibling",

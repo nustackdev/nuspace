@@ -19,6 +19,7 @@ from nuspace.system.devices.web.sidebar.interactions import (
     on_delete_plane,
     on_move_plane,
     on_rename_plane,
+    on_set_icon,
     set_tree,
 )
 from nuspace.system.devices.web.sidebar.ref import SidebarRef, registered_entries
@@ -37,6 +38,7 @@ __all__ = [
     "on_delete_plane",
     "on_move_plane",
     "on_rename_plane",
+    "on_set_icon",
     "registered_entries",
     "rows",
     "set_tree",

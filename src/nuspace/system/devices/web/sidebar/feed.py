@@ -11,9 +11,12 @@ space row. ``made_by`` and ``system`` group nothing. A drawn plane whose
 parent is not drawn (a service's child, or one no node lists) is shown at the
 top level, after the rest, so nothing drawn goes missing.
 
+**Icons.** A row carries its plane's ``meta.icon`` and no other meta key.
+The browser falls back to the registered Plane's icon when it is empty.
+
 **Narrow watch.** The tree is shipped again when the set of planes, a
-plane's name or props, or a tree node change, and nothing else: a cell
-writing its state or the kernel writing a run never wakes it.
+plane's name, props or icon, or a tree node change, and nothing else: a
+cell writing its state or the kernel writing a run never wakes it.
 """
 
 from __future__ import annotations
@@ -47,6 +50,7 @@ _CREATE = "nuspace.web.sidebar.create"
 _RENAME = "nuspace.web.sidebar.rename"
 _DELETE = "nuspace.web.sidebar.delete"
 _MOVE = "nuspace.web.sidebar.move"
+_ICON = "nuspace.web.sidebar.icon"
 
 
 def _text(row: nu.Nu, field: str) -> nu.Nu:
@@ -56,6 +60,12 @@ def _text(row: nu.Nu, field: str) -> nu.Nu:
 def _prop(row: nu.Nu, field: str) -> nu.Nu:
     """One of a plane row's props. The row carries them whole, defaults filled in."""
     return nu.Dict(row.get_item(nu.Str("props"), nu.Dict.of())).get_item(nu.Str(field))
+
+
+def _icon(row: nu.Nu) -> nu.Nu:
+    """A plane row's ``meta.icon``, ``""`` when it has none."""
+    meta = nu.Dict(row.get_item(nu.Str("meta"), nu.Dict.of()))
+    return nu.ToStr(meta.get_item(nu.Str("icon"), nu.Str("")))
 
 
 def node(parent_id: nu.Nu) -> nu.Nu:
@@ -77,7 +87,7 @@ def rows() -> nu.Nu:
 
     Yields:
         ``[space, *planes]``, each ``{id, kind, title, parent, children}``,
-        planes with ``made_by`` too. Planes in creation order, ``children``
+        planes with ``made_by`` and ``icon`` too. Planes in creation order, ``children``
         in sibling order.
     """
     pick, each, kid = fresh("sidebar_pick"), fresh("sidebar_row"), fresh("sidebar_kid")
@@ -123,6 +133,7 @@ def rows() -> nu.Nu:
                     parent=nu.If(listed_under(row), _text(row, "parent"), nu.Str(ROOT_ID)),
                     children=kids(_text(row, "id")),
                     made_by=nu.ToStr(_prop(row, "made_by")),
+                    icon=_icon(row),
                 ),
                 key=each,
             )
@@ -199,13 +210,15 @@ def move(plane_id: nu.Nu, parent_id: nu.Nu, index: nu.Nu) -> nu.Nu:
 
 
 def _changes() -> list[nu.Nu]:
-    """What reships the tree: the set of planes, their names and props, the tree nodes."""
+    """What reships the tree: the set of planes, their names, props and icons, the tree nodes."""
     planes, tree = Space.planes, Space.tree
     return [
         snap(planes.on_children_change()),
         snap(planes.on_descendants_change("*", "name")),
         snap(planes.on_descendants_change("*", "props")),
         snap(planes.on_descendants_change("*", "props", "*")),
+        snap(planes.on_descendants_change("*", "meta")),
+        snap(planes.on_descendants_change("*", "meta", "icon")),
         snap(tree.on_children_change()),
         snap(tree.on_descendants_change("*", "children")),
         snap(tree.on_descendants_change("*", "children", "*")),
@@ -244,6 +257,7 @@ def sidebar_feed(sidebar: Ref, planes: Sequence[Plane]) -> nu.Nu:
     renamed = field_str(_RENAME, "plane_id")
     deleted = field_str(_DELETE, "plane_id")
     moved = field_str(_MOVE, "plane_id")
+    iconed = field_str(_ICON, "plane_id")
     arms += [
         _arms.event(
             _RENAME,
@@ -268,6 +282,14 @@ def sidebar_feed(sidebar: Ref, planes: Sequence[Plane]) -> nu.Nu:
                     field_str(_MOVE, "parent_id"),
                     nu.ToInt(nu.DictAttrRef(_MOVE).get_item(nu.Str("index"), nu.Int(-1))),
                 ),
+            ),
+        ),
+        _arms.event(
+            _ICON,
+            interactions.on_set_icon(sidebar),
+            nu.IfDo(
+                nu.Ne(iconed, nu.Str("")),
+                ops.set_plane_icon(iconed, field_str(_ICON, "icon")),
             ),
         ),
     ]

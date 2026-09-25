@@ -38,14 +38,12 @@ function caretAtEnd(el: HTMLElement): boolean {
 export function Title({
 	value,
 	placeholder,
-	compact,
 	onCommit,
 	onExit,
 }: {
 	/** The server's title. */
 	value: string;
 	placeholder: string;
-	compact: boolean;
 	/** A changed, non-empty title. */
 	onCommit: (title: string) => void;
 	/** Down or Enter at the end: hand the caret to the cells. False when there
@@ -108,7 +106,7 @@ export function Title({
 			suppressContentEditableWarning
 			spellCheck={false}
 			data-placeholder={placeholder}
-			className={docTitle(compact)}
+			className={docTitle()}
 			onFocus={(e) => {
 				entry.current = e.currentTarget.textContent ?? "";
 			}}

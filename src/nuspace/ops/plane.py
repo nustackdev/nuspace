@@ -3,6 +3,10 @@
 Its props (``system``, ``ui``, ``made_by``) are set when it is made. Its meta
 is free and merged into any time.
 
+A plane's icon is ``meta.icon``, a string: ``"lucide:<name>"`` for one of the
+shell's icon pack, ``"emoji:<char>"`` for an emoji, ``""`` or absent for the
+default. :func:`plane_icon` is the one place a spelling is read.
+
 A plane is structure only, so nothing here says how anything runs. Which
 cells are on it and in what order is :mod:`nuspace.ops.cell`; where it hangs
 is :mod:`nuspace.ops.tree`.
@@ -21,7 +25,23 @@ from .tree import link, subtree, unlink
 from .utils import MintId, atomic, binding, flag, fresh
 
 
-__all__ = ["add_plane", "remove_plane", "rename_plane", "set_plane_meta"]
+__all__ = [
+    "ICON_EMOJI",
+    "ICON_LUCIDE",
+    "add_plane",
+    "plane_icon",
+    "remove_plane",
+    "rename_plane",
+    "set_plane_icon",
+    "set_plane_meta",
+]
+
+
+#: The prefix of an icon from the shell's pack, a lucide name after it.
+ICON_LUCIDE = "lucide:"
+
+#: The prefix of an emoji icon, the emoji itself after it.
+ICON_EMOJI = "emoji:"
 
 
 def _merge(meta: nu.Nu, fields: dict[str, Any] | nu.Nu) -> nu.Nu:
@@ -135,3 +155,38 @@ def set_plane_meta(plane_id: nu.StrArg, fields: dict[str, Any] | nu.Nu) -> nu.Nu
     Props are not reachable from here: they are set by :func:`add_plane`.
     """
     return atomic(nu.IfDo(plane_exists(plane_id), _merge(Space.planes[plane_id].meta, fields)))
+
+
+def plane_icon(icon: str) -> str:
+    """The stored spelling of an icon: ``lucide:<name>``, ``emoji:<char>`` or ``""``.
+
+    A bare name, with no prefix, is a lucide name, which is how a registered
+    Plane names its icon. Surrounding space is dropped.
+
+    Raises:
+        ValueError: A prefix that is neither ``lucide:`` nor ``emoji:``, or
+            one with nothing after it.
+    """
+    icon = icon.strip()
+    if not icon:
+        return ""
+    if icon.startswith((ICON_LUCIDE, ICON_EMOJI)):
+        if not icon.partition(":")[2].strip():
+            raise ValueError(f"icon {icon!r} names nothing")
+        return icon
+    if ":" in icon:
+        raise ValueError(f"icon {icon!r} is neither lucide: nor emoji:")
+    return ICON_LUCIDE + icon
+
+
+def set_plane_icon(plane_id: nu.StrArg, icon: nu.StrArg) -> nu.Nu:
+    """Set a plane's icon: a merge of ``meta.icon``. A no-op when it is missing.
+
+    Args:
+        plane_id: The plane.
+        icon: ``"lucide:<name>"``, ``"emoji:<char>"``, a bare lucide name,
+            or ``""`` for the default. A Python string is checked and
+            spelled by :func:`plane_icon`; a term is stored as it evaluates.
+    """
+    value = nu.Str(plane_icon(icon)) if isinstance(icon, str) else icon
+    return set_plane_meta(plane_id, nu.Dict.of(icon=value))

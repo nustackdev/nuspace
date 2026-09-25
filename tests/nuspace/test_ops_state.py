@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import pytest
+
 import nu
 import nustd.kv
 from nuspace import ops
+from nuspace.ops.plane import plane_icon
 from nuspace.shapes import ROOT, CellState, PlaneState, Space, reroot
 
 
@@ -86,7 +89,10 @@ async def test_create_plane_seeds_cells_and_nested_children(store):
     made = await store.run(ops.create_plane(spec, parent=top))
     assert await store.read(ops.children(top)) == [made]
     rows = {r["id"]: r for r in await store.read(ops.plane_rows())}
-    assert (rows[made]["name"], rows[made]["meta"]) == ("Tracker", {"k": 1})
+    assert (rows[made]["name"], rows[made]["meta"]) == (
+        "Tracker",
+        {"k": 1, "icon": "lucide:list"},
+    )
     assert rows[made]["props"] == {"system": False, "ui": True, "made_by": "tracker"}
     assert [(c["name"], c["prog"]) for c in await store.read(ops.cell_rows(made))] == [
         ("form", "f"),
@@ -109,6 +115,44 @@ async def test_create_plane_name_and_id(store):
     # A term built once creates a new plane each time it runs.
     term = ops.create_plane(plain)
     assert await store.run(term) != await store.run(term)
+
+
+async def test_create_plane_writes_the_icon(store):
+    emoji = ops.Plane("e", "E", icon="emoji:\U0001f4da")
+    kept = ops.Plane("k", "K", icon="list", meta={"icon": "emoji:\U0001f331"})
+    blank = ops.Plane("b", "B", icon="list", meta={"icon": ""})
+    for spec in (emoji, kept, blank):
+        await store.run(ops.create_plane(spec, plane_id=spec.name))
+    meta = {r["id"]: r["meta"] for r in await store.read(ops.plane_rows())}
+    assert meta["e"] == {"icon": "emoji:\U0001f4da"}
+    # A spec's meta that names an icon wins, even an empty one.
+    assert meta["k"] == {"icon": "emoji:\U0001f331"}
+    assert meta["b"] == {"icon": ""}
+    with pytest.raises(ValueError, match="neither"):
+        ops.create_plane(ops.Plane("x", "X", icon="svg:x"))
+
+
+async def test_set_plane_icon(store):
+    p = await store.run(ops.add_plane(meta={"editable": True}))
+    await store.run(ops.set_plane_icon(p, "folder"))
+    await store.run(ops.set_plane_icon("missing", "folder"))
+    (row,) = await store.read(ops.plane_rows())
+    # A bare name is a lucide one, and the rest of meta stays.
+    assert row["meta"] == {"editable": True, "icon": "lucide:folder"}
+    await store.run(ops.set_plane_icon(p, nu.Str("emoji:\u2728")))
+    assert (await store.read(ops.plane_rows()))[0]["meta"]["icon"] == "emoji:\u2728"
+    await store.run(ops.set_plane_icon(p, ""))
+    assert (await store.read(ops.plane_rows()))[0]["meta"] == {"editable": True, "icon": ""}
+
+
+def test_plane_icon_spelling():
+    assert plane_icon(" folder ") == "lucide:folder"
+    assert plane_icon("lucide:cpu") == "lucide:cpu"
+    assert plane_icon("emoji:\U0001f680") == "emoji:\U0001f680"
+    assert plane_icon("") == ""
+    for bad in ("emoji:", "lucide: ", "img:x"):
+        with pytest.raises(ValueError):
+            plane_icon(bad)
 
 
 async def test_insert_snippet(store):

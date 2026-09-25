@@ -87,7 +87,7 @@ async def test_each_plane_is_created_drawn_with_its_cells(store, module):
     (row,) = [r for r in await store.read(ops.plane_rows()) if r["id"] == "p1"]
     assert row["name"] == "Live"
     assert row["props"] == {"system": False, "ui": True, "made_by": spec.name}
-    assert row["meta"] == {"editable": True, "full_width": False}
+    assert row["meta"] == {"editable": True, "full_width": False, "icon": f"lucide:{spec.icon}"}
     cells = await store.read(ops.cell_rows("p1"))
     assert [(c["name"], c["prog"]) for c in cells] == CELLS[spec.name]
 

@@ -19,8 +19,9 @@ import {
 import { mintId } from "../core/ids";
 import { focusPane, replacePane } from "../core/router";
 import { addPlaneDescription, addPlaneItem, addPlaneLabel, addPlaneText } from "../design";
+import { PlaneIcon } from "../icon/PlaneIcon";
+import { planeIcon } from "../icon/parse";
 import { closeAddPlane, renameWhenListed, useAddRequest } from "./add";
-import { iconNamed } from "./icons";
 import type { Notify } from "./ops";
 import { type Registered, ROOT_ID } from "./types";
 
@@ -68,7 +69,6 @@ export function AddPlane({
 			<CommandList>
 				<CommandEmpty>Nothing matches</CommandEmpty>
 				{registered.map((entry) => {
-					const Icon = iconNamed(entry.icon);
 					return (
 						<CommandItem
 							key={entry.name}
@@ -76,7 +76,7 @@ export function AddPlane({
 							onSelect={() => pick(entry)}
 							className={addPlaneItem}
 						>
-							<Icon aria-hidden="true" />
+							<PlaneIcon icon={planeIcon(entry.icon)} />
 							<span className={addPlaneText}>
 								<span className={addPlaneLabel}>{entry.label}</span>
 								{entry.description ? (

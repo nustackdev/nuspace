@@ -104,6 +104,20 @@ export function Main({ path }: NodeProps) {
 		[key, sidebar ? pathKey(sidebar) : ""],
 	);
 
+	// Optimistic like `onMeta`, and through the sidebar's op like `onRename`:
+	// the sidebar's is the one that sets an icon, and both the tree and the
+	// plane it reships carry it.
+	// biome-ignore lint/correctness/useExhaustiveDependencies: paths are compared by value.
+	const onIcon = useCallback(
+		(planeId: string, icon: string) => {
+			patchPlaneMeta(path, planeId, { icon });
+			if (sidebar) {
+				notifyOp<SidebarOps, "plane.icon">(sidebar, "plane.icon", { plane_id: planeId, icon });
+			}
+		},
+		[key, sidebar ? pathKey(sidebar) : ""],
+	);
+
 	if (routes.length === 0) {
 		return (
 			<div className={shellSurface}>
@@ -150,6 +164,7 @@ export function Main({ path }: NodeProps) {
 							notify={notify}
 							onMeta={onMeta}
 							onRename={onRename}
+							onIcon={onIcon}
 							split={split}
 							divided={i > 0}
 							focused={id === focused}

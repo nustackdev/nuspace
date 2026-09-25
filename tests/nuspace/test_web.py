@@ -130,7 +130,7 @@ async def _plane(store, pid, name, meta=None, **props):
     await store.run(ops.add_plane(pid, name=name, meta=meta, **props))
 
 
-def _row(pid, title, parent="space", children=(), made_by=""):
+def _row(pid, title, parent="space", children=(), made_by="", icon=""):
     return {
         "id": pid,
         "kind": "plane",
@@ -138,6 +138,7 @@ def _row(pid, title, parent="space", children=(), made_by=""):
         "parent": parent,
         "children": list(children),
         "made_by": made_by,
+        "icon": icon,
     }
 
 
@@ -174,6 +175,22 @@ async def test_sidebar_rows_are_one_tree(store):
     ]
 
 
+async def test_sidebar_rows_carry_the_icon_and_no_other_meta(store):
+    await _plane(store, "p1", "One", {"icon": "emoji:\U0001f680", "tone": "calm"}, ui=True)
+    await _plane(store, "p2", "Two", ui=True, made_by="jobs")
+    await store.run(ops.set_plane_icon("p2", "lucide:folder"))
+    await _plane(store, "p3", "Three", {"icon": 7}, ui=True)
+
+    _, *planes = await store.read(rows())
+
+    assert planes == [
+        _row("p1", "One", icon="emoji:\U0001f680"),
+        _row("p2", "Two", made_by="jobs", icon="lucide:folder"),
+        # Whatever is stored reads as a string; the browser falls back on a bad one.
+        _row("p3", "Three", icon="7"),
+    ]
+
+
 async def test_sidebar_rows_empty(store):
     await _plane(store, "p1", "One")
     got = await store.read(rows())
@@ -199,6 +216,9 @@ async def test_create_makes_the_named_plane(store):
     # An unknown name creates the first registered Plane, at the root.
     assert (by_id["px"]["name"], by_id["px"]["parent"]) == ("X", "root")
     assert by_id["px"]["props"]["made_by"] == "plain"
+    # The registered Plane's icon is the new plane's.
+    assert by_id["pj"]["meta"] == {"icon": "lucide:list"}
+    assert by_id["px"]["meta"] == {}
     assert create([], "x", "y", "z", "w") is None
 
 
@@ -475,7 +495,15 @@ async def test_connection_live(store):
         session.notify(("sidebar", "ops", "plane.rename"), {"plane_id": "p2", "title": "Deux"})
         await _until(
             lambda: (
-                _row("p2", "Deux", parent="p1", made_by="jobs")
+                _row("p2", "Deux", parent="p1", made_by="jobs", icon="lucide:list")
+                in session.writes("set_tree")[-1]["planes"]
+            )
+        )
+        # An icon set from the sidebar reships the tree with it.
+        session.notify(("sidebar", "ops", "plane.icon"), {"plane_id": "p2", "icon": "emoji:\u2728"})
+        await _until(
+            lambda: (
+                _row("p2", "Deux", parent="p1", made_by="jobs", icon="emoji:\u2728")
                 in session.writes("set_tree")[-1]["planes"]
             )
         )

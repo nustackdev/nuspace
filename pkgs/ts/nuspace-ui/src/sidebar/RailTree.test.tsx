@@ -27,17 +27,23 @@ const tree = coerceTree([
 	{ id: "b", kind: "plane", title: "B", parent: ROOT_ID, children: [] },
 ]);
 
+// One plane with an emoji of its own.
+const emojiTree = coerceTree([
+	{ id: ROOT_ID, kind: "space", title: "", parent: ROOT_ID, children: ["e"] },
+	{ id: "e", kind: "plane", title: "E", parent: ROOT_ID, children: [], icon: "emoji:🚀" },
+]);
+
 let host: HTMLDivElement;
 let root: Root;
 const onToggle = vi.fn();
 
-function render(expanded: string[]) {
-	const rows = visibleRows(tree, childrenOf(tree, ROOT_ID), new Set(expanded));
+function render(expanded: string[], on = tree) {
+	const rows = visibleRows(on, childrenOf(on, ROOT_ID), new Set(expanded));
 	act(() => {
 		root.render(
 			<TooltipProvider>
 				<RailTree
-					tree={tree}
+					tree={on}
 					rows={rows}
 					registered={[]}
 					routes={[]}
@@ -122,6 +128,27 @@ describe("rail icon and chevron slot", () => {
 		expect(lane?.querySelector("svg")?.getAttribute("class")).toContain("pointer-events-none");
 		expect(chevronOf("b")?.className).toMatch(/(^| )opacity-0( |$)/);
 		expect(chevronOf("b")?.className).toContain("group-hover/row:opacity-100");
+	});
+
+	it("draws a plane's own emoji in the icon's place, click-through too", () => {
+		render([], emojiTree);
+		const lane = rowOf("e")?.firstElementChild;
+		const emoji = lane?.querySelector(":scope > span");
+		expect(emoji?.textContent).toBe("🚀");
+		expect(emoji?.getAttribute("class")).toContain("pointer-events-none");
+		expect(emoji?.getAttribute("class")).toContain("size-4");
+		expect(lane?.querySelector(":scope > svg")).toBeNull();
+	});
+
+	it("offers Change icon in the row's menu", () => {
+		render([]);
+		act(() => {
+			moreOf("b")?.dispatchEvent(
+				new PointerEvent("pointerdown", { bubbles: true, button: 0, pointerType: "mouse" }),
+			);
+		});
+		const items = [...document.querySelectorAll('[role="menuitem"]')].map((i) => i.textContent);
+		expect(items).toContain("Change icon");
 	});
 
 	it("folds on a chevron click and never navigates", () => {

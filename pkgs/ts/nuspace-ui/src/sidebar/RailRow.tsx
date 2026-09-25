@@ -34,6 +34,7 @@ export function RailRow({
 	label,
 	actions,
 	menu,
+	onMenuCloseAutoFocus,
 	drag,
 	className,
 	onFocus,
@@ -62,6 +63,8 @@ export function RailRow({
 	actions: React.ReactNode;
 	/** Items for the right-click menu. */
 	menu: React.ReactNode;
+	/** Where focus goes when the right-click menu closes. See the kit's menu. */
+	onMenuCloseAutoFocus?: (e: Event) => void;
 	/** Drag and drop handlers, see ./useRailDrag.ts. */
 	drag?: React.HTMLAttributes<HTMLDivElement> & { draggable?: boolean };
 	/** Extra classes, eg while dragged or dropped into. */
@@ -97,7 +100,9 @@ export function RailRow({
 	return (
 		<ContextMenu>
 			<ContextMenuTrigger asChild>{body}</ContextMenuTrigger>
-			<ContextMenuContent className="min-w-40">{menu}</ContextMenuContent>
+			<ContextMenuContent className="min-w-40" onCloseAutoFocus={onMenuCloseAutoFocus}>
+				{menu}
+			</ContextMenuContent>
 		</ContextMenu>
 	);
 }

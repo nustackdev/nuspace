@@ -285,4 +285,16 @@
 	--text-doc-title: 2.5rem; /* 40 */
 	--text-doc-title--line-height: 1.2;
 	--text-doc-title--letter-spacing: -0.02em;
+
+	/* --- Plane icons ---------------------------------------------------------
+	 * The lane over the title holds "Add icon" (a kit `sm` button, 24, plus 4
+	 * of air). It is taken out of the run-up, so a plane with no icon keeps
+	 * its title where it always was. A set icon is 44 on a 56 button, the
+	 * emoji at the same 44 so the two kinds are one size.
+	 * --------------------------------------------------------------------- */
+	--spacing-doc-icon-lane: 1.75rem; /* 28 */
+	--text-plane-icon: 2.75rem; /* 44 */
+	--text-plane-icon--line-height: 1;
+	/* Emoji draw in the platform's colour font, never a text face's mono glyph. */
+	--font-emoji: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
 }

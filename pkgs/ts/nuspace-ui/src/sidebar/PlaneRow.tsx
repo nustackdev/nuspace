@@ -13,6 +13,10 @@
 // swap is pure CSS (`railIcon` / `railTwisty` in design/rail.ts). The chevron
 // only folds: it never opens the plane and never starts a drag.
 //
+// The icon is the plane's own (`meta.icon`), else its registered Plane's, else
+// the default. It is not a control, since the chevron takes its place under
+// the pointer: "Change icon" in both menus opens the picker, anchored on it.
+//
 // The hover split opens the plane in a new pane beside the others, the same as
 // the menus' "Open in split". The hover `+` adds a Plane under this one,
 // through the one Add plane popup. All three actions carry a kit tooltip; the
@@ -27,16 +31,29 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 	IconButton,
+	Popover,
+	PopoverAnchor,
 	Tooltip,
 	TooltipContent,
 	TooltipTrigger,
 } from "@nustackdev/ui-kit";
-import type { LucideIcon } from "lucide-react";
-import { ChevronRight, Columns2, Ellipsis, FileText, PenLine, Plus, Trash2 } from "lucide-react";
+import {
+	ChevronRight,
+	Columns2,
+	Ellipsis,
+	FileText,
+	PenLine,
+	Plus,
+	SmilePlus,
+	Trash2,
+} from "lucide-react";
 import type * as React from "react";
 import { useCallback, useRef, useState } from "react";
 import { closePanes, hrefFor, onNavClick, openPane, replacePane } from "../core/router";
 import { railAction, railChevron, railIcon, railTwisty } from "../design";
+import { IconPickerContent } from "../icon/IconPicker";
+import { PlaneIcon } from "../icon/PlaneIcon";
+import type { Icon as PlaneIconValue } from "../icon/parse";
 import { openAddPlane } from "./add";
 import type { Notify } from "./ops";
 import { RailRow, RailRowLink } from "./RailRow";
@@ -47,7 +64,7 @@ import type { PlaneTree } from "./types";
 export function PlaneRow({
 	row,
 	index,
-	icon: Icon,
+	icon,
 	selected,
 	open: isOpen,
 	tabbable,
@@ -67,8 +84,8 @@ export function PlaneRow({
 }: {
 	row: VisibleRow;
 	index: number;
-	/** The row's icon: the one its registered Plane names. */
-	icon: LucideIcon;
+	/** The row's icon, resolved: its own, its registered Plane's, or the default. */
+	icon: PlaneIconValue;
 	/** The focused pane's Plane. */
 	selected: boolean;
 	/** Showing in some pane. */
@@ -107,6 +124,27 @@ export function PlaneRow({
 
 	const add = useCallback(() => openAddPlane({ parent: id }), [id]);
 
+	// "Change icon" opens the picker once its menu has closed, in place of the
+	// menu handing focus back; opened any sooner, that focus would shut it.
+	const [picking, setPicking] = useState(false);
+	const pickNext = useRef(false);
+	const changeIcon = useCallback(() => {
+		pickNext.current = true;
+	}, []);
+	const afterMenu = useCallback((e: Event) => {
+		if (!pickNext.current) return;
+		pickNext.current = false;
+		e.preventDefault();
+		setPicking(true);
+	}, []);
+	const setIcon = useCallback(
+		(next: string) => {
+			setPicking(false);
+			notify("plane.icon", { plane_id: id, icon: next });
+		},
+		[id, notify],
+	);
+
 	return (
 		<RailRow
 			rowKey={key}
@@ -122,9 +160,30 @@ export function PlaneRow({
 			className={className}
 			onFocus={() => onFocus(key)}
 			onKeyDown={(e) => onKeyDown(e, row, index)}
+			onMenuCloseAutoFocus={afterMenu}
 			lane={
 				<>
-					<Icon className={railIcon(!dragging)} aria-hidden="true" />
+					<Popover open={picking} onOpenChange={setPicking}>
+						<PopoverAnchor asChild>
+							<PlaneIcon icon={icon} className={railIcon(!dragging)} />
+						</PopoverAnchor>
+						<IconPickerContent
+							value={row.icon}
+							onPick={setIcon}
+							onRemove={() => setIcon("")}
+							side="bottom"
+							align="start"
+							// Back to the row, so the keyboard carries on from where it was.
+							onCloseAutoFocus={(e) => {
+								e.preventDefault();
+								document
+									.querySelector<HTMLElement>(
+										`[role="treeitem"][data-rail-key="${CSS.escape(key)}"]`,
+									)
+									?.focus();
+							}}
+						/>
+					</Popover>
 					<IconButton
 						variant="ghost"
 						size="sm"
@@ -205,7 +264,12 @@ export function PlaneRow({
 						</TooltipTrigger>
 						<TooltipContent side="bottom">Add plane inside</TooltipContent>
 					</Tooltip>
-					<MoreMenu title={title} tabbable={tabbable} dragging={dragging}>
+					<MoreMenu
+						title={title}
+						tabbable={tabbable}
+						dragging={dragging}
+						onCloseAutoFocus={afterMenu}
+					>
 						<DropdownMenuItem onSelect={split}>
 							<Columns2 />
 							Open in split
@@ -217,6 +281,10 @@ export function PlaneRow({
 						<DropdownMenuItem onSelect={() => onRename(row)}>
 							<PenLine />
 							Rename
+						</DropdownMenuItem>
+						<DropdownMenuItem onSelect={changeIcon}>
+							<SmilePlus />
+							Change icon
 						</DropdownMenuItem>
 						<DropdownMenuSeparator />
 						<DropdownMenuItem variant="danger" onSelect={remove}>
@@ -245,6 +313,10 @@ export function PlaneRow({
 						<PenLine />
 						Rename
 					</ContextMenuItem>
+					<ContextMenuItem onSelect={changeIcon}>
+						<SmilePlus />
+						Change icon
+					</ContextMenuItem>
 					<ContextMenuSeparator />
 					<ContextMenuItem variant="danger" onSelect={remove}>
 						<Trash2 />
@@ -265,11 +337,14 @@ function MoreMenu({
 	title,
 	tabbable,
 	dragging,
+	onCloseAutoFocus,
 	children,
 }: {
 	title: string;
 	tabbable: boolean;
 	dragging: boolean;
+	/** Where focus goes when the menu closes; the default is back to the `...`. */
+	onCloseAutoFocus?: (e: Event) => void;
 	/** The dropdown's items. */
 	children: React.ReactNode;
 }) {
@@ -315,7 +390,7 @@ function MoreMenu({
 				</DropdownMenuTrigger>
 				<TooltipContent side="bottom">More</TooltipContent>
 			</Tooltip>
-			<DropdownMenuContent align="start" className="min-w-40">
+			<DropdownMenuContent align="start" className="min-w-40" onCloseAutoFocus={onCloseAutoFocus}>
 				{children}
 			</DropdownMenuContent>
 		</DropdownMenu>

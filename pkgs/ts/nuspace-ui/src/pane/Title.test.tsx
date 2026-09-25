@@ -17,15 +17,7 @@ const onExit = vi.fn(() => true);
 
 function render(value: string) {
 	act(() => {
-		root.render(
-			<Title
-				value={value}
-				placeholder="Untitled"
-				compact={false}
-				onCommit={onCommit}
-				onExit={onExit}
-			/>,
-		);
+		root.render(<Title value={value} placeholder="Untitled" onCommit={onCommit} onExit={onExit} />);
 	});
 }
 
