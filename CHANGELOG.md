@@ -12,6 +12,7 @@ separately here.
 
 ## Unreleased
 
+- Home and settings start with their own icons, a house and a gear
 - A settings plane with a telemetry switch, and home lives at its own address
 - Planes write like a document: Enter, Cmd+Enter, Backspace across text cells, and box selection
 - A wider sidebar by default, and clicking a resize handle resets its width

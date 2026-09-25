@@ -31,6 +31,9 @@ PLANE = "settings"
 #: What the plane is called.
 NAME = "Settings"
 
+#: Its icon, as :func:`~nuspace.ops.plane.plane_icon` spells it.
+ICON = "emoji:⚙️"
+
 
 TELEMETRY = """\
 import nu
@@ -68,4 +71,4 @@ CELLS = (("header", HEADER), ("telemetry", TELEMETRY))
 
 def ensure_settings() -> nu.Nu:
     """The settings plane and its cells, seeded once."""
-    return seed(PLANE, NAME, CELLS)
+    return seed(PLANE, NAME, ICON, CELLS)

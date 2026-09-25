@@ -36,7 +36,7 @@ async def test_home_is_seeded_once_and_left_alone_after_edits(store):
     (row,) = [r for r in await store.read(ops.plane_rows()) if r["id"] == home.PLANE]
     assert row["name"] == "Home"
     assert row["props"] == {"system": True, "ui": True, "made_by": ""}
-    assert row["meta"] == {"editable": True, "full_width": False}
+    assert row["meta"] == {"editable": True, "full_width": False, "icon": home.ICON}
     cells = await store.read(ops.cell_rows(home.PLANE))
     assert [(c["id"], c["name"], c["prog"]) for c in cells] == [
         (cell, cell, source) for cell, source in home.CELLS

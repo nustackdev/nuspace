@@ -59,6 +59,9 @@ PLANE = "home"
 #: What the plane is called.
 NAME = "Home"
 
+#: Its icon, as :func:`~nuspace.ops.plane.plane_icon` spells it.
+ICON = "emoji:🏠"
+
 #: The plane's meta, as nuverse's live planes start.
 META = {"editable": True, "full_width": False}
 
@@ -285,7 +288,7 @@ def out():
 CELLS = (("header", HEADER), ("recent", RECENT), ("glance", GLANCE), ("start", START))
 
 
-def seed(plane: str, name: str, cells: tuple[tuple[str, str], ...]) -> nu.Nu:
+def seed(plane: str, name: str, icon: str, cells: tuple[tuple[str, str], ...]) -> nu.Nu:
     """A system ui plane and its cells, when the plane was never made. Idempotent.
 
     Missing means ``add_plane`` never wrote it (no name), so a plane the owner
@@ -296,16 +299,17 @@ def seed(plane: str, name: str, cells: tuple[tuple[str, str], ...]) -> nu.Nu:
     Args:
         plane: The plane id, fixed.
         name: What the plane is called.
+        icon: Its icon, eg ``"emoji:<char>"``.
         cells: ``(cell id, source)`` in order. The id is the name too.
     """
     made = [add_cell(plane, source, cell_id=cell, name=cell) for cell, source in cells]
-    first = add_plane(plane, name=name, system=True, ui=True, made_by="", meta=META)
+    first = add_plane(plane, name=name, system=True, ui=True, made_by="", meta={**META, "icon": icon})
     return nu.IfDo(snap(nu.Not(Space.planes[plane].contains("name"))), nu.Sequential(first, *made))
 
 
 def ensure_home() -> nu.Nu:
     """The home plane and its cells, seeded once (:func:`seed`)."""
-    return seed(PLANE, NAME, CELLS)
+    return seed(PLANE, NAME, ICON, CELLS)
 
 
 def versions(packages: tuple[str, ...] = PACKAGES) -> dict[str, str]:
