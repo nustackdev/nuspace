@@ -42,7 +42,7 @@ from ..kernel.body import until
 from ..utils import Ticking, park, snap, wake
 
 
-__all__ = ["BY", "CELL", "PLANE", "SESSION", "SHIM", "clear_connections", "program"]
+__all__ = ["BY", "CELL", "PLANE", "SESSION", "SHIM", "clear_connections", "program", "routable"]
 
 
 #: The plane id, fixed (D31).
@@ -82,11 +82,12 @@ def clear_connections() -> nu.Nu:
     return atomic(nu.ForEachDo(nu.list(connections.keys()), connections.del_item(at), item=item))
 
 
-def _shown(route: nu.StrAttrRef) -> nu.Nu:
+def routable(route: nu.Nu) -> nu.Nu:
     """Whether a route names a plane nav brings up: one that exists and is drawn (``props.ui``).
 
     ``system`` is not asked: it only means protected, so a system ui plane
-    (home) comes up, and a service (``ui`` unset) never does.
+    (home) comes up, and a service (``ui`` unset) never does. The viewer
+    tells a pane why it is left empty off the same answer.
     """
     return nu.And(
         nu.Ne(route, nu.Str("")),
@@ -178,7 +179,7 @@ def _open(sid: nu.StrAttrRef, route: nu.StrAttrRef) -> nu.Nu:
     # a new plane's id and opens it while its create is still in flight. So
     # wait for the plane rather than giving up on the route; the routes will
     # not change again to retry.
-    shown = nu.WhileDo(nu.Not(snap(_shown(route))), wake(Space.planes.on_children_change()))
+    shown = nu.WhileDo(nu.Not(snap(routable(route))), wake(Space.planes.on_children_change()))
     return shown >> turn >> park()
 
 

@@ -91,6 +91,17 @@ export const docPlaneSurface = cn(docPlane, "flex min-w-0 flex-1 flex-col px-2")
 export const docPlaneLoading = "flex items-center gap-2 px-16 py-8 text-base text-text-muted";
 
 /**
+ * A pane with no plane to draw: there is none by that id, or it runs without
+ * a view. The loading state's quiet, centred on the document grid's content
+ * track and in the pane's height, with its one way out under it.
+ */
+export const docPlaneAbsent = cn(docRow, docPlaneWidth(false), "flex-1 content-center py-8");
+export const docPlaneAbsentBody = cn(
+	docContentTrack,
+	"flex flex-col items-center gap-3 text-center text-base text-text-muted",
+);
+
+/**
  * A ghost input: the line where a cell will be, before there is one.
  *
  * It says nothing at rest. A permanent control sitting at the foot of every
@@ -424,8 +435,15 @@ export const docSourceDirty = "flex items-center gap-1 self-end text-xs text-tex
 /** The cell's mounted ui refs. Looser gap: these are whole widgets. */
 export const docProgramFields = "flex flex-col gap-3 py-1";
 
-/** The "runs headless" line, when a cell mounts nothing. */
-export const docProgramHeadless = "py-1 text-base text-text-muted";
+/**
+ * The line a cell that mounts nothing keeps, one line high: a dashed chip,
+ * the lens's empty value (ui-kit's lens columns) in the document's tokens.
+ */
+export const docProgramHeadless = "flex py-1";
+export const docProgramHeadlessChip = cn(
+	"inline-flex items-center rounded-sm border border-dashed px-1",
+	"font-mono text-xs leading-none text-text-muted select-none",
+);
 
 /**
  * The code box around Monaco. Bordered and sunken, so a source editor looks

@@ -17,6 +17,8 @@ from nuspace.system.devices.web.viewer.feed import (
     viewer_feed,
 )
 from nuspace.system.devices.web.viewer.interactions import (
+    ABSENT_HEADLESS,
+    ABSENT_MISSING,
     STATE_FAILED,
     STATE_IDLE,
     STATE_RUNNING,
@@ -30,6 +32,7 @@ from nuspace.system.devices.web.viewer.interactions import (
     on_reorder_cells,
     on_set_meta,
     on_update_cell,
+    set_absent,
     set_plane,
     set_status,
 )
@@ -37,6 +40,8 @@ from nuspace.system.devices.web.viewer.ref import ViewerRef, slash_entries
 
 
 __all__ = [
+    "ABSENT_HEADLESS",
+    "ABSENT_MISSING",
     "PLANE_META",
     "STATES",
     "STATE_FAILED",
@@ -54,6 +59,7 @@ __all__ = [
     "on_update_cell",
     "plane_cells",
     "plane_view",
+    "set_absent",
     "set_plane",
     "set_status",
     "slash_entries",

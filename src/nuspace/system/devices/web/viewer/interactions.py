@@ -1,10 +1,11 @@
 """Everything the viewer says and hears, in the browser's own words.
 
 - **Events**, browser to host. One path per op under ``<viewer>.ops.``.
-- **Writes**, host to browser. Two, on the viewer's own path, tagged with an
+- **Writes**, host to browser. Three, on the viewer's own path, tagged with an
   ``op`` key, and keyed by ``plane_id``: several planes can be open at once,
   one pane each. ``set_status`` patches what ``set_plane`` landed for the
-  same plane, so the two go in that order.
+  same plane, so the two go in that order. ``set_absent`` stands in for
+  ``set_plane`` when the pane has no plane to draw; either replaces the other.
 
 Nothing here reads or writes a store. Which op an event runs is
 :mod:`.feed`. ``planes.open`` is the viewer's: which panes are open is a
@@ -24,6 +25,8 @@ if TYPE_CHECKING:
 
 
 __all__ = [
+    "ABSENT_HEADLESS",
+    "ABSENT_MISSING",
     "STATES",
     "STATE_FAILED",
     "STATE_IDLE",
@@ -37,6 +40,7 @@ __all__ = [
     "on_reorder_cells",
     "on_set_meta",
     "on_update_cell",
+    "set_absent",
     "set_plane",
     "set_status",
 ]
@@ -60,6 +64,12 @@ STATE_FAILED = "failed"
 #: What a cell's status can say. The browser's contract (``types.ts``).
 STATES = (STATE_IDLE, STATE_STARTING, STATE_RUNNING, STATE_STOPPED, STATE_FAILED)
 
+#: No plane by that id.
+ABSENT_MISSING = "missing"
+
+#: A plane, but not a ui one: it runs without a view.
+ABSENT_HEADLESS = "headless"
+
 
 # --- Writes: host -> browser --------------------------------------------------
 
@@ -76,10 +86,18 @@ def set_plane(
 
     ``meta`` is the plane's whole meta, ``editable`` and ``full_width`` at
     least. A cell is ``{id, name, source}``. Every open plane is answered
-    with one, even for something that is not a plane, or its pane loads
-    forever.
+    with one or with a :func:`set_absent`, or its pane loads forever.
     """
     return write(viewer, "set_plane", plane_id=plane_id, title=title, meta=meta, cells=cells)
+
+
+def set_absent(viewer: Ref, plane_id: StrArg, reason: StrArg) -> Nu:
+    """Say one pane has nothing to draw, and why.
+
+    ``reason`` is :data:`ABSENT_MISSING` or :data:`ABSENT_HEADLESS`. A later
+    :func:`set_plane` for the same plane replaces it.
+    """
+    return write(viewer, "set_absent", plane_id=plane_id, reason=reason)
 
 
 def set_status(viewer: Ref, plane_id: StrArg, statuses: ListArg[dict]) -> Nu:

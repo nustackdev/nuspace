@@ -7,8 +7,9 @@
 //
 // There is no chrome in here. Status, the cell id and the code toggle live
 // in the gutter (see ./Gutter.tsx), where every cell gets them, so what is
-// left below is purely what the program produced. On a read-only plane even the
-// "runs headless" note goes: the plane draws output and nothing about it.
+// left below is purely what the program produced. A cell that draws nothing
+// keeps one quiet line, a "No view" chip, on any plane, so it is never an
+// invisible gap; an error or an open editor stands in for it.
 //
 // The chrome still consumes the fixed status contract:
 //
@@ -28,6 +29,7 @@ import {
 	docProgram,
 	docProgramFields,
 	docProgramHeadless,
+	docProgramHeadlessChip,
 	docStatusTrace,
 } from "../../design";
 import type { FocusReq } from "../state";
@@ -40,8 +42,6 @@ export type ProgramProps = {
 	/** Where this cell's own refs live in the tree. See ./address.ts. */
 	uiPath: Path;
 	status: CellStatus | null;
-	/** The plane's setting. Off: output only. */
-	editable: boolean;
 	editing: boolean;
 	focusReq: FocusReq | null;
 	onFocusConsumed: () => void;
@@ -56,7 +56,6 @@ export function ProgramCell(props: ProgramProps) {
 		source,
 		uiPath,
 		status,
-		editable,
 		editing,
 		focusReq,
 		onFocusConsumed,
@@ -106,8 +105,12 @@ export function ProgramCell(props: ProgramProps) {
 				<div className={docProgramFields} data-cell-ui="">
 					<NodeView path={uiPath} />
 				</div>
-			) : editable && !editing && !status?.error ? (
-				<div className={docProgramHeadless}>No UI refs, this cell runs headless</div>
+			) : !editing && !status?.error ? (
+				<div className={docProgramHeadless}>
+					<span className={docProgramHeadlessChip} title="This cell draws no ui refs">
+						No view
+					</span>
+				</div>
 			) : null}
 		</div>
 	);

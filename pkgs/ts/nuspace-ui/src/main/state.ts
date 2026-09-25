@@ -2,8 +2,10 @@
 //
 // Every open Plane and its cells, as a map by plane id in `props.planes`: one
 // entry replaced wholesale by that plane's `set_plane` and patched by its
-// `set_status`. Entries for Planes no longer open are dropped. The browser half
-// of the node (each pane's editor state) is ../plane/state.ts.
+// `set_status`. A pane with no Plane to draw gets a `set_absent` instead, kept
+// by plane id in `props.absent`; either op replaces the other. Entries for
+// Planes no longer open are dropped. The browser half of the node (each pane's
+// editor state) is ../plane/state.ts.
 //
 // ## Cells are not registered here
 //
@@ -13,7 +15,7 @@
 //
 // ## Why this type keeps a write handler
 //
-// Two ops ride one payload, told apart by an `op` key, and the store's default
+// Three ops ride one payload, told apart by an `op` key, and the store's default
 // write has nothing to dispatch on. `set_status` also patches statuses into
 // the cell list by id, which a prop merge cannot do, and `set_plane` has to
 // prune local state naming cells the new Plane does not carry, which nothing
@@ -25,8 +27,10 @@ import { useMemo } from "react";
 import { LOCAL, localOf } from "../core/local";
 import { type EditorState, EMPTY_EDITOR, pruneEditor } from "../plane/state";
 import {
+	type AbsentReason,
 	type ActivePlane,
 	type CellStatus,
+	coerceAbsent,
 	coerceCells,
 	coerceMeta,
 	coerceStatus,
@@ -38,9 +42,21 @@ function planesOf(props: Props): Record<string, ActivePlane> {
 	return (props.planes as Record<string, ActivePlane> | undefined) ?? {};
 }
 
+/** Why each open pane has no Plane, by id, off the node's props. */
+function absentOf(props: Props): Record<string, AbsentReason> {
+	return (props.absent as Record<string, AbsentReason> | undefined) ?? {};
+}
+
 /** Every pane's editor state, by Plane id, off the node's props. */
 function panesOf(props: Props): Record<string, EditorState> {
 	return localOf<Record<string, EditorState>>(props, {});
+}
+
+/** Drop one entry. Same object when it is not there. */
+function without<T>(byId: Record<string, T>, id: string): Record<string, T> {
+	if (!(id in byId)) return byId;
+	const { [id]: _, ...rest } = byId;
+	return rest;
 }
 
 /** Keep only the entries for Planes in `open`. Same object when nothing goes. */
@@ -58,9 +74,9 @@ function keepOpen<T>(byId: Record<string, T>, open: string[]): Record<string, T>
  * Apply one inbound payload to this node's props. Pure given `open`, the
  * Planes the URL names, so it is testable.
  *
- * Both ops are keyed by plane. A `set_plane` for a Plane that is no longer open
- * is a reply to a pane already closed and is dropped, and every write prunes
- * what belongs to closed panes.
+ * Every op is keyed by plane. A `set_plane` or `set_absent` for a Plane that is
+ * no longer open is a reply to a pane already closed and is dropped, and every
+ * such write prunes what belongs to closed panes.
  */
 export function applyViewerWrite(props: Props, payload: unknown, open: string[]): void {
 	const p = (payload ?? {}) as Record<string, unknown>;
@@ -89,13 +105,24 @@ export function applyViewerWrite(props: Props, payload: unknown, open: string[])
 		return;
 	}
 
-	if (op !== "set_plane") return;
+	if (op !== "set_plane" && op !== "set_absent") return;
 
 	const planes = keepOpen(planesOf(props), open);
 	const panes = keepOpen(panesOf(props), open);
+	const absent = keepOpen(absentOf(props), open);
 	if (!planeId || !open.includes(planeId)) {
 		props.planes = planes;
+		props.absent = absent;
 		props[LOCAL] = panes;
+		return;
+	}
+
+	if (op === "set_absent") {
+		const reason = coerceAbsent(p.reason);
+		if (!reason) return;
+		props.planes = without(planes, planeId);
+		props.absent = { ...absent, [planeId]: reason };
+		props[LOCAL] = without(panes, planeId);
 		return;
 	}
 
@@ -109,6 +136,7 @@ export function applyViewerWrite(props: Props, payload: unknown, open: string[])
 			cells,
 		} satisfies ActivePlane,
 	};
+	props.absent = without(absent, planeId);
 
 	const live = new Set(cells.map((b) => b.id));
 	props[LOCAL] = { ...panes, [planeId]: pruneEditor(panes[planeId] ?? EMPTY_EDITOR, live) };
@@ -124,10 +152,12 @@ export function pruneViewer(path: Path, open: string[]): void {
 	if (!node) return;
 	const planes = planesOf(node.props);
 	const panes = panesOf(node.props);
+	const absent = absentOf(node.props);
 	const nextPlanes = keepOpen(planes, open);
 	const nextPanes = keepOpen(panes, open);
-	if (nextPlanes === planes && nextPanes === panes) return;
-	tree.getState().setProps(path, { planes: nextPlanes, [LOCAL]: nextPanes });
+	const nextAbsent = keepOpen(absent, open);
+	if (nextPlanes === planes && nextPanes === panes && nextAbsent === absent) return;
+	tree.getState().setProps(path, { planes: nextPlanes, absent: nextAbsent, [LOCAL]: nextPanes });
 }
 
 /**
@@ -168,6 +198,13 @@ const NO_PLANES: Record<string, ActivePlane> = {};
  *  still loading. */
 export function usePlanes(path: Path): Record<string, ActivePlane> {
 	return (useProps(path).planes as Record<string, ActivePlane> | undefined) ?? NO_PLANES;
+}
+
+const NO_ABSENT: Record<string, AbsentReason> = {};
+
+/** Why each open pane has no Plane to draw, by id. */
+export function useAbsent(path: Path): Record<string, AbsentReason> {
+	return (useProps(path).absent as Record<string, AbsentReason> | undefined) ?? NO_ABSENT;
 }
 
 const EMPTY_SNIPPETS: SlashSnippet[] = [];

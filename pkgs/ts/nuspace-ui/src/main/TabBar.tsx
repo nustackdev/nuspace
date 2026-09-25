@@ -38,15 +38,17 @@ import {
 } from "../design";
 import { PlaneIcon } from "../icon/PlaneIcon";
 import { parseIcon } from "../icon/parse";
-import { TITLE_FALLBACK } from "../pane/Pane";
+import { paneTitle } from "../pane/Pane";
 import { PaneMenu } from "../pane/PaneMenu";
-import type { ActivePlane } from "../plane/types";
+import type { AbsentReason, ActivePlane } from "../plane/types";
 import { OverflowTooltip } from "../shell/OverflowTooltip";
 import { pinDropIndex } from "../sidebar/pin";
 import { edgeAt, type PaneEdge } from "./useCanvasDrop";
 
 /** What a tab's drag carries: its pane's plane id. */
 export const TAB_MIME = "application/x-nuspace-tab";
+
+const NO_ABSENT: Record<string, AbsentReason> = {};
 
 /** Where a dragged tab would land: beside the tab at `index`. */
 type TabTarget = { index: number; edge: PaneEdge };
@@ -74,6 +76,7 @@ function reveal(host: HTMLElement | null, attr: string, id: string): void {
 export function TabBar({
 	routes,
 	planes,
+	absent = NO_ABSENT,
 	focused,
 	stripRef,
 	onMeta,
@@ -82,6 +85,8 @@ export function TabBar({
 }: {
 	routes: string[];
 	planes: Record<string, ActivePlane>;
+	/** Panes with no Plane to draw: titled by id, nothing to rename. */
+	absent?: Record<string, AbsentReason>;
 	focused: string;
 	/** The strip of panes, to scroll a pane into view. */
 	stripRef: React.RefObject<HTMLDivElement | null>;
@@ -172,7 +177,7 @@ export function TabBar({
 		>
 			{routes.map((id, i) => {
 				const plane = planes[id] ?? null;
-				const title = plane?.title || TITLE_FALLBACK;
+				const title = paneTitle(id, plane, absent[id] ?? null);
 				const active = id === focused;
 				const icon = parseIcon(plane?.meta.icon);
 				const aimed = target?.index === i ? target.edge : null;

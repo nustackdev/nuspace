@@ -40,7 +40,14 @@ import type { Ops } from "../plane/ops";
 import type { Notify as SidebarNotify, Ops as SidebarOps } from "../sidebar/ops";
 import { canDelete, deletePlane } from "../sidebar/remove";
 import { usePlaneTree } from "../sidebar/state";
-import { patchPlaneMeta, patchPlaneTitle, pruneViewer, usePlanes, useSnippets } from "./state";
+import {
+	patchPlaneMeta,
+	patchPlaneTitle,
+	pruneViewer,
+	useAbsent,
+	usePlanes,
+	useSnippets,
+} from "./state";
 import { TabBar } from "./TabBar";
 import { useCanvasDrop } from "./useCanvasDrop";
 import { usePaneWidths } from "./usePaneWidths";
@@ -51,6 +58,7 @@ const NOTHING_OPEN = "pick a Plane";
 
 export function Main({ path }: NodeProps) {
 	const planes = usePlanes(path);
+	const absent = useAbsent(path);
 	const snippets = useSnippets(path);
 	const routes = useRoutes();
 	const focused = useFocusedRoute();
@@ -155,6 +163,7 @@ export function Main({ path }: NodeProps) {
 				<TabBar
 					routes={routes}
 					planes={planes}
+					absent={absent}
 					focused={focused}
 					stripRef={stripRef}
 					onMeta={onMeta}
@@ -179,6 +188,7 @@ export function Main({ path }: NodeProps) {
 							viewerPath={path}
 							planeId={id}
 							plane={planes[id] ?? null}
+							absent={absent[id] ?? null}
 							snippets={snippets}
 							notify={notify}
 							onMeta={onMeta}

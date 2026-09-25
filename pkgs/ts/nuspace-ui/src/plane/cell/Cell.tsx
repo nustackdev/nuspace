@@ -111,7 +111,6 @@ export function Cell({
 					source={cell.source}
 					uiPath={uiPath}
 					status={cell.status}
-					editable={editable}
 					editing={editing}
 					focusReq={focusReq}
 					onFocusConsumed={onFocusConsumed}

@@ -5,14 +5,20 @@
 // The pane last clicked (or tabbed into) is the focused one: that is the pane
 // a plain sidebar click replaces. With more than one pane open the others
 // sit on a dimmed surface and the focused one keeps the canvas.
+//
+// A pane whose Plane is absent (none by that id, or one that runs without a
+// view) says so in place of the cells, with a way to close it, and offers no
+// title or icon to edit. Its bar and tab carry the plane id.
 
 import type { Path } from "@nustackdev/ui-core";
-import { Spinner } from "@nustackdev/ui-kit";
+import { Button, Spinner } from "@nustackdev/ui-kit";
 import type * as React from "react";
 import { useCallback, useRef } from "react";
 import { closePane, focusPane } from "../core/router";
 import { useTypePath } from "../core/surfaces";
 import {
+	docPlaneAbsent,
+	docPlaneAbsentBody,
 	docPlaneLoading,
 	docTitleHead,
 	docTitleRow,
@@ -22,7 +28,7 @@ import {
 } from "../design";
 import type { Notify } from "../plane/ops";
 import { Plane } from "../plane/Plane";
-import type { ActivePlane, SlashSnippet } from "../plane/types";
+import type { AbsentReason, ActivePlane, SlashSnippet } from "../plane/types";
 import { useRegisteredIcon } from "../sidebar/state";
 import { PaneBar } from "./PaneBar";
 import { Title } from "./Title";
@@ -32,10 +38,26 @@ import { TitleIcon } from "./TitleIcon";
 // muted, so it cannot be mistaken for a title that is really there.
 export const TITLE_FALLBACK = "Untitled";
 
+/** What an absent pane says, per reason. */
+export const ABSENT_TEXT: Record<AbsentReason, string> = {
+	missing: "This plane doesn't exist",
+	headless: "This plane runs without a view",
+};
+
+/** A pane's title: the plane's, the id for an absent one, else the fallback. */
+export function paneTitle(
+	planeId: string,
+	plane: ActivePlane | null,
+	absent: AbsentReason | null,
+): string {
+	return absent ? planeId : plane?.title || TITLE_FALLBACK;
+}
+
 export function Pane({
 	viewerPath,
 	planeId,
 	plane,
+	absent = null,
 	snippets,
 	notify,
 	onMeta,
@@ -52,6 +74,8 @@ export function Pane({
 	planeId: string;
 	/** Null until this Plane's `set_plane` lands. */
 	plane: ActivePlane | null;
+	/** Why there is no Plane to draw, once the server says so. */
+	absent?: AbsentReason | null;
 	snippets: SlashSnippet[];
 	notify: Notify;
 	/** Change this plane's settings. */
@@ -75,7 +99,7 @@ export function Pane({
 	// Capture, so a click that a cell handles and stops still moves focus,
 	// and a caret tabbed into the pane counts the same as a click.
 	const claim = useCallback(() => focusPane(planeId), [planeId]);
-	const title = plane?.title || TITLE_FALLBACK;
+	const title = paneTitle(planeId, plane, absent);
 	const wide = plane?.meta.full_width === true;
 	const compact = plane?.meta.compact === true;
 	// The plane fills these in, so the title can hand the caret down to it,
@@ -109,7 +133,16 @@ export function Pane({
 			)}
 			{/* A press off the cells starts a box selection over them. */}
 			<div className={shellPanePlane} onPointerDown={(e) => selectBox.current?.(e)}>
-				{plane == null ? (
+				{absent ? (
+					<div className={docPlaneAbsent}>
+						<div className={docPlaneAbsentBody}>
+							{ABSENT_TEXT[absent]}
+							<Button variant="ghost" size="sm" onClick={() => closePane(planeId)}>
+								Close
+							</Button>
+						</div>
+					</div>
+				) : plane == null ? (
 					<div className={docPlaneLoading}>
 						<Spinner size="sm" tone="neutral" label="Loading" />
 						loading...

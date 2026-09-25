@@ -58,6 +58,17 @@ export type ActivePlane = {
 	cells: Cell[];
 };
 
+/**
+ * Why an open pane has no Plane to draw, as `set_absent.reason` ships it:
+ * no Plane by that id, or one that runs without a view.
+ */
+export type AbsentReason = "missing" | "headless";
+
+/** A wire reason, or null for one this browser does not know. */
+export function coerceAbsent(raw: unknown): AbsentReason | null {
+	return raw === "missing" || raw === "headless" ? raw : null;
+}
+
 /** One registered snippet, as the `/` menu offers it. */
 export type SlashSnippet = { name: string; label: string };
 

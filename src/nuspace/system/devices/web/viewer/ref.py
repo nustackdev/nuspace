@@ -58,6 +58,10 @@ class ViewerRef(SpaceRef):
         """Replace what one pane draws: one plane, its meta, and its cells in order."""
         return interactions.set_plane(self, plane_id, title=title, meta=meta, cells=cells)
 
+    def set_absent(self, plane_id: StrArg, reason: StrArg) -> Nu:
+        """Say one pane has nothing to draw: its plane is missing or headless."""
+        return interactions.set_absent(self, plane_id, reason)
+
     def set_status(self, plane_id: StrArg, statuses: ListArg[dict]) -> Nu:
         """Patch what one pane says about its cells."""
         return interactions.set_status(self, plane_id, statuses)

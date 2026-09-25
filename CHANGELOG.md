@@ -12,6 +12,8 @@ separately here.
 
 ## Unreleased
 
+- Opening a missing or headless plane says so instead of showing an empty page
+- Cells that draw nothing show a quiet No view chip on every plane
 - Drag planes into a split, drag tabs to reorder, cmd-click opens a browser tab
 - Pin planes to a row at the top of the sidebar, reorder them by dragging
 - Home and settings start with their own icons, a house and a gear

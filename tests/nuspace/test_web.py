@@ -621,3 +621,50 @@ async def test_connection_panes(store):
     finally:
         task.cancel()
         await asyncio.gather(task, return_exceptions=True)
+
+
+async def test_connection_absent_panes(store):
+    from nuspace.system.devices.web.device import connection
+
+    await _plane(store, "ui", "Drawn", ui=True)
+    await _plane(store, "svc", "Service", system=True)
+    session = FakeSession()
+    ctx = store.ctx.bind(Session, session)
+    task = asyncio.create_task(
+        nu.arun(connection(nu.Str("s1"), planes=PLANES, snippets=SNIPPETS), ctx)
+    )
+
+    def last(plane_id: str) -> dict:
+        """The last set_plane or set_absent for one pane."""
+        said = [
+            f.payload
+            for f in session.frames
+            if isinstance(f.payload, dict)
+            and f.payload.get("op") in {"set_plane", "set_absent"}
+            and f.payload.get("plane_id") == plane_id
+        ]
+        return said[-1] if said else {}
+
+    try:
+        await _until(lambda: session.writes("set_tree"))
+        # A ui plane is drawn, a missing one and a headless one are told why not.
+        session.notify(("viewer", "ops", "planes.open"), {"plane_ids": ["ui", "nope", "svc"]})
+        await _until(lambda: all(last(p) for p in ("ui", "nope", "svc")))
+        assert last("ui")["op"] == "set_plane" and last("ui")["title"] == "Drawn"
+        assert last("nope") == {"op": "set_absent", "plane_id": "nope", "reason": "missing"}
+        assert last("svc") == {"op": "set_absent", "plane_id": "svc", "reason": "headless"}
+
+        # An open plane deleted elsewhere turns missing.
+        await store.run(ops.remove_plane("ui"))
+        await _until(lambda: last("ui").get("op") == "set_absent")
+        assert last("ui")["reason"] == "missing"
+
+        # One that appears, or turns ui, is drawn again.
+        await _plane(store, "nope", "Late", ui=True)
+        await _until(lambda: last("nope").get("op") == "set_plane")
+        assert last("nope")["title"] == "Late"
+        await store.run(atomic(Space.planes["svc"].props.ui.set(True)))
+        await _until(lambda: last("svc").get("op") == "set_plane")
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)

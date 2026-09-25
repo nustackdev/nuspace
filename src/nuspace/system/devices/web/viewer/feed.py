@@ -6,13 +6,20 @@ Two families:
 - **store to browser.** An open plane or its runs changed; its arm ships
   the plane or the statuses again, keyed by ``plane_id``.
 
+**A pane with nothing to draw is told why.** A route nav does not bring up
+(:func:`~nuspace.system.services.nav.routable`) ships ``set_absent`` in
+place of the plane: ``missing`` when there is no such plane, ``headless``
+when it is not a ui one. The same arm reships, so a plane deleted from
+another tab turns its pane absent, and one that comes back or turns ui is
+drawn again.
+
 **Which planes are open** is ``connections[sid].routes``, written by the
 device's route arm (D15), never read off the browser. One arm per plane in
 it: every subscription below an arm is about that one pane, and dies with it
 when the plane leaves ``routes``.
 
 **Narrow watch.** A plane is shipped again when its plane's row, name,
-meta, order or cells (their set, names and progs) change; the statuses when
+meta, ``ui`` prop, order or cells (their set, names and progs) change; the statuses when
 any run's ``status`` moves. A cell writing its state or a run writing its
 output wakes neither.
 
@@ -46,6 +53,8 @@ from nuspace.shapes import (
 from nuspace.system.devices.web.utils import Arms, field_ids, field_index, field_str
 from nuspace.system.devices.web.viewer import interactions
 from nuspace.system.devices.web.viewer.interactions import (
+    ABSENT_HEADLESS,
+    ABSENT_MISSING,
     STATE_FAILED,
     STATE_IDLE,
     STATE_RUNNING,
@@ -53,6 +62,7 @@ from nuspace.system.devices.web.viewer.interactions import (
     STATE_STOPPED,
 )
 from nuspace.system.kernel.utils import snap
+from nuspace.system.services.nav import routable
 
 
 if TYPE_CHECKING:
@@ -212,10 +222,20 @@ def statuses(plane_id: nu.StrArg) -> nu.Nu:
 # --- Shipping ------------------------------------------------------------------
 
 
+def _absence(plane: nu.Nu) -> nu.Nu:
+    """Why a pane has no plane to draw, ``""`` when it has one. Bare read."""
+    return nu.If(
+        routable(plane),
+        nu.Str(""),
+        nu.If(ops.plane_exists(plane), nu.Str(ABSENT_HEADLESS), nu.Str(ABSENT_MISSING)),
+    )
+
+
 def _ship_plane(viewer: Ref, plane: nu.Nu) -> nu.Nu:
-    held = fresh("viewer_plane")
+    held, absent = fresh("viewer_plane"), fresh("viewer_absent")
     got = nu.DictAttrRef(held)
-    return nu.Let(
+    why = nu.StrAttrRef(absent)
+    shown = nu.Let(
         held,
         snap(plane_view(plane)),
         interactions.set_plane(
@@ -226,6 +246,11 @@ def _ship_plane(viewer: Ref, plane: nu.Nu) -> nu.Nu:
             cells=nu.List(got.get_item(nu.Str("cells"), nu.List.of())),
         ),
     )
+    return nu.Let(
+        absent,
+        snap(_absence(plane)),
+        nu.IfDo(nu.Eq(why, nu.Str("")), shown, interactions.set_absent(viewer, plane, why)),
+    )
 
 
 def _ship_status(viewer: Ref, plane: nu.Nu) -> nu.Nu:
@@ -235,12 +260,14 @@ def _ship_status(viewer: Ref, plane: nu.Nu) -> nu.Nu:
 
 
 def _plane_changes(plane: nu.Nu) -> list[nu.Nu]:
-    """What reships the plane: the plane's row, name, meta, order and cells."""
+    """What reships the plane: the plane's row, name, meta, ``ui`` prop, order and cells."""
     planes = Space.planes
     patterns = [
         ("name",),
         ("meta",),
         ("meta", "*"),
+        ("props",),
+        ("props", "ui"),
         ("order",),
         ("order", "*"),
         ("cells",),
