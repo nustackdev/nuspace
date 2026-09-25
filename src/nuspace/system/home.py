@@ -1,4 +1,4 @@
-"""Home: the plane ``/`` opens, seeded by the host at open when missing.
+"""Home: the plane ``/`` redirects to, seeded by the host at open when missing.
 
 A system ui plane with a fixed id: ``remove_plane`` refuses it, nav brings it
 up like any other drawn plane, and the sidebar lists it like one, first at the
@@ -47,12 +47,13 @@ __all__ = [
     "RECENT_SHOWN",
     "START",
     "ensure_home",
+    "seed",
     "versions",
     "write_info",
 ]
 
 
-#: The plane id, fixed: ``/`` routes here.
+#: The plane id, fixed: routed at ``/home``, like any plane.
 PLANE = "home"
 
 #: What the plane is called.
@@ -284,17 +285,27 @@ def out():
 CELLS = (("header", HEADER), ("recent", RECENT), ("glance", GLANCE), ("start", START))
 
 
-def ensure_home() -> nu.Nu:
-    """The home plane and its cells, when the plane was never made. Idempotent.
+def seed(plane: str, name: str, cells: tuple[tuple[str, str], ...]) -> nu.Nu:
+    """A system ui plane and its cells, when the plane was never made. Idempotent.
 
-    Missing means ``add_plane`` never wrote it (no name), so a home the owner
+    Missing means ``add_plane`` never wrote it (no name), so a plane the owner
     has edited since, cells removed or renamed included, is left as it is.
     Several commits, like the service planes: it runs in the host at open,
     before anything else reads the store.
+
+    Args:
+        plane: The plane id, fixed.
+        name: What the plane is called.
+        cells: ``(cell id, source)`` in order. The id is the name too.
     """
-    cells = [add_cell(PLANE, source, cell_id=cell, name=cell) for cell, source in CELLS]
-    seed = add_plane(PLANE, name=NAME, system=True, ui=True, made_by="", meta=META)
-    return nu.IfDo(snap(nu.Not(Space.planes[PLANE].contains("name"))), nu.Sequential(seed, *cells))
+    made = [add_cell(plane, source, cell_id=cell, name=cell) for cell, source in cells]
+    first = add_plane(plane, name=name, system=True, ui=True, made_by="", meta=META)
+    return nu.IfDo(snap(nu.Not(Space.planes[plane].contains("name"))), nu.Sequential(first, *made))
+
+
+def ensure_home() -> nu.Nu:
+    """The home plane and its cells, seeded once (:func:`seed`)."""
+    return seed(PLANE, NAME, CELLS)
 
 
 def versions(packages: tuple[str, ...] = PACKAGES) -> dict[str, str]:

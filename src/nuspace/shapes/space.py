@@ -11,7 +11,7 @@ from .plane import Plane
 from .tree import Node
 
 
-__all__ = ["RECENTS_CAP", "Space", "SpaceInfo", "SpaceState"]
+__all__ = ["RECENTS_CAP", "Space", "SpaceInfo", "SpaceSettings", "SpaceState"]
 
 
 #: How many plane ids ``SpaceState.recents`` keeps.
@@ -44,6 +44,19 @@ class SpaceState(nu.Shape):
     info = nustd.kv.ShapeRef.slot(SpaceInfo)
 
 
+class SpaceSettings(nu.Shape):
+    """The space's own settings, written from the settings plane. Unset reads as off.
+
+    ``telemetry`` is whether the space may share anonymous usage data.
+    Nothing reads it yet: it is wired to telemetry once there is some.
+
+    Space level only: what belongs to one device or browser, eg its theme,
+    stays there and never lands in the store.
+    """
+
+    telemetry = nustd.kv.BoolRef.slot()
+
+
 class Space(nu.Shape):
     """Planes, the tree between them, the kernel's records, device and space state.
 
@@ -53,7 +66,8 @@ class Space(nu.Shape):
 
     One writer per subtree: people, cells and services write ``planes`` and
     ``tree`` through ops, the kernel writes ``kernel``, the web device writes
-    ``connections`` and ``state.recents``, the host writes ``state.info``.
+    ``connections`` and ``state.recents``, the host writes ``state.info``,
+    the settings plane writes ``settings``.
 
     ``Space`` is also the store's tag. kv refs find their navigator by root
     shape class, so the store is bound under this class and anything rerooted
@@ -65,3 +79,4 @@ class Space(nu.Shape):
     kernel = nustd.kv.ShapeRef.slot(Kernel)
     connections = nustd.kv.ShapesDictRef.slot(Connection)
     state = nustd.kv.ShapeRef.slot(SpaceState)
+    settings = nustd.kv.ShapeRef.slot(SpaceSettings)

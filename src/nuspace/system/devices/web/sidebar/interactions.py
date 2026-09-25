@@ -54,7 +54,7 @@ ROOT_ID = "space"
 
 
 def set_tree(sidebar: Ref, rows: ListArg[dict]) -> Nu:
-    """Replace the sidebar. A row is ``{id, kind, title, parent, children, made_by, icon}``."""
+    """Replace the sidebar. A row is ``{id, kind, title, parent, children, made_by, icon, system}``."""
     return write(sidebar, "set_tree", planes=rows)
 
 

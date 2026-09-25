@@ -41,6 +41,7 @@ from nuspace.system.home import PLANE as HOME
 from nuspace.system.kernel.space import free_port
 from nuspace.system.kernel.utils import Now, snap
 from nuspace.system.services.nav import clear_connections
+from nuspace.system.settings import PLANE as SETTINGS
 from nustd.ui.core import WsSession
 from nustd.ws_server import SID_ATTR, listen, run_once, session_for, sessions_fold
 
@@ -92,7 +93,7 @@ def _erase(viewer: Ref, plane: nu.Nu) -> nu.Nu:
 
 
 def _remembered(plane: nu.Nu) -> nu.Nu:
-    """Whether an opened plane goes in recents: not home, and not a system plane that is not ui.
+    """Whether an opened plane goes in recents: not home or settings, and not a service.
 
     A plane not written yet counts: a new plane is routed before its create
     lands (D41), and the home cell drops ids that never came to exist.
@@ -100,6 +101,7 @@ def _remembered(plane: nu.Nu) -> nu.Nu:
     props = Space.planes[plane].props
     return nu.And(
         nu.Ne(plane, nu.Str(HOME)),
+        nu.Ne(plane, nu.Str(SETTINGS)),
         nu.Not(nu.And(flag(props.system, False), nu.Not(flag(props.ui, False)))),
     )
 

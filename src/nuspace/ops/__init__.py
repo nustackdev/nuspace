@@ -54,6 +54,7 @@ from .read import (
     planes,
     prog,
 )
+from .settings import set_telemetry, telemetry
 from .state import CellState, PlaneState, clear_state, sibling
 from .tree import move_plane
 from .utils import mint_ordered_id
@@ -100,7 +101,9 @@ __all__ = [
     "set_plane_icon",
     "set_plane_meta",
     "set_prog",
+    "set_telemetry",
     "sibling",
+    "telemetry",
     "up",
     "up_plane",
     "worker",

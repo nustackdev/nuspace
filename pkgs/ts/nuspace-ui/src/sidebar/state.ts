@@ -74,6 +74,14 @@ export function useRegisteredIcon(sidebar: Path | null, planeId: string): string
 	});
 }
 
+/** The sidebar's tree, read from outside the sidebar. Empty until it lands. */
+export function usePlaneTree(sidebar: Path | null): PlaneTree {
+	return useTree((s) => {
+		const props = sidebar ? getNode(s.root, sidebar)?.props : undefined;
+		return (props?.tree as PlaneTree | undefined) ?? EMPTY_TREE;
+	});
+}
+
 export function useExpanded(path: Path): string[] {
 	return useLocalSlot(path, EMPTY_LOCAL, (s) => s.expanded);
 }

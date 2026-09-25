@@ -5,8 +5,8 @@
 //
 // Selection is router-owned: the URL /<id1>+<id2>+... is the cursor, left to
 // right, the sidebar drives it, and the route effect here ships `planes.open`
-// with the full list whenever it changes. The bare "/" is home, the Plane the
-// host seeds, so there is always at least one pane.
+// with the full list whenever it changes. The bare "/" lands on home, the
+// Plane the host seeds, so there is always at least one pane.
 //
 // A single pane is the plane as it always was: the whole strip, centred, no
 // borders. With a split every pane keeps at least the plane's measure, the
@@ -34,12 +34,14 @@ import {
 } from "../design";
 import { Pane } from "../pane/Pane";
 import type { Ops } from "../plane/ops";
-import type { Ops as SidebarOps } from "../sidebar/ops";
+import type { Notify as SidebarNotify, Ops as SidebarOps } from "../sidebar/ops";
+import { canDelete, deletePlane } from "../sidebar/remove";
+import { usePlaneTree } from "../sidebar/state";
 import { patchPlaneMeta, patchPlaneTitle, pruneViewer, usePlanes, useSnippets } from "./state";
 import { TabBar } from "./TabBar";
 import { usePaneWidths } from "./usePaneWidths";
 
-/** Nothing is open. Unreachable while "/" routes home, kept as the honest
+/** Nothing is open. Unreachable while "/" lands home, kept as the honest
  *  fallback should a route ever come back empty. */
 const NOTHING_OPEN = "pick a Plane";
 
@@ -49,6 +51,7 @@ export function Main({ path }: NodeProps) {
 	const routes = useRoutes();
 	const focused = useFocusedRoute();
 	const sidebar = useTypePath("SidebarRef");
+	const tree = usePlaneTree(sidebar);
 	const key = pathKey(path);
 	const routesKey = routes.join("+");
 	const stripRef = useRef<HTMLDivElement | null>(null);
@@ -118,6 +121,16 @@ export function Main({ path }: NodeProps) {
 		[key, sidebar ? pathKey(sidebar) : ""],
 	);
 
+	// Through the sidebar's op and its confirm, like `onRename`: a delete from
+	// a pane's `...` is the sidebar's delete. Undefined for a system Plane.
+	const deleteOf = (planeId: string): (() => void) | undefined => {
+		if (!sidebar || !canDelete(tree, planeId)) return undefined;
+		const notifySidebar: SidebarNotify = (op, args) =>
+			notifyOp<SidebarOps, typeof op>(sidebar, op, args);
+		const title = planes[planeId]?.title || tree[planeId]?.title || planeId;
+		return () => deletePlane(notifySidebar, tree, planeId, title);
+	};
+
 	if (routes.length === 0) {
 		return (
 			<div className={shellSurface}>
@@ -141,6 +154,7 @@ export function Main({ path }: NodeProps) {
 					stripRef={stripRef}
 					onMeta={onMeta}
 					onRename={onRename}
+					deleteOf={deleteOf}
 				/>
 			) : null}
 			<div ref={stripRef} className={shellPanes}>
@@ -165,6 +179,7 @@ export function Main({ path }: NodeProps) {
 							onMeta={onMeta}
 							onRename={onRename}
 							onIcon={onIcon}
+							onDelete={deleteOf(id)}
 							split={split}
 							divided={i > 0}
 							focused={id === focused}

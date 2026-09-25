@@ -107,7 +107,7 @@ export const railHeaderSpace = "min-w-0 flex-1";
  */
 export const railFooter = "flex h-chrome shrink-0 items-center gap-0.5 px-rail-bar-pad";
 
-/** The bottom bar's free middle, where a settings button can go later. */
+/** Either side of the bottom bar's settings button, which sits in the middle. */
 export const railFooterSpace = "min-w-0 flex-1";
 
 /**

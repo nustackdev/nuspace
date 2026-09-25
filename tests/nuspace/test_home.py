@@ -13,7 +13,7 @@ from nuspace import ops
 from nuspace.ops import Plane
 from nuspace.ops.utils import atomic
 from nuspace.shapes import RECENTS_CAP, Reroot, Space
-from nuspace.system import home
+from nuspace.system import home, settings
 from nuspace.system.devices.web.env import session_env
 from nuspace.system.devices.web.sidebar import rows
 from nuspace.system.kernel.body import Bracketed, Rewrites
@@ -99,9 +99,9 @@ async def test_remember_dedupes_caps_and_skips(store):
         await store.run(atomic(remember(nu.Literal(list(ids)))))
         return await store.read(recents)
 
-    # Pane order: the last is the newest. Home and services are skipped; a
-    # plane not written yet and a plain non ui one are kept.
-    assert await push("a", home.PLANE, "svc", "b") == ["b", "a"]
+    # Pane order: the last is the newest. Home, settings and services are
+    # skipped; a plane not written yet and a plain non ui one are kept.
+    assert await push("a", home.PLANE, "svc", settings.PLANE, "b") == ["b", "a"]
     assert await push("later") == ["later", "b", "a"]
     assert await push("hidden") == ["hidden", "later", "b", "a"]
     # Opened again: moved to the front, never twice.

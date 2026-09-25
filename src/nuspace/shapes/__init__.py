@@ -25,6 +25,8 @@ reads it and it reads nothing back::
       state         SpaceState
         recents     [plane id], newest first
         info        path, opened, versions
+      settings      SpaceSettings
+        telemetry   bool, off when unset
 
 Plane and cell hold structure only. How and when a cell runs is the caller's
 argument, and what it did is a run.
@@ -53,7 +55,7 @@ from .kernel import (
 )
 from .plane import Plane, PlaneProps
 from .reroot import Reroot, reroot, reroot_base
-from .space import RECENTS_CAP, Space, SpaceInfo, SpaceState
+from .space import RECENTS_CAP, Space, SpaceInfo, SpaceSettings, SpaceState
 from .state import CellState, PlaneState
 from .tree import ROOT, Node
 
@@ -88,6 +90,7 @@ __all__ = [
     "Run",
     "Space",
     "SpaceInfo",
+    "SpaceSettings",
     "SpaceState",
     "Worker",
     "reroot",

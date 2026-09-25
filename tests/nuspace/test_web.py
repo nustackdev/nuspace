@@ -130,7 +130,7 @@ async def _plane(store, pid, name, meta=None, **props):
     await store.run(ops.add_plane(pid, name=name, meta=meta, **props))
 
 
-def _row(pid, title, parent="space", children=(), made_by="", icon=""):
+def _row(pid, title, parent="space", children=(), made_by="", icon="", system=False):
     return {
         "id": pid,
         "kind": "plane",
@@ -139,6 +139,7 @@ def _row(pid, title, parent="space", children=(), made_by="", icon=""):
         "children": list(children),
         "made_by": made_by,
         "icon": icon,
+        "system": system,
     }
 
 
@@ -169,8 +170,9 @@ async def test_sidebar_rows_are_one_tree(store):
         _row("p1", "One", children=["p6", "p2"], made_by="plain"),
         _row("p2", "Two", parent="p1", made_by="jobs"),
         _row("p4", "Lifted"),
-        # System only protects it: a system ui plane is listed like any other.
-        _row("p5", "System"),
+        # System only protects it: a system ui plane is listed like any other,
+        # flagged so the browser offers no delete.
+        _row("p5", "System", system=True),
         _row("p6", "Kid", parent="p1"),
     ]
 

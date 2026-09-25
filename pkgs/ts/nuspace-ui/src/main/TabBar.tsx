@@ -56,6 +56,7 @@ export function TabBar({
 	stripRef,
 	onMeta,
 	onRename,
+	deleteOf,
 }: {
 	routes: string[];
 	planes: Record<string, ActivePlane>;
@@ -64,6 +65,8 @@ export function TabBar({
 	stripRef: React.RefObject<HTMLDivElement | null>;
 	onMeta: (planeId: string, patch: Record<string, unknown>) => void;
 	onRename: (planeId: string, title: string) => void;
+	/** A plane's delete, undefined for one that cannot be deleted. */
+	deleteOf: (planeId: string) => (() => void) | undefined;
 }) {
 	const barRef = useRef<HTMLDivElement | null>(null);
 	const [editing, setEditing] = useState<string | null>(null);
@@ -193,6 +196,7 @@ export function TabBar({
 								meta={plane?.meta ?? null}
 								onChange={(patch) => onMeta(id, patch)}
 								onRename={() => setEditing(id)}
+								onDelete={deleteOf(id)}
 								open={menuOf === id}
 								onOpenChange={(open) => setMenuOf(open ? id : null)}
 								className={paneBarButton}

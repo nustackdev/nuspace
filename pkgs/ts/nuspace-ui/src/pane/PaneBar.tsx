@@ -15,6 +15,7 @@ export function PaneBar({
 	title,
 	meta,
 	onMeta,
+	onDelete,
 	onClose,
 }: {
 	planeId: string;
@@ -22,6 +23,8 @@ export function PaneBar({
 	/** Null while the plane is loading. */
 	meta: PlaneMeta | null;
 	onMeta: (patch: Record<string, unknown>) => void;
+	/** Left out for a Plane that cannot be deleted. */
+	onDelete?: () => void;
 	onClose: () => void;
 }) {
 	return (
@@ -29,7 +32,7 @@ export function PaneBar({
 			<OverflowTooltip label={title}>
 				<span className={paneBarTitle}>{title}</span>
 			</OverflowTooltip>
-			<PaneMenu planeId={planeId} meta={meta} onChange={onMeta} />
+			<PaneMenu planeId={planeId} meta={meta} onChange={onMeta} onDelete={onDelete} />
 			<IconButton
 				variant="ghost"
 				size="sm"

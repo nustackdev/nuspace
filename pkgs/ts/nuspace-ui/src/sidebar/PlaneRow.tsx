@@ -49,7 +49,7 @@ import {
 } from "lucide-react";
 import type * as React from "react";
 import { useCallback, useRef, useState } from "react";
-import { closePanes, hrefFor, onNavClick, openPane, replacePane } from "../core/router";
+import { hrefFor, onNavClick, openPane, replacePane } from "../core/router";
 import { railAction, railChevron, railIcon, railTwisty } from "../design";
 import { IconPickerContent } from "../icon/IconPicker";
 import { PlaneIcon } from "../icon/PlaneIcon";
@@ -58,7 +58,8 @@ import { openAddPlane } from "./add";
 import type { Notify } from "./ops";
 import { RailRow, RailRowLink } from "./RailRow";
 import { RailRowInput } from "./RailRowInput";
-import { subtreeOf, type VisibleRow } from "./tree";
+import { canDelete, deletePlane } from "./remove";
+import type { VisibleRow } from "./tree";
 import type { PlaneTree } from "./types";
 
 export function PlaneRow({
@@ -109,13 +110,8 @@ export function PlaneRow({
 	const { key, id, depth, title, hasKids, open, pos, size } = row;
 	const navClick = onNavClick(id);
 
-	const remove = useCallback(() => {
-		if (!window.confirm(`Delete "${title}" and everything under it?`)) return;
-		notify("plane.delete", { plane_id: id });
-		// Its panes go too, and so do its children's. Replace, not push: the
-		// back button should not bring back a Plane that no longer exists.
-		closePanes(subtreeOf(tree, id), true);
-	}, [id, notify, title, tree]);
+	const remove = useCallback(() => deletePlane(notify, tree, id, title), [id, notify, title, tree]);
+	const removable = canDelete(tree, id);
 
 	const split = useCallback(() => {
 		if (hasKids) reveal(key);
@@ -286,11 +282,15 @@ export function PlaneRow({
 							<SmilePlus />
 							Change icon
 						</DropdownMenuItem>
-						<DropdownMenuSeparator />
-						<DropdownMenuItem variant="danger" onSelect={remove}>
-							<Trash2 />
-							Delete
-						</DropdownMenuItem>
+						{removable ? (
+							<>
+								<DropdownMenuSeparator />
+								<DropdownMenuItem variant="danger" onSelect={remove}>
+									<Trash2 />
+									Delete
+								</DropdownMenuItem>
+							</>
+						) : null}
 					</MoreMenu>
 				</>
 			}
@@ -317,11 +317,15 @@ export function PlaneRow({
 						<SmilePlus />
 						Change icon
 					</ContextMenuItem>
-					<ContextMenuSeparator />
-					<ContextMenuItem variant="danger" onSelect={remove}>
-						<Trash2 />
-						Delete
-					</ContextMenuItem>
+					{removable ? (
+						<>
+							<ContextMenuSeparator />
+							<ContextMenuItem variant="danger" onSelect={remove}>
+								<Trash2 />
+								Delete
+							</ContextMenuItem>
+						</>
+					) : null}
 				</>
 			}
 		/>

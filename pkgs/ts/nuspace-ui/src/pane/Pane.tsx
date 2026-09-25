@@ -34,6 +34,7 @@ export function Pane({
 	onMeta,
 	onRename,
 	onIcon,
+	onDelete,
 	split,
 	divided,
 	focused,
@@ -51,6 +52,8 @@ export function Pane({
 	onRename: (planeId: string, title: string) => void;
 	/** Set this plane's icon: a stored spelling, "" for none. */
 	onIcon: (planeId: string, icon: string) => void;
+	/** Delete this plane. Left out for one that cannot be deleted. */
+	onDelete?: () => void;
 	/** More than one pane is open: no bar, the tab bar stands in for it. */
 	split: boolean;
 	/** Draws the divider on its left edge. */
@@ -90,6 +93,7 @@ export function Pane({
 					title={title}
 					meta={plane?.meta ?? null}
 					onMeta={(patch) => onMeta(planeId, patch)}
+					onDelete={onDelete}
 					onClose={() => closePane(planeId)}
 				/>
 			)}

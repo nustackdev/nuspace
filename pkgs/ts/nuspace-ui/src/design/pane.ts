@@ -42,6 +42,9 @@ export const paneMenuAction = cn(
 	"focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
 );
 
+/** Delete plane: an action row in the danger tone. */
+export const paneMenuDanger = cn(paneMenuAction, "text-status-danger");
+
 /** The hairline between the actions and the settings. */
 export const paneMenuSeparator = "-mx-1 my-1 h-px bg-border-subtle";
 

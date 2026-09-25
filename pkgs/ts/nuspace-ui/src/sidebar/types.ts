@@ -47,6 +47,8 @@ export type TreeRow = {
 	made_by: string;
 	/** The plane's own `meta.icon`, "" when it has none. See ../icon/parse.ts. */
 	icon: string;
+	/** A protected Plane (home, settings, a service): the server refuses its delete. */
+	system: boolean;
 };
 
 /** One registered Plane, as the Add plane popup offers it. Seeded at boot. */
@@ -136,6 +138,7 @@ export function coerceTree(raw: unknown): PlaneTree {
 			children: coerceStrs(r.children),
 			made_by: String(r.made_by ?? ""),
 			icon: typeof r.icon === "string" ? r.icon : "",
+			system: r.system === true,
 		};
 	}
 	return out;

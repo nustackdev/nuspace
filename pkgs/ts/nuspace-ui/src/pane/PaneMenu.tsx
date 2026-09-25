@@ -7,7 +7,8 @@
 // Above the settings, "Add plane" opens the Add plane popup for a child of
 // this pane's Plane, opened in this pane. The tab bar adds a Rename row (only
 // when `onRename` is given), and `open` / `onOpenChange` so a key on the tab
-// can open it.
+// can open it. "Delete plane" shows when `onDelete` is given, which it is not
+// for a system Plane.
 
 import { IconButton, Popover, PopoverContent, PopoverTrigger, Switch } from "@nustackdev/ui-kit";
 import { Ellipsis } from "lucide-react";
@@ -16,6 +17,7 @@ import {
 	paneBarButton,
 	paneMenu,
 	paneMenuAction,
+	paneMenuDanger,
 	paneMenuHint,
 	paneMenuLabel,
 	paneMenuRow,
@@ -31,6 +33,7 @@ export function PaneMenu({
 	meta,
 	onChange,
 	onRename,
+	onDelete,
 	open,
 	onOpenChange,
 	className = paneBarButton,
@@ -43,6 +46,8 @@ export function PaneMenu({
 	onChange: (patch: Record<string, unknown>) => void;
 	/** Adds a Rename row on top. The caller owns the inline editor. */
 	onRename?: () => void;
+	/** Adds a Delete plane row. Left out for a Plane that cannot be deleted. */
+	onDelete?: () => void;
 	/** Controlled open state; uncontrolled when left out. */
 	open?: boolean;
 	onOpenChange?: (open: boolean) => void;
@@ -105,6 +110,18 @@ export function PaneMenu({
 						}}
 					>
 						Rename
+					</button>
+				) : null}
+				{meta && onDelete ? (
+					<button
+						type="button"
+						className={paneMenuDanger}
+						onClick={() => {
+							setOpen(false);
+							onDelete();
+						}}
+					>
+						Delete plane
 					</button>
 				) : null}
 				{meta ? <div className={paneMenuSeparator} aria-hidden="true" /> : null}

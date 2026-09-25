@@ -14,6 +14,9 @@ top level, after the rest, so nothing drawn goes missing.
 **Icons.** A row carries its plane's ``meta.icon`` and no other meta key.
 The browser falls back to the registered Plane's icon when it is empty.
 
+**System.** A row carries ``props.system``, so the browser offers no delete
+for a plane ``remove_plane`` refuses.
+
 **Narrow watch.** The tree is shipped again when the set of planes, a
 plane's name, props or icon, or a tree node change, and nothing else: a
 cell writing its state or the kernel writing a run never wakes it.
@@ -87,8 +90,8 @@ def rows() -> nu.Nu:
 
     Yields:
         ``[space, *planes]``, each ``{id, kind, title, parent, children}``,
-        planes with ``made_by`` and ``icon`` too. Planes in creation order, ``children``
-        in sibling order.
+        planes with ``made_by``, ``icon`` and ``system`` too. Planes in
+        creation order, ``children`` in sibling order.
     """
     pick, each, kid = fresh("sidebar_pick"), fresh("sidebar_row"), fresh("sidebar_kid")
     listed, known = fresh("sidebar_listed"), fresh("sidebar_known")
@@ -134,6 +137,7 @@ def rows() -> nu.Nu:
                     children=kids(_text(row, "id")),
                     made_by=nu.ToStr(_prop(row, "made_by")),
                     icon=_icon(row),
+                    system=nu.ToBool(_prop(row, "system")),
                 ),
                 key=each,
             )

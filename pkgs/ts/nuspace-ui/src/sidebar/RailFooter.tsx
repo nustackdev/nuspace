@@ -8,12 +8,16 @@
 // over a document you are writing in are two controls with nothing holding
 // them.
 //
-// The free middle is where a settings button goes when there is one.
+// The gear, in the free middle, opens the settings Plane the way a sidebar row opens its Plane: a
+// real anchor, a plain click in the focused pane, cmd/ctrl-click as a split.
+// It holds the space's settings only; the theme is the window's, so it stays
+// down here and in the browser.
 
 import { IconButton, Tooltip, TooltipContent, TooltipTrigger } from "@nustackdev/ui-kit";
 import type { LucideIcon } from "lucide-react";
-import { BookOpen, Github, Moon, Sun } from "lucide-react";
+import { BookOpen, Github, Moon, Settings, Sun } from "lucide-react";
 import { useConnectionStatus } from "../core/connection";
+import { hrefFor, onNavClick } from "../core/router";
 import { toggleTheme, useTheme } from "../core/theme";
 import {
 	railChromeButton,
@@ -26,6 +30,8 @@ import {
 const GITHUB_URL = "https://github.com/nustackdev/nuspace";
 /** The docs are not written yet; the site is the closest thing. */
 const DOCS_URL = "https://nustack.dev";
+/** The settings Plane's id, fixed by the host. */
+const SETTINGS = "settings";
 
 /** Wire status -> the kit's status tones. */
 const CONNECTION_TONE: Record<string, "ok" | "info" | "warn" | "danger"> = {
@@ -95,6 +101,27 @@ function ConnectionDot() {
 	);
 }
 
+function SettingsLink() {
+	return (
+		<Tooltip>
+			<TooltipTrigger asChild>
+				<IconButton
+					variant="ghost"
+					size="sm"
+					aria-label="Settings"
+					className={railChromeButton}
+					asChild
+				>
+					<a href={hrefFor(SETTINGS)} onClick={onNavClick(SETTINGS)}>
+						<Settings />
+					</a>
+				</IconButton>
+			</TooltipTrigger>
+			<TooltipContent side="top">Settings</TooltipContent>
+		</Tooltip>
+	);
+}
+
 function ThemeToggle() {
 	const theme = useTheme();
 	const next = theme === "dark" ? "light" : "dark";
@@ -122,6 +149,8 @@ export function RailFooter() {
 		<div className={railFooter}>
 			<RailLink href={GITHUB_URL} label="GitHub" icon={Github} />
 			<RailLink href={DOCS_URL} label="Docs" hint="Docs are coming soon" icon={BookOpen} />
+			<div className={railFooterSpace} />
+			<SettingsLink />
 			<div className={railFooterSpace} />
 			<ConnectionDot />
 			<ThemeToggle />

@@ -2,11 +2,12 @@
 // else.
 //
 // One segment: /<id1>+<id2>+... A Plane id never contains `+`, so the split
-// is unambiguous, and each id is URI-encoded on its own. Bare "/" is home: the
-// routes ["home"], the Plane the host seeds at open, and what closing the last
-// pane lands on. "/home" names the same thing and is written back as "/". A
-// Plane appears at most once: opening one that is already open focuses its
-// pane instead of drawing it twice.
+// is unambiguous, and each id is URI-encoded on its own. Home is a Plane like
+// any other, at /home. Bare "/" names no Plane and is the one path override:
+// it always lands on /home, replacing the history entry (see `redirected`).
+// Anything that means "go home", closing the last pane included, goes to "/"
+// and lets that redirect decide. A Plane appears at most once: opening one
+// that is already open focuses its pane instead of drawing it twice.
 //
 // Which pane has focus lives here too, beside the routes, because both the
 // sidebar (what a plain click replaces) and the Viewer (which pane is drawn as
@@ -20,13 +21,13 @@ import { useSyncExternalStore } from "react";
 
 const SEP = "+";
 
-/** The home Plane's id, fixed by the host. What bare "/" opens. */
-export const HOME = "home";
+/** The home Plane's id, fixed by the host. Only the redirect reads it. */
+const HOME = "home";
 
-/** The plane ids in `pathname`, left to right. Home when it names none. */
+/** The plane ids in `pathname`, left to right. Empty when it names none. */
 export function splitRoutes(pathname: string): string[] {
 	const parts = pathname.split("/").filter((s) => s.length > 0);
-	if (parts.length !== 1) return [HOME];
+	if (parts.length !== 1) return [];
 	const out: string[] = [];
 	for (const raw of parts[0].split(SEP)) {
 		if (!raw) continue;
@@ -38,7 +39,7 @@ export function splitRoutes(pathname: string): string[] {
 		}
 		if (id && !out.includes(id)) out.push(id);
 	}
-	return out.length ? out : [HOME];
+	return out;
 }
 
 /** The Planes the live URL names. Read directly: callable outside a render. */
@@ -54,14 +55,18 @@ export function currentRoutes(): string[] {
  */
 export function hrefFor(planeIds: string | string[]): string {
 	const ids = (Array.isArray(planeIds) ? planeIds : [planeIds]).filter(Boolean);
-	if (ids.length === 0 || (ids.length === 1 && ids[0] === HOME)) return "/";
 	return `/${ids.map(encodeURIComponent).join(SEP)}`;
+}
+
+/** The one path override: bare "/" lands on home. Every other URL is itself. */
+export function redirected(url: string): string {
+	return url === "/" ? `/${HOME}` : url;
 }
 
 /**
  * The routes a same-origin href names, or null when it is not a route: another
  * origin, more than one path segment, or anything after the path (a query or
- * a hash is left to the browser). Bare "/" is home.
+ * a hash is left to the browser). Bare "/" is no Planes, which lands home.
  */
 export function routesOfHref(href: string): string[] | null {
 	let url: URL;
@@ -85,7 +90,10 @@ function emit(): void {
 
 function subscribe(cb: () => void): () => void {
 	subscribers.add(cb);
-	const onPop = () => cb();
+	const onPop = () => {
+		land();
+		cb();
+	};
 	window.addEventListener("popstate", onPop);
 	return () => {
 		subscribers.delete(cb);
@@ -137,7 +145,7 @@ export function useFocusedRoute(): string {
 // -- Moves -------------------------------------------------------------------
 
 function go(ids: string[], replace = false): void {
-	const url = hrefFor(ids);
+	const url = redirected(hrefFor(ids));
 	if (window.location.pathname !== url) {
 		if (replace) window.history.replaceState({}, "", url);
 		else window.history.pushState({}, "", url);
@@ -209,12 +217,6 @@ export function closePane(planeId: string): void {
 	closePanes([planeId]);
 }
 
-/** Home alone, in one pane: where bare "/" lands. */
-export function goHome(): void {
-	focusedRaw = HOME;
-	go([HOME]);
-}
-
 /**
  * Follow a list of Planes the way the sidebar follows one: a plain click puts
  * a single Plane in the focused pane and replaces the panes with a longer
@@ -281,25 +283,19 @@ export function onNavClick(planeId: string) {
 }
 
 /**
- * Click handler for the way home (the sidebar's header): a plain click goes
- * to "/", home alone, cmd/ctrl-click opens home as a split.
+ * Rewrite the live URL to what it resolves to, in place: no history entry.
+ * Anything deeper than one segment is not a route, so it becomes the bare "/"
+ * rather than a guess at which of its segments was meant, and "/" lands home.
+ * A duplicate or empty id in the list is normalised away. Whether it moved.
  */
-export function onHomeClick(e: React.MouseEvent<HTMLElement>): void {
-	if (e.defaultPrevented || !isNavClick(e)) return;
-	e.preventDefault();
-	if (isSplitClick(e)) openPane(HOME);
-	else goHome();
+function land(): boolean {
+	const url = redirected(hrefFor(currentRoutes()));
+	if (window.location.pathname === url) return false;
+	window.history.replaceState({}, "", url);
+	return true;
 }
 
-/**
- * Landing bootstrap. Anything deeper than one segment is not a route, so it
- * becomes the bare "/" (home) rather than a guess at which of its segments
- * was meant. A duplicate or empty id in the list is normalised away, and
- * "/home" is written back as "/".
- */
+/** Landing bootstrap: the URL the tab opened on, rewritten by `land`. */
 export function ensureLanding(): void {
-	const url = hrefFor(currentRoutes());
-	if (window.location.pathname === url) return;
-	window.history.replaceState({}, "", url);
-	emit();
+	if (land()) emit();
 }
