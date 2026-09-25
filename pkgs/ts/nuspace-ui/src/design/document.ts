@@ -77,11 +77,28 @@ export const docPlaneLoading = "flex items-center gap-2 p-8 text-base text-text-
  * conditional label: the text is always there for a screen reader, it is
  * merely not ink until you are in it.
  */
-export const docGhost = cn(
-	"w-full rounded-sm border-0 bg-transparent outline-none",
-	"px-doc-cell-x py-doc-cell-y",
-	"text-xl leading-relaxed text-text-primary",
-	"placeholder:text-transparent focus:placeholder:text-text-muted",
+export const docGhost = (hinted: boolean) =>
+	cn(
+		"w-full rounded-sm border-0 bg-transparent outline-none",
+		"px-doc-cell-x py-doc-cell-y",
+		"text-xl leading-relaxed text-text-primary",
+		// An empty plane shows its hint at rest; otherwise only with the caret in.
+		hinted
+			? "placeholder:text-text-muted"
+			: "placeholder:text-transparent focus:placeholder:text-text-muted",
+	);
+
+/**
+ * A draft: what was typed into a ghost while its text cell is on the way.
+ *
+ * Plain text set where and how a text cell's first paragraph sits (cell pad,
+ * field pad and the paragraph's own margin make the `py-5`), so the handoff
+ * to the real editor moves nothing.
+ */
+export const docDraft = cn(
+	"w-full resize-none rounded-sm border-0 bg-transparent outline-none [field-sizing:content]",
+	"px-doc-cell-x py-5",
+	"font-display text-base leading-normal text-text-primary",
 );
 
 /**

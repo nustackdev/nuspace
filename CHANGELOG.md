@@ -12,6 +12,8 @@ separately here.
 
 ## Unreleased
 
+- Empty planes show how to start, and the cell menu says when nothing matches
+- Start typing on an empty line and a text cell opens with your words
 - Planes take an icon or emoji, picked from the title or the sidebar menu
 - New cells from a snippet open showing what they draw, not their code
 - Rename a plane by editing its title in place, on any plane

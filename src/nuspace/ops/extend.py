@@ -57,11 +57,15 @@ class Snippet:
         name: Registry key, and the new cell's name.
         label: What the menu shows.
         source: The cell's prog.
+        on_type: Typing a letter into an empty line starts a cell from
+            this snippet, and the typing carries on into its text. The first
+            flagged snippet wins; with none, typing opens the ``/`` menu.
     """
 
     name: str
     label: str
     source: str
+    on_type: bool = False
 
 
 def create_plane(

@@ -19,10 +19,12 @@ export function useGhosts(
 		focusCell,
 		createAfter,
 		slashKey,
+		startDraft,
 	}: {
 		focusCell: (cell: Cell, req: Omit<FocusReq, "cellId">, editing: string[]) => void;
 		createAfter: (afterId: string | null, name: string) => void;
 		slashKey: (key: string) => boolean;
+		startDraft: ((after: string | null, text: string) => void) | null;
 	},
 ) {
 	/** Nothing was picked. Close the menu, and take the offer back. */
@@ -85,6 +87,7 @@ export function useGhosts(
 				selected: [],
 				anchor: null,
 			}),
+		onType: startDraft && ((text) => startDraft(after, text)),
 		onQuery: (query) => patch((e) => (e.slash ? { slash: { ...e.slash, query, index: 0 } } : {})),
 		onKey: slashKey,
 		onCloseSlash: () => patch({ slash: null }),

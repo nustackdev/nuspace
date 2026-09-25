@@ -2,7 +2,7 @@
 
 One prose surface over a string in its own state, synced both ways. What the
 person wrote lives in the state, not in the prog. The viewer draws it like any
-other cell.
+other cell. Typing into an empty line starts one of these.
 """
 
 from __future__ import annotations
@@ -41,4 +41,4 @@ def out():
     )
 """
 
-SNIPPET = Snippet("prose", "Text", SOURCE)
+SNIPPET = Snippet("prose", "Text", SOURCE, on_type=True)

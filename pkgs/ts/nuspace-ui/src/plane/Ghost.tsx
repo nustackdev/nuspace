@@ -2,9 +2,11 @@
 //
 // A ghost is a line you can put a caret in that has not decided what it is
 // yet. It holds no value, owns no id, and nothing exists in the store because
-// of it. Press `/` (or just start typing) and it offers the registered
-// snippets; pick one and it becomes a cell made from that snippet. Enter on
-// an empty ghost makes a blank program.
+// of it. Press `/` and it offers the registered snippets; pick one and it
+// becomes a cell made from that snippet. Start typing and it becomes a text
+// cell with the typing in it (./Draft.tsx), when a snippet asks for that, or
+// else the typing searches the snippets. Enter on an empty ghost makes a
+// blank program.
 //
 // There is always one at the end of the plane, which is what makes an empty
 // plane writeable without hunting for a control, and the gutter `+` summons a
@@ -18,7 +20,7 @@ import { docGhost } from "../design";
 import type { ExitDir } from "./types";
 
 /** What a ghost offers before anything has happened in it. */
-const GHOST_HINT = "/ for cells";
+const GHOST_HINT = "Write, or press / for cells";
 /** ...and once the menu is open, which is the whole of what changed. */
 const GHOST_SEARCH = "Type to search";
 
@@ -33,6 +35,8 @@ export type GhostProps = {
 	/** Enter on an empty ghost: a blank program. */
 	onBlank: () => void;
 	onOpenSlash: (anchor: { x: number; y: number }, query: string) => void;
+	/** Typing with the menu closed starts a draft. Null: it opens the menu. */
+	onType: ((text: string) => void) | null;
 	onQuery: (query: string) => void;
 	/** Return true if the menu consumed the key. */
 	onKey: (key: string) => boolean;
@@ -41,14 +45,16 @@ export type GhostProps = {
 	onEscape: () => void;
 	onLeave: (dir: ExitDir) => void;
 	onDismiss: () => void;
+	/** Show the hint without a caret: the plane is empty, so this line is all there is. */
+	hinted?: boolean;
 };
 
 /**
  * The ghost input.
  *
  * A one-line text input that never holds anything but the slash query. `/`
- * opens the menu with an empty query; any other character opens it with that
- * character as the query. Enter with the menu closed makes a blank program.
+ * opens the menu with an empty query; any other character starts a draft, or
+ * with nothing to draft opens the menu with that character as the query. Enter with the menu closed makes a blank program.
  *
  * An `<input>` and not a contenteditable on purpose: it is one line, it holds
  * no marks, it is in the tab order for free, and screen readers already know
@@ -61,12 +67,14 @@ export function Ghost({
 	onWake,
 	onBlank,
 	onOpenSlash,
+	onType,
 	onQuery,
 	onKey,
 	onCloseSlash,
 	onEscape,
 	onLeave,
 	onDismiss,
+	hinted = false,
 }: GhostProps) {
 	const open = query !== null;
 
@@ -85,7 +93,7 @@ export function Ghost({
 			ref={hostRef}
 			type="text"
 			aria-label="New cell"
-			className={docGhost}
+			className={docGhost(hinted)}
 			placeholder={open ? GHOST_SEARCH : GHOST_HINT}
 			value={query ?? ""}
 			onFocus={onWake}
@@ -95,7 +103,8 @@ export function Ghost({
 					onQuery(next);
 					return;
 				}
-				if (next) onOpenSlash(anchorOf(e.currentTarget), next);
+				if (next && onType) onType(next);
+				else if (next) onOpenSlash(anchorOf(e.currentTarget), next);
 			}}
 			onKeyDown={(e) => {
 				// The ghost owns its keyboard outright, for the reason a focused

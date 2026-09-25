@@ -45,7 +45,7 @@ PLANES = [
     Plane("jobs", "Jobs", icon="list", cells=(("list", PROSE_SRC),)),
 ]
 SNIPPETS = [
-    Snippet("prose", "Text", PROSE_SRC),
+    Snippet("prose", "Text", PROSE_SRC, on_type=True),
     Snippet("program", "Program", "def out():\n    return nu.Noop()\n"),
 ]
 
@@ -418,7 +418,8 @@ async def test_connection_live(store):
         assert session.frames[0].op == "remove"
         viewer_init = next(f for f in session.frames if f.ref == ("viewer",))
         assert viewer_init.chain[0][2]["snippets"] == [
-            {"name": s.name, "label": s.label} for s in SNIPPETS
+            {"name": "prose", "label": "Text", "on_type": True},
+            {"name": "program", "label": "Program", "on_type": False},
         ]
         sidebar_init = next(f for f in session.frames if f.ref == ("sidebar",))
         assert sidebar_init.chain[0][2]["registered"] == registered_entries(PLANES)

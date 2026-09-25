@@ -54,11 +54,11 @@ export function useStructure({
 
 	/**
 	 * Add a cell made from the snippet `name` after `afterId` (or last), and
-	 * land on it. The server stores the snippet's program; a name no
-	 * snippet has makes a blank one.
+	 * land on it unless `land` is off. The server stores the snippet's
+	 * program; a name no snippet has makes a blank one. Returns the new id.
 	 */
 	const createAfter = useCallback(
-		(afterId: string | null, name: string) => {
+		(afterId: string | null, name: string, land = true): string => {
 			const id = mintId("c");
 			const at = afterId ? index(afterId) : -1;
 			notify("cell.create", {
@@ -67,7 +67,8 @@ export function useStructure({
 				name,
 				index: at < 0 ? cells.length : at + 1,
 			});
-			pendingFocus.current = { id, open: name === "" };
+			if (land) pendingFocus.current = { id, open: name === "" };
+			return id;
 		},
 		[cells.length, index, notify, planeId],
 	);

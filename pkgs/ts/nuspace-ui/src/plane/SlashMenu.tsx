@@ -9,7 +9,13 @@
 
 import { SquareTerminal } from "lucide-react";
 import { useEffect, useRef } from "react";
-import { docSlashMenu, docSlashMenuHint, docSlashMenuItem, docSlashMenuItemLabel } from "../design";
+import {
+	docSlashMenu,
+	docSlashMenuEmpty,
+	docSlashMenuHint,
+	docSlashMenuItem,
+	docSlashMenuItemLabel,
+} from "../design";
 import type { SlashSnippet } from "./types";
 
 /** The menu's rows, narrowed by what has been typed. */
@@ -41,13 +47,12 @@ export function SlashMenu({
 			?.scrollIntoView({ block: "nearest" });
 	}, [index]);
 
-	if (items.length === 0) return null;
-
 	const top = Math.min(anchor.y + 6, window.innerHeight - 300);
 	const left = Math.min(anchor.x, window.innerWidth - 280);
 
 	return (
 		<div ref={ref} className={`${docSlashMenu} fixed outline-none`} style={{ top, left }}>
+			{items.length === 0 ? <div className={docSlashMenuEmpty}>Nothing matches</div> : null}
 			{items.map((item, i) => (
 				<button
 					key={item.name}

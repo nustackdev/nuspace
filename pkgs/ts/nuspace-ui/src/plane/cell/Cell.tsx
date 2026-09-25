@@ -22,6 +22,7 @@ export function Cell({
 	cell,
 	uiPath,
 	editable,
+	hidden,
 	selected,
 	selectedStrong,
 	focused,
@@ -43,6 +44,8 @@ export function Cell({
 	/** Where this cell's own refs live in the tree. */
 	uiPath: Path;
 	editable: boolean;
+	/** Drawn but not shown: a draft stands in for it (../Draft.tsx). */
+	hidden?: boolean;
 	selected: boolean;
 	/** Part of a multi-cell selection. */
 	selectedStrong: boolean;
@@ -71,6 +74,7 @@ export function Cell({
 		<div
 			ref={setEl}
 			data-cell={cell.id}
+			hidden={hidden}
 			className={docCell({ selected, selectedStrong, focused, dragging })}
 			onMouseDown={(e) => {
 				// A plain click inside a cell leaves cell-selection mode;

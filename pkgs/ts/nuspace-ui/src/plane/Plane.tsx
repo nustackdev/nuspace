@@ -16,6 +16,7 @@
 //   useCellDrag.ts      drag reorder
 //   useSlash.ts          the `/` menu's behaviour (SlashMenu.tsx draws it)
 //   useGhosts.ts         the ghost inputs' wiring (Ghost.tsx draws one)
+//   Draft.tsx            typing into a ghost, carried into a new text cell
 //   cell/               one cell: its row, gutter, program, source editor
 
 import type { Path } from "@nustackdev/ui-core";
@@ -24,6 +25,7 @@ import { Fragment, useCallback, useEffect, useRef } from "react";
 import { docColumn, docDropIndicator, docTail } from "../design";
 import { cellUiPath } from "./cell/address";
 import { Cell } from "./cell/Cell";
+import { Draft, useDraft } from "./Draft";
 import { Ghost } from "./Ghost";
 import type { PlaneModel } from "./model";
 import type { Notify } from "./ops";
@@ -108,7 +110,8 @@ export function Plane({
 		snippets,
 		createAfter,
 	);
-	const ghostProps = useGhosts(model, { focusCell, createAfter, slashKey });
+	const { draft, boxRef, startDraft } = useDraft(model, viewerPath, snippets, createAfter);
+	const ghostProps = useGhosts(model, { focusCell, createAfter, slashKey, startDraft });
 
 	useEffect(() => {
 		if (!entryRef) return;
@@ -179,6 +182,7 @@ export function Plane({
 							cell={cell}
 							uiPath={cellUiPath(viewerPath, cell.id)}
 							editable={editable}
+							hidden={draft?.id === cell.id}
 							selected={selected}
 							selectedStrong={selected && selectedIds.length > 1}
 							focused={editor.focused === cell.id}
@@ -218,6 +222,11 @@ export function Plane({
 							onCommit={(src) => commitSource(cell.id, src)}
 							onExit={(dir, column) => step(cell.id, dir, column)}
 						/>
+						{/* A draft stays where its ghost was, which is right above its
+						    cell once that arrives. */}
+						{editable && draft?.after === cell.id ? (
+							<Draft boxRef={boxRef} text={draft.text} />
+						) : null}
 						{editable && editor.ghost === cell.id ? <Ghost {...ghostProps(cell.id, true)} /> : null}
 					</Fragment>
 				);
@@ -231,7 +240,12 @@ export function Plane({
 			{/* The permanent ghost is how an empty Plane is written on without
 			    hunting for a control, so it goes with the rest of the authoring
 			    affordances. */}
-			{editable ? <Ghost {...ghostProps(lastId, false)} /> : null}
+			{editable && draft && draft.after === null ? (
+				<Draft boxRef={boxRef} text={draft.text} />
+			) : null}
+			{editable ? (
+				<Ghost {...ghostProps(lastId, false)} hinted={cells.length === 0 && !draft} />
+			) : null}
 			{/* The run-off under the last cell is the plane's compact setting, not
 			    its editable one. Clicking it aims at the ghost when there is one. */}
 			{compact ? null : (

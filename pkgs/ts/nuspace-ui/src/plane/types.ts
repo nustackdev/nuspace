@@ -55,8 +55,9 @@ export type ActivePlane = {
 	cells: Cell[];
 };
 
-/** One registered snippet, as the `/` menu offers it. */
-export type SlashSnippet = { name: string; label: string };
+/** One registered snippet, as the `/` menu offers it. `onType`: typing into
+ *  a ghost starts this one (see ./Draft.tsx). */
+export type SlashSnippet = { name: string; label: string; onType?: boolean };
 
 /** `invalid` never compiled; `failed` ran and died. They read differently. */
 export function isBad(s: CellState): boolean {

@@ -91,6 +91,8 @@ def test_snippets_are_well_formed():
         snippets.cell_lens.SNIPPET,
     )
     assert (snippets.heading.SNIPPET, snippets.monaco.SNIPPET) == (None, None)
+    # Typing into an empty line starts a text cell, and nothing else claims it.
+    assert [s.name for s in snippets.SNIPPETS if s.on_type] == ["prose"]
     for snippet in snippets.SNIPPETS:
         assert isinstance(snippet, Snippet)
         assert snippet.name and snippet.label
