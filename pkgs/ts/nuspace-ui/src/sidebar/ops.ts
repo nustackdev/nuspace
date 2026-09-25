@@ -38,6 +38,14 @@ export type Ops = {
 	"plane.move": { plane_id: string; parent_id: string; index: number };
 	/** `icon` is a stored spelling (../icon/parse.ts), "" for the default. */
 	"plane.icon": { plane_id: string; icon: string };
+	/**
+	 * Pin at `index` among the pins, counted without the Plane; -1 is the
+	 * end. Already pinned, it moves there. The Plane stays in the tree.
+	 */
+	"plane.pin": { plane_id: string; index: number };
+	"plane.unpin": { plane_id: string };
+	/** Reorder a pinned Plane, `index` as in `plane.pin`. */
+	"plane.pin_move": { plane_id: string; index: number };
 };
 
 /** Send one op. Threaded down from `Sidebar.tsx` into the rail. */

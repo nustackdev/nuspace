@@ -48,9 +48,9 @@ class SidebarRef(SpaceRef):
         """Mount the sidebar, seeded with the registered Planes."""
         return super().slot(registered=[dict(r) for r in registered or ()])
 
-    def set_tree(self, rows: ListArg[dict]) -> Nu:
-        """Replace the tree."""
-        return interactions.set_tree(self, rows)
+    def set_tree(self, rows: ListArg[dict], pinned: ListArg[str]) -> Nu:
+        """Replace the tree and the pins."""
+        return interactions.set_tree(self, rows, pinned)
 
     def on_create_plane(self) -> Changed:
         """``{plane_id, parent_id, made_by, title}``."""
@@ -67,3 +67,15 @@ class SidebarRef(SpaceRef):
     def on_move_plane(self) -> Changed:
         """``{plane_id, parent_id, index}``."""
         return interactions.on_move_plane(self)
+
+    def on_pin_plane(self) -> Changed:
+        """``{plane_id, index}``."""
+        return interactions.on_pin_plane(self)
+
+    def on_unpin_plane(self) -> Changed:
+        """``{plane_id}``."""
+        return interactions.on_unpin_plane(self)
+
+    def on_move_pin(self) -> Changed:
+        """``{plane_id, index}``."""
+        return interactions.on_move_pin(self)

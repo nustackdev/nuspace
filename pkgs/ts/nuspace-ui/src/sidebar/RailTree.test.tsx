@@ -36,6 +36,7 @@ const emojiTree = coerceTree([
 let host: HTMLDivElement;
 let root: Root;
 const onToggle = vi.fn();
+const pins = { ids: ["a"], pin: vi.fn(), unpin: vi.fn(), move: vi.fn() };
 
 function render(expanded: string[], on = tree) {
 	const rows = visibleRows(on, childrenOf(on, ROOT_ID), new Set(expanded));
@@ -51,6 +52,7 @@ function render(expanded: string[], on = tree) {
 					onToggle={onToggle}
 					reveal={() => {}}
 					notify={() => {}}
+					pins={pins}
 				/>
 			</TooltipProvider>,
 		);
@@ -98,6 +100,7 @@ beforeEach(() => {
 	document.body.append(host);
 	root = createRoot(host);
 	onToggle.mockClear();
+	vi.clearAllMocks();
 });
 
 afterEach(() => {
@@ -149,6 +152,24 @@ describe("rail icon and chevron slot", () => {
 		});
 		const items = [...document.querySelectorAll('[role="menuitem"]')].map((i) => i.textContent);
 		expect(items).toContain("Change icon");
+	});
+
+	it("offers Pin or Unpin in the row's menu, as the plane is", () => {
+		const menu = (key: string) => {
+			act(() => {
+				moreOf(key)?.dispatchEvent(
+					new PointerEvent("pointerdown", { bubbles: true, button: 0, pointerType: "mouse" }),
+				);
+			});
+			return [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')];
+		};
+		render([]);
+		const unpin = menu("a").find((i) => i.textContent === "Unpin");
+		act(() => unpin?.click());
+		expect(pins.unpin).toHaveBeenCalledWith("a");
+		const pin = menu("b").find((i) => i.textContent === "Pin");
+		act(() => pin?.click());
+		expect(pins.pin).toHaveBeenCalledWith("b");
 	});
 
 	it("folds on a chevron click and never navigates", () => {

@@ -308,6 +308,53 @@ async def test_sibling_order_after_add_remove_and_move(store):
     assert await store.read(ops.children()) == [a, d]
 
 
+# --- Pins ----------------------------------------------------------------------
+
+
+async def test_pin_places_and_moves(store):
+    assert await store.read(ops.pinned()) == []
+    a, b, c = [await plane(store, ui=True) for _ in range(3)]
+    await store.run(ops.pin_plane(a) >> ops.pin_plane(b) >> ops.pin_plane(c, index=0))
+    assert await store.read(ops.pinned()) == [c, a, b]
+    # Pinned again with no index: stays. With one: moves, the plane taken out first.
+    await store.run(ops.pin_plane(c))
+    assert await store.read(ops.pinned()) == [c, a, b]
+    await store.run(ops.pin_plane(c, index=1))
+    assert await store.read(ops.pinned()) == [a, c, b]
+    # Out of range, negative included, is the end.
+    await store.run(ops.pin_plane(a, index=-1))
+    assert await store.read(ops.pinned()) == [c, b, a]
+    # A pin is a shortcut: the tree is untouched.
+    assert await store.read(ops.children()) == [a, b, c]
+
+
+async def test_pin_refuses_missing_and_undrawn_planes(store):
+    hidden = await plane(store)
+    await store.run(ops.pin_plane("nope") >> ops.pin_plane(hidden, index=0))
+    assert await store.read(ops.pinned()) == []
+
+
+async def test_unpin_and_move_pin(store):
+    a, b, c = [await plane(store, ui=True) for _ in range(3)]
+    await store.run(ops.pin_plane(a) >> ops.pin_plane(b) >> ops.pin_plane(c))
+    await store.run(ops.move_pin(c, 0) >> ops.move_pin(a, 9))
+    assert await store.read(ops.pinned()) == [c, b, a]
+    await store.run(ops.unpin_plane(b) >> ops.unpin_plane("nope"))
+    assert await store.read(ops.pinned()) == [c, a]
+    # Moving a plane that is not pinned pins nothing.
+    await store.run(ops.move_pin(b, 0))
+    assert await store.read(ops.pinned()) == [c, a]
+    assert await store.read(ops.planes()) == [a, b, c]
+
+
+async def test_remove_plane_unpins_its_subtree(store):
+    top, keep = await plane(store, ui=True), await plane(store, ui=True)
+    kid = await store.run(ops.add_plane(parent=top, ui=True))
+    await store.run(ops.pin_plane(kid) >> ops.pin_plane(keep) >> ops.pin_plane(top))
+    assert await store.run(ops.remove_plane(top)) is True
+    assert await store.read(ops.pinned()) == [keep]
+
+
 async def test_parent_of_an_unlinked_plane(store):
     assert await store.read(ops.parent("nope")) == ""
 

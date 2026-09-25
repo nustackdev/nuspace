@@ -30,7 +30,7 @@ from nuspace.shapes import (
     Space,
 )
 from nuspace.system.devices.web import CellRoot, SessionWrap, Shell, session_env
-from nuspace.system.devices.web.sidebar import create, move, registered_entries, rows
+from nuspace.system.devices.web.sidebar import create, move, pins, registered_entries, rows
 from nuspace.system.devices.web.viewer import plane_view, statuses
 from nuspace.system.kernel import build_body
 from nustd.ui.core import OP_NOTIFY, Frame, WsSession
@@ -197,6 +197,18 @@ async def test_sidebar_rows_empty(store):
     await _plane(store, "p1", "One")
     got = await store.read(rows())
     assert got == [{"id": "space", "kind": "space", "title": "", "parent": "space", "children": []}]
+
+
+async def test_sidebar_pins_are_drawn_planes_in_order(store):
+    await _plane(store, "p1", "One", ui=True)
+    await _plane(store, "p2", "Two", ui=True)
+    await _plane(store, "p3", "Hidden")
+    await store.run(ops.pin_plane("p2") >> ops.pin_plane("p1") >> ops.pin_plane("p3"))
+    assert await store.read(pins()) == ["p2", "p1"]
+    # A plane drawn once and hidden since stays pinned in the store, unshipped.
+    await store.run(ops.add_plane("p2", name="Two"))
+    assert await store.read(ops.pinned()) == ["p2", "p1"]
+    assert await store.read(pins()) == ["p1"]
 
 
 def test_registered_entries():
@@ -427,6 +439,7 @@ async def test_connection_live(store):
         sidebar_init = next(f for f in session.frames if f.ref == ("sidebar",))
         assert sidebar_init.chain[0][2]["registered"] == registered_entries(PLANES)
         assert [row["id"] for row in session.writes("set_tree")[-1]["planes"]] == ["space", "p1"]
+        assert session.writes("set_tree")[-1]["pinned"] == []
         assert await store.read(conns["s1"].routes) == []
 
         # planes.open: deduped with order kept, empty ids dropped, the plane shipped.
@@ -520,10 +533,21 @@ async def test_connection_live(store):
         await _until(
             lambda: session.writes("set_tree")[-1]["planes"][0]["children"] == ["p2", "p1"]
         )
+        # Pins ship with the tree: pinned, moved, unpinned, and gone with a delete.
+        session.notify(("sidebar", "ops", "plane.pin"), {"plane_id": "p1", "index": -1})
+        await _until(lambda: session.writes("set_tree")[-1]["pinned"] == ["p1"])
+        session.notify(("sidebar", "ops", "plane.pin"), {"plane_id": "p2", "index": 0})
+        await _until(lambda: session.writes("set_tree")[-1]["pinned"] == ["p2", "p1"])
+        session.notify(("sidebar", "ops", "plane.pin_move"), {"plane_id": "p2", "index": 1})
+        await _until(lambda: session.writes("set_tree")[-1]["pinned"] == ["p1", "p2"])
+        session.notify(("sidebar", "ops", "plane.unpin"), {"plane_id": "p1"})
+        await _until(lambda: session.writes("set_tree")[-1]["pinned"] == ["p2"])
+        assert await store.read(ops.children()) == ["p2", "p1"]
         session.notify(("sidebar", "ops", "plane.delete"), {"plane_id": "p2"})
         await _until(
             lambda: "p2" not in [r["id"] for r in session.writes("set_tree")[-1]["planes"]]
         )
+        assert session.writes("set_tree")[-1]["pinned"] == []
     finally:
         task.cancel()
         await asyncio.gather(task, return_exceptions=True)

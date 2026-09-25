@@ -2,7 +2,8 @@
 
 Like home (:mod:`nuspace.system.home`): a system ui plane with a fixed id,
 seeded once by the same :func:`~nuspace.system.home.seed`, its cells the
-owner's after that. Two cells:
+owner's after that. Pinned when seeded, after home: the sidebar's pin is the
+way to it. Two cells:
 
 - ``header``: home's header, the same source;
 - ``telemetry``: a switch over ``Space.settings.telemetry``, both ways.

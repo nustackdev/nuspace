@@ -1,8 +1,8 @@
 // The SidebarRef node: what the wire writes, and the fold state the browser
 // keeps.
 //
-// The wire half is the list of Planes that draw, replaced wholesale by
-// `set_tree`, and the registered Planes the Add plane popup offers, seeded as
+// The wire half is the list of Planes that draw and the pinned ids, replaced
+// wholesale by `set_tree`, and the registered Planes the Add plane popup offers, seeded as
 // the `registered` prop at boot. Both land in props.
 //
 // The browser half is which branches are open. The server never sees it, none
@@ -21,6 +21,7 @@ import { useMemo } from "react";
 import { patchLocal, useLocalSlot } from "../core/local";
 import {
 	coerceRegistered,
+	coerceStrs,
 	coerceTree,
 	EMPTY_TREE,
 	type PlaneTree,
@@ -43,18 +44,22 @@ export function applySidebarWrite(props: Props, payload: unknown): void {
 	const p = (payload ?? {}) as Record<string, unknown>;
 	if (String(p.op ?? "") !== "set_tree") return;
 	props.tree = coerceTree(p.planes);
+	props.pinned = coerceStrs(p.pinned);
 	props.loaded = true;
 }
 
 // -- Reads --------------------------------------------------------------------
 
+const NO_PINS: string[] = [];
+
 export function useSidebarValue(path: Path): SidebarValue {
 	const props = useProps(path);
 	const tree = (props.tree as SidebarValue["tree"] | undefined) ?? EMPTY_TREE;
+	const pinned = (props.pinned as string[] | undefined) ?? NO_PINS;
 	const loaded = props.loaded === true;
 	const raw = props.registered;
 	const registered = useMemo(() => coerceRegistered(raw), [raw]);
-	return useMemo(() => ({ tree, loaded, registered }), [tree, loaded, registered]);
+	return useMemo(() => ({ tree, pinned, loaded, registered }), [tree, pinned, loaded, registered]);
 }
 
 /**
@@ -79,6 +84,14 @@ export function usePlaneTree(sidebar: Path | null): PlaneTree {
 	return useTree((s) => {
 		const props = sidebar ? getNode(s.root, sidebar)?.props : undefined;
 		return (props?.tree as PlaneTree | undefined) ?? EMPTY_TREE;
+	});
+}
+
+/** The pinned ids, read from outside the sidebar. Empty until the tree lands. */
+export function usePinned(sidebar: Path | null): string[] {
+	return useTree((s) => {
+		const props = sidebar ? getNode(s.root, sidebar)?.props : undefined;
+		return (props?.pinned as string[] | undefined) ?? NO_PINS;
 	});
 }
 

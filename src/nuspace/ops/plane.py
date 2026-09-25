@@ -9,7 +9,7 @@ default. :func:`plane_icon` is the one place a spelling is read.
 
 A plane is structure only, so nothing here says how anything runs. Which
 cells are on it and in what order is :mod:`nuspace.ops.cell`; where it hangs
-is :mod:`nuspace.ops.tree`.
+is :mod:`nuspace.ops.tree`; whether it is pinned is :mod:`nuspace.ops.pin`.
 """
 
 from __future__ import annotations
@@ -20,6 +20,7 @@ import nu
 from nuspace.shapes import ROOT, Space
 
 from .kernel import stop_runs
+from .pin import unpin
 from .read import plane_exists
 from .tree import link, subtree, unlink
 from .utils import MintId, atomic, binding, flag, fresh
@@ -104,7 +105,7 @@ def add_plane(
 
 
 def remove_plane(plane_id: nu.StrArg) -> nu.Nu:
-    """Drop a plane, its cells, and every plane nested below it.
+    """Drop a plane, its cells, and every plane nested below it, unpinning each.
 
     Refused when the plane or any plane below it is a system plane. Live
     runs of every plane going are asked to stop first, so nothing keeps
@@ -131,6 +132,7 @@ def remove_plane(plane_id: nu.StrArg) -> nu.Nu:
             delete = nu.ForEachDo(
                 gone,
                 unlink(each_ref)
+                >> unpin(each_ref)
                 >> nu.IfDo(Space.planes.contains(each_ref), Space.planes.del_item(each_ref))
                 >> nu.IfDo(Space.tree.contains(each_ref), Space.tree.del_item(each_ref)),
                 item=each,

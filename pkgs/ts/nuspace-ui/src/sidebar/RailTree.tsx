@@ -23,7 +23,8 @@
 // The tree is one tab stop; `useRailFocus` owns the tab stop, the by-key
 // focus and the four moves. What this adds on top is the two arrows that fold
 // and open-and-reveal. Drag and drop is ./useRailDrag.ts; this draws its
-// insertion line and its target.
+// insertion line and its target, and drops them once the drag leaves for the
+// pinned row.
 
 import type * as React from "react";
 import { Fragment, useCallback, useEffect, useMemo } from "react";
@@ -44,6 +45,7 @@ import { planeIcon } from "../icon/parse";
 import { clearPendingRename, usePendingRename } from "./add";
 import type { Notify } from "./ops";
 import { PlaneRow } from "./PlaneRow";
+import type { Pins } from "./pin";
 import { showsNoPlanes, type VisibleRow } from "./tree";
 import type { PlaneTree, Registered } from "./types";
 import { useDraft } from "./useDraft";
@@ -59,6 +61,7 @@ export function RailTree({
 	onToggle,
 	reveal,
 	notify,
+	pins,
 }: {
 	tree: PlaneTree;
 	rows: VisibleRow[];
@@ -69,6 +72,7 @@ export function RailTree({
 	onToggle: (key: string) => void;
 	reveal: (key: string) => void;
 	notify: Notify;
+	pins: Pins;
 }) {
 	const keys = useMemo(() => rows.map((r) => r.key), [rows]);
 	const { containerRef, tabKey, setActiveKey, focusKey, focusIndex, handleArrows } = useRailFocus(
@@ -76,7 +80,12 @@ export function RailTree({
 		selKey,
 	);
 	const { draft, startRename, commitDraft, cancelDraft } = useDraft({ notify, focusKey });
-	const { dragKey, target, rowProps, tailProps } = useRailDrag({ tree, rows, notify, reveal });
+	const { dragKey, target, rowProps, tailProps, leaveProps } = useRailDrag({
+		tree,
+		rows,
+		notify,
+		reveal,
+	});
 
 	// A Plane made from the Add plane popup is renamed as soon as its row shows.
 	const pending = usePendingRename();
@@ -125,7 +134,9 @@ export function RailTree({
 	);
 
 	return (
-		<>
+		// `contents`: a box for the drag's leave only, the rows and the tail
+		// stay laid out by the rail's scroll body.
+		<div className="contents" {...leaveProps}>
 			<div role="tree" aria-label="Planes" ref={containerRef} className={railTreeList}>
 				{rows.map((row, index) => {
 					const aimed = target?.key === row.key ? target.edge : null;
@@ -154,6 +165,7 @@ export function RailTree({
 									onCancel={cancelDraft}
 									notify={notify}
 									tree={tree}
+									pins={pins}
 								/>
 								{aimed === "before" || aimed === "after" ? (
 									<span
@@ -179,6 +191,6 @@ export function RailTree({
 					<span className={railDropLine("before")} style={railDropLineStyle(0)} />
 				) : null}
 			</div>
-		</>
+		</div>
 	);
 }

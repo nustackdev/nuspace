@@ -23,6 +23,11 @@
 //
 // An unknown `kind` is dropped rather than bucketed. A row whose parent this
 // build has no row for is simply not in the tree.
+//
+// ## Pins
+//
+// `set_tree` also ships `pinned`, the ids pinned to the row under the top bar,
+// in order. A pin is a shortcut: the Plane is in the tree as well.
 
 /** What a row is. The Space, or a Plane. */
 export const KIND_SPACE = "space";
@@ -63,7 +68,13 @@ export type Registered = {
 /** Every Plane that draws, keyed by id. What the sidebar walks. */
 export type PlaneTree = Record<string, TreeRow>;
 
-export type SidebarValue = { tree: PlaneTree; loaded: boolean; registered: Registered[] };
+export type SidebarValue = {
+	tree: PlaneTree;
+	/** The pinned Plane ids, in order. Every one is in `tree` too. */
+	pinned: string[];
+	loaded: boolean;
+	registered: Registered[];
+};
 
 export const EMPTY_TREE: PlaneTree = {};
 

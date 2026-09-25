@@ -13,11 +13,13 @@ import { pathKey } from "@nustackdev/ui-kit";
 import { useCallback, useMemo } from "react";
 import { notifyOp } from "../core/wire";
 import type { Ops } from "./ops";
+import { usePins } from "./pin";
 import { Rail } from "./Rail";
 import { patchSidebar, useExpanded, useSidebarValue } from "./state";
 
 export function Sidebar({ path }: NodeProps) {
 	const { tree, loaded, registered } = useSidebarValue(path);
+	const pins = usePins(path);
 	const expandedList = useExpanded(path);
 	const key = pathKey(path);
 
@@ -52,6 +54,7 @@ export function Sidebar({ path }: NodeProps) {
 			expanded={expanded}
 			onToggle={toggleExpanded}
 			notify={notify}
+			pins={pins}
 		/>
 	);
 }

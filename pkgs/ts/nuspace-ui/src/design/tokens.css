@@ -97,6 +97,7 @@
 	                         * parent's by a whole lane                     */
 	--rail-bar-pad: 0.75rem; /* 12 top and bottom bar side padding          */
 	--rail-top-gap: 0.5rem; /* 8 between the top bar and the first row      */
+	--rail-fade: 1rem; /* 16     the pinned row's fade over a clipped edge  */
 
 	/* --- Plane grid -------------------------------------------------------
 	 * Every row of a plane (the title, each cell, a ghost, a draft, a drop

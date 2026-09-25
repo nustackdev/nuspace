@@ -17,9 +17,12 @@ The browser falls back to the registered Plane's icon when it is empty.
 **System.** A row carries ``props.system``, so the browser offers no delete
 for a plane ``remove_plane`` refuses.
 
+**Pins.** ``Space.pinned`` ships with the tree, in order, drawn planes only.
+A pin is a shortcut: the pinned plane is in the tree as well.
+
 **Narrow watch.** The tree is shipped again when the set of planes, a
-plane's name, props or icon, or a tree node change, and nothing else: a
-cell writing its state or the kernel writing a run never wakes it.
+plane's name, props or icon, a tree node, or the pins change, and nothing
+else: a cell writing its state or the kernel writing a run never wakes it.
 """
 
 from __future__ import annotations
@@ -43,7 +46,7 @@ if TYPE_CHECKING:
     from nustd.ui.core import Ref
 
 
-__all__ = ["create", "move", "node", "rows", "sidebar_feed"]
+__all__ = ["create", "move", "node", "pins", "rows", "sidebar_feed"]
 
 
 _arms = Arms("sidebar")
@@ -54,6 +57,9 @@ _RENAME = "nuspace.web.sidebar.rename"
 _DELETE = "nuspace.web.sidebar.delete"
 _MOVE = "nuspace.web.sidebar.move"
 _ICON = "nuspace.web.sidebar.icon"
+_PIN = "nuspace.web.sidebar.pin"
+_UNPIN = "nuspace.web.sidebar.unpin"
+_PIN_MOVE = "nuspace.web.sidebar.pin_move"
 
 
 def _text(row: nu.Nu, field: str) -> nu.Nu:
@@ -151,6 +157,12 @@ def rows() -> nu.Nu:
     return nu.Let(listed, shown, body)
 
 
+def pins() -> nu.Nu:
+    """The pinned plane ids, in order, those that draw only. Bare read."""
+    at = fresh("sidebar_pin")
+    return nu.List(nu.Collect(nu.Filter(ops.pinned(), _drawn(nu.StrAttrRef(at)), key=at)))
+
+
 def create(
     planes: Sequence[Plane], made_by: nu.Nu, plane_id: nu.Nu, parent_id: nu.Nu, title: nu.Nu
 ) -> nu.Nu | None:
@@ -214,7 +226,7 @@ def move(plane_id: nu.Nu, parent_id: nu.Nu, index: nu.Nu) -> nu.Nu:
 
 
 def _changes() -> list[nu.Nu]:
-    """What reships the tree: the set of planes, their names, props and icons, the tree nodes."""
+    """What reships the tree: the planes, their names, props and icons, the tree, the pins."""
     planes, tree = Space.planes, Space.tree
     return [
         snap(planes.on_children_change()),
@@ -226,12 +238,27 @@ def _changes() -> list[nu.Nu]:
         snap(tree.on_children_change()),
         snap(tree.on_descendants_change("*", "children")),
         snap(tree.on_descendants_change("*", "children", "*")),
+        snap(Space.pinned.on_change()),
+        snap(Space.pinned.on_children_change()),
     ]
 
 
+def _index(attr: str) -> nu.Nu:
+    """An event's ``index``, -1 (the end) when it has none."""
+    return nu.ToInt(nu.DictAttrRef(attr).get_item(nu.Str("index"), nu.Int(-1)))
+
+
 def _ship(sidebar: Ref) -> nu.Nu:
-    held = fresh("sidebar_ship")
-    return nu.Let(held, snap(rows()), interactions.set_tree(sidebar, nu.ListAttrRef(held)))
+    held, pinned = fresh("sidebar_ship"), fresh("sidebar_pinned")
+    return nu.Let(
+        held,
+        snap(rows()),
+        nu.Let(
+            pinned,
+            snap(pins()),
+            interactions.set_tree(sidebar, nu.ListAttrRef(held), nu.ListAttrRef(pinned)),
+        ),
+    )
 
 
 def sidebar_feed(sidebar: Ref, planes: Sequence[Plane]) -> nu.Nu:
@@ -262,6 +289,9 @@ def sidebar_feed(sidebar: Ref, planes: Sequence[Plane]) -> nu.Nu:
     deleted = field_str(_DELETE, "plane_id")
     moved = field_str(_MOVE, "plane_id")
     iconed = field_str(_ICON, "plane_id")
+    pinning = field_str(_PIN, "plane_id")
+    unpinning = field_str(_UNPIN, "plane_id")
+    shifted = field_str(_PIN_MOVE, "plane_id")
     arms += [
         _arms.event(
             _RENAME,
@@ -284,7 +314,7 @@ def sidebar_feed(sidebar: Ref, planes: Sequence[Plane]) -> nu.Nu:
                 move(
                     moved,
                     field_str(_MOVE, "parent_id"),
-                    nu.ToInt(nu.DictAttrRef(_MOVE).get_item(nu.Str("index"), nu.Int(-1))),
+                    _index(_MOVE),
                 ),
             ),
         ),
@@ -295,6 +325,21 @@ def sidebar_feed(sidebar: Ref, planes: Sequence[Plane]) -> nu.Nu:
                 nu.Ne(iconed, nu.Str("")),
                 ops.set_plane_icon(iconed, field_str(_ICON, "icon")),
             ),
+        ),
+        _arms.event(
+            _PIN,
+            interactions.on_pin_plane(sidebar),
+            nu.IfDo(nu.Ne(pinning, nu.Str("")), ops.pin_plane(pinning, _index(_PIN))),
+        ),
+        _arms.event(
+            _UNPIN,
+            interactions.on_unpin_plane(sidebar),
+            nu.IfDo(nu.Ne(unpinning, nu.Str("")), ops.unpin_plane(unpinning)),
+        ),
+        _arms.event(
+            _PIN_MOVE,
+            interactions.on_move_pin(sidebar),
+            nu.IfDo(nu.Ne(shifted, nu.Str("")), ops.move_pin(shifted, _index(_PIN_MOVE))),
         ),
     ]
     return nu.ParallelAsync(*arms)

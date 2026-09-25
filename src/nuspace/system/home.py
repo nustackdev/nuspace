@@ -2,7 +2,8 @@
 
 A system ui plane with a fixed id: ``remove_plane`` refuses it, nav brings it
 up like any other drawn plane, and the sidebar lists it like one, first at the
-top level since it is made before anything else is. Its cells are ordinary
+top level since it is made before anything else is. It is pinned when seeded,
+first for the same reason. Its cells are ordinary
 cells, seeded once: after that they are the owner's to edit, and a store
 that has a home keeps it as it is.
 
@@ -28,7 +29,7 @@ import importlib.metadata
 from pathlib import Path
 
 import nu
-from nuspace.ops import add_cell, add_plane
+from nuspace.ops import add_cell, add_plane, pin_plane
 from nuspace.ops.utils import atomic
 from nuspace.shapes import Space
 
@@ -289,11 +290,11 @@ CELLS = (("header", HEADER), ("recent", RECENT), ("glance", GLANCE), ("start", S
 
 
 def seed(plane: str, name: str, icon: str, cells: tuple[tuple[str, str], ...]) -> nu.Nu:
-    """A system ui plane and its cells, when the plane was never made. Idempotent.
+    """A system ui plane and its cells, pinned last, when the plane was never made. Idempotent.
 
     Missing means ``add_plane`` never wrote it (no name), so a plane the owner
-    has edited since, cells removed or renamed included, is left as it is.
-    Several commits, like the service planes: it runs in the host at open,
+    has edited since, cells removed or renamed included, is left as it is,
+    and so is a pin the owner has taken off. Several commits, like the service planes: it runs in the host at open,
     before anything else reads the store.
 
     Args:
@@ -303,8 +304,11 @@ def seed(plane: str, name: str, icon: str, cells: tuple[tuple[str, str], ...]) -
         cells: ``(cell id, source)`` in order. The id is the name too.
     """
     made = [add_cell(plane, source, cell_id=cell, name=cell) for cell, source in cells]
-    first = add_plane(plane, name=name, system=True, ui=True, made_by="", meta={**META, "icon": icon})
-    return nu.IfDo(snap(nu.Not(Space.planes[plane].contains("name"))), nu.Sequential(first, *made))
+    first = add_plane(
+        plane, name=name, system=True, ui=True, made_by="", meta={**META, "icon": icon}
+    )
+    missing = snap(nu.Not(Space.planes[plane].contains("name")))
+    return nu.IfDo(missing, nu.Sequential(first, *made, pin_plane(plane)))
 
 
 def ensure_home() -> nu.Nu:

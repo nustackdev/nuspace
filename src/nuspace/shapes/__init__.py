@@ -27,6 +27,7 @@ reads it and it reads nothing back::
         info        path, opened, versions
       settings      SpaceSettings
         telemetry   bool, off when unset
+      pinned        [plane id], in order
 
 Plane and cell hold structure only. How and when a cell runs is the caller's
 argument, and what it did is a run.

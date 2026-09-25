@@ -107,7 +107,7 @@ export const railHeaderSpace = "min-w-0 flex-1";
  */
 export const railFooter = "flex h-chrome shrink-0 items-center gap-0.5 px-rail-bar-pad";
 
-/** Either side of the bottom bar's settings button, which sits in the middle. */
+/** The free middle of the bottom bar, between the links and the window's state. */
 export const railFooterSpace = "min-w-0 flex-1";
 
 /**
@@ -152,7 +152,7 @@ export function railStatusDot(tone: "ok" | "info" | "warn" | "danger", busy: boo
  * `rail-top-gap` gives the first row air under the top bar.
  */
 export const railScroll = cn(
-	"flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden [scrollbar-gutter:stable]",
+	"flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden",
 	"px-rail-inset pt-rail-top-gap pb-1",
 );
 
@@ -373,6 +373,58 @@ export const railDragging = "opacity-50";
 
 /** The space under the last row. A drop here moves the row to the top level, last. */
 export const railDropTail = "relative min-h-8 flex-1";
+
+/* ============================== Pinned ================================== */
+
+/*
+ * The pinned row, under the top bar: one icon per pinned plane, in a strip
+ * that scrolls sideways with no scrollbar. The bar pad puts the first glyph
+ * on the rail's one left edge, and the buttons are the top bar's size, so the
+ * two strips read as one header.
+ */
+
+/** The strip. Its mask is `railPinsFade`, inline, since which edges fade is data. */
+export const railPins = cn(
+	"flex shrink-0 items-center gap-0.5 overflow-x-auto overflow-y-hidden",
+	"px-rail-bar-pad py-0.5",
+	"[scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+);
+
+/**
+ * A soft fade on each edge with more behind it, as a mask so it works on any
+ * surface in either theme. `--rail-fade` wide.
+ */
+export function railPinsFade(start: boolean, end: boolean): { maskImage?: string } {
+	if (!start && !end) return {};
+	const from = start ? "transparent, black var(--rail-fade)" : "black";
+	const to = end ? "black calc(100% - var(--rail-fade)), transparent" : "black";
+	return { maskImage: `linear-gradient(to right, ${from}, ${to})` };
+}
+
+/**
+ * One pinned plane: its icon in a top bar button's box. Washed like a tree
+ * row: the focused pane's plane strongest, one open elsewhere lighter.
+ */
+export function railPin(selected: boolean, open: boolean): string {
+	return cn(
+		"relative flex size-7 shrink-0 items-center justify-center rounded-md text-text-muted",
+		"transition-colors duration-fast ease-out",
+		"focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0",
+		selected
+			? "bg-rail-selected text-text-primary"
+			: open
+				? "bg-rail-open hover:bg-rail-hover hover:text-text-primary"
+				: "hover:bg-rail-hover hover:text-text-primary active:bg-doc-active",
+	);
+}
+
+/** Where a drop lands among the pins: a thin accent line on one side of an icon. */
+export function railPinDropLine(edge: "before" | "after"): string {
+	return cn(
+		"pointer-events-none absolute inset-y-1 w-0.5 rounded-full bg-accent",
+		edge === "before" ? "-left-0.5" : "-right-0.5",
+	);
+}
 
 /* ============================== Add plane =============================== */
 

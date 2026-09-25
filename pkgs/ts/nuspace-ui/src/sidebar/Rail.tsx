@@ -1,4 +1,4 @@
-// The sidebar rail: a top bar, the tree, a bottom bar.
+// The sidebar rail: a top bar, the pinned planes, the tree, a bottom bar.
 //
 // Planes only. Cells are parts of a Plane, not navigable entities, so they
 // never appear here.
@@ -20,7 +20,9 @@
 //
 //   Rail.tsx          this: the aside, its three strips, the resize edge
 //   RailHeader.tsx    the top bar: collapse, new plane
+//   PinnedRow.tsx     the pinned planes, under the top bar
 //   RailFooter.tsx    the bottom bar: links, connection, theme
+//   pin.ts            the pins and their ops
 //   RailTree.tsx      the tree: keyboard, drop marks
 //   PlaneRow.tsx      one row: icon and twisty, label, actions, menus
 //   RailRow.tsx       the row shell the three lanes sit in
@@ -49,6 +51,8 @@ import {
 import { AddPlane } from "./AddPlane";
 import { useRailCollapsed } from "./collapse";
 import type { Notify } from "./ops";
+import { PinnedRow } from "./PinnedRow";
+import type { Pins } from "./pin";
 import { RailFooter } from "./RailFooter";
 import { RailHeader } from "./RailHeader";
 import { RailTree } from "./RailTree";
@@ -64,6 +68,7 @@ export function Rail({
 	expanded,
 	onToggle,
 	notify,
+	pins,
 }: {
 	tree: PlaneTree;
 	loaded: boolean;
@@ -71,6 +76,7 @@ export function Rail({
 	expanded: Set<string>;
 	onToggle: (key: string) => void;
 	notify: Notify;
+	pins: Pins;
 }) {
 	const routes = useRoutes();
 	// The focused pane's Plane is the cursor; the others are merely open.
@@ -94,6 +100,16 @@ export function Rail({
 		// a pane's `...` still opens it.
 		<aside aria-label="Sidebar" className={railAside(collapsed)} style={{ width }}>
 			<RailHeader />
+			{loading ? null : (
+				<PinnedRow
+					tree={tree}
+					pins={pins}
+					registered={registered}
+					routes={routes}
+					selKey={selKey}
+					reveal={reveal}
+				/>
+			)}
 			<nav aria-label="Planes" className={railScroll}>
 				{loading ? (
 					<RailSkeleton />
@@ -107,6 +123,7 @@ export function Rail({
 						onToggle={onToggle}
 						reveal={reveal}
 						notify={notify}
+						pins={pins}
 					/>
 				)}
 			</nav>

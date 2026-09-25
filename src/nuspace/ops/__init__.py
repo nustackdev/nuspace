@@ -42,6 +42,7 @@ from .kernel import (
     worker,
     workers,
 )
+from .pin import move_pin, pin_plane, pinned, unpin_plane
 from .plane import add_plane, remove_plane, rename_plane, set_plane_icon, set_plane_meta
 from .read import (
     cell_exists,
@@ -85,8 +86,11 @@ __all__ = [
     "live_runs",
     "mint_ordered_id",
     "move_cell",
+    "move_pin",
     "move_plane",
     "parent",
+    "pin_plane",
+    "pinned",
     "plane_exists",
     "plane_rows",
     "planes",
@@ -104,6 +108,7 @@ __all__ = [
     "set_telemetry",
     "sibling",
     "telemetry",
+    "unpin_plane",
     "up",
     "up_plane",
     "worker",

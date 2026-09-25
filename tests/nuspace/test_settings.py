@@ -37,6 +37,15 @@ async def test_settings_is_seeded_once_with_home_header(store):
     assert all(p["system"] for p in planes)
 
 
+async def test_home_and_settings_are_pinned_on_first_seed_only(store):
+    await store.run(home.ensure_home() >> settings.ensure_settings())
+    assert await store.read(ops.pinned()) == [home.PLANE, settings.PLANE]
+    # Unpinned by the owner: seeding again leaves it that way.
+    await store.run(ops.unpin_plane(settings.PLANE) >> ops.move_pin(home.PLANE, 0))
+    await store.run(home.ensure_home() >> settings.ensure_settings())
+    assert await store.read(ops.pinned()) == [home.PLANE]
+
+
 async def test_telemetry_is_off_until_set(store):
     assert await store.read(nustd.kv.Snapshot(ops.telemetry(), scope=Space)) is False
     await store.run(ops.set_telemetry(True))

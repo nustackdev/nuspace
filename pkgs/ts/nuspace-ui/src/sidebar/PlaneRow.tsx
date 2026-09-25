@@ -16,6 +16,7 @@
 // The icon is the plane's own (`meta.icon`), else its registered Plane's, else
 // the default. It is not a control, since the chevron takes its place under
 // the pointer: "Change icon" in both menus opens the picker, anchored on it.
+// "Pin" / "Unpin" in both menus puts it in the pinned row or takes it out.
 //
 // The hover split opens the plane in a new pane beside the others, the same as
 // the menus' "Open in split". The hover `+` adds a Plane under this one,
@@ -43,6 +44,8 @@ import {
 	Ellipsis,
 	FileText,
 	PenLine,
+	Pin,
+	PinOff,
 	Plus,
 	SmilePlus,
 	Trash2,
@@ -56,6 +59,7 @@ import { PlaneIcon } from "../icon/PlaneIcon";
 import type { Icon as PlaneIconValue } from "../icon/parse";
 import { openAddPlane } from "./add";
 import type { Notify } from "./ops";
+import type { Pins } from "./pin";
 import { RailRow, RailRowLink } from "./RailRow";
 import { RailRowInput } from "./RailRowInput";
 import { canDelete, deletePlane } from "./remove";
@@ -82,6 +86,7 @@ export function PlaneRow({
 	onCancel,
 	notify,
 	tree,
+	pins,
 }: {
 	row: VisibleRow;
 	index: number;
@@ -106,6 +111,7 @@ export function PlaneRow({
 	onCancel: () => void;
 	notify: Notify;
 	tree: PlaneTree;
+	pins: Pins;
 }) {
 	const { key, id, depth, title, hasKids, open, pos, size } = row;
 	const navClick = onNavClick(id);
@@ -119,6 +125,11 @@ export function PlaneRow({
 	}, [hasKids, id, key, reveal]);
 
 	const add = useCallback(() => openAddPlane({ parent: id }), [id]);
+
+	const pinned = pins.ids.includes(id);
+	const togglePin = useCallback(() => (pinned ? pins.unpin(id) : pins.pin(id)), [id, pinned, pins]);
+	const PinIcon = pinned ? PinOff : Pin;
+	const pinLabel = pinned ? "Unpin" : "Pin";
 
 	// "Change icon" opens the picker once its menu has closed, in place of the
 	// menu handing focus back; opened any sooner, that focus would shut it.
@@ -282,6 +293,10 @@ export function PlaneRow({
 							<SmilePlus />
 							Change icon
 						</DropdownMenuItem>
+						<DropdownMenuItem onSelect={togglePin}>
+							<PinIcon />
+							{pinLabel}
+						</DropdownMenuItem>
 						{removable ? (
 							<>
 								<DropdownMenuSeparator />
@@ -316,6 +331,10 @@ export function PlaneRow({
 					<ContextMenuItem onSelect={changeIcon}>
 						<SmilePlus />
 						Change icon
+					</ContextMenuItem>
+					<ContextMenuItem onSelect={togglePin}>
+						<PinIcon />
+						{pinLabel}
 					</ContextMenuItem>
 					{removable ? (
 						<>

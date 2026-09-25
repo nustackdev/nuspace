@@ -16,6 +16,10 @@
 // A row can never land in its own subtree, itself included: those rows offer
 // no drop at all. Everything else moves, home and system Planes too. The
 // server is the one that holds that rule; this only keeps from asking.
+//
+// A row can also be dropped on the pinned row, which pins it and leaves it
+// here (./PinnedRow.tsx reads the drag's `PLANE_MIME`). A pin dragged over the
+// tree is not one of its rows, so nothing here takes it.
 
 import type * as React from "react";
 import { useCallback, useMemo, useState } from "react";
@@ -28,8 +32,8 @@ export type DropEdge = "before" | "after" | "into";
 /** Where the dragged row would land right now. `key` "" is below the rows. */
 export type DropTarget = { key: string; edge: DropEdge };
 
-/** What the drag carries on the wire, so a drop from elsewhere is ignored. */
-const MIME = "application/x-nuspace-plane";
+/** What a row's drag carries: its id. The pinned row takes it too. */
+export const PLANE_MIME = "application/x-nuspace-plane";
 
 /** The edge a pointer at `clientY` picks on `el`. */
 function edgeAt(el: HTMLElement, clientY: number): DropEdge {
@@ -119,7 +123,7 @@ export function useRailDrag({
 			draggable: true,
 			onDragStart: (e: React.DragEvent) => {
 				e.dataTransfer.effectAllowed = "move";
-				e.dataTransfer.setData(MIME, key);
+				e.dataTransfer.setData(PLANE_MIME, key);
 				setDragKey(key);
 			},
 			onDragEnd: end,
@@ -163,5 +167,15 @@ export function useRailDrag({
 		[dragKey, target, drop],
 	);
 
-	return { dragKey, target, rowProps, tailProps };
+	/** Handlers around the rows and the tail: leaving them, eg for the pins, drops the mark. */
+	const leaveProps = useMemo(
+		() => ({
+			onDragLeave: (e: React.DragEvent) => {
+				if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setTarget(null);
+			},
+		}),
+		[],
+	);
+
+	return { dragKey, target, rowProps, tailProps, leaveProps };
 }

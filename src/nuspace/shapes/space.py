@@ -69,6 +69,10 @@ class Space(nu.Shape):
     ``connections`` and ``state.recents``, the host writes ``state.info``,
     the settings plane writes ``settings``.
 
+    ``pinned`` is the plane ids pinned to the top of the sidebar, in order,
+    written through the pin ops. A pin is a shortcut: the plane stays where
+    it is in ``tree``.
+
     ``Space`` is also the store's tag. kv refs find their navigator by root
     shape class, so the store is bound under this class and anything rerooted
     under it resolves there.
@@ -80,3 +84,4 @@ class Space(nu.Shape):
     connections = nustd.kv.ShapesDictRef.slot(Connection)
     state = nustd.kv.ShapeRef.slot(SpaceState)
     settings = nustd.kv.ShapeRef.slot(SpaceSettings)
+    pinned = nustd.kv.ListRef.slot(str)

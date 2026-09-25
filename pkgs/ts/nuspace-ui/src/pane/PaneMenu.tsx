@@ -5,7 +5,8 @@
 // label as well as the track.
 //
 // Above the settings, "Add plane" opens the Add plane popup for a child of
-// this pane's Plane, opened in this pane. The tab bar adds a Rename row (only
+// this pane's Plane, opened in this pane, and "Pin" / "Unpin" puts the Plane
+// in the sidebar's pinned row or takes it out (a Plane the sidebar draws only). The tab bar adds a Rename row (only
 // when `onRename` is given), and `open` / `onOpenChange` so a key on the tab
 // can open it. "Delete plane" shows when `onDelete` is given, which it is not
 // for a system Plane.
@@ -26,6 +27,7 @@ import {
 } from "../design";
 import type { PlaneMeta } from "../plane/types";
 import { openAddPlane } from "../sidebar/add";
+import { usePlanePin } from "../sidebar/pin";
 import { PLANE_SETTINGS, type PlaneSetting } from "./settings";
 
 export function PaneMenu({
@@ -64,6 +66,7 @@ export function PaneMenu({
 	const [own, setOwn] = useState(false);
 	const isOpen = open ?? own;
 	const setOpen = onOpenChange ?? setOwn;
+	const pin = usePlanePin(planeId);
 	return (
 		<Popover open={isOpen} onOpenChange={setOpen}>
 			<PopoverTrigger asChild>
@@ -97,6 +100,18 @@ export function PaneMenu({
 						}}
 					>
 						Add plane
+					</button>
+				) : null}
+				{meta && pin ? (
+					<button
+						type="button"
+						className={paneMenuAction}
+						onClick={() => {
+							setOpen(false);
+							pin.toggle();
+						}}
+					>
+						{pin.pinned ? "Unpin" : "Pin"}
 					</button>
 				) : null}
 				{meta && onRename ? (
