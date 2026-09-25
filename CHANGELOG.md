@@ -12,6 +12,7 @@ separately here.
 
 ## Unreleased
 
+- New cells from a snippet open showing what they draw, not their code
 - Rename a plane by editing its title in place, on any plane
 - New lens snippets browse the current plane, or a cell picked from a dropdown
 - A Lens snippet browses any shape in the store as cascading columns

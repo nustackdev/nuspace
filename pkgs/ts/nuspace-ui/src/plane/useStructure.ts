@@ -8,24 +8,42 @@ import { useCallback, useEffect, useRef } from "react";
 import { mintId } from "../core/ids";
 import type { PlaneModel } from "./model";
 
-export function useStructure({ planeId, cells, editor, patch, notify, index }: PlaneModel) {
+export function useStructure({
+	planeId,
+	cells,
+	editor,
+	patch,
+	notify,
+	index,
+	rootRef,
+	elRefs,
+}: PlaneModel) {
 	/** A cell that has been asked for but not shipped back yet. `set_plane`
 	 *  prunes focus pointing at a cell it does not carry, so the intent is
 	 *  parked here until the cell actually arrives. */
-	const pendingFocus = useRef<string | null>(null);
+	const pendingFocus = useRef<{ id: string; open: boolean } | null>(null);
 
-	// Land the caret in a newly created cell, once the server confirms it.
+	// Land on a newly created cell once the server confirms it. A snippet's
+	// cell is selected with its source closed: what it draws is the point. A
+	// blank cell has nothing to draw yet, so its source opens for typing.
 	useEffect(() => {
 		const want = pendingFocus.current;
 		if (!want) return;
-		if (!cells.some((b) => b.id === want)) return;
+		if (!cells.some((b) => b.id === want.id)) return;
 		pendingFocus.current = null;
-		patch((e) => ({
-			editing: e.editing.includes(want) ? e.editing : [...e.editing, want],
-			focus: { cellId: want, place: "start" },
-			selected: [],
-		}));
-	}, [cells, patch]);
+		const id = want.id;
+		if (want.open) {
+			patch((e) => ({
+				editing: e.editing.includes(id) ? e.editing : [...e.editing, id],
+				focus: { cellId: id, place: "start" },
+				selected: [],
+			}));
+			return;
+		}
+		patch({ focus: null, selected: [id], anchor: id, column: null });
+		rootRef.current?.focus({ preventScroll: true });
+		elRefs.current.get(id)?.scrollIntoView({ block: "nearest" });
+	}, [cells, patch, rootRef, elRefs]);
 
 	const commitSource = useCallback(
 		(id: string, source: string) => {
@@ -36,7 +54,7 @@ export function useStructure({ planeId, cells, editor, patch, notify, index }: P
 
 	/**
 	 * Add a cell made from the snippet `name` after `afterId` (or last), and
-	 * aim the caret at it. The server stores the snippet's program; a name no
+	 * land on it. The server stores the snippet's program; a name no
 	 * snippet has makes a blank one.
 	 */
 	const createAfter = useCallback(
@@ -49,7 +67,7 @@ export function useStructure({ planeId, cells, editor, patch, notify, index }: P
 				name,
 				index: at < 0 ? cells.length : at + 1,
 			});
-			pendingFocus.current = id;
+			pendingFocus.current = { id, open: name === "" };
 		},
 		[cells.length, index, notify, planeId],
 	);
