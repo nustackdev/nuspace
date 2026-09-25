@@ -25,9 +25,11 @@ let root: Root;
 const onPick = vi.fn();
 const onRemove = vi.fn();
 
-function render(value = "") {
-	act(() => {
+/** Render, and let the emoji load inside the act so no update lands outside it. */
+async function render(value = "") {
+	await act(async () => {
 		root.render(<IconPicker value={value} onPick={onPick} onRemove={onRemove} />);
+		await new Promise((r) => setTimeout(r, 0));
 	});
 }
 
@@ -46,6 +48,23 @@ function type(text: string) {
 	act(() => {
 		set?.call(el, text);
 		el.dispatchEvent(new Event("input", { bubbles: true }));
+	});
+}
+
+/** Let the emoji's dynamic import land. */
+async function settle() {
+	await act(async () => {
+		await new Promise((r) => setTimeout(r, 0));
+	});
+}
+
+const tabs = () => [...host.querySelectorAll('[role="tab"]')].map((t) => t.textContent);
+
+/** Switch to the Icons tab the way a click does: Radix tabs go on mousedown. */
+function toIcons() {
+	const tab = [...host.querySelectorAll('[role="tab"]')].find((t) => t.textContent === "Icons");
+	act(() => {
+		tab?.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0 }));
 	});
 }
 
@@ -70,15 +89,29 @@ afterEach(() => {
 });
 
 describe("icon picker", () => {
-	it("opens on the icons with the caret in the search, and picks one", () => {
-		render();
+	it("opens on the emoji first, loading them, with the caret in the search", async () => {
+		act(() => {
+			root.render(<IconPicker value="" onPick={onPick} onRemove={onRemove} />);
+		});
+		expect(tabs()).toEqual(["Emoji", "Icons"]);
 		expect(document.activeElement).toBe(search());
+		expect(host.querySelector('[role="status"]')?.getAttribute("aria-label")).toBe("Loading emoji");
+		await settle();
+		expect(host.querySelector('[role="status"]')).toBeNull();
+		act(() => cell("cat face")?.click());
+		expect(onPick).toHaveBeenCalledWith("emoji:🐱");
+	});
+
+	it("picks an icon from the icons tab", async () => {
+		await render();
+		toIcons();
 		act(() => cell("folder")?.click());
 		expect(onPick).toHaveBeenCalledWith("lucide:folder");
 	});
 
-	it("filters by name and keyword, and Enter takes the first match", () => {
-		render();
+	it("filters by name and keyword, and Enter takes the first match", async () => {
+		await render();
+		toIcons();
 		type("stopwatch");
 		const shown = [...host.querySelectorAll("button[data-cell]")].map((b) =>
 			b.getAttribute("aria-label"),
@@ -90,8 +123,9 @@ describe("icon picker", () => {
 		expect(host.textContent).toContain("Nothing matches");
 	});
 
-	it("moves through the grid with the arrows and picks with the focused cell", () => {
-		render();
+	it("moves through the grid with the arrows and picks with the focused cell", async () => {
+		await render();
+		toIcons();
 		type("chart");
 		key(search(), "ArrowDown");
 		const first = document.activeElement as HTMLElement;
@@ -102,26 +136,23 @@ describe("icon picker", () => {
 		expect(document.activeElement).toBe(search());
 	});
 
-	it("marks the current icon and removes it", () => {
-		render("lucide:cpu");
+	it("opens on the icons for a pack icon, marks it and removes it", async () => {
+		await render("lucide:cpu");
 		expect(cell("cpu")?.getAttribute("aria-pressed")).toBe("true");
 		const remove = [...host.querySelectorAll("button")].find((b) => b.textContent === "Remove");
 		act(() => remove?.click());
 		expect(onRemove).toHaveBeenCalled();
 	});
 
-	it("offers no remove when there is nothing to remove", () => {
-		render();
+	it("offers no remove when there is nothing to remove", async () => {
+		await render();
 		expect([...host.querySelectorAll("button")].some((b) => b.textContent === "Remove")).toBe(
 			false,
 		);
 	});
 
-	it("opens on the emoji for an emoji icon, and remembers picks", async () => {
-		render("emoji:🌱");
-		await act(async () => {
-			await new Promise((r) => setTimeout(r, 0));
-		});
+	it("marks an emoji icon, and remembers picks", async () => {
+		await render("emoji:🌱");
 		expect(cell("seedling")?.getAttribute("aria-pressed")).toBe("true");
 		act(() => cell("cat face")?.click());
 		expect(onPick).toHaveBeenCalledWith("emoji:🐱");

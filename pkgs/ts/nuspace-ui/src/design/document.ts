@@ -31,17 +31,45 @@ const docPlane = cn(
 );
 
 /**
- * The reading column. Cells sit inside; the gutter hangs off the left edge
- * into the plane padding, which is why pad-x is doc-pad-x and not zero.
+ * The plane's width: its grid at its widest, centred in the pane. The title
+ * head and the column of cells both take it, so their rows line up track for
+ * track.
  *
- * `wide` is the plane's full-width setting: the column spans the pane instead
- * of stopping at the reading measure.
+ * `wide` is the plane's full-width setting: no cap, so the content track
+ * spans the pane while the gutters keep their width.
+ */
+function docPlaneWidth(wide: boolean): string {
+	return cn("mx-auto w-full", wide ? "max-w-none" : "max-w-doc-plane");
+}
+
+/**
+ * One row of a plane: the three tracks every row shares, left gutter,
+ * content, right gutter (`--doc-grid`, tokens.css). The title, each cell,
+ * a ghost, a draft and the drop line are each one of these, so the same
+ * edges run through all of them without a row knowing about the others.
+ */
+export const docRow = "grid w-full grid-cols-(--doc-grid)";
+
+/**
+ * Where a row's parts go. Pinned to the first grid row as well as to their
+ * column, so the order they render in never pushes one onto a second line.
+ */
+export const docGutterTrack = "col-[gutter-l] row-start-1";
+export const docContentTrack = "col-[content] row-start-1 min-w-0";
+
+/**
+ * The column of cells. Each child is a `docRow`, and the ones that are not
+ * (the tail, the slash menu) span it or float over it.
+ *
+ * The top pad is the air between the title and the first cell, 32. The
+ * bottom one is the air under the last cell before the tail. Compact trims
+ * both to 12.
  */
 export function docColumn(wide = false, compact = false): string {
 	return cn(
-		"relative mx-auto w-full",
-		wide ? "max-w-none" : "max-w-doc",
-		compact ? "px-doc-pad-x pt-3 pb-3" : "px-doc-pad-x pt-doc-pad-y pb-doc-pad-y",
+		"relative",
+		docPlaneWidth(wide),
+		compact ? "pt-3 pb-3" : "pt-8 pb-doc-pad-y",
 		"flex flex-col gap-doc-cell-gap",
 	);
 }
@@ -49,22 +77,18 @@ export function docColumn(wide = false, compact = false): string {
 /**
  * The scroll surface as the flex child a pane mounts it as.
  *
- * The side padding is the gutter's room. The gutter is `doc-gutter` wide and
- * hangs off the column into its `doc-pad-x`, which is narrower, so in a pane
- * too narrow to centre the column with air to spare the gutter used to hang
- * past the pane's left edge and get cut off. Padding the surface by the
- * difference (plus 8px of air off the pane border) means the gutter always
- * lands inside the pane. Symmetric, so a centred plane stays centred; on a
- * wide pane it changes nothing.
+ * The 8px side pad is air between the gutters and the pane border, so a
+ * cell's controls never sit on the divider of a split. The grid keeps
+ * everything else inside: its gutters are tracks, not overhangs, so nothing
+ * hangs past the pane's edge at any width.
  */
-export const docPlaneSurface = cn(
-	docPlane,
-	"flex min-w-0 flex-1 flex-col",
-	"px-[calc(var(--spacing-doc-gutter)_-_var(--spacing-doc-pad-x)_+_0.5rem)]",
-);
+export const docPlaneSurface = cn(docPlane, "flex min-w-0 flex-1 flex-col px-2");
 
-/** Before a plane's value lands. Same quiet as the shell's boot state. */
-export const docPlaneLoading = "flex items-center gap-2 p-8 text-base text-text-muted";
+/**
+ * Before a plane's value lands. Same quiet as the shell's boot state, 72 in
+ * from the pane's edge (the surface's 8 plus 64), where it always sat.
+ */
+export const docPlaneLoading = "flex items-center gap-2 px-16 py-8 text-base text-text-muted";
 
 /**
  * A ghost input: the line where a cell will be, before there is one.
@@ -76,9 +100,12 @@ export const docPlaneLoading = "flex items-center gap-2 p-8 text-base text-text-
  * answer to anything. Hence the transparent placeholder rather than a
  * conditional label: the text is always there for a screen reader, it is
  * merely not ink until you are in it.
+ *
+ * It sits in a `docRow`'s content track, where a cell's box sits.
  */
 export const docGhost = (hinted: boolean) =>
 	cn(
+		docContentTrack,
 		"w-full rounded-sm border-0 bg-transparent outline-none",
 		"px-doc-cell-x py-doc-cell-y",
 		"text-xl leading-relaxed text-text-primary",
@@ -93,9 +120,11 @@ export const docGhost = (hinted: boolean) =>
  *
  * Plain text set where and how a text cell's first paragraph sits (cell pad,
  * field pad and the paragraph's own margin make the `py-5`), so the handoff
- * to the real editor moves nothing.
+ * to the real editor moves nothing. Like a ghost, in a `docRow`'s content
+ * track.
  */
 export const docDraft = cn(
+	docContentTrack,
 	"w-full resize-none rounded-sm border-0 bg-transparent outline-none [field-sizing:content]",
 	"px-doc-cell-x py-5",
 	"font-display text-base leading-normal text-text-primary",
@@ -121,31 +150,28 @@ export const docTail = "h-doc-tail w-full shrink-0 cursor-text";
 // writing off the fold.
 //
 // One left edge runs through all three of these and the cells below. A
-// cell's text starts at the column's 24px side gutter plus the cell's own
-// 8px inset, so the trail and the title pay the same 8px -- `px-doc-cell-x`
-// on both is alignment, not padding for its own sake.
+// cell's text starts at the content track's edge plus the cell's own 8px
+// inset, so the trail and the title pay the same 8px -- `px-doc-cell-x` on
+// both is alignment, not padding for its own sake.
 
 /**
- * The band the trail and the title sit in. Same measure and same side gutter
- * as `docColumn`, so the two columns are one column.
+ * The band the trail and the title sit in. The same width as `docColumn`,
+ * so its rows and the cells' rows share their tracks.
  *
- * The negative bottom margin eats half of the document column's own 64px top
- * pad. Without it the title and the first cell sit 64px apart on top of this
- * band's own trailing space, which reads as two documents rather than one.
- *
- * The `z-10` is load-bearing, not decoration: that same negative margin makes
- * the column's transparent top padding overlap the title, and the column is
- * later in the DOM, so without it the padding eats every click meant for the
- * heading.
+ * The air between the title and the first cell is the column's top pad, not
+ * anything here.
  */
 export function docTitleHead(wide = false, compact = false): string {
-	return cn(
-		"relative z-10 mx-auto w-full",
-		wide ? "max-w-none" : "max-w-doc",
-		// Compact: no run-up above the title and no overlap into the column,
-		// whose own top pad shrinks with it (see `docColumn`).
-		compact ? "px-doc-pad-x pt-3" : "px-doc-pad-x pt-4 -mb-8",
-	);
+	return cn(docPlaneWidth(wide), compact ? "pt-3" : "pt-4");
+}
+
+/**
+ * The title's row: the plane's icon in the left gutter, the title in the
+ * content track, so a long title wraps on the cells' text edge. It carries
+ * the run-up the title always had: the full gap, or 28 in compact.
+ */
+export function docTitleRow(compact = false): string {
+	return cn(docRow, compact ? "mt-7" : "mt-doc-title-gap");
 }
 
 /**
@@ -165,9 +191,9 @@ export const docTrail = "px-doc-cell-x";
  * node, so there is no mode swap and no layout shift on click.
  *
  * The blank run-up above it (see `--spacing-doc-title-gap`) is carried by
- * `docTitleBlock`, the block it shares with the plane's icon, rather than as
+ * `docTitleRow`, the row it shares with the plane's icon, rather than as
  * pad on the band, so the trail sits above it and the air lands between the
- * two.
+ * two. It fills that row's content track.
  *
  * No focus ring. A ring around a 40px heading is a box drawn around the plane's
  * name, and the caret already says where you are. The placeholder is a `::before` on the empty element
@@ -184,7 +210,8 @@ export const docTrail = "px-doc-cell-x";
 // future custom type token meeting a text colour has the same problem.
 export function docTitle(): string {
 	return `${cn(
-		"block w-full px-doc-cell-x py-0.5",
+		docContentTrack,
+		"block px-doc-cell-x py-0.5",
 		"font-bold text-text-primary",
 		"cursor-text whitespace-pre-wrap break-words outline-none",
 		"empty:before:pointer-events-none empty:before:text-text-muted",
@@ -209,8 +236,27 @@ export interface CellStateFlags {
 }
 
 /**
- * One cell. The content flows normally at full measure; the gutter is hung
- * outside the cell's left edge (see `docGutter`), so nothing the gutter
+ * A cell's row: its gutter in the left track, its box (`docCell`) in the
+ * content track. The row is the hover group, so standing anywhere on it,
+ * the controls included, counts as being on the cell.
+ *
+ * The hovered row rides above its neighbours, so a gutter stack taller than
+ * a short cell stays on top of the next row where it overhangs it, and wins
+ * the pointer there (see `docGutter`). The caret's row rides one step lower.
+ * A dragged cell fades whole, controls and all, while it travels.
+ */
+export function docCellRow(state: CellStateFlags = {}): string {
+	return cn(
+		docRow,
+		"group/cell relative hover:z-20",
+		state.focused && "z-10",
+		state.dragging && "opacity-40",
+	);
+}
+
+/**
+ * One cell's box, in its row's content track. The content flows normally at
+ * full measure; the gutter is its own track beside it, so nothing the gutter
  * renders can shift the reading column.
  *
  * Hover and pressed are NEUTRAL (doc-hover / doc-active); selection is the
@@ -228,62 +274,47 @@ export interface CellStateFlags {
  */
 export function docCell(state: CellStateFlags = {}): string {
 	return cn(
-		"group/cell relative w-full rounded-sm",
+		docContentTrack,
+		"relative rounded-sm",
 		"px-doc-cell-x",
 		"py-doc-cell-y-program",
 		"transition-colors duration-fast ease-out",
-		// The hovered cell rides above its neighbours, so a gutter stack that
-		// overhangs a short cell stays on top of the next cell's lane.
-		"hover:z-20",
-		!state.selected && "has-[[data-cell-grip]:hover]:bg-doc-hover",
+		// The grip is in the gutter, a sibling of this box, so its hover is
+		// read off the row.
+		!state.selected && "group-has-[[data-cell-grip]:hover]/cell:bg-doc-hover",
 		state.selected && "bg-doc-selected",
 		state.selectedStrong && "bg-doc-selected-strong",
 		// The caret's cell gets no fill: it is already marked by the caret.
-		// Its status rail is pinned instead, see `docStatusRail`.
-		state.focused && "z-10",
-		state.dragging && "opacity-40",
 	);
 }
 
 /**
- * The gutter. Hangs off the cell's left edge into the plane padding and holds
- * every affordance the cell has: add and drag, copy the cell id, open the
- * source. Hidden at rest and revealed on cell hover or keyboard focus - a
- * document at rest shows text, not controls.
+ * The gutter: the left track of a cell's row. It holds every affordance the
+ * cell has: add and drag, copy the cell id, open the source. Hidden at rest
+ * and revealed on hover or keyboard focus - a document at rest shows text,
+ * not controls.
  *
- * Sized to hold the widest row - two `sm` IconButtons side by side (24px each
- * + a 2px gap) - which is what makes the gutter one lane instead of two
- * overlapping ones. The top offset lines the first row up with the cell's
- * output, which sits 8px in.
+ * The track is sized to hold the widest row of the stack - two `sm`
+ * IconButtons side by side (24px each + a 2px gap) - and the rows
+ * right-align into it, so their right edge is the content edge. The top pad
+ * lines the first row up with the cell's output, which sits 8px in.
  *
- * The lane itself is inert. Three stacked rows are 76px tall (3x24 + 2x2),
- * taller than a one-line cell, so a cell's gutter hangs past the bottom of
- * the cell it belongs to and straight across the next cell's gutter slot. If
- * both were live hit targets the lower one would win by document order and
- * moving down your own controls would hand you the neighbour's - which is
- * exactly what it did. `pointer-events-none` here and on the hidden stack
- * means only the revealed stack takes the pointer, so at most one cell's
- * controls are live at a time and the overhang unambiguously belongs to the
- * cell that is showing. See `docGutterAffordances`.
+ * The lane is as tall as the cell and no taller. The stack is 58px (8 of pad,
+ * two 24px rows and a 2px gap), taller than a short cell, and if the lane
+ * took its height a one-line cell would grow to fit its own controls. Size
+ * containment keeps the stack out of the row's height, so it overhangs the
+ * next row instead, and `hover:z-20` on the hovered row (`docCellRow`) lifts
+ * it over that row so the overhang takes the pointer.
  *
- * The 4px that holds the controls off the text is padding INSIDE the stack,
- * not padding on the lane. On the lane it was a dead strip: the stack's hit
- * rect stopped 4px short of the cell's left edge, and that strip is inert,
- * so walking from the text out to the controls dropped the cell's `:hover`
- * before the stack was reached and the stack went inert with it. The pointer
- * is only hit-tested where it is sampled, so a fast enough swipe jumped the
- * strip and worked while a slow one did not. The two rects touch now, and
- * the walk is continuous at any speed.
+ * The lane itself is a live hover target: it is part of the row, so
+ * standing anywhere on it keeps the row's `group-hover/cell`. The 4px that
+ * holds the controls off the text is padding INSIDE the stack, not on the
+ * lane, so the stack's hit rect meets the content edge and the walk from the
+ * text out to the controls never crosses a dead strip.
  */
-//
-// The lane is a live hover target now, spanning the cell's full height (and
-// at least the stack's height, min-h-14). It is a descendant of the cell, so
-// standing anywhere in the column keeps the cell's `group-hover/cell`, and
-// the controls stay pinned at the top via pt-2. The overhang problem above is
-// handled by `hover:z-20` on the cell: the hovered cell paints over the next
-// one, so its overhanging lane and stack win the hit test.
 export const docGutter = cn(
-	"absolute right-full top-0 bottom-0 min-h-14 w-doc-gutter pt-2",
+	docGutterTrack,
+	"relative pt-2 [contain:size]",
 	"flex flex-col items-end gap-0.5 select-none",
 );
 
@@ -294,12 +325,12 @@ export const docGutter = cn(
  *
  * Revealed and live are the same state, always. Hidden means `pointer-events:
  * none`, which is what keeps a neighbour's invisible stack from stealing the
- * pointer (see `docGutter`). Hover survives the walk out into the lane because
- * `:hover` follows the DOM, not the box: the stack is a descendant of the
- * cell, so standing on it keeps the cell hovered even though it is painted
- * outside the cell's rect. And the wrapper is one rect covering all three
- * rows, so sliding between rows never crosses a dead strip even where a row is
- * narrower than the lane.
+ * pointer where it overhangs (see `docGutter`). Hover survives the walk off
+ * the end of a short cell because `:hover` follows the DOM, not the box: the
+ * stack is a descendant of the row, so standing on it keeps the row hovered
+ * even where it is painted past the row's bottom. And the wrapper is one rect
+ * covering both rows, so sliding between rows never crosses a dead strip even
+ * where a row is narrower than the lane.
  *
  * Reveal rules, in order of how they burn:
  *  - Hover, the ordinary one.
@@ -314,7 +345,7 @@ export const docGutter = cn(
 export function docGutterAffordances(pinned = false): string {
 	return cn(
 		// Sticky: in a tall cell the stack rides the top of the viewport while
-		// the cell is on screen, and the full-height lane is its track.
+		// the cell is on screen, and the cell-high lane is its track.
 		"sticky top-2 flex flex-col items-end gap-0.5 pr-1",
 		"transition-opacity duration-fast ease-out",
 		pinned
@@ -347,7 +378,11 @@ export const docGutterToggle = "px-1";
  */
 export const docDragHandle = "cursor-grab active:cursor-grabbing";
 
-/** Drop indicator drawn between two cells during a drag. 2px accent line. */
+/**
+ * Drop indicator drawn between two cells during a drag. 2px accent line,
+ * across the content track: it rides the top of the cell it would land
+ * above, or a zero-height row after the last one.
+ */
 export const docDropIndicator = cn(
 	"pointer-events-none absolute inset-x-0 h-doc-rail -translate-y-1/2",
 	"rounded-full bg-doc-drop-line",
@@ -359,7 +394,7 @@ export const docDropIndicator = cn(
 // plane around it is not: the type inside it is chrome type, and the code box
 // gets the same bordered-and-sunken treatment an editor in a tool gets. What makes it a document cell and not a
 // panel is the outside - the gutter, the measure, the cell padding - and that
-// is `docCell`'s job.
+// is `docCellRow` and `docCell`'s job.
 //
 // The cell has no control row of its own. Status, the id and the code toggle
 // all live in the gutter now, on the same three rows every cell gets, so what
@@ -397,7 +432,8 @@ export const docCodeBox = cn(
 
 /**
  * The status rail: a 2px line down the gutter lane's inner edge (beside the
- * cell, not on it), in the cell's hue, running the lane's full height. It
+ * cell, not on it), in the cell's hue, running the lane's full height, which
+ * is the cell's. It
  * is the cell's one state indicator, so every state paints one, idle
  * included (muted gray). Same visibility as the gutter controls: cell hover,
  * or pinned while the source is open or the cell is selected.

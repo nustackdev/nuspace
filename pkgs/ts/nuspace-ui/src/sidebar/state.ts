@@ -15,11 +15,17 @@
 // write has nothing to dispatch on. It also sets `loaded`, which is what tells
 // an empty Space from a tree that has not landed.
 
-import type { Path, Props } from "@nustackdev/ui-core";
-import { useProps } from "@nustackdev/ui-kit";
+import { getNode, type Path, type Props } from "@nustackdev/ui-core";
+import { useProps, useTree } from "@nustackdev/ui-kit";
 import { useMemo } from "react";
 import { patchLocal, useLocalSlot } from "../core/local";
-import { coerceRegistered, coerceTree, EMPTY_TREE, type SidebarValue } from "./types";
+import {
+	coerceRegistered,
+	coerceTree,
+	EMPTY_TREE,
+	type PlaneTree,
+	type SidebarValue,
+} from "./types";
 
 // -- Browser-owned state ------------------------------------------------------
 
@@ -49,6 +55,23 @@ export function useSidebarValue(path: Path): SidebarValue {
 	const raw = props.registered;
 	const registered = useMemo(() => coerceRegistered(raw), [raw]);
 	return useMemo(() => ({ tree, loaded, registered }), [tree, loaded, registered]);
+}
+
+/**
+ * The icon a plane falls back to: its registered Plane's, "" for none. Read
+ * off the sidebar's node, the one place a plane's `made_by` and the
+ * registered list both reach the browser. `sidebar` is that node's path.
+ */
+export function useRegisteredIcon(sidebar: Path | null, planeId: string): string {
+	return useTree((s) => {
+		const props = sidebar ? getNode(s.root, sidebar)?.props : undefined;
+		const made = (props?.tree as PlaneTree | undefined)?.[planeId]?.made_by;
+		if (!made || !Array.isArray(props?.registered)) return "";
+		const hit = (props.registered as unknown[]).find(
+			(r) => !!r && typeof r === "object" && (r as Record<string, unknown>).name === made,
+		) as Record<string, unknown> | undefined;
+		return typeof hit?.icon === "string" ? hit.icon : "";
+	});
 }
 
 export function useExpanded(path: Path): string[] {

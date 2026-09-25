@@ -1,32 +1,36 @@
-// The plane's icon over its title, and the way to set one.
+// The plane's icon, beside its title, and the way to change it.
 //
-// Notion's: a set icon shows large above the title and opens the picker on a
-// click. With none, the lane over the title holds a quiet "Add icon" that
-// shows while the title block is hovered or it has focus. Every plane has
+// Always there: the plane's own `meta.icon`, else its registered Plane's, else
+// the page icon, the same line the rail follows. A click, or Enter on it,
+// opens the picker anchored on it; that is its only job. Every plane has
 // this, editable or not: like the title, the icon is not one of its cells.
-//
-// Only the plane's own `meta.icon` shows here. The rail also falls back to the
-// registered Plane's icon, but a plane view has no `made_by` to look up.
 
-import { Button, Popover, PopoverTrigger } from "@nustackdev/ui-kit";
-import { SmilePlus } from "lucide-react";
+import {
+	Popover,
+	PopoverTrigger,
+	Tooltip,
+	TooltipContent,
+	TooltipTrigger,
+} from "@nustackdev/ui-kit";
 import { useState } from "react";
-import { docAddIcon, docIconLane, docPlaneIcon } from "../design";
+import { docPlaneIcon } from "../design";
 import { IconPickerContent } from "../icon/IconPicker";
 import { PlaneIcon } from "../icon/PlaneIcon";
-import { parseIcon } from "../icon/parse";
+import { planeIcon } from "../icon/parse";
 
 export function TitleIcon({
 	value,
+	registered = "",
 	onChange,
 }: {
 	/** The plane's `meta.icon`. */
 	value: unknown;
+	/** Its registered Plane's icon, the fallback. "" for none. */
+	registered?: string;
 	/** A stored spelling, "" for none. */
 	onChange: (icon: string) => void;
 }) {
 	const [open, setOpen] = useState(false);
-	const icon = parseIcon(value);
 	const set = (next: string) => {
 		setOpen(false);
 		onChange(next);
@@ -34,22 +38,16 @@ export function TitleIcon({
 
 	return (
 		<Popover open={open} onOpenChange={setOpen}>
-			{icon ? (
-				<PopoverTrigger asChild>
-					<button type="button" aria-label="Change icon" className={docPlaneIcon}>
-						<PlaneIcon icon={icon} size="lg" />
-					</button>
-				</PopoverTrigger>
-			) : (
-				<div className={docIconLane}>
+			<Tooltip>
+				<TooltipTrigger asChild>
 					<PopoverTrigger asChild>
-						<Button variant="ghost" size="sm" className={docAddIcon}>
-							<SmilePlus aria-hidden="true" />
-							Add icon
-						</Button>
+						<button type="button" aria-label="Change icon" className={docPlaneIcon}>
+							<PlaneIcon icon={planeIcon(value, registered)} size="lg" />
+						</button>
 					</PopoverTrigger>
-				</div>
-			)}
+				</TooltipTrigger>
+				<TooltipContent side="bottom">Change icon</TooltipContent>
+			</Tooltip>
 			<IconPickerContent
 				value={typeof value === "string" ? value : ""}
 				onPick={set}

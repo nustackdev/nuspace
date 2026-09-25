@@ -1,4 +1,6 @@
-// One cell on a plane: its row, its gutter, and the program inside.
+// One cell on a plane: its row, its gutter, and the program inside. The row
+// is a plane grid row (see ../../design/document.ts): the gutter in the left
+// track, the cell's box in the content track.
 //
 // There is no cell kind to branch on. Each cell renders the subtree at its
 // own address -- the ui refs its program mounted, which arrive as ordinary
@@ -12,7 +14,7 @@
 
 import type { Path } from "@nustackdev/ui-core";
 import type * as React from "react";
-import { docCell, docDropIndicator } from "../../design";
+import { docCell, docCellRow, docDropIndicator } from "../../design";
 import type { FocusReq } from "../state";
 import type { Cell as CellValue, ExitDir } from "../types";
 import { Gutter } from "./Gutter";
@@ -75,14 +77,13 @@ export function Cell({
 			ref={setEl}
 			data-cell={cell.id}
 			hidden={hidden}
-			className={docCell({ selected, selectedStrong, focused, dragging })}
+			className={docCellRow({ focused, dragging })}
 			onMouseDown={(e) => {
 				// A plain click inside a cell leaves cell-selection mode;
 				// the cell's own editor takes over from here.
 				if (e.button === 0) onPointerIn();
 			}}
 		>
-			{dropAbove ? <span className={`${docDropIndicator} top-0`} /> : null}
 			{editable ? (
 				<Gutter
 					cellId={cell.id}
@@ -95,19 +96,22 @@ export function Cell({
 					onSelect={onSelect}
 				/>
 			) : null}
-			<ProgramCell
-				source={cell.source}
-				uiPath={uiPath}
-				status={cell.status}
-				editable={editable}
-				editing={editing}
-				focusReq={focusReq}
-				onFocusConsumed={onFocusConsumed}
-				onCommit={onCommit}
-				onExit={onExit}
-				onSelectSelf={onSelect}
-				onSetEditing={onSetEditing}
-			/>
+			<div className={docCell({ selected, selectedStrong })}>
+				{dropAbove ? <span className={`${docDropIndicator} top-0`} /> : null}
+				<ProgramCell
+					source={cell.source}
+					uiPath={uiPath}
+					status={cell.status}
+					editable={editable}
+					editing={editing}
+					focusReq={focusReq}
+					onFocusConsumed={onFocusConsumed}
+					onCommit={onCommit}
+					onExit={onExit}
+					onSelectSelf={onSelect}
+					onSetEditing={onSetEditing}
+				/>
+			</div>
 		</div>
 	);
 }

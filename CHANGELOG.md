@@ -12,6 +12,8 @@ separately here.
 
 ## Unreleased
 
+- The plane icon sits in the gutter beside the title, and the emoji tab opens first
+- Planes lay out on one grid, so gutters never hang past a narrow pane
 - Empty planes show how to start, and the cell menu says when nothing matches
 - Start typing on an empty line and a text cell opens with your words
 - Planes take an icon or emoji, picked from the title or the sidebar menu

@@ -2,7 +2,7 @@
 //
 // An icon is either a lucide glyph from the pack or an emoji, and the two sit
 // in the same box at every size: a 16 slot in the rail and on a tab, a 20
-// glyph in the picker's 32 cells, and 44 over a plane's title. The emoji is
+// glyph in the picker's 32 cells, and 40 in the gutter beside a plane's title. The emoji is
 // text, so it is centred in the box with the line box collapsed, and drawn in
 // the platform's colour font (`font-emoji`, tokens.css).
 //
@@ -12,9 +12,11 @@
 
 import { cn } from "@nustackdev/ui-kit";
 
+import { docGutterTrack } from "./document";
+
 export type IconSize = "sm" | "md" | "lg";
 
-const BOX: Record<IconSize, string> = { sm: "size-4", md: "size-5", lg: "size-11" };
+const BOX: Record<IconSize, string> = { sm: "size-4", md: "size-5", lg: "size-10" };
 
 /** A lucide glyph at `size`, plus the caller's classes. */
 export function iconGlyph(size: IconSize, className?: string): string {
@@ -75,38 +77,30 @@ export function iconPickerCell(current: boolean): string {
 	);
 }
 
-/** Nothing matches, the emoji are loading, or they failed to. */
+/** The emoji are on their way: a small spinner where the grid goes. */
+export const iconPickerLoading = "flex justify-center py-8";
+
+/** Nothing matches, or the emoji failed to load. */
 export const iconPickerNote = "select-none px-1 py-8 text-center text-sm text-text-muted";
 
-/* ============================== Over the title ========================== */
+/* ============================== Beside the title ======================== */
 
 /**
- * The icon and the title as one block, and the `head` group its "Add icon"
- * listens to. It carries the run-up the title used to, less the icon lane,
- * so with no icon the title does not move.
+ * The icon, a button that opens the picker. It sits in the title row's left
+ * gutter (`docTitleRow`), not beside the title's text: a square the gutter's
+ * width, its right edge on the content edge the way the cell controls sit,
+ * so the title keeps the text edge every cell has. `-my-0.5` centres it on
+ * the title's first line (its 2 of pad plus half its 48 line, against half
+ * the 56 box) and keeps its height at the title's, so the row is as tall as
+ * it would be with no icon. Muted like the rail's; an emoji keeps its own
+ * colours.
  */
-export function docTitleBlock(compact = false): string {
-	return cn(
-		"group/head relative",
-		compact ? "mt-0" : "mt-[calc(var(--spacing-doc-title-gap)_-_var(--spacing-doc-icon-lane))]",
-	);
-}
-
-/** The lane over the title "Add icon" sits in, on the title's left edge. */
-export const docIconLane = "flex h-doc-icon-lane items-start px-doc-cell-x";
-
-/** "Add icon": out of sight until the title block is hovered or it has focus. */
-export const docAddIcon = cn(
-	"-ml-2 text-text-muted hover:text-text-primary",
-	"opacity-0 transition-opacity duration-fast ease-out",
-	"group-hover/head:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100",
-);
-
-/** The set icon, a button that opens the picker. Its glyph on the title's edge. */
 export const docPlaneIcon = cn(
-	"mb-1 ml-0.5 flex size-14 cursor-default items-center justify-center rounded-md text-text-secondary",
+	docGutterTrack,
+	"-my-0.5 flex size-doc-gutter shrink-0 cursor-default items-center justify-center self-start rounded-md text-text-muted",
 	"transition-colors duration-fast ease-out hover:bg-doc-hover active:bg-doc-active",
 	"focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring",
+	"data-[state=open]:bg-doc-active",
 );
 
 /** A tab's icon, before its title. */

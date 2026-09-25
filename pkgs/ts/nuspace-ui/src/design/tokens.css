@@ -98,6 +98,32 @@
 	--rail-bar-pad: 0.75rem; /* 12 top and bottom bar side padding          */
 	--rail-top-gap: 0.5rem; /* 8 between the top bar and the first row      */
 
+	/* --- Plane grid -------------------------------------------------------
+	 * Every row of a plane (the title, each cell, a ghost, a draft, a drop
+	 * line) is a grid on the same three tracks:
+	 *
+	 *   | gutter-l 56 | content, up to 592  | gutter-r 56 |
+	 *
+	 * The left gutter holds the plane's icon on the title row and a cell's
+	 * controls on its row. The right one is empty for now; it keeps the page
+	 * symmetric and is where per-row things go later. The gutters are fixed
+	 * and the content track takes the rest (`minmax(0, 1fr)`), so one template
+	 * serves every width: the plane caps its own width at `--doc-grid-width`
+	 * and the content stops at the measure, full width drops the cap and it
+	 * grows, a narrow pane squeezes it and the gutters stay put.
+	 *
+	 * Here in :root and not only in @theme because the template is a raw
+	 * value (`grid-cols-(--doc-grid)`), not a theme scale.
+	 *
+	 * The measure is the cells' box, 592: the 640 reading measure less the
+	 * 24 side pad the column used to carry, so the text keeps the width it
+	 * was set at.
+	 * --------------------------------------------------------------------- */
+	--doc-gutter: 3.5rem; /* 56  one gutter track, see --spacing-doc-gutter */
+	--doc-measure: 37rem; /* 592 the content track at its widest            */
+	--doc-grid-width: calc(var(--doc-measure) + 2 * var(--doc-gutter)); /* 704 */
+	--doc-grid: [gutter-l] var(--doc-gutter) [content] minmax(0, 1fr) [gutter-r] var(--doc-gutter);
+
 	/* --- Cell status ----------------------------------------------------
 	 * A nuspace cell is a live program. Six states, all pointing at existing
 	 * status roles. No new hues.
@@ -236,19 +262,21 @@
 	--container-doc-wide: 60rem; /* 960, == kit container-panel, for program
 	                              * cells that opt out of the measure */
 
+	/* max-w-doc-plane: the plane's grid at its widest, both gutters and the
+	 * measure. See "Plane grid" in :root above. */
+	--container-doc-plane: var(--doc-grid-width);
+
 	/* p-doc-*, w-doc-*, gap-doc-* */
-	--spacing-doc-pad-x: 1.5rem; /* 24, spacing 6   plane side gutter        */
-	--spacing-doc-pad-y: 4rem; /* 64, spacing 16  air above the first cell */
-	--spacing-doc-gutter: 3.5rem; /* 56            the gutter's WIDTH. The
-	                               * stack is three rows now; this is the
-	                               * widest of them, two kit `sm` IconButtons
-	                               * (24 + 2 gap + 24), plus the 4px lane that
-	                               * separates the row from the text edge. The
-	                               * narrower rows right-align into it, so the
-	                               * gutter stays one lane, not two that
-	                               * overlap. Height is content, not a token:
-	                               * see `docGutter` for what the overhang past
-	                               * a short cell costs and how it is paid. */
+	--spacing-doc-pad-y: 4rem; /* 64, spacing 16  air under the last cell   */
+	--spacing-doc-gutter: var(--doc-gutter); /* 56  a gutter track's WIDTH.
+	                               * The widest row of a cell's stack, two kit
+	                               * `sm` IconButtons (24 + 2 gap + 24), plus
+	                               * the 4px that holds it off the text edge.
+	                               * The narrower rows right-align into it, so
+	                               * the gutter stays one lane, not two that
+	                               * overlap. Height is the row's, not a token:
+	                               * see `docGutter` for the stack that is
+	                               * taller than a short cell. */
 	--spacing-doc-cell-x: 0.5rem; /* 8            wash overhangs the text  */
 	--spacing-doc-cell-y: 0.25rem; /* 4           ghost line pad-y         */
 	--spacing-doc-cell-y-program: 0.5rem; /* 8    cell pad-y              */
@@ -287,13 +315,11 @@
 	--text-doc-title--letter-spacing: -0.02em;
 
 	/* --- Plane icons ---------------------------------------------------------
-	 * The lane over the title holds "Add icon" (a kit `sm` button, 24, plus 4
-	 * of air). It is taken out of the run-up, so a plane with no icon keeps
-	 * its title where it always was. A set icon is 44 on a 56 button, the
-	 * emoji at the same 44 so the two kinds are one size.
+	 * Beside the title the icon is 40 on a button the gutter's 56 square,
+	 * about the title's cap height up to its 48 line. The emoji is drawn at
+	 * the same 40 so the two kinds are one size.
 	 * --------------------------------------------------------------------- */
-	--spacing-doc-icon-lane: 1.75rem; /* 28 */
-	--text-plane-icon: 2.75rem; /* 44 */
+	--text-plane-icon: 2.5rem; /* 40 */
 	--text-plane-icon--line-height: 1;
 	/* Emoji draw in the platform's colour font, never a text face's mono glyph. */
 	--font-emoji: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;

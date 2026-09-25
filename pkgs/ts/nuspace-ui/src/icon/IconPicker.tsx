@@ -1,9 +1,10 @@
 // The icon picker: our pack or an emoji, searched, picked from a grid.
 //
-// Two tabs over one grid. "Icons" is the pack (./pack.ts), in its groups;
-// "Emoji" is the standard set, loaded the first time the tab shows (see
-// ./emoji.ts). Both lead with this viewer's recent picks of that kind, until
-// there is a search.
+// Two tabs over one grid. "Emoji" comes first and is where it opens, unless
+// the plane's icon is one of the pack's: it is the standard set, loaded when
+// the picker opens (see ./emoji.ts). "Icons" is the pack (./pack.ts), in its
+// groups. Both lead with this viewer's recent picks of that kind, until there
+// is a search.
 //
 // The search box has the caret when it opens. Typing filters by name, group
 // and keywords; Enter there takes the first match and Down steps into the
@@ -21,6 +22,7 @@ import {
 	Button,
 	Input,
 	PopoverContent,
+	Spinner,
 	Tabs,
 	TabsContent,
 	TabsList,
@@ -34,6 +36,7 @@ import {
 	iconPickerCell,
 	iconPickerGroup,
 	iconPickerHead,
+	iconPickerLoading,
 	iconPickerNote,
 	iconPickerRemove,
 	iconPickerRow,
@@ -107,11 +110,11 @@ function sectionsFor(all: Section[], recent: string[], query: string): Section[]
 	return mine.length > 0 ? [{ label: "Recent", cells: mine }, ...all] : all;
 }
 
-/** The emoji, once the tab has asked for them. */
-function useEmoji(wanted: boolean): EmojiGroup[] | "loading" | "failed" {
+/** The emoji, asked for as the picker opens. */
+function useEmoji(): EmojiGroup[] | "loading" | "failed" {
 	const [state, setState] = useState<EmojiGroup[] | "loading" | "failed">("loading");
 	useEffect(() => {
-		if (!wanted || state !== "loading") return;
+		if (state !== "loading") return;
 		let live = true;
 		loadEmoji().then(
 			(groups) => live && setState(groups),
@@ -120,7 +123,7 @@ function useEmoji(wanted: boolean): EmojiGroup[] | "loading" | "failed" {
 		return () => {
 			live = false;
 		};
-	}, [wanted, state]);
+	}, [state]);
 	return state;
 }
 
@@ -137,11 +140,11 @@ export function IconPicker({
 	onRemove: () => void;
 }) {
 	const current = formatIcon(parseIcon(value));
-	const [tab, setTab] = useState<Tab>(current.startsWith(EMOJI) ? "emoji" : "icons");
+	const [tab, setTab] = useState<Tab>(current && !current.startsWith(EMOJI) ? "icons" : "emoji");
 	const [query, setQuery] = useState("");
 	const [active, setActive] = useState(0);
 	const [recent] = useState(readRecent);
-	const emoji = useEmoji(tab === "emoji");
+	const emoji = useEmoji();
 	const rootRef = useRef<HTMLDivElement | null>(null);
 	const icons = useMemo(iconCells, []);
 	const emojis = useMemo(() => (Array.isArray(emoji) ? emojiCells(emoji) : []), [emoji]);
@@ -245,7 +248,11 @@ export function IconPicker({
 
 	const body = () => {
 		if (tab === "emoji" && emoji === "loading") {
-			return <p className={iconPickerNote}>Loading emoji</p>;
+			return (
+				<div className={iconPickerLoading}>
+					<Spinner size="sm" tone="neutral" label="Loading emoji" />
+				</div>
+			);
 		}
 		if (tab === "emoji" && emoji === "failed") {
 			return <p className={iconPickerNote}>Emoji could not load</p>;
@@ -300,11 +307,11 @@ export function IconPicker({
 			<Tabs value={tab} onValueChange={(v) => setTab(v as Tab)} className="gap-0">
 				<div className={iconPickerHead}>
 					<TabsList variant="line" className="border-b-0">
-						<TabsTrigger value="icons" size="sm">
-							Icons
-						</TabsTrigger>
 						<TabsTrigger value="emoji" size="sm">
 							Emoji
+						</TabsTrigger>
+						<TabsTrigger value="icons" size="sm">
+							Icons
 						</TabsTrigger>
 					</TabsList>
 					{value.trim() ? (
@@ -324,11 +331,11 @@ export function IconPicker({
 						onKeyDown={onSearchKey}
 					/>
 				</div>
-				<TabsContent value="icons" tabIndex={-1} className={iconPickerBody} data-picker-body="">
-					{tab === "icons" ? body() : null}
-				</TabsContent>
 				<TabsContent value="emoji" tabIndex={-1} className={iconPickerBody} data-picker-body="">
 					{tab === "emoji" ? body() : null}
+				</TabsContent>
+				<TabsContent value="icons" tabIndex={-1} className={iconPickerBody} data-picker-body="">
+					{tab === "icons" ? body() : null}
 				</TabsContent>
 			</Tabs>
 		</div>

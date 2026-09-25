@@ -1,4 +1,4 @@
-// A cell's gutter: every affordance it has, hung outside the reading column.
+// A cell's gutter: every affordance it has, in the left track of its row.
 
 import { IconButton, Toggle, Tooltip, TooltipContent, TooltipTrigger } from "@nustackdev/ui-kit";
 import { Check, Code, GripVertical, Hash, Plus } from "lucide-react";
@@ -16,7 +16,7 @@ import {
 import type { CellState } from "../types";
 
 /**
- * Every affordance a cell has, hung in the gutter outside the reading column.
+ * Every affordance a cell has, in the gutter beside the reading column.
  *
  * Three stacked rows of kit primitives, so they share a box, a hover tier, a
  * focus ring and one reveal. Top to bottom they read as what you do to the

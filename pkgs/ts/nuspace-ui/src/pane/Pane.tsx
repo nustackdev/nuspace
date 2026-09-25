@@ -11,10 +11,12 @@ import { Spinner } from "@nustackdev/ui-kit";
 import type * as React from "react";
 import { useCallback, useRef } from "react";
 import { closePane, focusPane } from "../core/router";
-import { docPlaneLoading, docTitleBlock, docTitleHead, shellPane, shellPanePlane } from "../design";
+import { useTypePath } from "../core/surfaces";
+import { docPlaneLoading, docTitleHead, docTitleRow, shellPane, shellPanePlane } from "../design";
 import type { Notify } from "../plane/ops";
 import { Plane } from "../plane/Plane";
 import type { ActivePlane, SlashSnippet } from "../plane/types";
+import { useRegisteredIcon } from "../sidebar/state";
 import { PaneBar } from "./PaneBar";
 import { Title } from "./Title";
 import { TitleIcon } from "./TitleIcon";
@@ -65,6 +67,8 @@ export function Pane({
 	const compact = plane?.meta.compact === true;
 	// The plane fills this in, so the title can hand the caret down to it.
 	const enterCells = useRef<(() => boolean) | null>(null);
+	// The icon's fallback. The plane carries no `made_by`, the sidebar's row does.
+	const registeredIcon = useRegisteredIcon(useTypePath("SidebarRef"), planeId);
 
 	return (
 		<section
@@ -93,8 +97,12 @@ export function Pane({
 				) : (
 					<>
 						<header className={docTitleHead(wide, compact)}>
-							<div className={docTitleBlock(compact)}>
-								<TitleIcon value={plane.meta.icon} onChange={(icon) => onIcon(planeId, icon)} />
+							<div className={docTitleRow(compact)}>
+								<TitleIcon
+									value={plane.meta.icon}
+									registered={registeredIcon}
+									onChange={(icon) => onIcon(planeId, icon)}
+								/>
 								<Title
 									value={plane.title}
 									placeholder={TITLE_FALLBACK}

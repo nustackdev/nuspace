@@ -1,9 +1,9 @@
-// The standard emoji set, loaded when the picker first shows its Emoji tab.
+// The standard emoji set, loaded when the icon picker first opens.
 //
 // The data is `unicode-emoji-json`'s by-group file: every fully qualified
 // emoji with its Unicode name and group, bundled, never fetched from anywhere
 // else. It is a dynamic import, so vite puts it in a chunk of its own and the
-// main bundle does not carry it until someone opens the tab.
+// main bundle does not carry it until someone opens the picker.
 //
 // Emoji newer than 15.0 are left out: a system font that cannot draw one shows
 // a box, and 15.0 is what the platforms people run draw today. Skin tone

@@ -22,7 +22,7 @@
 import type { Path } from "@nustackdev/ui-core";
 import { pathKey } from "@nustackdev/ui-kit";
 import { Fragment, useCallback, useEffect, useRef } from "react";
-import { docColumn, docDropIndicator, docTail } from "../design";
+import { docColumn, docContentTrack, docDropIndicator, docRow, docTail } from "../design";
 import { cellUiPath } from "./cell/address";
 import { Cell } from "./cell/Cell";
 import { Draft, useDraft } from "./Draft";
@@ -225,15 +225,23 @@ export function Plane({
 						{/* A draft stays where its ghost was, which is right above its
 						    cell once that arrives. */}
 						{editable && draft?.after === cell.id ? (
-							<Draft boxRef={boxRef} text={draft.text} />
+							<div className={docRow}>
+								<Draft boxRef={boxRef} text={draft.text} />
+							</div>
 						) : null}
-						{editable && editor.ghost === cell.id ? <Ghost {...ghostProps(cell.id, true)} /> : null}
+						{editable && editor.ghost === cell.id ? (
+							<div className={docRow}>
+								<Ghost {...ghostProps(cell.id, true)} />
+							</div>
+						) : null}
 					</Fragment>
 				);
 			})}
 			{drag && drag.at >= cells.length ? (
-				<div className="relative h-0">
-					<span className={docDropIndicator} />
+				<div className={docRow}>
+					<div className={`${docContentTrack} relative h-0`}>
+						<span className={docDropIndicator} />
+					</div>
 				</div>
 			) : null}
 
@@ -241,13 +249,19 @@ export function Plane({
 			    hunting for a control, so it goes with the rest of the authoring
 			    affordances. */}
 			{editable && draft && draft.after === null ? (
-				<Draft boxRef={boxRef} text={draft.text} />
+				<div className={docRow}>
+					<Draft boxRef={boxRef} text={draft.text} />
+				</div>
 			) : null}
 			{editable ? (
-				<Ghost {...ghostProps(lastId, false)} hinted={cells.length === 0 && !draft} />
+				<div className={docRow}>
+					<Ghost {...ghostProps(lastId, false)} hinted={cells.length === 0 && !draft} />
+				</div>
 			) : null}
 			{/* The run-off under the last cell is the plane's compact setting, not
-			    its editable one. Clicking it aims at the ghost when there is one. */}
+			    its editable one. Clicking it aims at the ghost when there is one.
+			    It spans all three tracks: the whole width under the plane is
+			    somewhere to click. */}
 			{compact ? null : (
 				// biome-ignore lint/a11y/noStaticElementInteractions: the run-off under a document is a click target, not a control -- the keyboard reaches the same ghost by arrowing down
 				<div
