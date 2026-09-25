@@ -14,8 +14,9 @@
 // drag. We never remount a pane that stays open.
 //
 // With a split a tab bar runs across the top (./TabBar.tsx), one tab per
-// pane, and the panes drop their own bars. Renaming from a tab sends the
-// sidebar's own `plane.rename`, so the server has one way in for a rename.
+// pane, and the panes drop their own bars. Renaming from a tab or from a
+// plane's title sends the sidebar's own `plane.rename`, so the server has one
+// way in for a rename.
 
 import { type NodeProps, pathKey } from "@nustackdev/ui-kit";
 import { Fragment, useCallback, useEffect, useRef } from "react";
@@ -148,6 +149,7 @@ export function Main({ path }: NodeProps) {
 							snippets={snippets}
 							notify={notify}
 							onMeta={onMeta}
+							onRename={onRename}
 							split={split}
 							divided={i > 0}
 							focused={id === focused}

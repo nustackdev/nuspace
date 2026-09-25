@@ -7,6 +7,7 @@
 //   - If that cell is open in code mode, the caret enters it, carrying its
 //     column
 //   - Otherwise the cell gets *selected* and the plane takes keyboard focus
+//   - Down or Enter at the end of the plane's title lands on the first cell
 
 import { useCallback } from "react";
 import type { PlaneModel } from "./model";
@@ -117,5 +118,20 @@ export function useFocusRouting({
 		[patch, rootRef],
 	);
 
-	return { focusCell, step, enterCell, setEditing, selectCell };
+	/**
+	 * Arrive from the title above: the first cell, or the end ghost on an
+	 * empty plane. False when there is nothing to land in.
+	 */
+	const enterTop = useCallback((): boolean => {
+		if (cells.length === 0) {
+			const ghost = endGhost.current;
+			if (!ghost) return false;
+			ghost.focus();
+			return true;
+		}
+		focusCell(cells[0], { place: "start" }, editor.editing);
+		return true;
+	}, [cells, editor.editing, focusCell, endGhost]);
+
+	return { focusCell, step, enterCell, setEditing, selectCell, enterTop };
 }

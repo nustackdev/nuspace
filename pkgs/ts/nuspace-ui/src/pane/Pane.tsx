@@ -9,13 +9,14 @@
 import type { Path } from "@nustackdev/ui-core";
 import { Spinner } from "@nustackdev/ui-kit";
 import type * as React from "react";
-import { useCallback } from "react";
+import { useCallback, useRef } from "react";
 import { closePane, focusPane } from "../core/router";
-import { docPlaneLoading, docTitle, docTitleHead, shellPane, shellPanePlane } from "../design";
+import { docPlaneLoading, docTitleHead, shellPane, shellPanePlane } from "../design";
 import type { Notify } from "../plane/ops";
 import { Plane } from "../plane/Plane";
 import type { ActivePlane, SlashSnippet } from "../plane/types";
 import { PaneBar } from "./PaneBar";
+import { Title } from "./Title";
 
 // The Plane the server inits with no name shows this instead. A placeholder,
 // muted, so it cannot be mistaken for a title that is really there.
@@ -28,6 +29,7 @@ export function Pane({
 	snippets,
 	notify,
 	onMeta,
+	onRename,
 	split,
 	divided,
 	focused,
@@ -41,6 +43,8 @@ export function Pane({
 	notify: Notify;
 	/** Change this plane's settings. */
 	onMeta: (planeId: string, patch: Record<string, unknown>) => void;
+	/** Rename this plane. */
+	onRename: (planeId: string, title: string) => void;
 	/** More than one pane is open: no bar, the tab bar stands in for it. */
 	split: boolean;
 	/** Draws the divider on its left edge. */
@@ -55,6 +59,8 @@ export function Pane({
 	const title = plane?.title || TITLE_FALLBACK;
 	const wide = plane?.meta.full_width === true;
 	const compact = plane?.meta.compact === true;
+	// The plane fills this in, so the title can hand the caret down to it.
+	const enterCells = useRef<(() => boolean) | null>(null);
 
 	return (
 		<section
@@ -83,9 +89,13 @@ export function Pane({
 				) : (
 					<>
 						<header className={docTitleHead(wide, compact)}>
-							<h1 className={docTitle(compact)} data-placeholder={TITLE_FALLBACK}>
-								{plane.title}
-							</h1>
+							<Title
+								value={plane.title}
+								placeholder={TITLE_FALLBACK}
+								compact={compact}
+								onCommit={(next) => onRename(planeId, next)}
+								onExit={() => enterCells.current?.() ?? false}
+							/>
 						</header>
 						<Plane
 							viewerPath={viewerPath}
@@ -95,6 +105,7 @@ export function Pane({
 							wide={wide}
 							compact={compact}
 							notify={notify}
+							entryRef={enterCells}
 						/>
 					</>
 				)}

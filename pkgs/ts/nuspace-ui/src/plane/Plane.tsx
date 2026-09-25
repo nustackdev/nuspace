@@ -20,7 +20,7 @@
 
 import type { Path } from "@nustackdev/ui-core";
 import { pathKey } from "@nustackdev/ui-kit";
-import { Fragment, useCallback, useRef } from "react";
+import { Fragment, useCallback, useEffect, useRef } from "react";
 import { docColumn, docDropIndicator, docTail } from "../design";
 import { cellUiPath } from "./cell/address";
 import { Cell } from "./cell/Cell";
@@ -48,6 +48,7 @@ export function Plane({
 	wide,
 	compact,
 	notify,
+	entryRef,
 }: {
 	/** The ViewerRef node, which holds every pane's editor state and roots
 	 *  every cell's refs. */
@@ -62,6 +63,9 @@ export function Plane({
 	/** The plane's compact setting: no run-off under the last cell. */
 	compact: boolean;
 	notify: Notify;
+	/** Set to "take the caret from the title above", null while the plane is
+	 *  read-only and has nowhere to put one. */
+	entryRef?: React.RefObject<(() => boolean) | null>;
 }) {
 	const cells = plane.cells;
 	const planeId = plane.plane_id;
@@ -95,7 +99,7 @@ export function Plane({
 		plusGhost,
 	};
 
-	const { focusCell, step, enterCell, setEditing, selectCell } = useFocusRouting(model);
+	const { focusCell, step, enterCell, setEditing, selectCell, enterTop } = useFocusRouting(model);
 	const { commitSource, createAfter, deleteCells, moveSelected } = useStructure(model);
 	const onCellKeys = useCellKeys(model, { focusCell, enterCell, deleteCells, moveSelected });
 	const startDrag = useCellDrag(model);
@@ -105,6 +109,14 @@ export function Plane({
 		createAfter,
 	);
 	const ghostProps = useGhosts(model, { focusCell, createAfter, slashKey });
+
+	useEffect(() => {
+		if (!entryRef) return;
+		entryRef.current = editable ? enterTop : null;
+		return () => {
+			entryRef.current = null;
+		};
+	}, [entryRef, editable, enterTop]);
 
 	// -- Where the caret actually is ------------------------------------------
 	//
