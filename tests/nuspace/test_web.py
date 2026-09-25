@@ -16,7 +16,7 @@ import sys
 import nu
 import nustd.ui
 from nuspace import ops
-from nuspace.ops import Plane, Snippet
+from nuspace.ops import TEXT, Plane, Snippet
 from nuspace.ops.utils import atomic
 from nuspace.shapes import (
     EXIT_FAILED,
@@ -45,7 +45,7 @@ PLANES = [
     Plane("jobs", "Jobs", icon="list", cells=(("list", PROSE_SRC),)),
 ]
 SNIPPETS = [
-    Snippet("prose", "Text", PROSE_SRC, on_type=True),
+    Snippet(TEXT, "Text", PROSE_SRC),
     Snippet("program", "Program", "def out():\n    return nu.Noop()\n"),
 ]
 
@@ -245,7 +245,8 @@ async def test_move_counts_drawn_siblings_only(store):
 
 async def test_viewer_plane(store):
     await _plane(store, "p1", "Notes", {"editable": True, "tone": "calm"}, ui=True)
-    await store.run(ops.add_cell("p1", PROSE_SRC, cell_id="c1", name="intro"))
+    await store.run(ops.insert_snippet("p1", SNIPPETS[0], cell_id="c1"))
+    await store.run(ops.rename_cell("p1", "c1", "intro"))
     await store.run(ops.add_cell("p1", "x = 1", cell_id="c2", name="code"))
     await store.run(ops.add_cell("p1", "y = 2", cell_id="c0", name="first", index=0))
 
@@ -255,9 +256,9 @@ async def test_viewer_plane(store):
         "title": "Notes",
         "meta": {"editable": True, "full_width": False, "tone": "calm"},
         "cells": [
-            {"id": "c0", "name": "first", "source": "y = 2"},
-            {"id": "c1", "name": "intro", "source": PROSE_SRC},
-            {"id": "c2", "name": "code", "source": "x = 1"},
+            {"id": "c0", "name": "first", "source": "y = 2", "made_by": ""},
+            {"id": "c1", "name": "intro", "source": PROSE_SRC, "made_by": "text"},
+            {"id": "c2", "name": "code", "source": "x = 1", "made_by": ""},
         ],
     }
 
@@ -418,8 +419,8 @@ async def test_connection_live(store):
         assert session.frames[0].op == "remove"
         viewer_init = next(f for f in session.frames if f.ref == ("viewer",))
         assert viewer_init.chain[0][2]["snippets"] == [
-            {"name": "prose", "label": "Text", "on_type": True},
-            {"name": "program", "label": "Program", "on_type": False},
+            {"name": "text", "label": "Text"},
+            {"name": "program", "label": "Program"},
         ]
         sidebar_init = next(f for f in session.frames if f.ref == ("sidebar",))
         assert sidebar_init.chain[0][2]["registered"] == registered_entries(PLANES)
@@ -476,17 +477,19 @@ async def test_connection_live(store):
         # unknown name a blank program.
         session.notify(
             ("viewer", "ops", "cell.create"),
-            {"plane_id": "p1", "cell_id": "c3", "name": "prose", "index": 0},
+            {"plane_id": "p1", "cell_id": "c3", "name": "text", "index": 0},
         )
         await _until(lambda: session.writes("set_plane")[-1]["cells"][0]["id"] == "c3")
         made = session.writes("set_plane")[-1]["cells"][0]
-        assert made["name"] == "prose" and made["source"] == PROSE_SRC
+        assert made["name"] == "text" and made["source"] == PROSE_SRC
+        assert made["made_by"] == "text"
         session.notify(
             ("viewer", "ops", "cell.create"),
             {"plane_id": "p1", "cell_id": "c4", "name": "nope", "index": 0},
         )
         await _until(lambda: session.writes("set_plane")[-1]["cells"][0]["id"] == "c4")
-        assert session.writes("set_plane")[-1]["cells"][0]["source"] == ""
+        blank = session.writes("set_plane")[-1]["cells"][0]
+        assert blank["source"] == "" and blank["made_by"] == ""
         session.notify(
             ("sidebar", "ops", "plane.create"),
             {"plane_id": "p2", "parent_id": "p1", "made_by": "jobs", "title": "Two"},

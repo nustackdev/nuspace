@@ -24,6 +24,9 @@ export type Cell = {
 	name: string;
 	/** The Nu program this cell stores. */
 	source: string;
+	/** The snippet it was made from, "" when none. A cell made from the text
+	 *  snippet is a text cell (see ./useTextCells.ts). */
+	made_by: string;
 	/** Never null. Every cell compiles, runs and is supervised. */
 	status: CellStatus;
 };
@@ -55,9 +58,17 @@ export type ActivePlane = {
 	cells: Cell[];
 };
 
-/** One registered snippet, as the `/` menu offers it. `onType`: typing into
- *  a ghost starts this one (see ./Draft.tsx). */
-export type SlashSnippet = { name: string; label: string; onType?: boolean };
+/** One registered snippet, as the `/` menu offers it. */
+export type SlashSnippet = { name: string; label: string };
+
+/** The name reserved for the text snippet, as `nuspace.TEXT`. Its cells are
+ *  the text cells (see ./Draft.tsx and ./useTextCells.ts). */
+export const TEXT = "text";
+
+/** Whether the text snippet is registered: without it, the text sugar is off. */
+export function hasText(snippets: SlashSnippet[]): boolean {
+	return snippets.some((s) => s.name === TEXT);
+}
 
 /** `invalid` never compiled; `failed` ran and died. They read differently. */
 export function isBad(s: CellState): boolean {
@@ -108,6 +119,7 @@ export function coerceCells(raw: unknown): Cell[] {
 			id,
 			name: String(r.name ?? id),
 			source: String(r.source ?? ""),
+			made_by: String(r.made_by ?? ""),
 			status: coerceStatus(r.status) ?? {
 				cell_id: id,
 				state: "idle",

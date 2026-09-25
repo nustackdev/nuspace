@@ -121,14 +121,23 @@ def plane_rows() -> nu.Nu:
 
 
 def cell_rows(plane_id: nu.StrArg) -> nu.Nu:
-    """A plane's cells as ``id, name, prog, meta``, in order. One read fills an editor."""
+    """A plane's cells as ``id, name, prog, props, meta``, in order. One read fills an editor.
+
+    ``props`` is always whole, ``{made_by}``, defaults filled in.
+    """
     item = fresh("cell_rows")
     at = nu.StrAttrRef(item)
     cell = Space.planes[plane_id].cells[at]
     return nu.Collect(
         nu.Map(
             cells(plane_id),
-            nu.Dict.of(id=at, name=text(cell.name), prog=text(cell.prog), meta=cell.meta.extract()),
+            nu.Dict.of(
+                id=at,
+                name=text(cell.name),
+                prog=text(cell.prog),
+                props=nu.Dict.of(made_by=text(cell.props.made_by)),
+                meta=cell.meta.extract(),
+            ),
             key=item,
         )
     )

@@ -17,8 +17,8 @@ any run's ``status`` moves. A cell writing its state or a run writing its
 output wakes neither.
 
 **Meta goes both ways.** A shipped plane carries its whole meta, and a
-``plane.meta`` event merges keys into it. Props never reach the browser and
-are never written from it.
+``plane.meta`` event merges keys into it. A plane's props never reach the
+browser, a cell's ship as a flat ``made_by``, and neither is written from it.
 
 **Statuses come from runs.** Per cell: its live run if it has one, else its
 most recent. ``starting`` is starting, ``up`` and ``stopping`` are running,
@@ -85,9 +85,13 @@ PLANE_META = {"editable": False, "full_width": False}
 
 
 def plane_cells(plane_id: nu.StrArg) -> nu.Nu:
-    """A plane's cells as ``{id, name, source}``, in order. Bare read."""
+    """A plane's cells as ``{id, name, source, made_by}``, in order. Bare read.
+
+    ``made_by`` is the snippet the cell was made from, ``""`` when none.
+    """
     item = fresh("viewer_cell")
     row = nu.DictAttrRef(item)
+    props = nu.Dict(row.get_item(nu.Str("props"), nu.Dict.of()))
     return nu.Collect(
         nu.Map(
             ops.cell_rows(plane_id),
@@ -95,6 +99,7 @@ def plane_cells(plane_id: nu.StrArg) -> nu.Nu:
                 id=nu.ToStr(row.get_item(nu.Str("id"), nu.Str(""))),
                 name=nu.ToStr(row.get_item(nu.Str("name"), nu.Str(""))),
                 source=nu.ToStr(row.get_item(nu.Str("prog"), nu.Str(""))),
+                made_by=nu.ToStr(props.get_item(nu.Str("made_by"), nu.Str(""))),
             ),
             key=item,
         )
@@ -256,16 +261,19 @@ def _status_changes() -> list[nu.Nu]:
 # --- The composition -------------------------------------------------------------
 
 
-def _create_prog(snippets: Sequence[Snippet]) -> nu.Nu:
-    """The prog a created cell stores: the snippet its ``name`` names.
+def _create_prog(snippets: Sequence[Snippet]) -> tuple[nu.Nu, nu.Nu]:
+    """The prog and ``made_by`` a created cell stores: the snippet its ``name`` names.
 
-    An unknown or empty name stores a blank program.
+    An unknown or empty name stores a blank program and ``""``.
     """
     name = field_str(_CREATE, "name")
     prog: nu.Nu = nu.Str("")
+    made_by: nu.Nu = nu.Str("")
     for snippet in reversed(snippets):
-        prog = nu.If(nu.Eq(name, nu.Str(snippet.name)), nu.Str(snippet.source), prog)
-    return prog
+        known = nu.Eq(name, nu.Str(snippet.name))
+        prog = nu.If(known, nu.Str(snippet.source), prog)
+        made_by = nu.If(known, nu.Str(snippet.name), made_by)
+    return prog, made_by
 
 
 def _events(viewer: Ref, snippets: Sequence[Snippet]) -> list[nu.Nu]:
@@ -277,7 +285,7 @@ def _events(viewer: Ref, snippets: Sequence[Snippet]) -> list[nu.Nu]:
             nu.Ne(field_str(name, "cell_id"), nu.Str("")),
         )
 
-    prog = _create_prog(snippets)
+    prog, made_by = _create_prog(snippets)
     create_in = field_str(_CREATE, "plane_id")
     move_to = field_str(_MOVE, "to_plane_id")
     return [
@@ -292,6 +300,7 @@ def _events(viewer: Ref, snippets: Sequence[Snippet]) -> list[nu.Nu]:
                     cell_id=field_str(_CREATE, "cell_id"),
                     name=field_str(_CREATE, "name"),
                     index=field_index(_CREATE, "index", nu.Len(ops.cells(create_in))),
+                    made_by=made_by,
                 ),
             ),
         ),

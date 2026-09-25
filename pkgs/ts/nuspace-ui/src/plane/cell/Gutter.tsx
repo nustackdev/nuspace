@@ -1,7 +1,18 @@
 // A cell's gutter: every affordance it has, in the left track of its row.
 
-import { IconButton, Toggle, Tooltip, TooltipContent, TooltipTrigger } from "@nustackdev/ui-kit";
-import { Check, Code, GripVertical, Hash, Plus } from "lucide-react";
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuSeparator,
+	DropdownMenuTrigger,
+	IconButton,
+	Toggle,
+	Tooltip,
+	TooltipContent,
+	TooltipTrigger,
+} from "@nustackdev/ui-kit";
+import { Check, Code, GripVertical, Hash, Plus, Trash2 } from "lucide-react";
 import type * as React from "react";
 import { useCallback, useState } from "react";
 import {
@@ -25,6 +36,10 @@ import type { CellState } from "../types";
  *
  * Every glyph carries a tooltip and a label. A bare glyph in a margin is not
  * self-explanatory, and `title` is not an affordance, it is a delay.
+ *
+ * The grip drags, and a click on it opens the cell's controls in a menu
+ * anchored to it: the source toggle, the id, delete. The menu is controlled,
+ * so a press that turns into a drag never opens it (../useCellDrag.ts).
  */
 export function Gutter({
 	cellId,
@@ -32,7 +47,7 @@ export function Gutter({
 	onSetEditing,
 	onDrag,
 	onPlus,
-	onSelect,
+	onDelete,
 	state,
 	pinned,
 }: {
@@ -43,12 +58,14 @@ export function Gutter({
 	pinned: boolean;
 	editing: boolean;
 	onSetEditing: (on: boolean) => void;
-	onDrag: (e: React.PointerEvent) => void;
+	/** A press on the grip. `onClick` runs when it never becomes a drag. */
+	onDrag: (e: React.PointerEvent, onClick: () => void) => void;
 	/** Open a line below this cell. Not a cell: see ../Ghost.tsx. */
 	onPlus: () => void;
-	onSelect: () => void;
+	onDelete: () => void;
 }) {
 	const [copied, setCopied] = useState(false);
+	const [menu, setMenu] = useState(false);
 
 	// The bare cell id, not the `cells.<id>` mount prefix: the id is what
 	// every op on the wire is keyed by, so it is the string worth having on the
@@ -71,7 +88,7 @@ export function Gutter({
 				</TooltipTrigger>
 				<TooltipContent side="top">{CELL_STATUS[state].label}</TooltipContent>
 			</Tooltip>
-			<div className={docGutterAffordances(pinned)}>
+			<div className={docGutterAffordances(pinned || menu)}>
 				<div className={docGutterRow}>
 					<Tooltip>
 						<TooltipTrigger asChild>
@@ -81,22 +98,45 @@ export function Gutter({
 						</TooltipTrigger>
 						<TooltipContent side="top">Add a line below</TooltipContent>
 					</Tooltip>
-					<Tooltip>
-						<TooltipTrigger asChild>
-							<IconButton
-								variant="ghost"
-								size="sm"
-								aria-label="Drag to reorder, click to select"
-								onPointerDown={onDrag}
-								onClick={onSelect}
-								data-cell-grip=""
-								className={docDragHandle}
-							>
-								<GripVertical />
-							</IconButton>
-						</TooltipTrigger>
-						<TooltipContent side="top">Drag to reorder, click to select</TooltipContent>
-					</Tooltip>
+					<DropdownMenu open={menu} onOpenChange={setMenu}>
+						<Tooltip>
+							<TooltipTrigger asChild>
+								<DropdownMenuTrigger asChild>
+									<IconButton
+										variant="ghost"
+										size="sm"
+										aria-label="Drag to reorder, click for options"
+										// Prevented here, so the menu's own press never opens it.
+										onPointerDown={(e) => onDrag(e, () => setMenu(true))}
+										data-cell-grip=""
+										className={docDragHandle}
+									>
+										<GripVertical />
+									</IconButton>
+								</DropdownMenuTrigger>
+							</TooltipTrigger>
+							<TooltipContent side="top">Drag to reorder, click for options</TooltipContent>
+						</Tooltip>
+						<DropdownMenuContent
+							align="start"
+							// The caret goes where the action sends it, not back to the grip.
+							onCloseAutoFocus={(e) => e.preventDefault()}
+						>
+							<DropdownMenuItem onSelect={() => onSetEditing(!editing)}>
+								<Code />
+								{editing ? "Hide source" : "Show source"}
+							</DropdownMenuItem>
+							<DropdownMenuItem onSelect={copyId}>
+								<Hash />
+								Copy cell id
+							</DropdownMenuItem>
+							<DropdownMenuSeparator />
+							<DropdownMenuItem variant="danger" onSelect={onDelete}>
+								<Trash2 />
+								Delete
+							</DropdownMenuItem>
+						</DropdownMenuContent>
+					</DropdownMenu>
 				</div>
 				<div className={docGutterRow}>
 					<Tooltip>

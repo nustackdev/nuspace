@@ -65,8 +65,13 @@ export function Pane({
 	const title = plane?.title || TITLE_FALLBACK;
 	const wide = plane?.meta.full_width === true;
 	const compact = plane?.meta.compact === true;
-	// The plane fills this in, so the title can hand the caret down to it.
+	// The plane fills these in, so the title can hand the caret down to it,
+	// open a line in it or split into it, and a press anywhere in the pane can
+	// start a box selection over its cells.
 	const enterCells = useRef<(() => boolean) | null>(null);
+	const openTop = useRef<((home: () => void) => boolean) | null>(null);
+	const splitTitle = useRef<((tail: string) => boolean) | null>(null);
+	const selectBox = useRef<((e: React.PointerEvent) => void) | null>(null);
 	// The icon's fallback. The plane carries no `made_by`, the sidebar's row does.
 	const registeredIcon = useRegisteredIcon(useTypePath("SidebarRef"), planeId);
 
@@ -88,7 +93,8 @@ export function Pane({
 					onClose={() => closePane(planeId)}
 				/>
 			)}
-			<div className={shellPanePlane}>
+			{/* A press off the cells starts a box selection over them. */}
+			<div className={shellPanePlane} onPointerDown={(e) => selectBox.current?.(e)}>
 				{plane == null ? (
 					<div className={docPlaneLoading}>
 						<Spinner size="sm" tone="neutral" label="Loading" />
@@ -108,6 +114,8 @@ export function Pane({
 									placeholder={TITLE_FALLBACK}
 									onCommit={(next) => onRename(planeId, next)}
 									onExit={() => enterCells.current?.() ?? false}
+									onOpen={(home) => openTop.current?.(home) ?? false}
+									onSplit={(tail) => splitTitle.current?.(tail) ?? false}
 								/>
 							</div>
 						</header>
@@ -120,6 +128,9 @@ export function Pane({
 							compact={compact}
 							notify={notify}
 							entryRef={enterCells}
+							splitRef={splitTitle}
+							openRef={openTop}
+							selectRef={selectBox}
 						/>
 					</>
 				)}

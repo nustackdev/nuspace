@@ -72,11 +72,11 @@ def _points(monkeypatch, points: list[_Point]) -> list[str]:
 
 def test_merge_keeps_the_first_per_name_and_warns():
     first = Extension(
-        (_plane("plain", "Mine"),), (_snippet("prose", "a"),), {"db": _env("mine")}, "a"
+        (_plane("plain", "Mine"),), (_snippet("text", "a"),), {"db": _env("mine")}, "a"
     )
     second = Extension(
         (_plane("plain", "Theirs"), _plane("jobs")),
-        (_snippet("prose", "b"), _snippet("heading")),
+        (_snippet("text", "b"), _snippet("heading")),
         {"db": _env("theirs"), "llm": _env("llm")},
         "b",
     )
@@ -86,8 +86,8 @@ def test_merge_keeps_the_first_per_name_and_warns():
     assert "'plain' from b ignored: a registered it first" in str(caught[0].message)
     assert list(reg.planes) == ["plain", "jobs"]
     assert reg.planes["plain"].label == "Mine"
-    assert reg.snippets["prose"].source == "a"
-    assert list(reg.snippets) == ["prose", "heading"]
+    assert reg.snippets["text"].source == "a"
+    assert list(reg.snippets) == ["text", "heading"]
     assert reg.envs["db"]().label == "mine"
     assert set(reg.envs) == {"db", "llm"}
 
@@ -101,7 +101,7 @@ def test_discover_loads_extensions_and_factories_and_skips_the_broken(monkeypatc
         monkeypatch,
         [
             _Point("plain", lambda: ext),
-            _Point("factory", lambda: lambda: Extension(snippets=(_snippet("prose"),))),
+            _Point("factory", lambda: lambda: Extension(snippets=(_snippet("text"),))),
             _Point("broken", broken),
             _Point("wrong", lambda: lambda: 42),
         ],
@@ -111,7 +111,7 @@ def test_discover_loads_extensions_and_factories_and_skips_the_broken(monkeypatc
     assert asked == [GROUP]
     assert [e.name for e in found] == ["plain", "factory"]
     assert found[0].planes == ext.planes
-    assert [s.name for s in found[1].snippets] == ["prose"]
+    assert [s.name for s in found[1].snippets] == ["text"]
     said = [str(w.message) for w in caught]
     assert any("'broken' failed to load" in s for s in said)
     assert any("'wrong' is not an Extension: int" in s for s in said)
@@ -140,9 +140,9 @@ def test_discovery_can_be_turned_off(monkeypatch):
     asked = _points(monkeypatch, [_Point("nuverse", lambda: Extension((_plane("plain"),)))])
     with warnings.catch_warnings():
         warnings.simplefilter("error")
-        reg = space_registry(snippets=[_snippet("prose")], discover=False)
+        reg = space_registry(snippets=[_snippet("text")], discover=False)
     assert asked == []
-    assert (list(reg.planes), list(reg.snippets)) == ([], ["prose"])
+    assert (list(reg.planes), list(reg.snippets)) == ([], ["text"])
 
 
 # --- open_space ------------------------------------------------------------------
@@ -156,7 +156,7 @@ STARTER = "starter"
 async def test_boot_before_the_first_open_keeps_the_services(store):
     await store.run(boot(USER) >> ensure_system())
     assert await store.read(ops.cell_rows(init.PLANE)) == [
-        {"id": "main", "name": "main", "prog": init.SHIM, "meta": {}}
+        {"id": "main", "name": "main", "prog": init.SHIM, "props": {"made_by": ""}, "meta": {}}
     ]
     rows = {r["id"]: r for r in await store.read(ops.plane_rows())}
     assert (rows[init.PLANE]["name"], rows[init.PLANE]["props"]["system"]) == (init.PLANE, True)
@@ -239,7 +239,7 @@ async def test_nuverse_prose_loads_through_the_kernel_rewrites(store):
 
 def test_open_space_with_web_compiles(monkeypatch):
     _points(monkeypatch, [])
-    term = open_space(planes=[_plane("plain")], snippets=[_snippet("prose")], open_browser=False)
+    term = open_space(planes=[_plane("plain")], snippets=[_snippet("text")], open_browser=False)
     nu.validate(nu.compile(term))
 
 

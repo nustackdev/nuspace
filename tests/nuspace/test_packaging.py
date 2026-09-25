@@ -15,7 +15,7 @@ from pathlib import Path
 
 import nu
 import nuverse
-from nuspace import Extension, Plane, Snippet
+from nuspace import TEXT, Extension, Plane, Snippet
 from nuspace.host import discover, space_registry
 from nuverse import planes, snippets
 
@@ -45,7 +45,7 @@ def test_discovery_finds_nuverse():
     assert ext == replace(nuverse.extension(), name="nuverse")
     assert [p.name for p in ext.planes] == ["plain", "jobs", "runs", "workers", "planes"]
     assert [s.name for s in ext.snippets] == [
-        "prose",
+        "text",
         "program",
         "ticker",
         "lens",
@@ -58,7 +58,7 @@ def test_discovery_finds_nuverse():
 def test_open_space_registers_nuverse_by_default():
     reg = space_registry()
     assert next(iter(reg.planes)) == "plain"
-    assert {"prose", "program", "ticker"} <= set(reg.snippets)
+    assert {"text", "program", "ticker"} <= set(reg.snippets)
     assert space_registry(discover=False).planes == {}
 
 
@@ -91,8 +91,8 @@ def test_snippets_are_well_formed():
         snippets.cell_lens.SNIPPET,
     )
     assert (snippets.heading.SNIPPET, snippets.monaco.SNIPPET) == (None, None)
-    # Typing into an empty line starts a text cell, and nothing else claims it.
-    assert [s.name for s in snippets.SNIPPETS if s.on_type] == ["prose"]
+    # The prose editor is the text snippet.
+    assert snippets.prose.SNIPPET.name == TEXT
     for snippet in snippets.SNIPPETS:
         assert isinstance(snippet, Snippet)
         assert snippet.name and snippet.label

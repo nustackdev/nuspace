@@ -184,7 +184,7 @@ export function useSnippets(path: Path): SlashSnippet[] {
 			const name = typeof o.name === "string" ? o.name : "";
 			if (!name) continue;
 			const label = typeof o.label === "string" && o.label ? o.label : name;
-			out.push({ name, label, onType: o.on_type === true });
+			out.push({ name, label });
 		}
 		return out.length ? out : EMPTY_SNIPPETS;
 	}, [raw]);

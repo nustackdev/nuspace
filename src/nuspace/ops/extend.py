@@ -17,7 +17,11 @@ from .plane import add_plane, plane_icon
 from .utils import binding
 
 
-__all__ = ["Plane", "Snippet", "create_plane", "insert_snippet"]
+__all__ = ["TEXT", "Plane", "Snippet", "create_plane", "insert_snippet"]
+
+
+#: The name reserved for the text snippet, see :class:`Snippet`.
+TEXT = "text"
 
 
 @dataclass(frozen=True)
@@ -53,19 +57,23 @@ class Plane:
 class Snippet:
     """Source for one cell, offered from the ``/`` menu.
 
+    The name :data:`TEXT` is reserved for the text snippet. Its cells are
+    the text cells the plane writes like a document: typing on an empty line
+    starts one, Enter in the title starts one at the top with the text after
+    the caret, Cmd+Enter in one starts the next below, and Backspace in an
+    empty one removes it. With no snippet under that name, typing opens the
+    ``/`` menu and the rest is off.
+
     Args:
-        name: Registry key, and the new cell's name.
+        name: Registry key, the new cell's name, and what the cells made
+            from it record as ``props.made_by``.
         label: What the menu shows.
         source: The cell's prog.
-        on_type: Typing a letter into an empty line starts a cell from
-            this snippet, and the typing carries on into its text. The first
-            flagged snippet wins; with none, typing opens the ``/`` menu.
     """
 
     name: str
     label: str
     source: str
-    on_type: bool = False
 
 
 def create_plane(
@@ -117,9 +125,16 @@ def insert_snippet(
     index: nu.IntArg | None = None,
     cell_id: nu.StrArg | None = None,
 ) -> nu.Nu:
-    """Add a cell from a snippet: its source as the prog, its name as the name.
+    """Add a cell from a snippet: its source as the prog, its name as the name and ``made_by``.
 
     Yields:
         The cell id, as :func:`~nuspace.ops.cell.add_cell` does.
     """
-    return add_cell(plane_id, snippet.source, cell_id=cell_id, name=snippet.name, index=index)
+    return add_cell(
+        plane_id,
+        snippet.source,
+        cell_id=cell_id,
+        name=snippet.name,
+        index=index,
+        made_by=snippet.name,
+    )

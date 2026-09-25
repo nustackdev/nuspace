@@ -2,7 +2,7 @@
 
 - :mod:`.planes`: what ``+`` creates: ``plain``, ``jobs``, ``runs``,
   ``workers``, ``planes``.
-- :mod:`.snippets`: what ``/`` inserts: ``prose``, ``program``, ``ticker``,
+- :mod:`.snippets`: what ``/`` inserts: ``text``, ``program``, ``ticker``,
   ``lens``, ``plane_lens``, ``cell_lens``, and later ``heading``, ``monaco``.
 
 nuspace finds this package through the ``nuspace.extensions`` entry point,

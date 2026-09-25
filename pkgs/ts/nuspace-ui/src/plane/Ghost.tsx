@@ -4,15 +4,16 @@
 // yet. It holds no value, owns no id, and nothing exists in the store because
 // of it. Press `/` and it offers the registered snippets; pick one and it
 // becomes a cell made from that snippet. Start typing and it becomes a text
-// cell with the typing in it (./Draft.tsx), when a snippet asks for that, or
-// else the typing searches the snippets. Enter on an empty ghost makes a
-// blank program.
+// cell with the typing in it (./Draft.tsx), when a text snippet is
+// registered, or else the typing searches the snippets. Enter on an empty
+// ghost makes a blank program.
 //
 // There is always one at the end of the plane, which is what makes an empty
-// plane writeable without hunting for a control, and the gutter `+` summons a
-// second one after any row. The summoned one is transient: it resolves into a
-// cell or it is gone the moment it loses focus with nothing in it. The
-// wiring for both is ./useGhosts.ts.
+// plane writeable without hunting for a control, and a second one can be
+// summoned after any row: by the gutter `+`, Cmd+Enter in a text cell, or
+// Enter at the end of the title (at the top). The summoned one is transient:
+// it resolves into a cell or it is gone the moment it loses focus with nothing
+// in it. The wiring for both is ./useGhosts.ts.
 
 import type * as React from "react";
 import { useEffect } from "react";

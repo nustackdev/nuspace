@@ -12,6 +12,7 @@ reads it and it reads nothing back::
           cells     id -> Cell
             <c>
               name, prog, meta
+              props made_by
               state CellState shapes, rerooted here
           order     [cell id]
       tree          id -> Node (children), ROOT at the top
@@ -29,7 +30,7 @@ Plane and cell hold structure only. How and when a cell runs is the caller's
 argument, and what it did is a run.
 """
 
-from .cell import Cell
+from .cell import Cell, CellProps
 from .connection import Connection
 from .kernel import (
     EXIT_FAILED,
@@ -75,6 +76,7 @@ __all__ = [
     "STATUS_STOPPING",
     "STATUS_UP",
     "Cell",
+    "CellProps",
     "CellState",
     "Connection",
     "Kernel",

@@ -12,7 +12,7 @@
 import type * as React from "react";
 
 /** How far a press travels before it is a drag rather than a click. */
-const CLICK_SLOP = 3;
+export const CLICK_SLOP = 3;
 
 /**
  * Track one drag started by `e`. `onMove` gets the distance from the start on

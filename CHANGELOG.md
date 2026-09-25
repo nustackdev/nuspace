@@ -12,6 +12,7 @@ separately here.
 
 ## Unreleased
 
+- Planes write like a document: Enter, Cmd+Enter, Backspace across text cells, and box selection
 - A wider sidebar by default, and clicking a resize handle resets its width
 - The plane icon sits in the gutter beside the title, and the emoji tab opens first
 - Planes lay out on one grid, so gutters never hang past a narrow pane

@@ -14,10 +14,21 @@ let host: HTMLDivElement;
 let root: Root;
 const onCommit = vi.fn();
 const onExit = vi.fn(() => true);
+const onSplit = vi.fn((_tail: string) => true);
+const onOpen = vi.fn((_home: () => void) => true);
 
-function render(value: string) {
+function render(value: string, split = false) {
 	act(() => {
-		root.render(<Title value={value} placeholder="Untitled" onCommit={onCommit} onExit={onExit} />);
+		root.render(
+			<Title
+				value={value}
+				placeholder="Untitled"
+				onCommit={onCommit}
+				onExit={onExit}
+				onOpen={split ? onOpen : undefined}
+				onSplit={split ? onSplit : undefined}
+			/>,
+		);
 	});
 }
 
@@ -59,6 +70,8 @@ beforeEach(() => {
 	root = createRoot(host);
 	onCommit.mockClear();
 	onExit.mockClear();
+	onSplit.mockClear();
+	onOpen.mockClear();
 });
 
 afterEach(() => {
@@ -136,5 +149,55 @@ describe("Title", () => {
 		caret(5);
 		key("Enter");
 		expect(onExit).toHaveBeenCalledTimes(2);
+	});
+
+	it("splits on Enter: the tail opens a text cell, the head is the rename", () => {
+		render("Notes", true);
+		type("Plans today");
+		caret(5);
+		key("Enter");
+		expect(onSplit).toHaveBeenCalledExactlyOnceWith("today");
+		expect(onExit).not.toHaveBeenCalled();
+		act(() => title().blur());
+		expect(onCommit).toHaveBeenCalledExactlyOnceWith("Plans");
+	});
+
+	it("keeps the title whole on Enter at its start, and the cell opens empty", () => {
+		render("Notes", true);
+		type("Notes");
+		caret(0);
+		key("Enter");
+		expect(onSplit).toHaveBeenCalledExactlyOnceWith("");
+		expect(title().textContent).toBe("Notes");
+	});
+
+	it("opens a line on Enter at the end, and its way back lands at the end", () => {
+		render("Notes", true);
+		type("Notes");
+		caret(5);
+		key("Enter");
+		expect(onOpen).toHaveBeenCalledTimes(1);
+		expect(onSplit).not.toHaveBeenCalled();
+		expect(onExit).not.toHaveBeenCalled();
+		act(() => title().blur());
+		caret(0);
+		act(() => onOpen.mock.calls[0][0]());
+		expect(document.activeElement).toBe(title());
+		const sel = document.getSelection() as Selection;
+		expect(sel.isCollapsed).toBe(true);
+		const rest = document.createRange();
+		rest.selectNodeContents(title());
+		rest.setStart(sel.focusNode as Node, sel.focusOffset);
+		expect(rest.toString()).toBe("");
+	});
+
+	it("leaves as before when there is nothing to split into", () => {
+		onOpen.mockReturnValueOnce(false);
+		onSplit.mockReturnValueOnce(false);
+		render("Notes", true);
+		type("Notes");
+		caret(5);
+		key("Enter");
+		expect(onExit).toHaveBeenCalledTimes(1);
 	});
 });

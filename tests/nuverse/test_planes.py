@@ -217,7 +217,7 @@ async def test_creating_a_job_makes_a_headless_plane_with_a_main_cell(store):
     assert row["props"] == {"system": False, "ui": False, "made_by": "jobs"}
     assert row["parent"] == "jp"
     assert await store.read(ops.cell_rows(job)) == [
-        {"id": "main", "name": "main", "prog": program.SOURCE, "meta": {}}
+        {"id": "main", "name": "main", "prog": program.SOURCE, "props": {"made_by": ""}, "meta": {}}
     ]
 
 

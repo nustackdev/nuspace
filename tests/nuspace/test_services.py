@@ -84,7 +84,7 @@ async def test_bootstrap_makes_the_services_and_is_idempotent(store):
         assert rows[plane]["props"] == {"system": True, "ui": False, "made_by": ""}
         assert rows[plane]["meta"] == {}
         assert await store.read(ops.cell_rows(plane)) == [
-            {"id": "main", "name": "main", "prog": shim, "meta": {}}
+            {"id": "main", "name": "main", "prog": shim, "props": {"made_by": ""}, "meta": {}}
         ]
     assert await store.read(boot_list()) == list(BOOTED)
     # An edited store: a renamed service, a changed boot list. A rerun keeps both.

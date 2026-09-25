@@ -3,11 +3,16 @@
 // Both ghosts run the same handlers. What differs is where they sit and
 // whether they are allowed to go away: the end-of-plane one is furniture, the
 // summoned one is a passing offer. `after` is the cell a ghost would create
-// past -- null only on a plane with no cells -- and it doubles as the ghost's
-// identity, which is how the slash state can name one when neither of them
-// has an id of its own.
+// past -- null at the top of the plane, which the end one only is on a plane
+// with no cells, where nothing is ever summoned -- and it doubles as the
+// ghost's identity, which is how the slash state can name one when neither of
+// them has an id of its own.
+//
+// A ghost opened from somewhere the caret was writing (Cmd+Enter in a text
+// cell, Enter at the end of the title) keeps the way back there, and Escape
+// takes it: the caret goes home and a summoned ghost goes with it.
 
-import { useCallback } from "react";
+import { useCallback, useRef } from "react";
 import type { GhostProps } from "./Ghost";
 import type { PlaneModel } from "./model";
 import type { FocusReq } from "./state";
@@ -27,9 +32,35 @@ export function useGhosts(
 		startDraft: ((after: string | null, text: string) => void) | null;
 	},
 ) {
+	/** The way back from the ghost that is after `after`, while it holds the caret. */
+	const back = useRef<{ after: string | null; to: () => void } | null>(null);
+
+	/**
+	 * Open a line after `after` (null: at the top) and put the caret in it.
+	 * Right below the last cell that is the end ghost, since a second empty
+	 * line there would only make vertical travel pick between two. `home`
+	 * is where Escape sends the caret, null to select the cell above.
+	 */
+	const openGhost = useCallback(
+		(after: string | null, home: (() => void) | null) => {
+			back.current = home && { after, to: home };
+			const last = cells.length ? cells[cells.length - 1].id : null;
+			if (after === last) {
+				patch({ ghost: null, slash: null });
+				endGhost.current?.focus();
+				return;
+			}
+			patch({ ghost: { after }, slash: null, selected: [], anchor: null, focus: null });
+		},
+		[cells, endGhost, patch],
+	);
+
 	/** Nothing was picked. Close the menu, and take the offer back. */
 	const dismissGhost = useCallback(
-		(transient: boolean) => patch(transient ? { ghost: null, slash: null } : { slash: null }),
+		(after: string | null, transient: boolean) => {
+			if (back.current?.after === after) back.current = null;
+			patch(transient ? { ghost: null, slash: null } : { slash: null });
+		},
 		[patch],
 	);
 
@@ -45,10 +76,18 @@ export function useGhosts(
 		[cells, editor.editing, focusCell, index, patch],
 	);
 
-	/** Escape with no menu open selects the cell the ghost hangs off, since
-	 *  the ghost itself cannot be one. */
+	/** Escape with no menu open goes back where the ghost was opened from,
+	 *  or else selects the cell it hangs off, since the ghost itself cannot
+	 *  be one. A summoned ghost goes either way. */
 	const escapeGhost = useCallback(
 		(after: string | null, transient: boolean) => {
+			const home = back.current?.after === after ? back.current.to : null;
+			if (home) {
+				back.current = null;
+				patch((e) => ({ slash: null, ghost: transient ? null : e.ghost }));
+				home();
+				return;
+			}
 			const cell = after ? cells[index(after)] : null;
 			patch((e) => ({
 				slash: null,
@@ -93,8 +132,8 @@ export function useGhosts(
 		onCloseSlash: () => patch({ slash: null }),
 		onEscape: () => escapeGhost(after, transient),
 		onLeave: (dir) => leaveGhost(after, dir, transient),
-		onDismiss: () => dismissGhost(transient),
+		onDismiss: () => dismissGhost(after, transient),
 	});
 
-	return ghostProps;
+	return { ghostProps, openGhost };
 }

@@ -11,6 +11,9 @@
 //
 // `editable` is the plane's setting. Off, the cell draws its output and
 // nothing else: no gutter, and its source never opens.
+//
+// A text cell's keys (../useTextCells.ts) are caught on the row, before the
+// editor inside it sees them.
 
 import type { Path } from "@nustackdev/ui-core";
 import type * as React from "react";
@@ -37,6 +40,8 @@ export function Cell({
 	onSetEditing,
 	onDrag,
 	onPlus,
+	onDelete,
+	onTextKey,
 	onSelect,
 	onFocusConsumed,
 	onCommit,
@@ -63,9 +68,12 @@ export function Cell({
 	/** A plain primary-button press landed inside the cell. */
 	onPointerIn: () => void;
 	onSetEditing: (on: boolean) => void;
-	onDrag: (e: React.PointerEvent) => void;
+	onDrag: (e: React.PointerEvent, onClick: () => void) => void;
 	/** Open a line below this cell. Not a cell: see ../Ghost.tsx. */
 	onPlus: () => void;
+	onDelete: () => void;
+	/** Set on a text cell of an editable plane. */
+	onTextKey?: (e: React.KeyboardEvent) => void;
 	onSelect: () => void;
 	onFocusConsumed: () => void;
 	onCommit: (source: string) => void;
@@ -78,6 +86,7 @@ export function Cell({
 			data-cell={cell.id}
 			hidden={hidden}
 			className={docCellRow({ focused, dragging })}
+			onKeyDownCapture={onTextKey}
 			onMouseDown={(e) => {
 				// A plain click inside a cell leaves cell-selection mode;
 				// the cell's own editor takes over from here.
@@ -93,10 +102,10 @@ export function Cell({
 					onSetEditing={onSetEditing}
 					onDrag={onDrag}
 					onPlus={onPlus}
-					onSelect={onSelect}
+					onDelete={onDelete}
 				/>
 			) : null}
-			<div className={docCell({ selected, selectedStrong })}>
+			<div className={docCell({ selected, selectedStrong })} data-cell-body="">
 				{dropAbove ? <span className={`${docDropIndicator} top-0`} /> : null}
 				<ProgramCell
 					source={cell.source}

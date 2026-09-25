@@ -388,6 +388,16 @@ export const docDropIndicator = cn(
 	"rounded-full bg-doc-drop-line",
 );
 
+/**
+ * The box a press off the cells drags out to select them. The selection's
+ * own accent, translucent, over everything in the pane and in the way of
+ * nothing. Placed in viewport coordinates by the plane.
+ */
+export const docBoxSelect = cn(
+	"pointer-events-none fixed z-40 rounded-sm",
+	"border border-doc-selected-line bg-doc-selected",
+);
+
 /* ============================== Cell interior =========================== */
 //
 // Every cell is a live program, so its interior is kit density even though the

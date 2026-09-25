@@ -102,7 +102,8 @@ export function ProgramCell(props: ProgramProps) {
 			) : null}
 
 			{hasUi ? (
-				<div className={docProgramFields}>
+				// What the program draws, and what a copy of the cell takes.
+				<div className={docProgramFields} data-cell-ui="">
 					<NodeView path={uiPath} />
 				</div>
 			) : editable && !editing && !status?.error ? (

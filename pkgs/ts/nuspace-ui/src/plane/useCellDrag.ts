@@ -1,8 +1,12 @@
 // Drag reorder, off a cell's grip. The drop index is found against the live
 // cell rows, and one `cell.reorder` goes out on release if it moved.
+//
+// The grip is a button too: a press that never travels past the slop (see
+// ../core/drag.ts) moves nothing and calls `onClick` instead.
 
 import type * as React from "react";
 import { useCallback, useRef } from "react";
+import { CLICK_SLOP } from "../core/drag";
 import type { PlaneModel } from "./model";
 
 export function useCellDrag({ planeId, cells, patch, notify, index, elRefs }: PlaneModel) {
@@ -26,30 +30,38 @@ export function useCellDrag({ planeId, cells, patch, notify, index, elRefs }: Pl
 	);
 
 	return useCallback(
-		(e: React.PointerEvent, id: string) => {
+		(e: React.PointerEvent, id: string, onClick?: () => void) => {
+			if (e.button !== 0) return;
 			e.preventDefault();
 			(e.target as HTMLElement).setPointerCapture?.(e.pointerId);
-			dragRef.current = { id, at: index(id) };
-			patch({
-				drag: { id, at: index(id), y: e.clientY },
-				selected: [id],
-				anchor: id,
-			});
+			const x0 = e.clientX;
+			const y0 = e.clientY;
 
 			const move = (ev: PointerEvent) => {
-				const at = dropIndexFor(ev.clientY);
 				const cur = dragRef.current;
-				if (!cur) return;
+				if (!cur) {
+					if (Math.abs(ev.clientX - x0) < CLICK_SLOP && Math.abs(ev.clientY - y0) < CLICK_SLOP) {
+						return;
+					}
+					dragRef.current = { id, at: index(id) };
+					patch({ drag: { id, at: index(id), y: ev.clientY }, selected: [id], anchor: id });
+					return;
+				}
+				const at = dropIndexFor(ev.clientY);
 				dragRef.current = { ...cur, at };
 				patch({ drag: { id: cur.id, at, y: ev.clientY } });
 			};
-			const up = () => {
+			const up = (ev: PointerEvent) => {
 				window.removeEventListener("pointermove", move);
 				window.removeEventListener("pointerup", up);
+				window.removeEventListener("pointercancel", up);
 				const cur = dragRef.current;
 				dragRef.current = null;
+				if (!cur) {
+					if (ev.type === "pointerup") onClick?.();
+					return;
+				}
 				patch({ drag: null });
-				if (!cur) return;
 				const from = index(cur.id);
 				if (from < 0 || cur.at === from || cur.at === from + 1) return;
 				const ids = cells.map((b) => b.id);
@@ -60,6 +72,7 @@ export function useCellDrag({ planeId, cells, patch, notify, index, elRefs }: Pl
 			};
 			window.addEventListener("pointermove", move);
 			window.addEventListener("pointerup", up);
+			window.addEventListener("pointercancel", up);
 		},
 		[cells, dropIndexFor, index, notify, planeId, patch],
 	);

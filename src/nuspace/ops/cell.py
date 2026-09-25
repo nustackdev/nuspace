@@ -50,6 +50,7 @@ def add_cell(
     cell_id: nu.StrArg | None = None,
     name: nu.StrArg = "",
     index: nu.IntArg | None = None,
+    made_by: nu.StrArg = "",
     meta: dict[str, Any] | nu.Nu | None = None,
 ) -> nu.Nu:
     """Write a cell onto a plane and place it at ``index``, in one commit.
@@ -60,7 +61,11 @@ def add_cell(
         cell_id: Its id. Minted when the term is evaluated when absent.
         name: What to call it.
         index: Where in the plane's order. The end when absent.
+        made_by: Prop, the snippet it was made from, ``""`` for none.
         meta: Fields to merge into its meta.
+
+    The props are written every time, so an existing cell given again takes
+    the ones passed now.
 
     Yields:
         The cell id, ``""`` when the plane is missing.
@@ -70,7 +75,7 @@ def add_cell(
         cid = nu.StrAttrRef(cid_name)
         plane = Space.planes[plane_id]
         row = plane.cells[cid]
-        writes = row.name.set(name) >> row.prog.set(prog)
+        writes = row.name.set(name) >> row.prog.set(prog) >> row.props.made_by.set(made_by)
         if meta is not None:
             writes = writes >> row.meta.update(meta)
         return nu.IfDo(
@@ -130,7 +135,7 @@ def move_cell(
     to_plane_id: nu.StrArg,
     index: nu.IntArg | None = None,
 ) -> nu.Nu:
-    """Move a cell to another plane, keeping its id, prog, meta and state.
+    """Move a cell to another plane, keeping its id, prog, props, meta and state.
 
     Its live runs are asked to stop: they were loaded against the old plane.
     A no-op when either plane or the cell is missing, or the planes are the

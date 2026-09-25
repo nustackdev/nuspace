@@ -26,7 +26,7 @@ from .cell import (
     set_cell_meta,
     set_prog,
 )
-from .extend import Plane, Snippet, create_plane, insert_snippet
+from .extend import TEXT, Plane, Snippet, create_plane, insert_snippet
 from .kernel import (
     CELL_ATTR,
     PLANE_ATTR,
@@ -63,6 +63,7 @@ __all__ = [
     "CELL_ATTR",
     "PLANE_ATTR",
     "RUN_ATTR",
+    "TEXT",
     "CellState",
     "Plane",
     "PlaneState",

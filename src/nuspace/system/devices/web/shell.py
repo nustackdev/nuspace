@@ -110,7 +110,7 @@ class Shell(nu.Shape):
         """This shell's slots as the batch that seeds a tab.
 
         Args:
-            snippets: The ``/`` menu's entries, ``{name, label}`` in order,
+            snippets: The ``/`` menu's entries, ``{name, label, text}`` in order,
                 mounted on the viewer.
             registered: The add plane popup's entries, ``{name, label, icon,
                 description}`` in order, mounted on the sidebar.

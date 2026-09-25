@@ -2,6 +2,7 @@
 //
 // Only live while at least one cell is selected. A focused editor (Monaco, a
 // ghost) owns its keys outright and stops them before they reach the plane.
+// On a read-only plane only Escape and copy do anything.
 
 import type * as React from "react";
 import { useCallback } from "react";
@@ -9,8 +10,33 @@ import type { PlaneModel } from "./model";
 import type { FocusReq } from "./state";
 import type { Cell } from "./types";
 
+/**
+ * Put the selected cells on the clipboard, in plane order: what each one
+ * draws, as html and as plain text. A cell that draws nothing adds nothing.
+ */
+function copyCells(ids: string[], cells: Cell[], elRefs: PlaneModel["elRefs"]): void {
+	const drawn = cells
+		.filter((c) => ids.includes(c.id))
+		.map((c) => elRefs.current.get(c.id)?.querySelector<HTMLElement>("[data-cell-ui]"))
+		.filter((el): el is HTMLElement => el != null);
+	const html = drawn.map((el) => el.innerHTML).join("");
+	const plain = drawn.map((el) => el.innerText).join("\n");
+	const clip = navigator.clipboard;
+	if (!clip) return;
+	if (typeof ClipboardItem === "undefined" || !clip.write) {
+		clip.writeText(plain).catch(() => {});
+		return;
+	}
+	const item = new ClipboardItem({
+		"text/html": new Blob([html], { type: "text/html" }),
+		"text/plain": new Blob([plain], { type: "text/plain" }),
+	});
+	clip.write([item]).catch(() => {});
+}
+
 export function useCellKeys(
-	{ cells, editor, patch }: PlaneModel,
+	{ cells, editor, patch, elRefs }: PlaneModel,
+	editable: boolean,
 	{
 		focusCell,
 		enterCell,
@@ -36,6 +62,14 @@ export function useCellKeys(
 				patch({ selected: [], anchor: null });
 				return;
 			}
+			if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "c") {
+				// From an editor inside a cell, the copy is the editor's.
+				if (e.target !== e.currentTarget) return;
+				e.preventDefault();
+				copyCells(sel, cells, elRefs);
+				return;
+			}
+			if (!editable) return;
 			if (e.key === "Enter") {
 				e.preventDefault();
 				const b = cells[last];
@@ -88,6 +122,8 @@ export function useCellKeys(
 			editor.column,
 			editor.editing,
 			editor.selected,
+			editable,
+			elRefs,
 			enterCell,
 			focusCell,
 			moveSelected,

@@ -1,13 +1,14 @@
-"""The ``prose`` snippet: a text editor cell.
+"""The ``text`` snippet: a text editor cell.
 
 One prose surface over a string in its own state, synced both ways. What the
 person wrote lives in the state, not in the prog. The viewer draws it like any
-other cell. Typing into an empty line starts one of these.
+other cell. Registered under :data:`~nuspace.TEXT`, it is the space's text
+snippet, so typing into an empty line starts one.
 """
 
 from __future__ import annotations
 
-from nuspace import Snippet
+from nuspace import TEXT, Snippet
 
 
 __all__ = ["SNIPPET", "SOURCE"]
@@ -41,4 +42,4 @@ def out():
     )
 """
 
-SNIPPET = Snippet("prose", "Text", SOURCE, on_type=True)
+SNIPPET = Snippet(TEXT, "Text", SOURCE)

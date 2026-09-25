@@ -59,17 +59,19 @@ export type EditorState = {
 	editing: string[];
 	slash: SlashState | null;
 	/**
-	 * The transient ghost input, as the id of the cell it sits after.
+	 * The transient ghost input, as the id of the cell it sits after, null
+	 * at the top of the plane.
 	 *
-	 * Summoned by a gutter `+` and nothing else; it resolves into a cell or
-	 * it goes away the moment it loses focus with nothing in it. At most one
-	 * exists, because it is one id and not a set -- summoning a second while a
-	 * first is open blurs the first, which is what dismisses it.
+	 * Summoned by a gutter `+`, Cmd+Enter in a text cell, or Enter at the end
+	 * of the title; it resolves into a cell or it goes away the moment it
+	 * loses focus with nothing in it. At most one exists, because it is one
+	 * slot and not a set -- summoning a second while a first is open blurs the
+	 * first, which is what dismisses it.
 	 *
 	 * The end-of-plane ghost is NOT here. It is always there, so there is
 	 * nothing about it to remember.
 	 */
-	ghost: string | null;
+	ghost: { after: string | null } | null;
 	drag: DragState | null;
 	/**
 	 * Desired column, parked while the caret is "between" editors -- i.e.
@@ -112,7 +114,11 @@ export function pruneEditor(local: EditorState, live: Set<string>): EditorState 
 			local.slash && (local.slash.cellId === null || live.has(local.slash.cellId))
 				? local.slash
 				: null,
-		ghost: local.ghost && live.has(local.ghost) ? local.ghost : null,
+		// A ghost at the top needs a cell under it, or it is the end ghost's twin.
+		ghost:
+			local.ghost && (local.ghost.after === null ? live.size > 0 : live.has(local.ghost.after))
+				? local.ghost
+				: null,
 		drag: null,
 	};
 }

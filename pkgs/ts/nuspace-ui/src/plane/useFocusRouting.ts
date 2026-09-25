@@ -63,7 +63,7 @@ export function useFocusRouting({
 			const i = index(fromId);
 			if (i < 0) return;
 			if (dir === "down") {
-				if (editor.ghost === fromId) {
+				if (editor.ghost?.after === fromId) {
 					plusGhost.current?.focus();
 					return;
 				}
@@ -71,7 +71,7 @@ export function useFocusRouting({
 					endGhost.current?.focus();
 					return;
 				}
-			} else if (i > 0 && editor.ghost === cells[i - 1].id) {
+			} else if (editor.ghost && editor.ghost.after === (i > 0 ? cells[i - 1].id : null)) {
 				plusGhost.current?.focus();
 				return;
 			}

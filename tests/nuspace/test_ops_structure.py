@@ -80,6 +80,7 @@ async def test_yielding_ops_chain_and_bind(store):
             "id": (await store.read(ops.cells(rows[1]["id"])))[0],
             "name": "c",
             "prog": "src",
+            "props": {"made_by": ""},
             "meta": {},
         }
     ]
@@ -162,6 +163,7 @@ async def test_add_cell_places_by_index(store):
         "id": c,
         "name": "c",
         "prog": "def out(): pass",
+        "props": {"made_by": ""},
         "meta": {"k": 1},
     }
 
@@ -311,10 +313,10 @@ async def test_parent_of_an_unlinked_plane(store):
 
 
 async def test_structure_round_trips_through_rocksdb(disk):
-    """The codec path: nested meta, a moved cell's nested state, order, the tree."""
+    """The codec path: nested meta, a moved cell's props and nested state, order, the tree."""
     p = await disk.run(ops.add_plane(name="p", meta={"a": {"b": 1}}))
     q = await disk.run(ops.add_plane(name="q", parent=p))
-    c = await disk.run(ops.add_cell(p, "src", meta={"m": [1, 2]}))
+    c = await disk.run(ops.add_cell(p, "src", made_by="m", meta={"m": [1, 2]}))
     state = Space.planes[p].cells[c].state
     await disk.run(nustd.kv.Transaction(state.set_item("n", {"deep": [3]}), scope=Space))
     await disk.run(ops.move_cell(p, c, q))
@@ -323,7 +325,7 @@ async def test_structure_round_trips_through_rocksdb(disk):
         {"id": q, "name": "q", "props": NO_PROPS, "meta": {}, "parent": p},
     ]
     assert await disk.read(ops.cell_rows(q)) == [
-        {"id": c, "name": "", "prog": "src", "meta": {"m": [1, 2]}}
+        {"id": c, "name": "", "prog": "src", "props": {"made_by": "m"}, "meta": {"m": [1, 2]}}
     ]
     assert await disk.read(Space.planes[q].cells[c].state.extract()) == {"n": {"deep": [3]}}
     assert await disk.run(ops.remove_plane(p)) is True
