@@ -25,6 +25,7 @@ import { EmptyState, NodeView } from "@nustackdev/ui-kit";
 import { useEffect, useRef } from "react";
 import { routeAnchorClick } from "../core/router";
 import { useTypePath } from "../core/surfaces";
+import { useTab } from "../core/tab";
 import { shellMain, shellMissing, shellRailOpen, shellRoot } from "../design";
 import {
 	focusRailToggle,
@@ -40,6 +41,7 @@ export function Shell() {
 	const mainRef = useRef<HTMLElement | null>(null);
 	const collapsed = useRailCollapsed() && sidebar !== null;
 	useRailShortcut();
+	useTab(viewer, sidebar);
 
 	useEffect(() => {
 		const main = mainRef.current;
