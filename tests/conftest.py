@@ -12,6 +12,7 @@ import nu
 import nustd.kv
 from nu.lang import ScalarQuery
 from nuspace.shapes import Space
+from nuspace.system.kernel import KERNEL_FILE
 
 
 if TYPE_CHECKING:
@@ -69,16 +70,16 @@ async def store():
 
 @dataclass
 class DiskStore(Store):
-    """The same calls against rocksdb, opened per evaluation. Slow: a few tests only."""
+    """The same calls against the space's sqlite file, opened per evaluation. A few tests only."""
 
     path: str = ""
 
     async def run(self, term: nu.Nu) -> object:
-        stack = nustd.kv.rocksdb_navigator(self.path, tags=(Space,))
+        stack = nustd.kv.sqlite_navigator(self.path, tags=(Space,))
         value, _ = await nu.arun(nu.With(stack, body=term))
         return value
 
 
 @pytest_asyncio.fixture
 async def disk(tmp_path):
-    return DiskStore(ctx=None, path=str(tmp_path / "space"))
+    return DiskStore(ctx=None, path=str(tmp_path / "space" / KERNEL_FILE))

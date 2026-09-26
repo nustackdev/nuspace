@@ -13,9 +13,10 @@ requires-python = ">=3.10"
 dependencies = [
     # The whole stack, every extra. A space runs arbitrary Nu programs and its own
     # services in pool workers, so it reaches most fabrics: kv for the store,
-    # ui for the browser, proxy (invisibles) for the worker's session, mp_pool
-    # for the workers themselves. Picking extras just means discovering the
-    # missing one at import time.
+    # valkey for its change notifications, ui for the browser, proxy
+    # (invisibles) for the worker's session, mp_pool for the workers
+    # themselves. Picking extras just means discovering the missing one at
+    # import time.
     "nucore>=0.5.3",
     "nustd[all]>=0.5.3",
     # The compiled web bundle. A separate distribution only because PyPI caps

@@ -197,6 +197,49 @@ async def test_a_run_on_a_dead_worker_fails(space):
     assert w in row["error"]
 
 
+_SHARED = """
+import nu
+import nustd.kv
+import nuspace
+
+class Shared(nuspace.PlaneState):
+    ping = nustd.kv.IntRef.slot()
+    pong = nustd.kv.IntRef.slot()
+
+def out():
+    return {}
+"""
+
+#: Wakes on the first ping it hears, and copies what it reads.
+LISTENS = _SHARED.format("nu.React(Shared.ping.on_change(), Shared.pong.set(Shared.ping))")
+
+#: Pings forever, every tenth of a second, so the listener hears one once it listens.
+PINGS = _SHARED.format(
+    "nu.ForeverDo(nu.IfDo(Shared.ping.missing(), Shared.ping.set(0))"
+    " >> Shared.ping.set(Shared.ping + 1) >> nu.Delay(0.1))"
+)
+
+
+@module_loop
+async def test_two_workers_share_the_store_and_hear_each_others_writes(space):
+    """Each worker opens the store itself: a write in one wakes a subscriber in the other."""
+    p, (listens, pings) = await space.plane(LISTENS, PINGS)
+    wa, wb = await space.run(ops.worker()), await space.run(ops.worker())
+    (ra,) = await space.run(ops.up(p, [listens], worker=wa))
+    await space.run_row(ra, _up)
+    (rb,) = await space.run(ops.up(p, [pings], worker=wb))
+    row = await space.run_row(ra, _dead)
+    assert (row["exit"], row["error"]) == (EXIT_OK, "")
+    shared = Space.planes[p].state
+    pong = await space.read(shared["pong"])
+    assert pong >= 1
+    assert await space.read(shared["ping"]) >= pong
+    workers = {r["id"]: r["worker"] for r in await space.read(ops.runs(plane=p))}
+    assert workers[ra] != workers[rb]
+    await space.run(ops.down([rb]))
+    assert (await space.run_row(rb, _dead))["exit"] == EXIT_STOPPED
+
+
 @module_loop
 async def test_closing_leaves_no_workers(space):
     await space.close()

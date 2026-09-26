@@ -18,7 +18,7 @@ from nustd.ui.core import Ref as UiRef
 
 from .kernel import stop_runs
 from .read import cell_exists, plane_exists
-from .utils import MintId, atomic, binding, keep_order
+from .utils import MintId, atomic, binding, fresh, keep_order
 
 
 if TYPE_CHECKING:
@@ -83,9 +83,25 @@ class HasUi(ScalarQuery):
         return athunk
 
 
-def _write_prog(row: nu.Nu, plane_id: nu.StrArg, cell_id: nu.StrArg, prog: nu.StrArg) -> nu.Nu:
+def _write_prog(row: nu.Nu, prog: nu.StrArg, has_ui: nu.Nu) -> nu.Nu:
     """Set a cell's prog and the ``has_ui`` it implies, together."""
-    return row.prog.set(prog) >> row.props.has_ui.set(HasUi(prog, plane_id, cell_id))
+    return row.prog.set(prog) >> row.props.has_ui.set(has_ui)
+
+
+def _knowing_ui(
+    prog: nu.StrArg,
+    plane_id: nu.StrArg,
+    cell_id: nu.StrArg,
+    build: Callable[[nu.Nu], nu.Nu],
+) -> nu.Nu:
+    """``build(has_ui)``, with :class:`HasUi` worked out before it runs.
+
+    Constructing runs the prog's module code, which can take as long as its
+    imports do. Outside the op's bracket, so the store's write lock is never
+    held for it, and a retried commit does not construct again.
+    """
+    name = fresh("ui")
+    return nu.Let(name, HasUi(prog, plane_id, cell_id), build(nu.BoolAttrRef(name)))
 
 
 def _place(order: nu.ListRef, cell_id: nu.StrArg, index: nu.IntArg | None) -> nu.Nu:
@@ -128,14 +144,12 @@ def add_cell(
         The cell id, ``""`` when the plane is missing.
     """
 
-    def write(cid_name: str) -> nu.Nu:
+    def write(cid_name: str, has_ui: nu.Nu) -> nu.Nu:
         cid = nu.StrAttrRef(cid_name)
         plane = Space.planes[plane_id]
         row = plane.cells[cid]
         writes = (
-            row.name.set(name)
-            >> _write_prog(row, plane_id, cid, prog)
-            >> row.props.made_by.set(made_by)
+            row.name.set(name) >> _write_prog(row, prog, has_ui) >> row.props.made_by.set(made_by)
         )
         if meta is not None:
             writes = writes >> row.meta.update(meta)
@@ -143,8 +157,22 @@ def add_cell(
             plane_exists(plane_id), writes >> _place(plane.order, cid, index)
         ) >> nu.IfDo(nu.Not(plane_exists(plane_id)), nu.SetCmd(cid, nu.Str("")))
 
+    # Minted ahead of the bracket, so has_ui is worked out outside it. The
+    # binding the op yields stays inside: an attr set in a retried bracket
+    # does not reach past it.
+    minted = fresh("c")
+    cid = nu.StrAttrRef(minted)
     value = MintId("c") if cell_id is None else nu.Str(cell_id)
-    return atomic(binding(value, write, tag="c"))
+    return nu.Let(
+        minted,
+        value,
+        _knowing_ui(
+            prog,
+            plane_id,
+            cid,
+            lambda has_ui: atomic(binding(cid, lambda name: write(name, has_ui), tag="c")),
+        ),
+    )
 
 
 def remove_cell(plane_id: nu.StrArg, cell_id: nu.StrArg) -> nu.Nu:
@@ -172,8 +200,13 @@ def set_prog(plane_id: nu.StrArg, cell_id: nu.StrArg, prog: nu.StrArg) -> nu.Nu:
     Nothing validates: a broken prog stores fine, and reads as not drawing.
     """
     row = Space.planes[plane_id].cells[cell_id]
-    return atomic(
-        nu.IfDo(cell_exists(plane_id, cell_id), _write_prog(row, plane_id, cell_id, prog))
+    return _knowing_ui(
+        prog,
+        plane_id,
+        cell_id,
+        lambda has_ui: atomic(
+            nu.IfDo(cell_exists(plane_id, cell_id), _write_prog(row, prog, has_ui))
+        ),
     )
 
 

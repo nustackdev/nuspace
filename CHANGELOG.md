@@ -10,6 +10,10 @@ Below is the changelog for **nuspace** - the full commit stream. Newest first.
 The `nuspace-ui` wheel is the same source tree's vite output and is not tracked
 separately here.
 
+## Unreleased
+
+- Pages and apps start faster, since every worker reads the store directly
+
 ## 0.4.0 — 2026-09-25
 
 - Cells and planes still loading show skeletons, not blank space or No view

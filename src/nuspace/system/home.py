@@ -10,7 +10,7 @@ that has a home keeps it as it is.
 Four cells, read only. All but ``start`` redraw once a second from one
 snapshot of the store, like the nuverse live planes:
 
-- ``header``: the space, its store path, versions and uptime, off
+- ``header``: the space, its directory, versions and uptime, off
   ``Space.state.info``;
 - ``recent``: the last :data:`RECENT_SHOWN` planes of ``Space.state.recents``
   that still exist, as links;
@@ -328,10 +328,10 @@ def versions(packages: tuple[str, ...] = PACKAGES) -> dict[str, str]:
 
 
 def write_info(path: str | None) -> nu.Nu:
-    """``Space.state.info`` for this open: the store path, now, the versions. One commit.
+    """``Space.state.info`` for this open: the space path, now, the versions. One commit.
 
     Args:
-        path: The store directory, None for a throwaway one (written ``""``).
+        path: The space directory, None for a throwaway one (written ``""``).
     """
     info = Space.state.info
     where = "" if path is None else str(Path(path).resolve())

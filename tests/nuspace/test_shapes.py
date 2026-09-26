@@ -25,6 +25,7 @@ from nuspace.shapes import (
     Space,
     reroot,
 )
+from nuspace.system.kernel import KERNEL_FILE
 
 
 class Tick(CellState):
@@ -64,12 +65,12 @@ def bump() -> nu.Nu:
 
 def _store(tmp_path):
     """A Space on disk, and the two calls that write it and read it back."""
-    path = str(tmp_path / "space")
+    path = str(tmp_path / "space" / KERNEL_FILE)
 
     async def write(term):
         await nu.arun(
             nu.With(
-                nustd.kv.rocksdb_navigator(path, tags=(Space,)),
+                nustd.kv.sqlite_navigator(path, tags=(Space,)),
                 body=nustd.kv.auto_flow_atomic(term, scope=Space),
             )
         )
@@ -77,7 +78,7 @@ def _store(tmp_path):
     async def read(term):
         value, _ = await nu.arun(
             nu.With(
-                nustd.kv.rocksdb_navigator(path, tags=(Space,)),
+                nustd.kv.sqlite_navigator(path, tags=(Space,)),
                 body=nustd.kv.Snapshot(term, scope=Space),
             )
         )
@@ -157,7 +158,11 @@ async def test_a_cell_does_not_hear_its_siblings_cell_state(tmp_path, target, ex
     seen = Space.planes["p"].name
     heard = React(Tick.n.on_change(), seen.set("wrong"))
     other = nu.Delay(0.05) >> reroot(bump(), "p", target)
-    await write(nu.Timeout(0.3, reroot(heard, "p", "c"), on_timeout=seen.set("quiet")) | other)
+    # Bracketed by hand: left to the pass, a write in ``on_timeout`` puts the
+    # whole Timeout in one write transaction, held across the wait, and the
+    # sqlite store refuses the sibling's write while it is open.
+    quiet = nustd.kv.Transaction(seen.set("quiet"), scope=Space)
+    await write(nu.Timeout(0.3, reroot(heard, "p", "c"), on_timeout=quiet) | other)
     assert await read(seen) == expected
 
 

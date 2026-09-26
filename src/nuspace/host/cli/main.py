@@ -2,7 +2,8 @@
 
 ``serve`` opens a space with the browser shell, ``run`` opens it headless.
 Both run until interrupted, then the brackets reap the workers on the way
-out. With no path the store is a throwaway directory, gone at close.
+out. PATH is the space directory, made if missing. With no path the space
+is a throwaway directory, gone at close.
 """
 
 from __future__ import annotations
@@ -16,12 +17,13 @@ from rich.text import Text
 import nu
 from nu._config.branding import BLUE, PURPLE
 from nuspace.host.space import open_space
+from nuspace.system.kernel import NotASpace
 
 
 __all__ = ["STORE_ENV", "cli", "main"]
 
 
-#: The environment variable naming the store when no path is given.
+#: The environment variable naming the space directory when no path is given.
 STORE_ENV = "NUSPACE_STORE"
 
 console = Console()
@@ -47,15 +49,23 @@ def nuspace_version() -> str:
 
 
 def _path_argument(fn: click.Command) -> click.Command:
-    """The store path every command takes, from the environment when absent."""
+    """The space directory every command takes, from the environment when absent."""
     return click.argument("path", required=False, envvar=STORE_ENV)(fn)
 
 
 def _announce(path: str | None, how: str) -> None:
     """Say which space this is and how it is open."""
-    where = path or "Throwaway store, gone at close"
+    where = path or "Throwaway space, gone at close"
     console.print(Text.assemble(("nuspace", f"bold {PURPLE}"), ("  ", ""), (where, "dim")))
     console.print(f"[dim]{how}, Ctrl+C to stop[/dim]")
+
+
+def _opened(path: str | None, **kwargs: object) -> nu.Nu:
+    """The space at ``path``, or a short error when ``path`` is not one."""
+    try:
+        return open_space(path, **kwargs)
+    except NotASpace as e:
+        raise click.ClickException(str(e)) from None
 
 
 def _hold(term: nu.Nu) -> None:
@@ -86,16 +96,18 @@ def cli(ctx: click.Context) -> None:
 @click.option("--no-browser", is_flag=True, help="Do not open a browser tab on the way up.")
 def serve(path: str | None, host: str, port: int, no_browser: bool) -> None:
     """Serve until Ctrl+C."""
+    term = _opened(path, host=host, port=port, open_browser=not no_browser)
     _announce(path, f"http://{host}:{port}")
-    _hold(open_space(path, host=host, port=port, open_browser=not no_browser))
+    _hold(term)
 
 
 @cli.command(help=f"Open the space at PATH headless: kernel and services. PATH from ${STORE_ENV}.")
 @_path_argument
 def run(path: str | None) -> None:
     """Run until Ctrl+C."""
+    term = _opened(path, web=False)
     _announce(path, "Headless")
-    _hold(open_space(path, web=False))
+    _hold(term)
 
 
 def main() -> None:

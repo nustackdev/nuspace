@@ -21,7 +21,7 @@ RECENTS_CAP = 20
 class SpaceInfo(nu.Shape):
     """What the host says about the space it opened. Written once per open.
 
-    ``path`` is the store directory, ``""`` for a throwaway one. ``opened``
+    ``path`` is the space directory, ``""`` for a throwaway one. ``opened``
     is when this open started, in seconds since the epoch. ``versions`` maps
     a package name (``nuspace``, and ``nuverse`` when installed) to its
     installed version.

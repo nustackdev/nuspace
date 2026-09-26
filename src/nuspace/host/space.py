@@ -1,7 +1,8 @@
 """open_space: the whole system in one term, as a host runs it.
 
 Layer three. It composes, nothing more: the registry, the kernel's
-brackets, the services, and the web device when asked for. The order, all
+brackets (the space directory's store and notification server, the pool),
+the services, and the web device when asked for. The order, all
 inside :func:`~nuspace.system.kernel.open_kernel` after reconcile:
 
 1. :func:`~nuspace.system.services.ensure_system`: the service planes, made
@@ -10,7 +11,7 @@ inside :func:`~nuspace.system.kernel.open_kernel` after reconcile:
    :func:`~nuspace.system.settings.ensure_settings`: the home and settings
    planes, made where missing, so they exist before the web device serves;
 3. :func:`~nuspace.system.home.write_info`: ``Space.state.info`` for this
-   open (store path, when, versions);
+   open (space path, when, versions);
 4. :func:`~nuspace.system.services.nav.clear_connections`: tabs of a previous
    run dropped, so nav never brings a plane up for one (D34);
 5. init started by the kernel's own :func:`~nuspace.system.kernel.init_start`,
@@ -112,7 +113,9 @@ def open_space(
     the main module.
 
     Args:
-        path: The store directory. None is a throwaway one, gone at close.
+        path: The space directory, created if missing: ``kernel.sqlite``
+            and the notification server's ``valkey/``. None is a throwaway
+            one, gone at close.
         web: Serve the browser shell. False is headless: kernel and services.
         host: The interface the web server binds.
         port: The port the web server binds.

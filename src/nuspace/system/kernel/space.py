@@ -1,12 +1,22 @@
-"""The brackets a space is opened in: store, sockets, pool, spares.
+"""The brackets a space is opened in: store, pool, spares.
 
-RocksDB takes an exclusive lock on the store directory, so exactly one
-process, the host, opens a space. Everything here follows from that:
+A space is a directory::
 
-- a worker cannot open the store, so the navigator goes on a socket and the
-  worker reaches it through a proxy;
-- a proxy carries calls, not notifications, so the host's change feed goes
-  on a second socket and a worker subscribes through it;
+    <space dir>/
+      kernel.sqlite     the whole Space store
+      valkey/           the notification server's data dir (pid, log)
+
+The store is one SQLite file in WAL mode, which every process opens and
+writes on its own: readers never wait, writers take turns on the file's
+lock, and a process that dies mid write frees it. What SQLite does not do is
+tell one process about another's writes, so the host runs a private Valkey
+server on a unix socket and every process publishes and subscribes through
+it. Everything here follows from that:
+
+- the host brings the server up before its own navigator, and takes it down
+  last, after the fleet has stopped talking to it;
+- a worker opens the same file with the same server's address, so a read is
+  a local read, and a write it makes wakes a subscriber anywhere;
 - workers are children of the host, so the pool lives here too, and closing
   the brackets reaps the fleet.
 
@@ -27,9 +37,8 @@ from typing import TYPE_CHECKING
 import nu
 import nustd.kv
 import nustd.mp_pool
-import nustd.proxy
+import nustd.valkey
 from nuspace.shapes import Space
-from nustd.kv.fabrics import Navigator
 from nustd.mp_pool.presets import spares as spares_shelf
 
 from .envs import KernelConfig
@@ -48,12 +57,15 @@ if TYPE_CHECKING:
 __all__ = [
     "DEFAULT_NAME",
     "DEFAULT_SPARES",
+    "KERNEL_FILE",
+    "VALKEY_DIR",
+    "NotASpace",
     "Throwaway",
     "Warmed",
     "free_port",
+    "navigator",
     "open_kernel",
-    "served_feed",
-    "served_navigator",
+    "space_dir",
     "store",
     "worker_context",
     "worker_pool",
@@ -67,6 +79,35 @@ DEFAULT_NAME = "nuspace"
 #: one for the tab beside it.
 DEFAULT_SPARES = 2
 
+#: The store's file inside a space directory.
+KERNEL_FILE = "kernel.sqlite"
+
+#: The notification server's data dir inside a space directory.
+VALKEY_DIR = "valkey"
+
+
+class NotASpace(ValueError):  # noqa: N818 -- names what the path is not
+    """Raised when a path holds something other than a space, eg an old RocksDB store."""
+
+
+def space_dir(path: str) -> str:
+    """``path`` made absolute, refused if it holds a store of the old RocksDB layout.
+
+    Absolute because workers get it pickled and derive the server's socket
+    from it: every process has to name the same directory the same way.
+
+    Raises:
+        NotASpace: ``path`` is a RocksDB store directory.
+    """
+    root = Path(path).expanduser().resolve()
+    if (root / "CURRENT").is_file() and not (root / KERNEL_FILE).exists():
+        msg = (
+            f"{root} is a store from an older nuspace (RocksDB). "
+            "Spaces are SQLite now and there is no migration: open a fresh directory."
+        )
+        raise NotASpace(msg)
+    return str(root)
+
 
 def free_port() -> int:
     """A port nobody listens on, as of now. Racy by nature, fine for a server about to start."""
@@ -76,10 +117,10 @@ def free_port() -> int:
 
 
 class Throwaway:
-    """A store directory that goes when its bracket closes. Binds nothing anyone reads.
+    """A space directory that goes when its bracket closes. Binds nothing anyone reads.
 
-    Outside the store's own brackets, so rocksdb has closed by the time the
-    directory is removed.
+    Outside the store's own brackets, so the file and the server are closed
+    by the time the directory is removed.
 
     Args:
         path: The directory, made if missing (a term run twice finds it gone).
@@ -101,56 +142,47 @@ class Throwaway:
         shutil.rmtree(self.path, ignore_errors=True)
 
 
-def store(path: str | None = None) -> nu.With:
-    """The storage stack, tagged :class:`~nuspace.shapes.Space`. Always rocksdb (D29).
+def navigator(path: str) -> nu.With:
+    """The Space store in ``path``, as any process opens it. Tagged :class:`~nuspace.shapes.Space`.
 
     kv refs find their navigator by root shape class, so the tag is load
-    bearing: a served navigator told the wrong tag fails before anything boots.
-
-    Never the pure memory store: it holds objects as they are, so a list a
-    worker writes through the proxy would be stored as a live reference into
-    that worker.
+    bearing. Needs the space's server up: its publisher and observer connect
+    at setup. The host opens it inside :func:`store`, a worker on its own.
 
     Args:
-        path: The store directory, created if missing. None is a throwaway
+        path: The space directory, absolute (see :func:`space_dir`).
+    """
+    return nustd.kv.sqlite_navigator_redis(
+        str(Path(path) / KERNEL_FILE),
+        tags=(Space,),
+        redis_url=nustd.valkey.url_for(Path(path) / VALKEY_DIR),
+    )
+
+
+def _owned(path: str | None) -> tuple[str, nu.With]:
+    """The space directory, absolute, and the brackets that own it. See :func:`store`."""
+    throwaway = path is None
+    root = space_dir(tempfile.mkdtemp(prefix="nuspace-") if throwaway else path)
+    served = nu.With(nustd.valkey.server(Path(root) / VALKEY_DIR), navigator(root))
+    if throwaway:
+        served = nu.With(nu.Provide(Throwaway, {"path": root}), served)
+    return root, served
+
+
+def store(path: str | None = None) -> nu.With:
+    """The Space store as its owner opens it: the notification server, then :func:`navigator`.
+
+    The server comes up first and goes down last, so nothing in the bracket
+    ever talks to a server that is not there.
+
+    Args:
+        path: The space directory, created if missing. None is a throwaway
             directory, removed when the bracket closes.
+
+    Raises:
+        NotASpace: ``path`` is an old RocksDB store.
     """
-    if path is not None:
-        return nustd.kv.rocksdb_navigator(path, tags=(Space,))
-    tmp = tempfile.mkdtemp(prefix="nuspace-")
-    return nu.With(
-        nu.Provide(Throwaway, {"path": tmp}),
-        nustd.kv.rocksdb_navigator(tmp, tags=(Space,)),
-    )
-
-
-def served_navigator(address: str) -> nu.Provide:
-    """The navigator on a socket, so a worker reaches the store it cannot open.
-
-    Threaded, because every worker calls it and they do not take turns.
-
-    Args:
-        address: ``host:port`` to listen on.
-    """
-    return nu.Provide(
-        nustd.proxy.InvisiblesServer,
-        {
-            "target": Navigator,
-            "target_tag": Space,
-            "address": address,
-            "transport": "tcp",
-            "executor": "threaded",
-        },
-    )
-
-
-def served_feed(address: str) -> nu.With:
-    """The host's change feed on a socket, so a worker hears writes it did not make.
-
-    Args:
-        address: ``host:port`` to listen on, apart from the navigator's.
-    """
-    return nustd.kv.served_observer(address, target_tag=Space)
+    return _owned(path)[1]
 
 
 class Warmed:
@@ -180,38 +212,34 @@ class Warmed:
         self.setup(ctx)
 
 
-def worker_context(address: str, feed_address: str) -> nu.With:
+def worker_context(path: str) -> nu.With:
     """What every worker comes up holding. Pickled to the child, entered there.
 
-    Process scope only, since the pool pays it on every launch: the store
-    through a proxy, the feed through another, a dict for host local
-    records, and the warm module cache. Whatever one run needs rides in its
-    body. Both proxies bind untagged, which Space tagged refs find by
-    fallback.
+    Process scope only, since the pool pays it on every launch: the store,
+    opened by the worker itself on the host's file and server, a dict for
+    host local records, and the warm module cache. Whatever one run needs
+    rides in its body.
 
     Args:
-        address: Where :func:`served_navigator` listens.
-        feed_address: Where :func:`served_feed` listens.
+        path: The space directory, absolute.
     """
     return nu.With(
-        nustd.kv.proxy_observer(feed_address),
-        nustd.proxy.InvisiblesProxy(Navigator, address=address),
+        navigator(path),
         nu.Provide(dict, {}),
         nu.Provide(Warmed, {}),
     )
 
 
-def worker_pool(address: str, feed_address: str, *, name: str = DEFAULT_NAME) -> nu.Provide:
+def worker_pool(path: str, *, name: str = DEFAULT_NAME) -> nu.Provide:
     """The fleet, every worker holding :func:`worker_context`. Closing kills them all.
 
     Args:
-        address: Where :func:`served_navigator` listens.
-        feed_address: Where :func:`served_feed` listens.
+        path: The space directory, absolute.
         name: Process name prefix.
     """
     return nu.Provide(
         nustd.mp_pool.WorkerPool,
-        {"name": name, "init": worker_context(address, feed_address)},
+        {"name": name, "init": worker_context(path)},
     )
 
 
@@ -228,29 +256,27 @@ def open_kernel(
     """A space open in this process, the kernel running beside ``body``.
 
     The brackets, in the order each needs the last (teardown runs the other
-    way, so the fleet dies before the sockets it calls): the store, a dict,
-    the navigator and the feed on sockets, the pool, the shelf of spares, the
-    kernel's config. Inside: reconcile first, so leftovers are dead before
-    ``body`` asks for anything, then the kernel and ``body`` race. The space
-    closes when ``body`` returns; a server's body never does.
+    way, so the fleet dies before the server it publishes through): the
+    store (the notification server, then the navigator), a dict, the pool,
+    the shelf of spares, the kernel's config. Inside: reconcile first, so
+    leftovers are dead before ``body`` asks for anything, then the kernel and
+    ``body`` race. The space closes when ``body`` returns; a server's body
+    never does.
 
     Args:
         body: What runs in the host beside the kernel.
-        path: The store directory. None is a throwaway one, see :func:`store`.
+        path: The space directory. None is a throwaway one, see :func:`store`.
         spares: Idle workers to keep up. Zero is every take cold.
         envs: Env factories by name, see :mod:`nuspace.system.kernel.envs`.
         space_envs: Env specs applied to every run, outermost.
         init: A plane to bring up once reconciled, see :func:`~.kernel.kernel`.
         name: Process name prefix for workers.
     """
-    address = f"127.0.0.1:{free_port()}"
-    feed_address = f"127.0.0.1:{free_port()}"
+    root, owned = _owned(path)
     return nu.With(
-        store(path),
+        owned,
         nu.Provide(dict, {}),
-        served_navigator(address),
-        served_feed(feed_address),
-        worker_pool(address, feed_address, name=name),
+        worker_pool(root, name=name),
         spares_shelf(spares),
         nu.Provide(KernelConfig, {"envs": envs, "space_envs": space_envs}),
         body=reconcile() >> nu.Race(kernel_loop(init), body),

@@ -1,7 +1,7 @@
 """A space in the browser, with nuverse and nothing else.
 
 Every Plane and snippet comes from nuverse, found through its entry point. The
-store is ``examples/space.db``, kept between runs.
+space is the directory ``examples/example.nuspace``, kept between runs.
 
 Run it::
 
@@ -24,7 +24,7 @@ import nuspace
 logging.getLogger("invisibles").setLevel(logging.CRITICAL)
 
 
-STORE = str(Path(__file__).parent / "space.db")
+STORE = str(Path(__file__).parent / "example.nuspace")
 
 
 if __name__ == "__main__":

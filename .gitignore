@@ -95,5 +95,6 @@ src/nuspace/web/ui/dist/*
 !src/nuspace/web/ui/dist/.gitkeep
 
 *.db/
+*.nuspace/
 # Local archive of the v0 prototype (reference only, never edited)
 _archive/

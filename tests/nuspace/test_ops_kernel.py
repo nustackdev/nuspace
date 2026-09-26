@@ -148,7 +148,7 @@ def test_run_attrs():
     )
 
 
-async def test_run_records_round_trip_through_rocksdb(disk):
+async def test_run_records_round_trip_through_sqlite(disk):
     """The codec path: env specs as nested lists, the live index, the active set."""
     p = await disk.run(ops.add_plane())
     c = await disk.run(ops.add_cell(p, "src"))

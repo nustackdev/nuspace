@@ -407,7 +407,7 @@ async def test_parent_of_an_unlinked_plane(store):
     assert await store.read(ops.parent("nope")) == ""
 
 
-async def test_structure_round_trips_through_rocksdb(disk):
+async def test_structure_round_trips_through_sqlite(disk):
     """The codec path: nested meta, a moved cell's props and nested state, order, the tree."""
     p = await disk.run(ops.add_plane(name="p", meta={"a": {"b": 1}}))
     q = await disk.run(ops.add_plane(name="q", parent=p))
