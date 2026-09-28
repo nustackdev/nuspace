@@ -16,7 +16,7 @@ from nu.lang import ScalarQuery
 from nuspace.shapes import Space
 from nustd.ui.core import Ref as UiRef
 
-from .kernel import stop_runs
+from .kernel import interrupt_cell
 from .read import cell_exists, plane_exists
 from .utils import MintId, atomic, binding, fresh, keep_order
 
@@ -84,8 +84,13 @@ class HasUi(ScalarQuery):
 
 
 def _write_prog(row: nu.Nu, prog: nu.StrArg, has_ui: nu.Nu) -> nu.Nu:
-    """Set a cell's prog and the ``has_ui`` it implies, together."""
-    return row.prog.set(prog) >> row.props.has_ui.set(has_ui)
+    """Set a cell's prog and the ``has_ui`` it implies, together, and count the write.
+
+    ``version`` goes up by one per write, from 1, so a cell run recording an
+    older one is running an older prog.
+    """
+    version = nu.If(row.version.exists(), nu.ToInt(row.version) + nu.Int(1), nu.Int(1))
+    return row.prog.set(prog) >> row.props.has_ui.set(has_ui) >> row.version.set(version)
 
 
 def _knowing_ui(
@@ -108,11 +113,6 @@ def _place(order: nu.ListRef, cell_id: nu.StrArg, index: nu.IntArg | None) -> nu
     """Put ``cell_id`` in ``order`` at ``index``, the end when None, once."""
     put = order.append(cell_id) if index is None else order.insert(index, cell_id)
     return nu.IfDo(nu.Not(order.contains(cell_id)), put)
-
-
-def _stop_cell(plane_id: nu.StrArg, cell_id: nu.StrArg) -> nu.Nu:
-    """Ask the cell's live runs to stop. No bracket."""
-    return stop_runs(lambda run: nu.And(nu.Eq(run.plane, plane_id), nu.Eq(run.cell, cell_id)))
 
 
 def add_cell(
@@ -176,12 +176,12 @@ def add_cell(
 
 
 def remove_cell(plane_id: nu.StrArg, cell_id: nu.StrArg) -> nu.Nu:
-    """Drop a cell: its live runs asked to stop, out of order, row deleted."""
+    """Drop a cell: its live cell runs interrupted, out of order, row deleted."""
     plane = Space.planes[plane_id]
     return atomic(
         nu.IfDo(
             cell_exists(plane_id, cell_id),
-            _stop_cell(plane_id, cell_id)
+            interrupt_cell(plane_id, cell_id)
             >> nu.IfDo(plane.order.contains(cell_id), plane.order.remove(cell_id))
             >> plane.cells.del_item(cell_id),
         )
@@ -195,9 +195,10 @@ def rename_cell(plane_id: nu.StrArg, cell_id: nu.StrArg, name: nu.StrArg) -> nu.
 
 
 def set_prog(plane_id: nu.StrArg, cell_id: nu.StrArg, prog: nu.StrArg) -> nu.Nu:
-    """Replace a cell's source, and its ``has_ui`` with it.
+    """Replace a cell's source, and its ``has_ui`` with it. Bumps its ``version``.
 
-    Nothing validates: a broken prog stores fine, and reads as not drawing.
+    Live cell runs keep running the prog they loaded: rerunning them is the
+    reload service's. Nothing validates: a broken prog stores fine, and reads as not drawing.
     """
     row = Space.planes[plane_id].cells[cell_id]
     return _knowing_ui(
@@ -236,7 +237,7 @@ def move_cell(
 ) -> nu.Nu:
     """Move a cell to another plane, keeping its id, prog, props, meta and state.
 
-    Its live runs are asked to stop: they were loaded against the old plane.
+    Its live cell runs are interrupted: they were loaded against the old plane.
     A no-op when either plane or the cell is missing, or the planes are the
     same (rearranging within a plane is :func:`reorder_cells`).
     """
@@ -248,7 +249,7 @@ def move_cell(
                 cell_exists(plane_id, cell_id),
                 plane_exists(to_plane_id),
             ),
-            _stop_cell(plane_id, cell_id)
+            interrupt_cell(plane_id, cell_id)
             >> dst.cells.set_item(cell_id, src.cells[cell_id].extract())
             >> _place(dst.order, cell_id, index)
             >> nu.IfDo(src.order.contains(cell_id), src.order.remove(cell_id))

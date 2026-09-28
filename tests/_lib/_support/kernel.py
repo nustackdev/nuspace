@@ -16,7 +16,7 @@ import nu
 import nustd.kv
 from nu.lang import ScalarQuery
 from nuspace import ops
-from nuspace.shapes import STATUS_DEAD, STATUS_UP, Space
+from nuspace.shapes import Space
 from nuspace.system.kernel import open_kernel
 
 
@@ -48,6 +48,15 @@ SET_42 = prog("return Tick.n.set(42)")
 RAISES = prog('raise ValueError("boom")')
 FOREVER = prog('print("built")', 'return nu.print("tick") >> nu.ForeverDo(nu.Delay(0.05))')
 READS_TAG = prog('return Tick.s.set(nu.StrAttrRef("test.tag"))')
+#: Holds its worker's loop, so it never hears an interrupt.
+BLOCKS = prog(
+    "from _support.actions import Block",
+    "return nu.Delay(0.2) >> nu.Let('x', Block(60), nu.Noop())",
+)
+#: Takes its own worker process down, a moment in.
+CRASHES = prog(
+    "from _support.actions import Crash", "return nu.Delay(0.3) >> nu.Let('x', Crash(3), nu.Noop())"
+)
 
 
 # --- The harness ------------------------------------------------------------------
@@ -99,18 +108,18 @@ class Kernel:
                 raise AssertionError(msg)
             await asyncio.sleep(0.05)
 
-    async def run_row(self, rid: str, pred: Callable[[dict], bool]) -> dict:
-        rows = await self.until(ops.runs(), lambda rs: pred(_by_id(rs, rid)))
-        return _by_id(rows, rid)
+    async def run_row(self, rid: str, pred: Callable[[dict], bool], timeout: float = 4.0) -> dict:
+        """The plane run, read by id until ``pred`` holds on it."""
+        return await self.until(ops.run(rid), pred, timeout)
 
     async def worker_row(
-        self, wid: str, pred: Callable[[dict], bool], timeout: float = 4.0
+        self, wid: str, pred: Callable[[dict], bool] | None = None, timeout: float = 4.0
     ) -> dict:
-        rows = await self.until(ops.workers(), lambda ws: pred(_by_id(ws, wid)), timeout)
-        return _by_id(rows, wid)
+        """A worker's record, live or ended. With ``pred``, read until it holds; by default until ended."""
+        return await self.until(worker(wid), pred or ended, timeout)
 
-    async def plane(self, *progs: str) -> tuple[str, list[str]]:
-        p = await self.run(ops.add_plane(ui=True))
+    async def plane(self, *progs: str, backend: str = "async") -> tuple[str, list[str]]:
+        p = await self.run(ops.add_plane(ui=True, backend=backend))
         return p, [await self.run(ops.add_cell(p, src)) for src in progs]
 
     async def close(self) -> None:
@@ -119,20 +128,59 @@ class Kernel:
             await asyncio.wait_for(self.task, 15)
 
 
-def _by_id(rows: list[dict], rid: str) -> dict:
-    return next((r for r in rows if r["id"] == rid), {})
+def ended(row: dict) -> bool:
+    """A run or cell run row that has ended."""
+    return row.get("terminated_at") is not None
 
 
-def _dead(row: dict) -> bool:
-    return row.get("status") == STATUS_DEAD
+def live(row: dict) -> bool:
+    """A run or cell run row that started and has not ended."""
+    return row.get("started_at") is not None and not ended(row)
 
 
-def _up(row: dict) -> bool:
-    return row.get("status") == STATUS_UP
+def cell_of(row: dict, cell: str) -> dict:
+    """The newest cell run of ``cell`` in a plane run row, ``{}`` when none."""
+    mine = [c for c in row.get("cells", []) if c["cell"] == cell]
+    return mine[-1] if mine else {}
 
 
-def _texts(row: dict, stream: str | None = None) -> list[str]:
+def only_cell(row: dict) -> dict:
+    """The one cell run of a plane run row."""
+    (cr,) = row["cells"]
+    return cr
+
+
+def texts(row: dict, stream: str | None = None) -> list[str]:
     return [text for _, s, text in row["out"] if stream is None or s == stream]
+
+
+def worker(wid: str) -> nu.Nu:
+    """One worker record as a dict, any worker, by id. Tests only read ended ones this way."""
+    row = Space.kernel.workers[wid]
+
+    def read(ref: nu.Nu, default: object) -> nu.Nu:
+        return nu.If(ref.exists(), ref, nu.Literal(default))
+
+    return nu.Dict.of(
+        id=wid,
+        backend=read(row.backend, ""),
+        run=read(row.run, ""),
+        handle=read(row.handle, ""),
+        started_at=read(row.started_at, None),
+        terminated_at=read(row.terminated_at, None),
+        exit=read(row.exit, ""),
+        error=read(row.error, ""),
+    )
+
+
+def history(plane: str | None = None) -> nu.Nu:
+    """Every plane run ever, oldest first, as :func:`nuspace.ops.run` rows. Test only: O(n)."""
+    item = "test.history"
+    rid = nu.StrAttrRef(item)
+    ids: nu.Nu = nu.list(Space.kernel.runs.keys())
+    if plane is not None:
+        ids = nu.Filter(ids, nu.Eq(Space.kernel.runs[rid].plane, plane), key=item)
+    return nu.Collect(nu.Map(ids, ops.run(rid), key=item))
 
 
 def workers_named(prefix: str) -> list:

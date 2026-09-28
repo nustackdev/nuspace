@@ -1,4 +1,4 @@
-"""The brackets a space is opened in: store, pool, spares.
+"""The brackets a space is opened in: store, pool, spares, backends.
 
 A space is a directory::
 
@@ -22,8 +22,9 @@ it. Everything here follows from that:
 
 :func:`worker_context` is the other side: what every worker comes up
 holding, pickled to the child and entered there. Nothing here writes, and
-nothing here knows about runs. :func:`open_kernel` stacks it all and runs
-the kernel beside a body.
+nothing here knows about runs. :func:`open_kernel` stacks it all, the
+backends on top of the pool and its spares, and runs the kernel beside a
+body.
 """
 
 from __future__ import annotations
@@ -39,6 +40,7 @@ import nustd.kv
 import nustd.mp_pool
 import nustd.valkey
 from nuspace.shapes import Space
+from nuspace.system.backends import provided
 from nustd.mp_pool.presets import spares as spares_shelf
 
 from .envs import KernelConfig
@@ -50,6 +52,7 @@ if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
 
     from nu.lang.runtime import Context
+    from nuspace.system.backends import Backend
 
     from .envs import EnvFactory
 
@@ -250,6 +253,7 @@ def open_kernel(
     spares: int = DEFAULT_SPARES,
     envs: Mapping[str, EnvFactory] | None = None,
     space_envs: Sequence[Sequence[str] | str] = (),
+    backends: Mapping[str, type[Backend]] | None = None,
     init: str | None = None,
     name: str = DEFAULT_NAME,
 ) -> nu.With:
@@ -258,8 +262,8 @@ def open_kernel(
     The brackets, in the order each needs the last (teardown runs the other
     way, so the fleet dies before the server it publishes through): the
     store (the notification server, then the navigator), a dict, the pool,
-    the shelf of spares, the kernel's config. Inside: reconcile first, so
-    leftovers are dead before ``body`` asks for anything, then the kernel and
+    the shelf of spares, the backends, the kernel's config. Inside: reconcile first, so
+    leftovers have ended before ``body`` asks for anything, then the kernel and
     ``body`` race. The space closes when ``body`` returns; a server's body
     never does.
 
@@ -269,7 +273,9 @@ def open_kernel(
         spares: Idle workers to keep up. Zero is every take cold.
         envs: Env factories by name, see :mod:`nuspace.system.kernel.envs`.
         space_envs: Env specs applied to every run, outermost.
-        init: A plane to bring up once reconciled, see :func:`~.kernel.kernel`.
+        backends: Backend classes by name, on top of the built in ``async``
+            and ``per_cell`` (see :mod:`nuspace.system.backends`).
+        init: A plane to run once reconciled, see :func:`~.kernel.kernel`.
         name: Process name prefix for workers.
     """
     root, owned = _owned(path)
@@ -278,6 +284,7 @@ def open_kernel(
         nu.Provide(dict, {}),
         worker_pool(root, name=name),
         spares_shelf(spares),
+        provided(backends),
         nu.Provide(KernelConfig, {"envs": envs, "space_envs": space_envs}),
         body=reconcile() >> nu.Race(kernel_loop(init), body),
     )

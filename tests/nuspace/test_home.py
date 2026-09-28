@@ -35,7 +35,7 @@ async def test_home_is_seeded_once_and_left_alone_after_edits(store):
     await store.run(home.ensure_home())
     (row,) = [r for r in await store.read(ops.plane_rows()) if r["id"] == home.PLANE]
     assert row["name"] == "Home"
-    assert row["props"] == {"system": True, "ui": True, "made_by": ""}
+    assert row["props"] == {"system": True, "ui": True, "made_by": "", "backend": "async"}
     assert row["meta"] == {"editable": True, "full_width": False, "icon": home.ICON}
     cells = await store.read(ops.cell_rows(home.PLANE))
     assert [(c["id"], c["name"], c["prog"]) for c in cells] == [
@@ -262,23 +262,18 @@ async def test_recent_shows_at_most_eight(store):
 
 
 def _seed_kernel() -> nu.Nu:
-    """One worker up and one dead, one live run, a run failed now and one failed long ago."""
+    """Two live runs, three live cell runs between them, one worker up, and history that counts for nothing."""
     k = Space.kernel
-    now = time.time()
     return atomic(
-        k.workers["w1"].status.set("up")
-        >> k.workers["w2"].status.set("dead")
-        >> k.runs["r1"].status.set("up")
-        >> k.live.set_item("r1", "w1")
-        >> k.runs["r2"].status.set("dead")
-        >> k.runs["r2"].exit.set("failed")
-        >> k.runs["r2"].ended.set(nu.Float(now - 60.0))
-        >> k.runs["r3"].status.set("dead")
+        k.runs["r1"].cells_running.add("c1")
+        >> k.runs["r1"].cells_running.add("c2")
+        >> k.runs["r2"].cells_running.add("c3")
+        >> k.running.add("r1")
+        >> k.running.add("r2")
         >> k.runs["r3"].exit.set("failed")
-        >> k.runs["r3"].ended.set(nu.Float(now - 7200.0))
-        >> k.runs["r4"].status.set("dead")
-        >> k.runs["r4"].exit.set("ok")
-        >> k.runs["r4"].ended.set(nu.Float(now - 10.0))
+        >> k.workers["w1"].run.set("r1")
+        >> k.workers_running.add("w1")
+        >> k.workers["w2"].exit.set("ok")
     )
 
 
@@ -296,7 +291,7 @@ async def test_glance_draws_plain_tiles(store):
         >> _seed_kernel()
     )
     got = await _frames(store, home.GLANCE)
-    assert _tiles(got) == {"planes": "2", "live": "1", "workers": "1", "failed": "1"}
+    assert _tiles(got) == {"planes": "2", "live": "2", "cells": "3", "workers": "1"}
     assert [got[("links", name)] for name in ("runs", "workers", "planes")] == [None] * 3
 
 

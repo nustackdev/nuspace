@@ -1,7 +1,12 @@
-"""Kernel records: workers, runs, and the index of what is live.
+"""Kernel records: plane runs, their cell runs, the workers they run on, and what is live.
 
-The kernel is their only writer. Services and the shell read them, and call
-ops to ask for changes (the ops write requests, the kernel reconciles).
+No status anywhere. A record logs intents (``*_requested``, written by ops)
+and effects (``started_at``, ``terminated_at``, ``exit``, ``error``, written
+by the kernel and the backends). Whether something is live is whether its id
+is in an index: ``running`` for plane runs, ``cells_running`` for a plane
+run's cell runs, ``workers_running`` for workers. Ending is a write of
+``terminated_at`` plus a delete from the index. Nothing moves, nothing is
+pruned, and nothing iterates ``runs`` or ``workers`` whole.
 """
 
 from __future__ import annotations
@@ -13,131 +18,117 @@ import nustd.kv
 __all__ = [
     "EXITS",
     "EXIT_FAILED",
+    "EXIT_INTERRUPTED",
     "EXIT_KILLED",
     "EXIT_OK",
-    "EXIT_STOPPED",
-    "KINDS",
-    "KIND_DOCKER",
-    "KIND_LOCAL",
-    "KIND_REMOTE",
-    "STATUSES",
-    "STATUS_DEAD",
-    "STATUS_STARTING",
-    "STATUS_STOPPING",
-    "STATUS_UP",
+    "CellRun",
     "Kernel",
     "Run",
     "Worker",
 ]
 
 
-#: Asked for, not running yet.
-STATUS_STARTING = "starting"
-
-#: Running.
-STATUS_UP = "up"
-
-#: Asked to stop. A run's body watches for this and exits on its own.
-STATUS_STOPPING = "stopping"
-
-#: Gone. Kept as history, never revived: a restart is a new run.
-STATUS_DEAD = "dead"
-
-#: A run's or a worker's lifecycle, in order. Only the kernel moves it.
-STATUSES = (STATUS_STARTING, STATUS_UP, STATUS_STOPPING, STATUS_DEAD)
-
-#: The program returned.
+#: It returned. For a plane run, no cell run of it failed. For a worker,
+#: its backend let it go once the plane run was over.
 EXIT_OK = "ok"
 
-#: The program raised, or its worker died under it.
+#: It raised, or its worker died under it. For a worker, it died by itself.
 EXIT_FAILED = "failed"
 
-#: Somebody asked, via ``down``.
-EXIT_STOPPED = "stopped"
+#: Somebody asked, via ``cell_interrupt`` or ``plane_interrupt``.
+EXIT_INTERRUPTED = "interrupted"
 
-#: Nobody asked the run: reconcile at open, or its worker was killed.
+#: Torn down: ``plane_kill``, or reconcile at open.
 EXIT_KILLED = "killed"
 
-#: How a run ended. Tells a crash from a request.
-EXITS = (EXIT_OK, EXIT_FAILED, EXIT_STOPPED, EXIT_KILLED)
-
-#: A python process from the pool on this machine.
-KIND_LOCAL = "local"
-
-#: Reserved.
-KIND_DOCKER = "docker"
-
-#: Reserved.
-KIND_REMOTE = "remote"
-
-#: How a worker is made. Only ``local`` exists for now.
-KINDS = (KIND_LOCAL, KIND_DOCKER, KIND_REMOTE)
+#: How a run or a worker ended. Tells a crash from a request.
+EXITS = (EXIT_OK, EXIT_FAILED, EXIT_INTERRUPTED, EXIT_KILLED)
 
 
-class Worker(nu.Shape):
-    """Where runs execute. Keyed by a minted id, not the pool's.
+class CellRun(nu.Shape):
+    """One execution of one cell, inside a plane run. Never mutated into another.
 
-    ``wid`` is the pool's own id for the process. Pool ids are process local
-    ints, so the store keys workers by an id the kernel mints and keeps the
-    pool's here.
+    A reload or a restart is a new cell run. ``version`` is the cell's
+    version when this run was asked for, so a newer prog is told apart
+    without reading source. ``by`` says who asked. ``worker`` is the id of
+    the :class:`Worker` its backend put it on.
 
-    ``error`` says why it died when nobody asked it to: a crash, or a kind
-    the kernel cannot make.
-
-    ``held`` keeps it out of idle GC (D9, D40): it lives until someone kills
-    it, or it crashes.
+    ``out`` is ``[ts, stream, text]`` entries, a capped ring written whole by
+    the run's own body.
     """
 
-    kind = nustd.kv.StrRef.slot()
-    held = nustd.kv.BoolRef.slot()
-    wid = nustd.kv.IntRef.slot()
-    status = nustd.kv.StrRef.slot()
-    error = nustd.kv.StrRef.slot()
-    started = nustd.kv.FloatRef.slot()
-    ended = nustd.kv.FloatRef.slot()
-
-
-class Run(nu.Shape):
-    """One execution of one cell, on one worker. Never mutated into another.
-
-    A restart or a prog edit is a new run, so a cell's history is its runs
-    by ``started``. ``worker`` is the store id of a :class:`Worker`. ``by``
-    says who asked, eg ``nav`` or ``init``.
-
-    ``envs`` is the env specs the run was built with, each ``[name, *args]``
-    naming a factory registered at open. Stored rather than the envs
-    themselves because a function cannot be stored, and so anyone can re-up
-    the cell the same way.
-
-    ``out`` is ``[ts, stream, text]`` entries, a capped ring. ``envs`` and
-    ``out`` are whole value lists: read back as plain python lists, and
-    rewritten whole, which is fine for a spec written once and a small ring.
-    """
-
-    plane = nustd.kv.StrRef.slot()
     cell = nustd.kv.StrRef.slot()
-    worker = nustd.kv.StrRef.slot()
+    version = nustd.kv.IntRef.slot()
     by = nustd.kv.StrRef.slot()
-    envs = nustd.kv.PrimitiveListRef.slot()
-    status = nustd.kv.StrRef.slot()
+    worker = nustd.kv.StrRef.slot()
+    started_at = nustd.kv.FloatRef.slot()
+    interrupt_requested = nustd.kv.BoolRef.slot()
+    terminated_at = nustd.kv.FloatRef.slot()
     exit = nustd.kv.StrRef.slot()
     error = nustd.kv.StrRef.slot()
-    started = nustd.kv.FloatRef.slot()
-    ended = nustd.kv.FloatRef.slot()
     out = nustd.kv.PrimitiveListRef.slot()
 
 
-class Kernel(nu.Shape):
-    """Everything the kernel records.
+class Run(nu.Shape):
+    """One execution of a plane: the thing started, stopped and killed.
 
-    ``live`` is ``run id -> worker id`` for every run not dead: what is
-    running, and what runs on a worker, without scanning history.
+    ``backend`` is the plane's backend when the run was asked for. ``envs``
+    is the env specs its cells run inside, each ``[name, *args]`` naming a
+    factory registered at open: stored rather than the envs themselves
+    because a function cannot be stored, and so anyone can run the plane
+    the same way again.
 
-    ``active`` is ``worker id -> True`` for every worker not dead, so the
-    kernel's worker fold iterates the living rather than the history.
+    ``cells`` is every cell run it ever had, ``cells_running`` the live ones.
+    ``latest`` maps each cell to its newest cell run, written with it, so a
+    cell's current run is a point read and never a walk of ``cells``, which
+    grows with every reload. The run ends once ``cells_running`` is empty,
+    or on kill, its exit read off ``latest``. ``workers`` is every worker
+    its backend ever gave it.
     """
 
-    workers = nustd.kv.ShapesDictRef.slot(Worker)
+    plane = nustd.kv.StrRef.slot()
+    backend = nustd.kv.StrRef.slot()
+    by = nustd.kv.StrRef.slot()
+    envs = nustd.kv.PrimitiveListRef.slot()
+    started_at = nustd.kv.FloatRef.slot()
+    termination_requested = nustd.kv.BoolRef.slot()
+    terminated_at = nustd.kv.FloatRef.slot()
+    exit = nustd.kv.StrRef.slot()
+    error = nustd.kv.StrRef.slot()
+    cells = nustd.kv.ShapesDictRef.slot(CellRun)
+    cells_running = nustd.kv.SetRef.slot(str)
+    latest = nustd.kv.DictRef.slot(str)
+    workers = nustd.kv.SetRef.slot(str)
+
+
+class Worker(nu.Shape):
+    """The executor unit a backend runs cells on: a process today, anything later.
+
+    Written by its backend only, read by everybody. ``run`` is the plane run
+    it belongs to. ``handle`` is the backend's own address for it, a str
+    only the backend reads (the pool's id, for the process backends).
+    ``exit`` is ``ok`` when its backend let it go, ``killed`` when the plane
+    run was killed, ``failed`` when it died by itself (``error`` says how).
+    """
+
+    backend = nustd.kv.StrRef.slot()
+    run = nustd.kv.StrRef.slot()
+    handle = nustd.kv.StrRef.slot()
+    started_at = nustd.kv.FloatRef.slot()
+    terminated_at = nustd.kv.FloatRef.slot()
+    exit = nustd.kv.StrRef.slot()
+    error = nustd.kv.StrRef.slot()
+
+
+class Kernel(nu.Shape):
+    """Everything the kernel and the backends record.
+
+    ``runs`` and ``workers`` are the source of truth, every one ever.
+    ``running`` and ``workers_running`` are the live ids, so what is live is
+    read in the time of what is live.
+    """
+
     runs = nustd.kv.ShapesDictRef.slot(Run)
-    live = nustd.kv.DictRef.slot(str)
-    active = nustd.kv.DictRef.slot(bool)
+    running = nustd.kv.SetRef.slot(str)
+    workers = nustd.kv.ShapesDictRef.slot(Worker)
+    workers_running = nustd.kv.SetRef.slot(str)

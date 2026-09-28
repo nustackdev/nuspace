@@ -20,7 +20,7 @@ from nuverse.snippets import program
 LIVE = [jobs, runs, workers, planes]
 CELLS = {
     "jobs": [("jobs", jobs.TABLE), ("new", jobs.NEW), ("job", jobs.DETAIL)],
-    "runs": [("counts", runs.COUNTS), ("live", runs.LIVE), ("finished", runs.FINISHED)],
+    "runs": [("counts", runs.COUNTS), ("live", runs.LIVE), ("cells", runs.CELLS)],
     "workers": [("counts", workers.COUNTS), ("workers", workers.TABLE)],
     "planes": [("made_by", planes.MADE_BY), ("planes", planes.TABLE)],
 }
@@ -48,34 +48,40 @@ class _Answering(_Recording):
 
 
 def _seed() -> nu.Nu:
-    """A worker up with one live run, one dead worker, and two finished runs."""
+    """One live plane run with two live cell runs on one worker, and an ended run and worker."""
     k = Space.kernel
+    live, gone = k.runs["r1"], k.runs["r2"]
     w1, w2 = k.workers["w1"], k.workers["w2"]
-    live, ok, bad = k.runs["r1"], k.runs["r2"], k.runs["r3"]
     return atomic(
-        w1.kind.set("local")
-        >> w1.status.set("up")
-        >> w1.held.set(True)
-        >> w1.started.set(nu.Float(100.0))
-        >> k.active.set_item("w1", nu.Bool(True))
-        >> w2.kind.set("local")
-        >> w2.status.set("dead")
+        ops.add_plane("p", name="P")
+        >> ops.add_cell("p", "x", cell_id="c", name="C")
         >> live.plane.set("p")
-        >> live.cell.set("c")
-        >> live.worker.set("w1")
+        >> live.backend.set("async")
         >> live.by.set("nav")
-        >> live.status.set("up")
-        >> live.started.set(nu.Float(100.0))
-        >> k.live.set_item("r1", "w1")
-        >> ok.plane.set("gone")
-        >> ok.status.set("dead")
-        >> ok.exit.set("ok")
-        >> ok.ended.set(nu.Float(50.0))
-        >> bad.plane.set("p")
-        >> bad.status.set("dead")
-        >> bad.exit.set("failed")
-        >> bad.error.set("x" * 200)
-        >> bad.ended.set(nu.Float(60.0))
+        >> live.started_at.set(nu.Float(100.0))
+        >> live.cells["x1"].cell.set("c")
+        >> live.cells["x1"].by.set("nav")
+        >> live.cells["x1"].version.set(1)
+        >> live.cells["x1"].worker.set("w1")
+        >> live.cells["x1"].started_at.set(nu.Float(100.0))
+        >> live.cells["x2"].cell.set("c")
+        >> live.cells["x2"].by.set("reload")
+        >> live.cells["x2"].version.set(2)
+        >> live.cells["x2"].worker.set("w1")
+        >> live.cells_running.add("x1")
+        >> live.cells_running.add("x2")
+        >> live.workers.add("w1")
+        >> k.running.add("r1")
+        >> w1.backend.set("async")
+        >> w1.run.set("r1")
+        >> w1.handle.set("7")
+        >> w1.started_at.set(nu.Float(100.0))
+        >> k.workers_running.add("w1")
+        >> gone.plane.set("p")
+        >> gone.exit.set("failed")
+        >> w2.backend.set("per_cell")
+        >> w2.run.set("r2")
+        >> w2.exit.set("failed")
     )
 
 
@@ -86,7 +92,7 @@ async def test_each_plane_is_created_drawn_with_its_cells(store, module):
     assert made == "p1"
     (row,) = [r for r in await store.read(ops.plane_rows()) if r["id"] == "p1"]
     assert row["name"] == "Live"
-    assert row["props"] == {"system": False, "ui": True, "made_by": spec.name}
+    assert row["props"] == {"system": False, "ui": True, "made_by": spec.name, "backend": "async"}
     assert row["meta"] == {"editable": True, "full_width": False, "icon": f"lucide:{spec.icon}"}
     cells = await store.read(ops.cell_rows("p1"))
     assert [(c["name"], c["prog"]) for c in cells] == CELLS[spec.name]
@@ -133,37 +139,35 @@ async def test_runs_draws_counts_and_tables(store):
     await store.run(_seed())
     counts = await _frames(store, runs.COUNTS)
     assert {name: counts[name]["value"] for name in counts} == {
-        "live": "1",
-        "ok": "1",
-        "failed": "1",
-        "killed": "0",
+        "runs": "1",
+        "cells": "2",
+        "workers": "1",
     }
     (live,) = (await _frames(store, runs.LIVE)).values()
-    assert live["columns"] == ["Plane", "Cell", "Worker", "By", "Status", "Age"]
-    ((plane, cell, worker, by, status, age),) = live["rows"]
-    assert (plane, cell, worker, by, status) == ("p", "c", "w1", "nav", "up")
+    assert live["columns"] == ["Plane", "Backend", "By", "Cells", "Workers", "Age"]
+    ((plane, backend, by, cells, workers_, age),) = live["rows"]
+    assert (plane, backend, by, cells, workers_) == ("P", "async", "nav", 2, 1)
     assert age.endswith("s")
-    (done,) = (await _frames(store, runs.FINISHED)).values()
-    assert [(r[0], r[2], len(r[3])) for r in done["rows"]] == [
-        ("p", "failed", 80),
-        ("gone", "ok", 0),
+    (table,) = (await _frames(store, runs.CELLS)).values()
+    assert table["columns"] == ["Plane", "Cell", "By", "Version", "Worker", "Age"]
+    assert [r[:5] for r in table["rows"]] == [
+        ["P", "C", "nav", 1, "w1"],
+        ["P", "C", "reload", 2, "w1"],
     ]
+    assert table["rows"][1][5] == "starting"
 
 
 async def test_workers_draws_counts_and_a_table(store):
     await store.run(_seed())
     counts = await _frames(store, workers.COUNTS)
     assert {name: counts[name]["value"] for name in counts} == {
-        "starting": "0",
         "up": "1",
-        "stopping": "0",
-        "dead": "1",
+        "async": "1",
+        "per_cell": "0",
     }
     (table,) = (await _frames(store, workers.TABLE)).values()
-    assert [r[:5] for r in table["rows"]] == [
-        ["w2", "local", "dead", "no", 0],
-        ["w1", "local", "up", "yes", 1],
-    ]
+    assert table["columns"] == ["ID", "Backend", "Plane", "Run", "Cells", "Age"]
+    assert [r[:5] for r in table["rows"]] == [["w1", "async", "P", "r1", 2]]
 
 
 async def test_planes_draws_makers_and_every_plane(store):
@@ -214,7 +218,7 @@ async def test_creating_a_job_makes_a_headless_plane_with_a_main_cell(store):
     job = await _job(store)
     (row,) = [r for r in await store.read(ops.plane_rows()) if r["id"] == job]
     assert row["name"] == "Nightly"
-    assert row["props"] == {"system": False, "ui": False, "made_by": "jobs"}
+    assert row["props"] == {"system": False, "ui": False, "made_by": "jobs", "backend": "async"}
     assert row["parent"] == "jp"
     assert await store.read(ops.cell_rows(job)) == [
         {
@@ -231,7 +235,7 @@ async def test_the_jobs_table_lists_jobs_only_and_selects_on_click(store):
     job = await _job(store)
     other = await _job(store, "Hourly")
     await store.run(ops.add_plane("s", name="S", system=True) >> init.boot(job))
-    await store.run(supervisor.supervise(job, "main", supervisor.ALWAYS, delay=5.0))
+    await store.run(supervisor.supervise(job, supervisor.ALWAYS, delay=5.0))
     (table,) = (await _frames(store, jobs.TABLE)).values()
     assert table["rows"] == [
         ["Nightly", job, "yes", "always, 5s", "no"],
@@ -251,33 +255,31 @@ async def _restart(store, job: str, policy: str, delay: float) -> None:
 
 async def test_boot_and_restart_settings_round_trip(store):
     job = await _job(store)
-    await store.run(ops.add_cell(job, program.SOURCE, cell_id="more"))
     await store.run(init.boot(job))
     await _restart(store, job, supervisor.ALWAYS, 2.5)
-    for cell in ("main", "more"):
-        assert await store.read(supervisor.policy_of(job, cell)) == supervisor.ALWAYS
-        assert await store.read(supervisor.delay_of(job, cell)) == 2.5
+    assert await store.read(supervisor.policy_of(job)) == supervisor.ALWAYS
+    assert await store.read(supervisor.delay_of(job)) == 2.5
     session = _Recording()
     draw = _as("job", _cell(jobs.DETAIL)["draw"](nu.Str(job)))
     await nu.arun(draw, store.ctx.bind(Session, session))
     shown = {frame.ref[-1]: frame.payload for frame in session.frames}
     assert (shown["boot"], shown["choice"], shown["delay"]) == (True, "always", 2.5)
     assert shown["editor"] == program.SOURCE
-    # No delay backs off, and off takes every cell off the supervisor.
+    # No delay backs off, and off takes the job off the supervisor.
     await _restart(store, job, supervisor.ON_FAILURE, 0.0)
-    assert await store.read(supervisor.policy_of(job, "more")) == supervisor.ON_FAILURE
-    assert await store.read(supervisor.delay_of(job, "more")) == -1.0
+    assert await store.read(supervisor.policy_of(job)) == supervisor.ON_FAILURE
+    assert await store.read(supervisor.delay_of(job)) == -1.0
     await _restart(store, job, "off", 3.0)
-    assert await store.read(supervisor.policy_of(job, "main")) == ""
-    assert await store.read(supervisor.delay_of(job, "main")) == -1.0
+    assert await store.read(supervisor.policy_of(job)) == ""
+    assert await store.read(supervisor.delay_of(job)) == -1.0
 
 
 async def test_deleting_a_job_cleans_boot_and_supervision(store):
     job = await _job(store)
-    await store.run(init.boot(job) >> supervisor.supervise(job, "main", supervisor.ALWAYS, 1.0))
+    await store.run(init.boot(job) >> supervisor.supervise(job, supervisor.ALWAYS, 1.0))
     await store.run(_as("job", _cell(jobs.DETAIL)["remove"](nu.Str(job))))
     assert job not in await store.read(ops.planes())
     assert job not in await store.read(init.booted())
-    assert await store.read(supervisor.policy_of(job, "main")) == ""
-    assert await store.read(supervisor.delay_of(job, "main")) == -1.0
+    assert await store.read(supervisor.policy_of(job)) == ""
+    assert await store.read(supervisor.delay_of(job)) == -1.0
     assert await store.read(SELECTED) == ""

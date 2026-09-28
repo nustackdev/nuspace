@@ -14,22 +14,24 @@ import time
 
 import pytest
 import pytest_asyncio
-from _support.kernel import SET_42, Kernel, _dead, _up, opened, prog, workers_named
+from _support.kernel import (
+    RAISES,
+    SET_42,
+    Kernel,
+    cell_of,
+    ended,
+    history,
+    live,
+    opened,
+    prog,
+    workers_named,
+)
 
 import nu
 from nuspace import ops
 from nuspace.ops.utils import atomic
-from nuspace.shapes import (
-    EXIT_FAILED,
-    EXIT_KILLED,
-    EXIT_OK,
-    EXIT_STOPPED,
-    STATUS_DEAD,
-    STATUS_UP,
-    Space,
-    reroot,
-)
-from nuspace.system.kernel import Env, store
+from nuspace.shapes import EXIT_FAILED, EXIT_INTERRUPTED, EXIT_OK, Space, reroot
+from nuspace.system.kernel import INIT_BY, Env, store
 from nuspace.system.services import (
     ALWAYS,
     BOOTED,
@@ -43,6 +45,7 @@ from nuspace.system.services import (
     unsupervise,
 )
 from nuspace.system.services import nav as nav_service
+from nuspace.system.services import reload as reload_service
 from nuspace.system.services import supervisor as supervisor_service
 
 
@@ -57,7 +60,8 @@ NAME = "nuspace-services"
 READS_SESSION = prog(
     'return Tick.s.set(nu.StrAttrRef("test.session")) >> nu.ForeverDo(nu.Delay(0.05))'
 )
-RAISES = prog('raise ValueError("boom")')
+#: Fails, but only after long enough for the supervisor to have seen it live.
+FAILS_LATE = prog('return nu.Delay(0.6) >> nu.Raise(nu.Str("boom"))')
 
 
 def version(v: str) -> str:
@@ -81,7 +85,12 @@ async def test_bootstrap_makes_the_services_and_is_idempotent(store):
     rows = {r["id"]: r for r in await store.read(ops.plane_rows())}
     assert set(rows) == {plane for plane, _ in SERVICES}
     for plane, shim in SERVICES:
-        assert rows[plane]["props"] == {"system": True, "ui": False, "made_by": ""}
+        assert rows[plane]["props"] == {
+            "system": True,
+            "ui": False,
+            "made_by": "",
+            "backend": "async",
+        }
         assert rows[plane]["meta"] == {}
         assert await store.read(ops.cell_rows(plane)) == [
             {
@@ -108,23 +117,28 @@ async def test_boot_and_unboot_are_idempotent(store):
     assert await store.read(boot_list()) == [*BOOTED, "b"]
 
 
-async def test_supervise_writes_the_policy(store):
-    await store.run(supervise("p", "c") >> supervise("p", "d", ALWAYS) >> unsupervise("p", "c"))
-    policy = reroot(supervisor_service.Policy.cells, supervisor_service.PLANE, "main")
-    assert await store.read(policy.extract()) == {"p/d": "always"}
+async def test_supervise_writes_the_policy_per_plane(store):
+    await store.run(supervise("p") >> supervise("q", ALWAYS) >> unsupervise("p"))
+    planes = reroot(supervisor_service.Policy.planes, supervisor_service.PLANE, "main")
+    assert await store.read(planes.extract()) == {"q": "always"}
+    assert await store.read(supervisor_service.policy_of("q")) == ALWAYS
+    assert await store.read(supervisor_service.policy_of("p")) == ""
+    assert await store.read(supervisor_service.run_of("q")) == ""
+    # Nothing to stop: unsupervising a plane never supervised is a no-op.
+    await store.run(unsupervise("ghost"))
 
 
 async def test_supervise_sets_and_clears_a_fixed_delay(store):
     delays = reroot(supervisor_service.Policy.delays, supervisor_service.PLANE, "main")
-    await store.run(supervise("p", "c", ALWAYS, delay=2) >> supervise("p", "d", delay=0.5))
-    assert await store.read(delays.extract()) == {"p/c": 2.0, "p/d": 0.5}
-    assert await store.read(supervisor_service.delay_of("p", "c")) == 2.0
-    assert await store.read(supervisor_service.policy_of("p", "c")) == ALWAYS
+    await store.run(supervise("p", ALWAYS, delay=2) >> supervise("q", delay=0.5))
+    assert await store.read(delays.extract()) == {"p": 2.0, "q": 0.5}
+    assert await store.read(supervisor_service.delay_of("p")) == 2.0
+    assert await store.read(supervisor_service.policy_of("p")) == ALWAYS
     # Supervised again with no delay backs off, unsupervised drops both.
-    await store.run(supervise("p", "c", ALWAYS) >> unsupervise("p", "d"))
+    await store.run(supervise("p", ALWAYS) >> unsupervise("q"))
     assert await store.read(delays.extract()) == {}
-    assert await store.read(supervisor_service.delay_of("p", "c")) == -1.0
-    assert await store.read(supervisor_service.policy_of("p", "d")) == ""
+    assert await store.read(supervisor_service.delay_of("p")) == -1.0
+    assert await store.read(supervisor_service.policy_of("q")) == ""
 
 
 async def test_unboot_without_a_list(store):
@@ -154,80 +168,102 @@ async def space(tmp_path_factory):
 SLOW = 20.0
 
 
-async def runs_of(space: Kernel, plane: str, pred, timeout: float = 4.0) -> list[dict]:
-    return await space.until(ops.runs(plane=plane), pred, timeout)
+async def runs_of(space: Kernel, plane: str, pred, timeout: float = SLOW) -> list[dict]:
+    """Every plane run of a plane ever, read until ``pred`` holds on them. Test only: O(n)."""
+    return await space.until(history(plane), pred, timeout)
+
+
+def only(rows: list[dict]) -> dict:
+    (row,) = rows
+    return row
+
+
+def first_cell(row: dict) -> dict:
+    return row["cells"][0] if row.get("cells") else {}
+
+
+async def open_tab(space: Kernel, sid: str, *routes: str) -> None:
+    conn = Space.connections[sid]
+    await space.run(atomic(conn.routes.set(list(routes)) >> conn.opened.set(time.time())))
+
+
+async def close_tab(space: Kernel, sid: str) -> None:
+    await space.run(atomic(Space.connections.del_item(sid)))
+
+
+async def pane(space: Kernel, sid: str, plane: str) -> dict:
+    """The live run nav made for a tab's pane, once its first cell run is live."""
+    rid = await space.until(nav_service.pane_run(sid, plane), bool, SLOW)
+    return await space.run_row(rid, lambda r: live(first_cell(r)), SLOW)
 
 
 @module_loop
 async def test_init_brings_up_its_boot_list(space):
     for plane in BOOTED:
-        rows = await runs_of(space, plane, lambda rs: any(_up(r) for r in rs))
-        assert [r["by"] for r in rows] == [init.BY]
-    (row,) = await runs_of(space, BOOTED_PLANE, lambda rs: rs and _dead(rs[0]))
+        row = only(await runs_of(space, plane, lambda rs: rs and live(first_cell(rs[0]))))
+        assert row["by"] == init.BY
+    row = only(await runs_of(space, BOOTED_PLANE, lambda rs: rs and ended(rs[0])))
     assert (row["by"], row["exit"]) == (init.BY, EXIT_OK)
     assert await space.read(Space.planes[BOOTED_PLANE].cells["c"].state["n"]) == 42
-    (kernel_run,) = await space.read(ops.runs(plane=init.PLANE))
-    assert _up(kernel_run)
-    services = {
-        r["worker"] for p in (init.PLANE, *BOOTED) for r in await space.read(ops.runs(plane=p))
+    kernel_run = only(await space.read(ops.runs(plane=init.PLANE)))
+    assert kernel_run["by"] == INIT_BY
+    workers = {
+        w for p in (init.PLANE, *BOOTED) for w in only(await space.read(history(p)))["workers"]
     }
-    assert len(services) == 4
+    assert len(workers) == 4
 
 
 @module_loop
-async def test_nav_runs_each_open_plane_on_its_own_worker(space):
+async def test_nav_runs_each_open_plane_in_its_own_run(space):
     a, _ = await space.plane(READS_SESSION)
     b, _ = await space.plane(READS_SESSION)
     sid = "conn-1"
-    routes = Space.connections[sid].routes
-    await space.run(atomic(routes.set([a, b]) >> Space.connections[sid].opened.set(time.time())))
-    (ra,) = await runs_of(space, a, lambda rs: rs and _up(rs[0]))
-    (rb,) = await runs_of(space, b, lambda rs: rs and _up(rs[0]))
+    await open_tab(space, sid, a, b)
+    ra, rb = await pane(space, sid, a), await pane(space, sid, b)
     assert (ra["by"], ra["envs"]) == (nav_service.BY, [["session", sid]])
     assert (rb["by"], rb["envs"]) == (nav_service.BY, [["session", sid]])
-    assert ra["worker"] != rb["worker"]
+    assert ra["workers"] != rb["workers"]
     await space.until(Space.planes[a].cells.extract(), lambda cs: _state(cs) == [sid])
 
-    # Closing a kills only its worker: b keeps its run.
-    await space.run(atomic(routes.set([b])))
-    assert (await space.worker_row(ra["worker"], _dead))["status"] == STATUS_DEAD
-    assert (await space.run_row(ra["id"], _dead))["exit"] == EXIT_KILLED
-    assert _up(await space.run_row(rb["id"], _up))
-    assert (await space.worker_row(rb["worker"], lambda w: True))["status"] == STATUS_UP
+    # Closing a stops only its run: b keeps going.
+    await open_tab(space, sid, b)
+    row = await space.run_row(ra["id"], ended, SLOW)
+    assert row["exit"] == EXIT_INTERRUPTED
+    await space.until(nav_service.pane_run(sid, a), lambda x: x == "")
+    assert not ended(await space.read(ops.run(rb["id"])))
 
-    await space.run(atomic(Space.connections.del_item(sid)))
-    await space.worker_row(rb["worker"], _dead)
-    assert (await space.run_row(rb["id"], _dead))["exit"] == EXIT_KILLED
+    await close_tab(space, sid)
+    assert (await space.run_row(rb["id"], ended, SLOW))["exit"] == EXIT_INTERRUPTED
+    await space.until(nav_service.pane_run(sid, b), lambda x: x == "")
 
 
 @module_loop
-async def test_nav_kills_every_open_planes_worker_when_the_connection_goes(space):
+async def test_nav_stops_every_open_planes_run_when_the_connection_goes(space):
     a, _ = await space.plane(READS_SESSION)
-    b, _ = await space.plane(READS_SESSION)
+    b, _ = await space.plane(READS_SESSION, backend="per_cell")
     sid = "conn-both"
-    await space.run(atomic(Space.connections[sid].routes.set([a, b])))
-    (ra,) = await runs_of(space, a, lambda rs: rs and _up(rs[0]))
-    (rb,) = await runs_of(space, b, lambda rs: rs and _up(rs[0]))
-    assert ra["worker"] != rb["worker"]
-
-    await space.run(atomic(Space.connections.del_item(sid)))
+    await open_tab(space, sid, a, b)
+    ra, rb = await pane(space, sid, a), await pane(space, sid, b)
+    assert rb["backend"] == "per_cell"
+    await close_tab(space, sid)
     for r in (ra, rb):
-        await space.worker_row(r["worker"], _dead)
-        assert (await space.run_row(r["id"], _dead))["exit"] == EXIT_KILLED
+        row = await space.run_row(r["id"], ended, SLOW)
+        assert row["exit"] == EXIT_INTERRUPTED
+        for w in row["workers"]:
+            assert (await space.worker_row(w, timeout=SLOW))["exit"] == EXIT_OK
 
 
 @module_loop
 async def test_nav_skips_missing_and_system_planes(space):
     sid = "conn-2"
-    await space.run(atomic(Space.connections[sid].routes.set(["reload"])))
-    await space.run(atomic(Space.connections[sid].routes.set(["ghost"])))
+    await open_tab(space, sid, "reload")
+    await open_tab(space, sid, "ghost")
     p, _ = await space.plane(READS_SESSION)
-    await space.run(atomic(Space.connections[sid].routes.set([p])))
-    await runs_of(space, p, lambda rs: rs and _up(rs[0]))
-    reloads = await space.read(ops.runs(plane="reload"))
-    assert [r["by"] for r in reloads] == [init.BY]
-    await space.run(atomic(Space.connections.del_item(sid)))
-    await runs_of(space, p, lambda rs: _dead(rs[0]))
+    await open_tab(space, sid, p)
+    await pane(space, sid, p)
+    assert [r["by"] for r in await space.read(history("reload"))] == [init.BY]
+    await close_tab(space, sid)
+    await runs_of(space, p, lambda rs: ended(rs[0]))
 
 
 @module_loop
@@ -236,180 +272,202 @@ async def test_nav_brings_up_a_system_ui_plane_and_never_a_service(space):
     sid = "conn-system-ui"
     p = await space.run(ops.add_plane(system=True, ui=True))
     await space.run(ops.add_cell(p, READS_SESSION))
-    await space.run(atomic(Space.connections[sid].routes.set(["reload", p])))
-    await runs_of(space, p, lambda rs: rs and _up(rs[0]))
-    reloads = await space.read(ops.runs(plane="reload"))
-    assert [r["by"] for r in reloads] == [init.BY]
-    await space.run(atomic(Space.connections.del_item(sid)))
-    await runs_of(space, p, lambda rs: _dead(rs[0]))
+    await open_tab(space, sid, "reload", p)
+    await pane(space, sid, p)
+    assert [r["by"] for r in await space.read(history("reload"))] == [init.BY]
+    await close_tab(space, sid)
+    await runs_of(space, p, lambda rs: ended(rs[0]))
 
 
 @module_loop
 async def test_nav_waits_for_a_routed_plane_not_written_yet(space):
     """A new plane is selected before its create lands: nav waits, not gives up."""
     sid = "conn-early"
-    await space.run(atomic(Space.connections[sid].routes.set(["early"])))
+    await open_tab(space, sid, "early")
     # Past a tick, so nav has seen the routes and found no plane behind it.
     await asyncio.sleep(1.5)
     await space.run(ops.add_plane("early", ui=True))
     await space.run(ops.add_cell("early", READS_SESSION))
-    await runs_of(space, "early", lambda rs: rs and _up(rs[0]))
-    await space.run(atomic(Space.connections.del_item(sid)))
-    await runs_of(space, "early", lambda rs: _dead(rs[0]))
+    await pane(space, sid, "early")
+    await close_tab(space, sid)
+    await runs_of(space, "early", lambda rs: all(ended(r) for r in rs))
 
 
 @module_loop
 async def test_nav_follows_the_open_planes_cells(space):
-    p, _ = await space.plane(READS_SESSION)
+    p, (c1,) = await space.plane(READS_SESSION)
     sid = "conn-3"
-    await space.run(atomic(Space.connections[sid].routes.set([p])))
-    (r1,) = await runs_of(space, p, lambda rs: rs and _up(rs[0]))
+    await open_tab(space, sid, p)
+    r = (await pane(space, sid, p))["id"]
 
     c2 = await space.run(ops.add_cell(p, READS_SESSION))
-    (r2,) = await space.until(ops.runs(plane=p, cell=c2), lambda rs: rs and _up(rs[0]), SLOW)
-    assert (r2["worker"], r2["by"], r2["envs"]) == (
-        r1["worker"],
-        nav_service.BY,
-        [["session", sid]],
-    )
+    row = await space.run_row(r, lambda x: live(cell_of(x, c2)), SLOW)
+    new = cell_of(row, c2)
+    assert new["by"] == nav_service.BY
+    assert new["worker"] == cell_of(row, c1)["worker"]
 
     await space.run(ops.remove_cell(p, c2))
-    assert (await space.run_row(r2["id"], _dead))["exit"] == EXIT_STOPPED
-    assert _up(await space.run_row(r1["id"], _up))
+    row = await space.run_row(r, lambda x: ended(cell_of(x, c2)), SLOW)
+    assert cell_of(row, c2)["exit"] == EXIT_INTERRUPTED
+    assert live(cell_of(row, c1))
+    assert not ended(row)
 
-    await space.run(atomic(Space.connections.del_item(sid)))
-    assert (await space.run_row(r1["id"], _dead))["exit"] == EXIT_KILLED
+    await close_tab(space, sid)
+    assert (await space.run_row(r, ended, SLOW))["exit"] == EXIT_INTERRUPTED
 
 
 @module_loop
-async def test_nav_keeps_its_worker_once_an_emptied_plane_gets_a_cell(space):
-    p, (c1,) = await space.plane(READS_SESSION)
+async def test_nav_runs_the_plane_again_once_its_run_ended_and_a_cell_changed(space):
+    p, (c,) = await space.plane(SET_42)
     sid = "conn-4"
-    await space.run(atomic(Space.connections[sid].routes.set([p])))
-    (r1,) = await runs_of(space, p, lambda rs: rs and _up(rs[0]))
-
-    # The last cell gone, its worker had a run and has none: held, idle GC skips it.
-    await space.run(ops.remove_cell(p, c1))
-    await space.run_row(r1["id"], _dead)
-
-    c2 = await space.run(ops.add_cell(p, READS_SESSION))
-    (r2,) = await space.until(ops.runs(plane=p, cell=c2), lambda rs: rs and _up(rs[0]), SLOW)
-    assert r2["worker"] == r1["worker"]
-
-    await space.run(atomic(Space.connections.del_item(sid)))
-    assert (await space.run_row(r2["id"], _dead))["exit"] == EXIT_KILLED
-
-
-@module_loop
-async def test_nav_runs_a_cell_that_replaces_the_last_one(space):
-    p, (c1,) = await space.plane(READS_SESSION)
-    sid = "conn-5"
-    await space.run(atomic(Space.connections[sid].routes.set([p])))
-    (r1,) = await runs_of(space, p, lambda rs: rs and _up(rs[0]))
-
-    # Added right after the removal: its first run may land on the worker
-    # idle GC is taking (or beat GC to it), and either way it comes up.
-    await space.run(ops.remove_cell(p, c1))
-    c2 = await space.run(ops.add_cell(p, READS_SESSION))
-    rows = await space.until(ops.runs(plane=p, cell=c2), lambda rs: any(_up(r) for r in rs), SLOW)
-    (r2,) = [r for r in rows if _up(r)]
-    assert r2["by"] == nav_service.BY
-    assert r1["id"] not in [r["id"] for r in rows]
-
-    await space.run(atomic(Space.connections.del_item(sid)))
-    assert (await space.run_row(r2["id"], _dead))["exit"] == EXIT_KILLED
+    await open_tab(space, sid, p)
+    first = await space.until(nav_service.pane_run(sid, p), bool, SLOW)
+    assert (await space.run_row(first, ended, SLOW))["exit"] == EXIT_OK
+    await space.run(ops.set_prog(p, c, prog("return Tick.n.set(7)")))
+    again = await space.until(nav_service.pane_run(sid, p), lambda x: x not in ("", first), SLOW)
+    assert (await space.run_row(again, ended, SLOW))["exit"] == EXIT_OK
+    assert await space.read(Space.planes[p].cells[c].state["n"]) == 7
+    await close_tab(space, sid)
 
 
 def _state(cells: dict) -> list:
     return [c.get("state", {}).get("s") for c in cells.values()]
 
 
+async def supervised(space: Kernel, plane: str, pred, timeout: float = SLOW) -> list[dict]:
+    """The plane's runs by the supervisor, oldest first, read until ``pred`` holds on them."""
+
+    def mine(rows: list[dict]) -> list[dict]:
+        return [r for r in rows if r["by"] == supervisor_service.BY]
+
+    return mine(await space.until(history(plane), lambda rs: pred(mine(rs)), timeout))
+
+
+def gaps(rows: list[dict]) -> list[float]:
+    """The waits between one run ending and the next starting."""
+    return [rows[i + 1]["started_at"] - rows[i]["terminated_at"] for i in range(len(rows) - 1)]
+
+
 @module_loop
-async def test_supervisor_restarts_with_backoff_until_unsupervised(space):
-    p, (c,) = await space.plane(RAISES)
-    await space.run(supervise(p, c, ON_FAILURE))
-    w = await space.run(ops.worker())
-    await space.run(ops.up(p, [c], worker=w, by="test"))
-    rows = await runs_of(space, p, lambda rs: len(rs) >= 3 and all(_dead(r) for r in rs))
-    await space.run(unsupervise(p, c))
-    assert [r["by"] for r in rows[:3]] == ["test", supervisor_service.BY, supervisor_service.BY]
-    assert all(r["exit"] == EXIT_FAILED for r in rows)
-    first, second = (rows[i + 1]["started"] - rows[i]["ended"] for i in range(2))
+async def test_supervisor_restarts_a_failed_plane_with_backoff_until_unsupervised(space):
+    p, _ = await space.plane(FAILS_LATE)
+    await space.run(supervise(p, ON_FAILURE))
+    rows = await supervised(space, p, lambda rs: len(rs) >= 3 and all(ended(r) for r in rs[:3]))
+    await space.run(unsupervise(p))
+    assert all(r["exit"] == EXIT_FAILED for r in rows[:3])
+    assert all(first_cell(r)["by"] == supervisor_service.BY for r in rows[:3])
+    first, second = gaps(rows[:3])
     assert first >= 0.25
     assert second >= 0.5
     assert second > first
-    # The next wait would be a second: nothing comes after it once unsupervised.
+    # Unsupervised: its run stopped, nothing after it.
+    await runs_of(space, p, lambda rs: all(ended(r) for r in rs))
+    count = len(await space.read(history(p)))
     await asyncio.sleep(1.3)
-    assert len(await space.read(ops.runs(plane=p))) == len(rows)
-
-
-@module_loop
-async def test_supervisor_always_restarts_on_a_worker_still_serving(space):
-    p, (_, c) = await space.plane(version("keep"), SET_42)
-    await space.run(supervise(p, c, ALWAYS))
-    w = await space.run(ops.worker())
-    await space.run(ops.up_plane(p, worker=w, by="test"))
-    # Deadlines, not delays: each wait returns once its condition holds. They
-    # are long because a loaded machine stretches backoff and a worker's stop.
-    rows = await space.until(ops.runs(plane=p, cell=c), lambda rs: len(rs) >= 3, SLOW)
-    await space.run(unsupervise(p, c))
-    assert [r["by"] for r in rows[:3]] == ["test", supervisor_service.BY, supervisor_service.BY]
-    assert {r["worker"] for r in rows} == {w}
-    assert all(r["exit"] == EXIT_OK for r in rows[:2])
-    await space.run(ops.kill_worker(w))
-    await space.worker_row(w, _dead, SLOW)
+    assert len(await space.read(history(p))) == count
+    assert await space.read(supervisor_service.run_of(p)) == ""
 
 
 @module_loop
 async def test_supervisor_always_with_a_delay_is_periodic(space):
     delay = 0.6
-    p, (c,) = await space.plane(SET_42)
-    await space.run(supervise(p, c, ALWAYS, delay=delay))
-    w = await space.run(ops.worker())
-    await space.run(ops.up(p, [c], worker=w, by="test"))
-    rows = await space.until(
-        ops.runs(plane=p), lambda rs: len(rs) >= 3 and all(_dead(r) for r in rs[:3]), SLOW
-    )
-    await space.run(unsupervise(p, c))
-    assert [r["by"] for r in rows[:3]] == ["test", supervisor_service.BY, supervisor_service.BY]
+    p, _ = await space.plane(prog("return nu.Delay(0.5) >> Tick.n.set(42)"))
+    await space.run(supervise(p, ALWAYS, delay=delay))
+    rows = await supervised(space, p, lambda rs: len(rs) >= 3 and all(ended(r) for r in rs[:3]))
+    await space.run(unsupervise(p))
     assert all(r["exit"] == EXIT_OK for r in rows[:3])
     # The fixed wait every time, where the backoff would be 0.25s after an ok exit.
-    gaps = [rows[i + 1]["started"] - rows[i]["ended"] for i in range(2)]
-    assert all(delay <= gap < delay + 2.0 for gap in gaps), gaps
+    assert all(delay <= gap < delay + 2.0 for gap in gaps(rows[:3])), gaps(rows[:3])
 
 
 @module_loop
-async def test_supervisor_leaves_a_stopped_run_alone(space):
-    p, (c,) = await space.plane(version("x"))
-    await space.run(supervise(p, c, ALWAYS))
-    w = await space.run(ops.worker())
-    (r,) = await space.run(ops.up(p, [c], worker=w, by="test"))
-    await space.run_row(r, _up)
-    await space.run(ops.down([r]))
-    assert (await space.run_row(r, _dead))["exit"] == EXIT_STOPPED
-    await asyncio.sleep(0.6)
-    assert [x["id"] for x in await space.read(ops.runs(plane=p))] == [r]
-    await space.run(unsupervise(p, c))
+async def test_supervisor_on_failure_leaves_an_ok_plane_down_until_supervised_again(space):
+    p, _ = await space.plane(SET_42)
+    await space.run(supervise(p, ON_FAILURE))
+    (row,) = await supervised(space, p, lambda rs: len(rs) == 1 and ended(rs[0]))
+    assert row["exit"] == EXIT_OK
+    await asyncio.sleep(0.8)
+    assert [r["id"] for r in await space.read(history(p))] == [row["id"]]
+    # Always restarts after ok: supervising it again brings it up, and again.
+    await space.run(supervise(p, ALWAYS))
+    rows = await supervised(space, p, lambda rs: len(rs) >= 3)
+    await space.run(unsupervise(p))
+    assert all(r["exit"] == EXIT_OK for r in rows[:2])
 
 
 @module_loop
-async def test_reload_replaces_a_run_when_its_prog_changes(space):
+async def test_supervisor_leaves_an_interrupted_run_alone(space):
+    p, _ = await space.plane(version("x"))
+    await space.run(supervise(p, ALWAYS))
+    (row,) = await supervised(space, p, lambda rs: len(rs) == 1 and live(first_cell(rs[0])))
+    await space.run(ops.plane_interrupt(row["id"]))
+    assert (await space.run_row(row["id"], ended, SLOW))["exit"] == EXIT_INTERRUPTED
+    await asyncio.sleep(0.8)
+    assert [x["id"] for x in await space.read(history(p))] == [row["id"]]
+    await space.run(unsupervise(p))
+
+
+@module_loop
+async def test_supervisor_ignores_runs_by_others(space):
+    """Another run of the plane failing is not restarted, and its own run is left as it is."""
+    p, _ = await space.plane(version("x"))
+    await space.run(supervise(p, ON_FAILURE))
+    (mine,) = await supervised(space, p, lambda rs: len(rs) == 1 and live(first_cell(rs[0])))
+    theirs = await space.run(ops.plane_run(p, by="test", envs=[ops.env("nope")]))
+    assert (await space.run_row(theirs, ended, SLOW))["exit"] == EXIT_FAILED
+    killed = await space.run(ops.plane_run(p, by="test"))
+    await space.run(ops.plane_kill(killed))
+    await space.run_row(killed, ended, SLOW)
+    await asyncio.sleep(0.8)
+    rows = await space.read(history(p))
+    assert [r["id"] for r in rows] == [mine["id"], theirs, killed]
+    assert not ended(rows[0])
+    assert await space.read(supervisor_service.run_of(p)) == mine["id"]
+    await space.run(unsupervise(p))
+
+
+@module_loop
+async def test_unsupervise_stops_its_run(space):
+    p, _ = await space.plane(version("x"))
+    await space.run(supervise(p, ALWAYS))
+    (row,) = await supervised(space, p, lambda rs: len(rs) == 1 and live(first_cell(rs[0])))
+    await space.run(unsupervise(p))
+    assert (await space.read(ops.run(row["id"])))["exit"] == EXIT_INTERRUPTED
+    await asyncio.sleep(0.8)
+    assert [x["id"] for x in await space.read(history(p))] == [row["id"]]
+
+
+@module_loop
+async def test_supervisor_leaves_a_failed_cell_in_a_live_run(space):
+    """Plane level: a cell failing while its run goes on is not restarted."""
+    p, (_, bad) = await space.plane(version("x"), RAISES)
+    await space.run(supervise(p, ON_FAILURE))
+    (row,) = await supervised(
+        space, p, lambda rs: len(rs) == 1 and cell_of(rs[0], bad).get("exit") == EXIT_FAILED
+    )
+    await asyncio.sleep(0.8)
+    row = await space.read(ops.run(row["id"]))
+    assert not ended(row)
+    assert len([c for c in row["cells"] if c["cell"] == bad]) == 1
+    await space.run(unsupervise(p))
+
+
+@module_loop
+async def test_reload_replaces_a_cell_run_when_its_prog_changes(space):
     p, (c,) = await space.plane(version("v1"))
-    w = await space.run(ops.worker())
     envs = [ops.env("session", "conn-9")]
-    (old,) = await space.run(ops.up(p, [c], worker=w, envs=envs, by="test"))
-    await space.run_row(old, _up)
+    r = await space.run(ops.plane_run(p, envs=envs, by="test"))
+    old = first_cell(await space.run_row(r, lambda x: live(first_cell(x)), SLOW))
     await space.run(ops.set_prog(p, c, version("v2")))
-    rows = await runs_of(space, p, lambda rs: len(rs) == 2 and _up(rs[1]) and _dead(rs[0]))
-    assert rows[0]["id"] == old
-    assert rows[0]["exit"] == EXIT_STOPPED
-    new = rows[1]
-    assert (new["worker"], new["by"], new["envs"]) == (w, "test", envs)
-    state = Space.planes[p].cells[c].state["s"]
-    await space.until(state, lambda s: s == "v2")
-    assert (await space.worker_row(w, bool))["status"] == STATUS_UP
-    await space.run(ops.kill_worker(w))
-    await space.run_row(new["id"], _dead)
+    row = await space.run_row(r, lambda x: len(x["cells"]) == 2 and live(x["cells"][1]), SLOW)
+    gone, new = row["cells"]
+    assert (gone["id"], gone["exit"]) == (old["id"], EXIT_INTERRUPTED)
+    assert (new["by"], new["version"], new["worker"]) == (reload_service.BY, 2, old["worker"])
+    assert (row["by"], row["envs"]) == ("test", envs)
+    assert not ended(row)
+    await space.until(Space.planes[p].cells[c].state["s"], lambda s: s == "v2")
+    await space.run(ops.plane_kill(r))
+    await space.run_row(r, ended, SLOW)
 
 
 @module_loop

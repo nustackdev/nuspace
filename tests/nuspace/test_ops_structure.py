@@ -11,7 +11,7 @@ import pickle
 import nu
 import nustd.kv
 from nuspace import ops
-from nuspace.shapes import ROOT, STATUS_STOPPING, Space
+from nuspace.shapes import ROOT, Space
 
 
 async def plane(store, name="", **kw):
@@ -22,7 +22,7 @@ async def cell(store, plane_id, prog="def out(): pass", **kw):
     return await store.run(ops.add_cell(plane_id, prog, **kw))
 
 
-NO_PROPS = {"system": False, "ui": False, "made_by": ""}
+NO_PROPS = {"system": False, "ui": False, "made_by": "", "backend": "async"}
 
 
 # --- Planes --------------------------------------------------------------------
@@ -40,7 +40,7 @@ async def test_add_plane_writes_the_row_and_links_under_root(store):
         {
             "id": p,
             "name": "notes",
-            "props": {"system": False, "ui": True, "made_by": "plain"},
+            "props": {"system": False, "ui": True, "made_by": "plain", "backend": "async"},
             "meta": {"editable": True},
             "parent": ROOT,
         }
@@ -99,14 +99,14 @@ async def test_set_plane_meta_merges(store):
     (row,) = await store.read(ops.plane_rows())
     assert row["meta"] == {"a": 1, "b": 3, "c": {"d": 4}, "made_by": "x"}
     # A meta key named like a prop is only meta.
-    assert row["props"] == {"system": False, "ui": False, "made_by": "plain"}
+    assert row["props"] == {"system": False, "ui": False, "made_by": "plain", "backend": "async"}
 
 
 async def test_add_plane_again_rewrites_props_and_merges_meta(store):
     p = await plane(store, system=True, ui=True, made_by="a", meta={"x": 1})
     await store.run(ops.add_plane(p, name="b", made_by="b", meta={"y": 2}))
     (row,) = await store.read(ops.plane_rows())
-    assert row["props"] == {"system": False, "ui": False, "made_by": "b"}
+    assert row["props"] == {"system": False, "ui": False, "made_by": "b", "backend": "async"}
     assert row["meta"] == {"x": 1, "y": 2}
 
 
@@ -132,20 +132,18 @@ async def test_remove_plane_refuses_system(store):
     assert len(await store.read(ops.planes())) == 3
 
 
-async def test_remove_plane_downs_live_runs(store):
+async def test_remove_plane_kills_live_runs(store):
     p, other = await plane(store), await plane(store)
     kid = await store.run(ops.add_plane(parent=p))
     await cell(store, p)
     await cell(store, kid)
     await cell(store, other)
-    w = await store.run(ops.worker())
-    mine = await store.run(ops.up_plane(p, worker=w))
-    below = await store.run(ops.up_plane(kid, worker=w))
-    theirs = await store.run(ops.up_plane(other, worker=w))
+    mine = await store.run(ops.plane_run(p))
+    below = await store.run(ops.plane_run(kid))
+    theirs = await store.run(ops.plane_run(other))
     assert await store.run(ops.remove_plane(p)) is True
-    status = {r["id"]: r["status"] for r in await store.read(ops.runs())}
-    assert [status[r] for r in mine + below] == [STATUS_STOPPING] * 2
-    assert status[theirs[0]] == "starting"
+    asked = {r["id"]: r["termination_requested"] for r in await store.read(ops.runs())}
+    assert asked == {mine: True, below: True, theirs: False}
 
 
 # --- Cells ---------------------------------------------------------------------
@@ -239,13 +237,12 @@ async def test_cells_lists_unordered_cells_last(store):
 async def test_remove_cell(store):
     p = await plane(store)
     a, b = await cell(store, p), await cell(store, p)
-    w = await store.run(ops.worker())
-    runs = await store.run(ops.up(p, [a, b], worker=w))
+    r = await store.run(ops.plane_run(p))
     await store.run(ops.remove_cell(p, a) >> ops.remove_cell(p, "nope"))
     assert await store.read(ops.cells(p)) == [b]
     assert await store.read(ops.cell_exists(p, a)) is False
-    status = {r["id"]: r["status"] for r in await store.read(ops.runs())}
-    assert status == {runs[0]: STATUS_STOPPING, runs[1]: "starting"}
+    asked = {c["cell"]: c["interrupt_requested"] for c in await store.read(ops.cell_runs(r))}
+    assert asked == {a: True, b: False}
 
 
 async def test_rename_cell_and_set_prog(store):
@@ -281,15 +278,13 @@ async def test_move_cell_keeps_id_and_state(store):
     q1 = await cell(store, q)
     state = Space.planes[p].cells[a].state
     await store.run(nustd.kv.Transaction(state.set_item("n", {"deep": 3}), scope=Space))
-    w = await store.run(ops.worker())
-    (run,) = await store.run(ops.up(p, [a], worker=w))
+    run = await store.run(ops.plane_run(p))
     await store.run(ops.move_cell(p, a, q, 0))
     assert await store.read(ops.cells(p)) == []
     assert await store.read(ops.cells(q)) == [a, q1]
     assert (await store.read(ops.cell_rows(q)))[0]["name"] == "a"
     assert await store.read(Space.planes[q].cells[a].state.extract()) == {"n": {"deep": 3}}
-    assert (await store.read(ops.runs()))[0]["status"] == STATUS_STOPPING
-    assert run
+    assert (await store.read(ops.cell_runs(run)))[0]["interrupt_requested"] is True
 
 
 async def test_move_cell_refuses_same_plane_and_missing(store):

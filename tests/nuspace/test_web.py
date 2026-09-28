@@ -18,21 +18,12 @@ import nustd.ui
 from nuspace import ops
 from nuspace.ops import TEXT, Plane, Snippet
 from nuspace.ops.utils import atomic
-from nuspace.shapes import (
-    EXIT_FAILED,
-    EXIT_KILLED,
-    EXIT_OK,
-    EXIT_STOPPED,
-    STATUS_DEAD,
-    STATUS_STARTING,
-    STATUS_STOPPING,
-    STATUS_UP,
-    Space,
-)
+from nuspace.shapes import EXIT_FAILED, EXIT_INTERRUPTED, EXIT_KILLED, EXIT_OK, Space
 from nuspace.system.devices.web import CellRoot, SessionWrap, Shell, session_env
 from nuspace.system.devices.web.sidebar import create, move, pins, registered_entries, rows
 from nuspace.system.devices.web.viewer import plane_view, statuses
 from nuspace.system.kernel import build_body
+from nuspace.system.services import nav
 from nustd.ui.core import OP_NOTIFY, Frame, WsSession
 from nustd.ui.core.session import Session
 
@@ -56,7 +47,7 @@ SNIPPETS = [
 def _body():
     """A run body built the way dispatch builds it, inside the session env."""
     env = session_env("127.0.0.1:9")("conn-7")
-    return env, build_body("r1", "p1", "c1", [env])
+    return env, build_body("r1", "cr1", "p1", "c1", [env])
 
 
 def test_session_env_builds_and_pickles():
@@ -225,7 +216,12 @@ async def test_create_makes_the_named_plane(store):
     by_id = {row["id"]: row for row in await store.read(ops.plane_rows())}
     # An empty title takes the label, the parent is the one asked for.
     assert (by_id["pj"]["name"], by_id["pj"]["parent"]) == ("Jobs", "top")
-    assert by_id["pj"]["props"] == {"system": False, "ui": True, "made_by": "jobs"}
+    assert by_id["pj"]["props"] == {
+        "system": False,
+        "ui": True,
+        "made_by": "jobs",
+        "backend": "async",
+    }
     assert [c["name"] for c in await store.read(ops.cell_rows("pj"))] == ["list"]
     # An unknown name creates the first registered Plane, at the root.
     assert (by_id["px"]["name"], by_id["px"]["parent"]) == ("X", "root")
@@ -287,70 +283,73 @@ async def test_viewer_plane_missing_and_meta_defaults(store):
 # --- Viewer statuses ---------------------------------------------------------------
 
 
-def _run(rid, cell, status, exit_="", error="", *, plane="p1"):
-    """A run record as the kernel writes it."""
+#: When a hand written cell run started, if it did.
+STARTED = 5.0
+
+
+def _run(rid, plane, *cell_runs, live=True):
+    """A plane run record as the kernel writes it, its cell runs ``(id, cell, started, exit, error)``.
+
+    A cell run with no exit is live, in ``cells_running``. Each is its
+    cell's newest in ``latest`` as it is written, the way the kernel does.
+    """
     row = Space.kernel.runs[rid]
-    writes = (
-        row.plane.set(plane)
-        >> row.cell.set(cell)
-        >> row.worker.set("w1")
-        >> row.status.set(status)
-        >> row.exit.set(exit_)
-        >> row.error.set(error)
-    )
-    if status != STATUS_DEAD:
-        writes = writes >> Space.kernel.live.set_item(rid, nu.Str("w1"))
+    writes = row.plane.set(plane) >> row.backend.set("async")
+    for crid, cell, started, exit_, error in cell_runs:
+        cr = row.cells[crid]
+        writes = (
+            writes >> cr.cell.set(cell) >> cr.worker.set("w1") >> row.latest.set_item(cell, crid)
+        )
+        if started:
+            writes = writes >> cr.started_at.set(STARTED)
+        if exit_:
+            writes = (
+                writes >> cr.exit.set(exit_) >> cr.error.set(error) >> cr.terminated_at.set(9.0)
+            )
+        else:
+            writes = writes >> row.cells_running.add(crid)
+    if live:
+        writes = writes >> Space.kernel.running.add(rid)
     return atomic(writes)
 
 
 async def test_viewer_statuses(store):
-    cells = [
-        "none",
-        "start",
-        "up",
-        "stopping",
-        "ok",
-        "stopped",
-        "killed",
-        "failed",
-        "mixed",
-        "redo",
-    ]
+    cells = ["none", "start", "up", "ok", "stopped", "killed", "failed", "mixed", "redo"]
     await _plane(store, "p1", "Runs")
     for cell in cells:
         await store.run(ops.add_cell("p1", "x", cell_id=cell))
     await _plane(store, "p2", "Other")
-    await store.run(ops.add_cell("p2", "x", cell_id="up"))
+    await store.run(ops.add_cell("p2", "x", cell_id="none"))
 
-    for term in [
-        _run("r_01", "start", STATUS_STARTING),
-        _run("r_02", "up", STATUS_UP),
-        _run("r_03", "stopping", STATUS_STOPPING),
-        _run("r_04", "ok", STATUS_DEAD, EXIT_OK),
-        _run("r_05", "stopped", STATUS_DEAD, EXIT_STOPPED),
-        _run("r_06", "killed", STATUS_DEAD, EXIT_KILLED),
-        _run("r_07", "failed", STATUS_DEAD, EXIT_FAILED, "ValueError: boom"),
-        # A live run wins over a later dead one.
-        _run("r_08", "mixed", STATUS_UP),
-        _run("r_09", "mixed", STATUS_DEAD, EXIT_FAILED, "old"),
-        # No live run: the most recent one says.
-        _run("r_10", "redo", STATUS_DEAD, EXIT_FAILED, "first"),
-        _run("r_11", "redo", STATUS_DEAD, EXIT_OK),
-        # Another plane's run of a same named cell is not this plane's.
-        _run("r_12", "none", STATUS_UP, plane="p2"),
-    ]:
-        await store.run(term)
+    await store.run(
+        _run(
+            "r_1",
+            "p1",
+            ("cr_01", "start", False, "", ""),
+            ("cr_02", "up", True, "", ""),
+            ("cr_03", "ok", True, EXIT_OK, ""),
+            ("cr_04", "stopped", True, EXIT_INTERRUPTED, ""),
+            ("cr_05", "killed", True, EXIT_KILLED, ""),
+            ("cr_06", "failed", True, EXIT_FAILED, "ValueError: boom"),
+            # A reload: the old one ended, the newest live says.
+            ("cr_07", "mixed", True, EXIT_FAILED, "old"),
+            ("cr_08", "mixed", True, "", ""),
+            # The most recent one says.
+            ("cr_09", "redo", True, EXIT_FAILED, "first"),
+            ("cr_10", "redo", True, EXIT_OK, ""),
+        )
+    )
+    # Another run, of another plane, with a cell of the same id: not this one's.
+    await store.run(_run("r_2", "p2", ("cr_11", "none", True, "", "")))
 
-    got = await store.read(statuses("p1"))
+    def entry(cell, state, error="", started=STARTED):
+        return {"cell_id": cell, "state": state, "error": error, "started_at": started}
 
-    def entry(cell, state, error=""):
-        return {"cell_id": cell, "state": state, "error": error, "started_at": 0}
-
-    assert got == [
-        entry("none", "idle"),
-        entry("start", "starting"),
+    assert await store.read(statuses("p1", "")) == [entry(c, "idle", started=0) for c in cells]
+    assert await store.read(statuses("p1", "r_1")) == [
+        entry("none", "idle", started=0),
+        entry("start", "starting", started=0),
         entry("up", "running"),
-        entry("stopping", "running"),
         entry("ok", "idle"),
         entry("stopped", "stopped"),
         entry("killed", "stopped"),
@@ -454,17 +453,22 @@ async def test_connection_live(store):
         assert [c["id"] for c in shown["cells"]] == ["c1"]
         assert session.writes("set_status")[-1]["statuses"][0]["state"] == "idle"
 
-        # A cell added reships the plane, a run moving reships the statuses.
+        # A cell added reships the plane. nav giving the pane a run reships
+        # the statuses, and so does a cell run of it starting.
         await store.run(ops.add_cell("p1", "y = 2", cell_id="c2"))
         await _until(lambda: len(session.writes("set_plane")[-1]["cells"]) == 2)
-        await store.run(_run("r_01", "c1", STATUS_UP))
+        await store.run(_run("r_01", "p1", ("cr_1", "c1", False, "", "")))
+        await store.run(atomic(nav.panes().set_item("s1/p1", nu.Str("r_01"))))
+        await _until(lambda: session.writes("set_status")[-1]["statuses"][0]["state"] == "starting")
+        cr = Space.kernel.runs["r_01"].cells["cr_1"]
+        await store.run(atomic(cr.started_at.set(STARTED)))
         await _until(lambda: session.writes("set_status")[-1]["statuses"][0]["state"] == "running")
 
         # State and output writes wake nothing.
         shipped, stats = len(session.writes("set_plane")), len(session.writes("set_status"))
         trees = len(session.writes("set_tree"))
         await store.run(atomic(Space.planes["p1"].state.set_item("text", nu.Str("hi"))))
-        await store.run(atomic(Space.kernel.runs["r_01"].out.set(nu.Literal([[1.0, "out", "x"]]))))
+        await store.run(atomic(cr.out.set(nu.Literal([[1.0, "out", "x"]]))))
         await asyncio.sleep(0.2)
         assert len(session.writes("set_plane")) == shipped
         assert len(session.writes("set_status")) == stats
@@ -485,7 +489,12 @@ async def test_connection_live(store):
             "system": True,
         }
         (row,) = [r for r in await store.read(ops.plane_rows()) if r["id"] == "p1"]
-        assert row["props"] == {"system": False, "ui": True, "made_by": "plain"}
+        assert row["props"] == {
+            "system": False,
+            "ui": True,
+            "made_by": "plain",
+            "backend": "async",
+        }
         assert await store.read(ops.plane_exists("nope")) is False
 
         # Browser events run ops. A create stores the named snippet's prog, an

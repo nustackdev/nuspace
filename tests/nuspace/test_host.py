@@ -24,7 +24,7 @@ from nuspace.host.cli import cli
 from nuspace.host.registry import GROUP, Registry, RegistryWarning, discover
 from nuspace.host.space import space_registry
 from nuspace.ops.utils import atomic
-from nuspace.shapes import STATUS_UP, Reroot, Space, reroot
+from nuspace.shapes import Reroot, Space, reroot
 from nuspace.system import home
 from nuspace.system.kernel import Env, store
 from nuspace.system.kernel.body import Bracketed, Rewrites
@@ -206,9 +206,7 @@ async def test_open_space_headless_runs_a_booted_plane(tmp_path, monkeypatch):
             *(plane for plane, _ in SERVICES),
         }
         for plane in BOOTED:
-            await space.until(
-                ops.runs(plane=plane), lambda rs: any(r["status"] == STATUS_UP for r in rs)
-            )
+            await space.until(ops.runs(plane=plane), lambda rs: any(r["started_at"] for r in rs))
         # Cleared before init started nav: the stale tab brought nothing up.
         assert await space.read(nu.list(Space.connections.keys())) == []
         assert await space.read(ops.runs(plane=TAB)) == []

@@ -4,10 +4,10 @@ Each is a system plane with a fixed id and one cell ``main`` (D31) whose
 prog is a shim importing its module here, so the code lives in the package
 and the store holds a program like any other. They act only through ops.
 
-- :mod:`.init`: pid 1, brings up its boot list at open.
-- :mod:`.nav`: one worker per open plane of a connection, running the planes its routes name.
-- :mod:`.supervisor`: restarts the cells its policy names, with backoff.
-- :mod:`.reload`: replaces a live run when its cell's prog changes.
+- :mod:`.init`: pid 1, runs its boot list at open.
+- :mod:`.nav`: one plane run per open plane of a connection, the planes its routes name.
+- :mod:`.supervisor`: keeps the planes its policy names running, with backoff.
+- :mod:`.reload`: replaces a live cell run when its cell's prog changes.
 - :mod:`.bootstrap`: the service planes made real in a store.
 
 Modules here are imported into workers: nothing at module scope may pull in

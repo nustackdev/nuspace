@@ -19,7 +19,7 @@ async def test_settings_is_seeded_once_with_home_header(store):
     await store.run(home.ensure_home() >> settings.ensure_settings())
     (row,) = [r for r in await store.read(ops.plane_rows()) if r["id"] == settings.PLANE]
     assert row["name"] == "Settings"
-    assert row["props"] == {"system": True, "ui": True, "made_by": ""}
+    assert row["props"] == {"system": True, "ui": True, "made_by": "", "backend": "async"}
     cells = await store.read(ops.cell_rows(settings.PLANE))
     assert [(c["id"], c["prog"]) for c in cells] == [
         ("header", home.HEADER),

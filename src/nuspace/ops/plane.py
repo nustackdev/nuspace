@@ -1,13 +1,14 @@
 """Plane ops: make one, name it, annotate it, drop it.
 
-Its props (``system``, ``ui``, ``made_by``) are set when it is made. Its meta
-is free and merged into any time.
+Its props (``system``, ``ui``, ``made_by``, ``backend``) are set when it is
+made. Its meta is free and merged into any time.
 
 A plane's icon is ``meta.icon``, a string: ``"lucide:<name>"`` for one of the
 shell's icon pack, ``"emoji:<char>"`` for an emoji, ``""`` or absent for the
 default. :func:`plane_icon` is the one place a spelling is read.
 
-A plane is structure only, so nothing here says how anything runs. Which
+A plane is structure plus the one run setting, its ``backend``: nothing else
+here says how anything runs. Which
 cells are on it and in what order is :mod:`nuspace.ops.cell`; where it hangs
 is :mod:`nuspace.ops.tree`; whether it is pinned is :mod:`nuspace.ops.pin`.
 """
@@ -17,9 +18,9 @@ from __future__ import annotations
 from typing import Any
 
 import nu
-from nuspace.shapes import ROOT, Space
+from nuspace.shapes import DEFAULT_BACKEND, ROOT, Space
 
-from .kernel import stop_runs
+from .kernel import kill, live_runs_of
 from .pin import unpin
 from .read import plane_exists
 from .tree import link, subtree, unlink
@@ -58,6 +59,7 @@ def add_plane(
     system: nu.BoolArg = False,
     ui: nu.BoolArg = False,
     made_by: nu.StrArg = "",
+    backend: nu.StrArg = DEFAULT_BACKEND,
     meta: dict[str, Any] | nu.Nu | None = None,
 ) -> nu.Nu:
     """Make a plane with no cells and hang it under ``parent``, in one commit.
@@ -74,6 +76,8 @@ def add_plane(
         ui: Prop, the shell draws it and nav brings it up when routed.
         made_by: Prop, the registered Plane it was created from. Nothing
             groups by it.
+        backend: Prop, the backend its runs execute on, by the name it was
+            registered under at open.
         meta: Fields to merge into its meta.
 
     The props are written every time, so an existing plane given again takes
@@ -95,6 +99,7 @@ def add_plane(
             >> row.props.system.set(system)
             >> row.props.ui.set(ui)
             >> row.props.made_by.set(made_by)
+            >> row.props.backend.set(backend)
         )
         if meta is not None:
             writes = writes >> _merge(row.meta, meta)
@@ -108,7 +113,7 @@ def remove_plane(plane_id: nu.StrArg) -> nu.Nu:
     """Drop a plane, its cells, and every plane nested below it, unpinning each.
 
     Refused when the plane or any plane below it is a system plane. Live
-    runs of every plane going are asked to stop first, so nothing keeps
+    runs of every plane going are killed in the same commit, so nothing keeps
     running against rows that are gone.
 
     Yields:
@@ -139,7 +144,7 @@ def remove_plane(plane_id: nu.StrArg) -> nu.Nu:
             )
             return nu.SetCmd(
                 ok, nu.And(plane_exists(plane_id), nu.Eq(system.len(), nu.Int(0)))
-            ) >> nu.IfDo(ok, stop_runs(lambda run: gone.contains(run.plane)) >> delete)
+            ) >> nu.IfDo(ok, live_runs_of(gone.contains, kill) >> delete)
 
         return subtree(plane_id, drop)
 

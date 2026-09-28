@@ -10,6 +10,10 @@ Below is the changelog for **nuspace** - the full commit stream. Newest first.
 The `nuspace-ui` wheel is the same source tree's vite output and is not tracked
 separately here.
 
+## Unreleased
+
+- Planes run whole on pluggable backends, and the kernel never slows with use
+
 ## 0.4.1 — 2026-09-27
 
 - Pages and apps start faster, since every worker reads the store directly

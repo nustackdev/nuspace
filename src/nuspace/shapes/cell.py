@@ -27,9 +27,11 @@ class CellProps(nu.Shape):
 class Cell(nu.Shape):
     """A program and the state it owns. Structure only.
 
-    ``prog`` is python source whose entry point returns a Nu tree. How and
-    when it runs is the caller's argument to ``up``, so a cell carries no run
-    info: runs, their output and their errors live under ``Space.kernel``.
+    ``prog`` is python source whose entry point returns a Nu tree. ``version``
+    counts its writes: every cell run records the version it ran, so a live
+    one running an older prog is told apart without reading source. A cell
+    carries no run info: runs, their output and their errors live under
+    ``Space.kernel``.
 
     ``state`` is the program's own subtree. Its shape comes from the program's
     :class:`~nuspace.shapes.state.CellState` classes, not from here, so it is
@@ -41,6 +43,7 @@ class Cell(nu.Shape):
 
     name = nustd.kv.StrRef.slot()
     prog = nustd.kv.ProgramRef.slot()
+    version = nustd.kv.IntRef.slot()
     props = nustd.kv.ShapeRef.slot(CellProps)
     meta = nustd.kv.DictRef.slot(object)
     state = nustd.kv.DictRef.slot(object)

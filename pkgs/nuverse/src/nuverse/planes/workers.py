@@ -1,7 +1,8 @@
-"""The ``workers`` Plane: the kernel's workers, live.
+"""The ``workers`` Plane: the workers the backends hold, live.
 
 Two cells, each redrawing once a second from one snapshot of the store: the
-counts by status, and every worker, newest first.
+counts per backend, and every live worker with the run it serves. Read off
+``workers_running``, so it costs what is up, never history.
 """
 
 from __future__ import annotations
@@ -20,20 +21,20 @@ import nuspace
 from nuspace import ops
 
 
-def count(workers, status):
+def count(workers, backend):
     w = nu.DictAttrRef("w")
-    return nu.Count(nu.Filter(nu.Iter(workers), nu.Eq(w["status"], status), key="w"))
+    return nu.Count(nu.Filter(nu.Iter(workers), nu.Eq(w["backend"], backend), key="w"))
 
 
 def draw():
     workers = nu.ListAttrRef("workers")
-    tiles = [
-        nustd.ui.StatRef(status).set(nu.ToStr(count(workers, status)), label=status.capitalize())
-        for status in ("starting", "up", "stopping", "dead")
-    ]
-    return nustd.kv.Snapshot(
-        nu.Let("workers", ops.workers(), nu.Sequential(*tiles)), scope=nuspace.Space
+    tiles = nustd.ui.StatRef("up").set(nu.ToStr(nu.Len(workers)), label="Up") >> nu.Sequential(
+        *[
+            nustd.ui.StatRef(backend).set(nu.ToStr(count(workers, backend)), label=backend)
+            for backend in ("async", "per_cell")
+        ]
     )
+    return nustd.kv.Snapshot(nu.Let("workers", ops.workers(), tiles), scope=nuspace.Space)
 
 
 def out():
@@ -50,9 +51,9 @@ import nuspace
 from nuspace import ops
 
 
-def held(wid):
-    flag = nuspace.Space.kernel.workers[wid].held
-    return nu.If(flag.exists(), nu.If(nu.ToBool(flag), "yes", "no"), "no")
+def plane_name(pid):
+    name = nuspace.Space.planes[pid].name
+    return nu.If(name.exists(), nu.ToStr(name), pid)
 
 
 def age(t):
@@ -60,16 +61,22 @@ def age(t):
     return nu.If(nu.Is(t, None), nu.Str(""), nu.Format(now - t, ".0f") + nu.Str("s"))
 
 
+def cells_on(w):
+    # The run's live cell runs placed on this worker: a walk of what is live.
+    c = nu.DictAttrRef("c")
+    live = nu.Iter(ops.cell_runs(nu.ToStr(w["run"]), live=True))
+    return nu.Count(nu.Filter(live, nu.Eq(c["worker"], w["id"]), key="c"))
+
+
 def draw():
     w = nu.DictAttrRef("w")
-    newest = nu.List(nu.Collect(nu.Reversed(ops.workers())))[0:30]
     row = nu.List.of(
-        w["id"], w["kind"], w["status"], held(w["id"]),
-        nu.Len(ops.live_runs(worker=w["id"])), age(w["started"]),
+        w["id"], w["backend"], plane_name(w["plane"]), w["run"], cells_on(w), age(w["started_at"])
     )
+    newest = nu.List(nu.Collect(nu.Reversed(ops.workers())))
     table = nustd.ui.TableRef("workers").set(
         nu.Dict.of(
-            columns=["ID", "Kind", "Status", "Held", "Live runs", "Age"],
+            columns=["ID", "Backend", "Plane", "Run", "Cells", "Age"],
             rows=nu.Collect(nu.Map(nu.Iter(newest), row, key="w")),
         )
     )
@@ -85,7 +92,7 @@ PLANE = Plane(
     "workers",
     "Workers",
     icon="cpu",
-    description="The kernel's workers, redrawn every second.",
+    description="The workers the backends hold, redrawn every second.",
     meta={"editable": True, "full_width": False},
     cells=(("counts", COUNTS), ("workers", TABLE)),
 )

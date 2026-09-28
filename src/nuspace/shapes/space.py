@@ -65,7 +65,8 @@ class Space(nu.Shape):
     :data:`~nuspace.shapes.tree.ROOT`.
 
     One writer per subtree: people, cells and services write ``planes`` and
-    ``tree`` through ops, the kernel writes ``kernel``, the web device writes
+    ``tree`` through ops, the ops write intents into ``kernel`` and the
+    kernel and the backends its effects, the web device writes
     ``connections`` and ``state.recents``, the host writes ``state.info``,
     the settings plane writes ``settings``.
 

@@ -93,7 +93,12 @@ async def test_create_plane_seeds_cells_and_nested_children(store):
         "Tracker",
         {"k": 1, "icon": "lucide:list"},
     )
-    assert rows[made]["props"] == {"system": False, "ui": True, "made_by": "tracker"}
+    assert rows[made]["props"] == {
+        "system": False,
+        "ui": True,
+        "made_by": "tracker",
+        "backend": "async",
+    }
     assert [(c["name"], c["prog"]) for c in await store.read(ops.cell_rows(made))] == [
         ("form", "f"),
         ("list", "l"),

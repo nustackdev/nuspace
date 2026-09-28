@@ -1,15 +1,21 @@
-"""supervisor: restarts the cells its policy names, with backoff or a fixed delay (D13).
+"""supervisor: keeps the planes its policy names running, with backoff or a fixed delay (D13).
 
-Acts only on cells listed in its own state (:class:`Policy`), so it never
-fights another owner over a run. Per cell, when nothing of it is live and
-its latest run ended in a way the policy covers, it waits a backoff and ups
-the cell again the way the last run was upped: same envs, the same worker
-while that worker is still serving other runs, else a fresh one.
+Plane level, and only its own runs. Per supervised plane (:class:`Policy`)
+it keeps one live plane run ``by`` supervisor, and remembers its id in its
+own state. It only ever reads that run, by id, and never looks at or touches
+a run somebody else started: nav's tab runs of the same plane are theirs.
+
+    none of its runs yet       plane_run(plane, by=supervisor), no wait
+    its run live               wait for it to end
+    its run ended              restart per policy on the run's exit, after
+                                 the wait, else leave the plane down until it
+                                 is supervised again
+    unsupervised               forgotten, and its run stopped
 
 =============  ===========================  =====================
 policy         restarts after exit          never after
 =============  ===========================  =====================
-``on-failure`` ``failed``                   ``ok``, ``stopped``,
+``on-failure`` ``failed``                   ``ok``, ``interrupted``,
 ``always``     ``ok``, ``failed``           ``killed``
 =============  ===========================  =====================
 
@@ -19,29 +25,27 @@ wait           before each restart
 backoff        0.25s, doubled per restart after a failure, capped at 30s,
                back to 0.25s after an ``ok`` exit. The default
 fixed delay    exactly the seconds given to :func:`supervise`, every time.
-               ``always`` with a delay is a periodic cell
+               ``always`` with a delay is a periodic plane
 =============  =========================================================
 
-``stopped`` and ``killed`` are somebody asking, so they are respected.
+``interrupted`` and ``killed`` are somebody asking, so they are respected.
+A cell failing inside a run that is still live is left alone: the plane
+run is what the supervisor restarts, once it has ended.
+
+Every read is a point read: a policy, a run id, a run's ``exit``. Nothing
+walks ``runs``, ``running`` or a run's cell runs.
 """
 
 from __future__ import annotations
 
 import nu
 import nustd.kv
-from nuspace.ops import cell_exists, up, worker
-from nuspace.ops.utils import atomic, fresh, or_else, text
-from nuspace.shapes import (
-    EXIT_FAILED,
-    EXIT_OK,
-    STATUS_DEAD,
-    STATUS_STOPPING,
-    CellState,
-    Space,
-    reroot,
-)
+from nuspace.ops import plane_exists, plane_stop
+from nuspace.ops.kernel import add_plane_run
+from nuspace.ops.utils import MintId, atomic, fresh, text
+from nuspace.shapes import EXIT_FAILED, EXIT_OK, CellState, Space, reroot
 
-from ..utils import snap, wake
+from ..utils import Ticking, moved, park, snap, until, wake
 
 
 __all__ = [
@@ -58,6 +62,7 @@ __all__ = [
     "delay_of",
     "policy_of",
     "program",
+    "run_of",
     "supervise",
     "unsupervise",
 ]
@@ -69,7 +74,7 @@ PLANE = "supervisor"
 #: The one cell on the plane.
 CELL = "main"
 
-#: What runs the supervisor starts are recorded as ``by``.
+#: What plane runs the supervisor starts are recorded as ``by``.
 BY = "supervisor"
 
 #: Restart after a failed exit only.
@@ -78,7 +83,7 @@ ON_FAILURE = "on-failure"
 #: Restart after an ok or a failed exit.
 ALWAYS = "always"
 
-#: The policies a cell can be supervised under.
+#: The policies a plane can be supervised under.
 POLICIES = (ON_FAILURE, ALWAYS)
 
 #: The first wait before a restart, in seconds.
@@ -98,36 +103,25 @@ def out():
 
 _kernel = Space.kernel
 
-_KEY = "nuspace.supervisor.key"
 _PLANE = "nuspace.supervisor.plane"
-_CELL = "nuspace.supervisor.cell"
+_MINE = "nuspace.supervisor.mine"
 _DELAY = "nuspace.supervisor.delay"
 _FIXED = "nuspace.supervisor.fixed"
-_HANDLED = "nuspace.supervisor.handled"
-_LATEST = "nuspace.supervisor.latest"
-_WORKER = "nuspace.supervisor.worker"
+_NEW = "nuspace.supervisor.new"
 
 
 class Policy(CellState):
-    """The supervisor's state, keyed ``"<plane>/<cell>"``.
+    """The supervisor's state, keyed by plane id.
 
-    ``cells`` holds each cell's policy in :data:`POLICIES`. ``delays`` holds
-    the fixed wait in seconds of the cells that have one, in place of the
-    backoff.
+    ``planes`` holds each supervised plane's policy in :data:`POLICIES`.
+    ``delays`` holds the fixed wait in seconds of the planes that have one,
+    in place of the backoff. ``runs`` holds the plane run the supervisor
+    last started for each, live or ended: the only run it ever looks at.
     """
 
-    cells = nustd.kv.DictRef.slot(str)
+    planes = nustd.kv.DictRef.slot(str)
     delays = nustd.kv.DictRef.slot(float)
-
-
-def _key(plane_id: nu.StrArg, cell_id: nu.StrArg) -> nu.StrArg:
-    if isinstance(plane_id, str) and isinstance(cell_id, str):
-        return f"{plane_id}/{cell_id}"
-
-    def part(x: nu.StrArg) -> nu.Nu:
-        return nu.Str(x) if isinstance(x, str) else x
-
-    return part(plane_id) + nu.Str("/") + part(cell_id)
+    runs = nustd.kv.DictRef.slot(str)
 
 
 def _here(term: nu.Nu) -> nu.Nu:
@@ -141,9 +135,15 @@ def _made() -> nu.Nu:
     Asks the cell's state for the keys: a dict never written reads as there.
     """
     state = Space.planes[PLANE].cells[CELL].state
-    return nu.IfDo(
-        nu.Not(state.contains("cells")), _here(Policy.cells.set(nu.Literal({})))
-    ) >> nu.IfDo(nu.Not(state.contains("delays")), _here(Policy.delays.set(nu.Literal({}))))
+    writes = [
+        nu.IfDo(nu.Not(state.contains(name)), _here(ref.set(nu.Literal({}))))
+        for name, ref in (
+            ("planes", Policy.planes),
+            ("delays", Policy.delays),
+            ("runs", Policy.runs),
+        )
+    ]
+    return writes[0] >> writes[1] >> writes[2]
 
 
 def _drop(ref: nu.Nu, key: nu.StrArg) -> nu.Nu:
@@ -151,187 +151,203 @@ def _drop(ref: nu.Nu, key: nu.StrArg) -> nu.Nu:
     return nu.IfDo(ref.contains(key), ref.del_item(key))
 
 
+def _policy(plane: nu.StrArg) -> nu.Nu:
+    """The plane's policy, ``""`` when it is not supervised."""
+    planes = Policy.planes
+    return nu.If(planes.contains(plane), nu.ToStr(planes[plane]), nu.Str(""))
+
+
+def _fixed(plane: nu.StrArg) -> nu.Nu:
+    """The plane's fixed delay in seconds, -1 when it has none and backs off instead."""
+    delays = Policy.delays
+    return nu.If(delays.contains(plane), nu.ToFloat(delays[plane]), nu.Float(-1.0))
+
+
+def _mine(plane: nu.StrArg) -> nu.Nu:
+    """The plane run the supervisor last started for the plane, ``""`` when none."""
+    runs = Policy.runs
+    return nu.If(runs.contains(plane), nu.ToStr(runs[plane]), nu.Str(""))
+
+
 def supervise(
-    plane_id: nu.StrArg,
-    cell_id: nu.StrArg,
-    policy: nu.StrArg = ON_FAILURE,
-    delay: nu.FloatArg | None = None,
+    plane_id: nu.StrArg, policy: nu.StrArg = ON_FAILURE, delay: nu.FloatArg | None = None
 ) -> nu.Nu:
-    """Put a cell under the supervisor, or change its policy and delay.
+    """Put a plane under the supervisor, or change its policy and delay. One commit.
+
+    A plane whose supervisor run ended and was not restarted (interrupted,
+    killed, or ``ok`` under ``on-failure``) is brought up again: supervising
+    it is asking for it to run.
 
     Args:
-        plane_id: The cell's plane.
-        cell_id: The cell.
+        plane_id: The plane.
         policy: :data:`ON_FAILURE` or :data:`ALWAYS`.
         delay: Seconds to wait before every restart, in place of the
             backoff. None clears it, back to the backoff.
     """
-    key = _key(plane_id, cell_id)
     delays = Policy.delays
-    timing = _drop(delays, key) if delay is None else delays.set_item(key, nu.ToFloat(delay))
-    return atomic(_made() >> _here(Policy.cells.set_item(key, policy) >> timing))
-
-
-def unsupervise(plane_id: nu.StrArg, cell_id: nu.StrArg) -> nu.Nu:
-    """Take a cell off the supervisor, delay and all. Its live runs are left alone.
-
-    A no-op when not listed.
-    """
-    key = _key(plane_id, cell_id)
-    return atomic(_here(_drop(Policy.cells, key) >> _drop(Policy.delays, key)))
-
-
-def policy_of(plane_id: nu.StrArg, cell_id: nu.StrArg) -> nu.Nu:
-    """A cell's policy, from anywhere, ``""`` when it is not supervised. Bare read."""
-    return _here(_policy(_key(plane_id, cell_id)))
-
-
-def delay_of(plane_id: nu.StrArg, cell_id: nu.StrArg) -> nu.Nu:
-    """A cell's fixed delay in seconds, from anywhere, -1 when it has none. Bare read."""
-    return _here(_fixed(_key(plane_id, cell_id)))
-
-
-# --- One cell ------------------------------------------------------------------
-
-
-def _of_cell(ids: nu.Nu, plane: nu.StrArg, cell: nu.StrArg) -> nu.Nu:
-    """The run ids in ``ids`` that ran ``plane``/``cell``, as a stream."""
-    item = fresh("sup")
-    run = _kernel.runs[nu.StrAttrRef(item)]
-    same = nu.And(nu.Eq(text(run.plane), plane), nu.Eq(text(run.cell), cell))
-    return nu.Filter(ids, same, key=item)
-
-
-def _live(plane: nu.StrArg, cell: nu.StrArg) -> nu.Nu:
-    """Whether any run of the cell is live."""
-    ids = nu.List(nu.Collect(_of_cell(nu.list(_kernel.live.keys()), plane, cell)))
-    return nu.Gt(ids.len(), nu.Int(0))
-
-
-def _latest(plane: nu.StrArg, cell: nu.StrArg) -> nu.Nu:
-    """The cell's newest run id, ``""`` when it has none. Minted ids sort by creation."""
-    last = nu.Last(_of_cell(nu.list(_kernel.runs.keys()), plane, cell))
-    return nu.If(nu.IsEmpty(last), nu.Str(""), last)
-
-
-def _policy(key: nu.StrArg) -> nu.Nu:
-    """The key's policy, ``""`` once it is gone (the fold cancels the arm a beat later)."""
-    cells = Policy.cells
-    return nu.If(cells.contains(key), nu.ToStr(cells[key]), nu.Str(""))
-
-
-def _fixed(key: nu.StrArg) -> nu.Nu:
-    """The key's fixed delay in seconds, -1 when it has none and backs off instead."""
-    delays = Policy.delays
-    return nu.If(delays.contains(key), nu.ToFloat(delays[key]), nu.Float(-1.0))
-
-
-def _due(key: nu.StrAttrRef, plane: nu.StrArg, cell: nu.StrArg, latest: nu.StrAttrRef) -> nu.Nu:
-    """Whether to restart: nothing live, the latest run new to us and dead the policy's way."""
-    run = _kernel.runs[latest]
-    exit_ = text(run.exit)
-    covered = nu.Or(
-        nu.Eq(exit_, nu.Str(EXIT_FAILED)),
-        nu.And(nu.Eq(exit_, nu.Str(EXIT_OK)), nu.Eq(_policy(key), nu.Str(ALWAYS))),
+    timing = (
+        _drop(delays, plane_id) if delay is None else delays.set_item(plane_id, nu.ToFloat(delay))
     )
-    return nu.And(
-        nu.Ne(latest, nu.Str("")),
-        nu.Ne(latest, nu.StrAttrRef(_HANDLED)),
-        nu.Eq(text(run.status), nu.Str(STATUS_DEAD)),
-        covered,
-        cell_exists(plane, cell),
-        nu.Not(_live(plane, cell)),
-    )
-
-
-def _serving(worker_id: nu.Nu) -> nu.Nu:
-    """Whether a worker can take the restart: living, not stopping, and running something.
-
-    A worker with nothing live is about to be idle collected (D9), so a run
-    put on it would be killed with it.
-    """
-    item = fresh("sup_on")
-    on = nu.List(
-        nu.Collect(
-            nu.Filter(
-                nu.list(_kernel.live.keys()),
-                nu.Eq(_kernel.live[nu.StrAttrRef(item)], worker_id),
-                key=item,
-            )
+    run = _mine(plane_id)
+    over = nu.And(nu.Ne(run, nu.Str("")), nu.Not(_kernel.running.contains(run)))
+    return atomic(
+        _made()
+        >> _here(
+            Policy.planes.set_item(plane_id, policy)
+            >> timing
+            >> nu.IfDo(over, _drop(Policy.runs, plane_id))
         )
     )
-    return nu.And(
-        _kernel.active.contains(worker_id),
-        nu.Ne(text(_kernel.workers[worker_id].status), nu.Str(STATUS_STOPPING)),
-        nu.Gt(on.len(), nu.Int(0)),
-    )
 
 
-def _restart(plane: nu.StrAttrRef, cell: nu.StrAttrRef, latest: nu.StrAttrRef) -> nu.Nu:
-    """The cell up again as its latest run was: its envs, its worker if still serving."""
-    run = _kernel.runs[latest]
-    old = snap(text(run.worker))
-    w = nu.StrAttrRef(_WORKER)
-    # Envs read inside up's own commit, never bound: a list read on a worker
-    # is a reference into the host, and a bracket deep copies what is bound.
-    again = up(plane, nu.List.of(cell), worker=w, envs=or_else(run.envs, []), by=BY)
-    return nu.IfDo(
-        snap(_serving(text(run.worker))),
-        nu.Let(_WORKER, old, again),
-        nu.Let(_WORKER, worker(), again),
-    )
+def unsupervise(plane_id: nu.StrArg) -> nu.Nu:
+    """Take a plane off the supervisor, delay and all, and stop the run it started.
 
+    Forgotten in one commit, so the supervisor starts nothing for it after;
+    then its run, if live, is stopped: interrupted, killed after the grace.
+    Returns once it has ended, or once the kill is asked for. A no-op when
+    the plane is not supervised.
 
-def _turn(key: nu.StrAttrRef, plane: nu.StrAttrRef, cell: nu.StrAttrRef) -> nu.Nu:
-    """One look: restart after the wait when due, else wait for ``live`` to move.
-
-    The wait is the key's fixed delay when it has one, read as it is due,
-    else the backoff.
+    The remembered run id stays: the commit that cancels the plane's arm
+    must not also wake it, or on Python 3.11 the cancel can be lost (a
+    ``Timeout`` whose body completes as it is cancelled swallows it) and
+    the fold waits on the arm forever. :func:`supervise` and the next open
+    drop it.
     """
-    latest = nu.StrAttrRef(_LATEST)
-    delay = nu.FloatAttrRef(_DELAY)
-    fixed = nu.FloatAttrRef(_FIXED)
-    exit_ = text(_kernel.runs[latest].exit)
+    forget = _here(_drop(Policy.planes, plane_id) >> _drop(Policy.delays, plane_id))
+    gone = fresh("unsupervise")
+    run = nu.StrAttrRef(gone)
+    live = nu.And(nu.Ne(run, nu.Str("")), _kernel.running.contains(run))
+    stop = nu.Let(gone, snap(_here(_mine(plane_id))), nu.IfDo(snap(live), plane_stop(run)))
+    return atomic(forget) >> stop
+
+
+def policy_of(plane_id: nu.StrArg) -> nu.Nu:
+    """A plane's policy, from anywhere, ``""`` when it is not supervised. Bare read."""
+    return _here(_policy(plane_id))
+
+
+def delay_of(plane_id: nu.StrArg) -> nu.Nu:
+    """A plane's fixed delay in seconds, from anywhere, -1 when it has none. Bare read."""
+    return _here(_fixed(plane_id))
+
+
+def run_of(plane_id: nu.StrArg) -> nu.Nu:
+    """The plane run the supervisor last started for a supervised plane, from anywhere. Bare read.
+
+    ``""`` when it has none, or the plane is not supervised.
+    """
+    return _here(nu.If(nu.Eq(_policy(plane_id), nu.Str("")), nu.Str(""), _mine(plane_id)))
+
+
+# --- One plane -----------------------------------------------------------------
+
+
+def _start(plane: nu.StrAttrRef, mine: nu.StrAttrRef) -> nu.Nu:
+    """A new plane run of the plane, ``by`` supervisor, remembered in the same commit.
+
+    Written only while the plane is still supervised and its remembered run
+    is still ``mine``: an unsupervise or a supervise landing first wins, so
+    nothing is started that nobody tracks. A plane not there yet is waited
+    for.
+    """
+    new = nu.StrAttrRef(_NEW)
+    still = nu.And(
+        nu.Ne(_policy(plane), nu.Str("")), nu.Eq(_mine(plane), mine), plane_exists(plane)
+    )
+    write = atomic(
+        nu.IfDo(still, add_plane_run(new, plane, by=BY) >> Policy.runs.set_item(plane, new))
+    )
+    return nu.IfDo(
+        snap(plane_exists(plane)),
+        nu.Let(_NEW, MintId("r"), write),
+        wake(Space.planes.on_children_change()),
+    )
+
+
+def _covered(plane: nu.StrAttrRef, exit_: nu.Nu) -> nu.Nu:
+    """Whether the plane's policy restarts after ``exit_``."""
+    return nu.Or(
+        nu.Eq(exit_, nu.Str(EXIT_FAILED)),
+        nu.And(nu.Eq(exit_, nu.Str(EXIT_OK)), nu.Eq(_policy(plane), nu.Str(ALWAYS))),
+    )
+
+
+def _wait() -> nu.Nu:
+    """The wait before a restart: the fixed delay, read as it is due, else the backoff, doubled after."""
+    plane = nu.StrAttrRef(_PLANE)
+    delay, fixed = nu.FloatAttrRef(_DELAY), nu.FloatAttrRef(_FIXED)
     doubled = delay * nu.Float(2.0)
     backoff = nu.Delay(delay) >> nu.SetCmd(
         delay, nu.If(nu.Gt(doubled, nu.Float(BACKOFF_CAP)), nu.Float(BACKOFF_CAP), doubled)
     )
-    act = (
-        nu.IfDo(snap(nu.Eq(exit_, nu.Str(EXIT_OK))), nu.SetCmd(delay, nu.Float(BACKOFF_START)))
-        >> nu.SetCmd(nu.StrAttrRef(_HANDLED), latest)
-        >> nu.Let(
-            _FIXED,
-            snap(_fixed(key)),
-            nu.IfDo(nu.Ge(fixed, nu.Float(0.0)), nu.Delay(fixed), backoff),
-        )
-        # Read again after the wait: someone else may have upped it meanwhile.
-        >> nu.IfDo(snap(nu.Not(_live(plane, cell))), _restart(plane, cell, latest))
-    )
     return nu.Let(
-        _LATEST,
-        snap(_latest(plane, cell)),
-        nu.IfDo(snap(_due(key, plane, cell, latest)), act, wake(_kernel.live.on_children_change())),
+        _FIXED, snap(_fixed(plane)), nu.IfDo(nu.Ge(fixed, nu.Float(0.0)), nu.Delay(fixed), backoff)
     )
 
 
-def _arm(key: nu.StrAttrRef) -> nu.Nu:
-    """One supervised cell, watched for as long as its key is listed."""
-    parts = key.split("/", 1)
-    plane, cell = nu.StrAttrRef(_PLANE), nu.StrAttrRef(_CELL)
-    body = nu.Let(
-        _DELAY,
-        nu.Float(BACKOFF_START),
-        nu.Let(_HANDLED, nu.Str(""), nu.ForeverDo(_turn(key, plane, cell))),
+def _ended(plane: nu.StrAttrRef, mine: nu.StrAttrRef) -> nu.Nu:
+    """Its run is over: restarted after the wait when the policy covers the exit.
+
+    Otherwise left down, until its remembered run moves (supervised again).
+    """
+    exit_ = text(_kernel.runs[mine].exit)
+    delay = nu.FloatAttrRef(_DELAY)
+    again = (
+        nu.IfDo(snap(nu.Eq(exit_, nu.Str(EXIT_OK))), nu.SetCmd(delay, nu.Float(BACKOFF_START)))
+        >> _wait()
+        >> _start(plane, mine)
     )
-    return nu.Let(_PLANE, nu.ToStr(parts[0]), nu.Let(_CELL, nu.ToStr(parts[1]), body))
+    return nu.IfDo(snap(_covered(plane, exit_)), again, moved(Policy.runs[plane], mine))
+
+
+def _turn(plane: nu.StrAttrRef) -> nu.Nu:
+    """One look at the plane's own run: start one, wait for it to end, or act on how it ended.
+
+    A plane no longer supervised parks until the fold cancels the arm, so
+    the loop never spins on a start its commit refuses.
+    """
+    mine = nu.StrAttrRef(_MINE)
+    running = _kernel.running
+    live = until(nu.Not(running.contains(mine)), running.on_children_change())
+    look = nu.IfDo(
+        nu.Eq(mine, nu.Str("")),
+        _start(plane, mine),
+        nu.IfDo(snap(running.contains(mine)), live, _ended(plane, mine)),
+    )
+    return nu.IfDo(
+        snap(nu.Eq(_policy(plane), nu.Str(""))), park(), nu.Let(_MINE, snap(_mine(plane)), look)
+    )
+
+
+def _arm(plane: nu.StrAttrRef) -> nu.Nu:
+    """One supervised plane, kept up for as long as it is listed."""
+    return nu.Let(_DELAY, nu.Float(BACKOFF_START), nu.ForeverDo(_turn(plane)))
+
+
+def _forget_ended() -> nu.Nu:
+    """Every remembered run no longer live, or of a plane no longer supervised, dropped.
+
+    O(planes supervised since the last open). At open, reconcile ended every
+    run the last open left, ``killed``: the supervisor starts its planes
+    again rather than reading that as a request.
+    """
+    item = fresh("sup_forget")
+    plane = nu.StrAttrRef(item)
+    runs = Policy.runs
+    over = nu.Or(
+        nu.Not(Policy.planes.contains(plane)),
+        nu.Not(_kernel.running.contains(nu.ToStr(runs[plane]))),
+    )
+    return nu.ForEachDo(nu.list(runs.keys()), nu.IfDo(over, runs.del_item(plane)), item=item)
 
 
 def program() -> nu.Nu:
-    """One arm per supervised cell, births and deaths included. Never returns."""
-    cells = Policy.cells
-    return atomic(_made()) >> nu.ForEachParReactive(
-        snap(nu.list(cells.keys())),
-        snap(cells.on_children_change()),
-        _arm(nu.StrAttrRef(_KEY)),
-        _KEY,
+    """One arm per supervised plane, births and deaths included. Never returns."""
+    planes = Policy.planes
+    return atomic(_made() >> _forget_ended()) >> nu.ForEachParReactive(
+        snap(nu.list(planes.keys())),
+        Ticking(snap(planes.on_children_change())),
+        _arm(nu.StrAttrRef(_PLANE)),
+        _PLANE,
     )

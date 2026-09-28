@@ -47,6 +47,7 @@ if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
 
     from nuspace.ops import Plane, Snippet
+    from nuspace.system.backends import Backend
     from nuspace.system.kernel import EnvFactory
 
 
@@ -101,6 +102,7 @@ def open_space(
     snippets: Sequence[Snippet] = (),
     envs: Mapping[str, EnvFactory] | None = None,
     space_envs: Sequence[Sequence[str] | str] = (),
+    backends: Mapping[str, type[Backend]] | None = None,
     extensions: Sequence[Extension] | None = None,
     discover: bool = True,
     body: nu.Nu | None = None,
@@ -127,6 +129,8 @@ def open_space(
         snippets: Snippets registered directly.
         envs: Env factories registered directly.
         space_envs: Env specs every run executes inside, outermost.
+        backends: Backend classes by name, on top of the built in ``async``
+            and ``per_cell``. A plane runs on the one its ``backend`` prop names.
         extensions: Extensions registered explicitly, ahead of discovered ones.
         discover: Also register the extensions installed under the
             ``nuspace.extensions`` entry point group.
@@ -166,5 +170,6 @@ def open_space(
         spares=spares,
         envs=factories,
         space_envs=space_envs,
+        backends=backends,
         **kwargs,
     )

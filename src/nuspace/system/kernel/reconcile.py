@@ -1,18 +1,20 @@
-"""Reconcile: at open, everything the last open left running is dead.
+"""Reconcile: at open, everything the last open left live has ended, killed.
 
-A worker or run not ``dead`` in the store belongs to a process that is gone,
-since workers die with the host. Marking them dead, ``exit: killed``, makes
-the records true again before anything else reads them. It also makes the
-kernel's containers real, since a fold subscribing to a container that is
-not there never hears anything.
+A plane run in ``running`` or a worker in ``workers_running`` belongs to a
+process that is gone, since workers die with the host. Ending each
+``killed``, its live cell runs with it, makes the records true again before
+anything else reads them. Only the indexes are walked, never history. It
+also makes the kernel's containers real, since a fold subscribing to a
+container that is not there never hears anything.
 """
 
 from __future__ import annotations
 
 import nu
-from nuspace.ops.utils import atomic, fresh, text
-from nuspace.shapes import EXIT_KILLED, STATUS_DEAD, Space
+from nuspace.ops.utils import atomic, fresh
+from nuspace.shapes import EXIT_KILLED, Space
 
+from .runs import end_run
 from .utils import Now
 
 
@@ -25,38 +27,32 @@ _kernel = Space.kernel
 def _containers() -> nu.Nu:
     """Every kernel container made real, so a subscription on it resolves."""
     return (
-        _kernel.workers.init(nu.Dict.create())
-        >> _kernel.runs.init(nu.Dict.create())
-        >> _kernel.live.init(nu.Dict.create())
-        >> _kernel.active.init(nu.Dict.create())
+        _kernel.runs.init(nu.Dict.create())
+        >> _kernel.running.init(nu.Set.create())
+        >> _kernel.workers.init(nu.Dict.create())
+        >> _kernel.workers_running.init(nu.Set.create())
     )
 
 
 def reconcile() -> nu.Nu:
-    """Mark every worker and run not dead as dead, clear ``live`` and ``active``. One commit.
-
-    Runs get ``exit: killed`` (nobody asked them to stop), and both get
-    ``ended``. Dead records are left as they are: they are history.
-    """
+    """End every live plane run and worker ``killed``, empty the indexes. One commit."""
     w_item, r_item = fresh("reconcile_w"), fresh("reconcile_r")
     worker = _kernel.workers[nu.StrAttrRef(w_item)]
-    run = _kernel.runs[nu.StrAttrRef(r_item)]
     workers = nu.ForEachDo(
-        nu.list(_kernel.workers.keys()),
+        nu.list(_kernel.workers_running),
         nu.IfDo(
-            nu.Ne(text(worker.status), nu.Str(STATUS_DEAD)),
-            worker.status.set(STATUS_DEAD) >> worker.ended.set(Now()),
+            nu.Not(worker.terminated_at.exists()),
+            worker.terminated_at.set(Now()) >> worker.exit.set(EXIT_KILLED),
         ),
         item=w_item,
     )
     runs = nu.ForEachDo(
-        nu.list(_kernel.runs.keys()),
-        nu.IfDo(
-            nu.Ne(text(run.status), nu.Str(STATUS_DEAD)),
-            run.status.set(STATUS_DEAD) >> run.exit.set(EXIT_KILLED) >> run.ended.set(Now()),
-        ),
-        item=r_item,
+        nu.list(_kernel.running), end_run(nu.StrAttrRef(r_item), EXIT_KILLED), item=r_item
     )
     return atomic(
-        _containers() >> workers >> runs >> _kernel.live.clear() >> _kernel.active.clear()
+        _containers()
+        >> workers
+        >> runs
+        >> _kernel.workers_running.clear()
+        >> _kernel.running.clear()
     )

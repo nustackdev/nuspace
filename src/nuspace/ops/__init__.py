@@ -13,8 +13,8 @@ agent and the shell compose these and nothing narrower.
   bind with ``nu.Let``.
 - **Reads are bare.** They compose into any expression and read inside the
   enclosing bracket. Alone, wrap one in ``nustd.kv.Snapshot(..., scope=Space)``.
-- **Kernel ops write records only.** The kernel, in the host, makes them
-  true (see :mod:`nuspace.ops.kernel`).
+- **Kernel ops write intents only.** The kernel and the backends, in the
+  host, make them true and write the effects (see :mod:`nuspace.ops.kernel`).
 """
 
 from .cell import (
@@ -29,17 +29,21 @@ from .cell import (
 from .extend import TEXT, Plane, Snippet, create_plane, insert_snippet
 from .kernel import (
     CELL_ATTR,
+    CELL_RUN_ATTR,
     PLANE_ATTR,
     RUN_ATTR,
-    active_workers,
-    down,
+    STOP_GRACE,
+    cell_interrupt,
+    cell_run,
+    cell_runs,
     env,
-    kill_worker,
-    live_runs,
+    latest,
+    plane_interrupt,
+    plane_kill,
+    plane_run,
+    plane_stop,
+    run,
     runs,
-    up,
-    up_plane,
-    worker,
     workers,
 )
 from .pin import move_pin, pin_plane, pinned, unpin_plane
@@ -63,27 +67,29 @@ from .utils import mint_ordered_id
 
 __all__ = [
     "CELL_ATTR",
+    "CELL_RUN_ATTR",
     "PLANE_ATTR",
     "RUN_ATTR",
+    "STOP_GRACE",
     "TEXT",
     "CellState",
     "Plane",
     "PlaneState",
     "Snippet",
-    "active_workers",
     "add_cell",
     "add_plane",
     "cell_exists",
+    "cell_interrupt",
     "cell_rows",
+    "cell_run",
+    "cell_runs",
     "cells",
     "children",
     "clear_state",
     "create_plane",
-    "down",
     "env",
     "insert_snippet",
-    "kill_worker",
-    "live_runs",
+    "latest",
     "mint_ordered_id",
     "move_cell",
     "move_pin",
@@ -92,7 +98,11 @@ __all__ = [
     "pin_plane",
     "pinned",
     "plane_exists",
+    "plane_interrupt",
+    "plane_kill",
     "plane_rows",
+    "plane_run",
+    "plane_stop",
     "planes",
     "prog",
     "remove_cell",
@@ -100,6 +110,7 @@ __all__ = [
     "rename_cell",
     "rename_plane",
     "reorder_cells",
+    "run",
     "runs",
     "set_cell_meta",
     "set_plane_icon",
@@ -109,8 +120,5 @@ __all__ = [
     "sibling",
     "telemetry",
     "unpin_plane",
-    "up",
-    "up_plane",
-    "worker",
     "workers",
 ]

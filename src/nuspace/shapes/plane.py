@@ -8,7 +8,11 @@ import nustd.kv
 from .cell import Cell
 
 
-__all__ = ["Plane", "PlaneProps"]
+__all__ = ["DEFAULT_BACKEND", "Plane", "PlaneProps"]
+
+
+#: The backend a plane runs on when its ``backend`` prop was never written.
+DEFAULT_BACKEND = "async"
 
 
 class PlaneProps(nu.Shape):
@@ -18,16 +22,19 @@ class PlaneProps(nu.Shape):
     ``remove_plane`` refuses it, and that is all it means. ``ui`` says the
     shell draws it, and nav brings a routed plane up iff it is set.
     ``made_by`` names the registered Plane it was created from (``""`` for
-    none). A record, nothing groups by it.
+    none). A record, nothing groups by it. ``backend`` names the backend its
+    runs execute on, as registered at open, :data:`DEFAULT_BACKEND` when
+    unwritten. The one run setting a plane holds.
     """
 
     system = nustd.kv.BoolRef.slot()
     ui = nustd.kv.BoolRef.slot()
     made_by = nustd.kv.StrRef.slot()
+    backend = nustd.kv.StrRef.slot()
 
 
 class Plane(nu.Shape):
-    """A group of cells. No execution semantics.
+    """A group of cells, the runnable thing. How it runs is its ``backend`` prop only.
 
     ``order`` sits beside ``cells`` rather than inside a cell, so rearranging
     them is one write that touches no cell. Nesting is not here either: it is

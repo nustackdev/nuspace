@@ -3,8 +3,8 @@
 Two families:
 
 - **browser to store.** A viewer event runs one op over its own fields.
-- **store to browser.** An open plane or its runs changed; its arm ships
-  the plane or the statuses again, keyed by ``plane_id``.
+- **store to browser.** An open plane or its pane's run changed; its arm
+  ships the plane or the statuses again, keyed by ``plane_id``.
 
 **A pane with nothing to draw is told why.** A route nav does not bring up
 (:func:`~nuspace.system.services.nav.routable`) ships ``set_absent`` in
@@ -19,18 +19,22 @@ it: every subscription below an arm is about that one pane, and dies with it
 when the plane leaves ``routes``.
 
 **Narrow watch.** A plane is shipped again when its plane's row, name,
-meta, ``ui`` prop, order or cells (their set, names and progs) change; the statuses when
-any run's ``status`` moves. A cell writing its state or a run writing its
-output wakes neither.
+meta, ``ui`` prop, order or cells (their set, names and progs) change; the
+statuses when the pane's plane run changes: nav makes a new one, a cell run
+of it starts, begins or ends. A cell writing its state or a cell run
+writing its output wakes neither.
 
 **Meta goes both ways.** A shipped plane carries its whole meta, and a
 ``plane.meta`` event merges keys into it. A plane's props never reach the
 browser, a cell's ship as a flat ``made_by`` and ``has_ui``, and neither is written from it.
 
-**Statuses come from runs.** Per cell: its live run if it has one, else its
-most recent. ``starting`` is starting, ``up`` and ``stopping`` are running,
-a dead run is idle when it exited ``ok``, stopped when ``stopped`` or
-``killed``, failed (with its error) when ``failed``. No run at all is idle.
+**Statuses come from records, never stored.** A pane shows the plane run
+nav made for it (:func:`~nuspace.system.services.nav.pane_run`), so two tabs
+on one plane each see their own. Per cell: its live cell run in that run if
+it has one, else its most recent. Live and not started is starting, live
+and started is running. Ended, it is idle when it exited ``ok``, stopped
+when ``interrupted`` or ``killed``, failed (with its error) when
+``failed``. No run, or no cell run of the cell, is idle.
 """
 
 from __future__ import annotations
@@ -40,16 +44,7 @@ from typing import TYPE_CHECKING
 import nu
 from nuspace import ops
 from nuspace.ops.utils import fresh, or_else, text
-from nuspace.shapes import (
-    EXIT_FAILED,
-    EXIT_KILLED,
-    EXIT_STOPPED,
-    STATUS_DEAD,
-    STATUS_STARTING,
-    STATUS_STOPPING,
-    STATUS_UP,
-    Space,
-)
+from nuspace.shapes import EXIT_FAILED, EXIT_INTERRUPTED, EXIT_KILLED, Space
 from nuspace.system.devices.web.utils import Arms, field_ids, field_index, field_str
 from nuspace.system.devices.web.viewer import interactions
 from nuspace.system.devices.web.viewer.interactions import (
@@ -62,7 +57,7 @@ from nuspace.system.devices.web.viewer.interactions import (
     STATE_STOPPED,
 )
 from nuspace.system.kernel.utils import snap
-from nuspace.system.services.nav import routable
+from nuspace.system.services.nav import pane_key, pane_run, panes, routable
 
 
 if TYPE_CHECKING:
@@ -77,7 +72,6 @@ __all__ = ["PLANE_META", "plane_cells", "plane_view", "statuses", "viewer_feed"]
 
 _arms = Arms("viewer")
 _runs = Space.kernel.runs
-_live = Space.kernel.live
 
 # The event attrs, one per arm: parallel arms share one ``ctx.attrs``.
 _CREATE = "nuspace.web.viewer.create"
@@ -137,88 +131,66 @@ def plane_view(plane_id: nu.StrArg) -> nu.Nu:
     )
 
 
-def _state(run_id: nu.Nu) -> nu.Nu:
-    """The browser state a run id says, ``""`` being no run."""
-    run = _runs[run_id]
-    status, exit_ = text(run.status), text(run.exit)
+def _state(run_id: nu.StrArg, cell_run_id: nu.Nu) -> nu.Nu:
+    """The browser state a cell run of the run says, ``""`` being none."""
+    row = _runs[run_id]
+    cr = row.cells[cell_run_id]
+    exit_ = text(cr.exit)
 
     def eq(value: nu.Nu, *options: str) -> nu.Nu:
         conds = [nu.Eq(value, nu.Str(option)) for option in options]
         return conds[0] if len(conds) == 1 else nu.Or(*conds)
 
-    dead = nu.If(
+    ended = nu.If(
         eq(exit_, EXIT_FAILED),
         nu.Str(STATE_FAILED),
-        nu.If(eq(exit_, EXIT_STOPPED, EXIT_KILLED), nu.Str(STATE_STOPPED), nu.Str(STATE_IDLE)),
+        nu.If(eq(exit_, EXIT_INTERRUPTED, EXIT_KILLED), nu.Str(STATE_STOPPED), nu.Str(STATE_IDLE)),
     )
+    live = nu.If(cr.started_at.exists(), nu.Str(STATE_RUNNING), nu.Str(STATE_STARTING))
     return nu.If(
-        nu.Eq(run_id, nu.Str("")),
+        nu.Eq(cell_run_id, nu.Str("")),
         nu.Str(STATE_IDLE),
-        nu.If(
-            eq(status, STATUS_STARTING),
-            nu.Str(STATE_STARTING),
-            nu.If(
-                eq(status, STATUS_UP, STATUS_STOPPING),
-                nu.Str(STATE_RUNNING),
-                nu.If(eq(status, STATUS_DEAD), dead, nu.Str(STATE_IDLE)),
-            ),
-        ),
+        nu.If(row.cells_running.contains(cell_run_id), live, ended),
     )
 
 
-def statuses(plane_id: nu.StrArg) -> nu.Nu:
-    """A plane's cells as ``{cell_id, state, error, started_at}``, in order. Bare read.
-
-    One pass over the run records picks the plane's, then per cell its live
-    run or else its most recent (minted ids sort by creation).
-    """
-    r, mine_run, live_run, last_run = (
-        fresh("status_run"),
-        fresh("status_mine"),
-        fresh("status_live"),
-        fresh("status_last"),
-    )
-    held, cell, mine, pick, state = (
-        fresh("status_plane_runs"),
-        fresh("status_cell"),
-        fresh("status_cell_runs"),
-        fresh("status_pick"),
-        fresh("status_state"),
-    )
-    plane_runs = nu.List(
-        nu.Collect(
-            nu.Filter(
-                nu.list(_runs.keys()),
-                nu.Eq(text(_runs[nu.StrAttrRef(r)].plane), plane_id),
-                key=r,
-            )
-        )
-    )
-    cell_runs = nu.List(
-        nu.Collect(
-            nu.Filter(
-                nu.ListAttrRef(held),
-                nu.Eq(text(_runs[nu.StrAttrRef(mine_run)].cell), nu.StrAttrRef(cell)),
-                key=mine_run,
-            )
-        )
-    )
-    live = nu.First(
-        nu.Filter(nu.ListAttrRef(mine), _live.contains(nu.StrAttrRef(live_run)), key=live_run)
-    )
-    last = nu.Last(nu.Filter(nu.ListAttrRef(mine), nu.Bool(True), key=last_run))
-    chosen = nu.If(nu.IsEmpty(live), nu.If(nu.IsEmpty(last), nu.Str(""), last), live)
-    picked = nu.StrAttrRef(pick)
-    said = nu.StrAttrRef(state)
+def _idle(plane_id: nu.StrArg) -> nu.Nu:
+    """Every cell of the plane idle, in order. Bare read."""
+    cell = fresh("status_idle")
     row = nu.Dict.of(
         cell_id=nu.StrAttrRef(cell),
-        state=said,
-        error=nu.If(nu.Eq(said, nu.Str(STATE_FAILED)), text(_runs[picked].error), nu.Str("")),
-        # Nothing reads it yet. The browser keeps only a positive number.
+        state=nu.Str(STATE_IDLE),
+        error=nu.Str(""),
         started_at=nu.Int(0),
     )
-    per_cell = nu.Let(mine, cell_runs, nu.Let(pick, chosen, nu.Let(state, _state(picked), row)))
-    return nu.Let(held, plane_runs, nu.Collect(nu.Map(ops.cells(plane_id), per_cell, key=cell)))
+    return nu.Collect(nu.Map(ops.cells(plane_id), row, key=cell))
+
+
+def statuses(plane_id: nu.StrArg, run_id: nu.StrArg) -> nu.Nu:
+    """A plane's cells as ``{cell_id, state, error, started_at}`` in one plane run, in order. Bare read.
+
+    Per cell, its newest cell run in the run, a point read of the run's
+    ``latest``: never a walk of the run's cell runs, which grow with every
+    reload. A ``run_id`` of ``""`` is every cell idle.
+    """
+    row = _runs[run_id]
+    cell, pick, state = fresh("status_cell"), fresh("status_pick"), fresh("status_state")
+    here = nu.StrAttrRef(cell)
+    chosen = ops.latest(run_id, here)
+    picked = nu.StrAttrRef(pick)
+    said = nu.StrAttrRef(state)
+    started = row.cells[picked].started_at
+    entry = nu.Dict.of(
+        cell_id=here,
+        state=said,
+        error=nu.If(nu.Eq(said, nu.Str(STATE_FAILED)), text(row.cells[picked].error), nu.Str("")),
+        started_at=nu.If(
+            nu.And(nu.Ne(picked, nu.Str("")), started.exists()), nu.ToFloat(started), nu.Int(0)
+        ),
+    )
+    per_cell = nu.Let(pick, chosen, nu.Let(state, _state(run_id, picked), entry))
+    shown = nu.Collect(nu.Map(ops.cells(plane_id), per_cell, key=cell))
+    return nu.If(nu.Eq(run_id, nu.Str("")), _idle(plane_id), shown)
 
 
 # --- Shipping ------------------------------------------------------------------
@@ -255,10 +227,14 @@ def _ship_plane(viewer: Ref, plane: nu.Nu) -> nu.Nu:
     )
 
 
-def _ship_status(viewer: Ref, plane: nu.Nu) -> nu.Nu:
-    held = fresh("viewer_status")
-    read = nu.If(ops.plane_exists(plane), statuses(plane), nu.List.of())
-    return nu.Let(held, snap(read), interactions.set_status(viewer, plane, nu.ListAttrRef(held)))
+def _ship_status(viewer: Ref, sid: nu.StrArg, plane: nu.Nu) -> nu.Nu:
+    held, run = fresh("viewer_status"), fresh("viewer_run")
+    read = nu.If(ops.plane_exists(plane), statuses(plane, nu.StrAttrRef(run)), nu.List.of())
+    return nu.Let(
+        run,
+        snap(pane_run(sid, plane)),
+        nu.Let(held, snap(read), interactions.set_status(viewer, plane, nu.ListAttrRef(held))),
+    )
 
 
 def _plane_changes(plane: nu.Nu) -> list[nu.Nu]:
@@ -282,9 +258,20 @@ def _plane_changes(plane: nu.Nu) -> list[nu.Nu]:
     ]
 
 
-def _status_changes() -> list[nu.Nu]:
-    """What reships the statuses: any run's status. Exit and error land with it."""
-    return [snap(_runs.on_descendants_change("*", "status"))]
+def _status_changes(sid: nu.StrArg, plane: nu.Nu) -> list[nu.Nu]:
+    """What reships the statuses: nav's run for the pane, and that run's cell runs.
+
+    Built fresh every turn, so they follow the pane's current run: a new
+    one from nav, a cell run added or ended (``cells_running``), one
+    starting (``started_at``). Exit and error land with the end.
+    """
+    pane = pane_run(sid, plane)
+    rid = nu.If(nu.Eq(pane, nu.Str("")), nu.Str("-"), pane)
+    return [
+        snap(panes().on_child_change(pane_key(sid, plane))),
+        snap(_runs[rid].cells_running.on_children_change()),
+        snap(_runs[rid].cells.on_descendants_change("*", "started_at")),
+    ]
 
 
 # --- The composition -------------------------------------------------------------
@@ -405,9 +392,9 @@ def viewer_feed(viewer: Ref, sid: nu.StrArg, snippets: Iterable[Snippet] = ()) -
         _arms.state(
             "plane",
             _plane_changes(plane),
-            _ship_plane(viewer, plane) >> _ship_status(viewer, plane),
+            _ship_plane(viewer, plane) >> _ship_status(viewer, sid, plane),
         ),
-        _arms.state("status", _status_changes(), _ship_status(viewer, plane)),
+        _arms.state("status", _status_changes(sid, plane), _ship_status(viewer, sid, plane)),
     )
     # One arm per open plane: a plane opened gets itself and its statuses
     # shipped, a plane closed has its subscriptions torn down, and the other

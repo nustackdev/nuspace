@@ -1,7 +1,8 @@
-"""The ``runs`` Plane: what the kernel is running and what just ended, live.
+"""The ``runs`` Plane: what the kernel is running now, live.
 
 Three cells, each redrawing once a second from one snapshot of the store:
-the counts, the live runs, and the last finished ones.
+the counts, the live plane runs, and their live cell runs. Everything is
+read off the live indexes, so it costs what is running, never history.
 """
 
 from __future__ import annotations
@@ -9,7 +10,7 @@ from __future__ import annotations
 from nuspace import Plane
 
 
-__all__ = ["COUNTS", "FINISHED", "LIVE", "PLANE"]
+__all__ = ["CELLS", "COUNTS", "LIVE", "PLANE"]
 
 
 COUNTS = """\
@@ -20,21 +21,18 @@ import nuspace
 from nuspace import ops
 
 
-def count(runs, exit):
-    return nu.Count(nu.Filter(nu.Iter(runs), nu.Eq(nu.DictAttrRef("r")["exit"], exit), key="r"))
-
-
 def tile(name, label, value):
     return nustd.ui.StatRef(name).set(nu.ToStr(value), label=label)
 
 
 def draw():
     runs = nu.ListAttrRef("runs")
+    r = nu.DictAttrRef("r")
+    cells = nu.Sum(nu.Map(nu.Iter(runs), nu.Len(nu.List(r["cells_running"])), key="r"))
     tiles = (
-        tile("live", "Live", nu.Len(ops.live_runs()))
-        >> tile("ok", "OK", count(runs, "ok"))
-        >> tile("failed", "Failed", count(runs, "failed"))
-        >> tile("killed", "Killed", count(runs, "killed"))
+        tile("runs", "Live runs", nu.Len(runs))
+        >> tile("cells", "Live cells", cells)
+        >> tile("workers", "Workers up", nu.Len(ops.workers()))
     )
     return nustd.kv.Snapshot(nu.Let("runs", ops.runs(), tiles), scope=nuspace.Space)
 
@@ -65,14 +63,18 @@ def age(t):
 
 def draw():
     r = nu.DictAttrRef("r")
-    live = nu.Filter(nu.Iter(ops.runs()), nu.Ne(r["status"], "dead"), key="r")
     row = nu.List.of(
-        plane_name(r["plane"]), r["cell"], r["worker"], r["by"], r["status"], age(r["started"])
+        plane_name(r["plane"]),
+        r["backend"],
+        r["by"],
+        nu.Len(nu.List(r["cells_running"])),
+        nu.Len(nu.List(r["workers"])),
+        age(r["started_at"]),
     )
     table = nustd.ui.TableRef("live runs").set(
         nu.Dict.of(
-            columns=["Plane", "Cell", "Worker", "By", "Status", "Age"],
-            rows=nu.Collect(nu.Map(live, row, key="r")),
+            columns=["Plane", "Backend", "By", "Cells", "Workers", "Age"],
+            rows=nu.Collect(nu.Map(nu.Iter(ops.runs()), row, key="r")),
         )
     )
     return nustd.kv.Snapshot(nu.Let("now", nustd.time.time(), table), scope=nuspace.Space)
@@ -83,7 +85,7 @@ def out():
 """
 
 
-FINISHED = """\
+CELLS = """\
 import nu
 import nustd.kv
 import nustd.time
@@ -92,27 +94,35 @@ import nuspace
 from nuspace import ops
 
 
-def plane_name(pid):
-    name = nuspace.Space.planes[pid].name
-    return nu.If(name.exists(), nu.ToStr(name), pid)
+def name(ref, fallback):
+    return nu.If(ref.exists(), nu.ToStr(ref), fallback)
 
 
-def ago(t):
+def age(t):
     now = nu.FloatAttrRef("now")
-    return nu.If(nu.Is(t, None), nu.Str(""), nu.Format(now - t, ".0f") + nu.Str("s ago"))
+    return nu.If(nu.Is(t, None), nu.Str("starting"), nu.Format(now - t, ".0f") + nu.Str("s"))
 
 
 def draw():
-    r = nu.DictAttrRef("r")
-    dead = nu.Filter(nu.Iter(ops.runs(status="dead")), nu.Not(nu.Is(r["ended"], None)), key="r")
-    newest = nu.List(nu.Collect(nu.SortBy(dead, r["ended"], reverse=True, item="r")))[0:20]
+    r, c = nu.DictAttrRef("r"), nu.DictAttrRef("c")
+    plane = nuspace.Space.planes[nu.ToStr(r["plane"])]
     row = nu.List.of(
-        plane_name(r["plane"]), r["cell"], r["exit"], nu.Str(r["error"])[0:80], ago(r["ended"])
+        name(plane.name, nu.ToStr(r["plane"])),
+        name(plane.cells[nu.ToStr(c["cell"])].name, nu.ToStr(c["cell"])),
+        c["by"],
+        c["version"],
+        c["worker"],
+        age(c["started_at"]),
     )
-    table = nustd.ui.TableRef("finished runs").set(
+    rows = nu.Map(
+        nu.Iter(ops.runs()),
+        nu.Collect(nu.Map(nu.Iter(ops.cell_runs(nu.ToStr(r["id"]), live=True)), row, key="c")),
+        key="r",
+    )
+    table = nustd.ui.TableRef("live cells").set(
         nu.Dict.of(
-            columns=["Plane", "Cell", "Exit", "Error", "Ended"],
-            rows=nu.Collect(nu.Map(nu.Iter(newest), row, key="r")),
+            columns=["Plane", "Cell", "By", "Version", "Worker", "Age"],
+            rows=nu.Collect(nu.Flatten(rows)),
         )
     )
     return nustd.kv.Snapshot(nu.Let("now", nustd.time.time(), table), scope=nuspace.Space)
@@ -127,7 +137,7 @@ PLANE = Plane(
     "runs",
     "Runs",
     icon="activity",
-    description="Live and recent runs, redrawn every second.",
+    description="Live plane runs and their cells, redrawn every second.",
     meta={"editable": True, "full_width": False},
-    cells=(("counts", COUNTS), ("live", LIVE), ("finished", FINISHED)),
+    cells=(("counts", COUNTS), ("live", LIVE), ("cells", CELLS)),
 )

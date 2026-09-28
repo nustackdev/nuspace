@@ -10,7 +10,7 @@ Three cells, meeting in the plane's shared state (``Jobs.selected``):
 - ``new``: a name and a button that makes a job, starting as the ``program``
   snippet, and selects it.
 - ``job``: the selected job's code, boot switch, restart setting and delete.
-  Restart is set on every cell of the job.
+  Restart is plane level: the supervisor keeps the job running.
 """
 
 from __future__ import annotations
@@ -54,13 +54,13 @@ def jobs(key):
 
 def running():
     # Live runs are few: their planes, not every run ever recorded.
-    run = nuspace.Space.kernel.runs[nu.StrAttrRef("live")]
-    return nu.List(nu.Collect(nu.Unique(nu.Map(ops.live_runs(), nu.ToStr(run.plane), key="live"))))
+    run = nu.DictAttrRef("live")
+    return nu.List(nu.Collect(nu.Unique(nu.Map(nu.Iter(ops.runs()), run["plane"], key="live"))))
 
 
 def restart(pid):
-    policy = supervisor.policy_of(pid, "main")
-    delay = supervisor.delay_of(pid, "main")
+    policy = supervisor.policy_of(pid)
+    delay = supervisor.delay_of(pid)
     label = nu.If(
         nu.Eq(policy, "always"),
         nu.Str("always"),
@@ -215,8 +215,8 @@ def snap(term):
 def draw(job):
     d = View.detail
     name = nuspace.Space.planes[job].name
-    policy = supervisor.policy_of(job, "main")
-    delay = supervisor.delay_of(job, "main")
+    policy = supervisor.policy_of(job)
+    delay = supervisor.delay_of(job)
     return snap(
         d.title.set(nu.If(name.exists(), nu.ToStr(name), job))
         >> d.editor.set(ops.prog(job, "main"))
@@ -229,19 +229,17 @@ def draw(job):
 
 
 def restart(job, tag):
-    # Plane level: the same policy and delay on every cell of the job.
+    # Plane level: the supervisor keeps the job running, off stops its run.
     choice, delay = nu.StrAttrRef(tag + ".policy"), nu.FloatAttrRef(tag + ".delay")
-    cell = nu.StrAttrRef(tag + ".cell")
-    each = nu.IfDo(
+    apply = nu.IfDo(
         nu.Eq(choice, OFF),
-        supervisor.unsupervise(job, cell),
+        supervisor.unsupervise(job),
         nu.IfDo(
             nu.Gt(delay, 0.0),
-            supervisor.supervise(job, cell, choice, delay=delay),
-            supervisor.supervise(job, cell, choice),
+            supervisor.supervise(job, choice, delay=delay),
+            supervisor.supervise(job, choice),
         ),
     )
-    apply = nu.ForEachDo(snap(ops.cells(job)), each, item=tag + ".cell")
     policy = View.detail.restart.policy.choice
     return nu.Let(
         tag + ".policy",
@@ -251,13 +249,9 @@ def restart(job, tag):
 
 
 def remove(job):
-    cell = nu.StrAttrRef("job.gone")
-    unsupervised = nu.ForEachDo(
-        snap(ops.cells(job)), supervisor.unsupervise(job, cell), item="job.gone"
-    )
-    # remove_plane asks the job's live runs to stop.
+    # remove_plane kills the job's live runs.
     return (
-        unsupervised
+        supervisor.unsupervise(job)
         >> init.unboot(job)
         >> ops.remove_plane(job)
         >> nustd.kv.Transaction(Jobs.selected.set(""), scope=nuspace.Space)

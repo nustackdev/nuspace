@@ -1,15 +1,16 @@
-"""init: pid 1. Brings up the planes its boot list names, once, at open.
+"""init: pid 1. Runs the planes its boot list names, once, at open.
 
 The kernel starts this and nothing else. What else runs at boot is data, in
 this cell's own state (:class:`Boot`), edited with :func:`boot` and
-:func:`unboot` from anywhere. Each plane gets a worker of its own.
+:func:`unboot` from anywhere. Each plane gets a plane run of its own,
+``by`` init, on the backend the plane names.
 """
 
 from __future__ import annotations
 
 import nu
 import nustd.kv
-from nuspace.ops import plane_exists, up_plane, worker
+from nuspace.ops import plane_exists, plane_run
 from nuspace.ops.utils import atomic
 from nuspace.shapes import CellState, Space, reroot
 
@@ -37,7 +38,7 @@ PLANE = "init"
 #: The one cell on the plane.
 CELL = "main"
 
-#: What runs init starts are recorded as ``by``.
+#: What plane runs init starts are recorded as ``by``.
 BY = "init"
 
 #: The cell's prog: the code lives here, the store holds this (D20).
@@ -55,7 +56,6 @@ def out():
 BOOTED = ("nav", "supervisor", "reload")
 
 _ITEM = "nuspace.init.plane"
-_WORKER = "nuspace.init.worker"
 
 
 class Boot(CellState):
@@ -104,13 +104,12 @@ def booted() -> nu.Nu:
 
 
 def program() -> nu.Nu:
-    """Every listed plane that exists, up on a worker of its own. Then parked."""
+    """Every listed plane that exists, run. Then parked."""
     plane = nu.StrAttrRef(_ITEM)
-    start = nu.Let(_WORKER, worker(), up_plane(plane, worker=nu.StrAttrRef(_WORKER), by=BY))
     return (
         nu.ForEachDo(
             snap(nu.list(Boot.planes)),
-            nu.IfDo(snap(plane_exists(plane)), start),
+            nu.IfDo(snap(plane_exists(plane)), plane_run(plane, by=BY)),
             item=_ITEM,
         )
         >> park()

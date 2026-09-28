@@ -14,8 +14,9 @@ snapshot of the store, like the nuverse live planes:
   ``Space.state.info``;
 - ``recent``: the last :data:`RECENT_SHOWN` planes of ``Space.state.recents``
   that still exist, as links;
-- ``glance``: planes, live runs, workers up and runs failed in the last hour,
-  with links to the first Runs, Workers and Planes planes there are;
+- ``glance``: planes, live runs, live cells and workers up, read off the
+  live indexes, with links to the first Runs, Workers and Planes planes
+  there are;
 - ``start``: how the shell works, static.
 
 Core only: the cells import ``nu``, ``nustd`` and ``nuspace``, never nuverse,
@@ -171,7 +172,6 @@ def out():
 GLANCE = """\
 import nu
 import nustd.kv
-import nustd.time
 import nustd.ui
 import nuspace
 from nuspace import ops
@@ -180,8 +180,8 @@ from nuspace import ops
 class Tiles(nustd.ui.Row):
     planes = nustd.ui.StatRef.slot(label="Planes")
     live = nustd.ui.StatRef.slot(label="Live runs")
+    cells = nustd.ui.StatRef.slot(label="Live cells")
     workers = nustd.ui.StatRef.slot(label="Workers up")
-    failed = nustd.ui.StatRef.slot(label="Failed, last hour")
 
 
 class Links(nustd.ui.Row):
@@ -205,20 +205,9 @@ def drawn(planes):
     return nu.Count(nu.Filter(nu.Iter(planes), nu.And(drawn, nu.Ne(p["id"], "home")), key="p"))
 
 
-def workers_up():
-    w = nu.DictAttrRef("w")
-    return nu.Count(nu.Filter(nu.Iter(ops.workers()), nu.Eq(w["status"], "up"), key="w"))
-
-
-def failed_recently():
+def live_cells(runs):
     r = nu.DictAttrRef("r")
-    since = nu.FloatAttrRef("now") - 3600.0
-    failed = nu.Filter(
-        nu.Iter(ops.runs(status="dead")),
-        nu.And(nu.Eq(r["exit"], "failed"), nu.Not(nu.Is(r["ended"], None))),
-        key="r",
-    )
-    return nu.Count(nu.Filter(failed, nu.Ge(r["ended"], since), key="r"))
+    return nu.Sum(nu.Map(nu.Iter(runs), nu.Len(nu.List(r["cells_running"])), key="r"))
 
 
 def first(planes, made_by):
@@ -238,19 +227,19 @@ def link(ref, planes, made_by, label):
 
 
 def draw():
-    planes = nu.ListAttrRef("planes")
+    planes, runs = nu.ListAttrRef("planes"), nu.ListAttrRef("runs")
     tiles = (
         Glance.tiles.planes.set(nu.ToStr(drawn(planes)))
-        >> Glance.tiles.live.set(nu.ToStr(nu.Len(ops.live_runs())))
-        >> Glance.tiles.workers.set(nu.ToStr(workers_up()))
-        >> Glance.tiles.failed.set(nu.ToStr(failed_recently()))
+        >> Glance.tiles.live.set(nu.ToStr(nu.Len(runs)))
+        >> Glance.tiles.cells.set(nu.ToStr(live_cells(runs)))
+        >> Glance.tiles.workers.set(nu.ToStr(nu.Len(ops.workers())))
     )
     links = (
         link(Glance.links.runs, planes, "runs", "Runs")
         >> link(Glance.links.workers, planes, "workers", "Workers")
         >> link(Glance.links.planes, planes, "planes", "Planes")
     )
-    body = nu.Let("now", nustd.time.time(), nu.Let("planes", ops.plane_rows(), tiles >> links))
+    body = nu.Let("runs", ops.runs(), nu.Let("planes", ops.plane_rows(), tiles >> links))
     return nustd.kv.Snapshot(body, scope=nuspace.Space)
 
 
