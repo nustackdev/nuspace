@@ -88,7 +88,7 @@ def draw():
         )
     )
     body = nu.Let("booted", init.booted(), nu.Let("running", running(), table))
-    return nustd.kv.Snapshot(body, scope=nuspace.Space)
+    return ops.snapshot(body)
 
 
 def select():
@@ -99,7 +99,10 @@ def select():
     # The rows are the jobs in creation order: the same read finds the one clicked.
     return nu.IfDo(
         nu.Contains(click, "row_index"),
-        nustd.kv.Transaction(nu.Let("ids", jobs("jobs.pick"), pick), scope=nuspace.Space),
+        nustd.kv.Transaction(
+            nustd.kv.Snapshot(nu.Let("ids", jobs("jobs.pick"), pick), scope=nuspace.Space),
+            scope=nuspace.States,
+        ),
     )
 
 
@@ -141,7 +144,7 @@ def create(name):
     job = nu.StrAttrRef("new.job")
     made = ops.add_plane(name=name, parent=here, ui=False, made_by="jobs")
     fill = ops.add_cell(job, STARTER, cell_id="main", name="main") >> nustd.kv.Transaction(
-        Jobs.selected.set(job), scope=nuspace.Space
+        Jobs.selected.set(job), scope=nuspace.States
     )
     return nu.Let("new.job", made, fill)
 
@@ -209,7 +212,7 @@ class View(nustd.ui.Column):
 
 
 def snap(term):
-    return nustd.kv.Snapshot(term, scope=nuspace.Space)
+    return ops.snapshot(term)
 
 
 def draw(job):
@@ -254,7 +257,7 @@ def remove(job):
         supervisor.unsupervise(job)
         >> init.unboot(job)
         >> ops.remove_plane(job)
-        >> nustd.kv.Transaction(Jobs.selected.set(""), scope=nuspace.Space)
+        >> nustd.kv.Transaction(Jobs.selected.set(""), scope=nuspace.States)
     )
 
 

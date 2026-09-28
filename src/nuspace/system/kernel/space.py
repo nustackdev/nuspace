@@ -3,20 +3,24 @@
 A space is a directory::
 
     <space dir>/
-      kernel.sqlite     the whole Space store
+      kernel.sqlite     the Space store: planes, cells, tree, runs, devices
+      state.sqlite      the States store: what the programs remember
       valkey/           the notification server's data dir (pid, log)
 
-The store is one SQLite file in WAL mode, which every process opens and
+Each store is one SQLite file in WAL mode, which every process opens and
 writes on its own: readers never wait, writers take turns on the file's
-lock, and a process that dies mid write frees it. What SQLite does not do is
-tell one process about another's writes, so the host runs a private Valkey
-server on a unix socket and every process publishes and subscribes through
-it. Everything here follows from that:
+lock, and a process that dies mid write frees it. Two files, two tags
+(:class:`~nuspace.shapes.Space`, :class:`~nuspace.shapes.States`): a
+bracket names one, and a write to one never waits on the other's lock. What
+SQLite does not do is tell one process about another's writes, so the host
+runs a private Valkey server on a unix socket and every process publishes
+and subscribes through it, each store on its own channel prefix so neither
+hears the other. Everything here follows from that:
 
-- the host brings the server up before its own navigator, and takes it down
-  last, after the fleet has stopped talking to it;
-- a worker opens the same file with the same server's address, so a read is
-  a local read, and a write it makes wakes a subscriber anywhere;
+- the host brings the server up before its own navigators, and takes it
+  down last, after the fleet has stopped talking to it;
+- a worker opens the same files with the same server's address, so a read
+  is a local read, and a write it makes wakes a subscriber anywhere;
 - workers are children of the host, so the pool lives here too, and closing
   the brackets reaps the fleet.
 
@@ -39,7 +43,7 @@ import nu
 import nustd.kv
 import nustd.mp_pool
 import nustd.valkey
-from nuspace.shapes import Space
+from nuspace.shapes import Space, States
 from nuspace.system.backends import provided
 from nustd.mp_pool.presets import spares as spares_shelf
 
@@ -61,6 +65,7 @@ __all__ = [
     "DEFAULT_NAME",
     "DEFAULT_SPARES",
     "KERNEL_FILE",
+    "STATE_FILE",
     "VALKEY_DIR",
     "NotASpace",
     "Throwaway",
@@ -82,8 +87,11 @@ DEFAULT_NAME = "nuspace"
 #: one for the tab beside it.
 DEFAULT_SPARES = 2
 
-#: The store's file inside a space directory.
+#: The Space store's file inside a space directory.
 KERNEL_FILE = "kernel.sqlite"
+
+#: The States store's file inside a space directory, beside the Space one.
+STATE_FILE = "state.sqlite"
 
 #: The notification server's data dir inside a space directory.
 VALKEY_DIR = "valkey"
@@ -145,21 +153,35 @@ class Throwaway:
         shutil.rmtree(self.path, ignore_errors=True)
 
 
-def navigator(path: str) -> nu.With:
-    """The Space store in ``path``, as any process opens it. Tagged :class:`~nuspace.shapes.Space`.
+def _sqlite(path: str, file: str, tag: type[nu.Shape]) -> nu.With:
+    """One store of the space: ``file`` in ``path``, tagged ``tag``, notified on its own channels.
 
-    kv refs find their navigator by root shape class, so the tag is load
-    bearing. Needs the space's server up: its publisher and observer connect
-    at setup. The host opens it inside :func:`store`, a worker on its own.
+    The channel prefix is the file's name, so the two stores share the one
+    server and never wake each other's subscribers, even on equal keys.
+    """
+    return nustd.kv.sqlite_navigator_redis(
+        str(Path(path) / file),
+        tags=(tag,),
+        redis_url=nustd.valkey.url_for(Path(path) / VALKEY_DIR),
+        channel_prefix=f"nuspace.{Path(file).stem}",
+    )
+
+
+def navigator(path: str) -> nu.With:
+    """Both stores in ``path``, as any process opens them: Space, then States.
+
+    Tagged :class:`~nuspace.shapes.Space` and :class:`~nuspace.shapes.States`.
+    kv refs find their navigator by root shape class, so the tags are load
+    bearing: a rerooted state ref routes to ``state.sqlite``, anything of
+    Space to ``kernel.sqlite``. Both are always opened, never one without
+    the other. Needs the space's server up: their publishers and observers
+    connect at setup. The host opens them inside :func:`store`, a worker on
+    its own.
 
     Args:
         path: The space directory, absolute (see :func:`space_dir`).
     """
-    return nustd.kv.sqlite_navigator_redis(
-        str(Path(path) / KERNEL_FILE),
-        tags=(Space,),
-        redis_url=nustd.valkey.url_for(Path(path) / VALKEY_DIR),
-    )
+    return nu.With(_sqlite(path, KERNEL_FILE, Space), _sqlite(path, STATE_FILE, States))
 
 
 def _owned(path: str | None) -> tuple[str, nu.With]:
@@ -173,7 +195,7 @@ def _owned(path: str | None) -> tuple[str, nu.With]:
 
 
 def store(path: str | None = None) -> nu.With:
-    """The Space store as its owner opens it: the notification server, then :func:`navigator`.
+    """The space's stores as their owner opens them: the notification server, then :func:`navigator`.
 
     The server comes up first and goes down last, so nothing in the bracket
     ever talks to a server that is not there.
@@ -218,8 +240,8 @@ class Warmed:
 def worker_context(path: str) -> nu.With:
     """What every worker comes up holding. Pickled to the child, entered there.
 
-    Process scope only, since the pool pays it on every launch: the store,
-    opened by the worker itself on the host's file and server, a dict for
+    Process scope only, since the pool pays it on every launch: both
+    stores, opened by the worker itself on the host's files and server, a dict for
     host local records, and the warm module cache. Whatever one run needs
     rides in its body.
 
@@ -261,7 +283,7 @@ def open_kernel(
 
     The brackets, in the order each needs the last (teardown runs the other
     way, so the fleet dies before the server it publishes through): the
-    store (the notification server, then the navigator), a dict, the pool,
+    stores (the notification server, then both navigators), a dict, the pool,
     the shelf of spares, the backends, the kernel's config. Inside: reconcile first, so
     leftovers have ended before ``body`` asks for anything, then the kernel and
     ``body`` race. The space closes when ``body`` returns; a server's body

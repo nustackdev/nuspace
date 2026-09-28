@@ -15,7 +15,7 @@ import nustd.kv
 from nu.engine.structure import Declared
 from nu.lang import ScalarAction, ScalarQuery
 from nu.lang.sentinels import EMPTY, INVALID
-from nuspace.shapes import Space
+from nuspace.shapes import Space, States
 
 
 if TYPE_CHECKING:
@@ -29,6 +29,7 @@ __all__ = [
     "PopAttr",
     "as_list",
     "atomic",
+    "atomic_state",
     "binding",
     "flag",
     "fresh",
@@ -36,6 +37,7 @@ __all__ = [
     "mint_ordered_id",
     "minting",
     "or_else",
+    "snapshot",
     "text",
     "then",
 ]
@@ -159,8 +161,40 @@ def atomic(body: nu.Nu) -> nu.Nu:
 
     Brackets do not merge: an op inside another op's bracket opens its own.
     Composite ops are built from unbracketed parts for that reason.
+
+    Space only: States reads inside see a snapshot, opened only if one is
+    made, and a States write has no transaction to go through and fails. An
+    op that writes both is two commits, see :func:`atomic_state`.
     """
-    return nustd.kv.RetryOnConflict(nustd.kv.Transaction(body, scope=Space))
+    snapped = nustd.kv.Snapshot(nustd.kv.Transaction(body, scope=Space), scope=States)
+    return nustd.kv.RetryOnConflict(snapped)
+
+
+def atomic_state(body: nu.Nu) -> nu.Nu:
+    """``body`` as one commit against the States store, retried on conflict.
+
+    :func:`atomic` for program state. Space reads inside see a snapshot,
+    opened only if one is made, so a state write can ask about structure
+    (eg whether the cell is there) without taking the Space store's lock.
+
+    The two stores are two files: nothing commits both at once. An op that
+    writes both commits Space first, then States, and never holds both
+    write locks, so two processes writing both can never wait on each
+    other. Structure first means a live plane or cell never points at state
+    that is gone; what a crash between the two can leave is state nothing
+    points at.
+    """
+    snapped = nustd.kv.Snapshot(nustd.kv.Transaction(body, scope=States), scope=Space)
+    return nustd.kv.RetryOnConflict(snapped)
+
+
+def snapshot(term: nu.Nu) -> nu.Nu:
+    """``term`` read in a snapshot of both stores, Space and States.
+
+    Each opens only if ``term`` reads it, so wrapping a read that touches
+    one store costs nothing for the other.
+    """
+    return nustd.kv.Snapshot(nustd.kv.Snapshot(term, scope=States), scope=Space)
 
 
 def then(effect: nu.Nu, name: str) -> nu.Nu:

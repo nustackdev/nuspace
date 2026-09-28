@@ -127,7 +127,9 @@ async def test_plane_lens_browses_its_own_plane(ctx):
         await _until(lambda: any(f.ref[-1] == "lens" for f in browser.frames))
         shown = _keys(browser.last("lens"))
         assert shown["name"] == "Home"
-        assert {"props", "meta", "state", "cells", "order"} <= set(shown)
+        assert {"props", "meta", "cells", "order"} <= set(shown)
+        # State is in the other store: a lens on the plane does not see it.
+        assert "state" not in shown
     finally:
         task.cancel()
 

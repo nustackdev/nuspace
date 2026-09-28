@@ -12,7 +12,12 @@ agent and the shell compose these and nothing narrower.
   runs and yields it. Yielding ops are Actions: they chain with ``>>`` and
   bind with ``nu.Let``.
 - **Reads are bare.** They compose into any expression and read inside the
-  enclosing bracket. Alone, wrap one in ``nustd.kv.Snapshot(..., scope=Space)``.
+  enclosing bracket. Alone, wrap one in ``nustd.kv.Snapshot(..., scope=Space)``,
+  or in :func:`snapshot` when it reads program state too.
+- **Two stores.** Space holds structure, runs and devices; States holds
+  program state, by plane and cell id. A write op commits to one; one that
+  touches both is a commit to each, Space first (see
+  :func:`~.utils.atomic_state`).
 - **Kernel ops write intents only.** The kernel and the backends, in the
   host, make them true and write the effects (see :mod:`nuspace.ops.kernel`).
 """
@@ -62,7 +67,7 @@ from .read import (
 from .settings import set_telemetry, telemetry
 from .state import CellState, PlaneState, clear_state, sibling
 from .tree import move_plane
-from .utils import mint_ordered_id
+from .utils import mint_ordered_id, snapshot
 
 
 __all__ = [
@@ -118,6 +123,7 @@ __all__ = [
     "set_prog",
     "set_telemetry",
     "sibling",
+    "snapshot",
     "telemetry",
     "unpin_plane",
     "workers",

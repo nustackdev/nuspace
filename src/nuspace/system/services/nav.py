@@ -34,7 +34,7 @@ from __future__ import annotations
 import nu
 import nustd.kv
 from nuspace.ops import cell_exists, cell_run, cells, plane_exists, plane_run, plane_stop
-from nuspace.ops.utils import atomic, flag, fresh, or_else
+from nuspace.ops.utils import atomic, atomic_state, flag, fresh, or_else
 from nuspace.shapes import CellState, Space, reroot
 
 from ..utils import Ticking, park, snap, until, wake
@@ -208,7 +208,7 @@ def _turn(sid: nu.StrAttrRef, route: nu.StrAttrRef) -> nu.Nu:
     followed = nu.TryCatch(
         nu.Race(_cells_fold(route, run_id), ended), finally_=nu.IfDo(live, plane_stop(run_id))
     )
-    remember = atomic(_here(Panes.runs.set_item(pane_key(sid, route), run_id)))
+    remember = atomic_state(_here(Panes.runs.set_item(pane_key(sid, route), run_id)))
     # A route can name a plane before the plane is written: the browser mints
     # a new plane's id and opens it while its create is still in flight. So
     # wait for the plane rather than giving up on the route; the routes will
@@ -222,7 +222,7 @@ def _open(sid: nu.StrAttrRef, route: nu.StrAttrRef) -> nu.Nu:
     """One open plane, run and run again for as long as it is open. Forgotten on the way out."""
     runs = panes()
     key = pane_key(sid, route)
-    forget = atomic(nu.IfDo(runs.contains(key), runs.del_item(key)))
+    forget = atomic_state(nu.IfDo(runs.contains(key), runs.del_item(key)))
     return nu.TryCatch(nu.ForeverDo(_turn(sid, route)), finally_=forget)
 
 
@@ -258,8 +258,10 @@ def program() -> nu.Nu:
     were ended by reconcile.
     """
     connections = Space.connections
-    fresh_state = connections.init(nu.Dict.create()) >> _here(Panes.runs.set(nu.Literal({})))
-    return atomic(fresh_state) >> nu.ForEachParReactive(
+    fresh_state = atomic(connections.init(nu.Dict.create())) >> atomic_state(
+        _here(Panes.runs.set(nu.Literal({})))
+    )
+    return fresh_state >> nu.ForEachParReactive(
         snap(nu.list(connections.keys())),
         Ticking(snap(connections.on_children_change())),
         _arm(nu.StrAttrRef(_SID)),

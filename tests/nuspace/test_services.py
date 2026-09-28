@@ -30,7 +30,7 @@ from _support.kernel import (
 import nu
 from nuspace import ops
 from nuspace.ops.utils import atomic
-from nuspace.shapes import EXIT_FAILED, EXIT_INTERRUPTED, EXIT_OK, Space, reroot
+from nuspace.shapes import EXIT_FAILED, EXIT_INTERRUPTED, EXIT_OK, Space, States, reroot
 from nuspace.system.kernel import INIT_BY, Env, store
 from nuspace.system.services import (
     ALWAYS,
@@ -204,7 +204,7 @@ async def test_init_brings_up_its_boot_list(space):
         assert row["by"] == init.BY
     row = only(await runs_of(space, BOOTED_PLANE, lambda rs: rs and ended(rs[0])))
     assert (row["by"], row["exit"]) == (init.BY, EXIT_OK)
-    assert await space.read(Space.planes[BOOTED_PLANE].cells["c"].state["n"]) == 42
+    assert await space.read(States.planes[BOOTED_PLANE].cells["c"].extract()) == {"n": 42}
     kernel_run = only(await space.read(ops.runs(plane=init.PLANE)))
     assert kernel_run["by"] == INIT_BY
     workers = {
@@ -223,7 +223,7 @@ async def test_nav_runs_each_open_plane_in_its_own_run(space):
     assert (ra["by"], ra["envs"]) == (nav_service.BY, [["session", sid]])
     assert (rb["by"], rb["envs"]) == (nav_service.BY, [["session", sid]])
     assert ra["workers"] != rb["workers"]
-    await space.until(Space.planes[a].cells.extract(), lambda cs: _state(cs) == [sid])
+    await space.until(States.planes[a].cells.extract(), lambda cs: _state(cs) == [sid])
 
     # Closing a stops only its run: b keeps going.
     await open_tab(space, sid, b)
@@ -326,12 +326,12 @@ async def test_nav_runs_the_plane_again_once_its_run_ended_and_a_cell_changed(sp
     await space.run(ops.set_prog(p, c, prog("return Tick.n.set(7)")))
     again = await space.until(nav_service.pane_run(sid, p), lambda x: x not in ("", first), SLOW)
     assert (await space.run_row(again, ended, SLOW))["exit"] == EXIT_OK
-    assert await space.read(Space.planes[p].cells[c].state["n"]) == 7
+    assert (await space.read(States.planes[p].cells[c].extract()))["n"] == 7
     await close_tab(space, sid)
 
 
 def _state(cells: dict) -> list:
-    return [c.get("state", {}).get("s") for c in cells.values()]
+    return [c.get("s") for c in cells.values()]
 
 
 async def supervised(space: Kernel, plane: str, pred, timeout: float = SLOW) -> list[dict]:
@@ -465,7 +465,7 @@ async def test_reload_replaces_a_cell_run_when_its_prog_changes(space):
     assert (new["by"], new["version"], new["worker"]) == (reload_service.BY, 2, old["worker"])
     assert (row["by"], row["envs"]) == ("test", envs)
     assert not ended(row)
-    await space.until(Space.planes[p].cells[c].state["s"], lambda s: s == "v2")
+    await space.until(States.planes[p].cells[c].extract(), lambda s: s.get("s") == "v2")
     await space.run(ops.plane_kill(r))
     await space.run_row(r, ended, SLOW)
 

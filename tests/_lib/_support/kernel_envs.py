@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import nu
 from nuspace.ops import PLANE_ATTR
-from nuspace.shapes import Space
+from nuspace.shapes import States
 from nuspace.system.kernel import Env
 
 
@@ -20,12 +20,12 @@ TAG_ATTR = "test.tag"
 class Stamp:
     """A rewrite: the program writes ``stamped`` into its plane's state first.
 
-    Runs after reroot, so it names the store path itself.
+    Runs after reroot, so it names the state store path itself.
     """
 
     def __call__(self, term: nu.Nu) -> nu.Nu:
         plane = nu.StrAttrRef(PLANE_ATTR)
-        return Space.planes[plane].state.set_item("stamped", nu.Bool(True)) >> term
+        return States.planes[plane].state.set_item("stamped", nu.Bool(True)) >> term
 
 
 def tagged(value: str) -> Env:

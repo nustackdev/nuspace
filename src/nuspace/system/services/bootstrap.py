@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import nu
 from nuspace.ops import add_cell, add_plane
-from nuspace.ops.utils import atomic
+from nuspace.ops.utils import atomic_state
 from nuspace.shapes import Space
 
 from ..utils import snap
@@ -37,8 +37,8 @@ def _service(plane_id: str, shim: str) -> nu.Nu:
 
     Only when missing, because ``add_plane`` on an existing id rewrites its
     name and props, and ``add_cell`` its prog. Missing means never made by
-    those ops, not an absent row: :func:`~.init.boot` before the first open
-    writes init's cell state, which leaves a row with no name and no prog.
+    those ops, not an absent row: a row can be there with no name and no
+    prog (eg written by hand).
     """
     row = Space.planes[plane_id]
     return nu.IfDo(
@@ -59,4 +59,4 @@ def ensure_system() -> nu.Nu:
     term = _service(*SERVICES[0])
     for plane_id, shim in SERVICES[1:]:
         term = term >> _service(plane_id, shim)
-    return term >> atomic(init.seed(list(BOOTED)))
+    return term >> atomic_state(init.seed(list(BOOTED)))

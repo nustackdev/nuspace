@@ -17,8 +17,8 @@ import nu
 import nustd.ui
 from nuspace import ops
 from nuspace.ops import TEXT, Plane, Snippet
-from nuspace.ops.utils import atomic
-from nuspace.shapes import EXIT_FAILED, EXIT_INTERRUPTED, EXIT_KILLED, EXIT_OK, Space
+from nuspace.ops.utils import atomic, atomic_state
+from nuspace.shapes import EXIT_FAILED, EXIT_INTERRUPTED, EXIT_KILLED, EXIT_OK, Space, States
 from nuspace.system.devices.web import CellRoot, SessionWrap, Shell, session_env
 from nuspace.system.devices.web.sidebar import create, move, pins, registered_entries, rows
 from nuspace.system.devices.web.viewer import plane_view, statuses
@@ -458,7 +458,7 @@ async def test_connection_live(store):
         await store.run(ops.add_cell("p1", "y = 2", cell_id="c2"))
         await _until(lambda: len(session.writes("set_plane")[-1]["cells"]) == 2)
         await store.run(_run("r_01", "p1", ("cr_1", "c1", False, "", "")))
-        await store.run(atomic(nav.panes().set_item("s1/p1", nu.Str("r_01"))))
+        await store.run(atomic_state(nav.panes().set_item("s1/p1", nu.Str("r_01"))))
         await _until(lambda: session.writes("set_status")[-1]["statuses"][0]["state"] == "starting")
         cr = Space.kernel.runs["r_01"].cells["cr_1"]
         await store.run(atomic(cr.started_at.set(STARTED)))
@@ -467,7 +467,7 @@ async def test_connection_live(store):
         # State and output writes wake nothing.
         shipped, stats = len(session.writes("set_plane")), len(session.writes("set_status"))
         trees = len(session.writes("set_tree"))
-        await store.run(atomic(Space.planes["p1"].state.set_item("text", nu.Str("hi"))))
+        await store.run(atomic_state(States.planes["p1"].state.set_item("text", nu.Str("hi"))))
         await store.run(atomic(cr.out.set(nu.Literal([[1.0, "out", "x"]]))))
         await asyncio.sleep(0.2)
         assert len(session.writes("set_plane")) == shipped

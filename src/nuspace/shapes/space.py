@@ -75,8 +75,9 @@ class Space(nu.Shape):
     it is in ``tree``.
 
     ``Space`` is also the store's tag. kv refs find their navigator by root
-    shape class, so the store is bound under this class and anything rerooted
-    under it resolves there.
+    shape class, so the store is bound under this class. Program state is
+    not here: it lives in the other store, under
+    :class:`~nuspace.shapes.states.States`.
     """
 
     planes = nustd.kv.ShapesDictRef.slot(Plane)

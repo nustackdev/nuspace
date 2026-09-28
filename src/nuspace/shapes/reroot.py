@@ -7,15 +7,15 @@ splices every such chain under its owner's ``state``:
 ========================  ==========================================
 chain rooted at           lands at
 ========================  ==========================================
-a ``CellState`` subclass  ``Space.planes[plane].cells[cell].state``
-a ``PlaneState`` subclass ``Space.planes[plane].state``
+a ``CellState`` subclass  ``States.planes[plane].cells[cell]``
+a ``PlaneState`` subclass ``States.planes[plane].state``
 anything else             left alone: another store, Space, ui refs
 ========================  ==========================================
 
 Explicit bases rather than "anything not rooted at Space", because a movies
 db ref a program brings along must not move. The splice itself is
 ``nu.shape.reroot``: the chain resolves one level deeper and picks up
-Space's tag, so it routes to the store's navigator.
+States' tag, so it routes to the state store's navigator, never Space's.
 """
 
 from __future__ import annotations
@@ -24,8 +24,8 @@ from typing import TYPE_CHECKING
 
 import nu
 
-from .space import Space
 from .state import CellState, PlaneState
+from .states import States
 
 
 if TYPE_CHECKING:
@@ -57,7 +57,7 @@ def reroot_base(term: nu.Nu, base: type[nu.Shape], at: nu.Nu) -> nu.Nu:
         term: Any Nu term.
         base: :class:`CellState` or :class:`PlaneState`. Chains rooted at
             any other shape are left alone.
-        at: The ref the chains land under, eg ``Space.planes[p].state``.
+        at: The ref the chains land under, eg ``States.planes[p].state``.
 
     Returns:
         The rewritten term, or ``term`` itself when nothing matched.
@@ -78,8 +78,8 @@ def reroot(term: nu.Nu, plane: nu.StrArg, cell: nu.StrArg) -> nu.Nu:
         The rewritten term. ``term`` itself is untouched, and a term with no
         state chains comes back as the same object.
     """
-    row = Space.planes[plane]
-    term = reroot_base(term, CellState, row.cells[cell].state)
+    row = States.planes[plane]
+    term = reroot_base(term, CellState, row.cells[cell])
     return reroot_base(term, PlaneState, row.state)
 
 

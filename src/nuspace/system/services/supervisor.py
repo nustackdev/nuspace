@@ -42,8 +42,8 @@ import nu
 import nustd.kv
 from nuspace.ops import plane_exists, plane_stop
 from nuspace.ops.kernel import add_plane_run
-from nuspace.ops.utils import MintId, atomic, fresh, text
-from nuspace.shapes import EXIT_FAILED, EXIT_OK, CellState, Space, reroot
+from nuspace.ops.utils import MintId, atomic, atomic_state, fresh, text
+from nuspace.shapes import EXIT_FAILED, EXIT_OK, CellState, Space, States, reroot
 
 from ..utils import Ticking, moved, park, snap, until, wake
 
@@ -134,7 +134,7 @@ def _made() -> nu.Nu:
 
     Asks the cell's state for the keys: a dict never written reads as there.
     """
-    state = Space.planes[PLANE].cells[CELL].state
+    state = States.planes[PLANE].cells[CELL]
     writes = [
         nu.IfDo(nu.Not(state.contains(name)), _here(ref.set(nu.Literal({}))))
         for name, ref in (
@@ -190,7 +190,7 @@ def supervise(
     )
     run = _mine(plane_id)
     over = nu.And(nu.Ne(run, nu.Str("")), nu.Not(_kernel.running.contains(run)))
-    return atomic(
+    return atomic_state(
         _made()
         >> _here(
             Policy.planes.set_item(plane_id, policy)
@@ -219,7 +219,7 @@ def unsupervise(plane_id: nu.StrArg) -> nu.Nu:
     run = nu.StrAttrRef(gone)
     live = nu.And(nu.Ne(run, nu.Str("")), _kernel.running.contains(run))
     stop = nu.Let(gone, snap(_here(_mine(plane_id))), nu.IfDo(snap(live), plane_stop(run)))
-    return atomic(forget) >> stop
+    return atomic_state(forget) >> stop
 
 
 def policy_of(plane_id: nu.StrArg) -> nu.Nu:
@@ -244,20 +244,27 @@ def run_of(plane_id: nu.StrArg) -> nu.Nu:
 
 
 def _start(plane: nu.StrAttrRef, mine: nu.StrAttrRef) -> nu.Nu:
-    """A new plane run of the plane, ``by`` supervisor, remembered in the same commit.
+    """A new plane run of the plane, ``by`` supervisor, then remembered.
 
     Written only while the plane is still supervised and its remembered run
     is still ``mine``: an unsupervise or a supervise landing first wins, so
     nothing is started that nobody tracks. A plane not there yet is waited
     for.
+
+    The run is a Space commit and remembering it a States one, run first so
+    the remembered id always names a run. The check is made again in the
+    second: one of them landing in between refuses it, and the run just
+    started, now tracked by nobody, is stopped.
     """
     new = nu.StrAttrRef(_NEW)
     still = nu.And(
         nu.Ne(_policy(plane), nu.Str("")), nu.Eq(_mine(plane), mine), plane_exists(plane)
     )
-    write = atomic(
-        nu.IfDo(still, add_plane_run(new, plane, by=BY) >> Policy.runs.set_item(plane, new))
-    )
+    start = atomic(nu.IfDo(still, add_plane_run(new, plane, by=BY)))
+    made = _kernel.runs.contains(new)
+    remember = atomic_state(nu.IfDo(nu.And(made, still), Policy.runs.set_item(plane, new)))
+    orphan = nu.And(made, nu.Ne(_mine(plane), new))
+    write = start >> remember >> nu.IfDo(snap(orphan), plane_stop(new))
     return nu.IfDo(
         snap(plane_exists(plane)),
         nu.Let(_NEW, MintId("r"), write),
@@ -345,7 +352,7 @@ def _forget_ended() -> nu.Nu:
 def program() -> nu.Nu:
     """One arm per supervised plane, births and deaths included. Never returns."""
     planes = Policy.planes
-    return atomic(_made() >> _forget_ended()) >> nu.ForEachParReactive(
+    return atomic_state(_made() >> _forget_ended()) >> nu.ForEachParReactive(
         snap(nu.list(planes.keys())),
         Ticking(snap(planes.on_children_change())),
         _arm(nu.StrAttrRef(_PLANE)),

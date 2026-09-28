@@ -10,7 +10,7 @@ import nu
 import nustd.kv
 from nu.lang import ScalarQuery
 from nu.lang.sentinels import EMPTY, INVALID
-from nuspace.shapes import Space
+from nuspace.shapes import Space, States
 
 
 if TYPE_CHECKING:
@@ -59,8 +59,8 @@ def park() -> nu.Nu:
 
 
 def snap(term: nu.Nu) -> nu.Nu:
-    """``term`` read in a snapshot of the Space store."""
-    return nustd.kv.Snapshot(term, scope=Space)
+    """``term`` read in a snapshot of both stores, each opened only if read."""
+    return nustd.kv.Snapshot(nustd.kv.Snapshot(term, scope=States), scope=Space)
 
 
 def wake(change: nu.Nu) -> nu.Nu:

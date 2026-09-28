@@ -11,8 +11,8 @@ from __future__ import annotations
 import nu
 import nustd.kv
 from nuspace.ops import plane_exists, plane_run
-from nuspace.ops.utils import atomic
-from nuspace.shapes import CellState, Space, reroot
+from nuspace.ops.utils import atomic_state
+from nuspace.shapes import CellState, States, reroot
 
 from ..utils import park, snap
 
@@ -75,7 +75,7 @@ def seed(planes: list[str]) -> nu.Nu:
     Asks the cell's state for the key: a list that was never written reads
     as there and empty.
     """
-    listed = Space.planes[PLANE].cells[CELL].state.contains("planes")
+    listed = States.planes[PLANE].cells[CELL].contains("planes")
     return nu.IfDo(nu.Not(listed), _here(Boot.planes.set(nu.Literal(list(planes)))))
 
 
@@ -86,7 +86,7 @@ def boot(plane_id: nu.StrArg) -> nu.Nu:
     next open: init reads its list once.
     """
     listed = Boot.planes
-    return atomic(
+    return atomic_state(
         seed(list(BOOTED))
         >> _here(nu.IfDo(nu.Not(listed.contains(plane_id)), listed.append(plane_id)))
     )
@@ -95,7 +95,7 @@ def boot(plane_id: nu.StrArg) -> nu.Nu:
 def unboot(plane_id: nu.StrArg) -> nu.Nu:
     """Take a plane off init's boot list. A no-op when it is not listed."""
     listed = Boot.planes
-    return atomic(_here(nu.IfDo(listed.contains(plane_id), listed.remove(plane_id))))
+    return atomic_state(_here(nu.IfDo(listed.contains(plane_id), listed.remove(plane_id))))
 
 
 def booted() -> nu.Nu:

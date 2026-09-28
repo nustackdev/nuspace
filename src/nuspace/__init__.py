@@ -6,7 +6,8 @@ What a host and a program need, without knowing the layers:
   to register (the store's own plane shape is ``shapes.Plane``), and
   :data:`TEXT`, the name reserved for the text snippet;
 - :class:`CellState`, :class:`PlaneState`, so a program says
-  ``class Tick(nuspace.CellState)``;
+  ``class Tick(nuspace.CellState)``, and :class:`States`, the tag of the
+  store they land in, for a program bracketing its own state;
 - :mod:`ops`, and the few a host reaches for first: :func:`boot`,
   :func:`unboot`, :func:`supervise`, :func:`env`.
 
@@ -16,7 +17,7 @@ Workers import this package: nothing here may pull in a server.
 from nuspace import ops, shapes
 from nuspace.host import Extension, open_space
 from nuspace.ops import TEXT, Plane, Snippet, env
-from nuspace.shapes import CellState, PlaneState, Space
+from nuspace.shapes import CellState, PlaneState, Space, States
 from nuspace.system.services import boot, supervise, unboot, unsupervise
 
 
@@ -28,6 +29,7 @@ __all__ = [
     "PlaneState",
     "Snippet",
     "Space",
+    "States",
     "boot",
     "env",
     "open_space",

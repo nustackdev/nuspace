@@ -12,6 +12,7 @@ separately here.
 
 ## Unreleased
 
+- Plane and cell state live in their own store, apart from the kernel's
 - Planes run whole on pluggable backends, and the kernel never slows with use
 
 ## 0.4.1 — 2026-09-27

@@ -9,8 +9,9 @@ A program names its state as if it were alone::
         return Tick.n.set(Tick.n + 1)
 
 ``Tick.n`` resolves bare, at ``("n",)``, under a root shape nobody binds. The
-kernel reroots it at load (:mod:`nuspace.shapes.reroot`), so it lands under
-the cell that runs it and the store never learns a program's classes. The
+kernel reroots it at load (:mod:`nuspace.shapes.reroot`), so it lands in the
+state store (:mod:`nuspace.shapes.states`) under the cell that runs it, and
+neither store ever learns a program's classes. The
 base is the whole address: which one a shape subclasses is the only thing
 the rerooter asks.
 """
@@ -24,7 +25,7 @@ __all__ = ["CellState", "PlaneState"]
 
 
 class CellState(nu.Shape):
-    """Base for state owned by one cell. Lands at ``planes[p].cells[c].state``.
+    """Base for state owned by one cell. Lands at ``States.planes[p].cells[c]``.
 
     Only the cell's own program writes it. Persistent and shared by every run
     of the cell, so a restart picks up where the last run left off.
@@ -32,7 +33,7 @@ class CellState(nu.Shape):
 
 
 class PlaneState(nu.Shape):
-    """Base for state shared by a plane's cells. Lands at ``planes[p].state``.
+    """Base for state shared by a plane's cells. Lands at ``States.planes[p].state``.
 
     Where siblings meet: every cell of the plane that declares the same shape
     reads and writes the same slots.

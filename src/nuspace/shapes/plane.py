@@ -1,4 +1,4 @@
-"""Plane: a named group of cells, their order and the state they share."""
+"""Plane: a named group of cells and their order."""
 
 from __future__ import annotations
 
@@ -44,13 +44,12 @@ class Plane(nu.Shape):
     is free, for anything else, eg a ui plane's ``editable`` and
     ``full_width``.
 
-    ``state`` is shared by the plane's cells, shaped by their
-    :class:`~nuspace.shapes.state.PlaneState` classes.
+    The state its cells share is not here: it lives in the state store, at
+    ``States.planes[p].state`` (:mod:`nuspace.shapes.states`).
     """
 
     name = nustd.kv.StrRef.slot()
     props = nustd.kv.ShapeRef.slot(PlaneProps)
     meta = nustd.kv.DictRef.slot(object)
-    state = nustd.kv.DictRef.slot(object)
     cells = nustd.kv.ShapesDictRef.slot(Cell)
     order = nustd.kv.ListRef.slot(str)

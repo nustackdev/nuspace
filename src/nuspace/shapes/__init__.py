@@ -1,19 +1,18 @@
 """The store layout: layer zero.
 
 Imports ``nu`` and ``nustd.kv`` and nothing of nuspace, so everything above
-reads it and it reads nothing back::
+reads it and it reads nothing back. Two stores, each its own root and tag.
+Space, what the space is::
 
     Space
       planes        id -> Plane
         <p>
           name, meta
           props     system, ui, made_by, backend
-          state     PlaneState shapes, rerooted here
           cells     id -> Cell
             <c>
               name, prog, version, meta
               props made_by
-              state CellState shapes, rerooted here
           order     [cell id]
       tree          id -> Node (children), ROOT at the top
       kernel
@@ -29,8 +28,17 @@ reads it and it reads nothing back::
         telemetry   bool, off when unset
       pinned        [plane id], in order
 
+States, what the programs remember, by the same ids::
+
+    States
+      planes        id -> PlaneStates
+        <p>
+          state     PlaneState shapes, rerooted here
+          cells     id -> CellStates
+            <c>     CellState shapes, rerooted here
+
 Plane and cell hold structure only, but for the plane's ``backend``. What
-ran and how it ended is a run.
+ran and how it ended is a run. What a program remembers is a state.
 """
 
 from .cell import Cell, CellProps
@@ -50,6 +58,7 @@ from .plane import DEFAULT_BACKEND, Plane, PlaneProps
 from .reroot import Reroot, reroot, reroot_base
 from .space import RECENTS_CAP, Space, SpaceInfo, SpaceSettings, SpaceState
 from .state import CellState, PlaneState
+from .states import CellStates, PlaneStates, States
 from .tree import ROOT, Node
 
 
@@ -66,18 +75,21 @@ __all__ = [
     "CellProps",
     "CellRun",
     "CellState",
+    "CellStates",
     "Connection",
     "Kernel",
     "Node",
     "Plane",
     "PlaneProps",
     "PlaneState",
+    "PlaneStates",
     "Reroot",
     "Run",
     "Space",
     "SpaceInfo",
     "SpaceSettings",
     "SpaceState",
+    "States",
     "Worker",
     "reroot",
     "reroot_base",

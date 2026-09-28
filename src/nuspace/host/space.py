@@ -116,8 +116,9 @@ def open_space(
 
     Args:
         path: The space directory, created if missing: ``kernel.sqlite``
-            and the notification server's ``valkey/``. None is a throwaway
-            one, gone at close.
+            (structure and runs), ``state.sqlite`` (program state) and the
+            notification server's ``valkey/``. None is a throwaway one,
+            gone at close.
         web: Serve the browser shell. False is headless: kernel and services.
         host: The interface the web server binds.
         port: The port the web server binds.

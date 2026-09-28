@@ -13,7 +13,6 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 import nu
-import nustd.kv
 from nu.lang import ScalarQuery
 from nuspace import ops
 from nuspace.shapes import Space
@@ -92,7 +91,7 @@ class Kernel:
         return value
 
     async def read(self, term: nu.Nu) -> object:
-        return await self.run(nustd.kv.Snapshot(term, scope=Space))
+        return await self.run(ops.snapshot(term))
 
     async def until(
         self, term: nu.Nu, pred: Callable[[object], bool], timeout: float = 4.0

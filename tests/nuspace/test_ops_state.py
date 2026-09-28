@@ -1,4 +1,4 @@
-"""State ops: a sibling's state, wiping state, and the extension ops."""
+"""State ops: a sibling's state, wiping and dropping state in its own store, and the extension ops."""
 
 from __future__ import annotations
 
@@ -8,7 +8,9 @@ import nu
 import nustd.kv
 from nuspace import ops
 from nuspace.ops.plane import plane_icon
-from nuspace.shapes import ROOT, CellState, PlaneState, Space, reroot
+from nuspace.ops.state import drop_cell_state, drop_plane_state
+from nuspace.ops.utils import atomic_state
+from nuspace.shapes import ROOT, CellState, PlaneState, Space, States, reroot
 
 
 class Tick(CellState):
@@ -20,13 +22,45 @@ class Chat(PlaneState):
 
 
 def cell_state(p, c):
-    return Space.planes[p].cells[c].state
+    return States.planes[p].cells[c]
+
+
+def plane_state(p):
+    return States.planes[p].state
 
 
 def in_run(plane_id, cell_id, term):
     """``term`` as the kernel would run it: rerooted, the plane attr bound, bracketed."""
     body = reroot(term, nu.StrAttrRef(ops.PLANE_ATTR), cell_id)
-    return nu.Let(ops.PLANE_ATTR, nu.Str(plane_id), nustd.kv.Transaction(body, scope=Space))
+    return nu.Let(ops.PLANE_ATTR, nu.Str(plane_id), nustd.kv.Transaction(body, scope=States))
+
+
+async def seeded(store):
+    """A plane with cells ``a`` and ``b``, each with state, and the plane's shared state."""
+    p = await store.run(ops.add_plane())
+    a = await store.run(ops.add_cell(p, "a"))
+    b = await store.run(ops.add_cell(p, "b"))
+    await store.run(in_run(p, a, Tick.n.set(1) >> Chat.title.set("t")))
+    await store.run(in_run(p, b, Tick.n.set(2)))
+    return p, a, b
+
+
+async def test_state_lands_in_the_state_store_by_plane_and_cell(store):
+    p, a, b = await seeded(store)
+    assert await store.read(States.planes[p].extract()) == {
+        "state": {"title": "t"},
+        "cells": {a: {"n": 1}, b: {"n": 2}},
+    }
+    # Space holds structure only: no state under the plane or its cells.
+    assert not await store.read(Space.planes[p].contains("state"))
+    assert not await store.read(Space.planes[p].cells[a].contains("state"))
+
+
+async def test_two_cells_state_is_their_own(store):
+    p, a, b = await seeded(store)
+    await store.run(in_run(p, a, Tick.n.set(Tick.n + 10)))
+    assert await store.read(reroot(Tick.n, p, a)) == 11
+    assert await store.read(reroot(Tick.n, p, b)) == 2
 
 
 async def test_sibling_lands_under_the_sibling_cell(store):
@@ -37,7 +71,7 @@ async def test_sibling_lands_under_the_sibling_cell(store):
     await store.run(in_run(p, a, term))
     assert await store.read(cell_state(p, a).extract()) == {"n": 1}
     assert await store.read(cell_state(p, b).extract()) == {"n": 7}
-    assert await store.read(Space.planes[p].state.extract()) == {"title": "t"}
+    assert await store.read(plane_state(p).extract()) == {"title": "t"}
 
 
 async def test_sibling_reads(store):
@@ -46,7 +80,7 @@ async def test_sibling_reads(store):
     b = await store.run(ops.add_cell(p, "b"))
     await store.run(in_run(p, b, Tick.n.set(5)))
     await store.run(in_run(p, a, Tick.n.set(ops.sibling(b, Tick.n) + 1)))
-    assert await store.read(cell_state(p, a)["n"]) == 6
+    assert await store.read(reroot(Tick.n, p, a)) == 6
 
 
 def test_sibling_leaves_plane_state_and_foreign_chains_alone():
@@ -55,20 +89,64 @@ def test_sibling_leaves_plane_state_and_foreign_chains_alone():
 
 
 async def test_clear_state(store):
-    p = await store.run(ops.add_plane())
-    a = await store.run(ops.add_cell(p, "a"))
-    b = await store.run(ops.add_cell(p, "b"))
-    await store.run(in_run(p, a, Tick.n.set(1) >> Chat.title.set("t")))
-    await store.run(in_run(p, b, Tick.n.set(2)))
+    p, a, b = await seeded(store)
     await store.run(ops.clear_state(p, a))
     assert await store.read(cell_state(p, a).extract()) == {}
     assert await store.read(cell_state(p, b).extract()) == {"n": 2}
-    assert await store.read(Space.planes[p].state.extract()) == {"title": "t"}
+    assert await store.read(plane_state(p).extract()) == {"title": "t"}
     await store.run(ops.clear_state(p))
-    assert await store.read(Space.planes[p].state.extract()) == {}
+    assert await store.read(plane_state(p).extract()) == {}
+    assert await store.read(cell_state(p, b).extract()) == {"n": 2}
     await store.run(ops.clear_state("nope") >> ops.clear_state(p, "nope"))
     assert await store.read(ops.planes()) == [p]
     assert await store.read(ops.cells(p)) == [a, b]
+    # Nothing is written for a plane or cell that is not there.
+    assert await store.read(nu.list(States.planes.keys())) == [p]
+    assert await store.read(nu.list(States.planes[p].cells.keys())) == [b]
+
+
+async def test_clear_state_of_a_plane_with_none_writes_nothing(store):
+    p = await store.run(ops.add_plane())
+    c = await store.run(ops.add_cell(p, "c"))
+    await store.run(ops.clear_state(p) >> ops.clear_state(p, c))
+    assert await store.read(nu.list(States.planes.keys())) == []
+
+
+async def test_remove_cell_drops_its_state_only(store):
+    p, a, b = await seeded(store)
+    await store.run(ops.remove_cell(p, a))
+    assert await store.read(ops.cells(p)) == [b]
+    assert await store.read(States.planes[p].extract()) == {
+        "state": {"title": "t"},
+        "cells": {b: {"n": 2}},
+    }
+
+
+async def test_remove_plane_drops_its_state_and_its_cells_and_below(store):
+    p, _, _ = await seeded(store)
+    q = await store.run(ops.add_plane(parent=p))
+    c = await store.run(ops.add_cell(q, "c"))
+    await store.run(in_run(q, c, Tick.n.set(3)))
+    other, keep, _ = await seeded(store)
+    assert await store.run(ops.remove_plane(p)) is True
+    assert await store.read(nu.list(States.planes.keys())) == [other]
+    assert await store.read(reroot(Tick.n, other, keep)) == 1
+    assert await store.run(ops.remove_plane(p)) is False
+
+
+async def test_a_refused_remove_plane_keeps_state(store):
+    p, a, _ = await seeded(store)
+    await store.run(ops.add_plane("sys", system=True, parent=p))
+    assert await store.run(ops.remove_plane(p)) is False
+    assert await store.read(reroot(Tick.n, p, a)) == 1
+
+
+async def test_dropping_state_spares_a_cell_that_is_there(store):
+    """Run after the structure commit, the drop leaves a cell given its id again alone."""
+    p, a, _ = await seeded(store)
+    await store.run(atomic_state(drop_cell_state(p, a) >> drop_plane_state(p)))
+    assert await store.read(reroot(Tick.n, p, a)) == 1
+    assert await store.read(reroot(Chat.title, p, a)) == "t"
 
 
 # --- extend ---------------------------------------------------------------------

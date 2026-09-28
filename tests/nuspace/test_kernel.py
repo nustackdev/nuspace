@@ -36,7 +36,7 @@ from _support.kernel import (
 import nu
 from nuspace import ops
 from nuspace.ops.utils import atomic
-from nuspace.shapes import EXIT_FAILED, EXIT_INTERRUPTED, EXIT_KILLED, EXIT_OK, Space
+from nuspace.shapes import EXIT_FAILED, EXIT_INTERRUPTED, EXIT_KILLED, EXIT_OK, Space, States
 from nuspace.system.backends import AsyncBackend, Backend, PerCellBackend
 from nuspace.system.kernel import INIT_BY, reconcile
 from nustd.mp_pool import WorkerPool
@@ -78,7 +78,7 @@ async def test_a_plane_runs_and_ends_when_its_cells_are_done(space, backend):
     assert row["started_at"] <= row["terminated_at"]
     assert row["cells_running"] == []
     for cell in (a, b):
-        assert await space.read(Space.planes[p].cells[cell].state.extract()) == {"n": 42}
+        assert await space.read(States.planes[p].cells[cell].extract()) == {"n": 42}
     assert r not in [x["id"] for x in await space.read(ops.runs())]
     # Its workers are records too, ended once the run was.
     assert len(row["workers"]) == (1 if backend == "async" else 2)
@@ -141,11 +141,11 @@ async def test_envs_wrap_and_rewrite_the_program(space):
     q, (c,) = await space.plane(READS_TAG)
     r2 = await space.run(ops.plane_run(q))
     assert (await space.run_row(r2, ended, SLOW))["exit"] == EXIT_OK
-    cells = Space.planes[p].cells
-    assert await space.read(cells[a].state["s"]) == "inner"
-    assert await space.read(cells[b].state["s"]) == "inner"
-    assert await space.read(Space.planes[q].cells[c].state["s"]) == "outer"
-    assert await space.read(Space.planes[p].state["stamped"]) is True
+    cells = States.planes[p].cells
+    assert await space.read(cells[a].extract()) == {"s": "inner"}
+    assert await space.read(cells[b].extract()) == {"s": "inner"}
+    assert await space.read(States.planes[q].cells[c].extract()) == {"s": "outer"}
+    assert await space.read(States.planes[p].state["stamped"]) is True
 
 
 # --- Interrupt and cell runs -------------------------------------------------------------
@@ -426,7 +426,7 @@ async def test_two_workers_share_the_store_and_hear_each_others_writes(space):
     heard = cell_of(row, listens)
     assert (heard["exit"], heard["error"]) == (EXIT_OK, "")
     assert heard["worker"] != cell_of(row, pings)["worker"]
-    shared = Space.planes[p].state
+    shared = States.planes[p].state
     pong = await space.read(shared["pong"])
     assert pong >= 1
     assert await space.read(shared["ping"]) >= pong

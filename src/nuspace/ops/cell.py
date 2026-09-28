@@ -3,6 +3,10 @@
 The only writer of the two facts that must agree about a plane's cells:
 which ids are in ``cells`` and where they sit in ``order``. Every op here
 fixes both in one commit.
+
+A cell's state is in the other store (States). Dropping or moving a cell
+touches it too, as commits of its own around the structure one, in the
+order :func:`~.utils.atomic_state` gives.
 """
 
 from __future__ import annotations
@@ -13,12 +17,13 @@ import nu
 import nu.prog
 import nu.tree
 from nu.lang import ScalarQuery
-from nuspace.shapes import Space
+from nuspace.shapes import Space, States
 from nustd.ui.core import Ref as UiRef
 
 from .kernel import interrupt_cell
 from .read import cell_exists, plane_exists
-from .utils import MintId, atomic, binding, fresh, keep_order
+from .state import drop_cell_state
+from .utils import MintId, atomic, atomic_state, binding, fresh, keep_order
 
 
 if TYPE_CHECKING:
@@ -176,9 +181,15 @@ def add_cell(
 
 
 def remove_cell(plane_id: nu.StrArg, cell_id: nu.StrArg) -> nu.Nu:
-    """Drop a cell: its live cell runs interrupted, out of order, row deleted."""
+    """Drop a cell: its live cell runs interrupted, out of order, row deleted, then its state.
+
+    Two commits, the row first. The other way round, a cell still on the
+    plane (and its runs, still live until the interrupt lands) would read
+    its state gone. This way the worst a crash between them leaves is state
+    no cell points at.
+    """
     plane = Space.planes[plane_id]
-    return atomic(
+    row = atomic(
         nu.IfDo(
             cell_exists(plane_id, cell_id),
             interrupt_cell(plane_id, cell_id)
@@ -186,6 +197,7 @@ def remove_cell(plane_id: nu.StrArg, cell_id: nu.StrArg) -> nu.Nu:
             >> plane.cells.del_item(cell_id),
         )
     )
+    return row >> atomic_state(drop_cell_state(plane_id, cell_id))
 
 
 def rename_cell(plane_id: nu.StrArg, cell_id: nu.StrArg, name: nu.StrArg) -> nu.Nu:
@@ -240,15 +252,21 @@ def move_cell(
     Its live cell runs are interrupted: they were loaded against the old plane.
     A no-op when either plane or the cell is missing, or the planes are the
     same (rearranging within a plane is :func:`reorder_cells`).
+
+    Three commits: the state copied to the new plane, the row moved, the
+    old state dropped. Copied first, so the cell never sits on the new plane
+    without its state, and dropped last, from whichever plane the cell is
+    not on: the old one once moved, the new one when the move was refused.
     """
     src, dst = Space.planes[plane_id], Space.planes[to_plane_id]
-    return atomic(
+    movable = nu.And(
+        nu.Ne(plane_id, to_plane_id),
+        cell_exists(plane_id, cell_id),
+        plane_exists(to_plane_id),
+    )
+    row = atomic(
         nu.IfDo(
-            nu.And(
-                nu.Ne(plane_id, to_plane_id),
-                cell_exists(plane_id, cell_id),
-                plane_exists(to_plane_id),
-            ),
+            movable,
             interrupt_cell(plane_id, cell_id)
             >> dst.cells.set_item(cell_id, src.cells[cell_id].extract())
             >> _place(dst.order, cell_id, index)
@@ -256,3 +274,15 @@ def move_cell(
             >> src.cells.del_item(cell_id),
         )
     )
+    return (
+        atomic_state(nu.IfDo(movable, _copy_state(plane_id, cell_id, to_plane_id)))
+        >> row
+        >> atomic_state(drop_cell_state(plane_id, cell_id) >> drop_cell_state(to_plane_id, cell_id))
+    )
+
+
+def _copy_state(plane_id: nu.StrArg, cell_id: nu.StrArg, to_plane_id: nu.StrArg) -> nu.Nu:
+    """The cell's state written whole under ``to_plane_id``, when it has any. No bracket."""
+    src = States.planes[plane_id].cells
+    held = nu.And(States.planes.contains(plane_id), src.contains(cell_id))
+    return nu.IfDo(held, States.planes[to_plane_id].cells.set_item(cell_id, src[cell_id].extract()))

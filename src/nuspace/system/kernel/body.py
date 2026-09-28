@@ -13,9 +13,10 @@ Everything a cell run is, as one Nu term with its ids baked in as plain strs::
 
 The program is loaded on the worker from the store, so a cell run always
 runs the prog as it is now. Its term is rewritten on the way in: reroot
-first, then each env's rewrite, then the kv bracket (D23: a state ref only
-belongs to Space once rerooted). The kernel's own record writes are short
-transactions of their own, never held open while the program runs.
+first, then each env's rewrite, then the kv brackets, one pass per store
+(D23: a state ref only belongs to States once rerooted). The kernel's own
+record writes are short transactions of their own, never held open while
+the program runs.
 
 Interrupt is cooperative and backend agnostic: the body watches its own
 ``interrupt_requested`` and leaves when it reads true, so every backend gets
@@ -31,7 +32,7 @@ import nu.prog
 import nustd.kv
 from nuspace.ops import CELL_ATTR, CELL_RUN_ATTR, PLANE_ATTR, RUN_ATTR
 from nuspace.ops.utils import atomic, flag
-from nuspace.shapes import EXIT_FAILED, EXIT_INTERRUPTED, EXIT_OK, Reroot, Space
+from nuspace.shapes import EXIT_FAILED, EXIT_INTERRUPTED, EXIT_OK, Reroot, Space, States
 
 from .out import Captured, ErrorText, HasOut, TakeOut
 from .utils import Now, until
@@ -77,13 +78,19 @@ class Rewrites:
 
 
 class Bracketed:
-    """The kv pass over Space, as a transform: the last rewrite a program gets (D23)."""
+    """The kv passes over both stores, as a transform: the last rewrite a program gets (D23).
+
+    One pass per store, each leaving the other's refs alone: Space, then
+    States, whose refs are the rerooted state ones. A branch touching both
+    gets a bracket of each, and a program's own bracket for one store is
+    looked into by the other's pass.
+    """
 
     __slots__ = ()
 
     def __call__(self, term: nu.Nu) -> nu.Nu:
-        """``term`` with its Space reads and writes bracketed."""
-        return nustd.kv.auto_flow_atomic(term, scope=Space)
+        """``term`` with its Space and States reads and writes bracketed."""
+        return nustd.kv.auto_flow_atomic(nustd.kv.auto_flow_atomic(term, scope=Space), scope=States)
 
 
 def end_cell_run(

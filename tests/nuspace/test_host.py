@@ -24,7 +24,7 @@ from nuspace.host.cli import cli
 from nuspace.host.registry import GROUP, Registry, RegistryWarning, discover
 from nuspace.host.space import space_registry
 from nuspace.ops.utils import atomic
-from nuspace.shapes import Reroot, Space, reroot
+from nuspace.shapes import Reroot, Space, States, reroot
 from nuspace.system import home
 from nuspace.system.kernel import Env, store
 from nuspace.system.kernel.body import Bracketed, Rewrites
@@ -196,9 +196,9 @@ async def test_open_space_headless_runs_a_booted_plane(tmp_path, monkeypatch):
     task = asyncio.create_task(nu.arun(term))
     space = Kernel(await asyncio.wait_for(asyncio.shield(ready), 20), done, task)
     try:
-        state = Space.planes[USER].cells["c"].state.extract()
+        state = States.planes[USER].cells["c"].extract()
         assert await space.until(state, lambda s: s == {"n": 42}) == {"n": 42}
-        starter = Space.planes[STARTER].cells["c"].state.extract()
+        starter = States.planes[STARTER].cells["c"].extract()
         assert await space.until(starter, lambda s: s == {"hello": "world"}) == {"hello": "world"}
         # The services are made and init brought up its boot list beside the user plane.
         assert {r["id"] for r in await space.read(ops.plane_rows())} >= {

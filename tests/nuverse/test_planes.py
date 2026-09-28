@@ -8,7 +8,7 @@ import nu
 import nustd.kv
 from nuspace import ops
 from nuspace.ops.utils import atomic
-from nuspace.shapes import Reroot, Space, reroot
+from nuspace.shapes import Reroot, Space, States, reroot
 from nuspace.system.devices.web.env import session_env
 from nuspace.system.kernel.body import Bracketed, Rewrites
 from nuspace.system.services import ensure_system, init, supervisor
@@ -196,7 +196,7 @@ def _as(cell: str, term: nu.Nu, plane: str = "jp") -> nu.Nu:
     return nu.Let(ops.PLANE_ATTR, nu.Str(plane), reroot(term, plane, cell))
 
 
-SELECTED = Space.planes["jp"].state["selected"]
+SELECTED = States.planes["jp"].state["selected"]
 
 
 async def _job(store, name: str = "Nightly") -> str:

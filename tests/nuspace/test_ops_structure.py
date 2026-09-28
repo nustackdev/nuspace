@@ -11,7 +11,7 @@ import pickle
 import nu
 import nustd.kv
 from nuspace import ops
-from nuspace.shapes import ROOT, Space
+from nuspace.shapes import ROOT, Space, States
 
 
 async def plane(store, name="", **kw):
@@ -276,22 +276,28 @@ async def test_move_cell_keeps_id_and_state(store):
     p, q = await plane(store), await plane(store)
     a = await cell(store, p, name="a")
     q1 = await cell(store, q)
-    state = Space.planes[p].cells[a].state
-    await store.run(nustd.kv.Transaction(state.set_item("n", {"deep": 3}), scope=Space))
+    cells = States.planes[p].cells
+    await store.run(nustd.kv.Transaction(cells.set_item(a, {"n": {"deep": 3}}), scope=States))
     run = await store.run(ops.plane_run(p))
     await store.run(ops.move_cell(p, a, q, 0))
     assert await store.read(ops.cells(p)) == []
     assert await store.read(ops.cells(q)) == [a, q1]
     assert (await store.read(ops.cell_rows(q)))[0]["name"] == "a"
-    assert await store.read(Space.planes[q].cells[a].state.extract()) == {"n": {"deep": 3}}
+    assert await store.read(States.planes[q].cells[a].extract()) == {"n": {"deep": 3}}
+    assert not await store.read(States.planes[p].cells.contains(a))
     assert (await store.read(ops.cell_runs(run)))[0]["interrupt_requested"] is True
 
 
 async def test_move_cell_refuses_same_plane_and_missing(store):
     p = await plane(store)
     a = await cell(store, p)
+    cells = States.planes[p].cells
+    await store.run(nustd.kv.Transaction(cells.set_item(a, {"n": 1}), scope=States))
     await store.run(ops.move_cell(p, a, p) >> ops.move_cell(p, a, "nope"))
     assert await store.read(ops.cells(p)) == [a]
+    # Refused, the state stays where the cell is and no copy is left behind.
+    assert await store.read(nu.list(States.planes.keys())) == [p]
+    assert await store.read(cells[a].extract()) == {"n": 1}
 
 
 # --- Tree ----------------------------------------------------------------------
@@ -407,8 +413,8 @@ async def test_structure_round_trips_through_sqlite(disk):
     p = await disk.run(ops.add_plane(name="p", meta={"a": {"b": 1}}))
     q = await disk.run(ops.add_plane(name="q", parent=p))
     c = await disk.run(ops.add_cell(p, "src", made_by="m", meta={"m": [1, 2]}))
-    state = Space.planes[p].cells[c].state
-    await disk.run(nustd.kv.Transaction(state.set_item("n", {"deep": [3]}), scope=Space))
+    cells = States.planes[p].cells
+    await disk.run(nustd.kv.Transaction(cells.set_item(c, {"n": {"deep": [3]}}), scope=States))
     await disk.run(ops.move_cell(p, c, q))
     assert await disk.read(ops.plane_rows()) == [
         {"id": p, "name": "p", "props": NO_PROPS, "meta": {"a": {"b": 1}}, "parent": ROOT},
@@ -423,6 +429,7 @@ async def test_structure_round_trips_through_sqlite(disk):
             "meta": {"m": [1, 2]},
         }
     ]
-    assert await disk.read(Space.planes[q].cells[c].state.extract()) == {"n": {"deep": [3]}}
+    assert await disk.read(States.planes[q].cells[c].extract()) == {"n": {"deep": [3]}}
     assert await disk.run(ops.remove_plane(p)) is True
     assert await disk.read(ops.planes()) == []
+    assert await disk.read(nu.list(States.planes.keys())) == []
