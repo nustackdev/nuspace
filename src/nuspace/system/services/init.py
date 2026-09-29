@@ -50,10 +50,10 @@ def out():
     return init.program()
 """
 
-#: What the boot list starts as: every other service (nav, supervisor, reload).
+#: What the boot list starts as: every other service (nav, supervisor, reload, reactions).
 #: Seeded by whichever comes first, bootstrap or :func:`boot`, so booting a
 #: plane before the first open does not leave the services out.
-BOOTED = ("nav", "supervisor", "reload")
+BOOTED = ("nav", "supervisor", "reload", "reactions")
 
 _ITEM = "nuspace.init.plane"
 

@@ -17,7 +17,7 @@ inside :func:`~nuspace.system.kernel.open_kernel` after reconcile:
 4. :func:`~nuspace.system.services.nav.clear_connections`: tabs of a previous
    run dropped, so nav never brings a plane up for one (D34);
 5. init started by the kernel's own :func:`~nuspace.system.kernel.init_start`,
-   which brings up its boot list (nav, supervisor, reload by default);
+   which brings up its boot list (nav, supervisor, reload, reactions by default);
 6. the web device and ``body``, beside the kernel.
 
 The kernel's ``init=`` would start init beside the body, before the service

@@ -13,7 +13,7 @@ import sys
 import warnings
 
 import pytest
-from _support.kernel import SET_42, Kernel, _Hold
+from _support.kernel import SET_42, Kernel, _Hold, history
 from click.testing import CliRunner
 
 import nu
@@ -206,7 +206,7 @@ async def test_open_space_headless_runs_a_booted_plane(tmp_path, monkeypatch):
             *(plane for plane, _ in SERVICES),
         }
         for plane in BOOTED:
-            await space.until(ops.runs(plane=plane), lambda rs: any(r["started_at"] for r in rs))
+            await space.until(history(plane), lambda rs: any(r["started_at"] for r in rs))
         # Cleared before init started nav: the stale tab brought nothing up.
         assert await space.read(nu.list(Space.connections.keys())) == []
         assert await space.read(ops.runs(plane=TAB)) == []

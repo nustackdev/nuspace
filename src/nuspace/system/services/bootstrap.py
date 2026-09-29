@@ -14,7 +14,7 @@ from nuspace.ops.utils import atomic_state
 from nuspace.shapes import Space
 
 from ..utils import snap
-from . import init, nav, reload, supervisor
+from . import init, nav, reactions, reload, supervisor
 
 
 __all__ = ["BOOTED", "SERVICES", "ensure_system"]
@@ -51,7 +51,7 @@ def _service(plane_id: str, shim: str) -> nu.Nu:
 
 
 def ensure_system() -> nu.Nu:
-    """The service planes, and init's boot list, where missing. Idempotent.
+    """The service planes, the reactions plane, and init's boot list, where missing. Idempotent.
 
     A store that has them is left exactly as it is. Run before the kernel
     starts init (``open_kernel(init="init")``).
@@ -59,4 +59,4 @@ def ensure_system() -> nu.Nu:
     term = _service(*SERVICES[0])
     for plane_id, shim in SERVICES[1:]:
         term = term >> _service(plane_id, shim)
-    return term >> atomic_state(init.seed(list(BOOTED)))
+    return term >> reactions.ensure_reactions() >> atomic_state(init.seed(list(BOOTED)))

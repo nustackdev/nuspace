@@ -45,6 +45,7 @@ from nuspace.system.services import (
     unsupervise,
 )
 from nuspace.system.services import nav as nav_service
+from nuspace.system.services import reactions as reactions_service
 from nuspace.system.services import reload as reload_service
 from nuspace.system.services import supervisor as supervisor_service
 
@@ -55,6 +56,9 @@ module_loop = pytest.mark.asyncio(loop_scope="module")
 SESSION_ATTR = "test.session"
 
 BOOTED_PLANE = "booted"
+
+#: The booted services that stay up: all but reactions, which has no cells of its own.
+LIVE_BOOTED = [p for p in BOOTED if p != "reactions"]
 NAME = "nuspace-services"
 
 READS_SESSION = prog(
@@ -83,7 +87,7 @@ def boot_list() -> nu.Nu:
 async def test_bootstrap_makes_the_services_and_is_idempotent(store):
     await store.run(ensure_system())
     rows = {r["id"]: r for r in await store.read(ops.plane_rows())}
-    assert set(rows) == {plane for plane, _ in SERVICES}
+    assert set(rows) == {plane for plane, _ in SERVICES} | {reactions_service.PLANE}
     for plane, shim in SERVICES:
         assert rows[plane]["props"] == {
             "system": True,
@@ -107,7 +111,7 @@ async def test_bootstrap_makes_the_services_and_is_idempotent(store):
     before = await store.read(Space.planes.extract())
     await store.run(ensure_system())
     assert await store.read(Space.planes.extract()) == before
-    assert await store.read(boot_list()) == ["nav", "supervisor"]
+    assert await store.read(boot_list()) == [p for p in BOOTED if p != "reload"]
 
 
 async def test_boot_and_unboot_are_idempotent(store):
@@ -199,18 +203,21 @@ async def pane(space: Kernel, sid: str, plane: str) -> dict:
 
 @module_loop
 async def test_init_brings_up_its_boot_list(space):
-    for plane in BOOTED:
+    for plane in LIVE_BOOTED:
         row = only(await runs_of(space, plane, lambda rs: rs and live(first_cell(rs[0]))))
         assert row["by"] == init.BY
+    # The reactions plane has no cells until a reaction is enabled: its run ends at once.
+    row = only(await runs_of(space, reactions_service.PLANE, lambda rs: rs and ended(rs[0])))
+    assert (row["by"], row["exit"], row["cells"]) == (init.BY, EXIT_OK, [])
     row = only(await runs_of(space, BOOTED_PLANE, lambda rs: rs and ended(rs[0])))
     assert (row["by"], row["exit"]) == (init.BY, EXIT_OK)
     assert await space.read(States.planes[BOOTED_PLANE].cells["c"].extract()) == {"n": 42}
     kernel_run = only(await space.read(ops.runs(plane=init.PLANE)))
     assert kernel_run["by"] == INIT_BY
     workers = {
-        w for p in (init.PLANE, *BOOTED) for w in only(await space.read(history(p)))["workers"]
+        w for p in (init.PLANE, *LIVE_BOOTED) for w in only(await space.read(history(p)))["workers"]
     }
-    assert len(workers) == 4
+    assert len(workers) == 1 + len(LIVE_BOOTED)
 
 
 @module_loop

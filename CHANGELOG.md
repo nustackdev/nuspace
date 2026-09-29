@@ -12,6 +12,7 @@ separately here.
 
 ## Unreleased
 
+- Planes can wake on any state change, so idle chats cost nothing
 - Search plane titles and text cells from the sidebar, results landing live
 - Plane and cell state live in their own store, apart from the kernel's
 - Planes run whole on pluggable backends, and the kernel never slows with use

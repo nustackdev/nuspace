@@ -9,7 +9,7 @@ What a host and a program need, without knowing the layers:
   ``class Tick(nuspace.CellState)``, and :class:`States`, the tag of the
   store they land in, for a program bracketing its own state;
 - :mod:`ops`, and the few a host reaches for first: :func:`boot`,
-  :func:`unboot`, :func:`supervise`, :func:`env`.
+  :func:`unboot`, :func:`supervise`, :func:`enable_react`, :func:`env`.
 
 Workers import this package: nothing here may pull in a server.
 """
@@ -18,7 +18,14 @@ from nuspace import ops, shapes
 from nuspace.host import Extension, open_space
 from nuspace.ops import TEXT, Plane, Snippet, env
 from nuspace.shapes import CellState, PlaneState, Space, States
-from nuspace.system.services import boot, supervise, unboot, unsupervise
+from nuspace.system.services import (
+    boot,
+    disable_react,
+    enable_react,
+    supervise,
+    unboot,
+    unsupervise,
+)
 
 
 __all__ = [
@@ -31,6 +38,8 @@ __all__ = [
     "Space",
     "States",
     "boot",
+    "disable_react",
+    "enable_react",
     "env",
     "open_space",
     "ops",
