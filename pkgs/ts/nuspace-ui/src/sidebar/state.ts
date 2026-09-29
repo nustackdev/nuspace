@@ -21,6 +21,7 @@ import { useMemo } from "react";
 import { patchLocal, useLocalSlot } from "../core/local";
 import {
 	coerceRegistered,
+	coerceSearchable,
 	coerceStrs,
 	coerceTree,
 	EMPTY_TREE,
@@ -59,7 +60,12 @@ export function useSidebarValue(path: Path): SidebarValue {
 	const loaded = props.loaded === true;
 	const raw = props.registered;
 	const registered = useMemo(() => coerceRegistered(raw), [raw]);
-	return useMemo(() => ({ tree, pinned, loaded, registered }), [tree, pinned, loaded, registered]);
+	const rawSearchable = props.searchable;
+	const searchable = useMemo(() => coerceSearchable(rawSearchable), [rawSearchable]);
+	return useMemo(
+		() => ({ tree, pinned, loaded, registered, searchable }),
+		[tree, pinned, loaded, registered, searchable],
+	);
 }
 
 /**

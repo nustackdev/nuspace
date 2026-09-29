@@ -1,9 +1,10 @@
-"""State ops: reach a sibling's state, wipe state.
+"""State ops: reach another cell's or plane's state, wipe state.
 
 A program names its state bare and the kernel lands it in the States
 store, under the cell running it. :func:`sibling` lands it under another
 cell of the same plane instead, so two cells meet without either knowing
-the store's layout.
+the store's layout. :func:`cell_state` and :func:`plane_state` land it under
+any plane's, for a reader that is not on that plane (eg a search).
 """
 
 from __future__ import annotations
@@ -19,9 +20,11 @@ from .utils import atomic_state
 __all__ = [
     "CellState",
     "PlaneState",
+    "cell_state",
     "clear_state",
     "drop_cell_state",
     "drop_plane_state",
+    "plane_state",
     "sibling",
 ]
 
@@ -43,8 +46,36 @@ def sibling(cell_id: nu.StrArg, term: nu.Nu) -> nu.Nu:
         cell_id: The sibling's id. Ids, not names: names are not unique.
         term: What to read or write there, eg ``Tick.n``.
     """
-    plane = nu.StrAttrRef(PLANE_ATTR)
-    return reroot_base(term, CellState, States.planes[plane].cells[cell_id])
+    return cell_state(nu.StrAttrRef(PLANE_ATTR), cell_id, term)
+
+
+def cell_state(plane_id: nu.StrArg, cell_id: nu.StrArg, term: nu.Nu) -> nu.Nu:
+    """``term`` with its ``CellState`` chains landing under any plane's cell.
+
+    :func:`sibling` for a cell on another plane. Bare, and routed to the
+    States store, as :func:`sibling` is.
+
+    Args:
+        plane_id: The cell's plane.
+        cell_id: The cell.
+        term: What to read or write there, eg ``Doc.text``.
+    """
+    return reroot_base(term, CellState, States.planes[plane_id].cells[cell_id])
+
+
+def plane_state(plane_id: nu.StrArg, term: nu.Nu) -> nu.Nu:
+    """``term`` with its ``PlaneState`` chains landing under any plane's shared state.
+
+    What a plane's own cells reach bare, reached from outside it: by an op
+    that seeds a plane's state, or a cell showing another plane's. Rerooted
+    here, the chains no longer root at ``PlaneState``, so the kernel's own
+    reroot leaves them alone. Bare, and routed to the States store.
+
+    Args:
+        plane_id: The plane.
+        term: What to read or write there, eg ``Search.hits``.
+    """
+    return reroot_base(term, PlaneState, States.planes[plane_id].state)
 
 
 def clear_state(plane_id: nu.StrArg, cell_id: nu.StrArg | None = None) -> nu.Nu:

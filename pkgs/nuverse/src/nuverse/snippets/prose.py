@@ -4,14 +4,27 @@ One prose surface over a string in its own state, synced both ways. What the
 person wrote lives in the state, not in the prog. The viewer draws it like any
 other cell. Registered under :data:`~nuspace.TEXT`, it is the space's text
 snippet, so typing into an empty line starts one.
+
+Searchable (:func:`search`): a text cell is a hit when its text holds the
+query, ignoring case.
 """
 
 from __future__ import annotations
 
-from nuspace import TEXT, Snippet
+import nu
+import nuspace
+import nustd.kv
+from nuspace import TEXT, Snippet, ops
+from nuspace.system.search import excerpt, matches
 
 
-__all__ = ["SNIPPET", "SOURCE"]
+__all__ = ["SNIPPET", "SOURCE", "Doc", "search"]
+
+
+class Doc(nuspace.CellState):
+    """The text cell's state, as :data:`SOURCE` declares it: read by :func:`search`."""
+
+    text = nustd.kv.StrRef.slot()
 
 
 SOURCE = """\
@@ -42,4 +55,15 @@ def out():
     )
 """
 
-SNIPPET = Snippet(TEXT, "Text", SOURCE)
+_TEXT = "nuverse.text.search"
+
+
+def search(query: nu.StrArg, plane: nu.StrArg, cell: nu.StrArg) -> nu.Nu:
+    """One text cell searched: ``[{plane, cell, excerpt}]`` when its text holds ``query``, else ``[]``."""
+    held = ops.cell_state(plane, cell, nu.If(Doc.text.exists(), nu.ToStr(Doc.text), nu.Str("")))
+    text = nu.StrAttrRef(_TEXT)
+    hit = nu.List.of(nu.Dict.of(plane=plane, cell=cell, excerpt=excerpt(text, query)))
+    return nu.Let(_TEXT, held, nu.If(matches(text, query), hit, nu.List.of()))
+
+
+SNIPPET = Snippet(TEXT, "Text", SOURCE, search=search)

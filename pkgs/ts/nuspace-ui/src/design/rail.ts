@@ -82,8 +82,9 @@ export const railResizeHandle = resizeHandle("right");
 
 /**
  * Top bar. `h-chrome`, like the pane bar and the tab bar, so the tops line up.
- * No rule under it: the tree starts `rail-top-gap` below and a line would
- * only box it. `rail-bar-pad` puts a button's glyph on the rows' icon edge.
+ * No rule under it: the search entry sits right under it, and the header
+ * group ends at the divider (`railDivider`). `rail-bar-pad` puts a button's
+ * glyph on the rows' icon edge.
  */
 export const railHeader = "flex h-chrome shrink-0 items-center gap-0.5 px-rail-bar-pad";
 
@@ -97,15 +98,16 @@ export const railWordmarkNu = "text-accent";
 
 /**
  * The free middle of the top bar, between the collapse button and the create
- * one. Empty for now; search goes here.
+ * one. Search has its own strip under the bar, see `railSearch`.
  */
 export const railHeaderSpace = "min-w-0 flex-1";
 
 /**
- * Bottom bar: links on the left, the window's own state on the right. No rule
- * over it, same as the top bar.
+ * Bottom bar: links on the left, the window's own state on the right. An edge
+ * to edge rule over it, mirroring the divider under the header group.
  */
-export const railFooter = "flex h-chrome shrink-0 items-center gap-0.5 px-rail-bar-pad";
+export const railFooter =
+	"flex h-chrome shrink-0 items-center gap-0.5 border-t border-rail-edge px-rail-bar-pad";
 
 /** The free middle of the bottom bar, between the links and the window's state. */
 export const railFooterSpace = "min-w-0 flex-1";
@@ -129,8 +131,18 @@ export const railStatus = cn(
 );
 
 /**
- * Scroll body. `rail-inset` keeps a row's fill off both rail edges, and
- * `rail-top-gap` gives the first row air under the top bar.
+ * The hairline between the header group and the body: the rail's own edge
+ * token, edge to edge, like the one over the footer. `rail-top-gap`
+ * above it; the step below it is the body's top pad, the same with pins or
+ * without.
+ */
+export const railDivider = "mt-rail-top-gap shrink-0 border-t border-rail-edge";
+
+/**
+ * The body under the divider, the rail's one scroller: the pins, then the
+ * tree. `rail-inset` keeps a row's fill off both rail edges, and
+ * `rail-top-gap` is the step under the divider. It is pad, not a margin, so
+ * a focus ring at the top is not clipped.
  */
 export const railScroll = cn(
 	"flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden",
@@ -347,16 +359,19 @@ export const railDropTail = "relative min-h-8 flex-1";
 /* ============================== Pinned ================================== */
 
 /*
- * The pinned row, under the top bar: one icon per pinned plane, in a strip
- * that scrolls sideways with no scrollbar. The bar pad puts the first glyph
- * on the rail's one left edge, and the buttons are the top bar's size, so the
- * two strips read as one header.
+ * The pinned row, the body's top shelf under the divider: one boxed icon per
+ * pinned plane, in a strip that scrolls sideways with no scrollbar, the first
+ * thing in the body, scrolling with the tree. The strip's left pad (`rail-pin-pad`,
+ * tokens.css) puts the first box's glyph on the rows' icon column, so header
+ * button, search glyph, pins and row icons share one centre line; the box
+ * itself overhangs that column slightly. `rail-top-gap` under it is the step
+ * to the tree, so with no pins nothing is left over.
  */
 
 /** The strip. Its mask is `railPinsFade`, inline, since which edges fade is data. */
 export const railPins = cn(
-	"flex shrink-0 items-center gap-0.5 overflow-x-auto overflow-y-hidden",
-	"px-rail-bar-pad py-0.5 scrollbar-none",
+	"flex shrink-0 items-center gap-1 overflow-x-auto overflow-y-hidden",
+	"mb-rail-top-gap pl-rail-pin-pad scrollbar-none",
 );
 
 /**
@@ -371,19 +386,21 @@ export function railPinsFade(start: boolean, end: boolean): { maskImage?: string
 }
 
 /**
- * One pinned plane: its icon in a top bar button's box. Washed like a tree
- * row: the focused pane's plane strongest, one open elsewhere lighter.
+ * One pinned plane: its icon in a small outlined box, on top of a kit
+ * `IconButton outline sm` with the inset ring, sized to `rail-pin` (26px,
+ * between the kit's sm 24 and a top bar button's 28) with a 16px glyph. The outline is always there, on `rail-edge` so it holds in
+ * light; hover deepens it and lays the row's hover wash inside. Washed like a
+ * tree row: the focused pane's plane strongest, one open elsewhere lighter.
  */
 export function railPin(selected: boolean, open: boolean): string {
 	return cn(
-		"relative flex size-7 shrink-0 items-center justify-center rounded-md text-text-muted",
-		"transition-colors duration-fast ease-out",
-		"focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0",
+		"relative size-rail-pin shrink-0 border-rail-edge text-text-muted [&_svg]:size-4",
+		"focus-visible:ring-offset-0",
 		selected
-			? "bg-rail-selected text-text-primary"
+			? "border-border-strong bg-rail-selected text-text-primary hover:bg-rail-selected"
 			: open
-				? "bg-rail-open hover:bg-rail-hover hover:text-text-primary"
-				: "hover:bg-rail-hover hover:text-text-primary active:bg-doc-active",
+				? "bg-rail-open hover:border-border-strong hover:bg-rail-hover hover:text-text-primary"
+				: "hover:border-border-strong hover:bg-rail-hover hover:text-text-primary active:bg-doc-active",
 	);
 }
 
@@ -405,3 +422,51 @@ export const addPlaneText = "flex min-w-0 flex-col";
 export const addPlaneLabel = "truncate text-sm text-text-primary uppercase tracking-wider";
 
 export const addPlaneDescription = "truncate text-xs text-text-muted";
+
+/* ================================ Search ================================= */
+
+/*
+ * The search entry, under the top bar: the two read as one header group,
+ * closed by the divider (`railDivider`) `rail-top-gap` below it.
+ *
+ * It is a row, not an input. Same inset, height, radius and lanes as a flat
+ * plane row, so its glyph sits on the rail's one left edge and its label on
+ * the titles' edge. At rest it carries the hover tier as a quiet fill, so it
+ * reads as a place to type without a box around it; hover steps it up one
+ * tier and the label up to the secondary text tier. No border in any state.
+ */
+
+/** The strip holding the entry, on the rows' edges. */
+export const railSearch = "shrink-0 px-rail-inset";
+
+export const railSearchTrigger = cn(
+	"group/search flex h-rail-row w-full cursor-pointer items-center rounded-md",
+	"pl-rail-row-pad pr-rail-row-pad-end",
+	"bg-rail-hover text-base text-text-muted",
+	"transition-colors duration-fast ease-out",
+	"hover:bg-doc-active hover:text-text-secondary active:bg-doc-active",
+	"focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0",
+);
+
+/** The search glyph, in a row's icon lane and at a row icon's size. */
+export const railSearchIcon = cn(railLane, "[&_svg]:size-4");
+
+export const railSearchText = "min-w-0 flex-1 truncate text-left";
+
+/**
+ * The shortcut, on top of a kit `Kbd` with its well taken off: small muted
+ * mono at the far end, stepping up with the label on hover.
+ */
+export const railSearchHint = cn(
+	"shrink-0 border-transparent bg-transparent px-0.5 font-normal text-text-muted",
+	"transition-colors duration-fast ease-out group-hover/search:text-text-secondary",
+);
+
+/** One kind to search in the popup: its box, then its label. */
+export const searchItem = "gap-3";
+
+/** Under the popup's rows: the Enter hint, then the button. */
+export const searchFooter =
+	"flex items-center justify-between gap-2 border-t border-border-subtle px-3 py-2";
+
+export const searchHint = "flex items-center gap-1.5 text-xs text-text-muted";

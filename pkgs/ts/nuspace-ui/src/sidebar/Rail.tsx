@@ -1,4 +1,5 @@
-// The sidebar rail: a top bar, the pinned planes, the tree, a bottom bar.
+// The sidebar rail: a header group (top bar, search), a divider, a body (the
+// pinned planes fixed over the scrolling tree), a bottom bar.
 //
 // Planes only. Cells are parts of a Plane, not navigable entities, so they
 // never appear here.
@@ -19,9 +20,11 @@
 //
 // ## Where the parts are
 //
-//   Rail.tsx          this: the aside, its three strips, the resize edge
+//   Rail.tsx          this: the aside, its strips, the divider, the resize edge
 //   RailHeader.tsx    the top bar: collapse, new plane
-//   PinnedRow.tsx     the pinned planes, under the top bar
+//   SearchTrigger.tsx the search entry under it
+//   SearchPalette.tsx the search popup
+//   PinnedRow.tsx     the pinned planes, the body's top shelf
 //   RailFooter.tsx    the bottom bar: links, connection, theme
 //   pin.ts            the pins and their ops
 //   RailTree.tsx      the tree: keyboard, drop marks
@@ -44,6 +47,7 @@ import { useSkeleton } from "../core/delay";
 import { useFocusedRoute, useRoutes } from "../core/router";
 import {
 	railAside,
+	railDivider,
 	railIndent,
 	railResizeHandle,
 	railScroll,
@@ -58,8 +62,10 @@ import type { Pins } from "./pin";
 import { RailFooter } from "./RailFooter";
 import { RailHeader } from "./RailHeader";
 import { RailTree } from "./RailTree";
+import { SearchPopup } from "./SearchPalette";
+import { SearchTrigger } from "./SearchTrigger";
 import { visibleRows } from "./tree";
-import { childrenOf, type PlaneTree, type Registered, rootId } from "./types";
+import { childrenOf, type PlaneTree, type Registered, rootId, type Searchable } from "./types";
 import { useRailWidth } from "./useRailWidth";
 import { useReveal } from "./useReveal";
 
@@ -67,6 +73,7 @@ export function Rail({
 	tree,
 	loaded,
 	registered,
+	searchable,
 	expanded,
 	onToggle,
 	notify,
@@ -75,6 +82,7 @@ export function Rail({
 	tree: PlaneTree;
 	loaded: boolean;
 	registered: Registered[];
+	searchable: Searchable[];
 	expanded: Set<string>;
 	onToggle: (key: string) => void;
 	notify: Notify;
@@ -99,38 +107,42 @@ export function Rail({
 
 	return (
 		// Collapsed is hidden, not unmounted: the Add plane popup lives here and
-		// a pane's `...` still opens it.
+		// a pane's `...` still opens it, and so does the search popup, which
+		// cmd/ctrl+K opens from anywhere.
 		<aside aria-label="Sidebar" className={railAside(collapsed)} style={{ width }}>
 			<RailHeader />
-			{loading ? null : (
-				<PinnedRow
-					tree={tree}
-					pins={pins}
-					registered={registered}
-					routes={routes}
-					selKey={selKey}
-					reveal={reveal}
-				/>
-			)}
+			<SearchTrigger />
+			<hr className={railDivider} />
 			<nav aria-label="Planes" className={railScroll}>
 				{loading ? (
 					<RailSkeleton />
 				) : (
-					<RailTree
-						tree={tree}
-						rows={rows}
-						registered={registered}
-						routes={routes}
-						selKey={selKey}
-						onToggle={onToggle}
-						reveal={reveal}
-						notify={notify}
-						pins={pins}
-					/>
+					<>
+						<PinnedRow
+							tree={tree}
+							pins={pins}
+							registered={registered}
+							routes={routes}
+							selKey={selKey}
+							reveal={reveal}
+						/>
+						<RailTree
+							tree={tree}
+							rows={rows}
+							registered={registered}
+							routes={routes}
+							selKey={selKey}
+							onToggle={onToggle}
+							reveal={reveal}
+							notify={notify}
+							pins={pins}
+						/>
+					</>
 				)}
 			</nav>
 			<RailFooter />
 			<AddPlane registered={registered} notify={notify} reveal={reveal} />
+			<SearchPopup searchable={searchable} notify={notify} />
 			<div
 				aria-hidden="true"
 				className={railResizeHandle}

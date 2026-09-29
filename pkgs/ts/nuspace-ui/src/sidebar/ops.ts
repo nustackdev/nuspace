@@ -46,6 +46,12 @@ export type Ops = {
 	"plane.unpin": { plane_id: string };
 	/** Reorder a pinned Plane, `index` as in `plane.pin`. */
 	"plane.pin_move": { plane_id: string; index: number };
+	/**
+	 * Make a search. `snippets` names the searchable snippets to search, and
+	 * `titles` whether Plane titles count. The server makes the search Plane
+	 * and runs it; the search Plane shows it.
+	 */
+	"search.run": { query: string; snippets: string[]; titles: boolean };
 };
 
 /** Send one op. Threaded down from `Sidebar.tsx` into the rail. */

@@ -7,7 +7,7 @@ Core ships none privileged: a third party registers the same way.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import nu
 from nuspace.shapes import ROOT
@@ -15,6 +15,10 @@ from nuspace.shapes import ROOT
 from .cell import add_cell
 from .plane import add_plane, plane_icon
 from .utils import binding
+
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 
 __all__ = ["TEXT", "Plane", "Snippet", "create_plane", "insert_snippet"]
@@ -69,11 +73,23 @@ class Snippet:
             from it record as ``props.made_by``.
         label: What the menu shows.
         source: The cell's prog.
+        search: What searching one of its cells means, None when it has no
+            content to search. ``search(query, plane, cell)`` returns a term
+            yielding that cell's hits, a list of ``{plane, cell, excerpt}``,
+            ``[]`` for none. It runs inside a search's run, on a worker, so it
+            is named there by module and qualified name: a module level
+            function, never a lambda or a closure.
     """
 
     name: str
     label: str
     source: str
+    search: Callable[[nu.Nu, nu.Nu, nu.Nu], nu.Nu] | None = None
+
+    def __post_init__(self) -> None:
+        if self.search is not None and "<" in getattr(self.search, "__qualname__", "<"):
+            msg = f"Snippet {self.name!r}: search must be a module level function"
+            raise ValueError(msg)
 
 
 def create_plane(

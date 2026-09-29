@@ -11,7 +11,7 @@ There is no route slot. The routes live in the store
 
 :class:`Boot` seeds one tab. The shell is a static class, because a worker
 unpickles cell chains rooted on it, so what varies per space (the viewer's
-``/`` menu, the sidebar's registered Planes) is seeded here, as init frame props, rather than declared on the
+``/`` menu, the sidebar's registered Planes and searchable snippets) is seeded here, as init frame props, rather than declared on the
 slot. Chain props are a create time seed in the browser, so writes that come
 later carry the slot's own props and change nothing.
 """
@@ -106,6 +106,7 @@ class Shell(nu.Shape):
         cls,
         snippets: Sequence[Mapping[str, Any]] | None = None,
         registered: Sequence[Mapping[str, Any]] | None = None,
+        searchable: Sequence[Mapping[str, Any]] | None = None,
     ) -> Boot:
         """This shell's slots as the batch that seeds a tab.
 
@@ -114,7 +115,12 @@ class Shell(nu.Shape):
                 mounted on the viewer.
             registered: The add plane popup's entries, ``{name, label, icon,
                 description}`` in order, mounted on the sidebar.
+            searchable: The search popup's snippets, ``{name, label}`` in
+                order, mounted on the sidebar.
         """
         viewer = {"snippets": [dict(s) for s in snippets or ()]}
-        sidebar = {"registered": [dict(r) for r in registered or ()]}
+        sidebar = {
+            "registered": [dict(r) for r in registered or ()],
+            "searchable": [dict(s) for s in searchable or ()],
+        }
         return Boot(cls, {"viewer": viewer, "sidebar": sidebar})

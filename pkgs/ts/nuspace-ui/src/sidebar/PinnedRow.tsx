@@ -1,10 +1,11 @@
-// The pinned row, under the rail's top bar: one icon per pinned Plane, in
-// order. A pin is a shortcut: the Plane is in the tree as well. Hidden when
-// nothing is pinned.
+// The pinned row, the top shelf of the rail's body under the divider,
+// scrolling with the tree: one icon per pinned Plane, in order. A pin is a
+// shortcut: the Plane is in the tree as well. Hidden when nothing is pinned.
 //
 // An icon opens its Plane the way a tree row does, through the same handler:
 // a plain click in the focused pane, cmd/ctrl-click in a browser tab. The name
-// is in its tooltip. The focused pane's Plane is washed like the selected row.
+// is in its tooltip. Each is a kit outline IconButton, always boxed; the
+// focused pane's Plane is washed like the selected row.
 //
 // The strip scrolls sideways with no scrollbar. While it overflows, a
 // vertical wheel scrolls it too, and an edge with more behind it fades.
@@ -19,7 +20,7 @@
 // Where a drop lands is read off the pointer against the icon under it: its
 // left half is before it, its right half after it.
 
-import { cn, Tooltip, TooltipContent, TooltipTrigger } from "@nustackdev/ui-kit";
+import { cn, IconButton, Tooltip, TooltipContent, TooltipTrigger } from "@nustackdev/ui-kit";
 import type * as React from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { hrefFor, onNavClick } from "../core/router";
@@ -166,44 +167,51 @@ function PinStrip({
 				return (
 					<Tooltip key={id}>
 						<TooltipTrigger asChild>
-							<a
-								href={hrefFor(id)}
+							<IconButton
+								asChild
+								variant="outline"
+								size="sm"
+								ring="inset"
 								aria-label={title}
-								aria-current={selected ? "page" : undefined}
-								data-pin={id}
-								draggable
 								className={cn(
 									railPin(selected, !selected && routes.includes(id)),
 									dragId === id && railDragging,
 								)}
-								onClick={(e) => {
-									// The tree row's click: open it and reveal what is inside it.
-									if (row.children.length) reveal(id);
-									navClick(e);
-								}}
-								onDragStart={(e) => {
-									e.dataTransfer.effectAllowed = "move";
-									e.dataTransfer.setData(PIN_MIME, id);
-									setDragId(id);
-								}}
-								onDragEnd={end}
-								onDragOver={(e) => {
-									if (!takes(e)) return;
-									e.preventDefault();
-									e.stopPropagation();
-									e.dataTransfer.dropEffect = "move";
-									const next = aim(e, index);
-									if (target?.index !== next.index || target.edge !== next.edge) setTarget(next);
-								}}
-								onDrop={(e) => {
-									if (takes(e)) drop(e, aim(e, index));
-								}}
 							>
-								<PlaneIcon
-									icon={planeIcon(row.icon, registered.find((r) => r.name === row.made_by)?.icon)}
-								/>
-								{aimed ? <span className={railPinDropLine(aimed)} aria-hidden="true" /> : null}
-							</a>
+								<a
+									href={hrefFor(id)}
+									aria-current={selected ? "page" : undefined}
+									data-pin={id}
+									draggable
+									onClick={(e) => {
+										// The tree row's click: open it and reveal what is inside it.
+										if (row.children.length) reveal(id);
+										navClick(e);
+									}}
+									onDragStart={(e) => {
+										e.dataTransfer.effectAllowed = "move";
+										e.dataTransfer.setData(PIN_MIME, id);
+										setDragId(id);
+									}}
+									onDragEnd={end}
+									onDragOver={(e) => {
+										if (!takes(e)) return;
+										e.preventDefault();
+										e.stopPropagation();
+										e.dataTransfer.dropEffect = "move";
+										const next = aim(e, index);
+										if (target?.index !== next.index || target.edge !== next.edge) setTarget(next);
+									}}
+									onDrop={(e) => {
+										if (takes(e)) drop(e, aim(e, index));
+									}}
+								>
+									<PlaneIcon
+										icon={planeIcon(row.icon, registered.find((r) => r.name === row.made_by)?.icon)}
+									/>
+									{aimed ? <span className={railPinDropLine(aimed)} aria-hidden="true" /> : null}
+								</a>
+							</IconButton>
 						</TooltipTrigger>
 						<TooltipContent side="bottom">{title}</TooltipContent>
 					</Tooltip>

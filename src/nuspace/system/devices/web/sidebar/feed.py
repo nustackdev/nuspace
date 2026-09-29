@@ -20,6 +20,10 @@ for a plane ``remove_plane`` refuses.
 **Pins.** ``Space.pinned`` ships with the tree, in order, drawn planes only.
 A pin is a shortcut: the pinned plane is in the tree as well.
 
+**Search.** ``search.run`` makes a search (:func:`~nuspace.system.search.search`)
+over the snippets the space registered with a ``search``; the browser opens
+the search plane itself.
+
 **Narrow watch.** The tree is shipped again when the set of planes, a
 plane's name, props or icon, a tree node, or the pins change, and nothing
 else: a cell writing its state or the kernel writing a run never wakes it.
@@ -33,20 +37,21 @@ import nu
 from nuspace import ops
 from nuspace.ops.utils import flag, fresh
 from nuspace.shapes import ROOT, Space
+from nuspace.system import search
 from nuspace.system.devices.web.sidebar import interactions
 from nuspace.system.devices.web.sidebar.interactions import KIND_PLANE, KIND_SPACE, ROOT_ID
-from nuspace.system.devices.web.utils import Arms, field_str
+from nuspace.system.devices.web.utils import Arms, field_ids, field_str
 from nuspace.system.kernel.utils import snap
 
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
-    from nuspace.ops import Plane
+    from nuspace.ops import Plane, Snippet
     from nustd.ui.core import Ref
 
 
-__all__ = ["create", "move", "node", "pins", "rows", "sidebar_feed"]
+__all__ = ["create", "move", "node", "pins", "rows", "searched", "sidebar_feed"]
 
 
 _arms = Arms("sidebar")
@@ -60,6 +65,7 @@ _ICON = "nuspace.web.sidebar.icon"
 _PIN = "nuspace.web.sidebar.pin"
 _UNPIN = "nuspace.web.sidebar.unpin"
 _PIN_MOVE = "nuspace.web.sidebar.pin_move"
+_SEARCH = "nuspace.web.sidebar.search"
 
 
 def _text(row: nu.Nu, field: str) -> nu.Nu:
@@ -261,12 +267,26 @@ def _ship(sidebar: Ref) -> nu.Nu:
     )
 
 
-def sidebar_feed(sidebar: Ref, planes: Sequence[Plane]) -> nu.Nu:
+def searched(snippets: Sequence[Snippet]) -> nu.Nu:
+    """``search.run``'s op: a search over what it names, when the query is not blank."""
+    query = field_str(_SEARCH, "query")
+    titles = nu.ToBool(nu.DictAttrRef(_SEARCH).get_item(nu.Str("titles"), nu.Bool(True)))
+    made = search.search(
+        query,
+        field_ids(_SEARCH, "snippets"),
+        titles,
+        searchers=search.searchable(snippets),
+    )
+    return nu.IfDo(nu.Ne(nu.Str(query).strip(), nu.Str("")), made)
+
+
+def sidebar_feed(sidebar: Ref, planes: Sequence[Plane], snippets: Sequence[Snippet] = ()) -> nu.Nu:
     """The sidebar, live, as one term. Built per connection, never ends.
 
     Args:
         sidebar: The shell's sidebar ref.
         planes: The registered Planes, what ``plane.create`` can create.
+        snippets: The registered snippets, what ``search.run`` can search.
     """
     arms = [_arms.state("tree", _changes(), _ship(sidebar))]
     plane_id = field_str(_CREATE, "plane_id")
@@ -341,5 +361,6 @@ def sidebar_feed(sidebar: Ref, planes: Sequence[Plane]) -> nu.Nu:
             interactions.on_move_pin(sidebar),
             nu.IfDo(nu.Ne(shifted, nu.Str("")), ops.move_pin(shifted, _index(_PIN_MOVE))),
         ),
+        _arms.event(_SEARCH, interactions.on_search(sidebar), searched(snippets)),
     ]
     return nu.ParallelAsync(*arms)

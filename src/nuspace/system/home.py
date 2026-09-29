@@ -278,7 +278,9 @@ def out():
 CELLS = (("header", HEADER), ("recent", RECENT), ("glance", GLANCE), ("start", START))
 
 
-def seed(plane: str, name: str, icon: str, cells: tuple[tuple[str, str], ...]) -> nu.Nu:
+def seed(
+    plane: str, name: str, icon: str, cells: tuple[tuple[str, str], ...], *, pin: bool = True
+) -> nu.Nu:
     """A system ui plane and its cells, pinned last, when the plane was never made. Idempotent.
 
     Missing means ``add_plane`` never wrote it (no name), so a plane the owner
@@ -291,13 +293,15 @@ def seed(plane: str, name: str, icon: str, cells: tuple[tuple[str, str], ...]) -
         name: What the plane is called.
         icon: Its icon, eg ``"emoji:<char>"``.
         cells: ``(cell id, source)`` in order. The id is the name too.
+        pin: Pin it, after the pins there are.
     """
     made = [add_cell(plane, source, cell_id=cell, name=cell) for cell, source in cells]
     first = add_plane(
         plane, name=name, system=True, ui=True, made_by="", meta={**META, "icon": icon}
     )
     missing = snap(nu.Not(Space.planes[plane].contains("name")))
-    return nu.IfDo(missing, nu.Sequential(first, *made, pin_plane(plane)))
+    pinned = [pin_plane(plane)] if pin else []
+    return nu.IfDo(missing, nu.Sequential(first, *made, *pinned))
 
 
 def ensure_home() -> nu.Nu:

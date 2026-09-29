@@ -4,9 +4,10 @@ A component ref like ``ButtonRef``, only wider: it renders the tree of planes
 that draw. It holds no state and knows no store; everything it ships is
 handed to it.
 
-It is mounted with one prop off the registered Planes: ``registered``, what
-the add plane popup offers, in order. Seeded when the shell boots, like the
-viewer's ``/`` menu.
+It is mounted with two props off the registry: ``registered``, what the add
+plane popup offers, in order, and ``searchable``, the snippets the search
+popup offers to search. Seeded when the shell boots, like the viewer's ``/``
+menu.
 """
 
 from __future__ import annotations
@@ -23,11 +24,11 @@ if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping, Sequence
 
     from nu.lang import ListArg, Nu
-    from nuspace.ops import Plane
+    from nuspace.ops import Plane, Snippet
     from nustd.ui.core import Changed
 
 
-__all__ = ["SidebarRef", "registered_entries"]
+__all__ = ["SidebarRef", "registered_entries", "searchable_entries"]
 
 
 def registered_entries(planes: Iterable[Plane]) -> list[dict]:
@@ -38,15 +39,28 @@ def registered_entries(planes: Iterable[Plane]) -> list[dict]:
     ]
 
 
+def searchable_entries(snippets: Iterable[Snippet]) -> list[dict]:
+    """The search popup's entries, ``{name, label}``: the snippets with a ``search``, in order."""
+    return [{"name": s.name, "label": s.label} for s in snippets if s.search is not None]
+
+
 class SidebarRef(SpaceRef):
     """Every plane that draws, as one browser node."""
 
     _wire_type: ClassVar[str] = "SidebarRef"
 
     @classmethod
-    def slot(cls, *, registered: Sequence[Mapping[str, object]] | None = None) -> Self:
-        """Mount the sidebar, seeded with the registered Planes."""
-        return super().slot(registered=[dict(r) for r in registered or ()])
+    def slot(
+        cls,
+        *,
+        registered: Sequence[Mapping[str, object]] | None = None,
+        searchable: Sequence[Mapping[str, object]] | None = None,
+    ) -> Self:
+        """Mount the sidebar, seeded with the registered Planes and the searchable snippets."""
+        return super().slot(
+            registered=[dict(r) for r in registered or ()],
+            searchable=[dict(s) for s in searchable or ()],
+        )
 
     def set_tree(self, rows: ListArg[dict], pinned: ListArg[str]) -> Nu:
         """Replace the tree and the pins."""
@@ -79,3 +93,7 @@ class SidebarRef(SpaceRef):
     def on_move_pin(self) -> Changed:
         """``{plane_id, index}``."""
         return interactions.on_move_pin(self)
+
+    def on_search(self) -> Changed:
+        """``{query, snippets, titles}``."""
+        return interactions.on_search(self)

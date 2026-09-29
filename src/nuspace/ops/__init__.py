@@ -65,7 +65,7 @@ from .read import (
     prog,
 )
 from .settings import set_telemetry, telemetry
-from .state import CellState, PlaneState, clear_state, sibling
+from .state import CellState, PlaneState, cell_state, clear_state, plane_state, sibling
 from .tree import move_plane
 from .utils import mint_ordered_id, snapshot
 
@@ -88,6 +88,7 @@ __all__ = [
     "cell_rows",
     "cell_run",
     "cell_runs",
+    "cell_state",
     "cells",
     "children",
     "clear_state",
@@ -107,6 +108,7 @@ __all__ = [
     "plane_kill",
     "plane_rows",
     "plane_run",
+    "plane_state",
     "plane_stop",
     "planes",
     "prog",

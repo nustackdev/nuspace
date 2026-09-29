@@ -7,9 +7,11 @@ inside :func:`~nuspace.system.kernel.open_kernel` after reconcile:
 
 1. :func:`~nuspace.system.services.ensure_system`: the service planes, made
    where missing;
-2. :func:`~nuspace.system.home.ensure_home` and
-   :func:`~nuspace.system.settings.ensure_settings`: the home and settings
-   planes, made where missing, so they exist before the web device serves;
+2. :func:`~nuspace.system.home.ensure_home`,
+   :func:`~nuspace.system.settings.ensure_settings` and
+   :func:`~nuspace.system.search.ensure_search`: the home, settings and
+   search planes, made where missing, so they exist before the web device
+   serves;
 3. :func:`~nuspace.system.home.write_info`: ``Space.state.info`` for this
    open (space path, when, versions);
 4. :func:`~nuspace.system.services.nav.clear_connections`: tabs of a previous
@@ -34,6 +36,7 @@ from typing import TYPE_CHECKING
 import nu
 from nuspace.system.home import ensure_home, write_info
 from nuspace.system.kernel import DEFAULT_SPARES, init_start, open_kernel
+from nuspace.system.search import ensure_search
 from nuspace.system.services import ensure_system
 from nuspace.system.services import init as init_service
 from nuspace.system.services.nav import clear_connections
@@ -163,6 +166,7 @@ def open_space(
         ensure_system()
         >> ensure_home()
         >> ensure_settings()
+        >> ensure_search()
         >> write_info(path)
         >> clear_connections()
         >> init_start(init_service.PLANE)
