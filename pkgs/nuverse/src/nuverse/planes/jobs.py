@@ -142,7 +142,7 @@ def create(name):
     # Under the plane running this cell: the Jobs plane.
     here = nu.StrAttrRef(ops.PLANE_ATTR)
     job = nu.StrAttrRef("new.job")
-    made = ops.add_plane(name=name, parent=here, ui=False, made_by="jobs")
+    made = ops.add_plane(backend="mp", name=name, parent=here, ui=False, made_by="jobs")
     fill = ops.add_cell(job, STARTER, cell_id="main", name="main") >> nustd.kv.Transaction(
         Jobs.selected.set(job), scope=nuspace.States
     )
@@ -309,4 +309,5 @@ PLANE = Plane(
     description="Headless planes that run code: make them, boot them, restart them.",
     meta={"editable": True, "full_width": False},
     cells=(("jobs", TABLE), ("new", NEW), ("job", DETAIL)),
+    backend="async",
 )

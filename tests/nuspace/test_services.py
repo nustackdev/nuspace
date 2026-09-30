@@ -93,7 +93,7 @@ async def test_bootstrap_makes_the_services_and_is_idempotent(store):
             "system": True,
             "ui": False,
             "made_by": "",
-            "backend": "async",
+            "backend": "mp",
         }
         assert rows[plane]["meta"] == {}
         assert await store.read(ops.cell_rows(plane)) == [
@@ -158,7 +158,7 @@ async def space(tmp_path_factory):
     path = str(tmp_path_factory.mktemp("services") / "space")
     seed = (
         ensure_system()
-        >> ops.add_plane(BOOTED_PLANE)
+        >> ops.add_plane(BOOTED_PLANE, backend="async")
         >> ops.add_cell(BOOTED_PLANE, SET_42, cell_id="c")
         >> boot(BOOTED_PLANE)
     )
@@ -247,11 +247,11 @@ async def test_nav_runs_each_open_plane_in_its_own_run(space):
 @module_loop
 async def test_nav_stops_every_open_planes_run_when_the_connection_goes(space):
     a, _ = await space.plane(READS_SESSION)
-    b, _ = await space.plane(READS_SESSION, backend="per_cell")
+    b, _ = await space.plane(READS_SESSION, backend="mp")
     sid = "conn-both"
     await open_tab(space, sid, a, b)
     ra, rb = await pane(space, sid, a), await pane(space, sid, b)
-    assert rb["backend"] == "per_cell"
+    assert rb["backend"] == "mp"
     await close_tab(space, sid)
     for r in (ra, rb):
         row = await space.run_row(r["id"], ended, SLOW)
@@ -277,7 +277,7 @@ async def test_nav_skips_missing_and_system_planes(space):
 async def test_nav_brings_up_a_system_ui_plane_and_never_a_service(space):
     """``system`` only protects: a system ui plane (home) comes up, a service never does."""
     sid = "conn-system-ui"
-    p = await space.run(ops.add_plane(system=True, ui=True))
+    p = await space.run(ops.add_plane(system=True, ui=True, backend="async"))
     await space.run(ops.add_cell(p, READS_SESSION))
     await open_tab(space, sid, "reload", p)
     await pane(space, sid, p)
@@ -293,7 +293,7 @@ async def test_nav_waits_for_a_routed_plane_not_written_yet(space):
     await open_tab(space, sid, "early")
     # Past a tick, so nav has seen the routes and found no plane behind it.
     await asyncio.sleep(1.5)
-    await space.run(ops.add_plane("early", ui=True))
+    await space.run(ops.add_plane("early", ui=True, backend="async"))
     await space.run(ops.add_cell("early", READS_SESSION))
     await pane(space, sid, "early")
     await close_tab(space, sid)

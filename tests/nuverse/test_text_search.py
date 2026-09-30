@@ -25,7 +25,9 @@ def test_only_text_is_searchable_and_by_its_module_function():
 
 
 async def test_text_search_hits_a_cell_holding_the_query(store):
-    await store.run(ops.add_plane("p", ui=True) >> _text("p", "a", "Water the Basil daily"))
+    await store.run(
+        ops.add_plane("p", ui=True, backend="async") >> _text("p", "a", "Water the Basil daily")
+    )
     await store.run(ops.insert_snippet("p", prose.SNIPPET, cell_id="empty"))
     got = await store.read(prose.search(nu.Str("basil"), nu.Str("p"), nu.Str("a")))
     assert got == [{"plane": "p", "cell": "a", "excerpt": "Water the Basil daily"}]
@@ -36,7 +38,7 @@ async def test_text_search_hits_a_cell_holding_the_query(store):
 
 async def test_a_search_over_text_cells(store):
     await store.run(
-        ops.add_plane("p", name="Herbs", ui=True)
+        ops.add_plane("p", name="Herbs", ui=True, backend="async")
         >> _text("p", "a", "Basil likes sun")
         >> _text("p", "b", "Mint spreads")
     )

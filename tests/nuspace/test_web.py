@@ -32,8 +32,8 @@ PROSE_SRC = "def out():\n    return prose()\n"
 
 
 PLANES = [
-    Plane("plain", "Plain"),
-    Plane("jobs", "Jobs", icon="list", cells=(("list", PROSE_SRC),)),
+    Plane("plain", "Plain", backend="async"),
+    Plane("jobs", "Jobs", icon="list", cells=(("list", PROSE_SRC),), backend="mp"),
 ]
 SNIPPETS = [
     Snippet(TEXT, "Text", PROSE_SRC),
@@ -117,8 +117,8 @@ def test_device_term_compiles_and_validates():
 # --- Sidebar rows ------------------------------------------------------------------
 
 
-async def _plane(store, pid, name, meta=None, **props):
-    await store.run(ops.add_plane(pid, name=name, meta=meta, **props))
+async def _plane(store, pid, name, meta=None, backend="async", **props):
+    await store.run(ops.add_plane(pid, name=name, meta=meta, backend=backend, **props))
 
 
 def _row(pid, title, parent="space", children=(), made_by="", icon="", system=False):
@@ -197,7 +197,7 @@ async def test_sidebar_pins_are_drawn_planes_in_order(store):
     await store.run(ops.pin_plane("p2") >> ops.pin_plane("p1") >> ops.pin_plane("p3"))
     assert await store.read(pins()) == ["p2", "p1"]
     # A plane drawn once and hidden since stays pinned in the store, unshipped.
-    await store.run(ops.add_plane("p2", name="Two"))
+    await store.run(ops.add_plane("p2", name="Two", backend="async"))
     assert await store.read(ops.pinned()) == ["p2", "p1"]
     assert await store.read(pins()) == ["p1"]
 
@@ -220,12 +220,14 @@ async def test_create_makes_the_named_plane(store):
         "system": False,
         "ui": True,
         "made_by": "jobs",
-        "backend": "async",
+        "backend": "mp",
     }
     assert [c["name"] for c in await store.read(ops.cell_rows("pj"))] == ["list"]
     # An unknown name creates the first registered Plane, at the root.
     assert (by_id["px"]["name"], by_id["px"]["parent"]) == ("X", "root")
     assert by_id["px"]["props"]["made_by"] == "plain"
+    # Each runs on its registered Plane's own backend.
+    assert by_id["px"]["props"]["backend"] == "async"
     # The registered Plane's icon is the new plane's.
     assert by_id["pj"]["meta"] == {"icon": "lucide:list"}
     assert by_id["px"]["meta"] == {}
@@ -520,6 +522,8 @@ async def test_connection_live(store):
         )
         await _until(lambda: "p2" in [r["id"] for r in session.writes("set_tree")[-1]["planes"]])
         assert [c["name"] for c in await store.read(ops.cell_rows("p2"))] == ["list"]
+        # The browser names no backend: the plane runs on its spec's.
+        assert await store.read(Space.planes["p2"].props.backend) == "mp"
         session.notify(("sidebar", "ops", "plane.rename"), {"plane_id": "p2", "title": "Deux"})
         await _until(
             lambda: (

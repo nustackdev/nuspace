@@ -17,4 +17,5 @@ PLANE = Plane(
     "Plain",
     description="An empty plane. Add cells with /, or nest planes under it.",
     meta={"editable": True, "full_width": False},
+    backend="async",
 )

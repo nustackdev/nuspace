@@ -18,7 +18,7 @@ from __future__ import annotations
 from typing import Any
 
 import nu
-from nuspace.shapes import DEFAULT_BACKEND, ROOT, Space
+from nuspace.shapes import ROOT, Space
 
 from .kernel import kill, live_runs_of
 from .pin import unpin
@@ -46,21 +46,31 @@ ICON_LUCIDE = "lucide:"
 #: The prefix of an emoji icon, the emoji itself after it.
 ICON_EMOJI = "emoji:"
 
+#: What :func:`add_plane` says when it is given no backend.
+NO_BACKEND = "A plane needs a backend, eg mp or async: none was given"
+
 
 def _merge(meta: nu.Nu, fields: dict[str, Any] | nu.Nu) -> nu.Nu:
     """Merge ``fields`` into a meta dict: named keys replaced, others kept."""
     return meta.update(fields)
 
 
+def _refuse_empty(backend: nu.StrArg) -> nu.Nu:
+    """Raise :data:`NO_BACKEND` when ``backend`` evaluates to ``""``: the commit makes nothing."""
+    if isinstance(backend, str):
+        return nu.Noop()
+    return nu.IfDo(nu.Eq(backend, nu.Str("")), nu.Raise(nu.Str(NO_BACKEND), exc_cls=ValueError))
+
+
 def add_plane(
     plane_id: nu.StrArg | None = None,
     *,
+    backend: nu.StrArg,
     name: nu.StrArg = "",
     parent: nu.StrArg = ROOT,
     system: nu.BoolArg = False,
     ui: nu.BoolArg = False,
     made_by: nu.StrArg = "",
-    backend: nu.StrArg = DEFAULT_BACKEND,
     meta: dict[str, Any] | nu.Nu | None = None,
 ) -> nu.Nu:
     """Make a plane with no cells and hang it under ``parent``, in one commit.
@@ -69,6 +79,11 @@ def add_plane(
         plane_id: Its id. Minted when the term is evaluated when absent. An
             existing plane given again keeps its cells and is rewritten and
             moved.
+        backend: Prop, the backend its runs execute on, by the name it was
+            registered under at open (``mp``, ``async``). Required: there is
+            no default, and an empty one is refused. Picked by the kind of
+            work its cells do: many awaiting tasks run well on ``async``,
+            sync code on ``mp``.
         name: What to call it.
         parent: The tree node to hang it under, ``ROOT`` or a plane id. A
             parent that does not exist falls back to ``ROOT``.
@@ -77,8 +92,6 @@ def add_plane(
         ui: Prop, the shell draws it and nav brings it up when routed.
         made_by: Prop, the registered Plane it was created from. Nothing
             groups by it.
-        backend: Prop, the backend its runs execute on, by the name it was
-            registered under at open.
         meta: Fields to merge into its meta.
 
     The props are written every time, so an existing plane given again takes
@@ -86,7 +99,13 @@ def add_plane(
 
     Yields:
         The plane id.
+
+    Raises:
+        ValueError: ``backend`` is empty: at build when it is a ``str``, at
+            run time, before the commit writes anything, when it is a term.
     """
+    if isinstance(backend, str) and not backend:
+        raise ValueError(NO_BACKEND)
 
     def write(pid_name: str) -> nu.Nu:
         pid = nu.StrAttrRef(pid_name)
@@ -95,7 +114,8 @@ def add_plane(
             nu.Or(nu.Eq(parent, nu.Str(ROOT)), plane_exists(parent)), parent, nu.Str(ROOT)
         )
         writes = (
-            nu.IfDo(nu.Not(plane_exists(pid)), row.order.set(nu.Literal([])))
+            _refuse_empty(backend)
+            >> nu.IfDo(nu.Not(plane_exists(pid)), row.order.set(nu.Literal([])))
             >> row.name.set(name)
             >> row.props.system.set(system)
             >> row.props.ui.set(ui)

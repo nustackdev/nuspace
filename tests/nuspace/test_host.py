@@ -34,7 +34,7 @@ from nuverse.snippets import prose as nuverse_prose
 
 
 def _plane(name: str, label: str = "") -> Plane:
-    return Plane(name, label or name)
+    return Plane(name, label or name, backend="async")
 
 
 def _snippet(name: str, source: str = "") -> Snippet:
@@ -174,16 +174,20 @@ async def test_open_space_headless_runs_a_booted_plane(tmp_path, monkeypatch):
     """A store seeded the way a person would, boot() before anything opened it."""
     _points(monkeypatch, [])
     path = str(tmp_path / "space")
-    seed = ops.add_plane(USER) >> ops.add_cell(USER, SET_42, cell_id="c") >> boot(USER)
+    seed = (
+        ops.add_plane(USER, backend="async")
+        >> ops.add_cell(USER, SET_42, cell_id="c")
+        >> boot(USER)
+    )
     # A tab the previous run never closed, routed to a plane of its own.
     stale = Space.connections["stale"]
     seed = (
         seed
-        >> ops.add_plane(TAB, ui=True)
+        >> ops.add_plane(TAB, ui=True, backend="async")
         >> ops.add_cell(TAB, SET_42, cell_id="c")
         >> atomic(stale.opened.set(nu.Float(0.0)) >> stale.routes.set(nu.Literal([TAB])))
         # nuverse's starter program runs headless too.
-        >> ops.add_plane(STARTER)
+        >> ops.add_plane(STARTER, backend="async")
         >> ops.add_cell(STARTER, nuverse_program.SOURCE, cell_id="c")
         >> boot(STARTER)
     )
@@ -228,7 +232,9 @@ async def test_nuverse_prose_loads_through_the_kernel_rewrites(store):
     """Prose draws, so it runs only in a session: here it is loaded and compiled."""
     from nuspace.system.devices.web.env import session_env
 
-    await store.run(ops.add_plane("p") >> ops.add_cell("p", nuverse_prose.SOURCE, cell_id="c"))
+    await store.run(
+        ops.add_plane("p", backend="async") >> ops.add_cell("p", nuverse_prose.SOURCE, cell_id="c")
+    )
     env = session_env("127.0.0.1:9")("s1")
     rewrite = Rewrites(Reroot("p", "c"), env.rewrite, Bracketed())
     source = Space.planes["p"].cells["c"].prog

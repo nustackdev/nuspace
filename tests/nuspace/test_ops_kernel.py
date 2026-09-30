@@ -13,13 +13,13 @@ from nuspace.shapes import Space
 kernel = Space.kernel
 
 
-async def plane_with(store, n, **kw):
-    p = await store.run(ops.add_plane(**kw))
+async def plane_with(store, n, backend="async", **kw):
+    p = await store.run(ops.add_plane(backend=backend, **kw))
     cells = [await store.run(ops.add_cell(p, f"src{i}")) for i in range(n)]
     return p, cells
 
 
-async def test_plane_run_writes_a_run_with_a_cell_run_per_cell(store):
+async def test_plane_run_writes_a_run_with_a_cell_run_for_each_cell(store):
     p, (a, b) = await plane_with(store, 2)
     await store.run(ops.reorder_cells(p, [b, a]))
     envs = [ops.env("session", "conn-7"), ops.env("lmdb")]
@@ -45,11 +45,11 @@ async def test_plane_run_writes_a_run_with_a_cell_run_per_cell(store):
 
 
 async def test_plane_run_takes_the_planes_backend(store):
-    p, _ = await plane_with(store, 1, backend="per_cell")
+    p, _ = await plane_with(store, 1, backend="mp")
     r = await store.run(ops.plane_run(p))
-    assert (await store.read(ops.run(r)))["backend"] == "per_cell"
+    assert (await store.read(ops.run(r)))["backend"] == "mp"
     (row,) = [x for x in await store.read(ops.plane_rows()) if x["id"] == p]
-    assert row["props"]["backend"] == "per_cell"
+    assert row["props"]["backend"] == "mp"
 
 
 async def test_plane_run_mints_at_evaluation(store):
@@ -150,7 +150,7 @@ def test_run_attrs():
 
 async def test_run_records_round_trip_through_sqlite(disk):
     """The codec path: env specs as nested lists, the live sets."""
-    p = await disk.run(ops.add_plane())
+    p = await disk.run(ops.add_plane(backend="async"))
     await disk.run(ops.add_cell(p, "src"))
     r = await disk.run(ops.plane_run(p, envs=[ops.env("session", "c1")]))
     row = await disk.read(ops.run(r))

@@ -12,7 +12,7 @@ with the bracket that opened it.
 from __future__ import annotations
 
 import nu
-from nuspace.shapes import DEFAULT_BACKEND, ROOT, Space
+from nuspace.shapes import ROOT, Space
 
 from .utils import flag, fresh, text
 
@@ -97,7 +97,7 @@ def plane_rows() -> nu.Nu:
     """Every plane as ``id, name, props, meta, parent``. One read fills a sidebar.
 
     ``props`` is always whole, ``{system, ui, made_by, backend}``, defaults
-    filled in.
+    filled in. ``backend`` is ``""`` for a plane that names none.
     """
     item = fresh("plane_rows")
     at = nu.StrAttrRef(item)
@@ -112,7 +112,7 @@ def plane_rows() -> nu.Nu:
                     system=flag(plane.props.system, False),
                     ui=flag(plane.props.ui, False),
                     made_by=text(plane.props.made_by),
-                    backend=text(plane.props.backend, DEFAULT_BACKEND),
+                    backend=text(plane.props.backend),
                 ),
                 meta=plane.meta.extract(),
                 parent=parent(at),

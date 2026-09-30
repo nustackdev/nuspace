@@ -279,7 +279,13 @@ CELLS = (("header", HEADER), ("recent", RECENT), ("glance", GLANCE), ("start", S
 
 
 def seed(
-    plane: str, name: str, icon: str, cells: tuple[tuple[str, str], ...], *, pin: bool = True
+    plane: str,
+    name: str,
+    icon: str,
+    cells: tuple[tuple[str, str], ...],
+    *,
+    backend: str,
+    pin: bool = True,
 ) -> nu.Nu:
     """A system ui plane and its cells, pinned last, when the plane was never made. Idempotent.
 
@@ -293,11 +299,18 @@ def seed(
         name: What the plane is called.
         icon: Its icon, eg ``"emoji:<char>"``.
         cells: ``(cell id, source)`` in order. The id is the name too.
+        backend: The backend its runs execute on. Required: there is no default.
         pin: Pin it, after the pins there are.
     """
     made = [add_cell(plane, source, cell_id=cell, name=cell) for cell, source in cells]
     first = add_plane(
-        plane, name=name, system=True, ui=True, made_by="", meta={**META, "icon": icon}
+        plane,
+        backend=backend,
+        name=name,
+        system=True,
+        ui=True,
+        made_by="",
+        meta={**META, "icon": icon},
     )
     missing = snap(nu.Not(Space.planes[plane].contains("name")))
     pinned = [pin_plane(plane)] if pin else []
@@ -306,7 +319,7 @@ def seed(
 
 def ensure_home() -> nu.Nu:
     """The home plane and its cells, seeded once (:func:`seed`)."""
-    return seed(PLANE, NAME, ICON, CELLS)
+    return seed(PLANE, NAME, ICON, CELLS, backend="async")
 
 
 def versions(packages: tuple[str, ...] = PACKAGES) -> dict[str, str]:

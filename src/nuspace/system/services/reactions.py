@@ -120,7 +120,7 @@ def _here(term: nu.Nu) -> nu.Nu:
 def ensure_reactions() -> nu.Nu:
     """The plane, made when missing. No cells: each is a reaction. init's boot list runs it."""
     missing = snap(nu.Not(Space.planes[PLANE].contains("name")))
-    return nu.IfDo(missing, add_plane(PLANE, name=PLANE, system=True))
+    return nu.IfDo(missing, add_plane(PLANE, backend="async", name=PLANE, system=True))
 
 
 # --- The source --------------------------------------------------------------------

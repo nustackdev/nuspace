@@ -22,10 +22,10 @@ from nustd.ui.core import OP_NOTIFY, Frame, WsSession
 
 
 def _drawn(plane_id=None, name=""):
-    return ops.add_plane(plane_id, name=name, ui=True, made_by="plain")
+    return ops.add_plane(plane_id, name=name, ui=True, made_by="plain", backend="async")
 
 
-PLANES = [Plane("plain", "Plain")]
+PLANES = [Plane("plain", "Plain", backend="async")]
 
 
 # --- The seed ---------------------------------------------------------------------
@@ -88,8 +88,8 @@ async def test_remember_dedupes_caps_and_skips(store):
 
     await store.run(
         home.ensure_home()
-        >> ops.add_plane("svc", system=True)
-        >> ops.add_plane("hidden")
+        >> ops.add_plane("svc", system=True, backend="async")
+        >> ops.add_plane("hidden", backend="async")
         >> _drawn("a")
         >> _drawn("b")
     )
@@ -181,7 +181,7 @@ async def test_planes_open_pushes_recents(store):
 @pytest.mark.parametrize("cell", home.CELLS, ids=lambda c: c[0])
 async def test_each_cell_loads_through_the_kernel_rewrites(store, cell):
     _, source = cell
-    await store.run(ops.add_plane("p") >> ops.add_cell("p", source, cell_id="c"))
+    await store.run(ops.add_plane("p", backend="async") >> ops.add_cell("p", source, cell_id="c"))
     env = session_env("127.0.0.1:9")("s1")
     rewrite = Rewrites(Reroot("p", "c"), env.rewrite, Bracketed())
     prog = Space.planes["p"].cells["c"].prog
@@ -286,8 +286,8 @@ async def test_glance_draws_plain_tiles(store):
         home.ensure_home()
         >> _drawn("a")
         >> _drawn("b")
-        >> ops.add_plane("svc", system=True)
-        >> ops.add_plane("hidden")
+        >> ops.add_plane("svc", system=True, backend="async")
+        >> ops.add_plane("hidden", backend="async")
         >> _seed_kernel()
     )
     got = await _frames(store, home.GLANCE)
@@ -297,9 +297,9 @@ async def test_glance_draws_plain_tiles(store):
 
 async def test_glance_links_the_live_planes_there_are(store):
     await store.run(
-        ops.add_plane("r1", name="R", ui=True, made_by="runs")
-        >> ops.add_plane("r2", name="R2", ui=True, made_by="runs")
-        >> ops.add_plane("pl", name="P", ui=True, made_by="planes")
+        ops.add_plane("r1", name="R", ui=True, made_by="runs", backend="async")
+        >> ops.add_plane("r2", name="R2", ui=True, made_by="runs", backend="async")
+        >> ops.add_plane("pl", name="P", ui=True, made_by="planes", backend="async")
     )
     got = await _frames(store, home.GLANCE)
     assert got[("links", "runs")] == {"href": "/r1", "label": "Runs"}

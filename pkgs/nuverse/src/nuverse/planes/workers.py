@@ -31,7 +31,7 @@ def draw():
     tiles = nustd.ui.StatRef("up").set(nu.ToStr(nu.Len(workers)), label="Up") >> nu.Sequential(
         *[
             nustd.ui.StatRef(backend).set(nu.ToStr(count(workers, backend)), label=backend)
-            for backend in ("async", "per_cell")
+            for backend in ("async", "mp")
         ]
     )
     return nustd.kv.Snapshot(nu.Let("workers", ops.workers(), tiles), scope=nuspace.Space)
@@ -95,4 +95,5 @@ PLANE = Plane(
     description="The workers the backends hold, redrawn every second.",
     meta={"editable": True, "full_width": False},
     cells=(("counts", COUNTS), ("workers", TABLE)),
+    backend="async",
 )

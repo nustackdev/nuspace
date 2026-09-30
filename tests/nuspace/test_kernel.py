@@ -37,7 +37,7 @@ import nu
 from nuspace import ops
 from nuspace.ops.utils import atomic
 from nuspace.shapes import EXIT_FAILED, EXIT_INTERRUPTED, EXIT_KILLED, EXIT_OK, Space, States
-from nuspace.system.backends import AsyncBackend, Backend, PerCellBackend
+from nuspace.system.backends import AsyncBackend, Backend, MpBackend
 from nuspace.system.kernel import INIT_BY, reconcile
 from nustd.mp_pool import WorkerPool
 
@@ -65,7 +65,7 @@ async def live_cell(space, rid: str, cell: str) -> dict:
 # --- Plane runs ------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("backend", ["async", "per_cell"])
+@pytest.mark.parametrize("backend", ["async", "mp"])
 @module_loop
 async def test_a_plane_runs_and_ends_when_its_cells_are_done(space, backend):
     p, (a, b) = await space.plane(SET_42, SET_42, backend=backend)
@@ -121,6 +121,18 @@ async def test_an_unknown_backend_fails_the_run(space):
     row = await space.run_row(r, ended, SLOW)
     assert row["exit"] == EXIT_FAILED
     assert "nope" in row["error"]
+    assert only_cell(row)["exit"] == EXIT_FAILED
+
+
+@module_loop
+async def test_a_plane_naming_no_backend_fails_the_run(space):
+    # add_plane refuses an empty backend, so a row with none is written by hand.
+    p, _ = await space.plane(SET_42, backend="mp")
+    await space.run(atomic(Space.planes[p].props.backend.set("")))
+    r = await space.run(ops.plane_run(p))
+    row = await space.run_row(r, ended, SLOW)
+    assert (row["exit"], row["backend"]) == (EXIT_FAILED, "")
+    assert "names no backend" in row["error"]
     assert only_cell(row)["exit"] == EXIT_FAILED
 
 
@@ -263,7 +275,7 @@ async def test_plane_stop_kills_after_the_grace(space):
     assert (await space.worker_row(w))["exit"] == EXIT_KILLED
 
 
-@pytest.mark.parametrize("backend", ["async", "per_cell"])
+@pytest.mark.parametrize("backend", ["async", "mp"])
 @module_loop
 async def test_plane_kill_tears_the_run_down(space, backend):
     p, (a, b) = await space.plane(FOREVER, FOREVER, backend=backend)
@@ -284,8 +296,8 @@ async def test_plane_kill_tears_the_run_down(space, backend):
 
 
 @module_loop
-async def test_per_cell_a_crash_ends_only_that_cell_run(space):
-    p, (steady, crash) = await space.plane(FOREVER, CRASHES, backend="per_cell")
+async def test_mp_a_crash_ends_only_that_cell_run(space):
+    p, (steady, crash) = await space.plane(FOREVER, CRASHES, backend="mp")
     r = await space.run(ops.plane_run(p))
     row = await space.run_row(r, lambda x: ended(cell_of(x, crash)), SLOW)
     gone = cell_of(row, crash)
@@ -343,7 +355,7 @@ async def _cleaned(pool: WorkerPool, wid: int, want: bool) -> bool:
     return False
 
 
-@pytest.mark.parametrize("cls", [AsyncBackend, PerCellBackend])
+@pytest.mark.parametrize("cls", [AsyncBackend, MpBackend])
 async def test_cancelling_a_cell_run_cancels_its_body_on_the_worker(cls):
     async with _backend(cls) as (backend, pool):
         await backend.astart("r")
@@ -359,7 +371,7 @@ async def test_cancelling_a_cell_run_cancels_its_body_on_the_worker(cls):
         assert pool.alive(wid)
 
 
-@pytest.mark.parametrize(("cls", "shared"), [(AsyncBackend, True), (PerCellBackend, False)])
+@pytest.mark.parametrize(("cls", "shared"), [(AsyncBackend, True), (MpBackend, False)])
 async def test_a_worker_dying_under_a_body_is_its_loss(cls, shared):
     async with _backend(cls) as (backend, pool):
         await backend.astart("r")
@@ -381,7 +393,7 @@ async def test_a_worker_dying_under_a_body_is_its_loss(cls, shared):
             arms["b"].cancel()
 
 
-@pytest.mark.parametrize("cls", [AsyncBackend, PerCellBackend])
+@pytest.mark.parametrize("cls", [AsyncBackend, MpBackend])
 async def test_a_worker_let_go_is_no_loss(cls):
     async with _backend(cls) as (backend, _):
         await backend.astart("r")
@@ -420,7 +432,7 @@ PINGS = _SHARED.format(
 @module_loop
 async def test_two_workers_share_the_store_and_hear_each_others_writes(space):
     """Each worker opens the store itself: a write in one wakes a subscriber in the other."""
-    p, (listens, pings) = await space.plane(LISTENS, PINGS, backend="per_cell")
+    p, (listens, pings) = await space.plane(LISTENS, PINGS, backend="mp")
     r = await space.run(ops.plane_run(p))
     row = await space.run_row(r, lambda x: ended(cell_of(x, listens)), SLOW)
     heard = cell_of(row, listens)
@@ -486,7 +498,7 @@ async def test_reopen_reconciles_then_starts_init(tmp_path):
 
 
 async def test_reconcile_ends_what_was_live(store):
-    p = await store.run(ops.add_plane())
+    p = await store.run(ops.add_plane(backend="async"))
     c = await store.run(ops.add_cell(p, SET_42))
     r_live = await store.run(ops.plane_run(p))
     r_done = await store.run(ops.plane_run(p))

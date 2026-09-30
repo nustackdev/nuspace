@@ -140,4 +140,5 @@ PLANE = Plane(
     description="Live plane runs and their cells, redrawn every second.",
     meta={"editable": True, "full_width": False},
     cells=(("counts", COUNTS), ("live", LIVE), ("cells", CELLS)),
+    backend="async",
 )

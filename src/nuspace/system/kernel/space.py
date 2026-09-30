@@ -296,7 +296,7 @@ def open_kernel(
         envs: Env factories by name, see :mod:`nuspace.system.kernel.envs`.
         space_envs: Env specs applied to every run, outermost.
         backends: Backend classes by name, on top of the built in ``async``
-            and ``per_cell`` (see :mod:`nuspace.system.backends`).
+            and ``mp`` (see :mod:`nuspace.system.backends`).
         init: A plane to run once reconciled, see :func:`~.kernel.kernel`.
         name: Process name prefix for workers.
     """

@@ -54,7 +54,7 @@ from .kernel import (
     Run,
     Worker,
 )
-from .plane import DEFAULT_BACKEND, Plane, PlaneProps
+from .plane import Plane, PlaneProps
 from .reroot import Reroot, reroot, reroot_base
 from .space import RECENTS_CAP, Space, SpaceInfo, SpaceSettings, SpaceState
 from .state import CellState, PlaneState
@@ -63,7 +63,6 @@ from .tree import ROOT, Node
 
 
 __all__ = [
-    "DEFAULT_BACKEND",
     "EXITS",
     "EXIT_FAILED",
     "EXIT_INTERRUPTED",

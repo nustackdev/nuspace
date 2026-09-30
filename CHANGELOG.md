@@ -12,6 +12,7 @@ separately here.
 
 ## Unreleased
 
+- Every plane now says what it runs on, sync work in processes, drawing async
 - Planes can wake on any state change, so idle chats cost nothing
 - Search plane titles and text cells from the sidebar, results landing live
 - Plane and cell state live in their own store, apart from the kernel's

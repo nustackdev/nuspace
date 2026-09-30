@@ -46,6 +46,12 @@ class Plane:
         meta: What a new plane's meta starts as.
         cells: ``(name, source)`` per cell, in order.
         children: Planes seeded under it, the same shape, in order.
+        backend: Keyword, required. The backend a plane created from it
+            runs on, by registered name. Picked by the kind of work its cells
+            do: many awaiting tasks run well on ``async``, sync code on ``mp``.
+
+    Raises:
+        ValueError: ``backend`` is empty.
     """
 
     name: str
@@ -55,6 +61,12 @@ class Plane:
     meta: dict[str, Any] = field(default_factory=dict)
     cells: tuple[tuple[str, str], ...] = ()
     children: tuple[Plane, ...] = ()
+    backend: str = field(kw_only=True)
+
+    def __post_init__(self) -> None:
+        if not self.backend:
+            msg = f"Plane {self.name!r}: backend is required, eg mp or async"
+            raise ValueError(msg)
 
 
 @dataclass(frozen=True)
@@ -105,7 +117,8 @@ def create_plane(
     reader may see the plane before its cells.
 
     Args:
-        spec: The registered Plane.
+        spec: The registered Plane. It runs on ``spec.backend``, and each
+            child on its own spec's.
         parent: The tree node to hang it under, ``ROOT`` or a plane id.
         name: What to call it. ``spec.label`` when absent.
         plane_id: Its id. Minted when absent. Children always mint theirs.
@@ -125,6 +138,7 @@ def create_plane(
         meta["icon"] = plane_icon(spec.icon)
     made = add_plane(
         plane_id,
+        backend=spec.backend,
         name=spec.label if name is None else name,
         parent=parent,
         ui=True,

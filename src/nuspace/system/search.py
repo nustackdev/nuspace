@@ -337,7 +337,7 @@ def source(searchers: Mapping[str, str]) -> str:
 def _ensure_searches() -> nu.Nu:
     """The system parent every search hangs under, made when missing. Not drawn."""
     missing = snap(nu.Not(ops.plane_exists(SEARCHES)))
-    return nu.IfDo(missing, ops.add_plane(SEARCHES, name=SEARCHES_NAME, system=True))
+    return nu.IfDo(missing, ops.add_plane(SEARCHES, backend="mp", name=SEARCHES_NAME, system=True))
 
 
 def search(
@@ -380,7 +380,7 @@ def search(
             >> ops.plane_run(pid, by=BY)
         )
 
-    made = ops.add_plane(name=query, parent=SEARCHES)
+    made = ops.add_plane(backend="mp", name=query, parent=SEARCHES)
     return nu.Let(fresh("searches"), _ensure_searches(), binding(made, fill, tag="search"))
 
 
@@ -589,4 +589,4 @@ CELLS = (("pick", PICK), ("results", RESULTS))
 
 def ensure_search() -> nu.Nu:
     """The viewer plane and its cells, seeded once. Not pinned: the sidebar's search opens it."""
-    return seed(PLANE, NAME, ICON, CELLS, pin=False)
+    return seed(PLANE, NAME, ICON, CELLS, backend="async", pin=False)

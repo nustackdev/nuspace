@@ -119,7 +119,9 @@ async def _running(ctx: nu.Context, plane: str, cell: str, browser: _Browser) ->
 
 async def test_plane_lens_browses_its_own_plane(ctx):
     await nu.arun(
-        ops.add_plane("p", name="Home") >> ops.add_cell("p", plane_lens.SOURCE, cell_id="me"), ctx
+        ops.add_plane("p", name="Home", backend="async")
+        >> ops.add_cell("p", plane_lens.SOURCE, cell_id="me"),
+        ctx,
     )
     browser = _Browser()
     task = await _running(ctx, "p", "me", browser)
@@ -136,7 +138,7 @@ async def test_plane_lens_browses_its_own_plane(ctx):
 
 async def test_cell_lens_follows_the_select(ctx):
     await nu.arun(
-        ops.add_plane("p")
+        ops.add_plane("p", backend="async")
         >> ops.add_cell("p", cell_lens.SOURCE, cell_id="me", name="lens")
         >> ops.add_cell("p", "one", cell_id="c1")
         >> ops.add_cell("p", "two", cell_id="c2", name="second")
@@ -177,7 +179,10 @@ async def test_cell_lens_follows_the_select(ctx):
 
 
 async def test_cell_lens_alone_on_its_plane_browses_itself(ctx):
-    await nu.arun(ops.add_plane("p") >> ops.add_cell("p", cell_lens.SOURCE, cell_id="me"), ctx)
+    await nu.arun(
+        ops.add_plane("p", backend="async") >> ops.add_cell("p", cell_lens.SOURCE, cell_id="me"),
+        ctx,
+    )
     browser = _Browser()
     task = await _running(ctx, "p", "me", browser)
     try:

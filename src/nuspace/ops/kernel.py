@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING
 
 import nu
 import nustd.kv
-from nuspace.shapes import DEFAULT_BACKEND, Space
+from nuspace.shapes import Space
 
 from .read import cell_exists, cells, plane_exists
 from .utils import MintId, atomic, binding, flag, fresh, or_else, text
@@ -140,8 +140,7 @@ def add_plane_run(
     """
     specs = _envs(envs)
     row = _kernel.runs[run_id]
-    stored = text(Space.planes[plane_id].props.backend)
-    backend = nu.If(nu.Eq(stored, nu.Str("")), nu.Str(DEFAULT_BACKEND), stored)
+    backend = text(Space.planes[plane_id].props.backend)
     cell, cr = fresh("run_cell"), fresh("run_cell_run")
     each = nu.Let(
         cr,
@@ -173,7 +172,8 @@ def plane_run(
     """Run a plane: a new plane run with a cell run per cell, in order. One commit.
 
     The run takes the plane's ``backend`` prop as it is now. A plane with no
-    cells makes a run the kernel ends at once.
+    cells makes a run the kernel ends at once. A plane with no backend makes
+    a run the kernel ends failed, the error saying so: there is no default.
 
     Args:
         plane_id: The plane.

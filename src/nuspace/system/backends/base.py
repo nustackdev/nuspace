@@ -158,13 +158,14 @@ def require_backend(value: object) -> Backend:
     """Unwrap a :class:`BackendRef`'s value.
 
     Raises:
-        UnknownBackendError: No backend is bound under the name.
+        UnknownBackendError: No backend is bound under the name, or none is named.
     """
     if isinstance(value, Backend):
         return value
     name = value.name if isinstance(value, _Named) else value
-    if name is EMPTY or name is INVALID:
-        name = ""
+    if name is EMPTY or name is INVALID or name == "":
+        msg = "The plane names no backend: every plane must name one, eg mp or async"
+        raise UnknownBackendError(msg)
     msg = f"No backend registered as {name!r}"
     raise UnknownBackendError(msg)
 
@@ -286,7 +287,7 @@ def released(run_id: nu.StrArg, exit_: nu.StrArg) -> nu.Nu:
     is cancelled. The backend's own kill follows, and finds them ended.
 
     Walks ``workers_running``, the live workers, never the run's own
-    ``workers``: with ``per_cell`` that is a worker per cell run ever.
+    ``workers``: with ``mp`` that is a worker per cell run ever.
     """
     item = fresh("released")
     wid = nu.StrAttrRef(item)

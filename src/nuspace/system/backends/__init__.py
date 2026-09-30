@@ -8,8 +8,8 @@ with no kernel edit.
 - :mod:`.base`: the fabric, its ref, its interactions, and the worker
   records every backend writes through them.
 - :mod:`.pool`: the books both process backends keep over ``nustd.mp_pool``.
-- :mod:`.async_`: ``async``, one worker per plane run. The default.
-- :mod:`.per_cell`: ``per_cell``, one worker per cell run.
+- :mod:`.async_`: ``async``, one worker per plane run.
+- :mod:`.mp`: ``mp``, one worker per cell run.
 """
 
 from __future__ import annotations
@@ -35,7 +35,7 @@ from .base import (
     require_backend,
     start,
 )
-from .per_cell import PerCellBackend
+from .mp import MpBackend
 from .pool import PoolBackend
 
 
@@ -50,7 +50,7 @@ __all__ = [
     "BackendRef",
     "EndCell",
     "KillRun",
-    "PerCellBackend",
+    "MpBackend",
     "PlaceCell",
     "PoolBackend",
     "StartRun",
@@ -68,7 +68,7 @@ __all__ = [
 
 #: The backends every space registers, by name. Registered ones of the same
 #: name replace these.
-BACKENDS: dict[str, type[Backend]] = {"async": AsyncBackend, "per_cell": PerCellBackend}
+BACKENDS: dict[str, type[Backend]] = {"async": AsyncBackend, "mp": MpBackend}
 
 
 def provided(backends: Mapping[str, type[Backend]] | None = None) -> nu.With:

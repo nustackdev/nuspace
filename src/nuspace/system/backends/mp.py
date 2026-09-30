@@ -1,4 +1,4 @@
-"""The ``per_cell`` backend: one worker per cell run, ending with it.
+"""The ``mp`` backend: one worker per cell run, ending with it.
 
 ``start`` takes nothing. Every cell run is placed on a spare of its own and
 run in it, and the worker is let go once the cell run is over. A
@@ -11,14 +11,14 @@ from __future__ import annotations
 from .pool import PoolBackend
 
 
-__all__ = ["NAME", "PerCellBackend"]
+__all__ = ["NAME", "MpBackend"]
 
 
 #: The name it is registered under.
-NAME = "per_cell"
+NAME = "mp"
 
 
-class PerCellBackend(PoolBackend):
+class MpBackend(PoolBackend):
     """One pool worker per cell run."""
 
     async def astart(self, run_id: str) -> list[list[str]]:

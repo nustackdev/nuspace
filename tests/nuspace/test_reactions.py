@@ -88,7 +88,7 @@ async def test_bootstrap_makes_the_plane_with_no_cells(store):
 
 
 async def test_enable_writes_the_change_as_source_and_is_idempotent(store):
-    await store.run(ensure_system() >> ops.add_plane("chat"))
+    await store.run(ensure_system() >> ops.add_plane("chat", backend="async"))
     cid = await store.run(enable_react(on("chat"), "chat"))
     assert cid.startswith("react_")
     assert await store.run(enable_react(on("chat"), "chat")) == cid
@@ -113,7 +113,7 @@ async def test_enable_writes_the_change_as_source_and_is_idempotent(store):
     ],
 )
 async def test_enable_refuses_source_that_does_not_load(store, change, imports):
-    await store.run(ensure_system() >> ops.add_plane("chat"))
+    await store.run(ensure_system() >> ops.add_plane("chat", backend="async"))
     with pytest.raises(ConstructionError) as err:
         await store.run(enable_react(change, "chat", imports=imports))
     assert err.value.diagnostic is not None
@@ -123,13 +123,13 @@ async def test_enable_refuses_source_that_does_not_load(store, change, imports):
 
 
 async def test_enable_takes_imports(store):
-    await store.run(ensure_system() >> ops.add_plane("chat"))
+    await store.run(ensure_system() >> ops.add_plane("chat", backend="async"))
     cid = await store.run(enable_react(on("chat"), "chat", imports="import json"))
     assert "\nimport json\n" in await store.read(ops.prog(reactions.PLANE, cid))
 
 
 async def test_disable_removes_the_reaction_and_its_key(store):
-    await store.run(ensure_system() >> ops.add_plane("chat"))
+    await store.run(ensure_system() >> ops.add_plane("chat", backend="async"))
     cid = await store.run(enable_react(on("chat"), "chat"))
     other = await store.run(enable_react(on("chat", "other"), "chat"))
     await store.run(disable_react(on("chat"), "chat") >> disable_react(on("chat"), "chat"))
@@ -283,7 +283,11 @@ async def test_disable_stops_the_fires_and_removes_the_cell(space):
 async def test_a_change_while_the_space_was_closed_fires_at_the_next_open(tmp_path):
     """Each reaction fires as it starts: what landed between two opens is handled."""
     path = str(tmp_path / "space")
-    seed = ensure_system() >> ops.add_plane("chat", ui=True) >> ops.add_cell("chat", WORKS)
+    seed = (
+        ensure_system()
+        >> ops.add_plane("chat", ui=True, backend="async")
+        >> ops.add_cell("chat", WORKS)
+    )
     await nu.arun(nu.With(store(path), body=seed))
     k = await opened(f"{NAME}-reopen", path=path, spares=1, init=init.PLANE)
     try:

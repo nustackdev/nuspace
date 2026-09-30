@@ -57,7 +57,7 @@ async def test_telemetry_is_off_until_set(store):
 @pytest.mark.parametrize("cell", settings.CELLS, ids=lambda c: c[0])
 async def test_each_cell_loads_through_the_kernel_rewrites(store, cell):
     _, source = cell
-    await store.run(ops.add_plane("p") >> ops.add_cell("p", source, cell_id="c"))
+    await store.run(ops.add_plane("p", backend="async") >> ops.add_cell("p", source, cell_id="c"))
     env = session_env("127.0.0.1:9")("s1")
     rewrite = Rewrites(Reroot("p", "c"), env.rewrite, Bracketed())
     prog = Space.planes["p"].cells["c"].prog

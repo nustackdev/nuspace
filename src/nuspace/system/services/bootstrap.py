@@ -33,7 +33,7 @@ BOOTED = init.BOOTED
 
 
 def _service(plane_id: str, shim: str) -> nu.Nu:
-    """A service plane and its cell, each made only when missing.
+    """A service plane and its cell, each made only when missing. On ``mp``.
 
     Only when missing, because ``add_plane`` on an existing id rewrites its
     name and props, and ``add_cell`` its prog. Missing means never made by
@@ -43,7 +43,7 @@ def _service(plane_id: str, shim: str) -> nu.Nu:
     row = Space.planes[plane_id]
     return nu.IfDo(
         snap(nu.Not(row.contains("name"))),
-        add_plane(plane_id, name=plane_id, system=True),
+        add_plane(plane_id, backend="mp", name=plane_id, system=True),
     ) >> nu.IfDo(
         snap(nu.Not(row.cells[init.CELL].contains("prog"))),
         add_cell(plane_id, shim, cell_id=init.CELL, name=init.CELL),

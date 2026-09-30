@@ -188,8 +188,8 @@ def statuses(plane_id: nu.StrArg, run_id: nu.StrArg) -> nu.Nu:
             nu.And(nu.Ne(picked, nu.Str("")), started.exists()), nu.ToFloat(started), nu.Int(0)
         ),
     )
-    per_cell = nu.Let(pick, chosen, nu.Let(state, _state(run_id, picked), entry))
-    shown = nu.Collect(nu.Map(ops.cells(plane_id), per_cell, key=cell))
+    each_cell = nu.Let(pick, chosen, nu.Let(state, _state(run_id, picked), entry))
+    shown = nu.Collect(nu.Map(ops.cells(plane_id), each_cell, key=cell))
     return nu.If(nu.Eq(run_id, nu.Str("")), _idle(plane_id), shown)
 
 

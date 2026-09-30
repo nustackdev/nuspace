@@ -16,7 +16,7 @@ An arm makes its plane run true, and ends it::
 A cell run's arm lives exactly as long as its body: the backend's run
 returns when the body has ended, and says why when the worker died under
 it, which ends the cell run ``failed`` here. With ``async`` one death fails
-every cell run on the worker, with ``per_cell`` the one.
+every cell run on the worker, with ``mp`` the one.
 
 The arm never asks what backend it holds: every call goes through
 :mod:`nuspace.system.backends` by the name on the record. Ending is a write

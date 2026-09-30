@@ -134,7 +134,7 @@ def open_space(
         envs: Env factories registered directly.
         space_envs: Env specs every run executes inside, outermost.
         backends: Backend classes by name, on top of the built in ``async``
-            and ``per_cell``. A plane runs on the one its ``backend`` prop names.
+            and ``mp``. A plane runs on the one its ``backend`` prop names.
         extensions: Extensions registered explicitly, ahead of discovered ones.
         discover: Also register the extensions installed under the
             ``nuspace.extensions`` entry point group.

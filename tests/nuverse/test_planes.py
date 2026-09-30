@@ -53,7 +53,7 @@ def _seed() -> nu.Nu:
     live, gone = k.runs["r1"], k.runs["r2"]
     w1, w2 = k.workers["w1"], k.workers["w2"]
     return atomic(
-        ops.add_plane("p", name="P")
+        ops.add_plane("p", name="P", backend="async")
         >> ops.add_cell("p", "x", cell_id="c", name="C")
         >> live.plane.set("p")
         >> live.backend.set("async")
@@ -79,7 +79,7 @@ def _seed() -> nu.Nu:
         >> k.workers_running.add("w1")
         >> gone.plane.set("p")
         >> gone.exit.set("failed")
-        >> w2.backend.set("per_cell")
+        >> w2.backend.set("mp")
         >> w2.run.set("r2")
         >> w2.exit.set("failed")
     )
@@ -109,7 +109,7 @@ async def test_a_minted_plane_yields_its_id_and_takes_the_label(store):
     "source", [s for cells in CELLS.values() for _, s in cells], ids=lambda s: str(hash(s))
 )
 async def test_each_cell_loads_through_the_kernel_rewrites(store, source):
-    await store.run(ops.add_plane("p") >> ops.add_cell("p", source, cell_id="c"))
+    await store.run(ops.add_plane("p", backend="async") >> ops.add_cell("p", source, cell_id="c"))
     env = session_env("127.0.0.1:9")("s1")
     rewrite = Rewrites(Reroot("p", "c"), env.rewrite, Bracketed())
     prog = Space.planes["p"].cells["c"].prog
@@ -163,7 +163,7 @@ async def test_workers_draws_counts_and_a_table(store):
     assert {name: counts[name]["value"] for name in counts} == {
         "up": "1",
         "async": "1",
-        "per_cell": "0",
+        "mp": "0",
     }
     (table,) = (await _frames(store, workers.TABLE)).values()
     assert table["columns"] == ["ID", "Backend", "Plane", "Run", "Cells", "Age"]
@@ -173,7 +173,7 @@ async def test_workers_draws_counts_and_a_table(store):
 async def test_planes_draws_makers_and_every_plane(store):
     await store.run(
         ops.create_plane(runs.PLANE, name="R", plane_id="r")
-        >> ops.add_plane("s", name="S", system=True)
+        >> ops.add_plane("s", name="S", system=True, backend="async")
     )
     (made,) = (await _frames(store, planes.MADE_BY)).values()
     assert sorted(made["rows"]) == [["runs", 1, 3], ["system", 1, 0]]
@@ -218,7 +218,7 @@ async def test_creating_a_job_makes_a_headless_plane_with_a_main_cell(store):
     job = await _job(store)
     (row,) = [r for r in await store.read(ops.plane_rows()) if r["id"] == job]
     assert row["name"] == "Nightly"
-    assert row["props"] == {"system": False, "ui": False, "made_by": "jobs", "backend": "async"}
+    assert row["props"] == {"system": False, "ui": False, "made_by": "jobs", "backend": "mp"}
     assert row["parent"] == "jp"
     assert await store.read(ops.cell_rows(job)) == [
         {
@@ -234,7 +234,7 @@ async def test_creating_a_job_makes_a_headless_plane_with_a_main_cell(store):
 async def test_the_jobs_table_lists_jobs_only_and_selects_on_click(store):
     job = await _job(store)
     other = await _job(store, "Hourly")
-    await store.run(ops.add_plane("s", name="S", system=True) >> init.boot(job))
+    await store.run(ops.add_plane("s", name="S", system=True, backend="async") >> init.boot(job))
     await store.run(supervisor.supervise(job, supervisor.ALWAYS, delay=5.0))
     (table,) = (await _frames(store, jobs.TABLE)).values()
     assert table["rows"] == [
@@ -283,3 +283,13 @@ async def test_deleting_a_job_cleans_boot_and_supervision(store):
     assert await store.read(supervisor.policy_of(job)) == ""
     assert await store.read(supervisor.delay_of(job)) == -1.0
     assert await store.read(SELECTED) == ""
+
+
+def test_every_plane_names_a_registered_backend():
+    from nuspace.system.backends import BACKENDS
+    from nuverse.planes import PLANES
+
+    assert all(spec.backend in BACKENDS for spec in PLANES)
+    assert {spec.name: spec.backend for spec in PLANES} == dict.fromkeys(
+        ("plain", "jobs", "runs", "workers", "planes"), "async"
+    )

@@ -8,11 +8,7 @@ import nustd.kv
 from .cell import Cell
 
 
-__all__ = ["DEFAULT_BACKEND", "Plane", "PlaneProps"]
-
-
-#: The backend a plane runs on when its ``backend`` prop was never written.
-DEFAULT_BACKEND = "async"
+__all__ = ["Plane", "PlaneProps"]
 
 
 class PlaneProps(nu.Shape):
@@ -23,8 +19,9 @@ class PlaneProps(nu.Shape):
     shell draws it, and nav brings a routed plane up iff it is set.
     ``made_by`` names the registered Plane it was created from (``""`` for
     none). A record, nothing groups by it. ``backend`` names the backend its
-    runs execute on, as registered at open, :data:`DEFAULT_BACKEND` when
-    unwritten. The one run setting a plane holds.
+    runs execute on, as registered at open. There is no default: whoever
+    makes a plane names one, and a run of a plane with none fails. The one
+    run setting a plane holds.
     """
 
     system = nustd.kv.BoolRef.slot()

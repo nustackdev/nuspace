@@ -26,7 +26,7 @@ SEARCHERS = search.searchable([notes.NOTE, notes.SLOW_NOTE, notes.PLAIN])
 
 
 def _drawn(plane_id: str, name: str) -> nu.Nu:
-    return ops.add_plane(plane_id, name=name, ui=True, made_by="plain")
+    return ops.add_plane(plane_id, name=name, ui=True, made_by="plain", backend="async")
 
 
 def _note(plane_id: str, cell_id: str, body: str, snippet: Snippet = notes.NOTE) -> nu.Nu:
@@ -72,7 +72,7 @@ async def _garden(store) -> None:
         >> ops.insert_snippet("p1", notes.PLAIN, cell_id="c3")
         >> _drawn("p2", "Tomato plan")
         >> _note("p2", "c4", "Buy TOMATO seeds")
-        >> ops.add_plane("hidden", name="tomato hideout")
+        >> ops.add_plane("hidden", name="tomato hideout", backend="async")
         >> _note("hidden", "c5", "tomato")
     )
 
@@ -89,6 +89,7 @@ async def test_search_makes_a_plane_under_searches_and_starts_its_run(store):
     assert parent["props"]["system"] is True and parent["props"]["ui"] is False
     assert rows[pid]["name"] == "tomato"
     assert rows[pid]["props"]["ui"] is False and rows[pid]["parent"] == search.SEARCHES
+    assert (parent["props"]["backend"], rows[pid]["props"]["backend"]) == ("mp", "mp")
     assert await store.read(ops.children(search.SEARCHES)) == [pid]
 
     (cell,) = await store.read(ops.cell_rows(pid))
@@ -271,6 +272,7 @@ async def test_the_viewer_is_seeded_once_unpinned(store):
     (row,) = [r for r in await store.read(ops.plane_rows()) if r["id"] == search.PLANE]
     assert row["name"] == "Search"
     assert row["props"]["system"] is True and row["props"]["ui"] is True
+    assert row["props"]["backend"] == "async"
     assert [c["id"] for c in await store.read(ops.cell_rows(search.PLANE))] == ["pick", "results"]
     assert search.PLANE not in await store.read(ops.pinned())
 
@@ -278,7 +280,7 @@ async def test_the_viewer_is_seeded_once_unpinned(store):
 @pytest.mark.parametrize("cell", search.CELLS, ids=lambda c: c[0])
 async def test_each_viewer_cell_loads_through_the_kernel_rewrites(store, cell):
     name, source = cell
-    await store.run(ops.add_plane("v") >> ops.add_cell("v", source, cell_id=name))
+    await store.run(ops.add_plane("v", backend="async") >> ops.add_cell("v", source, cell_id=name))
     env = session_env("127.0.0.1:9")("s1")
     rewrite = Rewrites(Reroot("v", name), env.rewrite, Bracketed())
     prog = Space.planes["v"].cells[name].prog

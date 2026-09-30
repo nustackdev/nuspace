@@ -10,7 +10,7 @@ Books, per plane run: its living workers, and per worker the cell runs
 placed on it. A cell run's body runs as a blocking request on its worker
 (``mp_pool``'s exec), so its arm lives as long as the body does, and a
 worker that dies surfaces as ``WorkerGone`` on every request pending there:
-all of the run's cells with ``async``, the one with ``per_cell``. A death
+all of the run's cells with ``async``, the one with ``mp``. A death
 while nobody was letting the worker go is a loss, reported with the exit
 code; one the backend caused on purpose is not.
 """

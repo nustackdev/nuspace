@@ -72,4 +72,4 @@ CELLS = (("header", HEADER), ("telemetry", TELEMETRY))
 
 def ensure_settings() -> nu.Nu:
     """The settings plane and its cells, seeded once."""
-    return seed(PLANE, NAME, ICON, CELLS)
+    return seed(PLANE, NAME, ICON, CELLS, backend="async")

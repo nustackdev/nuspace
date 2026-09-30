@@ -18,7 +18,6 @@ import nustd.ui
 from nu.core.flows.react import React
 from nuspace import ops
 from nuspace.shapes import (
-    DEFAULT_BACKEND,
     EXITS,
     ROOT,
     CellState,
@@ -252,4 +251,3 @@ async def test_foreign_store_stays_where_it_is(tmp_path):
 def test_constants():
     assert ROOT == "root"
     assert EXITS == ("ok", "failed", "interrupted", "killed")
-    assert DEFAULT_BACKEND == "async"
