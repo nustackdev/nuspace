@@ -38,7 +38,7 @@ class PlaneStates(nu.Shape):
     """One plane's state: shared by its cells in ``state``, each cell's own under ``cells``."""
 
     state = nustd.kv.DictRef.slot(object)
-    cells = nustd.kv.ShapesDictRef.slot(CellStates)
+    cells = nustd.kv.DictRef.slot(CellStates)
 
 
 class States(nu.Shape):
@@ -49,4 +49,4 @@ class States(nu.Shape):
     after its structure.
     """
 
-    planes = nustd.kv.ShapesDictRef.slot(PlaneStates)
+    planes = nustd.kv.DictRef.slot(PlaneStates)

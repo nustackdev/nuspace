@@ -12,6 +12,7 @@ separately here.
 
 ## Unreleased
 
+- Moves to Nu's typed collection refs, with no change in behaviour
 - New planes appear whole in one step, with live status from the first frame
 - Every plane now says what it runs on, sync work in processes, drawing async
 - Planes can wake on any state change, so idle chats cost nothing

@@ -132,7 +132,7 @@ class Search(PlaneState):
     titles = nustd.kv.BoolRef.slot()
     started_at = nustd.kv.FloatRef.slot()
     finished_at = nustd.kv.FloatRef.slot()
-    hits = nustd.kv.ShapesListRef.slot(Hit)
+    hits = nustd.kv.ListRef.slot(Hit)
 
 
 # --- Matching, for any snippet's search ------------------------------------------------

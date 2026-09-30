@@ -80,10 +80,10 @@ class Space(nu.Shape):
     :class:`~nuspace.shapes.states.States`.
     """
 
-    planes = nustd.kv.ShapesDictRef.slot(Plane)
-    tree = nustd.kv.ShapesDictRef.slot(Node)
+    planes = nustd.kv.DictRef.slot(Plane)
+    tree = nustd.kv.DictRef.slot(Node)
     kernel = nustd.kv.ShapeRef.slot(Kernel)
-    connections = nustd.kv.ShapesDictRef.slot(Connection)
+    connections = nustd.kv.DictRef.slot(Connection)
     state = nustd.kv.ShapeRef.slot(SpaceState)
     settings = nustd.kv.ShapeRef.slot(SpaceSettings)
     pinned = nustd.kv.ListRef.slot(str)

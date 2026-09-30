@@ -48,5 +48,5 @@ class Plane(nu.Shape):
     name = nustd.kv.StrRef.slot()
     props = nustd.kv.ShapeRef.slot(PlaneProps)
     meta = nustd.kv.DictRef.slot(object)
-    cells = nustd.kv.ShapesDictRef.slot(Cell)
+    cells = nustd.kv.DictRef.slot(Cell)
     order = nustd.kv.ListRef.slot(str)

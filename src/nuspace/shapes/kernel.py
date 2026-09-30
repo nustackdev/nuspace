@@ -95,7 +95,7 @@ class Run(nu.Shape):
     terminated_at = nustd.kv.FloatRef.slot()
     exit = nustd.kv.StrRef.slot()
     error = nustd.kv.StrRef.slot()
-    cells = nustd.kv.ShapesDictRef.slot(CellRun)
+    cells = nustd.kv.DictRef.slot(CellRun)
     cells_running = nustd.kv.SetRef.slot(str)
     latest = nustd.kv.DictRef.slot(str)
     workers = nustd.kv.SetRef.slot(str)
@@ -128,7 +128,7 @@ class Kernel(nu.Shape):
     read in the time of what is live.
     """
 
-    runs = nustd.kv.ShapesDictRef.slot(Run)
+    runs = nustd.kv.DictRef.slot(Run)
     running = nustd.kv.SetRef.slot(str)
-    workers = nustd.kv.ShapesDictRef.slot(Worker)
+    workers = nustd.kv.DictRef.slot(Worker)
     workers_running = nustd.kv.SetRef.slot(str)
