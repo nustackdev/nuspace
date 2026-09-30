@@ -131,7 +131,7 @@ class BackendRef(FabricRef):
 
         def thunk(rt: Runtime) -> object:
             f, n = fabric(rt), name(rt)
-            return rt.ctx.get(f, n) if rt.ctx.has(f, n) else _Named(n)
+            return rt.ctx.fabrics.get(f, n) if rt.ctx.fabrics.has(f, n) else _Named(n)
 
         return thunk
 
@@ -140,7 +140,7 @@ class BackendRef(FabricRef):
 
         async def athunk(rt: Runtime) -> object:
             f, n = await fabric(rt), await name(rt)
-            return rt.ctx.get(f, n) if rt.ctx.has(f, n) else _Named(n)
+            return rt.ctx.fabrics.get(f, n) if rt.ctx.fabrics.has(f, n) else _Named(n)
 
         return athunk
 

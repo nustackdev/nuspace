@@ -12,6 +12,7 @@ separately here.
 
 ## Unreleased
 
+- Moves to Nu's per-task context; interrupted runs record as ok until fixed
 - Context names each module uses are declared in one place, with no behaviour change
 - Moves to Nu's pure context refs, with no change in behaviour
 - Moves to Nu's typed collection refs, with no change in behaviour

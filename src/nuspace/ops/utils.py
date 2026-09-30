@@ -108,11 +108,12 @@ class MintId(ScalarQuery):
 
 
 class PopAttr(ScalarAction):
-    """Unbinds an attr and yields what it held.
+    """Yields what an attr holds, as an Action.
 
     What lets an op write and then yield: a Flow yields nothing and a bare
     read is a Query, which a ``>>`` refuses. Ending on this Action keeps the
-    whole op an Action, so it chains and it binds.
+    whole op an Action, so it chains and it binds. The attr itself is left to
+    the ``Let`` that declared it, which unbinds it on exit.
 
     Args:
         name: The attr to take.
@@ -127,28 +128,13 @@ class PopAttr(ScalarAction):
         super().__init__(nu.ObjectRef(name))
         self._payload = {"name": name}
 
-    def _take(self, rt: Runtime, value: object) -> object:
-        name = self._payload["name"]
-        attrs = rt.ctx.attrs
-        if name in attrs:
-            del attrs[name]
-        return value
-
     def _compile(self, nid: int, children: tuple[Callable, ...]) -> Callable:
         (ref,) = children
-
-        def thunk(rt: Runtime) -> object:
-            return self._take(rt, ref(rt))
-
-        return thunk
+        return ref
 
     def _acompile(self, nid: int, children: tuple[Callable, ...]) -> Callable:
         (ref,) = children
-
-        async def athunk(rt: Runtime) -> object:
-            return self._take(rt, await ref(rt))
-
-        return athunk
+        return ref
 
 
 def atomic(body: nu.Nu) -> nu.Nu:
@@ -198,7 +184,7 @@ def snapshot(term: nu.Nu) -> nu.Nu:
 
 
 def then(effect: nu.Nu, name: str) -> nu.Nu:
-    """Run ``effect``, then take and yield the attr ``name``. An Action."""
+    """Run ``effect``, then yield the attr ``name``. An Action."""
     return nu.Let(fresh("then"), effect, PopAttr(name))
 
 

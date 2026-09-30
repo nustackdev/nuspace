@@ -134,12 +134,13 @@ class ConnectedSession(_LifecycleBracket):
     """
 
     @asynccontextmanager
-    async def _aopen(self, ctx: Context) -> AsyncIterator[Context]:
-        sid = ctx.attrs.get(SESSION_ATTR)
+    async def _aopen(self, ctx: Context) -> AsyncIterator[None]:
+        sid = ctx.attrs.get(SESSION_ATTR, None)
         if sid is None:
             msg = f"ConnectedSession found no {SESSION_ATTR!r} on the context"
             raise LookupError(msg)
-        yield ctx.bind(Session, ctx.get(Connections).session(sid))
+        with ctx.fabrics.bind(Session, ctx.fabrics.get(Connections).session(sid)):
+            yield
 
 
 def proxied_session(address: str, body: nu.Nu) -> nu.With:
@@ -206,7 +207,7 @@ class Sessions(Connections):
         # this is the one that called ``listen``, so it is loaded already.
         from nustd.ws_server import WebServer
 
-        self._server = ctx.get(WebServer)
+        self._server = ctx.fabrics.get(WebServer)
         self._loop = asyncio.get_running_loop()
 
     def session(self, sid: str) -> HostedSession:

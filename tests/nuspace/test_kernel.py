@@ -339,11 +339,12 @@ _TICKS = nu.TryCatch(
 async def _backend(cls: type[Backend]):
     """A bare backend over a bare pool, no store: bodies here are plain Nu."""
     pool = {"name": "nuspace-test-backend", "init": PROBE_INIT}
-    async with nu.Provide(WorkerPool, pool)._aopen(nu.Context()) as ctx:
+    ctx = nu.Context()
+    async with nu.Provide(WorkerPool, pool)._aopen(ctx):
         backend = cls()
         await backend.asetup(ctx)
         try:
-            yield backend, ctx.get(WorkerPool)
+            yield backend, ctx.fabrics.get(WorkerPool)
         finally:
             await backend.acleanup()
 

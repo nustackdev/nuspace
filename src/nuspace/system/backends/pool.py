@@ -67,11 +67,11 @@ class PoolBackend(Backend):
     async def asetup(self, ctx: Context) -> None:
         """Take the pool, and the shelf when one is bound."""
         try:
-            self._pool = ctx.get(WorkerPool)
+            self._pool = ctx.fabrics.get(WorkerPool)
         except LookupError:
             msg = f"{type(self).__name__} needs a WorkerPool bound around it"
             raise RuntimeError(msg) from None
-        self._spares = ctx.get(Spares) if ctx.has(Spares) else None
+        self._spares = ctx.fabrics.get(Spares) if ctx.fabrics.has(Spares) else None
 
     async def acleanup(self) -> None:
         """Kill every worker still held. No await points, like the pool's own close."""
