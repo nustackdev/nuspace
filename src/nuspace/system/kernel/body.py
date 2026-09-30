@@ -62,7 +62,6 @@ _ERROR = "nuspace.kernel.error"
 class Attrs(nu.Shape):
     """The names a body declares for itself, around the program and after it."""
 
-    outcome = nu.StrRef.slot()
     out = nu.ObjectRef.slot()
     why = nu.StrRef.slot()
 
@@ -154,8 +153,6 @@ def _finish(
     """The last write: out flushed, exit, error, terminated_at, out of ``cells_running``. One commit."""
     why = None if error is None else Attrs.why
     commit = atomic(end_cell_run(run_id, cell_run_id, exit_, why, Attrs.out))
-    # Texts are made before the bracket, which deep copies attrs and would
-    # carry the caught exception in with it.
     if error is not None:
         commit = nu.Let(Attrs.why, error, commit)
     return nu.Let(Attrs.out, TakeOut(extra, final=True), commit)
@@ -194,17 +191,15 @@ def build_body(
     # On the loop: a program that subscribes is async only.
     program = nu.ParallelAsync(nu.prog.Eval(load))
     asked = _kernel.runs[run_id].cells[cell_run_id].interrupt_requested
-    interrupted = until(flag(asked, False), asked.on_change()) >> Attrs.outcome.set(
-        nu.Str(EXIT_INTERRUPTED)
-    )
+    interrupted = until(flag(asked, False), asked.on_change())
     flusher = nu.ForeverDo(nu.Delay(FLUSH_SECONDS) >> _flush(run_id, cell_run_id))
-    # The program winning leaves the outcome ok. The flusher never wins.
-    run = nu.Let(
-        Attrs.outcome,
-        nu.Str(EXIT_OK),
+    # The record says why the race ended: an asked interrupt, or the program
+    # finishing. The flusher never wins.
+    exit_ = nu.If(flag(asked, False), nu.Str(EXIT_INTERRUPTED), nu.Str(EXIT_OK))
+    run = (
         _mark_started(run_id, cell_run_id)
         >> nu.Race(program, interrupted, flusher)
-        >> _finish(run_id, cell_run_id, Attrs.outcome),
+        >> _finish(run_id, cell_run_id, exit_)
     )
     for env in reversed(envs):
         if env.wrap is not None:
