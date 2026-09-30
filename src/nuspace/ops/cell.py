@@ -151,16 +151,10 @@ def add_cell(
 
     def write(cid_name: str, has_ui: nu.Nu) -> nu.Nu:
         cid = nu.StrAttrRef(cid_name)
-        plane = Space.planes[plane_id]
-        row = plane.cells[cid]
-        writes = (
-            row.name.set(name) >> _write_prog(row, prog, has_ui) >> row.props.made_by.set(made_by)
+        placed = cell_writes(
+            plane_id, cid, prog, has_ui, name=name, index=index, made_by=made_by, meta=meta
         )
-        if meta is not None:
-            writes = writes >> row.meta.update(meta)
-        return nu.IfDo(
-            plane_exists(plane_id), writes >> _place(plane.order, cid, index)
-        ) >> nu.IfDo(nu.Not(plane_exists(plane_id)), nu.SetCmd(cid, nu.Str("")))
+        return placed >> nu.IfDo(nu.Not(plane_exists(plane_id)), nu.SetCmd(cid, nu.Str("")))
 
     # Minted ahead of the bracket, so has_ui is worked out outside it. The
     # binding the op yields stays inside: an attr set in a retried bracket
@@ -178,6 +172,29 @@ def add_cell(
             lambda has_ui: atomic(binding(cid, lambda name: write(name, has_ui), tag="c")),
         ),
     )
+
+
+def cell_writes(
+    plane_id: nu.StrArg,
+    cell_id: nu.StrArg,
+    prog: nu.StrArg,
+    has_ui: nu.Nu,
+    *,
+    name: nu.StrArg = "",
+    index: nu.IntArg | None = None,
+    made_by: nu.StrArg = "",
+    meta: dict[str, Any] | nu.Nu | None = None,
+) -> nu.Nu:
+    """:func:`add_cell`'s writes for a cell id and ``has_ui`` already known. No bracket.
+
+    Nothing is written when the plane is missing.
+    """
+    plane = Space.planes[plane_id]
+    row = plane.cells[cell_id]
+    writes = row.name.set(name) >> _write_prog(row, prog, has_ui) >> row.props.made_by.set(made_by)
+    if meta is not None:
+        writes = writes >> row.meta.update(meta)
+    return nu.IfDo(plane_exists(plane_id), writes >> _place(plane.order, cell_id, index))
 
 
 def remove_cell(plane_id: nu.StrArg, cell_id: nu.StrArg) -> nu.Nu:

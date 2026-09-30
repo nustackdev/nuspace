@@ -34,7 +34,9 @@ from typing import TYPE_CHECKING
 import nu
 import nustd.kv
 from nuspace import ops
-from nuspace.ops.utils import atomic_state, binding, flag, fresh, text
+from nuspace.ops.cell import HasUi, cell_writes
+from nuspace.ops.plane import plane_writes
+from nuspace.ops.utils import MintId, atomic, atomic_state, binding, flag, fresh, text
 from nuspace.shapes import PlaneState, Space
 
 from .home import seed
@@ -334,10 +336,10 @@ def source(searchers: Mapping[str, str]) -> str:
 # --- The op ------------------------------------------------------------------------------
 
 
-def _ensure_searches() -> nu.Nu:
-    """The system parent every search hangs under, made when missing. Not drawn."""
-    missing = snap(nu.Not(ops.plane_exists(SEARCHES)))
-    return nu.IfDo(missing, ops.add_plane(SEARCHES, backend="mp", name=SEARCHES_NAME, system=True))
+def _searches() -> nu.Nu:
+    """The system parent every search hangs under, made when missing. Not drawn. No bracket."""
+    made = plane_writes(SEARCHES, backend="mp", name=SEARCHES_NAME, system=True)
+    return nu.IfDo(nu.Not(ops.plane_exists(SEARCHES)), made)
 
 
 def search(
@@ -349,8 +351,9 @@ def search(
 ) -> nu.Nu:
     """Search the space: a new search plane under :data:`SEARCHES`, its state set, its run started.
 
-    Several commits, like any composite op: the parent when missing, the
-    plane, its cell, its state, the run. The run does the searching.
+    Three commits: the plane with its cell (and the parent when missing),
+    then its state, which lives in the other store, then the run. The run
+    does the searching.
 
     Args:
         query: What to look for, in any case.
@@ -368,20 +371,25 @@ def search(
 
     def fill(pid_name: str) -> nu.Nu:
         pid = nu.StrAttrRef(pid_name)
+        ui = fresh("search_ui")
         state = (
             Search.query.set(query)
             >> Search.snippets.set(picked)
             >> Search.titles.set(titles)
             >> Search.started_at.set(Now())
         )
-        return (
-            ops.add_cell(pid, prog, cell_id=CELL, name=CELL)
-            >> atomic_state(ops.plane_state(pid, state))
-            >> ops.plane_run(pid, by=BY)
+        made = atomic(
+            _searches()
+            >> plane_writes(pid, backend="mp", name=query, parent=SEARCHES)
+            >> cell_writes(pid, CELL, prog, nu.BoolAttrRef(ui), name=CELL)
+        )
+        return nu.Let(
+            ui,
+            HasUi(prog, pid, CELL),
+            made >> atomic_state(ops.plane_state(pid, state)) >> ops.plane_run(pid, by=BY),
         )
 
-    made = ops.add_plane(backend="mp", name=query, parent=SEARCHES)
-    return nu.Let(fresh("searches"), _ensure_searches(), binding(made, fill, tag="search"))
+    return binding(MintId("p"), fill, tag="search")
 
 
 # --- The viewer ---------------------------------------------------------------------------

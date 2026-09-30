@@ -30,8 +30,10 @@ import importlib.metadata
 from pathlib import Path
 
 import nu
-from nuspace.ops import add_cell, add_plane, pin_plane
-from nuspace.ops.utils import atomic
+from nuspace.ops.cell import HasUi, cell_writes
+from nuspace.ops.pin import pin as pin_last
+from nuspace.ops.plane import plane_writes
+from nuspace.ops.utils import atomic, fresh
 from nuspace.shapes import Space
 
 from .kernel.utils import Now, snap
@@ -291,8 +293,9 @@ def seed(
 
     Missing means ``add_plane`` never wrote it (no name), so a plane the owner
     has edited since, cells removed or renamed included, is left as it is,
-    and so is a pin the owner has taken off. Several commits, like the service planes: it runs in the host at open,
-    before anything else reads the store.
+    and so is a pin the owner has taken off. One commit: the plane, its
+    cells and its pin land together. Each cell's ``has_ui`` is worked out
+    first, outside the bracket, and only when the plane is missing.
 
     Args:
         plane: The plane id, fixed.
@@ -302,8 +305,9 @@ def seed(
         backend: The backend its runs execute on. Required: there is no default.
         pin: Pin it, after the pins there are.
     """
-    made = [add_cell(plane, source, cell_id=cell, name=cell) for cell, source in cells]
-    first = add_plane(
+    missing = nu.Not(Space.planes[plane].contains("name"))
+    uis = [fresh("home_ui") for _ in cells]
+    writes = plane_writes(
         plane,
         backend=backend,
         name=name,
@@ -312,9 +316,14 @@ def seed(
         made_by="",
         meta={**META, "icon": icon},
     )
-    missing = snap(nu.Not(Space.planes[plane].contains("name")))
-    pinned = [pin_plane(plane)] if pin else []
-    return nu.IfDo(missing, nu.Sequential(first, *made, *pinned))
+    for ui, (cell, source) in zip(uis, cells, strict=True):
+        writes = writes >> cell_writes(plane, cell, source, nu.BoolAttrRef(ui), name=cell)
+    if pin:
+        writes = writes >> pin_last(plane)
+    body = atomic(nu.IfDo(missing, writes))
+    for ui, (cell, source) in reversed(list(zip(uis, cells, strict=True))):
+        body = nu.Let(ui, HasUi(source, plane, cell), body)
+    return nu.IfDo(snap(missing), body)
 
 
 def ensure_home() -> nu.Nu:

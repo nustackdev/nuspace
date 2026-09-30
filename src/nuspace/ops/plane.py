@@ -108,26 +108,47 @@ def add_plane(
         raise ValueError(NO_BACKEND)
 
     def write(pid_name: str) -> nu.Nu:
-        pid = nu.StrAttrRef(pid_name)
-        row = Space.planes[pid]
-        under = nu.If(
-            nu.Or(nu.Eq(parent, nu.Str(ROOT)), plane_exists(parent)), parent, nu.Str(ROOT)
+        return plane_writes(
+            nu.StrAttrRef(pid_name),
+            backend=backend,
+            name=name,
+            parent=parent,
+            system=system,
+            ui=ui,
+            made_by=made_by,
+            meta=meta,
         )
-        writes = (
-            _refuse_empty(backend)
-            >> nu.IfDo(nu.Not(plane_exists(pid)), row.order.set(nu.Literal([])))
-            >> row.name.set(name)
-            >> row.props.system.set(system)
-            >> row.props.ui.set(ui)
-            >> row.props.made_by.set(made_by)
-            >> row.props.backend.set(backend)
-        )
-        if meta is not None:
-            writes = writes >> _merge(row.meta, meta)
-        return writes >> unlink(pid) >> link(pid, under)
 
     value = MintId("p") if plane_id is None else nu.Str(plane_id)
     return atomic(binding(value, write, tag="p"))
+
+
+def plane_writes(
+    plane_id: nu.StrArg,
+    *,
+    backend: nu.StrArg,
+    name: nu.StrArg = "",
+    parent: nu.StrArg = ROOT,
+    system: nu.BoolArg = False,
+    ui: nu.BoolArg = False,
+    made_by: nu.StrArg = "",
+    meta: dict[str, Any] | nu.Nu | None = None,
+) -> nu.Nu:
+    """:func:`add_plane`'s writes for a plane id already known. No bracket."""
+    row = Space.planes[plane_id]
+    under = nu.If(nu.Or(nu.Eq(parent, nu.Str(ROOT)), plane_exists(parent)), parent, nu.Str(ROOT))
+    writes = (
+        _refuse_empty(backend)
+        >> nu.IfDo(nu.Not(plane_exists(plane_id)), row.order.set(nu.Literal([])))
+        >> row.name.set(name)
+        >> row.props.system.set(system)
+        >> row.props.ui.set(ui)
+        >> row.props.made_by.set(made_by)
+        >> row.props.backend.set(backend)
+    )
+    if meta is not None:
+        writes = writes >> _merge(row.meta, meta)
+    return writes >> unlink(plane_id) >> link(plane_id, under)
 
 
 def remove_plane(plane_id: nu.StrArg) -> nu.Nu:

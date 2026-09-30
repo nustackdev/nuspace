@@ -9,8 +9,9 @@ edited since.
 from __future__ import annotations
 
 import nu
-from nuspace.ops import add_cell, add_plane
-from nuspace.ops.utils import atomic_state
+from nuspace.ops.cell import HasUi, cell_writes
+from nuspace.ops.plane import plane_writes
+from nuspace.ops.utils import atomic, atomic_state, fresh
 from nuspace.shapes import Space
 
 from ..utils import snap
@@ -33,20 +34,23 @@ BOOTED = init.BOOTED
 
 
 def _service(plane_id: str, shim: str) -> nu.Nu:
-    """A service plane and its cell, each made only when missing. On ``mp``.
+    """A service plane and its cell, each made only when missing, in one commit. On ``mp``.
 
     Only when missing, because ``add_plane`` on an existing id rewrites its
     name and props, and ``add_cell`` its prog. Missing means never made by
     those ops, not an absent row: a row can be there with no name and no
-    prog (eg written by hand).
+    prog (eg written by hand). The cell's ``has_ui`` is worked out first,
+    outside the bracket, and only when the cell is missing.
     """
     row = Space.planes[plane_id]
+    no_plane = nu.Not(row.contains("name"))
+    no_cell = nu.Not(row.cells[init.CELL].contains("prog"))
+    ui = fresh("service_ui")
+    made = nu.IfDo(no_plane, plane_writes(plane_id, backend="mp", name=plane_id, system=True))
+    cell = cell_writes(plane_id, init.CELL, shim, nu.BoolAttrRef(ui), name=init.CELL)
+    both = atomic(made >> nu.IfDo(no_cell, cell))
     return nu.IfDo(
-        snap(nu.Not(row.contains("name"))),
-        add_plane(plane_id, backend="mp", name=plane_id, system=True),
-    ) >> nu.IfDo(
-        snap(nu.Not(row.cells[init.CELL].contains("prog"))),
-        add_cell(plane_id, shim, cell_id=init.CELL, name=init.CELL),
+        snap(nu.Or(no_plane, no_cell)), nu.Let(ui, HasUi(shim, plane_id, init.CELL), both)
     )
 
 

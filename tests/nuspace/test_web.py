@@ -13,6 +13,8 @@ import pickle
 import subprocess
 import sys
 
+from _support.kernel import Kernel, _Hold
+
 import nu
 import nustd.ui
 from nuspace import ops
@@ -23,6 +25,7 @@ from nuspace.system.devices.web import CellRoot, SessionWrap, Shell, session_env
 from nuspace.system.devices.web.sidebar import create, move, pins, registered_entries, rows
 from nuspace.system.devices.web.viewer import plane_view, statuses
 from nuspace.system.kernel import build_body
+from nuspace.system.kernel import store as space_store
 from nuspace.system.services import nav
 from nustd.ui.core import OP_NOTIFY, Frame, WsSession
 from nustd.ui.core.session import Session
@@ -681,3 +684,68 @@ async def test_connection_absent_panes(store):
     finally:
         task.cancel()
         await asyncio.gather(task, return_exceptions=True)
+
+
+# --- On the space's own store ---------------------------------------------------------
+
+
+async def test_connection_new_plane_runs_on_the_real_store():
+    """A new plane's cell turns running, on the store the space runs on.
+
+    Its notifications cross a server, where a filter opened late reaches the
+    publishers late. nav records the pane's run and the kernel starts the
+    cell within milliseconds of each other, written here the way they
+    write them. A run start that went unheard leaves the pane at starting.
+    """
+    from nuspace.system.devices.web.device import connection
+
+    planes = [Plane("text", "Text", backend="async", cells=((TEXT, PROSE_SRC),))]
+    loop = asyncio.get_running_loop()
+    ready, done = loop.create_future(), asyncio.Event()
+    held = asyncio.create_task(nu.arun(nu.With(space_store(), body=_Hold(ready, done))))
+    ctx = await asyncio.wait_for(asyncio.shield(ready), 20)
+    space = Kernel(ctx, done, held)
+    session = FakeSession()
+    task = asyncio.create_task(
+        nu.arun(connection(nu.Str("s1"), planes=planes), ctx.bind(Session, session))
+    )
+
+    def state(plane_id: str) -> str:
+        said = [w for w in session.writes("set_status") if w["plane_id"] == plane_id]
+        return said[-1]["statuses"][0]["state"] if said and said[-1]["statuses"] else ""
+
+    async def run(rid: str, plane_id: str, gap: float) -> str:
+        """Run the plane's one cell as nav and the kernel do, the start ``gap`` after the pane."""
+        (cell,) = await space.read(ops.cells(plane_id))
+        await space.run(_run(rid, plane_id, (f"{rid}_c", cell, False, "", "")))
+        await space.run(atomic_state(nav.panes().set_item(f"s1/{plane_id}", nu.Str(rid))))
+        await asyncio.sleep(gap)
+        await space.run(atomic(Space.kernel.runs[rid].cells[f"{rid}_c"].started_at.set(STARTED)))
+        return f"{rid}_c"
+
+    try:
+        await _until(lambda: session.writes("set_tree"), 10)
+        for n, gap in enumerate([0.0, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1]):
+            pid = f"p{n}"
+            # Made from the sidebar and opened, the way the Add plane popup does it.
+            session.notify(
+                ("sidebar", "ops", "plane.create"),
+                {"plane_id": pid, "parent_id": "space", "made_by": "text", "title": ""},
+            )
+            session.notify(("viewer", "ops", "planes.open"), {"plane_ids": [pid]})
+            await _until(lambda pid=pid: state(pid) == "idle", 10)
+            await run(f"r{n}", pid, gap)
+            await _until(lambda pid=pid: state(pid) == "running")
+
+        # Run again on the same pane, then ended: each is heard with no other write.
+        crid = await run("r_again", pid, 0.005)
+        await _until(lambda: state(pid) == "running")
+        ended = Space.kernel.runs["r_again"]
+        await space.run(
+            atomic(ended.cells[crid].exit.set(EXIT_OK) >> ended.cells_running.discard(crid))
+        )
+        await _until(lambda: state(pid) == "idle")
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+        await space.close()

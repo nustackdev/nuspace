@@ -32,6 +32,13 @@ def unpin(plane_id: nu.StrArg) -> nu.Nu:
     return nu.IfDo(pins.contains(plane_id), pins.remove(plane_id))
 
 
+def pin(plane_id: nu.StrArg) -> nu.Nu:
+    """Pin ``plane_id`` last, unless it is pinned already or not drawn. No bracket."""
+    pins = Space.pinned
+    ok = nu.And(plane_exists(plane_id), flag(Space.planes[plane_id].props.ui, False))
+    return nu.IfDo(nu.And(ok, nu.Not(pins.contains(plane_id))), pins.append(plane_id))
+
+
 def _place(plane_id: nu.StrArg, index: nu.IntArg) -> nu.Nu:
     """Take ``plane_id`` out of the pins, then put it at ``index``. No bracket."""
     pins = Space.pinned
@@ -45,10 +52,9 @@ def pin_plane(plane_id: nu.StrArg, index: nu.IntArg | None = None) -> nu.Nu:
     Already pinned, it stays where it is when ``index`` is None and moves
     there otherwise. A no-op for a plane that is missing or not drawn.
     """
-    pins = Space.pinned
-    ok = nu.And(plane_exists(plane_id), flag(Space.planes[plane_id].props.ui, False))
     if index is None:
-        return atomic(nu.IfDo(nu.And(ok, nu.Not(pins.contains(plane_id))), pins.append(plane_id)))
+        return atomic(pin(plane_id))
+    ok = nu.And(plane_exists(plane_id), flag(Space.planes[plane_id].props.ui, False))
     return atomic(nu.IfDo(ok, _place(plane_id, index)))
 
 

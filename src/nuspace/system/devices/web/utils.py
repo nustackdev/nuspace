@@ -166,6 +166,13 @@ def watch(changes: Sequence[nu.Nu], ship: nu.Nu) -> nu.Nu:
     again. A commit fires many keys at once, all into the turn being torn
     down, so a burst reships once rather than once per key.
 
+    **Opened is not heard.** The race starts its branches in order and
+    opening a subscription never waits, so each is bound before the ship
+    reads. But on the space's store a filter no one held before reaches the
+    publishers a moment later, and a write in that moment wakes nothing.
+    So a filter here is one the space already holds: the same every turn,
+    never named by something just read (a run id, a new plane's id).
+
     Args:
         changes: Subscriptions, each built fresh (two positions holding one
             node hold one handle). Opened before the ship reads.

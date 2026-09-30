@@ -12,9 +12,9 @@ from typing import TYPE_CHECKING, Any
 import nu
 from nuspace.shapes import ROOT
 
-from .cell import add_cell
-from .plane import add_plane, plane_icon
-from .utils import binding
+from .cell import HasUi, add_cell, cell_writes
+from .plane import plane_icon, plane_writes
+from .utils import MintId, atomic, fresh, then
 
 
 if TYPE_CHECKING:
@@ -113,8 +113,10 @@ def create_plane(
 ) -> nu.Nu:
     """Create a plane from ``spec``: drawn, its cells in order, its children under it.
 
-    Several commits, one per plane and cell, like any composite op: a
-    reader may see the plane before its cells.
+    One commit: the plane, its cells and its children land together or not
+    at all, so no reader ever sees a plane without its cells. Every id and
+    every cell's ``has_ui`` are worked out first, outside the bracket, the
+    way :func:`~nuspace.ops.cell.add_cell` does.
 
     Args:
         spec: The registered Plane. It runs on ``spec.backend``, and each
@@ -126,26 +128,53 @@ def create_plane(
     Yields:
         The new plane's id.
     """
+    held = fresh("create")
+    first: list[tuple[str, nu.Nu]] = [(held, MintId("p") if plane_id is None else nu.Str(plane_id))]
+    label = spec.label if name is None else name
+    body = then(atomic(_seeded(spec, nu.StrAttrRef(held), parent, label, first)), held)
+    for attr, value in reversed(first):
+        body = nu.Let(attr, value, body)
+    return body
 
-    def fill(pid_name: str) -> nu.Nu:
-        pid = nu.StrAttrRef(pid_name)
-        seeds = [add_cell(pid, source, name=cell) for cell, source in spec.cells]
-        seeds += [create_plane(child, parent=pid) for child in spec.children]
-        return nu.Sequential(*seeds) if seeds else nu.Noop()
 
+def _seeded(
+    spec: Plane,
+    plane_id: nu.Nu,
+    parent: nu.StrArg,
+    name: nu.StrArg,
+    first: list[tuple[str, nu.Nu]],
+) -> nu.Nu:
+    """``spec``'s writes under ``plane_id``, children included. No bracket.
+
+    What has to be known before the bracket (the cells' and children's ids,
+    each cell's ``has_ui``) is appended to ``first``, in the order it is
+    worked out.
+    """
     meta = dict(spec.meta)
     if spec.icon and "icon" not in meta:
         meta["icon"] = plane_icon(spec.icon)
-    made = add_plane(
-        plane_id,
-        backend=spec.backend,
-        name=spec.label if name is None else name,
-        parent=parent,
-        ui=True,
-        made_by=spec.name,
-        meta=meta,
-    )
-    return binding(made, fill, tag="create")
+    writes = [
+        plane_writes(
+            plane_id,
+            backend=spec.backend,
+            name=name,
+            parent=parent,
+            ui=True,
+            made_by=spec.name,
+            meta=meta,
+        )
+    ]
+    for cell, source in spec.cells:
+        cid, ui = fresh("c"), fresh("ui")
+        first += [(cid, MintId("c")), (ui, HasUi(source, plane_id, nu.StrAttrRef(cid)))]
+        writes.append(
+            cell_writes(plane_id, nu.StrAttrRef(cid), source, nu.BoolAttrRef(ui), name=cell)
+        )
+    for child in spec.children:
+        pid = fresh("p")
+        first.append((pid, MintId("p")))
+        writes.append(_seeded(child, nu.StrAttrRef(pid), plane_id, child.label, first))
+    return nu.Sequential(*writes)
 
 
 def insert_snippet(

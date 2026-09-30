@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 
 import nu
@@ -196,6 +198,33 @@ async def test_create_plane_seeds_cells_and_nested_children(store):
 async def test_create_plane_runs_on_its_specs_backend(store):
     made = await store.run(ops.create_plane(ops.Plane("j", "J", backend="mp")))
     assert await store.read(Space.planes[made].props.backend) == "mp"
+
+
+async def test_create_plane_is_seen_whole_or_not_at_all(store):
+    prog = "def out():\n    return nu.Noop()\n"
+    kid = ops.Plane("kid", "Kid", cells=(("c", prog),), backend="async")
+    spec = ops.Plane("t", "T", cells=(("a", prog), ("b", prog)), children=(kid,), backend="async")
+    shape = nu.Dict.of(
+        planes=nu.Len(ops.plane_rows()),
+        cells=nu.Len(ops.cells("p1")),
+        children=nu.Len(ops.children("p1")),
+    )
+    seen, making = [], True
+
+    async def reader() -> None:
+        while making:
+            seen.append(tuple((await store.read(shape)).values()))
+            await asyncio.sleep(0)
+
+    reading = asyncio.create_task(reader())
+    await asyncio.sleep(0)
+    await store.run(ops.create_plane(spec, plane_id="p1"))
+    making = False
+    await reading
+    seen.append(tuple((await store.read(shape)).values()))
+    # Nothing, or the plane with both cells and its child: never a plane half made.
+    assert set(seen) <= {(0, 0, 0), (2, 2, 1)}
+    assert seen[-1] == (2, 2, 1)
 
 
 def test_plane_spec_requires_a_backend():

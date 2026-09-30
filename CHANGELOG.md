@@ -12,6 +12,7 @@ separately here.
 
 ## Unreleased
 
+- New planes appear whole in one step, with live status from the first frame
 - Every plane now says what it runs on, sync work in processes, drawing async
 - Planes can wake on any state change, so idle chats cost nothing
 - Search plane titles and text cells from the sidebar, results landing live

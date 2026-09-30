@@ -28,7 +28,7 @@
 
 import { EmptyState } from "@nustackdev/ui-kit";
 import type * as React from "react";
-import { Fragment, useCallback, useEffect, useMemo } from "react";
+import { Fragment, useCallback, useMemo } from "react";
 import { replacePane } from "../core/router";
 import {
 	railDragging,
@@ -42,7 +42,6 @@ import {
 	railTreeList,
 } from "../design";
 import { planeIcon } from "../icon/parse";
-import { clearPendingRename, usePendingRename } from "./add";
 import type { Notify } from "./ops";
 import { PlaneRow } from "./PlaneRow";
 import type { Pins } from "./pin";
@@ -86,16 +85,6 @@ export function RailTree({
 		notify,
 		reveal,
 	});
-
-	// A Plane made from the Add plane popup is renamed as soon as its row shows.
-	const pending = usePendingRename();
-	useEffect(() => {
-		if (!pending) return;
-		const row = rows.find((r) => r.key === pending);
-		if (!row) return;
-		clearPendingRename();
-		startRename(row);
-	}, [pending, rows, startRename]);
 
 	const onKeyDown = useCallback(
 		(e: React.KeyboardEvent, row: VisibleRow, index: number) => {

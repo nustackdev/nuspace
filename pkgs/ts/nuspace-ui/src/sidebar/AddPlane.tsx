@@ -7,7 +7,7 @@
 //
 // The id is minted here, so the new Plane is routed to at once and the pane
 // waits for it (nav holds a route until its Plane exists). Its row is revealed
-// under its parent and put in rename mode when the tree brings it.
+// under its parent; renaming it is the user's call.
 
 import {
 	CommandEmpty,
@@ -21,7 +21,7 @@ import { focusPane, replacePane } from "../core/router";
 import { addPlaneDescription, addPlaneItem, addPlaneLabel, addPlaneText } from "../design";
 import { PlaneIcon } from "../icon/PlaneIcon";
 import { planeIcon } from "../icon/parse";
-import { closeAddPlane, renameWhenListed, useAddRequest } from "./add";
+import { closeAddPlane, useAddRequest } from "./add";
 import type { Notify } from "./ops";
 import { type Registered, ROOT_ID } from "./types";
 
@@ -54,7 +54,6 @@ export function AddPlane({
 		if (req.parent && req.parent !== ROOT_ID) reveal(req.parent);
 		if (req.pane) focusPane(req.pane);
 		replacePane(planeId);
-		renameWhenListed(planeId);
 	};
 
 	return (

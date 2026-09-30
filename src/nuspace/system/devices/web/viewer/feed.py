@@ -15,14 +15,13 @@ drawn again.
 
 **Which planes are open** is ``connections[sid].routes``, written by the
 device's route arm (D15), never read off the browser. One arm per plane in
-it: every subscription below an arm is about that one pane, and dies with it
-when the plane leaves ``routes``.
+it: its subscriptions die with it when the plane leaves ``routes``.
 
 **Narrow watch.** A plane is shipped again when its plane's row, name,
 meta, ``ui`` prop, order or cells (their set, names and progs) change; the
-statuses when the pane's plane run changes: nav makes a new one, a cell run
-of it starts, begins or ends. A cell writing its state or a cell run
-writing its output wakes neither.
+statuses when any pane's plane run changes or any cell run starts, begins
+or ends. Those are space wide on purpose, see :func:`_status_changes`. A
+cell writing its state or a cell run writing its output wakes neither.
 
 **Meta goes both ways.** A shipped plane carries its whole meta, and a
 ``plane.meta`` event merges keys into it. A plane's props never reach the
@@ -57,7 +56,7 @@ from nuspace.system.devices.web.viewer.interactions import (
     STATE_STOPPED,
 )
 from nuspace.system.kernel.utils import snap
-from nuspace.system.services.nav import pane_key, pane_run, panes, routable
+from nuspace.system.services.nav import pane_run, panes, routable
 
 
 if TYPE_CHECKING:
@@ -258,19 +257,24 @@ def _plane_changes(plane: nu.Nu) -> list[nu.Nu]:
     ]
 
 
-def _status_changes(sid: nu.StrArg, plane: nu.Nu) -> list[nu.Nu]:
-    """What reships the statuses: nav's run for the pane, and that run's cell runs.
+def _status_changes() -> list[nu.Nu]:
+    """What reships the statuses: any pane's run, and any run's cell runs.
 
-    Built fresh every turn, so they follow the pane's current run: a new
-    one from nav, a cell run added or ended (``cells_running``), one
-    starting (``started_at``). Exit and error land with the end.
+    A pane's run changing (nav makes a new one), a cell run added or ended
+    (``cells_running``), one starting (``started_at``). Exit and error land
+    with the end.
+
+    Never named by the pane's run, though that would be narrower. A filter
+    the space has not seen reaches the store's publishers a moment after it
+    is opened, and a new run's cell starts within that moment: the start
+    would go unheard and the pane would say starting forever. These filters
+    are the same for every pane and every run, so they are live long
+    before any run they wake for.
     """
-    pane = pane_run(sid, plane)
-    rid = nu.If(nu.Eq(pane, nu.Str("")), nu.Str("-"), pane)
     return [
-        snap(panes().on_child_change(pane_key(sid, plane))),
-        snap(_runs[rid].cells_running.on_children_change()),
-        snap(_runs[rid].cells.on_descendants_change("*", "started_at")),
+        snap(panes().on_children_change()),
+        snap(_runs.on_descendants_change("*", "cells_running", "*")),
+        snap(_runs.on_descendants_change("*", "cells", "*", "started_at")),
     ]
 
 
@@ -394,7 +398,7 @@ def viewer_feed(viewer: Ref, sid: nu.StrArg, snippets: Iterable[Snippet] = ()) -
             _plane_changes(plane),
             _ship_plane(viewer, plane) >> _ship_status(viewer, sid, plane),
         ),
-        _arms.state("status", _status_changes(sid, plane), _ship_status(viewer, sid, plane)),
+        _arms.state("status", _status_changes(), _ship_status(viewer, sid, plane)),
     )
     # One arm per open plane: a plane opened gets itself and its statuses
     # shipped, a plane closed has its subscriptions torn down, and the other
