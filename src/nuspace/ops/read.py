@@ -53,7 +53,7 @@ def cells(plane_id: nu.StrArg) -> nu.Nu:
     """
     plane = Space.planes[plane_id]
     item = fresh("cells")
-    at = nu.AnyAttrRef(item)
+    at = nu.ObjectAttrRef(item)
     placed = nu.List(
         nu.Collect(nu.Filter(nu.list(plane.order), plane.cells.contains(at), key=item))
     )

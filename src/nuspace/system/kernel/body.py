@@ -135,7 +135,7 @@ def _mark_started(run_id: str, cell_run_id: str) -> nu.Nu:
 def _flush(run_id: str, cell_run_id: str) -> nu.Nu:
     """Write waiting output to the record, if there is any."""
     cr = _kernel.runs[run_id].cells[cell_run_id]
-    out = nu.AnyAttrRef(_OUT)
+    out = nu.ObjectAttrRef(_OUT)
     return nu.IfDo(HasOut(), nu.Let(_OUT, TakeOut(), atomic(cr.out.set(out))))
 
 
@@ -149,7 +149,7 @@ def _finish(
 ) -> nu.Nu:
     """The last write: out flushed, exit, error, terminated_at, out of ``cells_running``. One commit."""
     why = None if error is None else nu.StrAttrRef(_WHY)
-    commit = atomic(end_cell_run(run_id, cell_run_id, exit_, why, nu.AnyAttrRef(_OUT)))
+    commit = atomic(end_cell_run(run_id, cell_run_id, exit_, why, nu.ObjectAttrRef(_OUT)))
     # Texts are made before the bracket, which deep copies attrs and would
     # carry the caught exception in with it.
     if error is not None:
@@ -212,8 +212,8 @@ def build_body(
         run_id,
         cell_run_id,
         EXIT_FAILED,
-        error=ErrorText(nu.AnyAttrRef(_ERROR)),
-        extra=ErrorText(nu.AnyAttrRef(_ERROR), full=True),
+        error=ErrorText(nu.ObjectAttrRef(_ERROR)),
+        extra=ErrorText(nu.ObjectAttrRef(_ERROR), full=True),
     )
     body = nu.With(Captured(), body=nu.TryCatch(run, catch=failed, error_key=_ERROR))
     ids = ((PLANE_ATTR, plane), (CELL_ATTR, cell), (RUN_ATTR, run_id), (CELL_RUN_ATTR, cell_run_id))

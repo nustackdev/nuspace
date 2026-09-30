@@ -190,7 +190,7 @@ async def opened(name: str = "nuspace-test", **kwargs: object) -> Kernel:
     """A kernel open on this loop, held until :meth:`Kernel.close`."""
     loop = asyncio.get_running_loop()
     ready, done = loop.create_future(), asyncio.Event()
-    body = nu.Let("test.held", _Hold(ready, done), nu.SetCmd(nu.AnyAttrRef("test.x"), 1))
+    body = nu.Let("test.held", _Hold(ready, done), nu.SetCmd(nu.ObjectAttrRef("test.x"), 1))
     task = asyncio.create_task(nu.arun(open_kernel(body, name=name, **kwargs)))
     ctx = await asyncio.wait_for(asyncio.shield(ready), 20)
     return Kernel(ctx, done, task)

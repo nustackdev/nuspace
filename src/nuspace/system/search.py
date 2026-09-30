@@ -204,7 +204,7 @@ def _field(row: nu.Nu, key: str) -> nu.Nu:
 
 def _append(found: nu.Nu, by: nu.StrArg) -> nu.Nu:
     """``found`` appended to ``Search.hits``, titled and tagged, in one commit. Nothing when empty."""
-    hit = nu.AnyAttrRef(_HIT)
+    hit = nu.ObjectAttrRef(_HIT)
     row = nu.Dict.of(
         plane=_field(hit, "plane"),
         cell=_field(hit, "cell"),
@@ -267,8 +267,8 @@ def run(searchers: Mapping[str, str]) -> nu.Nu:
     per_snippet = [_by_snippet(name, load_searcher(ref)) for name, ref in searchers.items()]
     each_cell = nu.Let(
         _CELL,
-        _field(nu.AnyAttrRef(_ROW), "id"),
-        nu.Let(_MADE, _field(nu.AnyAttrRef(_ROW), "made_by"), nu.Sequential(*per_snippet)),
+        _field(nu.ObjectAttrRef(_ROW), "id"),
+        nu.Let(_MADE, _field(nu.ObjectAttrRef(_ROW), "made_by"), nu.Sequential(*per_snippet)),
     )
     plane = nu.StrAttrRef(_PLANE)
     name = snap(text(Space.planes[plane].name))
@@ -294,7 +294,7 @@ def run(searchers: Mapping[str, str]) -> nu.Nu:
             titles=flag(Search.titles, False),
         )
     )
-    held = nu.AnyAttrRef(_SEL)
+    held = nu.ObjectAttrRef(_SEL)
     body = nu.Let(
         _SEL,
         asked,

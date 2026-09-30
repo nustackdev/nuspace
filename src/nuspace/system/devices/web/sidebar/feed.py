@@ -115,7 +115,9 @@ def rows() -> nu.Nu:
 
     def kids(node_id: nu.Nu) -> nu.Nu:
         return nu.List(
-            nu.Collect(nu.Filter(ops.children(node_id), ids.contains(nu.AnyAttrRef(kid)), key=kid))
+            nu.Collect(
+                nu.Filter(ops.children(node_id), ids.contains(nu.ObjectAttrRef(kid)), key=kid)
+            )
         )
 
     def listed_under(row: nu.Nu) -> nu.Nu:
@@ -205,7 +207,7 @@ def move(plane_id: nu.Nu, parent_id: nu.Nu, index: nu.Nu) -> nu.Nu:
     """
     under, others, drawn = fresh("sidebar_under"), fresh("sidebar_others"), fresh("sidebar_drawn")
     at = fresh("sidebar_at")
-    item = nu.AnyAttrRef(at)
+    item = nu.ObjectAttrRef(at)
     everyone = nu.List(
         nu.Collect(nu.Filter(ops.children(nu.StrAttrRef(under)), nu.Ne(item, plane_id), key=at))
     )

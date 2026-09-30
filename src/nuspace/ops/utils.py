@@ -124,7 +124,7 @@ class PopAttr(ScalarAction):
     _mutates = Declared(value=frozenset({0}), name="mutates")
 
     def __init__(self, name: str) -> None:
-        super().__init__(nu.AnyAttrRef(name))
+        super().__init__(nu.ObjectAttrRef(name))
         self._payload = {"name": name}
 
     def _take(self, rt: Runtime, value: object) -> object:
@@ -265,7 +265,7 @@ def keep_order(
         member: The collection that decides whether an id is real.
     """
     item = fresh("order")
-    at = nu.AnyAttrRef(item)
+    at = nu.ObjectAttrRef(item)
     listed = as_list(wanted)
     kept = nu.List(nu.Collect(nu.Filter(listed, member.contains(at), key=item)))
     # Ids left out keep their place after the named ones, so a partial order

@@ -121,7 +121,7 @@ def remember(opened: nu.Nu) -> nu.Nu:
     """
     recents = Space.state.recents
     item, new = fresh("web_recent"), fresh("web_recent_new")
-    at = nu.AnyAttrRef(item)
+    at = nu.ObjectAttrRef(item)
     fresh_ids = nu.ListAttrRef(new)
     kept = nu.Filter(nu.List(or_else(recents, [])), nu.Not(fresh_ids.contains(at)), key=item)
     wanted = nu.List(
@@ -142,7 +142,7 @@ def route_arm(viewer: Ref, sid: nu.StrArg) -> nu.Nu:
     row = _connections[sid]
     item, wanted, left = fresh("web_open"), fresh("web_open_ids"), fresh("web_closed")
     was, entered = fresh("web_was"), fresh("web_entered")
-    at = nu.AnyAttrRef(item)
+    at = nu.ObjectAttrRef(item)
     ids = nu.List(
         nu.Collect(
             nu.Unique(
@@ -156,11 +156,15 @@ def route_arm(viewer: Ref, sid: nu.StrArg) -> nu.Nu:
     )
     kept = nu.ListAttrRef(wanted)
     closed = nu.Filter(
-        nu.List(snap(or_else(row.routes, []))), nu.Not(kept.contains(nu.AnyAttrRef(left))), key=left
+        nu.List(snap(or_else(row.routes, []))),
+        nu.Not(kept.contains(nu.ObjectAttrRef(left))),
+        key=left,
     )
     # Read inside the commit, so a burst of opens never pushes one twice.
     opened = nu.Filter(
-        kept, nu.Not(nu.List(or_else(row.routes, [])).contains(nu.AnyAttrRef(entered))), key=entered
+        kept,
+        nu.Not(nu.List(or_else(row.routes, [])).contains(nu.ObjectAttrRef(entered))),
+        key=entered,
     )
     write = nu.Let(
         was, nu.List(nu.Collect(opened)), remember(nu.ListAttrRef(was))

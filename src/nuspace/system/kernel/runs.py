@@ -137,7 +137,7 @@ def _cell_arm(run_id: nu.StrArg, cell_run_id: nu.StrArg, backend: nu.StrArg) -> 
     place = nu.Let(
         _PLACE,
         PlaceCell(BackendRef(backend), run_id, cell_run_id),
-        backends.placed(backend, run_id, cell_run_id, nu.AnyAttrRef(_PLACE)),
+        backends.placed(backend, run_id, cell_run_id, nu.ObjectAttrRef(_PLACE)),
     )
     why = nu.StrAttrRef(_LOST)
     lost = atomic(
@@ -148,7 +148,7 @@ def _cell_arm(run_id: nu.StrArg, cell_run_id: nu.StrArg, backend: nu.StrArg) -> 
     )
     failed = nu.Let(
         _WHY,
-        ErrorText(nu.AnyAttrRef(_ERROR)),
+        ErrorText(nu.ObjectAttrRef(_ERROR)),
         atomic(end_cell_run(run_id, cell_run_id, EXIT_FAILED, nu.StrAttrRef(_WHY))),
     )
     go = nu.IfDo(
@@ -203,7 +203,7 @@ def run_arm(run_id: nu.StrArg) -> nu.Nu:
     )
     failed = nu.Let(
         _WHY,
-        nu.Str("Backend failed to start: ") + ErrorText(nu.AnyAttrRef(_ERROR)),
+        nu.Str("Backend failed to start: ") + ErrorText(nu.ObjectAttrRef(_ERROR)),
         atomic(end_run(run_id, EXIT_FAILED, nu.StrAttrRef(_WHY))),
     )
     live = nu.Race(_killed(run_id, backend), _cells(run_id, backend), _done(run_id))

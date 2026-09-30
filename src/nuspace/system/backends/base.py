@@ -254,7 +254,7 @@ def _made(backend: nu.StrArg, run_id: nu.StrArg, made: nu.Nu) -> nu.Nu:
     end and stays out of ``workers_running``.
     """
     item = fresh("made")
-    pair = nu.List(nu.AnyAttrRef(item))
+    pair = nu.List(nu.ObjectAttrRef(item))
     wid = nu.ToStr(pair[0])
     row = _kernel.workers[wid]
     write = (
@@ -309,7 +309,7 @@ def start(backend: nu.StrArg, run_id: nu.StrArg) -> nu.Nu:
     return nu.Let(
         made,
         StartRun(BackendRef(backend), run_id),
-        atomic(_made(backend, run_id, nu.AnyAttrRef(made))),
+        atomic(_made(backend, run_id, nu.ObjectAttrRef(made))),
     )
 
 
@@ -343,11 +343,15 @@ def end_cell(
     """:class:`EndCell`, and the workers it let go recorded ended ``exit_``."""
     gone = fresh("end_cell")
     return nu.Let(
-        gone, EndCell(BackendRef(backend), run_id, cell_run_id), _let_go(nu.AnyAttrRef(gone), exit_)
+        gone,
+        EndCell(BackendRef(backend), run_id, cell_run_id),
+        _let_go(nu.ObjectAttrRef(gone), exit_),
     )
 
 
 def kill(backend: nu.StrArg, run_id: nu.StrArg, exit_: nu.StrArg) -> nu.Nu:
     """:class:`KillRun`, and the workers it let go recorded ended ``exit_``."""
     gone = fresh("kill")
-    return nu.Let(gone, KillRun(BackendRef(backend), run_id), _let_go(nu.AnyAttrRef(gone), exit_))
+    return nu.Let(
+        gone, KillRun(BackendRef(backend), run_id), _let_go(nu.ObjectAttrRef(gone), exit_)
+    )
