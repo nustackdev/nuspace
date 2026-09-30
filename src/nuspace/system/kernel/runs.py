@@ -67,7 +67,7 @@ def outcome(run_id: nu.StrArg) -> nu.Nu:
     """
     row = _kernel.runs[run_id]
     item = fresh("outcome")
-    newest = row.cells[nu.ToStr(row.latest[nu.StrAttrRef(item)])]
+    newest = row.cells[nu.ToStr(row.latest[nu.StrRef(item)])]
     exits = nu.List(nu.Collect(nu.Map(nu.list(row.latest.keys()), text(newest.exit), key=item)))
 
     def some(exit_: str) -> nu.Nu:
@@ -95,7 +95,7 @@ def end_run(run_id: nu.StrArg, exit_: nu.StrArg, error: nu.StrArg | None = None)
     item = fresh("end_run")
     cells = nu.ForEachDo(
         nu.list(row.cells_running),
-        end_cell_run(run_id, nu.StrAttrRef(item), exit_, error),
+        end_cell_run(run_id, nu.StrRef(item), exit_, error),
         item=item,
     )
     own = row.exit.set(exit_)
@@ -137,9 +137,9 @@ def _cell_arm(run_id: nu.StrArg, cell_run_id: nu.StrArg, backend: nu.StrArg) -> 
     place = nu.Let(
         _PLACE,
         PlaceCell(BackendRef(backend), run_id, cell_run_id),
-        backends.placed(backend, run_id, cell_run_id, nu.ObjectAttrRef(_PLACE)),
+        backends.placed(backend, run_id, cell_run_id, nu.ObjectRef(_PLACE)),
     )
-    why = nu.StrAttrRef(_LOST)
+    why = nu.StrRef(_LOST)
     lost = atomic(
         backends.lost(text(cr.worker), why) >> end_cell_run(run_id, cell_run_id, EXIT_FAILED, why)
     )
@@ -148,8 +148,8 @@ def _cell_arm(run_id: nu.StrArg, cell_run_id: nu.StrArg, backend: nu.StrArg) -> 
     )
     failed = nu.Let(
         _WHY,
-        ErrorText(nu.ObjectAttrRef(_ERROR)),
-        atomic(end_cell_run(run_id, cell_run_id, EXIT_FAILED, nu.StrAttrRef(_WHY))),
+        ErrorText(nu.ObjectRef(_ERROR)),
+        atomic(end_cell_run(run_id, cell_run_id, EXIT_FAILED, nu.StrRef(_WHY))),
     )
     go = nu.IfDo(
         snap(nu.Not(cr.worker.exists())),
@@ -180,7 +180,7 @@ def _cells(run_id: nu.StrArg, backend: nu.StrArg) -> nu.Nu:
     return nu.ForEachParReactive(
         snap(nu.list(live)),
         Ticking(snap(live.on_children_change())),
-        _cell_arm(run_id, nu.StrAttrRef(_CELL_RUN), backend),
+        _cell_arm(run_id, nu.StrRef(_CELL_RUN), backend),
         _CELL_RUN,
     )
 
@@ -197,14 +197,14 @@ def _done(run_id: nu.StrArg) -> nu.Nu:
 def run_arm(run_id: nu.StrArg) -> nu.Nu:
     """One plane run's whole life in the host. Ends only by the fold cancelling it."""
     row = _kernel.runs[run_id]
-    backend = nu.StrAttrRef(_BACKEND)
+    backend = nu.StrRef(_BACKEND)
     started = backends.start(backend, run_id) >> atomic(
         nu.IfDo(nu.Not(row.started_at.exists()), row.started_at.set(Now()))
     )
     failed = nu.Let(
         _WHY,
-        nu.Str("Backend failed to start: ") + ErrorText(nu.ObjectAttrRef(_ERROR)),
-        atomic(end_run(run_id, EXIT_FAILED, nu.StrAttrRef(_WHY))),
+        nu.Str("Backend failed to start: ") + ErrorText(nu.ObjectRef(_ERROR)),
+        atomic(end_run(run_id, EXIT_FAILED, nu.StrRef(_WHY))),
     )
     live = nu.Race(_killed(run_id, backend), _cells(run_id, backend), _done(run_id))
     life = nu.TryCatch(started, catch=failed, error_key=_ERROR) >> nu.IfDo(
@@ -229,6 +229,6 @@ def run_fold() -> nu.Nu:
     return nu.ForEachParReactive(
         snap(nu.list(running)),
         Ticking(snap(running.on_children_change())),
-        run_arm(nu.StrAttrRef(RUN_ATTR)),
+        run_arm(nu.StrRef(RUN_ATTR)),
         RUN_ATTR,
     )

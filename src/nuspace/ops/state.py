@@ -46,7 +46,7 @@ def sibling(cell_id: nu.StrArg, term: nu.Nu) -> nu.Nu:
         cell_id: The sibling's id. Ids, not names: names are not unique.
         term: What to read or write there, eg ``Tick.n``.
     """
-    return cell_state(nu.StrAttrRef(PLANE_ATTR), cell_id, term)
+    return cell_state(nu.StrRef(PLANE_ATTR), cell_id, term)
 
 
 def cell_state(plane_id: nu.StrArg, cell_id: nu.StrArg, term: nu.Nu) -> nu.Nu:

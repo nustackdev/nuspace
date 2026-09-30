@@ -124,7 +124,7 @@ def cell_ui(viewer: Ref, cell: nu.StrArg) -> SectionRef:
 
     Args:
         viewer: The ref cells are drawn on, bound to its place on the shell.
-        cell: The cell id, any ``StrArg`` (eg ``nu.StrAttrRef(CELL_ATTR)``).
+        cell: The cell id, any ``StrArg`` (eg ``nu.StrRef(CELL_ATTR)``).
     """
     return SectionRef(cell, section_cls=nustd.ui.Column, parent_ref=cells_ui(viewer))
 
@@ -195,7 +195,7 @@ class Arms:
         return nu.Print(
             STDOUT,
             nu.Str(f"nuspace web {self.label}: {what}: "),
-            nu.ToStr(nu.AttrRef("error")),
+            nu.ToStr(nu.ObjectRef("error")),
         )
 
     def guard(self, term: nu.Nu, what: str) -> nu.Nu:
@@ -213,7 +213,7 @@ class Arms:
             name: The attr the event binds under, and what failures say.
                 Unique per arm: parallel arms share one ``ctx.attrs``.
             change: The subscription, built fresh per arm.
-            body: What runs per event, reading it via ``nu.DictAttrRef(name)``.
+            body: What runs per event, reading it via ``nu.ObjectRef(name)``.
         """
         return self.guard(nu.ReactForever(change, self.guard(body, name), changed_key=name), name)
 
@@ -230,12 +230,12 @@ class Arms:
 
 def field_str(name: str, field: str) -> nu.Nu:
     """One string field off the arm's event. ``""`` when absent."""
-    return nu.ToStr(nu.DictAttrRef(name).get_item(nu.Str(field), nu.Str("")))
+    return nu.ToStr(nu.Dict(nu.ObjectRef(name)).get_item(nu.Str(field), nu.Str("")))
 
 
 def field_ids(name: str, field: str) -> nu.Nu:
     """One list of ids off the arm's event. Empty when absent."""
-    return nu.List(nu.DictAttrRef(name).get_item(nu.Str(field), nu.List.of()))
+    return nu.List(nu.Dict(nu.ObjectRef(name)).get_item(nu.Str(field), nu.List.of()))
 
 
 def field_index(name: str, field: str, length: nu.Nu) -> nu.Nu:
@@ -244,4 +244,4 @@ def field_index(name: str, field: str, length: nu.Nu) -> nu.Nu:
     Zero is a real position, so a ``0`` default would prepend everything a
     caller forgot to place.
     """
-    return nu.ToInt(nu.DictAttrRef(name).get_item(nu.Str(field), length))
+    return nu.ToInt(nu.Dict(nu.ObjectRef(name)).get_item(nu.Str(field), length))

@@ -39,7 +39,7 @@ def out():
 def search(query: nu.StrArg, plane: nu.StrArg, cell: nu.StrArg) -> nu.Nu:
     """``[{plane, cell, excerpt}]`` when the note's body holds ``query``."""
     held = ops.cell_state(plane, cell, nu.If(Note.body.exists(), nu.ToStr(Note.body), nu.Str("")))
-    body = nu.StrAttrRef("test.note")
+    body = nu.StrRef("test.note")
     hit = nu.List.of(nu.Dict.of(plane=plane, cell=cell, excerpt=excerpt(body, query)))
     return nu.Let("test.note", held, nu.If(matches(body, query), hit, nu.List.of()))
 

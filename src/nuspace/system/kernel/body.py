@@ -135,7 +135,7 @@ def _mark_started(run_id: str, cell_run_id: str) -> nu.Nu:
 def _flush(run_id: str, cell_run_id: str) -> nu.Nu:
     """Write waiting output to the record, if there is any."""
     cr = _kernel.runs[run_id].cells[cell_run_id]
-    out = nu.ObjectAttrRef(_OUT)
+    out = nu.ObjectRef(_OUT)
     return nu.IfDo(HasOut(), nu.Let(_OUT, TakeOut(), atomic(cr.out.set(out))))
 
 
@@ -148,8 +148,8 @@ def _finish(
     extra: nu.Nu | str = "",
 ) -> nu.Nu:
     """The last write: out flushed, exit, error, terminated_at, out of ``cells_running``. One commit."""
-    why = None if error is None else nu.StrAttrRef(_WHY)
-    commit = atomic(end_cell_run(run_id, cell_run_id, exit_, why, nu.ObjectAttrRef(_OUT)))
+    why = None if error is None else nu.StrRef(_WHY)
+    commit = atomic(end_cell_run(run_id, cell_run_id, exit_, why, nu.ObjectRef(_OUT)))
     # Texts are made before the bracket, which deep copies attrs and would
     # carry the caught exception in with it.
     if error is not None:
@@ -188,12 +188,12 @@ def build_body(
     load = nustd.kv.auto_flow_atomic(
         source.load(scope={"plane": plane, "cell": cell}, rewrite=rewrite), scope=Space
     )
-    outcome = nu.StrAttrRef(_OUTCOME)
+    outcome = nu.StrRef(_OUTCOME)
     # On the loop: a program that subscribes is async only.
     program = nu.ParallelAsync(nu.prog.Eval(load))
     asked = _kernel.runs[run_id].cells[cell_run_id].interrupt_requested
-    interrupted = until(flag(asked, False), asked.on_change()) >> nu.SetCmd(
-        outcome, nu.Str(EXIT_INTERRUPTED)
+    interrupted = until(flag(asked, False), asked.on_change()) >> outcome.set(
+        nu.Str(EXIT_INTERRUPTED)
     )
     flusher = nu.ForeverDo(nu.Delay(FLUSH_SECONDS) >> _flush(run_id, cell_run_id))
     # The program winning leaves the outcome ok. The flusher never wins.
@@ -212,8 +212,8 @@ def build_body(
         run_id,
         cell_run_id,
         EXIT_FAILED,
-        error=ErrorText(nu.ObjectAttrRef(_ERROR)),
-        extra=ErrorText(nu.ObjectAttrRef(_ERROR), full=True),
+        error=ErrorText(nu.ObjectRef(_ERROR)),
+        extra=ErrorText(nu.ObjectRef(_ERROR), full=True),
     )
     body = nu.With(Captured(), body=nu.TryCatch(run, catch=failed, error_key=_ERROR))
     ids = ((PLANE_ATTR, plane), (CELL_ATTR, cell), (RUN_ATTR, run_id), (CELL_RUN_ATTR, cell_run_id))

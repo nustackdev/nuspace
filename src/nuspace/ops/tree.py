@@ -26,7 +26,7 @@ if TYPE_CHECKING:
 __all__ = ["move_plane"]
 
 
-def subtree(plane_id: nu.StrArg, body: Callable[[nu.ListAttrRef], nu.Nu]) -> nu.Nu:
+def subtree(plane_id: nu.StrArg, body: Callable[[nu.ObjectRef], nu.Nu]) -> nu.Nu:
     """Walk the tree below ``plane_id``, then run ``body(ids)``.
 
     ``ids`` is bound to the plane and every descendant, breadth first. The
@@ -34,7 +34,7 @@ def subtree(plane_id: nu.StrArg, body: Callable[[nu.ListAttrRef], nu.Nu]) -> nu.
     a cycle written by hand ends rather than going round forever.
     """
     going, edge, at, reached = fresh("going"), fresh("edge"), fresh("edge_at"), fresh("reached")
-    going_ref, edge_ref = nu.ListAttrRef(going), nu.ListAttrRef(edge)
+    going_ref, edge_ref = nu.ObjectRef(going), nu.ObjectRef(edge)
     step = nu.List(
         nu.Collect(
             nu.Filter(
@@ -42,19 +42,19 @@ def subtree(plane_id: nu.StrArg, body: Callable[[nu.ListAttrRef], nu.Nu]) -> nu.
                     nu.Flatten(
                         nu.Map(
                             nu.List(edge_ref),
-                            nu.list(Space.tree[nu.StrAttrRef(at)].children),
+                            nu.list(Space.tree[nu.StrRef(at)].children),
                             key=at,
                         )
                     )
                 ),
-                nu.Not(nu.List(going_ref).contains(nu.StrAttrRef(reached))),
+                nu.Not(nu.List(going_ref).contains(nu.StrRef(reached))),
                 key=reached,
             )
         )
     )
     walk = nu.WhileDo(
         nu.Gt(edge_ref.len(), nu.Int(0)),
-        nu.SetCmd(going_ref, nu.List(going_ref) + nu.List(edge_ref)) >> nu.SetCmd(edge_ref, step),
+        going_ref.set(nu.List(going_ref) + nu.List(edge_ref)) >> edge_ref.set(step),
     )
     return nu.Let(
         going,
@@ -66,7 +66,7 @@ def subtree(plane_id: nu.StrArg, body: Callable[[nu.ListAttrRef], nu.Nu]) -> nu.
 def unlink(plane_id: nu.StrArg) -> nu.Nu:
     """Drop ``plane_id`` from every tree node listing it. No bracket."""
     item = fresh("unlink")
-    node = Space.tree[nu.StrAttrRef(item)].children
+    node = Space.tree[nu.StrRef(item)].children
     return nu.ForEachDo(
         nu.list(Space.tree.keys()),
         nu.IfDo(node.contains(plane_id), node.remove(plane_id)),
@@ -99,15 +99,15 @@ def move_plane(
 
 def _move_body(plane_id: nu.StrArg, parent: nu.StrArg, index: nu.IntArg | None, out: str) -> nu.Nu:
     """Decide into the attr ``out``, then move the plane when it said yes."""
-    flag_ref = nu.BoolAttrRef(out)
+    flag_ref = nu.BoolRef(out)
 
-    def check(ids: nu.ListAttrRef) -> nu.Nu:
+    def check(ids: nu.ObjectRef) -> nu.Nu:
         ok = nu.And(
             plane_exists(plane_id),
             nu.Or(nu.Eq(parent, nu.Str(ROOT)), plane_exists(parent)),
             nu.Not(nu.List(ids).contains(parent)),
         )
-        return nu.SetCmd(flag_ref, ok)
+        return flag_ref.set(ok)
 
     return subtree(plane_id, check) >> nu.IfDo(
         flag_ref, unlink(plane_id) >> link(plane_id, parent, index)

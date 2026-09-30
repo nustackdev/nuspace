@@ -43,7 +43,7 @@ def follows(ref: nu.Nu, name: str, body: nu.Nu, *, alive: nu.Nu | None = None) -
             reads False the turn parks rather than subscribing to a row that
             is gone, and waits to be cancelled (eg by the fold over the rows).
     """
-    turn = nu.Race(body >> park(), moved(ref, nu.StrAttrRef(name)))
+    turn = nu.Race(body >> park(), moved(ref, nu.StrRef(name)))
     if alive is not None:
         turn = nu.IfDo(snap(alive), turn, park())
     return nu.ForeverDo(nu.Let(name, snap(text(ref)), turn))

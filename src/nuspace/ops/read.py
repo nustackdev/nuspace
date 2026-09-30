@@ -53,7 +53,7 @@ def cells(plane_id: nu.StrArg) -> nu.Nu:
     """
     plane = Space.planes[plane_id]
     item = fresh("cells")
-    at = nu.ObjectAttrRef(item)
+    at = nu.ObjectRef(item)
     placed = nu.List(
         nu.Collect(nu.Filter(nu.list(plane.order), plane.cells.contains(at), key=item))
     )
@@ -81,7 +81,7 @@ def parent(plane_id: nu.StrArg) -> nu.Nu:
     ``""`` for a plane no node lists, eg one written by hand or removed.
     """
     item = fresh("parent")
-    at = nu.StrAttrRef(item)
+    at = nu.StrRef(item)
     found = nu.First(
         nu.Filter(nu.list(Space.tree.keys()), Space.tree[at].children.contains(plane_id), key=item)
     )
@@ -100,7 +100,7 @@ def plane_rows() -> nu.Nu:
     filled in. ``backend`` is ``""`` for a plane that names none.
     """
     item = fresh("plane_rows")
-    at = nu.StrAttrRef(item)
+    at = nu.StrRef(item)
     plane = Space.planes[at]
     return nu.Collect(
         nu.Map(
@@ -129,7 +129,7 @@ def cell_rows(plane_id: nu.StrArg) -> nu.Nu:
     ``has_ui`` reads True where it was never worked out: maybe it draws.
     """
     item = fresh("cell_rows")
-    at = nu.StrAttrRef(item)
+    at = nu.StrRef(item)
     cell = Space.planes[plane_id].cells[at]
     return nu.Collect(
         nu.Map(

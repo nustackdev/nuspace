@@ -100,7 +100,7 @@ def uptime(seconds):
 
 
 def versions(v):
-    k = nu.StrAttrRef("k")
+    k = nu.StrRef("k")
     each = nu.Map(nu.list(v.keys()), k + nu.Str(" ") + nu.ToStr(v[k]), key="k")
     return nu.If(v.exists(), nu.Str(", ").join(nu.Collect(each)), nu.Str(""))
 
@@ -116,7 +116,7 @@ def draw():
     )
     parts = nu.List.of(nu.Str("nuspace"), where, versions(info.versions), up)
     line = nu.Str("  ·  ").join(
-        nu.Collect(nu.Filter(nu.Iter(parts), nu.Ne(nu.StrAttrRef("x"), ""), key="x"))
+        nu.Collect(nu.Filter(nu.Iter(parts), nu.Ne(nu.StrRef("x"), ""), key="x"))
     )
     return nustd.kv.Snapshot(nustd.ui.TextRef("info").set(line), scope=nuspace.Space)
 
@@ -142,7 +142,7 @@ def plane_name(pid):
 
 
 def link(i):
-    ids = nu.ListAttrRef("ids")
+    ids = nu.ObjectRef("ids")
     ref = nustd.ui.LinkRef("r" + str(i))
     pid = nu.ToStr(ids[i])
     return nu.IfDo(
@@ -155,11 +155,11 @@ def link(i):
 def draw():
     recents = nuspace.Space.state.recents
     listed = nu.If(recents.exists(), nu.List(recents), nu.List.of())
-    r = nu.StrAttrRef("r")
+    r = nu.StrRef("r")
     ids = nu.List(nu.Collect(nu.Filter(nu.Iter(listed), ops.plane_exists(r), key="r")))[0:SHOWN]
     none = nustd.ui.TextRef("none")
     empty = nu.IfDo(
-        nu.Eq(nu.Len(nu.ListAttrRef("ids")), 0), none.set("Nothing opened yet."), none.erase()
+        nu.Eq(nu.Len(nu.ObjectRef("ids")), 0), none.set("Nothing opened yet."), none.erase()
     )
     links = nu.Sequential(*[link(i) for i in range(SHOWN)])
     body = nustd.ui.HeadingRef("title").set("Recent", level=3) >> links >> empty
@@ -202,18 +202,18 @@ def prop(p, name):
 
 
 def drawn(planes):
-    p = nu.DictAttrRef("p")
+    p = nu.ObjectRef("p")
     drawn = nu.And(nu.ToBool(prop(p, "ui")), nu.Not(nu.ToBool(prop(p, "system"))))
     return nu.Count(nu.Filter(nu.Iter(planes), nu.And(drawn, nu.Ne(p["id"], "home")), key="p"))
 
 
 def live_cells(runs):
-    r = nu.DictAttrRef("r")
+    r = nu.ObjectRef("r")
     return nu.Sum(nu.Map(nu.Iter(runs), nu.Len(nu.List(r["cells_running"])), key="r"))
 
 
 def first(planes, made_by):
-    p = nu.DictAttrRef("p")
+    p = nu.ObjectRef("p")
     made = nu.Filter(
         nu.Iter(planes),
         nu.And(nu.Eq(nu.ToStr(prop(p, "made_by")), made_by), nu.ToBool(prop(p, "ui"))),
@@ -229,7 +229,7 @@ def link(ref, planes, made_by, label):
 
 
 def draw():
-    planes, runs = nu.ListAttrRef("planes"), nu.ListAttrRef("runs")
+    planes, runs = nu.ObjectRef("planes"), nu.ObjectRef("runs")
     tiles = (
         Glance.tiles.planes.set(nu.ToStr(drawn(planes)))
         >> Glance.tiles.live.set(nu.ToStr(nu.Len(runs)))
@@ -317,7 +317,7 @@ def seed(
         meta={**META, "icon": icon},
     )
     for ui, (cell, source) in zip(uis, cells, strict=True):
-        writes = writes >> cell_writes(plane, cell, source, nu.BoolAttrRef(ui), name=cell)
+        writes = writes >> cell_writes(plane, cell, source, nu.BoolRef(ui), name=cell)
     if pin:
         writes = writes >> pin_last(plane)
     body = atomic(nu.IfDo(missing, writes))

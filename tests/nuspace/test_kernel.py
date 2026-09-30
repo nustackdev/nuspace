@@ -32,6 +32,7 @@ from _support.kernel import (
     worker,
     workers_named,
 )
+from _support.probe import PROBE_INIT, Probe
 
 import nu
 from nuspace import ops
@@ -326,18 +327,19 @@ async def test_async_a_crash_ends_every_cell_run(space):
 
 # --- Backends -------------------------------------------------------------------------
 
-#: Ticks until cancelled, and marks ``cleaned`` on the way out. Run with no
-#: attrs, so on the worker's own Context, where a later read finds the mark.
+#: Ticks until cancelled, and marks ``cleaned`` on the way out. The mark lives
+#: in the worker's mem store, where a later read finds it.
 _TICKS = nu.TryCatch(
-    nu.SetCmd(nu.AttrRef("cleaned"), False) >> nu.ForeverDo(nu.Delay(0.01)),
-    finally_=nu.SetCmd(nu.AttrRef("cleaned"), True),
+    Probe.cleaned.set(False) >> nu.ForeverDo(nu.Delay(0.01)),
+    finally_=Probe.cleaned.set(True),
 )
 
 
 @contextlib.asynccontextmanager
 async def _backend(cls: type[Backend]):
     """A bare backend over a bare pool, no store: bodies here are plain Nu."""
-    async with nu.Provide(WorkerPool, {"name": "nuspace-test-backend"})._aopen(nu.Context()) as ctx:
+    pool = {"name": "nuspace-test-backend", "init": PROBE_INIT}
+    async with nu.Provide(WorkerPool, pool)._aopen(nu.Context()) as ctx:
         backend = cls()
         await backend.asetup(ctx)
         try:
@@ -349,7 +351,7 @@ async def _backend(cls: type[Backend]):
 async def _cleaned(pool: WorkerPool, wid: int, want: bool) -> bool:
     deadline = time.monotonic() + SLOW
     while time.monotonic() < deadline:
-        if await pool.ateleport(wid, nu.AttrRef("cleaned")) is want:
+        if await pool.ateleport(wid, Probe.cleaned) is want:
             return True
         await asyncio.sleep(0.02)
     return False

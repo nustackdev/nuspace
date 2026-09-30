@@ -47,14 +47,14 @@ def flag(ref):
 
 
 def jobs(key):
-    props = nuspace.Space.planes[nu.StrAttrRef(key)].props
+    props = nuspace.Space.planes[nu.StrRef(key)].props
     headless = nu.And(nu.Not(flag(props.ui)), nu.Not(flag(props.system)))
     return nu.List(nu.Collect(nu.Filter(ops.planes(), headless, key=key)))
 
 
 def running():
     # Live runs are few: their planes, not every run ever recorded.
-    run = nu.DictAttrRef("live")
+    run = nu.ObjectRef("live")
     return nu.List(nu.Collect(nu.Unique(nu.Map(nu.Iter(ops.runs()), run["plane"], key="live"))))
 
 
@@ -71,9 +71,9 @@ def restart(pid):
 
 
 def draw():
-    j = nu.StrAttrRef("j")
+    j = nu.StrRef("j")
     name = nuspace.Space.planes[j].name
-    booted, live = nu.ListAttrRef("booted"), nu.ListAttrRef("running")
+    booted, live = nu.ObjectRef("booted"), nu.ObjectRef("running")
     row = nu.List.of(
         nu.If(name.exists(), nu.ToStr(name), j),
         j,
@@ -92,8 +92,8 @@ def draw():
 
 
 def select():
-    click = nu.DictAttrRef("click")
-    ids = nu.ListAttrRef("ids")
+    click = nu.ObjectRef("click")
+    ids = nu.ObjectRef("ids")
     at = nu.ToInt(click["row_index"])
     pick = nu.IfDo(nu.Gt(nu.Len(ids), at), Jobs.selected.set(nu.ToStr(nu.List(ids)[at])))
     # The rows are the jobs in creation order: the same read finds the one clicked.
@@ -140,8 +140,8 @@ class Form(nustd.ui.Row):
 
 def create(name):
     # Under the plane running this cell: the Jobs plane.
-    here = nu.StrAttrRef(ops.PLANE_ATTR)
-    job = nu.StrAttrRef("new.job")
+    here = nu.StrRef(ops.PLANE_ATTR)
+    job = nu.StrRef("new.job")
     made = ops.add_plane(backend="mp", name=name, parent=here, ui=False, made_by="jobs")
     fill = ops.add_cell(job, STARTER, cell_id="main", name="main") >> nustd.kv.Transaction(
         Jobs.selected.set(job), scope=nuspace.States
@@ -152,7 +152,7 @@ def create(name):
 def out():
     typed = nu.Str(Form.name)
     name = nu.If(nu.Eq(typed, ""), nu.Str("New job"), typed)
-    make = nu.Let("new.name", name, create(nu.StrAttrRef("new.name")) >> Form.name.set(""))
+    make = nu.Let("new.name", name, create(nu.StrRef("new.name")) >> Form.name.set(""))
     return (
         Form.name.set("")
         >> Form.create.set("Create job")
@@ -233,7 +233,7 @@ def draw(job):
 
 def restart(job, tag):
     # Plane level: the supervisor keeps the job running, off stops its run.
-    choice, delay = nu.StrAttrRef(tag + ".policy"), nu.FloatAttrRef(tag + ".delay")
+    choice, delay = nu.StrRef(tag + ".policy"), nu.FloatRef(tag + ".delay")
     apply = nu.IfDo(
         nu.Eq(choice, OFF),
         supervisor.unsupervise(job),
@@ -264,18 +264,18 @@ def remove(job):
 def delete(job):
     # Two clicks: the first arms the button, the second deletes.
     button = View.detail.delete
-    armed = nu.BoolAttrRef("job.armed")
+    armed = nu.BoolRef("job.armed")
     click = nu.IfDo(
         armed,
         remove(job),
-        nu.SetCmd(armed, nu.Bool(True)) >> button.set("Click again to delete", variant="danger"),
+        armed.set(nu.Bool(True)) >> button.set("Click again to delete", variant="danger"),
     )
     return nu.Let("job.armed", nu.Bool(False), nu.ReactForever(button.on_click(), click))
 
 
 def shown(job):
     d = View.detail
-    source = nu.StrAttrRef("job.source")
+    source = nu.StrRef("job.source")
     save = nu.Let("job.source", nu.Str(d.editor), ops.set_prog(job, "main", source))
     boot = nu.IfDo(nu.ToBool(d.boot), init.boot(job), init.unboot(job))
     return (
@@ -296,7 +296,7 @@ def hint():
 
 
 def out():
-    job = nu.StrAttrRef("job.id")
+    job = nu.StrRef("job.id")
     there = nu.And(nu.Ne(job, ""), snap(ops.plane_exists(job)))
     return follows(Jobs.selected, "job.id", nu.IfDo(there, shown(job), hint()))
 """

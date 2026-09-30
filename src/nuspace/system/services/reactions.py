@@ -159,7 +159,7 @@ def source(change: nu.StrArg, plane_id: nu.StrArg, imports: str = "") -> nu.Nu:
 def _live_of(plane_id: nu.StrArg, by: nu.StrArg | None = None) -> nu.Nu:
     """A live plane run of the plane, ``by`` when given, ``""`` when none. A filter of ``running``, O(k)."""
     item = fresh("live_of")
-    row = _kernel.runs[nu.StrAttrRef(item)]
+    row = _kernel.runs[nu.StrRef(item)]
     mine = nu.Eq(text(row.plane), plane_id)
     if by is not None:
         mine = nu.And(mine, nu.Eq(text(row.by), by))
@@ -217,13 +217,13 @@ def up_plane(plane_id: nu.StrArg, by: nu.StrArg = BY) -> nu.Nu:
         by: Who asked, what the run is recorded as, and whose live runs count.
     """
     live, new = fresh("up_live"), fresh("up_new")
-    rid = nu.StrAttrRef(live)
+    rid = nu.StrRef(live)
     over = _kernel.runs[rid].terminated_at
-    ended = until(over.exists(), over.on_change()) >> nu.SetCmd(rid, snap(react_run(plane_id, by)))
+    ended = until(over.exists(), over.on_change()) >> rid.set(snap(react_run(plane_id, by)))
     settled = nu.Let(live, snap(react_run(plane_id, by)), nu.WhileDo(nu.Ne(rid, nu.Str("")), ended))
     none = nu.Eq(react_run(plane_id, by), nu.Str(""))
     start = nu.Let(
-        new, MintId("r"), atomic(nu.IfDo(none, add_plane_run(nu.StrAttrRef(new), plane_id, by=by)))
+        new, MintId("r"), atomic(nu.IfDo(none, add_plane_run(nu.StrRef(new), plane_id, by=by)))
     )
     return settled >> start
 
@@ -239,12 +239,12 @@ def _start(cid: nu.StrArg) -> nu.Nu:
     plane runs every cell, this one included.
     """
     run, new, cr = fresh("react_in"), fresh("react_run"), fresh("react_cr")
-    rid = nu.StrAttrRef(run)
+    rid = nu.StrRef(run)
     into = nu.IfDo(
         nu.Not(_kernel.runs[rid].latest.contains(cid)),
-        nu.Let(cr, MintId("cr"), add_cell_run(rid, cid, nu.StrAttrRef(cr), BY)),
+        nu.Let(cr, MintId("cr"), add_cell_run(rid, cid, nu.StrRef(cr), BY)),
     )
-    up = nu.Let(new, MintId("r"), add_plane_run(nu.StrAttrRef(new), PLANE, by=BY))
+    up = nu.Let(new, MintId("r"), add_plane_run(nu.StrRef(new), PLANE, by=BY))
     return atomic(nu.Let(run, live_run(), nu.IfDo(nu.Ne(rid, nu.Str("")), into, up)))
 
 
@@ -274,24 +274,24 @@ def enable_react(change: nu.StrArg, plane_id: nu.StrArg, *, imports: str = "") -
             change, a bad import). Nothing is written.
     """
     key_name = fresh("react_key")
-    key = nu.StrAttrRef(key_name)
+    key = nu.StrRef(key_name)
 
     src_name = fresh("react_src")
-    src = nu.StrAttrRef(src_name)
+    src = nu.StrRef(src_name)
 
     def make(cid_name: str) -> nu.Nu:
-        cid = nu.StrAttrRef(cid_name)
+        cid = nu.StrRef(cid_name)
         loads = nu.prog.LoadNu(src, scope={"plane": nu.Str(PLANE), "cell": cid})
         free = nu.Eq(_known(key), nu.Str(""))
         claim = atomic_state(_here(nu.IfDo(free, Registry.cells.set_item(key, cid))))
         won = snap(_here(nu.Eq(_indexed(key), cid)))
-        lost = remove_cell(PLANE, cid) >> nu.SetCmd(cid, snap(_here(_known(key))))
+        lost = remove_cell(PLANE, cid) >> cid.set(snap(_here(_known(key))))
         made = add_cell(PLANE, src, cell_id=cid, name=plane_id)
         then = claim >> nu.IfDo(won, _start(cid), lost)
         return nu.Let(fresh("react_loads"), loads, nu.Let(fresh("react_made"), made, then))
 
     had = fresh("react_had")
-    known = nu.StrAttrRef(had)
+    known = nu.StrRef(had)
     value = nu.If(nu.Eq(known, nu.Str("")), MintId("react"), known)
 
     def write(cid_name: str) -> nu.Nu:
@@ -313,7 +313,7 @@ def disable_react(change: nu.StrArg, plane_id: nu.StrArg) -> nu.Nu:
     already started is left to finish.
     """
     key, cid, run = fresh("unreact_key"), fresh("unreact_cell"), fresh("unreact_run")
-    k, c, r = nu.StrAttrRef(key), nu.StrAttrRef(cid), nu.StrAttrRef(run)
+    k, c, r = nu.StrRef(key), nu.StrRef(cid), nu.StrRef(run)
     interrupt = nu.Let(
         run, snap(live_run()), nu.IfDo(nu.Ne(r, nu.Str("")), cell_interrupt(r, latest(r, c)))
     )

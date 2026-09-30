@@ -46,7 +46,7 @@ class SessionWrap:
 
     def __call__(self, body: nu.Nu) -> nu.Nu:
         """``body``, drawing on the connection."""
-        erase = cell_ui(Shell.viewer, nu.StrAttrRef(CELL_ATTR)).erase()
+        erase = cell_ui(Shell.viewer, nu.StrRef(CELL_ATTR)).erase()
         return nu.Let(SESSION_ATTR, nu.Str(self.sid), proxied_session(self.address, erase >> body))
 
 
@@ -60,7 +60,7 @@ def session_env(address: str) -> EnvFactory:
     def factory(sid: str) -> Env:
         return Env(
             wrap=SessionWrap(address, sid),
-            rewrite=CellRoot(Shell.viewer, nu.StrAttrRef(CELL_ATTR)),
+            rewrite=CellRoot(Shell.viewer, nu.StrRef(CELL_ATTR)),
             label=f"{SESSION_ENV}:{sid}",
         )
 

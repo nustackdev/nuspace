@@ -26,8 +26,8 @@ def tile(name, label, value):
 
 
 def draw():
-    runs = nu.ListAttrRef("runs")
-    r = nu.DictAttrRef("r")
+    runs = nu.ObjectRef("runs")
+    r = nu.ObjectRef("r")
     cells = nu.Sum(nu.Map(nu.Iter(runs), nu.Len(nu.List(r["cells_running"])), key="r"))
     tiles = (
         tile("runs", "Live runs", nu.Len(runs))
@@ -57,12 +57,12 @@ def plane_name(pid):
 
 
 def age(t):
-    now = nu.FloatAttrRef("now")
+    now = nu.FloatRef("now")
     return nu.If(nu.Is(t, None), nu.Str(""), nu.Format(now - t, ".0f") + nu.Str("s"))
 
 
 def draw():
-    r = nu.DictAttrRef("r")
+    r = nu.ObjectRef("r")
     row = nu.List.of(
         plane_name(r["plane"]),
         r["backend"],
@@ -99,12 +99,12 @@ def name(ref, fallback):
 
 
 def age(t):
-    now = nu.FloatAttrRef("now")
+    now = nu.FloatRef("now")
     return nu.If(nu.Is(t, None), nu.Str("starting"), nu.Format(now - t, ".0f") + nu.Str("s"))
 
 
 def draw():
-    r, c = nu.DictAttrRef("r"), nu.DictAttrRef("c")
+    r, c = nu.ObjectRef("r"), nu.ObjectRef("c")
     plane = nuspace.Space.planes[nu.ToStr(r["plane"])]
     row = nu.List.of(
         name(plane.name, nu.ToStr(r["plane"])),

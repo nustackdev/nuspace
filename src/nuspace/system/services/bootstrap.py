@@ -47,7 +47,7 @@ def _service(plane_id: str, shim: str) -> nu.Nu:
     no_cell = nu.Not(row.cells[init.CELL].contains("prog"))
     ui = fresh("service_ui")
     made = nu.IfDo(no_plane, plane_writes(plane_id, backend="mp", name=plane_id, system=True))
-    cell = cell_writes(plane_id, init.CELL, shim, nu.BoolAttrRef(ui), name=init.CELL)
+    cell = cell_writes(plane_id, init.CELL, shim, nu.BoolRef(ui), name=init.CELL)
     both = atomic(made >> nu.IfDo(no_cell, cell))
     return nu.IfDo(
         snap(nu.Or(no_plane, no_cell)), nu.Let(ui, HasUi(shim, plane_id, init.CELL), both)

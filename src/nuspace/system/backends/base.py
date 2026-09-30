@@ -254,7 +254,7 @@ def _made(backend: nu.StrArg, run_id: nu.StrArg, made: nu.Nu) -> nu.Nu:
     end and stays out of ``workers_running``.
     """
     item = fresh("made")
-    pair = nu.List(nu.ObjectAttrRef(item))
+    pair = nu.List(nu.ObjectRef(item))
     wid = nu.ToStr(pair[0])
     row = _kernel.workers[wid]
     write = (
@@ -290,7 +290,7 @@ def released(run_id: nu.StrArg, exit_: nu.StrArg) -> nu.Nu:
     ``workers``: with ``mp`` that is a worker per cell run ever.
     """
     item = fresh("released")
-    wid = nu.StrAttrRef(item)
+    wid = nu.StrRef(item)
     mine = nu.Eq(nu.ToStr(_kernel.workers[wid].run), run_id)
     return nu.ForEachDo(
         nu.list(_kernel.workers_running), nu.IfDo(mine, _ended(wid, exit_)), item=item
@@ -300,7 +300,7 @@ def released(run_id: nu.StrArg, exit_: nu.StrArg) -> nu.Nu:
 def _let_go(ids: nu.Nu, exit_: nu.StrArg) -> nu.Nu:
     """Every worker id in ``ids`` ended ``exit_``. One commit."""
     item = fresh("let_go")
-    return atomic(nu.ForEachDo(nu.List(ids), _ended(nu.StrAttrRef(item), exit_), item=item))
+    return atomic(nu.ForEachDo(nu.List(ids), _ended(nu.StrRef(item), exit_), item=item))
 
 
 def start(backend: nu.StrArg, run_id: nu.StrArg) -> nu.Nu:
@@ -309,7 +309,7 @@ def start(backend: nu.StrArg, run_id: nu.StrArg) -> nu.Nu:
     return nu.Let(
         made,
         StartRun(BackendRef(backend), run_id),
-        atomic(_made(backend, run_id, nu.ObjectAttrRef(made))),
+        atomic(_made(backend, run_id, nu.ObjectRef(made))),
     )
 
 
@@ -345,13 +345,11 @@ def end_cell(
     return nu.Let(
         gone,
         EndCell(BackendRef(backend), run_id, cell_run_id),
-        _let_go(nu.ObjectAttrRef(gone), exit_),
+        _let_go(nu.ObjectRef(gone), exit_),
     )
 
 
 def kill(backend: nu.StrArg, run_id: nu.StrArg, exit_: nu.StrArg) -> nu.Nu:
     """:class:`KillRun`, and the workers it let go recorded ended ``exit_``."""
     gone = fresh("kill")
-    return nu.Let(
-        gone, KillRun(BackendRef(backend), run_id), _let_go(nu.ObjectAttrRef(gone), exit_)
-    )
+    return nu.Let(gone, KillRun(BackendRef(backend), run_id), _let_go(nu.ObjectRef(gone), exit_))

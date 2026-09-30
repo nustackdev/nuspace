@@ -23,7 +23,7 @@ from nuspace import ops
 
 
 def out(plane, cell):
-    picked = nu.StrAttrRef("picked")
+    picked = nu.StrRef("picked")
 
     # SHAPE is a shape class: what the lens expects to find.
     # PREFIX is a ref: where in the store that shape lives. Here, the picked cell.
@@ -37,12 +37,12 @@ def out(plane, cell):
         return nustd.kv.Snapshot(term, scope=nuspace.Space)
 
     # The plane's cells in order, labelled by name, or by id when unnamed.
-    row = nu.DictAttrRef("row")
+    row = nu.ObjectRef("row")
     label = nu.If(nu.Ne(row["name"], ""), row["name"], row["id"])
     option = nu.Dict.of(value=row["id"], label=label)
     options = read(nu.Collect(nu.Map(ops.cell_rows(plane), option, key="row")))
     # The first cell that is not this one, or this one when it is alone.
-    others = nu.First(nu.Filter(ops.cells(plane), nu.Ne(nu.StrAttrRef("id"), cell), key="id"))
+    others = nu.First(nu.Filter(ops.cells(plane), nu.Ne(nu.StrRef("id"), cell), key="id"))
     first = read(nu.If(nu.IsEmpty(others), nu.Str(cell), others))
 
     # browse never finishes: each pick cancels it and starts it on the new cell.

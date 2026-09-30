@@ -195,7 +195,8 @@ async def test_open_space_headless_runs_a_booted_plane(tmp_path, monkeypatch):
 
     loop = asyncio.get_running_loop()
     ready, done = loop.create_future(), asyncio.Event()
-    held = nu.Let("test.held", _Hold(ready, done), nu.SetCmd(nu.ObjectAttrRef("test.x"), 1))
+    hold = nu.Let("test.held", _Hold(ready, done), nu.ObjectRef("test.x").set(1))
+    held = nu.Let("test.x", body=hold)
     term = open_space(path, web=False, spares=1, name="nuspace-host", body=held)
     task = asyncio.create_task(nu.arun(term))
     space = Kernel(await asyncio.wait_for(asyncio.shield(ready), 20), done, task)

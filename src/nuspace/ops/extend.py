@@ -131,7 +131,7 @@ def create_plane(
     held = fresh("create")
     first: list[tuple[str, nu.Nu]] = [(held, MintId("p") if plane_id is None else nu.Str(plane_id))]
     label = spec.label if name is None else name
-    body = then(atomic(_seeded(spec, nu.StrAttrRef(held), parent, label, first)), held)
+    body = then(atomic(_seeded(spec, nu.StrRef(held), parent, label, first)), held)
     for attr, value in reversed(first):
         body = nu.Let(attr, value, body)
     return body
@@ -166,14 +166,12 @@ def _seeded(
     ]
     for cell, source in spec.cells:
         cid, ui = fresh("c"), fresh("ui")
-        first += [(cid, MintId("c")), (ui, HasUi(source, plane_id, nu.StrAttrRef(cid)))]
-        writes.append(
-            cell_writes(plane_id, nu.StrAttrRef(cid), source, nu.BoolAttrRef(ui), name=cell)
-        )
+        first += [(cid, MintId("c")), (ui, HasUi(source, plane_id, nu.StrRef(cid)))]
+        writes.append(cell_writes(plane_id, nu.StrRef(cid), source, nu.BoolRef(ui), name=cell))
     for child in spec.children:
         pid = fresh("p")
         first.append((pid, MintId("p")))
-        writes.append(_seeded(child, nu.StrAttrRef(pid), plane_id, child.label, first))
+        writes.append(_seeded(child, nu.StrRef(pid), plane_id, child.label, first))
     return nu.Sequential(*writes)
 
 

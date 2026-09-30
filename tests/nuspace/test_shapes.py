@@ -191,27 +191,26 @@ async def test_a_cell_does_not_hear_its_siblings_cell_state(tmp_path, target, ex
 
 async def test_plane_and_cell_can_be_attrs_bound_at_run_time(tmp_path):
     write, read = _store(tmp_path)
-    plane, cell = nu.StrAttrRef("plane"), nu.StrAttrRef("cell")
-    bind = nu.SetCmd(plane, nu.Str("p")) >> nu.SetCmd(cell, nu.Str("c"))
-    await write(bind >> reroot(bump() >> Chat.title.set("t"), plane, cell))
+    plane, cell = nu.StrRef("plane"), nu.StrRef("cell")
+    body = reroot(bump() >> Chat.title.set("t"), plane, cell)
+    await write(nu.Let(plane, nu.Str("p"), nu.Let(cell, nu.Str("c"), body)))
     assert await read(nu.List.of(n_of("p", "c"), States.planes["p"].state["title"])) == [1, "t"]
 
 
 async def test_the_class_form_survives_a_pickle(tmp_path):
     write, read = _store(tmp_path)
-    plane, cell = nu.StrAttrRef("plane"), nu.StrAttrRef("cell")
+    plane, cell = nu.StrRef("plane"), nu.StrRef("cell")
     rewrite = pickle.loads(pickle.dumps(Reroot(plane, cell)))  # noqa: S301
-    bind = nu.SetCmd(plane, nu.Str("p")) >> nu.SetCmd(cell, nu.Str("c"))
-    await write(bind >> rewrite(bump()))
+    await write(nu.Let(plane, nu.Str("p"), nu.Let(cell, nu.Str("c"), rewrite(bump()))))
     assert await read(n_of("p", "c")) == 1
 
 
 async def test_a_rerooted_term_survives_a_pickle(tmp_path):
     """What actually crosses to a worker: the term, already rewritten."""
     write, read = _store(tmp_path)
-    plane = nu.StrAttrRef("plane")
+    plane = nu.StrRef("plane")
     term = pickle.loads(pickle.dumps(reroot(bump(), plane, "c")))  # noqa: S301
-    await write(nu.SetCmd(plane, nu.Str("p")) >> term)
+    await write(nu.Let(plane, nu.Str("p"), term))
     assert await read(n_of("p", "c")) == 1
 
 

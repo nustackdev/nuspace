@@ -33,12 +33,12 @@ def cell_count(pid):
 
 
 def members(planes, m):
-    return nu.Filter(nu.Iter(planes), nu.Eq(nu.DictAttrRef("p")["made"], m), key="p")
+    return nu.Filter(nu.Iter(planes), nu.Eq(nu.ObjectRef("p")["made"], m), key="p")
 
 
 def draw():
-    p, m = nu.DictAttrRef("p"), nu.StrAttrRef("m")
-    planes = nu.ListAttrRef("planes")
+    p, m = nu.ObjectRef("p"), nu.StrRef("m")
+    planes = nu.ObjectRef("planes")
     tagged = nu.Collect(
         nu.Map(ops.plane_rows(), nu.Dict.of(made=made(p), cells=cell_count(p["id"])), key="p")
     )
@@ -77,7 +77,7 @@ def cell_count(pid):
 
 
 def draw():
-    p = nu.DictAttrRef("p")
+    p = nu.ObjectRef("p")
     row = nu.List.of(
         p["name"], prop(p, "made_by"), nu.If(prop(p, "system"), "yes", "no"), cell_count(p["id"])
     )

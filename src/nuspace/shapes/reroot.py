@@ -71,7 +71,7 @@ def reroot(term: nu.Nu, plane: nu.StrArg, cell: nu.StrArg) -> nu.Nu:
     Args:
         term: Any Nu term, typically a loaded program.
         plane: The plane id. Any ``StrArg``, since the kernel binds it at run
-            time (eg ``nu.StrAttrRef``).
+            time (eg ``nu.StrRef``).
         cell: The cell id, same.
 
     Returns:

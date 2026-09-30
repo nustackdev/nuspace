@@ -109,7 +109,7 @@ def add_plane(
 
     def write(pid_name: str) -> nu.Nu:
         return plane_writes(
-            nu.StrAttrRef(pid_name),
+            nu.StrRef(pid_name),
             backend=backend,
             name=name,
             parent=parent,
@@ -167,11 +167,9 @@ def remove_plane(plane_id: nu.StrArg) -> nu.Nu:
         True when removed, False when refused or missing.
     """
     gone = fresh("removed")
-    ids = nu.ListAttrRef(gone)
+    ids = nu.ObjectRef(gone)
     each = fresh("removed_each")
-    drop = atomic_state(
-        nu.ForEachDo(nu.List(ids), drop_plane_state(nu.StrAttrRef(each)), item=each)
-    )
+    drop = atomic_state(nu.ForEachDo(nu.List(ids), drop_plane_state(nu.StrRef(each)), item=each))
     removed = nu.Gt(nu.List(ids).len(), nu.Int(0))
     return nu.Let(gone, _remove_rows(plane_id), binding(removed, lambda _: drop, tag="removed_ok"))
 
@@ -184,11 +182,11 @@ def _remove_rows(plane_id: nu.StrArg) -> nu.Nu:
     """
 
     def body(out: str) -> nu.Nu:
-        removed = nu.ListAttrRef(out)
+        removed = nu.ObjectRef(out)
 
-        def drop(ids: nu.ListAttrRef) -> nu.Nu:
+        def drop(ids: nu.ObjectRef) -> nu.Nu:
             item = fresh("drop")
-            at = nu.StrAttrRef(item)
+            at = nu.StrRef(item)
             system = nu.List(
                 nu.Collect(
                     nu.Filter(nu.List(ids), flag(Space.planes[at].props.system, False), key=item)
@@ -196,7 +194,7 @@ def _remove_rows(plane_id: nu.StrArg) -> nu.Nu:
             )
             gone = nu.List(ids)
             each = fresh("drop_each")
-            each_ref = nu.StrAttrRef(each)
+            each_ref = nu.StrRef(each)
             delete = nu.ForEachDo(
                 gone,
                 unlink(each_ref)
@@ -206,9 +204,7 @@ def _remove_rows(plane_id: nu.StrArg) -> nu.Nu:
                 item=each,
             )
             ok = nu.And(plane_exists(plane_id), nu.Eq(system.len(), nu.Int(0)))
-            return nu.IfDo(
-                ok, live_runs_of(gone.contains, kill) >> delete >> nu.SetCmd(removed, gone)
-            )
+            return nu.IfDo(ok, live_runs_of(gone.contains, kill) >> delete >> removed.set(gone))
 
         return subtree(plane_id, drop)
 

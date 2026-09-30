@@ -111,7 +111,7 @@ def _knowing_ui(
     held for it, and a retried commit does not construct again.
     """
     name = fresh("ui")
-    return nu.Let(name, HasUi(prog, plane_id, cell_id), build(nu.BoolAttrRef(name)))
+    return nu.Let(name, HasUi(prog, plane_id, cell_id), build(nu.BoolRef(name)))
 
 
 def _place(order: nu.ListRef, cell_id: nu.StrArg, index: nu.IntArg | None) -> nu.Nu:
@@ -150,17 +150,17 @@ def add_cell(
     """
 
     def write(cid_name: str, has_ui: nu.Nu) -> nu.Nu:
-        cid = nu.StrAttrRef(cid_name)
+        cid = nu.StrRef(cid_name)
         placed = cell_writes(
             plane_id, cid, prog, has_ui, name=name, index=index, made_by=made_by, meta=meta
         )
-        return placed >> nu.IfDo(nu.Not(plane_exists(plane_id)), nu.SetCmd(cid, nu.Str("")))
+        return placed >> nu.IfDo(nu.Not(plane_exists(plane_id)), cid.set(nu.Str("")))
 
     # Minted ahead of the bracket, so has_ui is worked out outside it. The
     # binding the op yields stays inside: an attr set in a retried bracket
     # does not reach past it.
     minted = fresh("c")
-    cid = nu.StrAttrRef(minted)
+    cid = nu.StrRef(minted)
     value = MintId("c") if cell_id is None else nu.Str(cell_id)
     return nu.Let(
         minted,

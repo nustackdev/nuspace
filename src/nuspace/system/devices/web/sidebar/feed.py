@@ -107,17 +107,15 @@ def rows() -> nu.Nu:
     """
     pick, each, kid = fresh("sidebar_pick"), fresh("sidebar_row"), fresh("sidebar_kid")
     listed, known = fresh("sidebar_listed"), fresh("sidebar_known")
-    picked, row = nu.DictAttrRef(pick), nu.DictAttrRef(each)
-    held, ids = nu.ListAttrRef(listed), nu.ListAttrRef(known)
+    picked, row = nu.Dict(nu.ObjectRef(pick)), nu.Dict(nu.ObjectRef(each))
+    held, ids = nu.ObjectRef(listed), nu.ObjectRef(known)
     shown = nu.List(
         nu.Collect(nu.Filter(ops.plane_rows(), nu.ToBool(_prop(picked, "ui")), key=pick))
     )
 
     def kids(node_id: nu.Nu) -> nu.Nu:
         return nu.List(
-            nu.Collect(
-                nu.Filter(ops.children(node_id), ids.contains(nu.ObjectAttrRef(kid)), key=kid)
-            )
+            nu.Collect(nu.Filter(ops.children(node_id), ids.contains(nu.ObjectRef(kid)), key=kid))
         )
 
     def listed_under(row: nu.Nu) -> nu.Nu:
@@ -168,7 +166,7 @@ def rows() -> nu.Nu:
 def pins() -> nu.Nu:
     """The pinned plane ids, in order, those that draw only. Bare read."""
     at = fresh("sidebar_pin")
-    return nu.List(nu.Collect(nu.Filter(ops.pinned(), _drawn(nu.StrAttrRef(at)), key=at)))
+    return nu.List(nu.Collect(nu.Filter(ops.pinned(), _drawn(nu.StrRef(at)), key=at)))
 
 
 def create(
@@ -207,12 +205,12 @@ def move(plane_id: nu.Nu, parent_id: nu.Nu, index: nu.Nu) -> nu.Nu:
     """
     under, others, drawn = fresh("sidebar_under"), fresh("sidebar_others"), fresh("sidebar_drawn")
     at = fresh("sidebar_at")
-    item = nu.ObjectAttrRef(at)
+    item = nu.ObjectRef(at)
     everyone = nu.List(
-        nu.Collect(nu.Filter(ops.children(nu.StrAttrRef(under)), nu.Ne(item, plane_id), key=at))
+        nu.Collect(nu.Filter(ops.children(nu.StrRef(under)), nu.Ne(item, plane_id), key=at))
     )
-    shown = nu.List(nu.Collect(nu.Filter(nu.ListAttrRef(others), _drawn(nu.ToStr(item)), key=at)))
-    rest, seen = nu.ListAttrRef(others), nu.ListAttrRef(drawn)
+    shown = nu.List(nu.Collect(nu.Filter(nu.ObjectRef(others), _drawn(nu.ToStr(item)), key=at)))
+    rest, seen = nu.List(nu.ObjectRef(others)), nu.ObjectRef(drawn)
     position = nu.If(
         nu.And(nu.Ge(index, nu.Int(0)), nu.Lt(index, seen.len())),
         rest.index(seen[index]),
@@ -227,7 +225,7 @@ def move(plane_id: nu.Nu, parent_id: nu.Nu, index: nu.Nu) -> nu.Nu:
             nu.Let(
                 drawn,
                 snap(shown),
-                ops.move_plane(plane_id, parent=nu.StrAttrRef(under), index=position),
+                ops.move_plane(plane_id, parent=nu.StrRef(under), index=position),
             ),
         ),
     )
@@ -253,7 +251,7 @@ def _changes() -> list[nu.Nu]:
 
 def _index(attr: str) -> nu.Nu:
     """An event's ``index``, -1 (the end) when it has none."""
-    return nu.ToInt(nu.DictAttrRef(attr).get_item(nu.Str("index"), nu.Int(-1)))
+    return nu.ToInt(nu.Dict(nu.ObjectRef(attr)).get_item(nu.Str("index"), nu.Int(-1)))
 
 
 def _ship(sidebar: Ref) -> nu.Nu:
@@ -264,7 +262,7 @@ def _ship(sidebar: Ref) -> nu.Nu:
         nu.Let(
             pinned,
             snap(pins()),
-            interactions.set_tree(sidebar, nu.ListAttrRef(held), nu.ListAttrRef(pinned)),
+            interactions.set_tree(sidebar, nu.ObjectRef(held), nu.ObjectRef(pinned)),
         ),
     )
 
@@ -272,7 +270,7 @@ def _ship(sidebar: Ref) -> nu.Nu:
 def searched(snippets: Sequence[Snippet]) -> nu.Nu:
     """``search.run``'s op: a search over what it names, when the query is not blank."""
     query = field_str(_SEARCH, "query")
-    titles = nu.ToBool(nu.DictAttrRef(_SEARCH).get_item(nu.Str("titles"), nu.Bool(True)))
+    titles = nu.ToBool(nu.Dict(nu.ObjectRef(_SEARCH)).get_item(nu.Str("titles"), nu.Bool(True)))
     made = search.search(
         query,
         field_ids(_SEARCH, "snippets"),

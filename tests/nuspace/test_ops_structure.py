@@ -83,7 +83,7 @@ async def test_add_plane_given_id_and_parent(store):
 
 async def test_yielding_ops_chain_and_bind(store):
     """A yielding op is an Action: ``>>`` takes it, ``nu.Let`` binds it."""
-    pid = nu.StrAttrRef("p")
+    pid = nu.StrRef("p")
     term = ops.add_plane(name="a", backend="async") >> nu.Let(
         "p", ops.add_plane(name="b", backend="async"), ops.add_cell(pid, "src", name="c")
     )

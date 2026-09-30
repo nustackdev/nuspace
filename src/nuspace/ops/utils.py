@@ -124,7 +124,7 @@ class PopAttr(ScalarAction):
     _mutates = Declared(value=frozenset({0}), name="mutates")
 
     def __init__(self, name: str) -> None:
-        super().__init__(nu.ObjectAttrRef(name))
+        super().__init__(nu.ObjectRef(name))
         self._payload = {"name": name}
 
     def _take(self, rt: Runtime, value: object) -> object:
@@ -218,13 +218,13 @@ def binding(
     return nu.Let(name, value, then(build(name), name))
 
 
-def minting(prefix: str, build: Callable[[nu.StrAttrRef], nu.Nu]) -> nu.Nu:
+def minting(prefix: str, build: Callable[[nu.StrRef], nu.Nu]) -> nu.Nu:
     """Mint an id at evaluation time, run ``build(id_ref)``, yield the id.
 
     Minted when the term runs, not when it is built, so one term evaluated
     twice makes two things.
     """
-    return binding(MintId(prefix), lambda name: build(nu.StrAttrRef(name)), tag=prefix)
+    return binding(MintId(prefix), lambda name: build(nu.StrRef(name)), tag=prefix)
 
 
 def as_list(items: Sequence[nu.StrArg] | nu.Nu) -> nu.List:
@@ -265,7 +265,7 @@ def keep_order(
         member: The collection that decides whether an id is real.
     """
     item = fresh("order")
-    at = nu.ObjectAttrRef(item)
+    at = nu.ObjectRef(item)
     listed = as_list(wanted)
     kept = nu.List(nu.Collect(nu.Filter(listed, member.contains(at), key=item)))
     # Ids left out keep their place after the named ones, so a partial order

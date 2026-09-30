@@ -12,6 +12,7 @@ separately here.
 
 ## Unreleased
 
+- Moves to Nu's pure context refs, with no change in behaviour
 - Moves to Nu's typed collection refs, with no change in behaviour
 - New planes appear whole in one step, with live status from the first frame
 - Every plane now says what it runs on, sync work in processes, drawing async

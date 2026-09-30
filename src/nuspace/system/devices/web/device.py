@@ -94,7 +94,7 @@ def _erase(viewer: Ref, plane: nu.Nu) -> nu.Nu:
     """A plane's cells erased as drawn, so nothing of a closed pane stays on screen."""
     cell = fresh("web_erase_cell")
     ids = nu.If(ops.plane_exists(plane), ops.cells(plane), nu.List.of())
-    return nu.ForEachDo(snap(ids), cell_ui(viewer, nu.StrAttrRef(cell)).erase(), item=cell)
+    return nu.ForEachDo(snap(ids), cell_ui(viewer, nu.StrRef(cell)).erase(), item=cell)
 
 
 def _remembered(plane: nu.Nu) -> nu.Nu:
@@ -121,8 +121,8 @@ def remember(opened: nu.Nu) -> nu.Nu:
     """
     recents = Space.state.recents
     item, new = fresh("web_recent"), fresh("web_recent_new")
-    at = nu.ObjectAttrRef(item)
-    fresh_ids = nu.ListAttrRef(new)
+    at = nu.ObjectRef(item)
+    fresh_ids = nu.ObjectRef(new)
     kept = nu.Filter(nu.List(or_else(recents, [])), nu.Not(fresh_ids.contains(at)), key=item)
     wanted = nu.List(
         nu.Collect(nu.Reversed(nu.Filter(nu.List(opened), _remembered(nu.ToStr(at)), key=item)))
@@ -142,7 +142,7 @@ def route_arm(viewer: Ref, sid: nu.StrArg) -> nu.Nu:
     row = _connections[sid]
     item, wanted, left = fresh("web_open"), fresh("web_open_ids"), fresh("web_closed")
     was, entered = fresh("web_was"), fresh("web_entered")
-    at = nu.ObjectAttrRef(item)
+    at = nu.ObjectRef(item)
     ids = nu.List(
         nu.Collect(
             nu.Unique(
@@ -154,25 +154,25 @@ def route_arm(viewer: Ref, sid: nu.StrArg) -> nu.Nu:
             )
         )
     )
-    kept = nu.ListAttrRef(wanted)
+    kept = nu.ObjectRef(wanted)
     closed = nu.Filter(
         nu.List(snap(or_else(row.routes, []))),
-        nu.Not(kept.contains(nu.ObjectAttrRef(left))),
+        nu.Not(kept.contains(nu.ObjectRef(left))),
         key=left,
     )
     # Read inside the commit, so a burst of opens never pushes one twice.
     opened = nu.Filter(
         kept,
-        nu.Not(nu.List(or_else(row.routes, [])).contains(nu.ObjectAttrRef(entered))),
+        nu.Not(nu.List(or_else(row.routes, [])).contains(nu.ObjectRef(entered))),
         key=entered,
     )
-    write = nu.Let(
-        was, nu.List(nu.Collect(opened)), remember(nu.ListAttrRef(was))
-    ) >> row.routes.set(kept)
+    write = nu.Let(was, nu.List(nu.Collect(opened)), remember(nu.ObjectRef(was))) >> row.routes.set(
+        kept
+    )
     body = nu.Let(
         wanted,
         ids,
-        nu.ForEachDo(nu.List(nu.Collect(closed)), _erase(viewer, nu.StrAttrRef(left)), item=left)
+        nu.ForEachDo(nu.List(nu.Collect(closed)), _erase(viewer, nu.StrRef(left)), item=left)
         >> atomic(nu.IfDo(_connections.contains(sid), write)),
     )
     return _arms.event(_ROUTE, on_open(viewer), body)
@@ -244,7 +244,7 @@ def serve_web(
         factory, ``factory(sid) -> Env``.
     """
     session_address = session_address or f"127.0.0.1:{free_port()}"
-    sid = nu.StrAttrRef(SID_ATTR)
+    sid = nu.StrRef(SID_ATTR)
     term = nu.With(
         listen(
             session_cls=WsSession,

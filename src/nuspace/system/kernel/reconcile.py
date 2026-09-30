@@ -37,7 +37,7 @@ def _containers() -> nu.Nu:
 def reconcile() -> nu.Nu:
     """End every live plane run and worker ``killed``, empty the indexes. One commit."""
     w_item, r_item = fresh("reconcile_w"), fresh("reconcile_r")
-    worker = _kernel.workers[nu.StrAttrRef(w_item)]
+    worker = _kernel.workers[nu.StrRef(w_item)]
     workers = nu.ForEachDo(
         nu.list(_kernel.workers_running),
         nu.IfDo(
@@ -47,7 +47,7 @@ def reconcile() -> nu.Nu:
         item=w_item,
     )
     runs = nu.ForEachDo(
-        nu.list(_kernel.running), end_run(nu.StrAttrRef(r_item), EXIT_KILLED), item=r_item
+        nu.list(_kernel.running), end_run(nu.StrRef(r_item), EXIT_KILLED), item=r_item
     )
     return atomic(
         _containers()

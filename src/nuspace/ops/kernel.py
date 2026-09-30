@@ -145,7 +145,7 @@ def add_plane_run(
     each = nu.Let(
         cr,
         MintId("cr"),
-        _add_cell_run(run_id, plane_id, nu.StrAttrRef(cell), nu.StrAttrRef(cr), by),
+        _add_cell_run(run_id, plane_id, nu.StrRef(cell), nu.StrRef(cr), by),
     )
     writes = (
         row.plane.set(plane_id)
@@ -186,11 +186,11 @@ def plane_run(
     """
 
     def write(rid_name: str) -> nu.Nu:
-        rid = nu.StrAttrRef(rid_name)
+        rid = nu.StrRef(rid_name)
         return nu.IfDo(
             plane_exists(plane_id),
             add_plane_run(rid, plane_id, by=by, envs=envs),
-            nu.SetCmd(rid, nu.Str("")),
+            rid.set(nu.Str("")),
         )
 
     return atomic(binding(MintId("r"), write, tag="run"))
@@ -219,11 +219,9 @@ def cell_run(run_id: nu.StrArg, cell_id: nu.StrArg, *, by: nu.StrArg = "") -> nu
     plane = text(_kernel.runs[run_id].plane)
 
     def write(cr_name: str) -> nu.Nu:
-        cr = nu.StrAttrRef(cr_name)
+        cr = nu.StrRef(cr_name)
         live = nu.And(_kernel.running.contains(run_id), cell_exists(plane, cell_id))
-        return nu.IfDo(
-            live, _add_cell_run(run_id, plane, cell_id, cr, by), nu.SetCmd(cr, nu.Str(""))
-        )
+        return nu.IfDo(live, _add_cell_run(run_id, plane, cell_id, cr, by), cr.set(nu.Str("")))
 
     return atomic(binding(MintId("cr"), write, tag="cell_run"))
 
@@ -245,11 +243,11 @@ def cell_interrupt(run_id: nu.StrArg, cell_run_id: nu.StrArg) -> nu.Nu:
     return atomic(interrupt(run_id, cell_run_id))
 
 
-def _each_live_cell(run_id: nu.StrArg, body: Callable[[nu.StrAttrRef], nu.Nu]) -> nu.Nu:
+def _each_live_cell(run_id: nu.StrArg, body: Callable[[nu.StrRef], nu.Nu]) -> nu.Nu:
     """``body(cell_run_id)`` for every live cell run of a plane run. No bracket."""
     item = fresh("live_cell")
     return nu.ForEachDo(
-        nu.list(_kernel.runs[run_id].cells_running), body(nu.StrAttrRef(item)), item=item
+        nu.list(_kernel.runs[run_id].cells_running), body(nu.StrRef(item)), item=item
     )
 
 
@@ -300,10 +298,10 @@ def plane_stop(run_id: nu.StrArg, grace: nu.FloatArg = STOP_GRACE) -> nu.Nu:
 # --- Unbracketed parts, for ops that take away what runs belong to ----------------------
 
 
-def live_runs_of(match: Callable[[nu.Nu], nu.Nu], body: Callable[[nu.StrAttrRef], nu.Nu]) -> nu.Nu:
+def live_runs_of(match: Callable[[nu.Nu], nu.Nu], body: Callable[[nu.StrRef], nu.Nu]) -> nu.Nu:
     """``body(run_id)`` for every live plane run whose plane ``match(plane)`` holds for. No bracket."""
     item = fresh("live_run")
-    rid = nu.StrAttrRef(item)
+    rid = nu.StrRef(item)
     plane = text(_kernel.runs[rid].plane)
     return nu.ForEachDo(nu.list(_kernel.running), nu.IfDo(match(plane), body(rid)), item=item)
 
@@ -311,8 +309,8 @@ def live_runs_of(match: Callable[[nu.Nu], nu.Nu], body: Callable[[nu.StrAttrRef]
 def interrupt_cell(plane_id: nu.StrArg, cell_id: nu.StrArg) -> nu.Nu:
     """Ask every live cell run of a cell, in any live run of its plane, to stop. No bracket."""
 
-    def each(rid: nu.StrAttrRef) -> nu.Nu:
-        def one(cr: nu.StrAttrRef) -> nu.Nu:
+    def each(rid: nu.StrRef) -> nu.Nu:
+        def one(cr: nu.StrRef) -> nu.Nu:
             same = nu.Eq(text(_kernel.runs[rid].cells[cr].cell), cell_id)
             return nu.IfDo(same, interrupt(rid, cr))
 
@@ -339,7 +337,7 @@ def _ids(ref: nu.Nu) -> nu.Nu:
     return nu.List(nu.Collect(nu.Sorted(nu.list(ref))))
 
 
-def _cell_run_row(run_id: nu.StrArg, cr: nu.StrAttrRef) -> nu.Nu:
+def _cell_run_row(run_id: nu.StrArg, cr: nu.StrRef) -> nu.Nu:
     row = _kernel.runs[run_id].cells[cr]
     return nu.Dict.of(
         id=cr,
@@ -364,13 +362,13 @@ def cell_runs(run_id: nu.StrArg, *, live: bool = False) -> nu.Nu:
     row = _kernel.runs[run_id]
     item = fresh("cell_runs")
     ids = _ids(row.cells_running) if live else nu.list(row.cells.keys())
-    return nu.Collect(nu.Map(ids, _cell_run_row(run_id, nu.StrAttrRef(item)), key=item))
+    return nu.Collect(nu.Map(ids, _cell_run_row(run_id, nu.StrRef(item)), key=item))
 
 
 def _live_workers(rid: nu.StrArg) -> nu.Nu:
     """The plane run's live workers, oldest first. A walk of ``workers_running``, never its history."""
     item = fresh("run_workers")
-    wid = nu.StrAttrRef(item)
+    wid = nu.StrRef(item)
     return nu.List(
         nu.Collect(
             nu.Filter(
@@ -409,7 +407,7 @@ def runs(plane: nu.StrArg | None = None) -> nu.Nu:
     :func:`run`.
     """
     item = fresh("runs")
-    rid = nu.StrAttrRef(item)
+    rid = nu.StrRef(item)
     ids: nu.Nu = _ids(_kernel.running)
     if plane is not None:
         ids = nu.Filter(ids, nu.Eq(text(_kernel.runs[rid].plane), plane), key=item)
@@ -431,7 +429,7 @@ def workers() -> nu.Nu:
     ``handle`` is the backend's own, not for reading into.
     """
     item = fresh("workers")
-    wid = nu.StrAttrRef(item)
+    wid = nu.StrRef(item)
     row = _kernel.workers[wid]
     return nu.Collect(
         nu.Map(

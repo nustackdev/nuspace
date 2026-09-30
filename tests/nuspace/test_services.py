@@ -61,9 +61,7 @@ BOOTED_PLANE = "booted"
 LIVE_BOOTED = [p for p in BOOTED if p != "reactions"]
 NAME = "nuspace-services"
 
-READS_SESSION = prog(
-    'return Tick.s.set(nu.StrAttrRef("test.session")) >> nu.ForeverDo(nu.Delay(0.05))'
-)
+READS_SESSION = prog('return Tick.s.set(nu.StrRef("test.session")) >> nu.ForeverDo(nu.Delay(0.05))')
 #: Fails, but only after long enough for the supervisor to have seen it live.
 FAILS_LATE = prog('return nu.Delay(0.6) >> nu.Raise(nu.Str("boom"))')
 

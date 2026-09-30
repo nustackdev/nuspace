@@ -24,7 +24,7 @@ class Stamp:
     """
 
     def __call__(self, term: nu.Nu) -> nu.Nu:
-        plane = nu.StrAttrRef(PLANE_ATTR)
+        plane = nu.StrRef(PLANE_ATTR)
         return States.planes[plane].state.set_item("stamped", nu.Bool(True)) >> term
 
 

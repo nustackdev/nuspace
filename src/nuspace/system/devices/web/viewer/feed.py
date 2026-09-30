@@ -94,7 +94,7 @@ def plane_cells(plane_id: nu.StrArg) -> nu.Nu:
     ``has_ui`` is whether its program draws, True where never worked out.
     """
     item = fresh("viewer_cell")
-    row = nu.DictAttrRef(item)
+    row = nu.Dict(nu.ObjectRef(item))
     props = nu.Dict(row.get_item(nu.Str("props"), nu.Dict.of()))
     return nu.Collect(
         nu.Map(
@@ -157,7 +157,7 @@ def _idle(plane_id: nu.StrArg) -> nu.Nu:
     """Every cell of the plane idle, in order. Bare read."""
     cell = fresh("status_idle")
     row = nu.Dict.of(
-        cell_id=nu.StrAttrRef(cell),
+        cell_id=nu.StrRef(cell),
         state=nu.Str(STATE_IDLE),
         error=nu.Str(""),
         started_at=nu.Int(0),
@@ -174,10 +174,10 @@ def statuses(plane_id: nu.StrArg, run_id: nu.StrArg) -> nu.Nu:
     """
     row = _runs[run_id]
     cell, pick, state = fresh("status_cell"), fresh("status_pick"), fresh("status_state")
-    here = nu.StrAttrRef(cell)
+    here = nu.StrRef(cell)
     chosen = ops.latest(run_id, here)
-    picked = nu.StrAttrRef(pick)
-    said = nu.StrAttrRef(state)
+    picked = nu.StrRef(pick)
+    said = nu.StrRef(state)
     started = row.cells[picked].started_at
     entry = nu.Dict.of(
         cell_id=here,
@@ -206,8 +206,8 @@ def _absence(plane: nu.Nu) -> nu.Nu:
 
 def _ship_plane(viewer: Ref, plane: nu.Nu) -> nu.Nu:
     held, absent = fresh("viewer_plane"), fresh("viewer_absent")
-    got = nu.DictAttrRef(held)
-    why = nu.StrAttrRef(absent)
+    got = nu.Dict(nu.ObjectRef(held))
+    why = nu.StrRef(absent)
     shown = nu.Let(
         held,
         snap(plane_view(plane)),
@@ -228,11 +228,11 @@ def _ship_plane(viewer: Ref, plane: nu.Nu) -> nu.Nu:
 
 def _ship_status(viewer: Ref, sid: nu.StrArg, plane: nu.Nu) -> nu.Nu:
     held, run = fresh("viewer_status"), fresh("viewer_run")
-    read = nu.If(ops.plane_exists(plane), statuses(plane, nu.StrAttrRef(run)), nu.List.of())
+    read = nu.If(ops.plane_exists(plane), statuses(plane, nu.StrRef(run)), nu.List.of())
     return nu.Let(
         run,
         snap(pane_run(sid, plane)),
-        nu.Let(held, snap(read), interactions.set_status(viewer, plane, nu.ListAttrRef(held))),
+        nu.Let(held, snap(read), interactions.set_status(viewer, plane, nu.ObjectRef(held))),
     )
 
 
@@ -364,7 +364,7 @@ def _events(viewer: Ref, snippets: Sequence[Snippet]) -> list[nu.Nu]:
                 nu.Ne(field_str(_META, "plane_id"), nu.Str("")),
                 ops.set_plane_meta(
                     field_str(_META, "plane_id"),
-                    nu.Dict(nu.DictAttrRef(_META).get_item(nu.Str("meta"), nu.Dict.of())),
+                    nu.Dict(nu.Dict(nu.ObjectRef(_META)).get_item(nu.Str("meta"), nu.Dict.of())),
                 ),
             ),
         ),
@@ -391,7 +391,7 @@ def viewer_feed(viewer: Ref, sid: nu.StrArg, snippets: Iterable[Snippet] = ()) -
     snippets = list(snippets)
     routes = Space.connections[sid].routes
     at = fresh("viewer_route")
-    plane = nu.StrAttrRef(at)
+    plane = nu.StrRef(at)
     shown = nu.ParallelAsync(
         _arms.state(
             "plane",
