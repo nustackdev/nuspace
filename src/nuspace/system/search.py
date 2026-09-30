@@ -185,17 +185,22 @@ def searchable(snippets: Sequence[Snippet]) -> dict[str, str]:
 # --- The search's own cell --------------------------------------------------------------
 
 # One program, one cell: nothing runs beside it, so fixed attr names are safe.
-_Q = "nuspace.search.query"
-_SEL = "nuspace.search.snippets"
-_TITLES = "nuspace.search.titles"
 _PLANE = "nuspace.search.plane"
-_NAME = "nuspace.search.name"
-_CELLS = "nuspace.search.cells"
 _ROW = "nuspace.search.row"
-_CELL = "nuspace.search.cell"
-_MADE = "nuspace.search.made_by"
-_FOUND = "nuspace.search.found"
 _HIT = "nuspace.search.hit"
+
+
+class Attrs(nu.Shape):
+    """The names a search's walk declares. None is the kernel's ``plane`` or ``cell``."""
+
+    query = nu.StrRef.slot()
+    snippets = nu.ObjectRef.slot()
+    titles = nu.BoolRef.slot()
+    title = nu.StrRef.slot()
+    plane_cells = nu.ObjectRef.slot()
+    cell_id = nu.StrRef.slot()
+    made_by = nu.StrRef.slot()
+    found = nu.ObjectRef.slot()
 
 
 def _field(row: nu.Nu, key: str) -> nu.Nu:
@@ -208,7 +213,7 @@ def _append(found: nu.Nu, by: nu.StrArg) -> nu.Nu:
     row = nu.Dict.of(
         plane=_field(hit, "plane"),
         cell=_field(hit, "cell"),
-        title=nu.StrRef(_NAME),
+        title=Attrs.title,
         excerpt=_field(hit, "excerpt"),
         by=by,
     )
@@ -233,19 +238,17 @@ def _cell_rows(plane: nu.Nu) -> nu.Nu:
 
 def _by_snippet(name: str, fn: Callable[..., nu.Nu]) -> nu.Nu:
     """The cell at hand searched by ``fn``, when its snippet is ``name`` and ``name`` was picked."""
-    q, plane, cell = nu.StrRef(_Q), nu.StrRef(_PLANE), nu.StrRef(_CELL)
-    picked = nu.And(
-        nu.Eq(nu.StrRef(_MADE), nu.Str(name)), nu.ObjectRef(_SEL).contains(nu.Str(name))
-    )
-    found = nu.Let(_FOUND, snap(nu.List(fn(q, plane, cell))), _append(nu.ObjectRef(_FOUND), name))
+    picked = nu.And(nu.Eq(Attrs.made_by, nu.Str(name)), Attrs.snippets.contains(nu.Str(name)))
+    hits = snap(nu.List(fn(Attrs.query, nu.StrRef(_PLANE), Attrs.cell_id)))
+    found = nu.Let(Attrs.found, hits, _append(Attrs.found, name))
     return nu.IfDo(picked, found)
 
 
 def _title() -> nu.Nu:
     """The plane at hand, a hit when titles count and its name matches."""
-    name = nu.StrRef(_NAME)
+    name = Attrs.title
     hit = nu.List.of(nu.Dict.of(plane=nu.StrRef(_PLANE), cell=nu.Str(""), excerpt=name))
-    return nu.IfDo(nu.And(nu.BoolRef(_TITLES), matches(name, nu.StrRef(_Q))), _append(hit, TITLES))
+    return nu.IfDo(nu.And(Attrs.titles, matches(name, Attrs.query)), _append(hit, TITLES))
 
 
 def run(searchers: Mapping[str, str]) -> nu.Nu:
@@ -264,21 +267,21 @@ def run(searchers: Mapping[str, str]) -> nu.Nu:
     """
     per_snippet = [_by_snippet(name, load_searcher(ref)) for name, ref in searchers.items()]
     each_cell = nu.Let(
-        _CELL,
+        Attrs.cell_id,
         _field(nu.ObjectRef(_ROW), "id"),
-        nu.Let(_MADE, _field(nu.ObjectRef(_ROW), "made_by"), nu.Sequential(*per_snippet)),
+        nu.Let(Attrs.made_by, _field(nu.ObjectRef(_ROW), "made_by"), nu.Sequential(*per_snippet)),
     )
     plane = nu.StrRef(_PLANE)
     name = snap(text(Space.planes[plane].name))
     each_plane = nu.Let(
-        _NAME,
+        Attrs.title,
         nu.If(nu.Eq(name, nu.Str("")), nu.Str("Untitled"), name),
         _title()
         >> (
             nu.Let(
-                _CELLS,
+                Attrs.plane_cells,
                 snap(_cell_rows(plane)),
-                nu.ForEachDo(nu.ObjectRef(_CELLS), each_cell, item=_ROW),
+                nu.ForEachDo(Attrs.plane_cells, each_cell, item=_ROW),
             )
             if per_snippet
             else nu.Noop()
@@ -292,20 +295,20 @@ def run(searchers: Mapping[str, str]) -> nu.Nu:
             titles=flag(Search.titles, False),
         )
     )
-    held = nu.ObjectRef(_SEL)
+    held = Attrs.snippets
     body = nu.Let(
-        _SEL,
+        held,
         asked,
         nu.Let(
-            _Q,
+            Attrs.query,
             _field(held, "query"),
             nu.Let(
-                _TITLES,
+                Attrs.titles,
                 nu.ToBool(nu.Dict(held).get_item(nu.Str("titles"), nu.Bool(False))),
                 nu.Let(
-                    _SEL,
+                    held,
                     nu.List(nu.Dict(held).get_item(nu.Str("snippets"), nu.Literal([]))),
-                    nu.IfDo(nu.Ne(nu.StrRef(_Q).strip(), nu.Str("")), walk),
+                    nu.IfDo(nu.Ne(Attrs.query.strip(), nu.Str("")), walk),
                 ),
             ),
         ),

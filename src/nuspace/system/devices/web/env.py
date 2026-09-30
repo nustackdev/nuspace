@@ -16,7 +16,7 @@ Everything here is safe for a worker to import.
 from __future__ import annotations
 
 import nu
-from nuspace.ops import CELL_ATTR
+from nuspace.ops import Here
 from nuspace.system.devices.web.session import SESSION_ATTR, proxied_session
 from nuspace.system.devices.web.shell import Shell
 from nuspace.system.devices.web.utils import CellRoot, cell_ui
@@ -46,7 +46,7 @@ class SessionWrap:
 
     def __call__(self, body: nu.Nu) -> nu.Nu:
         """``body``, drawing on the connection."""
-        erase = cell_ui(Shell.viewer, nu.StrRef(CELL_ATTR)).erase()
+        erase = cell_ui(Shell.viewer, Here.cell).erase()
         return nu.Let(SESSION_ATTR, nu.Str(self.sid), proxied_session(self.address, erase >> body))
 
 
@@ -60,7 +60,7 @@ def session_env(address: str) -> EnvFactory:
     def factory(sid: str) -> Env:
         return Env(
             wrap=SessionWrap(address, sid),
-            rewrite=CellRoot(Shell.viewer, nu.StrRef(CELL_ATTR)),
+            rewrite=CellRoot(Shell.viewer, Here.cell),
             label=f"{SESSION_ENV}:{sid}",
         )
 

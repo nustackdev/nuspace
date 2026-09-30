@@ -8,7 +8,7 @@ class by module name there. ``tests/_lib`` is on ``sys.path`` (pytest's
 from __future__ import annotations
 
 import nu
-from nuspace.ops import PLANE_ATTR
+from nuspace.ops import Here
 from nuspace.shapes import States
 from nuspace.system.kernel import Env
 
@@ -24,7 +24,7 @@ class Stamp:
     """
 
     def __call__(self, term: nu.Nu) -> nu.Nu:
-        plane = nu.StrRef(PLANE_ATTR)
+        plane = Here.plane
         return States.planes[plane].state.set_item("stamped", nu.Bool(True)) >> term
 
 

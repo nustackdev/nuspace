@@ -104,10 +104,15 @@ def out():
 _kernel = Space.kernel
 
 _PLANE = "nuspace.supervisor.plane"
-_MINE = "nuspace.supervisor.mine"
-_DELAY = "nuspace.supervisor.delay"
-_FIXED = "nuspace.supervisor.fixed"
-_NEW = "nuspace.supervisor.new"
+
+
+class Attrs(nu.Shape):
+    """The names one supervised plane's arm declares."""
+
+    mine = nu.StrRef.slot()
+    delay = nu.FloatRef.slot()
+    fixed = nu.FloatRef.slot()
+    new = nu.StrRef.slot()
 
 
 class Policy(CellState):
@@ -256,7 +261,7 @@ def _start(plane: nu.StrRef, mine: nu.StrRef) -> nu.Nu:
     second: one of them landing in between refuses it, and the run just
     started, now tracked by nobody, is stopped.
     """
-    new = nu.StrRef(_NEW)
+    new = Attrs.new
     still = nu.And(
         nu.Ne(_policy(plane), nu.Str("")), nu.Eq(_mine(plane), mine), plane_exists(plane)
     )
@@ -267,7 +272,7 @@ def _start(plane: nu.StrRef, mine: nu.StrRef) -> nu.Nu:
     write = start >> remember >> nu.IfDo(snap(orphan), plane_stop(new))
     return nu.IfDo(
         snap(plane_exists(plane)),
-        nu.Let(_NEW, MintId("r"), write),
+        nu.Let(new, MintId("r"), write),
         wake(Space.planes.on_children_change()),
     )
 
@@ -283,13 +288,13 @@ def _covered(plane: nu.StrRef, exit_: nu.Nu) -> nu.Nu:
 def _wait() -> nu.Nu:
     """The wait before a restart: the fixed delay, read as it is due, else the backoff, doubled after."""
     plane = nu.StrRef(_PLANE)
-    delay, fixed = nu.FloatRef(_DELAY), nu.FloatRef(_FIXED)
+    delay, fixed = Attrs.delay, Attrs.fixed
     doubled = delay * nu.Float(2.0)
     backoff = nu.Delay(delay) >> delay.set(
         nu.If(nu.Gt(doubled, nu.Float(BACKOFF_CAP)), nu.Float(BACKOFF_CAP), doubled)
     )
     return nu.Let(
-        _FIXED, snap(_fixed(plane)), nu.IfDo(nu.Ge(fixed, nu.Float(0.0)), nu.Delay(fixed), backoff)
+        fixed, snap(_fixed(plane)), nu.IfDo(nu.Ge(fixed, nu.Float(0.0)), nu.Delay(fixed), backoff)
     )
 
 
@@ -299,7 +304,7 @@ def _ended(plane: nu.StrRef, mine: nu.StrRef) -> nu.Nu:
     Otherwise left down, until its remembered run moves (supervised again).
     """
     exit_ = text(_kernel.runs[mine].exit)
-    delay = nu.FloatRef(_DELAY)
+    delay = Attrs.delay
     again = (
         nu.IfDo(snap(nu.Eq(exit_, nu.Str(EXIT_OK))), delay.set(nu.Float(BACKOFF_START)))
         >> _wait()
@@ -314,7 +319,7 @@ def _turn(plane: nu.StrRef) -> nu.Nu:
     A plane no longer supervised parks until the fold cancels the arm, so
     the loop never spins on a start its commit refuses.
     """
-    mine = nu.StrRef(_MINE)
+    mine = Attrs.mine
     running = _kernel.running
     live = until(nu.Not(running.contains(mine)), running.on_children_change())
     look = nu.IfDo(
@@ -323,13 +328,13 @@ def _turn(plane: nu.StrRef) -> nu.Nu:
         nu.IfDo(snap(running.contains(mine)), live, _ended(plane, mine)),
     )
     return nu.IfDo(
-        snap(nu.Eq(_policy(plane), nu.Str(""))), park(), nu.Let(_MINE, snap(_mine(plane)), look)
+        snap(nu.Eq(_policy(plane), nu.Str(""))), park(), nu.Let(mine, snap(_mine(plane)), look)
     )
 
 
 def _arm(plane: nu.StrRef) -> nu.Nu:
     """One supervised plane, kept up for as long as it is listed."""
-    return nu.Let(_DELAY, nu.Float(BACKOFF_START), nu.ForeverDo(_turn(plane)))
+    return nu.Let(Attrs.delay, nu.Float(BACKOFF_START), nu.ForeverDo(_turn(plane)))
 
 
 def _forget_ended() -> nu.Nu:

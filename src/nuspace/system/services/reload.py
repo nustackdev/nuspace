@@ -44,7 +44,6 @@ def out():
 _kernel = Space.kernel
 
 _RUN = "nuspace.reload.run"
-_PLANE = "nuspace.reload.plane"
 
 
 def _version(plane: nu.StrArg, cell: nu.Nu) -> nu.Nu:
@@ -87,11 +86,11 @@ def _replace(run_id: nu.StrArg, plane: nu.StrArg) -> nu.Nu:
 
 def _arm(run_id: nu.StrRef) -> nu.Nu:
     """One live plane run: replace what is stale, then again on every rewrite of its plane's cells."""
-    plane = nu.StrRef(_PLANE)
+    plane = nu.StrRef("nuspace.reload.plane")
     edits = Space.planes[plane].cells.on_descendants_change("*", "version")
     look = _replace(run_id, plane) >> wake(edits)
     return nu.Let(
-        _PLANE,
+        plane,
         snap(text(_kernel.runs[run_id].plane)),
         nu.ForeverDo(look),
     )

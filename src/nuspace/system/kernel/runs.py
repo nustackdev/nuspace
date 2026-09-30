@@ -46,15 +46,21 @@ RUN_ATTR = "nuspace.kernel.run"
 
 _kernel = Space.kernel
 
+_ORPHAN = "Cell run lost its host arm"
+
 # Per arm names. Each fold arm runs on a context branch of its own, so one
 # name serves every arm.
-_BACKEND = "nuspace.kernel.backend"
 _CELL_RUN = "nuspace.kernel.cell_run"
-_PLACE = "nuspace.kernel.place"
-_LOST = "nuspace.kernel.lost"
-_ORPHAN = "Cell run lost its host arm"
 _ERROR = "nuspace.kernel.error"
-_WHY = "nuspace.kernel.why"
+
+
+class Attrs(nu.Shape):
+    """The names a run's arm and its cell arms declare."""
+
+    backend = nu.StrRef.slot()
+    place = nu.ObjectRef.slot()
+    lost = nu.StrRef.slot()
+    why = nu.StrRef.slot()
 
 
 def outcome(run_id: nu.StrArg) -> nu.Nu:
@@ -135,21 +141,21 @@ def _cell_arm(run_id: nu.StrArg, cell_run_id: nu.StrArg, backend: nu.StrArg) -> 
     """
     cr = _kernel.runs[run_id].cells[cell_run_id]
     place = nu.Let(
-        _PLACE,
+        Attrs.place,
         PlaceCell(BackendRef(backend), run_id, cell_run_id),
-        backends.placed(backend, run_id, cell_run_id, nu.ObjectRef(_PLACE)),
+        backends.placed(backend, run_id, cell_run_id, Attrs.place),
     )
-    why = nu.StrRef(_LOST)
+    why = Attrs.lost
     lost = atomic(
         backends.lost(text(cr.worker), why) >> end_cell_run(run_id, cell_run_id, EXIT_FAILED, why)
     )
     run = nu.Let(
-        _LOST, RunCell(backend, run_id, cell_run_id), nu.IfDo(nu.Ne(why, nu.Str("")), lost)
+        Attrs.lost, RunCell(backend, run_id, cell_run_id), nu.IfDo(nu.Ne(why, nu.Str("")), lost)
     )
     failed = nu.Let(
-        _WHY,
+        Attrs.why,
         ErrorText(nu.ObjectRef(_ERROR)),
-        atomic(end_cell_run(run_id, cell_run_id, EXIT_FAILED, nu.StrRef(_WHY))),
+        atomic(end_cell_run(run_id, cell_run_id, EXIT_FAILED, Attrs.why)),
     )
     go = nu.IfDo(
         snap(nu.Not(cr.worker.exists())),
@@ -197,14 +203,14 @@ def _done(run_id: nu.StrArg) -> nu.Nu:
 def run_arm(run_id: nu.StrArg) -> nu.Nu:
     """One plane run's whole life in the host. Ends only by the fold cancelling it."""
     row = _kernel.runs[run_id]
-    backend = nu.StrRef(_BACKEND)
+    backend = Attrs.backend
     started = backends.start(backend, run_id) >> atomic(
         nu.IfDo(nu.Not(row.started_at.exists()), row.started_at.set(Now()))
     )
     failed = nu.Let(
-        _WHY,
+        Attrs.why,
         nu.Str("Backend failed to start: ") + ErrorText(nu.ObjectRef(_ERROR)),
-        atomic(end_run(run_id, EXIT_FAILED, nu.StrRef(_WHY))),
+        atomic(end_run(run_id, EXIT_FAILED, Attrs.why)),
     )
     live = nu.Race(_killed(run_id, backend), _cells(run_id, backend), _done(run_id))
     life = nu.TryCatch(started, catch=failed, error_key=_ERROR) >> nu.IfDo(
@@ -214,7 +220,7 @@ def run_arm(run_id: nu.StrArg) -> nu.Nu:
     # when somebody asked for it, let go otherwise.
     let_go = nu.If(flag(row.termination_requested, False), nu.Str(EXIT_KILLED), nu.Str(EXIT_OK))
     return nu.Let(
-        _BACKEND,
+        backend,
         snap(text(row.backend)),
         nu.TryCatch(life, finally_=backends.kill(backend, run_id, let_go)) >> park(),
     )

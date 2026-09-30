@@ -33,8 +33,8 @@ def plane_state(p):
 
 def in_run(plane_id, cell_id, term):
     """``term`` as the kernel would run it: rerooted, the plane attr bound, bracketed."""
-    body = reroot(term, nu.StrRef(ops.PLANE_ATTR), cell_id)
-    return nu.Let(ops.PLANE_ATTR, nu.Str(plane_id), nustd.kv.Transaction(body, scope=States))
+    body = reroot(term, ops.Here.plane, cell_id)
+    return nu.Let(ops.Here.plane, nu.Str(plane_id), nustd.kv.Transaction(body, scope=States))
 
 
 async def seeded(store):

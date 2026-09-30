@@ -33,11 +33,8 @@ from .cell import (
 )
 from .extend import TEXT, Plane, Snippet, create_plane, insert_snippet
 from .kernel import (
-    CELL_ATTR,
-    CELL_RUN_ATTR,
-    PLANE_ATTR,
-    RUN_ATTR,
     STOP_GRACE,
+    Here,
     cell_interrupt,
     cell_run,
     cell_runs,
@@ -71,13 +68,10 @@ from .utils import mint_ordered_id, snapshot
 
 
 __all__ = [
-    "CELL_ATTR",
-    "CELL_RUN_ATTR",
-    "PLANE_ATTR",
-    "RUN_ATTR",
     "STOP_GRACE",
     "TEXT",
     "CellState",
+    "Here",
     "Plane",
     "PlaneState",
     "Snippet",

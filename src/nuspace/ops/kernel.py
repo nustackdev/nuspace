@@ -30,11 +30,8 @@ if TYPE_CHECKING:
 
 
 __all__ = [
-    "CELL_ATTR",
-    "CELL_RUN_ATTR",
-    "PLANE_ATTR",
-    "RUN_ATTR",
     "STOP_GRACE",
+    "Here",
     "add_cell_run",
     "add_plane_run",
     "cell_interrupt",
@@ -56,17 +53,18 @@ __all__ = [
 ]
 
 
-#: The attr the kernel binds a cell run's plane id under, inside its body.
-PLANE_ATTR = "nuspace.plane"
+class Here(nu.Shape):
+    """What the kernel declares around a cell run's body: where it runs.
 
-#: The attr the kernel binds a cell run's cell id under, inside its body.
-CELL_ATTR = "nuspace.cell"
+    A program and its envs read these, eg ``Here.plane``, and never declare
+    them: the kernel does, once per cell run.
+    """
 
-#: The attr the kernel binds the plane run's id under, inside a cell run's body.
-RUN_ATTR = "nuspace.run"
+    plane = nu.StrRef.slot()
+    cell = nu.StrRef.slot()
+    run = nu.StrRef.slot()
+    cell_run = nu.StrRef.slot()
 
-#: The attr the kernel binds the cell run's own id under, inside its body.
-CELL_RUN_ATTR = "nuspace.cell_run"
 
 #: How long ``plane_stop`` waits after interrupting before it kills, in seconds.
 STOP_GRACE = 10.0

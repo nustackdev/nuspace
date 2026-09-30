@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import pickle
 
+import pytest
+
 import nu
 from nuspace import ops
 from nuspace.ops.utils import atomic
@@ -139,13 +141,9 @@ def test_env_is_plain_data():
     assert ops.env("lmdb") == ["lmdb"]
 
 
-def test_run_attrs():
-    assert (ops.PLANE_ATTR, ops.CELL_ATTR, ops.RUN_ATTR, ops.CELL_RUN_ATTR) == (
-        "nuspace.plane",
-        "nuspace.cell",
-        "nuspace.run",
-        "nuspace.cell_run",
-    )
+@pytest.mark.parametrize("name", ["plane", "cell", "run", "cell_run"])
+def test_run_attrs(name):
+    assert nu.run(nu.Let(name, nu.Str("x"), getattr(ops.Here, name)))[0] == "x"
 
 
 async def test_run_records_round_trip_through_sqlite(disk):

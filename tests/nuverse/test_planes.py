@@ -193,7 +193,7 @@ def _cell(source: str) -> dict:
 
 def _as(cell: str, term: nu.Nu, plane: str = "jp") -> nu.Nu:
     """``term`` as the Jobs plane's ``cell`` would run it: its state rerooted, its plane bound."""
-    return nu.Let(ops.PLANE_ATTR, nu.Str(plane), reroot(term, plane, cell))
+    return nu.Let(ops.Here.plane, nu.Str(plane), reroot(term, plane, cell))
 
 
 SELECTED = States.planes["jp"].state["selected"]

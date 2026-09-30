@@ -30,7 +30,7 @@ from typing import TYPE_CHECKING
 import nu
 import nu.prog
 import nustd.kv
-from nuspace.ops import CELL_ATTR, CELL_RUN_ATTR, PLANE_ATTR, RUN_ATTR
+from nuspace.ops import Here
 from nuspace.ops.utils import atomic, flag
 from nuspace.shapes import EXIT_FAILED, EXIT_INTERRUPTED, EXIT_OK, Reroot, Space, States
 
@@ -56,10 +56,15 @@ _kernel = Space.kernel
 
 # One body per context: a run request carries attrs, so the worker runs each
 # body on a context copy of its own and these names cannot collide.
-_OUTCOME = "nuspace.kernel.outcome"
 _ERROR = "nuspace.kernel.error"
-_OUT = "nuspace.kernel.out"
-_WHY = "nuspace.kernel.why"
+
+
+class Attrs(nu.Shape):
+    """The names a body declares for itself, around the program and after it."""
+
+    outcome = nu.StrRef.slot()
+    out = nu.ObjectRef.slot()
+    why = nu.StrRef.slot()
 
 
 class Rewrites:
@@ -135,8 +140,7 @@ def _mark_started(run_id: str, cell_run_id: str) -> nu.Nu:
 def _flush(run_id: str, cell_run_id: str) -> nu.Nu:
     """Write waiting output to the record, if there is any."""
     cr = _kernel.runs[run_id].cells[cell_run_id]
-    out = nu.ObjectRef(_OUT)
-    return nu.IfDo(HasOut(), nu.Let(_OUT, TakeOut(), atomic(cr.out.set(out))))
+    return nu.IfDo(HasOut(), nu.Let(Attrs.out, TakeOut(), atomic(cr.out.set(Attrs.out))))
 
 
 def _finish(
@@ -148,13 +152,13 @@ def _finish(
     extra: nu.Nu | str = "",
 ) -> nu.Nu:
     """The last write: out flushed, exit, error, terminated_at, out of ``cells_running``. One commit."""
-    why = None if error is None else nu.StrRef(_WHY)
-    commit = atomic(end_cell_run(run_id, cell_run_id, exit_, why, nu.ObjectRef(_OUT)))
+    why = None if error is None else Attrs.why
+    commit = atomic(end_cell_run(run_id, cell_run_id, exit_, why, Attrs.out))
     # Texts are made before the bracket, which deep copies attrs and would
     # carry the caught exception in with it.
     if error is not None:
-        commit = nu.Let(_WHY, error, commit)
-    return nu.Let(_OUT, TakeOut(extra, final=True), commit)
+        commit = nu.Let(Attrs.why, error, commit)
+    return nu.Let(Attrs.out, TakeOut(extra, final=True), commit)
 
 
 def build_body(
@@ -175,9 +179,8 @@ def build_body(
             in the host, their rewrites ride along onto the worker.
 
     Returns:
-        A picklable term. Binds :data:`~nuspace.ops.PLANE_ATTR`,
-        :data:`~nuspace.ops.CELL_ATTR`, :data:`~nuspace.ops.RUN_ATTR` and
-        :data:`~nuspace.ops.CELL_RUN_ATTR` for the program and its envs.
+        A picklable term. Declares :class:`~nuspace.ops.Here` for the
+        program and its envs.
     """
     rewrite = Rewrites(
         Reroot(plane, cell),
@@ -188,21 +191,20 @@ def build_body(
     load = nustd.kv.auto_flow_atomic(
         source.load(scope={"plane": plane, "cell": cell}, rewrite=rewrite), scope=Space
     )
-    outcome = nu.StrRef(_OUTCOME)
     # On the loop: a program that subscribes is async only.
     program = nu.ParallelAsync(nu.prog.Eval(load))
     asked = _kernel.runs[run_id].cells[cell_run_id].interrupt_requested
-    interrupted = until(flag(asked, False), asked.on_change()) >> outcome.set(
+    interrupted = until(flag(asked, False), asked.on_change()) >> Attrs.outcome.set(
         nu.Str(EXIT_INTERRUPTED)
     )
     flusher = nu.ForeverDo(nu.Delay(FLUSH_SECONDS) >> _flush(run_id, cell_run_id))
     # The program winning leaves the outcome ok. The flusher never wins.
     run = nu.Let(
-        _OUTCOME,
+        Attrs.outcome,
         nu.Str(EXIT_OK),
         _mark_started(run_id, cell_run_id)
         >> nu.Race(program, interrupted, flusher)
-        >> _finish(run_id, cell_run_id, outcome),
+        >> _finish(run_id, cell_run_id, Attrs.outcome),
     )
     for env in reversed(envs):
         if env.wrap is not None:
@@ -216,7 +218,7 @@ def build_body(
         extra=ErrorText(nu.ObjectRef(_ERROR), full=True),
     )
     body = nu.With(Captured(), body=nu.TryCatch(run, catch=failed, error_key=_ERROR))
-    ids = ((PLANE_ATTR, plane), (CELL_ATTR, cell), (RUN_ATTR, run_id), (CELL_RUN_ATTR, cell_run_id))
-    for name, value in reversed(ids):
-        body = nu.Let(name, nu.Str(value), body)
+    ids = ((Here.plane, plane), (Here.cell, cell), (Here.run, run_id), (Here.cell_run, cell_run_id))
+    for ref, value in reversed(ids):
+        body = nu.Let(ref, nu.Str(value), body)
     return body

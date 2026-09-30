@@ -14,7 +14,6 @@ import nu
 import nustd.kv
 from nu.engine.structure import Declared
 from nu.lang import ScalarAction
-from nuspace.ops import CELL_ATTR, CELL_RUN_ATTR, PLANE_ATTR, RUN_ATTR
 from nuspace.ops.utils import or_else, text
 from nuspace.shapes import Space
 from nuspace.system.backends import BackendRef, require_backend
@@ -94,12 +93,9 @@ class RunCell(ScalarAction):
             plane, cell = record["plane"], record["cell"]
             envs = config.resolve(record["envs"])
             body = build_body(run_id, cell_run_id, plane, cell, envs)
-            attrs = {
-                PLANE_ATTR: plane,
-                CELL_ATTR: cell,
-                RUN_ATTR: run_id,
-                CELL_RUN_ATTR: cell_run_id,
-            }
+            # The names ops.Here declares. The body declares them again, but a
+            # request carrying attrs runs on a context copy of its own.
+            attrs = {"plane": plane, "cell": cell, "run": run_id, "cell_run": cell_run_id}
             return await backend.arun(run_id, cell_run_id, body, attrs)
 
         return athunk

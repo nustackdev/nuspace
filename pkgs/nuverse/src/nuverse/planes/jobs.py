@@ -140,7 +140,7 @@ class Form(nustd.ui.Row):
 
 def create(name):
     # Under the plane running this cell: the Jobs plane.
-    here = nu.StrRef(ops.PLANE_ATTR)
+    here = ops.Here.plane
     job = nu.StrRef("new.job")
     made = ops.add_plane(backend="mp", name=name, parent=here, ui=False, made_by="jobs")
     fill = ops.add_cell(job, STARTER, cell_id="main", name="main") >> nustd.kv.Transaction(

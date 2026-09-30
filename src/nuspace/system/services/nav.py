@@ -83,8 +83,6 @@ _kernel = Space.kernel
 _SID = "nuspace.nav.connection"
 _ROUTE = "nuspace.nav.route"
 _CELL = "nuspace.nav.cell"
-_RUN = "nuspace.nav.run"
-_SEEN = "nuspace.nav.seen"
 
 
 class Panes(CellState):
@@ -185,10 +183,10 @@ def _cells_seen(route: nu.StrRef) -> nu.Nu:
 
 def _changed(route: nu.StrRef) -> nu.Nu:
     """Wait until a cell of the plane is added, removed or rewritten."""
-    seen = nu.StrRef(_SEEN)
+    seen = nu.StrRef("nuspace.nav.seen")
     edits = Space.planes[route].cells.on_descendants_change("*", "version")
     return nu.Let(
-        _SEEN,
+        seen,
         snap(_cells_seen(route)),
         nu.WhileDo(nu.Eq(snap(_cells_seen(route)), seen), wake(edits)),
     )
@@ -201,7 +199,7 @@ def _turn(sid: nu.StrRef, route: nu.StrRef) -> nu.Nu:
     the run is over by itself, waits for the plane's cells to change, and
     the next turn runs it again.
     """
-    run_id = nu.StrRef(_RUN)
+    run_id = nu.StrRef("nuspace.nav.run")
     envs = nu.List.of(nu.List.of(nu.Str(SESSION), sid))
     ended = until(nu.Not(_kernel.running.contains(run_id)), _kernel.running.on_children_change())
     live = snap(_kernel.running.contains(run_id))
@@ -214,7 +212,9 @@ def _turn(sid: nu.StrRef, route: nu.StrRef) -> nu.Nu:
     # wait for the plane rather than giving up on the route; the routes will
     # not change again to retry.
     shown = nu.WhileDo(nu.Not(snap(routable(route))), wake(Space.planes.on_children_change()))
-    ran = nu.Let(_RUN, plane_run(route, by=BY, envs=envs), remember >> followed >> _changed(route))
+    ran = nu.Let(
+        run_id, plane_run(route, by=BY, envs=envs), remember >> followed >> _changed(route)
+    )
     return shown >> ran
 
 

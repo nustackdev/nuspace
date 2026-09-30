@@ -124,7 +124,7 @@ def cell_ui(viewer: Ref, cell: nu.StrArg) -> SectionRef:
 
     Args:
         viewer: The ref cells are drawn on, bound to its place on the shell.
-        cell: The cell id, any ``StrArg`` (eg ``nu.StrRef(CELL_ATTR)``).
+        cell: The cell id, any ``StrArg`` (eg ``ops.Here.cell``).
     """
     return SectionRef(cell, section_cls=nustd.ui.Column, parent_ref=cells_ui(viewer))
 
