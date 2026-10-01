@@ -9,6 +9,9 @@ __pycache__/
 # Distribution / packaging
 .Python
 build/
+# The nuspace-ui package links its build/ to the vite output so an editable
+# install serves it. A symlink, not a directory, but say so explicitly.
+!pkgs/ts/nuspace-ui/python/nuspace_ui/build
 develop-eggs/
 dist/
 downloads/

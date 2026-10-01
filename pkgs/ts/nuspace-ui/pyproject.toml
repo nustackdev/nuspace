@@ -14,7 +14,11 @@ requires-python = ">=3.10"
 Repository = "https://github.com/nustackdev/nuspace"
 
 [tool.hatch.build.targets.wheel]
-bypass-selection = true
+packages = ["python/nuspace_ui"]
+# `python/nuspace_ui/build` is a link to `dist/`, so an editable install serves
+# the last vite build with no reinstall. Exclude it from the package walk; the
+# force-include below places the real `dist/` contents at `nuspace_ui/build/`.
+exclude = ["python/nuspace_ui/build"]
 
 [tool.hatch.build.targets.wheel.force-include]
 "dist" = "nuspace_ui/build"

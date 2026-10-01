@@ -80,7 +80,7 @@ members = ["pkgs/nuverse"]
 
 [tool.uv.sources]
 nuverse = { workspace = true }
-nuspace-ui = { path = "./pkgs/ts/nuspace-ui" }
+nuspace-ui = { path = "./pkgs/ts/nuspace-ui", editable = true }
 nucore = { path = "../nu", editable = true }
 nustd = { path = "../nu/pkgs/nustd", editable = true }
 nucli = { path = "../nu/pkgs/nucli", editable = true }

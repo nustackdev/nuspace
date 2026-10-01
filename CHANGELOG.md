@@ -12,6 +12,7 @@ separately here.
 
 ## Unreleased
 
+- A rebuilt web bundle shows on restart in a checkout, no reinstall
 - Program code reads plainly: forms, lambdas and fallbacks replace hand-rolled helpers
 - The split button's tooltip shows its shortcut
 - The search shortcut sits in its own chip
