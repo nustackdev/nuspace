@@ -386,21 +386,21 @@ export function railPinsFade(start: boolean, end: boolean): { maskImage?: string
 }
 
 /**
- * One pinned plane: its icon in a small outlined box, on top of a kit
- * `IconButton outline sm` with the inset ring, sized to `rail-pin` (26px,
- * between the kit's sm 24 and a top bar button's 28) with a 16px glyph. The outline is always there, on `rail-edge` so it holds in
- * light; hover deepens it and lays the row's hover wash inside. Washed like a
- * tree row: the focused pane's plane strongest, one open elsewhere lighter.
+ * One pinned plane: its icon on a kit `IconButton soft sm` with the inset
+ * ring, a filled tile with no border like the rail's rows, sized to
+ * `rail-pin` (26px, between the kit's sm 24 and a top bar button's 28) with a
+ * 16px glyph. Washed like a tree row: the focused pane's plane strongest, one
+ * open elsewhere lighter, the rest on the kit's resting wash.
  */
 export function railPin(selected: boolean, open: boolean): string {
 	return cn(
-		"relative size-rail-pin shrink-0 border-rail-edge text-text-muted [&_svg]:size-4",
+		"relative size-rail-pin shrink-0 [&_svg]:size-4",
 		"focus-visible:ring-offset-0",
 		selected
-			? "border-border-strong bg-rail-selected text-text-primary hover:bg-rail-selected"
+			? "bg-rail-selected text-text-primary hover:bg-rail-selected"
 			: open
-				? "bg-rail-open hover:border-border-strong hover:bg-rail-hover hover:text-text-primary"
-				: "hover:border-border-strong hover:bg-rail-hover hover:text-text-primary active:bg-doc-active",
+				? "bg-rail-open hover:bg-rail-hover hover:text-text-primary"
+				: "hover:bg-rail-hover hover:text-text-primary active:bg-doc-active",
 	);
 }
 

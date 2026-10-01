@@ -4,8 +4,8 @@
 //
 // An icon opens its Plane the way a tree row does, through the same handler:
 // a plain click in the focused pane, cmd/ctrl-click in a browser tab. The name
-// is in its tooltip. Each is a kit outline IconButton, always boxed; the
-// focused pane's Plane is washed like the selected row.
+// is in its tooltip. Each is a kit soft IconButton, a filled tile with no
+// border; the focused pane's Plane is washed like the selected row.
 //
 // The strip scrolls sideways with no scrollbar. While it overflows, a
 // vertical wheel scrolls it too, and an edge with more behind it fades.
@@ -169,7 +169,7 @@ function PinStrip({
 						<TooltipTrigger asChild>
 							<IconButton
 								asChild
-								variant="outline"
+								variant="soft"
 								size="sm"
 								ring="inset"
 								aria-label={title}
