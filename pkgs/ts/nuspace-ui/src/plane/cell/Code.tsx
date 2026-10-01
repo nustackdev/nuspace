@@ -9,7 +9,7 @@
 // the last line have to leave the editor and land in the neighbouring cell,
 // and Escape has to hand control back to cell selection.
 
-import { Kbd } from "@nustackdev/ui-kit";
+import { Shortcut } from "@nustackdev/ui-kit";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { docCodeBox, docSourceDirty } from "../../design";
 import type { FocusReq } from "../state";
@@ -228,8 +228,7 @@ export function SourceEditor(props: Omit<CodeBoxProps, "onDirty">) {
 			{dirty ? (
 				<span className={docSourceDirty}>
 					unsaved
-					<Kbd>⌘</Kbd>
-					<Kbd>↵</Kbd>
+					<Shortcut keys={["mod", "enter"]} size="sm" />
 				</span>
 			) : null}
 		</>

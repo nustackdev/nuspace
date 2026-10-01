@@ -118,8 +118,8 @@ export const railFooterSpace = "min-w-0 flex-1";
  */
 export const railChromeButton = "size-7 [&_svg]:size-4";
 
-/** The shortcut's `Kbd` after a chrome button's tooltip text. */
-export const railTooltipHint = "ml-1";
+/** The shortcut's kit `Shortcut` after a chrome button's tooltip text. */
+export const railTooltipHint = "ml-1.5";
 
 /**
  * The connection state: the kit's `StatusDot` in a button-sized box, so its
@@ -466,12 +466,12 @@ export const railSearchIcon = cn(railLane, "[&_svg]:size-4");
 export const railSearchText = "min-w-0 flex-1 truncate text-left";
 
 /**
- * The shortcut, on top of a kit `Kbd` with its well taken off: small muted
- * mono at the far end, stepping up with the label on hover.
+ * The shortcut, a kit `Shortcut` in ghost caps at the far end: muted, its
+ * caps stepping up with the label on hover.
  */
 export const railSearchHint = cn(
-	"shrink-0 border-transparent bg-transparent px-0.5 font-normal text-text-muted",
-	"transition-colors duration-fast ease-out group-hover/search:text-text-secondary",
+	"shrink-0 *:transition-colors *:duration-fast *:ease-out",
+	"group-hover/search:*:text-text-secondary",
 );
 
 /** One kind to search in the popup: its box, then its label. */

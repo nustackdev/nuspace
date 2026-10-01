@@ -415,7 +415,7 @@ export const docBoxSelect = cn(
 export const docProgram = "flex flex-col gap-1";
 
 /**
- * "unsaved" plus its two Kbd caps, parked under the open source editor.
+ * "unsaved" plus its kit `Shortcut` (mod enter), parked under the open source editor.
  *
  * Quiet and right-aligned: it is a reminder about the buffer you are looking
  * at, and it says nothing once that buffer is closed.

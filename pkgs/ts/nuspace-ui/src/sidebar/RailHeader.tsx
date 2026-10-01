@@ -3,7 +3,7 @@
 //
 // No way home up here: home is an ordinary row in the tree.
 
-import { IconButton, Kbd, Tooltip, TooltipContent, TooltipTrigger } from "@nustackdev/ui-kit";
+import { IconButton, Shortcut, Tooltip, TooltipContent, TooltipTrigger } from "@nustackdev/ui-kit";
 import { PanelLeft, SquarePen } from "lucide-react";
 import {
 	railChromeButton,
@@ -14,7 +14,7 @@ import {
 	railWordmarkNu,
 } from "../design";
 import { openAddPlane } from "./add";
-import { focusRailToggle, RAIL_SHORTCUT, setRailCollapsed } from "./collapse";
+import { focusRailToggle, RAIL_KEYS, setRailCollapsed } from "./collapse";
 import { ROOT_ID } from "./types";
 
 export function RailHeader() {
@@ -72,7 +72,7 @@ export function RailToggle({ label, onClick }: { label: string; onClick: () => v
 			</TooltipTrigger>
 			<TooltipContent side="bottom">
 				{label}
-				<Kbd className={railTooltipHint}>{RAIL_SHORTCUT}</Kbd>
+				<Shortcut keys={RAIL_KEYS} size="sm" className={railTooltipHint} />
 			</TooltipContent>
 		</Tooltip>
 	);

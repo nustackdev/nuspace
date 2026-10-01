@@ -17,9 +17,8 @@ export const SEARCH_PLANE = "search";
 /** The popup's own kind, beside the snippets: Plane titles. */
 export const TITLES = "";
 
-/** The shortcut, for the entry's hint. */
-export const SEARCH_SHORTCUT =
-	typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.userAgent) ? "⌘K" : "Ctrl+K";
+/** The shortcut by key name, for the entry's hint; the kit `Shortcut` spells it. */
+export const SEARCH_KEYS = ["mod", "K"] as const;
 
 let open = false;
 /** Kinds unticked, by name: a kind not here is ticked. `TITLES` for titles. */

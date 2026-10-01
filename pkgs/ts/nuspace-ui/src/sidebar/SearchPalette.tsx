@@ -18,7 +18,7 @@ import {
 	CommandItem,
 	CommandList,
 	CommandPalette,
-	Kbd,
+	Shortcut,
 	useCommandPaletteHotkey,
 } from "@nustackdev/ui-kit";
 import { useState } from "react";
@@ -95,7 +95,7 @@ export function SearchPopup({ searchable, notify }: { searchable: Searchable[]; 
 			</CommandList>
 			<div className={searchFooter}>
 				<span className={searchHint}>
-					<Kbd>↵</Kbd> to search
+					<Shortcut keys={["enter"]} size="sm" /> to search
 				</span>
 				<Button size="sm" disabled={!ready} onClick={submit}>
 					Search

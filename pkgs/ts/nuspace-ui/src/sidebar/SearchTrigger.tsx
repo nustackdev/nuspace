@@ -5,7 +5,7 @@
 // like a flat plane row (design/rail.ts, `railSearchTrigger`), so the top bar
 // and the search entry read as one quiet group over the divider.
 
-import { Kbd } from "@nustackdev/ui-kit";
+import { Shortcut } from "@nustackdev/ui-kit";
 import { Search as SearchIcon } from "lucide-react";
 import {
 	railSearch,
@@ -14,7 +14,7 @@ import {
 	railSearchText,
 	railSearchTrigger,
 } from "../design";
-import { openSearch, SEARCH_SHORTCUT } from "./search";
+import { openSearch, SEARCH_KEYS } from "./search";
 
 export function SearchTrigger() {
 	return (
@@ -29,9 +29,12 @@ export function SearchTrigger() {
 					<SearchIcon />
 				</span>
 				<span className={railSearchText}>Search</span>
-				<Kbd className={railSearchHint} aria-hidden="true">
-					{SEARCH_SHORTCUT}
-				</Kbd>
+				<Shortcut
+					keys={SEARCH_KEYS}
+					variant="ghost"
+					className={railSearchHint}
+					aria-hidden="true"
+				/>
 			</button>
 		</div>
 	);

@@ -56,11 +56,8 @@ export function useRailCollapsed(): boolean {
 	return useSyncExternalStore(subscribe, getCollapsed, getCollapsed);
 }
 
-/** The shortcut, for tooltips. */
-export const RAIL_SHORTCUT =
-	typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.userAgent)
-		? "⌘\\"
-		: "Ctrl+\\";
+/** The shortcut by key name, for tooltips; the kit `Shortcut` spells it. */
+export const RAIL_KEYS = ["mod", "\\"] as const;
 
 /** Cmd/ctrl+\ flips the rail from anywhere in the window. Mount it once. */
 export function useRailShortcut(): void {
