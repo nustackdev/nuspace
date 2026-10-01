@@ -471,14 +471,8 @@ export const railSearchIcon = cn(railLane, "[&_svg]:size-4");
 
 export const railSearchText = "min-w-0 flex-1 truncate text-left";
 
-/**
- * The shortcut, a kit `Shortcut` in ghost caps at the far end: muted, its
- * caps stepping up with the label on hover.
- */
-export const railSearchHint = cn(
-	"shrink-0 *:transition-colors *:duration-fast *:ease-out",
-	"group-hover/search:*:text-text-secondary",
-);
+/** The shortcut at the far end: a kit `Shortcut` chip, apart from the label. */
+export const railSearchHint = "shrink-0";
 
 /** One kind to search in the popup: its box, then its label. */
 export const searchItem = "gap-3";

@@ -31,7 +31,6 @@ export function SearchTrigger() {
 				<span className={railSearchText}>Search</span>
 				<Shortcut
 					keys={SEARCH_KEYS}
-					variant="ghost"
 					className={railSearchHint}
 					aria-hidden="true"
 				/>
