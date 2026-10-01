@@ -10,8 +10,8 @@
 //
 // Keyboard (a11y.md §3 Tabs): Tab enters on the active tab, arrows and
 // Home / End move and activate (auto-activation: focusing a pane is cheap),
-// Tab leaves. On a tab, F2 renames, Delete closes, and Shift+F10 or the menu
-// key opens its settings. The `...` and close buttons stay out of the tab
+// Tab leaves. On a tab, F2 renames, Backspace or Delete closes, and Shift+F10,
+// the menu key or a right-click opens its settings. The `...` and close buttons stay out of the tab
 // order: they are the mouse's way to the same three things.
 //
 // A tab drags along the bar to move its pane, native like the rail's drags:
@@ -149,7 +149,8 @@ export function TabBar({
 			e.preventDefault();
 			if (planes[id]) setEditing(id);
 			return;
-		} else if (e.key === "Delete") {
+		} else if (e.key === "Backspace" || e.key === "Delete") {
+			// Backspace is the key a Mac calls delete; Delete is a full keyboard's Del.
 			e.preventDefault();
 			close(id, true);
 			return;
@@ -221,6 +222,12 @@ export function TabBar({
 							e.preventDefault();
 							close(id);
 						}}
+						// A right-click opens the tab's own `...` menu, the same items.
+						onContextMenu={(e) => {
+							if (!plane || editing === id) return;
+							e.preventDefault();
+							setMenuOf(id);
+						}}
 					>
 						{editing === id ? (
 							<TabRenameInput
@@ -242,10 +249,16 @@ export function TabBar({
 								<button
 									type="button"
 									role="tab"
+									data-plane-id={id}
 									aria-selected={active}
 									tabIndex={active ? 0 : -1}
 									className={tabTrigger}
-									onClick={() => activate(id)}
+									onClick={(e) => {
+										// Safari and Firefox on macOS never focus a clicked
+										// button; the arrows need the tab to have it.
+										e.currentTarget.focus({ preventScroll: true });
+										activate(id);
+									}}
 									onDoubleClick={() => {
 										if (plane) setEditing(id);
 									}}

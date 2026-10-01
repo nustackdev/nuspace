@@ -19,22 +19,20 @@
 // "Pin" / "Unpin" in both menus puts it in the pinned row or takes it out.
 //
 // The hover split opens the plane in a new pane beside the others, the same as
-// the menus' "Open in split" and a drag of the row onto the panes. "Open in new
+// "Open in split", Option+Enter, an Option-click and a drag of the row onto
+// the panes. The `...` and a right-click open the same menu (`PlaneMenuItems`). "Open in new
 // tab" in both menus is the browser's tab, the same as a cmd-click. The hover `+` adds a Plane under this one,
 // through the one Add plane popup. All three actions carry a kit tooltip; the
 // title carries one only when it is cut off (the kit's `OverflowTooltip`).
 
 import {
-	ContextMenuItem,
-	ContextMenuSeparator,
 	DropdownMenu,
 	DropdownMenuContent,
-	DropdownMenuItem,
-	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 	IconButton,
 	Popover,
 	PopoverAnchor,
+	Shortcut,
 	Tooltip,
 	TooltipContent,
 	TooltipTrigger,
@@ -55,11 +53,20 @@ import {
 import type * as React from "react";
 import { useCallback, useRef, useState } from "react";
 import { hrefFor, onNavClick, openInNewTab, openPane, replacePane } from "../core/router";
-import { railAction, railChevron, railIcon, railTwisty } from "../design";
+import {
+	railAction,
+	railChevron,
+	railIcon,
+	railMenu,
+	railTooltipHint,
+	railTwisty,
+} from "../design";
 import { IconPickerContent } from "../icon/IconPicker";
 import { PlaneIcon } from "../icon/PlaneIcon";
 import type { Icon as PlaneIconValue } from "../icon/parse";
-import { openAddPlane } from "./add";
+import { contextParts, dropdownParts, type MenuParts } from "../shell/menu";
+import { NEW_INSIDE_KEYS, openAddPlane } from "./add";
+import { OPEN_KEYS, SPLIT_KEYS } from "./keys";
 import type { Notify } from "./ops";
 import type { Pins } from "./pin";
 import { RailRow, RailRowLink } from "./RailRow";
@@ -133,10 +140,13 @@ export function PlaneRow({
 
 	const add = useCallback(() => openAddPlane({ parent: id }), [id]);
 
+	const openHere = useCallback(() => {
+		if (hasKids) reveal(key);
+		replacePane(id);
+	}, [hasKids, id, key, reveal]);
+
 	const pinned = pins.ids.includes(id);
 	const togglePin = useCallback(() => (pinned ? pins.unpin(id) : pins.pin(id)), [id, pinned, pins]);
-	const PinIcon = pinned ? PinOff : Pin;
-	const pinLabel = pinned ? "Unpin" : "Pin";
 
 	// "Change icon" opens the picker once its menu has closed, in place of the
 	// menu handing focus back; opened any sooner, that focus would shut it.
@@ -159,9 +169,22 @@ export function PlaneRow({
 		[id, notify],
 	);
 
+	const menu: PlaneMenuProps = {
+		open: openHere,
+		split,
+		newTab,
+		add,
+		rename: () => onRename(row),
+		changeIcon,
+		pinned,
+		togglePin,
+		remove: removable ? remove : null,
+	};
+
 	return (
 		<RailRow
 			rowKey={key}
+			planeId={id}
 			selected={selected}
 			open={isOpen && !selected}
 			tabbable={tabbable}
@@ -238,6 +261,14 @@ export function PlaneRow({
 						selected={selected}
 						dragging={dragging}
 						onClick={(e) => {
+							// Option-click opens it beside the others, as Option+Enter
+							// does. Taken before the browser, whose Option-click on a
+							// link is a download.
+							if (e.altKey && e.button === 0) {
+								e.preventDefault();
+								split();
+								return;
+							}
 							// Opening a Plane reveals what is inside it. It never folds
 							// it: a click that toggles is a click you cannot predict.
 							if (hasKids) reveal(key);
@@ -279,7 +310,10 @@ export function PlaneRow({
 								<Plus />
 							</IconButton>
 						</TooltipTrigger>
-						<TooltipContent side="bottom">Add plane inside</TooltipContent>
+						<TooltipContent side="bottom">
+							Add plane inside
+							<Shortcut keys={NEW_INSIDE_KEYS} size="sm" className={railTooltipHint} />
+						</TooltipContent>
 					</Tooltip>
 					<MoreMenu
 						title={title}
@@ -287,84 +321,11 @@ export function PlaneRow({
 						dragging={dragging}
 						onCloseAutoFocus={afterMenu}
 					>
-						<DropdownMenuItem onSelect={split}>
-							<Columns2 />
-							Open in split
-						</DropdownMenuItem>
-						<DropdownMenuItem onSelect={newTab}>
-							<ExternalLink />
-							Open in new tab
-						</DropdownMenuItem>
-						<DropdownMenuItem onSelect={add}>
-							<Plus />
-							Add plane
-						</DropdownMenuItem>
-						<DropdownMenuItem onSelect={() => onRename(row)}>
-							<PenLine />
-							Rename
-						</DropdownMenuItem>
-						<DropdownMenuItem onSelect={changeIcon}>
-							<SmilePlus />
-							Change icon
-						</DropdownMenuItem>
-						<DropdownMenuItem onSelect={togglePin}>
-							<PinIcon />
-							{pinLabel}
-						</DropdownMenuItem>
-						{removable ? (
-							<>
-								<DropdownMenuSeparator />
-								<DropdownMenuItem variant="danger" onSelect={remove}>
-									<Trash2 />
-									Delete
-								</DropdownMenuItem>
-							</>
-						) : null}
+						<PlaneMenuItems parts={dropdownParts} {...menu} />
 					</MoreMenu>
 				</>
 			}
-			menu={
-				<>
-					<ContextMenuItem onSelect={() => replacePane(id)}>
-						<FileText />
-						Open
-					</ContextMenuItem>
-					<ContextMenuItem onSelect={split}>
-						<Columns2 />
-						Open in split
-					</ContextMenuItem>
-					<ContextMenuItem onSelect={newTab}>
-						<ExternalLink />
-						Open in new tab
-					</ContextMenuItem>
-					<ContextMenuSeparator />
-					<ContextMenuItem onSelect={add}>
-						<Plus />
-						Add plane
-					</ContextMenuItem>
-					<ContextMenuItem onSelect={() => onRename(row)}>
-						<PenLine />
-						Rename
-					</ContextMenuItem>
-					<ContextMenuItem onSelect={changeIcon}>
-						<SmilePlus />
-						Change icon
-					</ContextMenuItem>
-					<ContextMenuItem onSelect={togglePin}>
-						<PinIcon />
-						{pinLabel}
-					</ContextMenuItem>
-					{removable ? (
-						<>
-							<ContextMenuSeparator />
-							<ContextMenuItem variant="danger" onSelect={remove}>
-								<Trash2 />
-								Delete
-							</ContextMenuItem>
-						</>
-					) : null}
-				</>
-			}
+			menu={<PlaneMenuItems parts={contextParts} {...menu} />}
 		/>
 	);
 }
@@ -432,9 +393,77 @@ function MoreMenu({
 				</DropdownMenuTrigger>
 				<TooltipContent side="bottom">More</TooltipContent>
 			</Tooltip>
-			<DropdownMenuContent align="start" className="min-w-40" onCloseAutoFocus={onCloseAutoFocus}>
+			<DropdownMenuContent align="start" className={railMenu} onCloseAutoFocus={onCloseAutoFocus}>
 				{children}
 			</DropdownMenuContent>
 		</DropdownMenu>
+	);
+}
+
+type PlaneMenuProps = {
+	open: () => void;
+	split: () => void;
+	newTab: () => void;
+	add: () => void;
+	rename: () => void;
+	changeIcon: () => void;
+	pinned: boolean;
+	togglePin: () => void;
+	/** Null for a Plane that cannot be deleted. */
+	remove: (() => void) | null;
+};
+
+/**
+ * A plane's actions, the same off the `...` and off a right-click: written
+ * once against the menu parts (../shell/menu.ts) each trigger renders with.
+ * An item with a key shows it on its right.
+ */
+function PlaneMenuItems({ parts, ...a }: PlaneMenuProps & { parts: MenuParts }) {
+	const { Item, Separator, Shortcut } = parts;
+	const PinIcon = a.pinned ? PinOff : Pin;
+	return (
+		<>
+			<Item onSelect={a.open}>
+				<FileText />
+				Open
+				<Shortcut keys={OPEN_KEYS} />
+			</Item>
+			<Item onSelect={a.split}>
+				<Columns2 />
+				Open in split
+				<Shortcut keys={SPLIT_KEYS} />
+			</Item>
+			<Item onSelect={a.newTab}>
+				<ExternalLink />
+				Open in new tab
+			</Item>
+			<Separator />
+			<Item onSelect={a.add}>
+				<Plus />
+				Add plane inside
+				<Shortcut keys={NEW_INSIDE_KEYS} />
+			</Item>
+			<Item onSelect={a.rename}>
+				<PenLine />
+				Rename
+			</Item>
+			<Item onSelect={a.changeIcon}>
+				<SmilePlus />
+				Change icon
+			</Item>
+			<Item onSelect={a.togglePin}>
+				<PinIcon />
+				{a.pinned ? "Unpin" : "Pin"}
+			</Item>
+			{a.remove ? (
+				<>
+					<Separator />
+					<Item variant="danger" onSelect={a.remove}>
+						<Trash2 />
+						Delete
+					</Item>
+				</>
+			) : null}
+		</>
 	);
 }

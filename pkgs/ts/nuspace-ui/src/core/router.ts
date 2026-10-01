@@ -137,6 +137,11 @@ export function useRoutes(): string[] {
 	return routesOf(useSyncExternalStore(subscribe, getPath, getPath));
 }
 
+/** The focused pane's Plane, or "" when nothing is open. Outside a render. */
+export function focusedRoute(): string {
+	return getFocus();
+}
+
 /** The focused pane's Plane, or "" when nothing is open. */
 export function useFocusedRoute(): string {
 	return useSyncExternalStore(subscribe, getFocus, getFocus);

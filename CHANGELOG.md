@@ -12,6 +12,7 @@ separately here.
 
 ## Unreleased
 
+- Keyboard shortcuts sheet, new plane keys, split on Option, one plane menu everywhere
 - Plane ids sort in one plain call
 - Follows the core's single rule for missing values
 - Shortcut hints read right on every platform and share one look

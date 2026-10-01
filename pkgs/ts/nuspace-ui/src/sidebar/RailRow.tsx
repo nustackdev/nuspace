@@ -18,7 +18,15 @@ import {
 	OverflowTooltip,
 } from "@nustackdev/ui-kit";
 import type * as React from "react";
-import { railActions, railIndent, railLabel, railLane, railRow, railTitle } from "../design";
+import {
+	railActions,
+	railIndent,
+	railLabel,
+	railLane,
+	railMenu,
+	railRow,
+	railTitle,
+} from "../design";
 
 export function RailRow({
 	rowKey,
@@ -39,9 +47,12 @@ export function RailRow({
 	className,
 	onFocus,
 	onKeyDown,
+	planeId,
 }: {
 	/** What `useRailFocus` addresses this row by. */
 	rowKey: string;
+	/** The row's Plane, for what acts on the Plane you are on (../sidebar/add.ts). */
+	planeId?: string;
 	/** The focused pane's Plane. */
 	selected: boolean;
 	/** Showing in a pane that is not the focused one. */
@@ -82,6 +93,7 @@ export function RailRow({
 			role="treeitem"
 			tabIndex={tabbable ? 0 : -1}
 			data-rail-key={rowKey}
+			data-plane-id={planeId}
 			aria-selected={selected}
 			aria-expanded={expanded}
 			aria-level={level}
@@ -89,6 +101,7 @@ export function RailRow({
 			aria-setsize={setsize}
 			onFocus={onFocus}
 			onKeyDown={onKeyDown}
+			onClick={focusOnClick}
 			{...drag}
 		>
 			<span className={railLane}>{lane}</span>
@@ -100,11 +113,23 @@ export function RailRow({
 	return (
 		<ContextMenu>
 			<ContextMenuTrigger asChild>{body}</ContextMenuTrigger>
-			<ContextMenuContent className="min-w-40" onCloseAutoFocus={onMenuCloseAutoFocus}>
+			<ContextMenuContent className={railMenu} onCloseAutoFocus={onMenuCloseAutoFocus}>
 				{menu}
 			</ContextMenuContent>
 		</ContextMenu>
 	);
+}
+
+/**
+ * A click on the row's label leaves the keyboard on the row, so the arrows
+ * work next. Safari and Firefox on macOS never focus a clicked link, so
+ * without this a click leaves the focus on the page and the arrows go nowhere.
+ * A click on one of the row's own controls keeps its focus.
+ */
+function focusOnClick(e: React.MouseEvent<HTMLDivElement>): void {
+	const row = e.currentTarget;
+	if ((e.target as HTMLElement).closest("button, input")) return;
+	if (!row.contains(document.activeElement)) row.focus({ preventScroll: true });
 }
 
 /**

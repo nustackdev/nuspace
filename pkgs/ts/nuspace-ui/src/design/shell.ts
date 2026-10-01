@@ -125,3 +125,30 @@ export function shellPaneDrop(edge: "before" | "after"): string {
 
 /** A region the tree does not hold: the kit's `EmptyState`, filling the strip. */
 export const shellMissing = "min-h-0 flex-1";
+
+/* ========================== Keyboard shortcuts ========================== */
+
+/*
+ * The shortcuts sheet (../shell/KeysDialog.tsx): a kit `Dialog lg`, its groups
+ * in two columns that never split a group, scrolling inside the dialog when
+ * the window is short. A line is its action on the left in secondary text and
+ * its keys on the right as kit `Shortcut` caps, "or" between alternatives.
+ */
+
+/** The dialog: its content scrolls, so the header stays put. */
+export const keysDialog = "max-h-[85vh] grid-rows-[auto_minmax(0,1fr)]";
+
+export const keysBody = "-mx-2 columns-1 gap-8 overflow-y-auto px-2 sm:columns-2";
+
+/** One group: never split across the two columns. */
+export const keysGroup = "mb-5 break-inside-avoid";
+
+export const keysGroupTitle = "mb-1.5 text-xs font-medium text-text-muted";
+
+export const keysRow = "flex min-h-7 items-center justify-between gap-4";
+
+export const keysDoes = "min-w-0 truncate text-sm text-text-secondary";
+
+export const keysKeys = "flex shrink-0 items-center gap-1.5";
+
+export const keysOr = "text-xs text-text-muted";

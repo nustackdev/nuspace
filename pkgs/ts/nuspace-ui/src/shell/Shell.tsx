@@ -33,6 +33,7 @@ import { useBooted, useTypePath } from "../core/surfaces";
 import { useTab } from "../core/tab";
 import { shellMain, shellMissing, shellPanePlane, shellRailOpen, shellRoot } from "../design";
 import { ViewerSkeleton } from "../pane/ViewerSkeleton";
+import { useNewPlaneShortcut } from "../sidebar/add";
 import {
 	focusRailToggle,
 	setRailCollapsed,
@@ -49,6 +50,7 @@ export function Shell() {
 	const booted = useBooted();
 	const collapsed = useRailCollapsed() && (sidebar !== null || !booted);
 	useRailShortcut();
+	useNewPlaneShortcut();
 	useTab(viewer, sidebar);
 
 	useEffect(() => {

@@ -460,6 +460,12 @@ export const railSearchTrigger = cn(
 	"focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0",
 );
 
+/**
+ * A plane's menu, off its `...` or a right-click: wide enough that a label and
+ * its shortcut caps never crowd each other.
+ */
+export const railMenu = "min-w-52";
+
 /** The search glyph, in a row's icon lane and at a row icon's size. */
 export const railSearchIcon = cn(railLane, "[&_svg]:size-4");
 

@@ -29,7 +29,7 @@
 import { EmptyState } from "@nustackdev/ui-kit";
 import type * as React from "react";
 import { Fragment, useCallback, useMemo } from "react";
-import { replacePane } from "../core/router";
+import { openPane, replacePane } from "../core/router";
 import {
 	railDragging,
 	railDropInto,
@@ -105,10 +105,12 @@ export function RailTree({
 				case "Enter":
 				case " ":
 					// Same contract as the click: open it and reveal what is
-					// inside it.
+					// inside it. With Option, beside the others, like an
+					// Option-click.
 					e.preventDefault();
 					if (row.hasKids) reveal(row.key);
-					replacePane(row.id);
+					if (e.altKey && e.key === "Enter") openPane(row.id);
+					else replacePane(row.id);
 					break;
 				case "F2":
 					e.preventDefault();

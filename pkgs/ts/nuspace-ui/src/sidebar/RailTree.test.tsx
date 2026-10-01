@@ -181,9 +181,9 @@ describe("rail icon and chevron slot", () => {
 			);
 		});
 		const items = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')];
-		const labels = items.map((i) => i.textContent);
+		const labels = items.map(itemLabel);
 		expect(labels.indexOf("Open in new tab")).toBe(labels.indexOf("Open in split") + 1);
-		act(() => items.find((i) => i.textContent === "Open in new tab")?.click());
+		act(() => items.find((i) => itemLabel(i) === "Open in new tab")?.click());
 		expect(open).toHaveBeenLastCalledWith("/b", "_blank", "noopener");
 
 		act(() => {
@@ -192,7 +192,7 @@ describe("rail icon and chevron slot", () => {
 			);
 		});
 		const ctx = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')];
-		act(() => ctx.find((i) => i.textContent === "Open in new tab")?.click());
+		act(() => ctx.find((i) => itemLabel(i) === "Open in new tab")?.click());
 		expect(open).toHaveBeenLastCalledWith("/a", "_blank", "noopener");
 		open.mockRestore();
 	});
@@ -294,7 +294,8 @@ describe("rail actions", () => {
 		act(() => (split as HTMLElement).focus());
 		expect(tooltip()).toBe("Open in split");
 		act(() => (add as HTMLElement).focus());
-		expect(tooltip()).toBe("Add plane inside");
+		// The label, then its shortcut's caps.
+		expect(tooltip()).toMatch(/^Add plane inside.+N/);
 	});
 });
 
@@ -350,3 +351,12 @@ describe("rail tooltips", () => {
 		expect(tooltip()).toBeNull();
 	});
 });
+
+/** A menu item's own words, without the shortcut caps on its right. */
+function itemLabel(item: HTMLElement): string {
+	return [...item.childNodes]
+		.filter((n) => n.nodeType === Node.TEXT_NODE)
+		.map((n) => n.textContent)
+		.join("")
+		.trim();
+}

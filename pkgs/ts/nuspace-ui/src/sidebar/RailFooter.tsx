@@ -1,5 +1,5 @@
-// The rail's bottom bar: where nuspace lives on the web on the left, the
-// window's own state on the right.
+// The rail's bottom bar: where nuspace lives on the web and the keyboard
+// shortcuts on the left, the window's own state on the right.
 //
 // The connection dot and the theme flip belong to the window rather than to
 // the space: the server writes no node for either, and a reconnect is the one
@@ -12,12 +12,26 @@
 // top. That Plane holds the space's settings only; the theme is the window's,
 // so it stays down here and in the browser.
 
-import { IconButton, StatusDot, Tooltip, TooltipContent, TooltipTrigger } from "@nustackdev/ui-kit";
+import {
+	IconButton,
+	Shortcut,
+	StatusDot,
+	Tooltip,
+	TooltipContent,
+	TooltipTrigger,
+} from "@nustackdev/ui-kit";
 import type { LucideIcon } from "lucide-react";
-import { BookOpen, Github, Moon, Sun } from "lucide-react";
+import { BookOpen, Github, Keyboard, Moon, Sun } from "lucide-react";
 import { useConnectionStatus } from "../core/connection";
 import { toggleTheme, useTheme } from "../core/theme";
-import { railChromeButton, railFooter, railFooterSpace, railStatus } from "../design";
+import {
+	railChromeButton,
+	railFooter,
+	railFooterSpace,
+	railStatus,
+	railTooltipHint,
+} from "../design";
+import { KEYS_KEYS, setKeysOpen } from "../shell/keys";
 
 const GITHUB_URL = "https://github.com/nustackdev/nuspace";
 /** The docs are not written yet; the site is the closest thing. */
@@ -92,6 +106,31 @@ function ConnectionDot() {
 	);
 }
 
+/** Opens the keyboard shortcuts sheet (../shell/KeysDialog.tsx). */
+function KeysButton() {
+	return (
+		<Tooltip>
+			<TooltipTrigger asChild>
+				<IconButton
+					variant="ghost"
+					size="sm"
+					ring="inset"
+					aria-label="Keyboard shortcuts"
+					aria-keyshortcuts="Meta+/ Control+/"
+					onClick={() => setKeysOpen(true)}
+					className={railChromeButton}
+				>
+					<Keyboard />
+				</IconButton>
+			</TooltipTrigger>
+			<TooltipContent side="top">
+				Keyboard shortcuts
+				<Shortcut keys={KEYS_KEYS} size="sm" className={railTooltipHint} />
+			</TooltipContent>
+		</Tooltip>
+	);
+}
+
 function ThemeToggle() {
 	const theme = useTheme();
 	const next = theme === "dark" ? "light" : "dark";
@@ -120,6 +159,7 @@ export function RailFooter() {
 		<div className={railFooter}>
 			<RailLink href={GITHUB_URL} label="GitHub" icon={Github} />
 			<RailLink href={DOCS_URL} label="Docs" hint="Docs are coming soon" icon={BookOpen} />
+			<KeysButton />
 			<div className={railFooterSpace} />
 			<ConnectionDot />
 			<ThemeToggle />

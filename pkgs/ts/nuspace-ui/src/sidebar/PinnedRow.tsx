@@ -3,8 +3,8 @@
 // a shortcut: the Plane is in the tree as well. Hidden when nothing is pinned,
 // its shelf with it.
 //
-// An icon opens its Plane the way a tree row does, through the same handler:
-// a plain click in the focused pane, cmd/ctrl-click in a browser tab. The name
+// An icon opens its Plane the way a tree row does: a plain click in the
+// focused pane, Option-click beside the others, cmd/ctrl-click in a browser tab. The name
 // is in its tooltip. Each is a kit soft IconButton, a filled tile with no
 // border; the focused pane's Plane is washed like the selected row.
 //
@@ -24,7 +24,7 @@
 import { cn, IconButton, Tooltip, TooltipContent, TooltipTrigger } from "@nustackdev/ui-kit";
 import type * as React from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { hrefFor, onNavClick } from "../core/router";
+import { hrefFor, onNavClick, openPane } from "../core/router";
 import { railDragging, railPin, railPinDropLine, railPins, railPinsFade } from "../design";
 import { PlaneIcon } from "../icon/PlaneIcon";
 import { planeIcon } from "../icon/parse";
@@ -192,8 +192,14 @@ function PinStrip({
 									data-pin={id}
 									draggable
 									onClick={(e) => {
-										// The tree row's click: open it and reveal what is inside it.
+										// The tree row's click: open it and reveal what is inside it,
+										// beside the others with Option, as a row does.
 										if (row.children.length) reveal(id);
+										if (e.altKey && e.button === 0) {
+											e.preventDefault();
+											openPane(id);
+											return;
+										}
 										navClick(e);
 									}}
 									onDragStart={(e) => {

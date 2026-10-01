@@ -2,7 +2,7 @@
 // settings.
 //
 // Above the separator, "Open in new tab" opens the Plane's URL in a browser
-// tab, "Add plane" opens the Add plane popup for a child of this pane's Plane,
+// tab, "Add plane inside" opens the Add plane popup for a child of this pane's Plane,
 // opened in this pane, and "Pin" / "Unpin" puts the Plane in the sidebar's
 // pinned row or takes it out (a Plane the sidebar draws only). The tab bar
 // adds a Rename row (only when `onRename` is given), and `open` /
@@ -20,6 +20,7 @@ import {
 	DropdownMenuContent,
 	DropdownMenuItem,
 	DropdownMenuSeparator,
+	DropdownMenuShortcut,
 	DropdownMenuTrigger,
 	IconButton,
 	Switch,
@@ -36,7 +37,7 @@ import {
 	paneMenuText,
 } from "../design";
 import type { PlaneMeta } from "../plane/types";
-import { openAddPlane } from "../sidebar/add";
+import { NEW_INSIDE_KEYS, openAddPlane } from "../sidebar/add";
 import { usePlanePin } from "../sidebar/pin";
 import { PLANE_SETTINGS, type PlaneSetting } from "./settings";
 
@@ -50,7 +51,7 @@ export function PaneMenu({
 	onOpenChange,
 	tabIndex,
 }: {
-	/** The pane's Plane, the parent "Add plane" makes a child of. */
+	/** The pane's Plane, the parent "Add plane inside" makes a child of. */
 	planeId: string;
 	/** Null until the plane lands; the menu stays shut until then. */
 	meta: PlaneMeta | null;
@@ -69,7 +70,7 @@ export function PaneMenu({
 	// focus back to the trigger on close, which blurs, and so commits, that
 	// input the moment it opens.
 	const renaming = useRef(false);
-	// Uncontrolled unless the caller says, so "Add plane" can shut it either way.
+	// Uncontrolled unless the caller says, so "Add plane inside" can shut it either way.
 	const [own, setOwn] = useState(false);
 	const isOpen = open ?? own;
 	const setOpen = onOpenChange ?? setOwn;
@@ -102,7 +103,8 @@ export function PaneMenu({
 							Open in new tab
 						</DropdownMenuItem>
 						<DropdownMenuItem onSelect={() => openAddPlane({ parent: planeId, pane: planeId })}>
-							Add plane
+							Add plane inside
+							<DropdownMenuShortcut keys={NEW_INSIDE_KEYS} />
 						</DropdownMenuItem>
 						{pin ? (
 							<DropdownMenuItem onSelect={pin.toggle}>

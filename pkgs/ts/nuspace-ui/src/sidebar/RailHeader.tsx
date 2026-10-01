@@ -13,7 +13,7 @@ import {
 	railWordmark,
 	railWordmarkNu,
 } from "../design";
-import { openAddPlane } from "./add";
+import { NEW_PLANE_KEYS, openAddPlane } from "./add";
 import { focusRailToggle, RAIL_KEYS, setRailCollapsed } from "./collapse";
 import { ROOT_ID } from "./types";
 
@@ -44,7 +44,10 @@ export function RailHeader() {
 						<SquarePen />
 					</IconButton>
 				</TooltipTrigger>
-				<TooltipContent side="bottom">New plane</TooltipContent>
+				<TooltipContent side="bottom">
+					New plane
+					<Shortcut keys={NEW_PLANE_KEYS} size="sm" className={railTooltipHint} />
+				</TooltipContent>
 			</Tooltip>
 		</div>
 	);
