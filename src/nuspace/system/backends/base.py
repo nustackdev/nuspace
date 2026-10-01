@@ -32,7 +32,7 @@ import nu
 from nu.context import FabricRef
 from nu.engine.structure import Declared
 from nu.lang import ScalarAction
-from nu.lang.sentinels import EMPTY, INVALID
+from nu.lang.sentinels import EMPTY
 from nuspace.ops.utils import atomic, fresh
 from nuspace.shapes import EXIT_FAILED, Space
 from nuspace.system.kernel.utils import Now
@@ -163,7 +163,7 @@ def require_backend(value: object) -> Backend:
     if isinstance(value, Backend):
         return value
     name = value.name if isinstance(value, _Named) else value
-    if name is EMPTY or name is INVALID or name == "":
+    if name is EMPTY or name == "":
         msg = "The plane names no backend: every plane must name one, eg mp or async"
         raise UnknownBackendError(msg)
     msg = f"No backend registered as {name!r}"

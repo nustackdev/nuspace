@@ -31,7 +31,7 @@ from nu.context import FabricRef
 from nu.core.spans.bracket import _LifecycleBracket
 from nu.engine.structure import Declared
 from nu.lang import ScalarAction, ScalarQuery
-from nu.lang.sentinels import EMPTY, INVALID
+from nu.lang.sentinels import EMPTY
 
 
 if TYPE_CHECKING:
@@ -177,7 +177,7 @@ class Captured(_LifecycleBracket):
 
 
 def _value(v: object, default: object) -> object:
-    return default if v is EMPTY or v is INVALID or v is None else v
+    return default if v is EMPTY or v is None else v
 
 
 class _Pure(ScalarQuery):

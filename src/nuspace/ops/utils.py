@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING
 import nu
 import nustd.kv
 from nu.lang import ScalarQuery
-from nu.lang.sentinels import EMPTY, INVALID
+from nu.lang.sentinels import EMPTY
 from nuspace.shapes import Space, States
 
 
@@ -78,7 +78,7 @@ class MintId(ScalarQuery):
         prefix: The id's prefix.
 
     Yields:
-        The id, a str. INVALID when the prefix is a sentinel.
+        The id, a str. EMPTY when the prefix is EMPTY.
     """
 
     def _compile(self, nid: int, children: tuple[Callable, ...]) -> Callable:
@@ -86,8 +86,8 @@ class MintId(ScalarQuery):
 
         def thunk(rt: Runtime) -> object:
             p = prefix(rt)
-            if p is EMPTY or p is INVALID:
-                return INVALID
+            if p is EMPTY:
+                return EMPTY
             return mint_ordered_id(p)
 
         return thunk
@@ -97,8 +97,8 @@ class MintId(ScalarQuery):
 
         async def athunk(rt: Runtime) -> object:
             p = await prefix(rt)
-            if p is EMPTY or p is INVALID:
-                return INVALID
+            if p is EMPTY:
+                return EMPTY
             return mint_ordered_id(p)
 
         return athunk
@@ -158,7 +158,7 @@ def as_list(items: Sequence[nu.StrArg] | nu.Nu) -> nu.List:
 def text(ref: nu.Nu, default: nu.StrArg = "") -> nu.Nu:
     """``ref`` as a str, ``default`` where nothing was written.
 
-    An unwritten leaf reads EMPTY and a Query touching EMPTY is INVALID, so a
+    An unwritten leaf reads EMPTY and a Query touching EMPTY is EMPTY too, so a
     value on its way out of the store needs a floor.
     """
     return nu.If(ref.exists(), nu.ToStr(ref), nu.Str(default))

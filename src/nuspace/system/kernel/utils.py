@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any
 import nu
 import nustd.kv
 from nu.lang import ScalarQuery
-from nu.lang.sentinels import EMPTY, INVALID
+from nu.lang.sentinels import EMPTY
 from nuspace.shapes import Space, States
 
 
@@ -127,7 +127,7 @@ class Ticking(ScalarQuery):
         change: A subscription, eg ``ref.on_children_change()``.
 
     Yields:
-        The subscription, wrapped. INVALID when ``change`` is.
+        The subscription, wrapped. EMPTY when ``change`` is.
     """
 
     def __init__(self, change: nu.Nu, seconds: float = WATCH_SECONDS) -> None:
@@ -147,8 +147,8 @@ class Ticking(ScalarQuery):
 
         async def athunk(rt: Runtime) -> object:
             sub = await change(rt)
-            if sub is EMPTY or sub is INVALID:
-                return INVALID
+            if sub is EMPTY:
+                return EMPTY
             return _TickingSubscription(sub, seconds)
 
         return athunk
