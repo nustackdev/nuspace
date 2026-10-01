@@ -12,6 +12,7 @@ separately here.
 
 ## Unreleased
 
+- The web UI needs ui-kit 0.2.4 for the soft pinned tiles
 - Runs on the new core: program locals live in memory frames, context is read-only
 - Pinned planes sit on filled tiles without borders, matching the sidebar rows
 - Interrupted cell runs are recorded as interrupted again, read from the run record
