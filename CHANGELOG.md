@@ -12,6 +12,7 @@ separately here.
 
 ## Unreleased
 
+- Plane ids sort in one plain call
 - Follows the core's single rule for missing values
 - Shortcut hints read right on every platform and share one look
 - Operations write what they make to the record or a given ref, never returning it

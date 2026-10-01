@@ -325,7 +325,7 @@ def latest(run_id: nu.StrArg, cell_id: nu.StrArg) -> nu.Nu:
 
 def _ids(ref: nu.Nu) -> nu.Nu:
     """A set of minted ids, oldest first."""
-    return nu.List(nu.Collect(nu.Sorted(nu.list(ref))))
+    return nu.sorted(ref)
 
 
 def _cell_run_row(run_id: nu.StrArg, cr: nu.Str) -> nu.Nu:
