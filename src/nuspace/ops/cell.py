@@ -23,7 +23,7 @@ from nustd.ui.core import Ref as UiRef
 from .kernel import interrupt_cell
 from .read import cell_exists, plane_exists
 from .state import drop_cell_state
-from .utils import MintId, Then, atomic, atomic_state, keep_order
+from .utils import MintId, atomic, atomic_state, keep_order
 
 
 if TYPE_CHECKING:
@@ -128,6 +128,7 @@ def add_cell(
     index: nu.IntArg | None = None,
     made_by: nu.StrArg = "",
     meta: dict[str, Any] | nu.Nu | None = None,
+    into: nu.Ref | None = None,
 ) -> nu.Nu:
     """Write a cell onto a plane and place it at ``index``, in one commit.
 
@@ -139,30 +140,31 @@ def add_cell(
         index: Where in the plane's order. The end when absent.
         made_by: Prop, the snippet it was made from, ``""`` for none.
         meta: Fields to merge into its meta.
+        into: Set to the cell id in the commit, ``""`` when the plane is
+            missing, for a caller that needs a minted one: the record does
+            not say which cell this call made.
 
     ``has_ui`` is worked out from ``prog`` (:class:`HasUi`). The props are
     written every time, so an existing cell given again takes
     the ones passed now.
-
-    Yields:
-        The cell id, ``""`` when the plane is missing.
     """
 
-    def write(cid: nu.ObjectRef, has_ui: nu.Nu) -> nu.Nu:
-        placed = cell_writes(
-            plane_id, nu.Str(cid), prog, has_ui, name=name, index=index, made_by=made_by, meta=meta
-        )
-        return Then(placed >> nu.IfDo(nu.Not(plane_exists(plane_id)), cid.set(nu.Str(""))), cid)
-
     def knowing(minted: nu.ObjectRef) -> nu.Nu:
-        # The id the op yields is a copy made inside the bracket, so a retried
-        # commit starts again from the minted id, whatever the last try set.
+        cid = nu.Str(minted)
+
         def commit(has_ui: nu.Nu) -> nu.Nu:
-            return atomic(nu.let(minted, lambda cid: write(cid, has_ui)))
+            placed = cell_writes(
+                plane_id, cid, prog, has_ui, name=name, index=index, made_by=made_by, meta=meta
+            )
+            if into is None:
+                return atomic(placed)
+            made = nu.If(plane_exists(plane_id), cid, nu.Str(""))
+            return atomic(placed >> into.set(made))
 
-        return _knowing_ui(prog, plane_id, nu.Str(minted), commit)
+        return _knowing_ui(prog, plane_id, cid, commit)
 
-    # Minted ahead of the bracket, so has_ui is worked out outside it.
+    # Minted ahead of the bracket, so has_ui is worked out outside it, and a
+    # retried commit writes the same id again.
     return nu.let(MintId("c") if cell_id is None else nu.Str(cell_id), knowing)
 
 

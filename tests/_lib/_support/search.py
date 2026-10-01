@@ -1,7 +1,8 @@
 """Snippets with a ``search``, for the search tests. A module of its own so a worker can import it.
 
-``note`` keeps its text in ``Note.body``; ``slow`` is the same, but takes a
-moment per cell, so a test can watch hits land one cell at a time.
+``note`` keeps its text in ``Note.body``; ``slow`` is the same, but works a
+while per cell first, so a test can watch hits land one cell at a time. A
+searcher is a query, so the while is computation, not a wait.
 """
 
 from __future__ import annotations
@@ -10,12 +11,11 @@ import nu
 import nuspace
 import nustd.kv
 from nuspace import Snippet, ops
-from nuspace.ops.utils import Then
 from nuspace.system.search import excerpt, matches
 
 
-#: How long ``slow`` takes per cell, in seconds.
-SLOW = 0.4
+#: How many numbers ``slow`` adds up per cell: a few tenths of a second.
+WORK = 1_500_000
 
 
 class Note(nuspace.CellState):
@@ -49,8 +49,9 @@ def search(query: nu.StrArg, plane: nu.StrArg, cell: nu.StrArg) -> nu.Nu:
 
 
 def slow(query: nu.StrArg, plane: nu.StrArg, cell: nu.StrArg) -> nu.Nu:
-    """:func:`search`, a moment later."""
-    return Then(nu.Delay(SLOW), search(query, plane, cell))
+    """:func:`search`, once a sum of :data:`WORK` numbers is worked out."""
+    worked = nu.Ge(nu.Sum(nu.Iter(range(WORK))), nu.Int(0))
+    return nu.If(worked, search(query, plane, cell), nu.List.of())
 
 
 def write(plane: str, cell: str, body: str) -> nu.Nu:

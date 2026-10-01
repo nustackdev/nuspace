@@ -18,6 +18,12 @@ def _text(plane: str, cell: str, body: str) -> nu.Nu:
     return ops.insert_snippet(plane, prose.SNIPPET, cell_id=cell) >> kept
 
 
+async def _searched(store, *args: object, **kwargs: object) -> str:
+    """Search through ``store``. The new search is the newest child of ``SEARCHES``."""
+    await store.run(search.search(*args, **kwargs))
+    return (await store.read(ops.children(search.SEARCHES)))[-1]
+
+
 def test_only_text_is_searchable_and_by_its_module_function():
     assert search.searchable(SNIPPETS) == {"text": "nuverse.snippets.prose:search"}
     # The state the search reads is the state the prog keeps.
@@ -43,7 +49,7 @@ async def test_a_search_over_text_cells(store):
         >> _text("p", "b", "Mint spreads")
     )
     searchers = search.searchable(SNIPPETS)
-    pid = await store.run(search.search("BASIL", ["text"], True, searchers=searchers))
+    pid = await _searched(store, "BASIL", ["text"], True, searchers=searchers)
     await store.run(await store.run(_loaded(pid)))
     hits = await store.read(ops.plane_state(pid, search.Search.hits.extract()))
     assert [(h["cell"], h["excerpt"], h["by"]) for h in hits] == [("a", "Basil likes sun", "text")]

@@ -27,6 +27,7 @@ from _support.kernel import (
     prog,
     workers_named,
 )
+from _support.made import MADE
 
 import nu
 from nuspace import ops
@@ -273,7 +274,7 @@ async def test_nav_skips_missing_and_system_planes(space):
 async def test_nav_brings_up_a_system_ui_plane_and_never_a_service(space):
     """``system`` only protects: a system ui plane (home) comes up, a service never does."""
     sid = "conn-system-ui"
-    p = await space.run(ops.add_plane(system=True, ui=True, backend="async"))
+    p = await space.made(ops.add_plane(system=True, ui=True, backend="async", into=MADE))
     await space.run(ops.add_cell(p, READS_SESSION))
     await open_tab(space, sid, "reload", p)
     await pane(space, sid, p)
@@ -303,7 +304,7 @@ async def test_nav_follows_the_open_planes_cells(space):
     await open_tab(space, sid, p)
     r = (await pane(space, sid, p))["id"]
 
-    c2 = await space.run(ops.add_cell(p, READS_SESSION))
+    c2 = await space.made(ops.add_cell(p, READS_SESSION, into=MADE))
     row = await space.run_row(r, lambda x: live(cell_of(x, c2)), SLOW)
     new = cell_of(row, c2)
     assert new["by"] == nav_service.BY
@@ -416,9 +417,9 @@ async def test_supervisor_ignores_runs_by_others(space):
     p, _ = await space.plane(version("x"))
     await space.run(supervise(p, ON_FAILURE))
     (mine,) = await supervised(space, p, lambda rs: len(rs) == 1 and live(first_cell(rs[0])))
-    theirs = await space.run(ops.plane_run(p, by="test", envs=[ops.env("nope")]))
+    theirs = await space.made(ops.plane_run(p, by="test", envs=[ops.env("nope")], into=MADE))
     assert (await space.run_row(theirs, ended, SLOW))["exit"] == EXIT_FAILED
-    killed = await space.run(ops.plane_run(p, by="test"))
+    killed = await space.made(ops.plane_run(p, by="test", into=MADE))
     await space.run(ops.plane_kill(killed))
     await space.run_row(killed, ended, SLOW)
     await asyncio.sleep(0.8)
@@ -459,7 +460,7 @@ async def test_supervisor_leaves_a_failed_cell_in_a_live_run(space):
 async def test_reload_replaces_a_cell_run_when_its_prog_changes(space):
     p, (c,) = await space.plane(version("v1"))
     envs = [ops.env("session", "conn-9")]
-    r = await space.run(ops.plane_run(p, envs=envs, by="test"))
+    r = await space.made(ops.plane_run(p, envs=envs, by="test", into=MADE))
     old = first_cell(await space.run_row(r, lambda x: live(first_cell(x)), SLOW))
     await space.run(ops.set_prog(p, c, version("v2")))
     row = await space.run_row(r, lambda x: len(x["cells"]) == 2 and live(x["cells"][1]), SLOW)

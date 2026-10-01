@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pytest
+from _support.made import MADE
 
 import nu
 import nustd.kv
@@ -88,8 +89,7 @@ def _seed() -> nu.Nu:
 @pytest.mark.parametrize("module", LIVE, ids=lambda m: m.PLANE.name)
 async def test_each_plane_is_created_drawn_with_its_cells(store, module):
     spec = module.PLANE
-    made = await store.run(ops.create_plane(spec, name="Live", plane_id="p1"))
-    assert made == "p1"
+    await store.run(ops.create_plane(spec, name="Live", plane_id="p1"))
     (row,) = [r for r in await store.read(ops.plane_rows()) if r["id"] == "p1"]
     assert row["name"] == "Live"
     assert row["props"] == {"system": False, "ui": True, "made_by": spec.name, "backend": "async"}
@@ -98,8 +98,8 @@ async def test_each_plane_is_created_drawn_with_its_cells(store, module):
     assert [(c["name"], c["prog"]) for c in cells] == CELLS[spec.name]
 
 
-async def test_a_minted_plane_yields_its_id_and_takes_the_label(store):
-    made = await store.run(ops.create_plane(runs.PLANE))
+async def test_a_minted_plane_writes_its_id_into_the_ref_and_takes_the_label(store):
+    made = await store.made(ops.create_plane(runs.PLANE, into=MADE))
     assert made in await store.read(ops.planes())
     assert await store.read(Space.planes[made].name) == "Runs"
     assert len(await store.read(ops.cells(made))) == 3

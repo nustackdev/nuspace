@@ -25,7 +25,7 @@ from .pin import unpin
 from .read import plane_exists
 from .state import drop_plane_state
 from .tree import link, subtree, unlink
-from .utils import MintId, Then, atomic, atomic_state, flag, fresh
+from .utils import MintId, atomic, atomic_state, flag, fresh
 
 
 __all__ = [
@@ -72,6 +72,7 @@ def add_plane(
     ui: nu.BoolArg = False,
     made_by: nu.StrArg = "",
     meta: dict[str, Any] | nu.Nu | None = None,
+    into: nu.Ref | None = None,
 ) -> nu.Nu:
     """Make a plane with no cells and hang it under ``parent``, in one commit.
 
@@ -93,12 +94,11 @@ def add_plane(
         made_by: Prop, the registered Plane it was created from. Nothing
             groups by it.
         meta: Fields to merge into its meta.
+        into: Set to the plane id in the commit, for a caller that needs a
+            minted one: the record does not say which plane this call made.
 
     The props are written every time, so an existing plane given again takes
     the ones passed now.
-
-    Yields:
-        The plane id.
 
     Raises:
         ValueError: ``backend`` is empty: at build when it is a ``str``, at
@@ -118,7 +118,7 @@ def add_plane(
             made_by=made_by,
             meta=meta,
         )
-        return Then(writes, pid)
+        return writes if into is None else writes >> into.set(nu.Str(pid))
 
     value = MintId("p") if plane_id is None else nu.Str(plane_id)
     return atomic(nu.let(value, write))
@@ -157,59 +157,55 @@ def remove_plane(plane_id: nu.StrArg) -> nu.Nu:
 
     Refused when the plane or any plane below it is a system plane. Live
     runs of every plane going are killed in the same commit, so nothing keeps
-    running against rows that are gone.
+    running against rows that are gone. Whether it went is in the record:
+    :func:`~nuspace.ops.read.plane_exists`.
 
-    Two commits: the rows, which yields the planes that went, then their
-    state, one subtree delete per plane (its cells' state inside it). Rows
-    first, as :func:`~nuspace.ops.cell.remove_cell` does, so no plane still
-    there reads its state gone.
-
-    Yields:
-        True when removed, False when refused or missing.
+    Two commits: the rows, then their state, one subtree delete per plane
+    (its cells' state inside it). The first writes which planes went into a
+    slot of the op's own, where the second reads them. Rows first, as
+    :func:`~nuspace.ops.cell.remove_cell` does, so no plane still there
+    reads its state gone.
     """
     each = fresh("removed_each")
 
     def drop(gone: nu.ObjectRef) -> nu.Nu:
-        ids = nu.List(gone)
-        states = atomic_state(nu.ForEachDo(ids, drop_plane_state(nu.Str(nu.Attr(each))), item=each))
-        return Then(states, nu.Gt(ids.len(), nu.Int(0)))
+        states = nu.ForEachDo(nu.List(gone), drop_plane_state(nu.Str(nu.Attr(each))), item=each)
+        return _remove_rows(plane_id, gone) >> atomic_state(states)
 
-    return nu.let(_remove_rows(plane_id), drop)
+    return nu.let(nu.Literal([]), drop)
 
 
-def _remove_rows(plane_id: nu.StrArg) -> nu.Nu:
-    """:func:`remove_plane`'s Space commit. Yields the plane ids removed, ``[]`` when refused.
+def _remove_rows(plane_id: nu.StrArg, gone: nu.Ref) -> nu.Nu:
+    """:func:`remove_plane`'s Space commit. ``gone`` set to the ids removed, ``[]`` when refused.
 
-    The slot it yields opens inside the bracket, so a retried commit starts
-    again from ``[]``.
+    Every try sets it, so after a retried commit it holds what the try that
+    landed removed.
     """
 
-    def body(removed: nu.ObjectRef) -> nu.Nu:
-        def drop(ids: nu.Nu) -> nu.Nu:
-            item = fresh("drop")
-            at = nu.Str(nu.Attr(item))
-            system = nu.List(
-                nu.Collect(
-                    nu.Filter(nu.List(ids), flag(Space.planes[at].props.system, False), key=item)
-                )
+    def drop(ids: nu.Nu) -> nu.Nu:
+        item = fresh("drop")
+        at = nu.Str(nu.Attr(item))
+        system = nu.List(
+            nu.Collect(
+                nu.Filter(nu.List(ids), flag(Space.planes[at].props.system, False), key=item)
             )
-            gone = nu.List(ids)
-            each = fresh("drop_each")
-            each_ref = nu.Str(nu.Attr(each))
-            delete = nu.ForEachDo(
-                gone,
-                unlink(each_ref)
-                >> unpin(each_ref)
-                >> nu.IfDo(Space.planes.contains(each_ref), Space.planes.del_item(each_ref))
-                >> nu.IfDo(Space.tree.contains(each_ref), Space.tree.del_item(each_ref)),
-                item=each,
-            )
-            ok = nu.And(plane_exists(plane_id), nu.Eq(system.len(), nu.Int(0)))
-            return nu.IfDo(ok, live_runs_of(gone.contains, kill) >> delete >> removed.set(gone))
+        )
+        going = nu.List(ids)
+        each = fresh("drop_each")
+        each_ref = nu.Str(nu.Attr(each))
+        delete = nu.ForEachDo(
+            going,
+            unlink(each_ref)
+            >> unpin(each_ref)
+            >> nu.IfDo(Space.planes.contains(each_ref), Space.planes.del_item(each_ref))
+            >> nu.IfDo(Space.tree.contains(each_ref), Space.tree.del_item(each_ref)),
+            item=each,
+        )
+        ok = nu.And(plane_exists(plane_id), nu.Eq(system.len(), nu.Int(0)))
+        removed = live_runs_of(going.contains, kill) >> delete >> gone.set(going)
+        return nu.IfDo(ok, removed, gone.set(nu.Literal([])))
 
-        return Then(subtree(plane_id, drop), removed)
-
-    return atomic(nu.let(nu.Literal([]), body))
+    return atomic(subtree(plane_id, drop))
 
 
 def rename_plane(plane_id: nu.StrArg, name: nu.StrArg) -> nu.Nu:

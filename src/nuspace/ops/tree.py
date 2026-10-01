@@ -16,7 +16,7 @@ import nu
 from nuspace.shapes import ROOT, Space
 
 from .read import plane_exists
-from .utils import Then, atomic, fresh
+from .utils import atomic, fresh
 
 
 if TYPE_CHECKING:
@@ -92,10 +92,8 @@ def move_plane(
     ``parent``'s children once the plane is out of them, the end when None.
     Anything moves, system planes and home too. Refused when either is
     missing, or when ``parent`` is the plane or sits below it: that would
-    make a cycle.
-
-    Yields:
-        True when moved, False when refused.
+    make a cycle. Whether it moved is in the record: the plane's parent
+    and its place among the children.
     """
     return atomic(nu.let(False, lambda moved: _move_body(plane_id, parent, index, moved)))
 
@@ -103,7 +101,7 @@ def move_plane(
 def _move_body(
     plane_id: nu.StrArg, parent: nu.StrArg, index: nu.IntArg | None, moved: nu.ObjectRef
 ) -> nu.Nu:
-    """Decide into ``moved``, then move the plane when it said yes, and yield the decision."""
+    """Decide into ``moved``, then move the plane when it said yes."""
 
     def check(ids: nu.Nu) -> nu.Nu:
         ok = nu.And(
@@ -113,7 +111,6 @@ def _move_body(
         )
         return moved.set(ok)
 
-    move = subtree(plane_id, check) >> nu.IfDo(
+    return subtree(plane_id, check) >> nu.IfDo(
         nu.Bool(moved), unlink(plane_id) >> link(plane_id, parent, index)
     )
-    return Then(move, moved)

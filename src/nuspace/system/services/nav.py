@@ -6,8 +6,9 @@ its ``routes`` (its panes, left to right): a user plane named there gets a
 plane run ``by`` nav, inside the ``session`` env bound to the connection,
 for as long as it stays in ``routes``:
 
-    plane opened   run = plane_run(plane, envs=[session:sid]), kept in nav's
-                     state (:class:`Panes`) under the connection and plane
+    plane opened   plane_run(plane, envs=[session:sid], into=run), run kept
+                     in nav's state (:class:`Panes`) under the connection
+                     and plane
     cell added     cell_run(run, cell), unless the run has one of it
     cell removed   nothing here: remove_cell interrupts its cell runs
     run ended      (every cell run over) waits for the plane's cells to
@@ -199,8 +200,8 @@ def _turn(sid: nu.Str, route: nu.Str) -> nu.Nu:
     """
     envs = nu.List.of(nu.List.of(nu.Str(SESSION), sid))
 
-    def follow(held: nu.ObjectRef) -> nu.Nu:
-        run_id = nu.Str(held)
+    def follow(made: nu.ObjectRef) -> nu.Nu:
+        run_id = nu.Str(made)
         running = _kernel.running
         ended = until(nu.Not(running.contains(run_id)), running.on_children_change())
         live = snap(running.contains(run_id))
@@ -208,14 +209,15 @@ def _turn(sid: nu.Str, route: nu.Str) -> nu.Nu:
             nu.Race(_cells_fold(route, run_id), ended), finally_=nu.IfDo(live, plane_stop(run_id))
         )
         remember = atomic_state(_here(Panes.runs.set_item(pane_key(sid, route), run_id)))
-        return remember >> followed >> _changed(route)
+        start = plane_run(route, by=BY, envs=envs, into=made)
+        return start >> remember >> followed >> _changed(route)
 
     # A route can name a plane before the plane is written: the browser mints
     # a new plane's id and opens it while its create is still in flight. So
     # wait for the plane rather than giving up on the route; the routes will
     # not change again to retry.
     shown = nu.WhileDo(nu.Not(snap(routable(route))), wake(Space.planes.on_children_change()))
-    return shown >> nu.let(plane_run(route, by=BY, envs=envs), follow)
+    return shown >> nu.let(nu.Str(""), follow)
 
 
 def _open(sid: nu.Str, route: nu.Str) -> nu.Nu:

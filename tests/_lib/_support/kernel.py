@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 import nu
+from _support.made import MADE, MADE_STORE
 from nu.lang import ScalarQuery
 from nuspace import ops
 from nuspace.shapes import Space
@@ -94,6 +95,11 @@ class Kernel:
     async def read(self, term: nu.Nu) -> object:
         return await self.run(ops.snapshot(term))
 
+    async def made(self, term: nu.Nu) -> object:
+        """Run ``term``, an op given ``into=MADE``, and read what it set there."""
+        await self.run(term)
+        return await self.run(MADE)
+
     async def until(
         self, term: nu.Nu, pred: Callable[[object], bool], timeout: float = 4.0
     ) -> object:
@@ -119,8 +125,8 @@ class Kernel:
         return await self.until(worker(wid), pred or ended, timeout)
 
     async def plane(self, *progs: str, backend: str = "async") -> tuple[str, list[str]]:
-        p = await self.run(ops.add_plane(ui=True, backend=backend))
-        return p, [await self.run(ops.add_cell(p, src)) for src in progs]
+        p = await self.made(ops.add_plane(ui=True, backend=backend, into=MADE))
+        return p, [await self.made(ops.add_cell(p, src, into=MADE)) for src in progs]
 
     async def close(self) -> None:
         if not self.task.done():
@@ -191,7 +197,7 @@ async def opened(name: str = "nuspace-test", **kwargs: object) -> Kernel:
     """A kernel open on this loop, held until :meth:`Kernel.close`."""
     loop = asyncio.get_running_loop()
     ready, done = loop.create_future(), asyncio.Event()
-    hold = nu.let(_Hold(ready, done), lambda _: nu.Noop())
+    hold = nu.With(MADE_STORE, body=nu.let(_Hold(ready, done), lambda _: nu.Noop()))
     task = asyncio.create_task(nu.arun(open_kernel(hold, name=name, **kwargs)))
     ctx = await asyncio.wait_for(asyncio.shield(ready), 20)
     return Kernel(ctx, done, task)

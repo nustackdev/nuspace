@@ -12,6 +12,7 @@ separately here.
 
 ## Unreleased
 
+- Operations write what they make to the record or a given ref, never returning it
 - Pins move into the sidebar header, aligned with search; divider shows on scroll
 - The web UI needs ui-kit 0.2.4 for the soft pinned tiles
 - Runs on the new core: program locals live in memory frames, context is read-only

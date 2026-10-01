@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 
 import pytest
+from _support.made import MADE
 
 import nu
 import nustd.kv
@@ -39,9 +40,9 @@ def in_run(plane_id, cell_id, term):
 
 async def seeded(store):
     """A plane with cells ``a`` and ``b``, each with state, and the plane's shared state."""
-    p = await store.run(ops.add_plane(backend="async"))
-    a = await store.run(ops.add_cell(p, "a"))
-    b = await store.run(ops.add_cell(p, "b"))
+    p = await store.made(ops.add_plane(backend="async", into=MADE))
+    a = await store.made(ops.add_cell(p, "a", into=MADE))
+    b = await store.made(ops.add_cell(p, "b", into=MADE))
     await store.run(in_run(p, a, Tick.n.set(1) >> Chat.title.set("t")))
     await store.run(in_run(p, b, Tick.n.set(2)))
     return p, a, b
@@ -66,9 +67,9 @@ async def test_two_cells_state_is_their_own(store):
 
 
 async def test_sibling_lands_under_the_sibling_cell(store):
-    p = await store.run(ops.add_plane(backend="async"))
-    a = await store.run(ops.add_cell(p, "a"))
-    b = await store.run(ops.add_cell(p, "b"))
+    p = await store.made(ops.add_plane(backend="async", into=MADE))
+    a = await store.made(ops.add_cell(p, "a", into=MADE))
+    b = await store.made(ops.add_cell(p, "b", into=MADE))
     term = Tick.n.set(1) >> ops.sibling(b, Tick.n.set(7)) >> Chat.title.set("t")
     await store.run(in_run(p, a, term))
     assert await store.read(cell_state(p, a).extract()) == {"n": 1}
@@ -77,9 +78,9 @@ async def test_sibling_lands_under_the_sibling_cell(store):
 
 
 async def test_sibling_reads(store):
-    p = await store.run(ops.add_plane(backend="async"))
-    a = await store.run(ops.add_cell(p, "a"))
-    b = await store.run(ops.add_cell(p, "b"))
+    p = await store.made(ops.add_plane(backend="async", into=MADE))
+    a = await store.made(ops.add_cell(p, "a", into=MADE))
+    b = await store.made(ops.add_cell(p, "b", into=MADE))
     await store.run(in_run(p, b, Tick.n.set(5)))
     await store.run(in_run(p, a, Tick.n.set(ops.sibling(b, Tick.n) + 1)))
     assert await store.read(reroot(Tick.n, p, a)) == 6
@@ -108,8 +109,8 @@ async def test_clear_state(store):
 
 
 async def test_clear_state_of_a_plane_with_none_writes_nothing(store):
-    p = await store.run(ops.add_plane(backend="async"))
-    c = await store.run(ops.add_cell(p, "c"))
+    p = await store.made(ops.add_plane(backend="async", into=MADE))
+    c = await store.made(ops.add_cell(p, "c", into=MADE))
     await store.run(ops.clear_state(p) >> ops.clear_state(p, c))
     assert await store.read(nu.list(States.planes.keys())) == []
 
@@ -126,20 +127,24 @@ async def test_remove_cell_drops_its_state_only(store):
 
 async def test_remove_plane_drops_its_state_and_its_cells_and_below(store):
     p, _, _ = await seeded(store)
-    q = await store.run(ops.add_plane(parent=p, backend="async"))
-    c = await store.run(ops.add_cell(q, "c"))
+    q = await store.made(ops.add_plane(parent=p, backend="async", into=MADE))
+    c = await store.made(ops.add_cell(q, "c", into=MADE))
     await store.run(in_run(q, c, Tick.n.set(3)))
     other, keep, _ = await seeded(store)
-    assert await store.run(ops.remove_plane(p)) is True
+    await store.run(ops.remove_plane(p))
+    assert not await store.read(ops.plane_exists(p))
     assert await store.read(nu.list(States.planes.keys())) == [other]
     assert await store.read(reroot(Tick.n, other, keep)) == 1
-    assert await store.run(ops.remove_plane(p)) is False
+    # Gone already: nothing more to drop.
+    await store.run(ops.remove_plane(p))
+    assert await store.read(nu.list(States.planes.keys())) == [other]
 
 
 async def test_a_refused_remove_plane_keeps_state(store):
     p, a, _ = await seeded(store)
     await store.run(ops.add_plane("sys", system=True, parent=p, backend="async"))
-    assert await store.run(ops.remove_plane(p)) is False
+    await store.run(ops.remove_plane(p))
+    assert await store.read(ops.plane_exists(p))
     assert await store.read(reroot(Tick.n, p, a)) == 1
 
 
@@ -166,8 +171,8 @@ async def test_create_plane_seeds_cells_and_nested_children(store):
         children=(mid, leaf),
         backend="mp",
     )
-    top = await store.run(ops.add_plane(name="top", backend="async"))
-    made = await store.run(ops.create_plane(spec, parent=top))
+    top = await store.made(ops.add_plane(name="top", backend="async", into=MADE))
+    made = await store.made(ops.create_plane(spec, parent=top, into=MADE))
     assert await store.read(ops.children(top)) == [made]
     rows = {r["id"]: r for r in await store.read(ops.plane_rows())}
     assert (rows[made]["name"], rows[made]["meta"]) == (
@@ -196,7 +201,7 @@ async def test_create_plane_seeds_cells_and_nested_children(store):
 
 
 async def test_create_plane_runs_on_its_specs_backend(store):
-    made = await store.run(ops.create_plane(ops.Plane("j", "J", backend="mp")))
+    made = await store.made(ops.create_plane(ops.Plane("j", "J", backend="mp"), into=MADE))
     assert await store.read(Space.planes[made].props.backend) == "mp"
 
 
@@ -245,13 +250,13 @@ async def test_add_plane_refuses_an_empty_backend(store):
 
 async def test_create_plane_name_and_id(store):
     plain = ops.Plane("plain", "Plain", backend="async")
-    assert await store.run(ops.create_plane(plain, name="Notes", plane_id="p1")) == "p1"
+    assert await store.made(ops.create_plane(plain, name="Notes", plane_id="p1", into=MADE)) == "p1"
     (row,) = await store.read(ops.plane_rows())
     assert (row["name"], row["parent"]) == ("Notes", ROOT)
     assert await store.read(ops.cells("p1")) == []
     # A term built once creates a new plane each time it runs.
-    term = ops.create_plane(plain)
-    assert await store.run(term) != await store.run(term)
+    term = ops.create_plane(plain, into=MADE)
+    assert await store.made(term) != await store.made(term)
 
 
 async def test_create_plane_writes_the_icon(store):
@@ -270,7 +275,7 @@ async def test_create_plane_writes_the_icon(store):
 
 
 async def test_set_plane_icon(store):
-    p = await store.run(ops.add_plane(meta={"editable": True}, backend="async"))
+    p = await store.made(ops.add_plane(meta={"editable": True}, backend="async", into=MADE))
     await store.run(ops.set_plane_icon(p, "folder"))
     await store.run(ops.set_plane_icon("missing", "folder"))
     (row,) = await store.read(ops.plane_rows())
@@ -293,10 +298,10 @@ def test_plane_icon_spelling():
 
 
 async def test_insert_snippet(store):
-    p = await store.run(ops.add_plane(backend="async"))
-    first = await store.run(ops.add_cell(p, "x"))
+    p = await store.made(ops.add_plane(backend="async", into=MADE))
+    first = await store.made(ops.add_cell(p, "x", into=MADE))
     snippet = ops.Snippet("ticker", "Ticker", "def out(): ...")
-    c = await store.run(ops.insert_snippet(p, snippet, index=0))
+    c = await store.made(ops.insert_snippet(p, snippet, index=0, into=MADE))
     assert await store.read(ops.cells(p)) == [c, first]
     assert (await store.read(ops.cell_rows(p)))[0] == {
         "id": c,
@@ -309,8 +314,8 @@ async def test_insert_snippet(store):
 
 async def test_snippet_cell_meta_stays_free(store):
     """``made_by`` is a prop: a cell's meta takes the same key without touching it."""
-    p = await store.run(ops.add_plane(backend="async"))
-    c = await store.run(ops.insert_snippet(p, ops.Snippet("ticker", "Ticker", "")))
+    p = await store.made(ops.add_plane(backend="async", into=MADE))
+    c = await store.made(ops.insert_snippet(p, ops.Snippet("ticker", "Ticker", ""), into=MADE))
     await store.run(ops.set_cell_meta(p, c, {"made_by": "x", "k": 1}))
     row = (await store.read(ops.cell_rows(p)))[0]
     assert row["props"] == {"made_by": "ticker", "has_ui": False}

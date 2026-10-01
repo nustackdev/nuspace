@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest_asyncio
+from _support.made import MADE, MADE_STORE
 
 import nu
 import nustd.kv
@@ -45,7 +46,10 @@ class _Hold(ScalarQuery):
 
 @dataclass
 class Store:
-    """``run`` evaluates an op as is, ``read`` inside a Snapshot of both stores."""
+    """``run`` evaluates an op as is, ``read`` inside a Snapshot of both stores.
+
+    ``made`` runs an op that sets ``into`` and reads it back.
+    """
 
     ctx: nu.Context
 
@@ -55,6 +59,11 @@ class Store:
 
     async def read(self, term: nu.Nu) -> object:
         return await self.run(ops.snapshot(term))
+
+    async def made(self, term: nu.Nu) -> object:
+        """Run ``term``, an op given ``into=MADE``, and read what it set there."""
+        await self.run(term)
+        return await self.run(MADE)
 
 
 @pytest_asyncio.fixture
@@ -66,6 +75,7 @@ async def store():
             nu.With(
                 nustd.kv.memory_navigator(tags=(Space,)),
                 nustd.kv.memory_navigator(tags=(States,)),
+                MADE_STORE,
                 body=_Hold(opened, done),
             )
         )

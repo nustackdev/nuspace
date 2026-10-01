@@ -36,7 +36,7 @@ import nustd.kv
 from nuspace import ops
 from nuspace.ops.cell import HasUi, cell_writes
 from nuspace.ops.plane import plane_writes
-from nuspace.ops.utils import MintId, Then, atomic, atomic_state, flag, text
+from nuspace.ops.utils import MintId, atomic, atomic_state, flag, text
 from nuspace.shapes import PlaneState, Space
 
 from .home import seed
@@ -362,8 +362,8 @@ def search(
             the registry has them (:func:`searchable`). The search's prog
             names them, so a name picked but missing here is not searched.
 
-    Yields:
-        The search plane's id.
+    The new search is the newest child of :data:`SEARCHES`, where the
+    viewer finds it.
     """
     prog = source(searchers or {})
     picked = snippets if isinstance(snippets, nu.Nu) else nu.Literal(list(snippets))
@@ -385,7 +385,7 @@ def search(
             )
             return plane >> atomic_state(ops.plane_state(pid, state)) >> ops.plane_run(pid, by=BY)
 
-        return Then(nu.let(HasUi(prog, pid, CELL), made), minted)
+        return nu.let(HasUi(prog, pid, CELL), made)
 
     return nu.let(MintId("p"), fill)
 

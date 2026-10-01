@@ -14,7 +14,7 @@ from nuspace.shapes import ROOT
 
 from .cell import HasUi, add_cell, cell_writes
 from .plane import plane_icon, plane_writes
-from .utils import MintId, Then, atomic
+from .utils import MintId, atomic
 
 
 if TYPE_CHECKING:
@@ -117,6 +117,7 @@ def create_plane(
     parent: nu.StrArg = ROOT,
     name: nu.StrArg | None = None,
     plane_id: nu.StrArg | None = None,
+    into: nu.Ref | None = None,
 ) -> nu.Nu:
     """Create a plane from ``spec``: drawn, its cells in order, its children under it.
 
@@ -131,15 +132,17 @@ def create_plane(
         parent: The tree node to hang it under, ``ROOT`` or a plane id.
         name: What to call it. ``spec.label`` when absent.
         plane_id: Its id. Minted when absent. Children always mint theirs.
-
-    Yields:
-        The new plane's id.
+        into: Set to the new plane's id once the commit landed, for a caller
+            that needs a minted one: the record does not say which plane
+            this call made.
     """
     pid = _Seeding.ids["p0"]
     first: list[nu.Nu] = [pid.set(MintId("p") if plane_id is None else nu.Str(plane_id))]
     label = spec.label if name is None else name
-    writes = atomic(_seeded(spec, pid, parent, label, first))
-    return nu.Frame(_Seeding, Then(nu.Sequential(*first, writes), pid), ids={}, ui={})
+    writes = [atomic(_seeded(spec, pid, parent, label, first))]
+    if into is not None:
+        writes.append(into.set(nu.Str(pid)))
+    return nu.Frame(_Seeding, nu.Sequential(*first, *writes), ids={}, ui={})
 
 
 def _seeded(
@@ -187,11 +190,11 @@ def insert_snippet(
     *,
     index: nu.IntArg | None = None,
     cell_id: nu.StrArg | None = None,
+    into: nu.Ref | None = None,
 ) -> nu.Nu:
     """Add a cell from a snippet: its source as the prog, its name as the name and ``made_by``.
 
-    Yields:
-        The cell id, as :func:`~nuspace.ops.cell.add_cell` does.
+    ``into`` is :func:`~nuspace.ops.cell.add_cell`'s.
     """
     return add_cell(
         plane_id,
@@ -200,4 +203,5 @@ def insert_snippet(
         name=snippet.name,
         index=index,
         made_by=snippet.name,
+        into=into,
     )

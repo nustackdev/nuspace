@@ -30,7 +30,8 @@ async def test_settings_is_seeded_once_with_home_header(store):
     await store.run(settings.ensure_settings())
     cells = await store.read(ops.cell_rows(settings.PLANE))
     assert [c["id"] for c in cells] == ["telemetry"]
-    assert await store.run(ops.remove_plane(settings.PLANE)) is False
+    await store.run(ops.remove_plane(settings.PLANE))
+    assert await store.read(ops.plane_exists(settings.PLANE))
 
     (space, *planes) = await store.read(rows())
     assert space["children"] == [home.PLANE, settings.PLANE]

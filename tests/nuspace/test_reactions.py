@@ -35,6 +35,13 @@ from nuspace.system.services import (
 
 module_loop = pytest.mark.asyncio(loop_scope="module")
 
+
+async def enabled(store, change: str, plane: str, **kwargs: str) -> str:
+    """Enable a reaction through ``store``, and its cell: :func:`reactions.reaction_of` them."""
+    await store.run(enable_react(change, plane, **kwargs))
+    return await store.read(reactions.reaction_of(change, plane))
+
+
 NAME = "nuspace-reactions"
 
 #: A deadline for waits a loaded machine stretches. Met early, it costs nothing.
@@ -89,9 +96,9 @@ async def test_bootstrap_makes_the_plane_with_no_cells(store):
 
 async def test_enable_writes_the_change_as_source_and_is_idempotent(store):
     await store.run(ensure_system() >> ops.add_plane("chat", backend="async"))
-    cid = await store.run(enable_react(on("chat"), "chat"))
+    cid = await enabled(store, on("chat"), "chat")
     assert cid.startswith("react_")
-    assert await store.run(enable_react(on("chat"), "chat")) == cid
+    assert await enabled(store, on("chat"), "chat") == cid
     assert await store.read(ops.cells(reactions.PLANE)) == [cid]
     source = await store.read(ops.prog(reactions.PLANE, cid))
     assert "PLANE = 'chat'" in source
@@ -124,19 +131,19 @@ async def test_enable_refuses_source_that_does_not_load(store, change, imports):
 
 async def test_enable_takes_imports(store):
     await store.run(ensure_system() >> ops.add_plane("chat", backend="async"))
-    cid = await store.run(enable_react(on("chat"), "chat", imports="import json"))
+    cid = await enabled(store, on("chat"), "chat", imports="import json")
     assert "\nimport json\n" in await store.read(ops.prog(reactions.PLANE, cid))
 
 
 async def test_disable_removes_the_reaction_and_its_key(store):
     await store.run(ensure_system() >> ops.add_plane("chat", backend="async"))
-    cid = await store.run(enable_react(on("chat"), "chat"))
-    other = await store.run(enable_react(on("chat", "other"), "chat"))
+    cid = await enabled(store, on("chat"), "chat")
+    other = await enabled(store, on("chat", "other"), "chat")
     await store.run(disable_react(on("chat"), "chat") >> disable_react(on("chat"), "chat"))
     assert await store.read(ops.cells(reactions.PLANE)) == [other]
     assert list((await store.read(index())).values()) == [other]
     assert await store.read(reactions.reaction_of(on("chat"), "chat")) == ""
-    again = await store.run(enable_react(on("chat"), "chat"))
+    again = await enabled(store, on("chat"), "chat")
     assert again not in ("", cid)
 
 
@@ -169,7 +176,7 @@ def _cell(row: dict, cell: str) -> dict:
 async def reacting(space: Kernel, change: str, plane: str) -> str:
     """Enable a reaction, wait for its cell run to be live, and for its first fire to end."""
     before = len(mine(await space.read(history(plane))))
-    cid = await space.run(enable_react(change, plane))
+    cid = await enabled(space, change, plane)
     rid = await space.until(reactions.live_run(), bool, SLOW)
     await space.run_row(rid, lambda r: live(_cell(r, cid)), SLOW)
     await fired(space, plane, lambda rs: len(rs) > before and all(ended(r) for r in rs))

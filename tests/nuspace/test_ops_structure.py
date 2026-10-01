@@ -7,6 +7,7 @@ in any process would, then read back.
 from __future__ import annotations
 
 import pytest
+from _support.made import MADE
 
 import nu
 import nustd.kv
@@ -17,11 +18,11 @@ from nuspace.shapes import ROOT, Space, States
 
 
 async def plane(store, name="", backend="async", **kw):
-    return await store.run(ops.add_plane(name=name, backend=backend, **kw))
+    return await store.made(ops.add_plane(name=name, backend=backend, **kw, into=MADE))
 
 
 async def cell(store, plane_id, prog="def out(): pass", **kw):
-    return await store.run(ops.add_cell(plane_id, prog, **kw))
+    return await store.made(ops.add_cell(plane_id, prog, **kw, into=MADE))
 
 
 NO_PROPS = {"system": False, "ui": False, "made_by": "", "backend": "async"}
@@ -62,29 +63,32 @@ async def test_add_plane_takes_the_backend_it_is_given_and_has_no_default(store)
 
 
 async def test_add_plane_mints_at_evaluation(store):
-    term = ops.add_plane(name="x", backend="async")
-    a, b = await store.run(term), await store.run(term)
+    term = ops.add_plane(name="x", backend="async", into=MADE)
+    a, b = await store.made(term), await store.made(term)
     assert a != b
     again = wire.loads(wire.dumps(term))
-    c = await store.run(again)
+    c = await store.made(again)
     assert await store.read(ops.planes()) == [a, b, c]
 
 
 async def test_add_plane_given_id_and_parent(store):
     top = await plane(store, "top")
-    assert await store.run(ops.add_plane("kid", parent=top, system=True, backend="async")) == "kid"
+    await store.run(ops.add_plane("kid", parent=top, system=True, backend="async"))
     assert await store.read(ops.children(top)) == ["kid"]
     assert await store.read(ops.children()) == [top]
     assert await store.read(ops.parent("kid")) == top
-    orphan = await store.run(ops.add_plane(parent="nope", backend="async"))
+    orphan = await store.made(ops.add_plane(parent="nope", backend="async", into=MADE))
     assert await store.read(ops.parent(orphan)) == ROOT
 
 
-async def test_yielding_ops_chain_and_bind(store):
-    """A yielding op is an Action: ``>>`` takes it, ``nu.let`` binds it."""
-    term = ops.add_plane(name="a", backend="async") >> nu.let(
-        ops.add_plane(name="b", backend="async"), lambda pid: ops.add_cell(pid, "src", name="c")
-    )
+async def test_ops_chain_and_write_what_they_made_into_a_ref(store):
+    """An op chains with ``>>``, and a minted id lands in the ``into`` ref for the next to read."""
+
+    def made(pid: nu.ObjectRef) -> nu.Nu:
+        b = ops.add_plane(name="b", backend="async", into=pid)
+        return b >> ops.add_cell(pid, "src", name="c")
+
+    term = ops.add_plane(name="a", backend="async") >> nu.let("", made)
     await store.run(term)
     rows = await store.read(ops.plane_rows())
     assert [r["name"] for r in rows] == ["a", "b"]
@@ -125,10 +129,10 @@ async def test_add_plane_again_rewrites_props_and_merges_meta(store):
 
 async def test_remove_plane_drops_it_and_its_subtree(store):
     top, keep = await plane(store, "top"), await plane(store, "keep")
-    mid = await store.run(ops.add_plane(parent=top, backend="async"))
-    leaf = await store.run(ops.add_plane(parent=mid, backend="async"))
+    mid = await store.made(ops.add_plane(parent=top, backend="async", into=MADE))
+    leaf = await store.made(ops.add_plane(parent=mid, backend="async", into=MADE))
     await cell(store, leaf)
-    assert await store.run(ops.remove_plane(top)) is True
+    await store.run(ops.remove_plane(top))
     assert await store.read(ops.planes()) == [keep]
     assert await store.read(ops.children()) == [keep]
     assert await store.read(nu.list(Space.tree.keys())) == [ROOT]
@@ -136,25 +140,23 @@ async def test_remove_plane_drops_it_and_its_subtree(store):
 
 
 async def test_remove_plane_refuses_system(store):
-    svc = await store.run(ops.add_plane(name="init", system=True, backend="async"))
+    svc = await store.made(ops.add_plane(name="init", system=True, backend="async", into=MADE))
     top = await plane(store)
     await store.run(ops.add_plane(parent=top, system=True, backend="async"))
-    assert await store.run(ops.remove_plane(svc)) is False
-    assert await store.run(ops.remove_plane(top)) is False
-    assert await store.run(ops.remove_plane("nope")) is False
+    await store.run(ops.remove_plane(svc) >> ops.remove_plane(top) >> ops.remove_plane("nope"))
     assert len(await store.read(ops.planes())) == 3
 
 
 async def test_remove_plane_kills_live_runs(store):
     p, other = await plane(store), await plane(store)
-    kid = await store.run(ops.add_plane(parent=p, backend="async"))
+    kid = await store.made(ops.add_plane(parent=p, backend="async", into=MADE))
     await cell(store, p)
     await cell(store, kid)
     await cell(store, other)
-    mine = await store.run(ops.plane_run(p))
-    below = await store.run(ops.plane_run(kid))
-    theirs = await store.run(ops.plane_run(other))
-    assert await store.run(ops.remove_plane(p)) is True
+    mine = await store.made(ops.plane_run(p, into=MADE))
+    below = await store.made(ops.plane_run(kid, into=MADE))
+    theirs = await store.made(ops.plane_run(other, into=MADE))
+    await store.run(ops.remove_plane(p))
     asked = {r["id"]: r["termination_requested"] for r in await store.read(ops.runs())}
     assert asked == {mine: True, below: True, theirs: False}
 
@@ -228,7 +230,7 @@ async def test_has_ui_reads_true_where_never_worked_out(store):
 
 
 async def test_add_cell_refuses_a_missing_plane(store):
-    assert await store.run(ops.add_cell("nope", "src")) == ""
+    assert await store.made(ops.add_cell("nope", "src", into=MADE)) == ""
     assert await store.read(ops.planes()) == []
 
 
@@ -250,7 +252,7 @@ async def test_cells_lists_unordered_cells_last(store):
 async def test_remove_cell(store):
     p = await plane(store)
     a, b = await cell(store, p), await cell(store, p)
-    r = await store.run(ops.plane_run(p))
+    r = await store.made(ops.plane_run(p, into=MADE))
     await store.run(ops.remove_cell(p, a) >> ops.remove_cell(p, "nope"))
     assert await store.read(ops.cells(p)) == [b]
     assert await store.read(ops.cell_exists(p, a)) is False
@@ -291,7 +293,7 @@ async def test_move_cell_keeps_id_and_state(store):
     q1 = await cell(store, q)
     cells = States.planes[p].cells
     await store.run(nustd.kv.Transaction(cells.set_item(a, {"n": {"deep": 3}}), scope=States))
-    run = await store.run(ops.plane_run(p))
+    run = await store.made(ops.plane_run(p, into=MADE))
     await store.run(ops.move_cell(p, a, q, 0))
     assert await store.read(ops.cells(p)) == []
     assert await store.read(ops.cells(q)) == [a, q1]
@@ -318,38 +320,38 @@ async def test_move_cell_refuses_same_plane_and_missing(store):
 
 async def test_move_plane_reparents_and_reorders(store):
     a, b, c = await plane(store), await plane(store), await plane(store)
-    assert await store.run(ops.move_plane(b, parent=a)) is True
-    assert await store.run(ops.move_plane(c, parent=a, index=0)) is True
+    await store.run(ops.move_plane(b, parent=a) >> ops.move_plane(c, parent=a, index=0))
     assert await store.read(ops.children()) == [a]
     assert await store.read(ops.children(a)) == [c, b]
-    assert await store.run(ops.move_plane(b)) is True
+    await store.run(ops.move_plane(b))
     assert await store.read(ops.children()) == [a, b]
     assert await store.read(ops.children(a)) == [c]
     assert await store.read(ops.parent(c)) == a
     # Within one parent: the index is taken with the plane out of the list.
-    assert await store.run(ops.move_plane(b, parent=ROOT, index=0)) is True
+    await store.run(ops.move_plane(b, parent=ROOT, index=0))
     assert await store.read(ops.children()) == [b, a]
 
 
 async def test_move_plane_refuses_cycles(store):
     a = await plane(store)
-    b = await store.run(ops.add_plane(parent=a, backend="async"))
-    c = await store.run(ops.add_plane(parent=b, backend="async"))
-    assert await store.run(ops.move_plane(a, parent=c)) is False
-    assert await store.run(ops.move_plane(a, parent=b)) is False
-    assert await store.run(ops.move_plane(a, parent=a)) is False
-    assert await store.run(ops.move_plane(a, parent="nope")) is False
-    assert await store.run(ops.move_plane("nope")) is False
+    b = await store.made(ops.add_plane(parent=a, backend="async", into=MADE))
+    c = await store.made(ops.add_plane(parent=b, backend="async", into=MADE))
+    for to in (c, b, a, "nope"):
+        await store.run(ops.move_plane(a, parent=to))
+        assert await store.read(ops.parent(a)) == ROOT
+    await store.run(ops.move_plane("nope"))
+    assert await store.read(ops.parent("nope")) == ""
     assert await store.read(ops.children()) == [a]
     assert await store.read(ops.children(b)) == [c]
-    assert await store.run(ops.move_plane(c, parent=a)) is True
+    await store.run(ops.move_plane(c, parent=a))
+    assert await store.read(ops.parent(c)) == a
     assert await store.read(ops.children(a)) == [b, c]
 
 
 async def test_move_plane_moves_system_planes_too(store):
     svc = await plane(store, system=True)
     top = await plane(store)
-    assert await store.run(ops.move_plane(svc, parent=top)) is True
+    await store.run(ops.move_plane(svc, parent=top))
     assert await store.read(ops.children(top)) == [svc]
 
 
@@ -364,7 +366,7 @@ async def test_sibling_order_after_add_remove_and_move(store):
     assert await store.read(ops.children()) == [a, d, b, c]
     await store.run(ops.remove_plane(b))
     assert await store.read(ops.children()) == [a, d, c]
-    kid = await store.run(ops.add_plane(name="kid", parent=d, backend="async"))
+    kid = await store.made(ops.add_plane(name="kid", parent=d, backend="async", into=MADE))
     await store.run(ops.move_plane(c, parent=d, index=0))
     assert await store.read(ops.children(d)) == [c, kid]
     assert await store.read(ops.children()) == [a, d]
@@ -411,9 +413,9 @@ async def test_unpin_and_move_pin(store):
 
 async def test_remove_plane_unpins_its_subtree(store):
     top, keep = await plane(store, ui=True), await plane(store, ui=True)
-    kid = await store.run(ops.add_plane(parent=top, ui=True, backend="async"))
+    kid = await store.made(ops.add_plane(parent=top, ui=True, backend="async", into=MADE))
     await store.run(ops.pin_plane(kid) >> ops.pin_plane(keep) >> ops.pin_plane(top))
-    assert await store.run(ops.remove_plane(top)) is True
+    await store.run(ops.remove_plane(top))
     assert await store.read(ops.pinned()) == [keep]
 
 
@@ -423,9 +425,10 @@ async def test_parent_of_an_unlinked_plane(store):
 
 async def test_structure_round_trips_through_sqlite(disk):
     """The codec path: nested meta, a moved cell's props and nested state, order, the tree."""
-    p = await disk.run(ops.add_plane(name="p", meta={"a": {"b": 1}}, backend="async"))
-    q = await disk.run(ops.add_plane(name="q", parent=p, backend="async"))
-    c = await disk.run(ops.add_cell(p, "src", made_by="m", meta={"m": [1, 2]}))
+    p, q, c = "p", "q", "c"
+    await disk.run(ops.add_plane(p, name="p", meta={"a": {"b": 1}}, backend="async"))
+    await disk.run(ops.add_plane(q, name="q", parent=p, backend="async"))
+    await disk.run(ops.add_cell(p, "src", cell_id=c, made_by="m", meta={"m": [1, 2]}))
     cells = States.planes[p].cells
     await disk.run(nustd.kv.Transaction(cells.set_item(c, {"n": {"deep": [3]}}), scope=States))
     await disk.run(ops.move_cell(p, c, q))
@@ -443,6 +446,6 @@ async def test_structure_round_trips_through_sqlite(disk):
         }
     ]
     assert await disk.read(States.planes[q].cells[c].extract()) == {"n": {"deep": [3]}}
-    assert await disk.run(ops.remove_plane(p)) is True
+    await disk.run(ops.remove_plane(p))
     assert await disk.read(ops.planes()) == []
     assert await disk.read(nu.list(States.planes.keys())) == []

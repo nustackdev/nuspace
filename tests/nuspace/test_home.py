@@ -54,7 +54,8 @@ async def test_home_is_seeded_once_and_left_alone_after_edits(store):
     assert cells[0]["prog"] == "def out():\n    return None\n"
     assert await store.read(Space.planes[home.PLANE].name) == "Mine"
     # System: protected.
-    assert await store.run(ops.remove_plane(home.PLANE)) is False
+    await store.run(ops.remove_plane(home.PLANE))
+    assert await store.read(ops.plane_exists(home.PLANE))
 
 
 async def test_home_is_first_in_the_sidebar_tree(store):

@@ -147,15 +147,18 @@ class Form(nustd.ui.Row):
 def create(name):
     # Under the plane running this cell: the Jobs plane.
     here = ops.Here.plane
-    made = ops.add_plane(backend="mp", name=name, parent=here, ui=False, made_by="jobs")
 
-    def fill(held):
-        job = nu.Str(held)
-        return ops.add_cell(job, STARTER, cell_id="main", name="main") >> nustd.kv.Transaction(
-            Jobs.selected.set(job), scope=nuspace.States
+    def make(made):
+        job = nu.Str(made)
+        return (
+            ops.add_plane(
+                backend="mp", name=name, parent=here, ui=False, made_by="jobs", into=made
+            )
+            >> ops.add_cell(job, STARTER, cell_id="main", name="main")
+            >> nustd.kv.Transaction(Jobs.selected.set(job), scope=nuspace.States)
         )
 
-    return nu.let(made, fill)
+    return nu.let("", make)
 
 
 def out():

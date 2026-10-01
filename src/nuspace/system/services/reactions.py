@@ -67,7 +67,7 @@ import nustd.kv
 from nuspace.ops import add_cell, add_plane, cell_exists, cell_interrupt, latest, remove_cell
 from nuspace.ops.kernel import add_cell_run, add_plane_run
 from nuspace.ops.state import plane_state
-from nuspace.ops.utils import MintId, Then, atomic, atomic_state, fresh, text
+from nuspace.ops.utils import MintId, atomic, atomic_state, fresh, text
 from nuspace.shapes import PlaneState, Space
 
 from ..utils import snap, until
@@ -255,7 +255,7 @@ def _start(cid: nu.StrArg) -> nu.Nu:
 
 
 class _Enabling(nu.Shape):
-    """What :func:`enable_react` works out before it writes, and the cell it yields."""
+    """What :func:`enable_react` works out before it writes: the key, the source, the cell."""
 
     key = nu.StrRef.slot()
     src = nu.StrRef.slot()
@@ -288,8 +288,8 @@ def enable_react(change: nu.StrArg, plane_id: nu.StrArg, *, imports: str = "") -
         imports: Source put after the standard imports, for a shape from an
             importable module.
 
-    Yields:
-        The reaction cell's id.
+    The reaction's cell is :func:`reaction_of` the change and the plane,
+    whichever call made it.
 
     Raises:
         nu.prog.ConstructionError: The source does not construct (a bad
@@ -300,7 +300,7 @@ def enable_react(change: nu.StrArg, plane_id: nu.StrArg, *, imports: str = "") -
     free = nu.Eq(_known(key), nu.Str(""))
     claim = atomic_state(_here(nu.IfDo(free, Registry.cells.set_item(key, cid))))
     won = snap(_here(nu.Eq(_indexed(key), cid)))
-    lost = remove_cell(PLANE, cid) >> cid.set(snap(_here(_known(key))))
+    lost = remove_cell(PLANE, cid)
     made = (
         add_cell(PLANE, src, cell_id=cid, name=plane_id) >> claim >> nu.IfDo(won, _start(cid), lost)
     )
@@ -309,7 +309,7 @@ def enable_react(change: nu.StrArg, plane_id: nu.StrArg, *, imports: str = "") -
     make = nu.let(loads, lambda _: made)
     return nu.Frame(
         _Enabling,
-        Then(nu.IfDo(nu.Eq(known, nu.Str("")), make), cid),
+        nu.IfDo(nu.Eq(known, nu.Str("")), make),
         key=_key(change, plane_id),
         src=source(change, plane_id, imports),
         known=snap(_here(_known(key))),

@@ -48,6 +48,12 @@ async def _finished(store, plane_id: str) -> bool:
     return await store.read(_state(plane_id, S.finished_at).exists())
 
 
+async def _searched(store, *args: object, **kwargs: object) -> str:
+    """Search through ``store``. The new search is the newest child of ``SEARCHES``."""
+    await store.run(search.search(*args, **kwargs))
+    return (await store.read(ops.children(search.SEARCHES)))[-1]
+
+
 def _loaded(plane: str, cell: str) -> nu.Nu:
     """A cell's prog loaded as the kernel loads it: rerooted under it, bracketed."""
     rewrite = Rewrites(Reroot(plane, cell), Bracketed())
@@ -81,7 +87,7 @@ async def _garden(store) -> None:
 
 
 async def test_search_makes_a_plane_under_searches_and_starts_its_run(store):
-    pid = await store.run(search.search("tomato", ["note"], True, searchers=SEARCHERS))
+    pid = await _searched(store, "tomato", ["note"], True, searchers=SEARCHERS)
     assert pid
     rows = {r["id"]: r for r in await store.read(ops.plane_rows())}
     parent = rows[search.SEARCHES]
@@ -108,7 +114,7 @@ async def test_search_makes_a_plane_under_searches_and_starts_its_run(store):
     assert run["by"] == search.BY
 
     # A second search: the parent is kept, the new one listed after.
-    again = await store.run(search.search("sun", [], False, searchers=SEARCHERS))
+    again = await _searched(store, "sun", [], False, searchers=SEARCHERS)
     assert await store.read(ops.children(search.SEARCHES)) == [pid, again]
 
 
@@ -133,7 +139,7 @@ async def test_insert_snippet_records_its_snippet_as_a_prop(store):
 
 async def test_the_cell_finds_notes_and_titles_in_drawn_planes(store):
     await _garden(store)
-    pid = await store.run(search.search("tomato", ["note"], True, searchers=SEARCHERS))
+    pid = await _searched(store, "tomato", ["note"], True, searchers=SEARCHERS)
     await _run_search(store, pid)
     hits = await _hits(store, pid)
     assert hits == [
@@ -164,11 +170,11 @@ async def test_the_cell_finds_notes_and_titles_in_drawn_planes(store):
 
 async def test_unpicked_snippets_and_titles_are_left_out(store):
     await _garden(store)
-    titles = await store.run(search.search("tomato", [], True, searchers=SEARCHERS))
+    titles = await _searched(store, "tomato", [], True, searchers=SEARCHERS)
     await _run_search(store, titles)
     assert [(h["plane"], h["by"]) for h in await _hits(store, titles)] == [("p2", "title")]
 
-    notes_only = await store.run(search.search("tomato", ["note"], False, searchers=SEARCHERS))
+    notes_only = await _searched(store, "tomato", ["note"], False, searchers=SEARCHERS)
     await _run_search(store, notes_only)
     assert [(h["cell"], h["by"]) for h in await _hits(store, notes_only)] == [
         ("c1", "note"),
@@ -176,9 +182,7 @@ async def test_unpicked_snippets_and_titles_are_left_out(store):
     ]
 
     # Picked, but the space it was made in could not search it.
-    unknown = await store.run(
-        search.search("tomato", ["plain", "gone"], False, searchers=SEARCHERS)
-    )
+    unknown = await _searched(store, "tomato", ["plain", "gone"], False, searchers=SEARCHERS)
     await _run_search(store, unknown)
     assert await _hits(store, unknown) == []
     assert await _finished(store, unknown)
@@ -186,31 +190,9 @@ async def test_unpicked_snippets_and_titles_are_left_out(store):
 
 async def test_an_empty_query_finds_nothing_and_finishes(store):
     await _garden(store)
-    pid = await store.run(search.search("  ", ["note"], True, searchers=SEARCHERS))
+    pid = await _searched(store, "  ", ["note"], True, searchers=SEARCHERS)
     await _run_search(store, pid)
     assert await _hits(store, pid) == []
-    assert await _finished(store, pid)
-
-
-async def test_hits_land_one_cell_at_a_time(store):
-    await store.run(
-        _drawn("p", "Slow")
-        >> _note("p", "a", "apple one", notes.SLOW_NOTE)
-        >> _note("p", "b", "apple two", notes.SLOW_NOTE)
-        >> _note("p", "c", "apple three", notes.SLOW_NOTE)
-    )
-    pid = await store.run(search.search("apple", ["slow"], False, searchers=SEARCHERS))
-    task = asyncio.create_task(_run_search(store, pid))
-    seen: set[int] = set()
-    while not task.done():
-        count = len(await _hits(store, pid))
-        if count < 3:
-            assert not await _finished(store, pid)
-        seen.add(count)
-        await asyncio.sleep(0.05)
-    await task
-    assert {1, 2} <= seen
-    assert [h["cell"] for h in await _hits(store, pid)] == ["a", "b", "c"]
     assert await _finished(store, pid)
 
 
@@ -295,8 +277,8 @@ async def test_each_viewer_cell_loads_through_the_kernel_rewrites(store, cell):
 
 async def test_pick_lists_searches_newest_first_and_shows_the_newest(store):
     await store.run(search.ensure_search())
-    old = await store.run(search.search("old", [], True, searchers=SEARCHERS))
-    new = await store.run(search.search("new", [], True, searchers=SEARCHERS))
+    old = await _searched(store, "old", [], True, searchers=SEARCHERS)
+    new = await _searched(store, "new", [], True, searchers=SEARCHERS)
     got = await _frames(
         store, search.PICK, "pick", lambda ns: nu.Frame(ns["Seen"], ns["draw"](), ids=[])
     )
@@ -310,8 +292,8 @@ async def test_pick_lists_searches_newest_first_and_shows_the_newest(store):
 
 async def test_a_picked_search_holds_until_a_newer_one_is_made(store):
     await store.run(search.ensure_search())
-    old = await store.run(search.search("old", [], True, searchers=SEARCHERS))
-    new = await store.run(search.search("new", [], True, searchers=SEARCHERS))
+    old = await _searched(store, "old", [], True, searchers=SEARCHERS)
+    new = await _searched(store, "new", [], True, searchers=SEARCHERS)
     chosen = ops.plane_state(search.PLANE, _Chosen.picked.set(old) >> _Chosen.newest.set(new))
     await store.run(ops.utils.atomic_state(chosen))
 
@@ -321,7 +303,7 @@ async def test_a_picked_search_holds_until_a_newer_one_is_made(store):
     shown = ops.plane_state(search.PLANE, _Chosen.shown)
     await _frames(store, search.PICK, "pick", draw)
     assert await store.read(shown) == old
-    newer = await store.run(search.search("newer", [], True, searchers=SEARCHERS))
+    newer = await _searched(store, "newer", [], True, searchers=SEARCHERS)
     got = await _draw(store, search.PICK, "pick", draw)
     assert got[("pick", "search")] == newer
     assert await store.read(shown) == newer
@@ -329,7 +311,7 @@ async def test_a_picked_search_holds_until_a_newer_one_is_made(store):
 
 async def test_results_draw_the_shown_search(store):
     await _garden(store)
-    pid = await store.run(search.search("tomato", ["note"], True, searchers=SEARCHERS))
+    pid = await _searched(store, "tomato", ["note"], True, searchers=SEARCHERS)
     await _run_search(store, pid)
     got = await _draw(store, search.RESULTS, "results", lambda ns: ns["shown"](nu.Str(pid)))
     assert got[("title",)]["label"] == "Results for “tomato”"
@@ -344,7 +326,7 @@ async def test_results_draw_the_shown_search(store):
 
 
 async def test_results_say_when_nothing_was_found_or_searched(store):
-    pid = await store.run(search.search("zzz", ["note"], True, searchers=SEARCHERS))
+    pid = await _searched(store, "zzz", ["note"], True, searchers=SEARCHERS)
     await _run_search(store, pid)
     got = await _draw(store, search.RESULTS, "results", lambda ns: ns["shown"](nu.Str(pid)))
     assert got[("status",)] == "Done: 0 hits"
@@ -426,7 +408,7 @@ async def test_a_search_runs_on_a_worker_and_its_run_ends():
     space = await opened(spares=1)
     try:
         await space.run(_drawn("p", "Tomato plan") >> _note("p", "c", "ripe tomato"))
-        pid = await space.run(search.search("tomato", ["note"], True, searchers=SEARCHERS))
+        pid = await _searched(space, "tomato", ["note"], True, searchers=SEARCHERS)
         (run,) = await space.read(ops.runs(pid))
         row = await space.run_row(run["id"], ended, 20.0)
         assert row["exit"] == "ok", row
@@ -436,5 +418,30 @@ async def test_a_search_runs_on_a_worker_and_its_run_ends():
             ("c", "note"),
         ]
         assert await space.read(ops.plane_state(pid, S.finished_at).exists())
+    finally:
+        await space.close()
+
+
+async def test_hits_land_one_cell_at_a_time():
+    """On a worker, so this loop reads while the slow searcher works there."""
+    space = await opened(spares=1)
+    try:
+        await space.run(
+            _drawn("p", "Slow")
+            >> _note("p", "a", "apple one", notes.SLOW_NOTE)
+            >> _note("p", "b", "apple two", notes.SLOW_NOTE)
+            >> _note("p", "c", "apple three", notes.SLOW_NOTE)
+        )
+        pid = await _searched(space, "apple", ["slow"], False, searchers=SEARCHERS)
+        seen: set[int] = set()
+
+        async def watch() -> None:
+            while not await _finished(space, pid):
+                seen.add(len(await _hits(space, pid)))
+                await asyncio.sleep(0.05)
+
+        await asyncio.wait_for(watch(), 20.0)
+        assert {1, 2} <= seen
+        assert [h["cell"] for h in await _hits(space, pid)] == ["a", "b", "c"]
     finally:
         await space.close()

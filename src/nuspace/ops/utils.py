@@ -1,4 +1,4 @@
-"""Helpers the ops share: the bracket, run time ids, yielding after writes.
+"""Helpers the ops share: the bracket, run time ids, reads with a floor.
 
 Nothing here knows what a plane or a cell is.
 """
@@ -12,8 +12,7 @@ from typing import TYPE_CHECKING
 
 import nu
 import nustd.kv
-from nu.engine.structure import Declared
-from nu.lang import Bracket, ScalarAction, ScalarQuery
+from nu.lang import ScalarQuery
 from nu.lang.sentinels import EMPTY, INVALID
 from nuspace.shapes import Space, States
 
@@ -26,7 +25,6 @@ if TYPE_CHECKING:
 
 __all__ = [
     "MintId",
-    "Then",
     "as_list",
     "atomic",
     "atomic_state",
@@ -102,57 +100,6 @@ class MintId(ScalarQuery):
             if p is EMPTY or p is INVALID:
                 return INVALID
             return mint_ordered_id(p)
-
-        return athunk
-
-
-class _Yield(ScalarAction):
-    """Yields what ``term`` reads, as an Action, so the op ending on it chains and binds."""
-
-    _mutates = Declared(value=frozenset({0}), name="mutates")
-
-    def _compile(self, nid: int, children: tuple[Callable, ...]) -> Callable:
-        (term,) = children
-        return term
-
-    def _acompile(self, nid: int, children: tuple[Callable, ...]) -> Callable:
-        (term,) = children
-        return term
-
-
-class Then(Bracket):
-    """Runs ``effect``, then yields ``value``: how an op writes and then yields what it made.
-
-    A Flow yields nothing and a bare read is a Query, which a ``>>``
-    refuses, so ending on a read cannot follow the writes. This runs them
-    first and ends the op on an Action, so the whole op chains and binds.
-
-    Args:
-        effect: The writes.
-        value: What to yield once they ran, eg the mem ref holding a minted id.
-
-    Yields:
-        What ``value`` reads after ``effect``.
-    """
-
-    def __init__(self, effect: nu.Nu, value: nu.Nu) -> None:
-        super().__init__(_Yield(value), effect)
-
-    def _compile(self, nid: int, children: tuple[Callable, ...]) -> Callable:
-        value, effect = children
-
-        def thunk(rt: Runtime) -> object:
-            effect(rt)
-            return value(rt)
-
-        return thunk
-
-    def _acompile(self, nid: int, children: tuple[Callable, ...]) -> Callable:
-        value, effect = children
-
-        async def athunk(rt: Runtime) -> object:
-            await effect(rt)
-            return await value(rt)
 
         return athunk
 

@@ -7,10 +7,18 @@ agent and the shell compose these and nothing narrower.
   over :class:`~nuspace.shapes.Space`, retried on conflict, so nothing reads
   half of it and it is safe from any process holding the store, a proxied
   navigator on a worker included.
+- **Queries yield, effects write.** A query, a pure read or computation,
+  evaluates to its value. A flow or an op with effects never hands a
+  result back: it writes what it made or decided into a ref, yields
+  nothing, and chains with ``>>``; whoever needs the result reads that
+  ref. Mostly the ref is the record itself: a plane made is in the tree,
+  a plane moved has its new parent. Where the record cannot say which one
+  this call made, the op takes an ``into`` ref, a mem ref the caller holds
+  or a kv ref in the store it commits to, and sets it as part of its
+  writes.
 - **Ids are minted at evaluation.** A term is built once and may run many
   times (eg in an arm), so an op that makes something mints its id when it
-  runs and yields it. Yielding ops are Actions: they chain with ``>>`` and
-  bind with ``nu.let``.
+  runs.
 - **Reads are bare.** They compose into any expression and read inside the
   enclosing bracket. Alone, wrap one in ``nustd.kv.Snapshot(..., scope=Space)``,
   or in :func:`snapshot` when it reads program state too.

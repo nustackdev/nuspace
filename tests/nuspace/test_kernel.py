@@ -32,6 +32,7 @@ from _support.kernel import (
     worker,
     workers_named,
 )
+from _support.made import MADE
 from _support.probe import PROBE_INIT, Probe
 
 import nu
@@ -70,7 +71,7 @@ async def live_cell(space, rid: str, cell: str) -> dict:
 @module_loop
 async def test_a_plane_runs_and_ends_when_its_cells_are_done(space, backend):
     p, (a, b) = await space.plane(SET_42, SET_42, backend=backend)
-    r = await space.run(ops.plane_run(p, by="test"))
+    r = await space.made(ops.plane_run(p, by="test", into=MADE))
     row = await space.run_row(r, ended, SLOW)
     assert (row["exit"], row["error"], row["by"], row["backend"]) == (EXIT_OK, "", "test", backend)
     assert [c["cell"] for c in row["cells"]] == [a, b]
@@ -94,20 +95,20 @@ async def test_a_plane_runs_and_ends_when_its_cells_are_done(space, backend):
 @module_loop
 async def test_a_plane_with_no_cells_ends_at_once(space):
     p, _ = await space.plane()
-    r = await space.run(ops.plane_run(p))
+    r = await space.made(ops.plane_run(p, into=MADE))
     row = await space.run_row(r, ended, SLOW)
     assert (row["exit"], row["cells"]) == (EXIT_OK, [])
 
 
 @module_loop
 async def test_plane_run_on_a_missing_plane(space):
-    assert await space.run(ops.plane_run("ghost")) == ""
+    assert await space.made(ops.plane_run("ghost", into=MADE)) == ""
 
 
 @module_loop
 async def test_a_failing_cell_records_why(space):
     p, _ = await space.plane(RAISES)
-    r = await space.run(ops.plane_run(p))
+    r = await space.made(ops.plane_run(p, into=MADE))
     row = await space.run_row(r, ended, SLOW)
     cr = only_cell(row)
     assert (row["exit"], cr["exit"]) == (EXIT_FAILED, EXIT_FAILED)
@@ -118,7 +119,7 @@ async def test_a_failing_cell_records_why(space):
 @module_loop
 async def test_an_unknown_backend_fails_the_run(space):
     p, _ = await space.plane(SET_42, backend="nope")
-    r = await space.run(ops.plane_run(p))
+    r = await space.made(ops.plane_run(p, into=MADE))
     row = await space.run_row(r, ended, SLOW)
     assert row["exit"] == EXIT_FAILED
     assert "nope" in row["error"]
@@ -130,7 +131,7 @@ async def test_a_plane_naming_no_backend_fails_the_run(space):
     # add_plane refuses an empty backend, so a row with none is written by hand.
     p, _ = await space.plane(SET_42, backend="mp")
     await space.run(atomic(Space.planes[p].props.backend.set("")))
-    r = await space.run(ops.plane_run(p))
+    r = await space.made(ops.plane_run(p, into=MADE))
     row = await space.run_row(r, ended, SLOW)
     assert (row["exit"], row["backend"]) == (EXIT_FAILED, "")
     assert "names no backend" in row["error"]
@@ -140,7 +141,7 @@ async def test_a_plane_naming_no_backend_fails_the_run(space):
 @module_loop
 async def test_an_unknown_env_fails_the_cell_run(space):
     p, _ = await space.plane(SET_42)
-    r = await space.run(ops.plane_run(p, envs=[ops.env("nope")]))
+    r = await space.made(ops.plane_run(p, envs=[ops.env("nope")], into=MADE))
     row = await space.run_row(r, ended, SLOW)
     assert only_cell(row)["exit"] == EXIT_FAILED
     assert "nope" in only_cell(row)["error"]
@@ -149,10 +150,10 @@ async def test_an_unknown_env_fails_the_cell_run(space):
 @module_loop
 async def test_envs_wrap_and_rewrite_the_program(space):
     p, (a, b) = await space.plane(READS_TAG, READS_TAG)
-    r = await space.run(ops.plane_run(p, envs=[ops.env("tagged", "inner")]))
+    r = await space.made(ops.plane_run(p, envs=[ops.env("tagged", "inner")], into=MADE))
     assert (await space.run_row(r, ended, SLOW))["exit"] == EXIT_OK
     q, (c,) = await space.plane(READS_TAG)
-    r2 = await space.run(ops.plane_run(q))
+    r2 = await space.made(ops.plane_run(q, into=MADE))
     assert (await space.run_row(r2, ended, SLOW))["exit"] == EXIT_OK
     cells = States.planes[p].cells
     assert await space.read(cells[a].extract()) == {"s": "inner"}
@@ -167,7 +168,7 @@ async def test_envs_wrap_and_rewrite_the_program(space):
 @module_loop
 async def test_cell_interrupt_ends_the_cell_run_and_then_the_plane_run(space):
     p, (c,) = await space.plane(FOREVER)
-    r = await space.run(ops.plane_run(p))
+    r = await space.made(ops.plane_run(p, into=MADE))
     row = await space.run_row(r, lambda x: "tick" in texts(cell_of(x, c)), SLOW)
     cr = cell_of(row, c)
     assert texts(cr, "stdout")[:2] == ["built", "tick"]
@@ -183,7 +184,7 @@ async def test_cell_interrupt_ends_the_cell_run_and_then_the_plane_run(space):
 async def test_cell_run_reruns_a_cell_in_the_live_plane_run(space):
     """A reload: interrupt the old cell run and run the cell anew, in one commit, same worker."""
     p, (c,) = await space.plane(FOREVER)
-    r = await space.run(ops.plane_run(p))
+    r = await space.made(ops.plane_run(p, into=MADE))
     old = cell_of(await live_cell(space, r, c), c)
     assert old["version"] == 1
     await space.run(ops.set_prog(p, c, FOREVER.replace("tick", "tock")))
@@ -201,25 +202,30 @@ async def test_cell_run_reruns_a_cell_in_the_live_plane_run(space):
     assert (second["id"], second["by"], second["version"]) == ("cr_test_new", "reload", 2)
     assert second["worker"] == first["worker"]
     assert not ended(row)
-    # cell_run is the same thing as one op, yielding its id.
-    third = await space.run(ops.cell_run(r, c, by="test"))
+    # cell_run is the same thing as one op, the new cell run the cell's latest.
+    await space.run(ops.cell_run(r, c, by="test"))
+    third = await space.read(ops.latest(r, c))
     assert third.startswith("cr_")
+    assert third != second["id"]
     await space.run_row(r, lambda x: any(live(y) for y in x["cells"] if y["id"] == third), SLOW)
-    assert await space.run(ops.cell_run(r, "ghost")) == ""
+    await space.run(ops.cell_run(r, "ghost"))
+    assert await space.read(ops.latest(r, "ghost")) == ""
     await space.run(ops.plane_kill(r))
     row = await space.run_row(r, ended, SLOW)
     assert row["exit"] == EXIT_KILLED
-    assert await space.run(ops.cell_run(r, c)) == ""
+    await space.run(ops.cell_run(r, c))
+    assert await space.read(ops.latest(r, c)) == third
 
 
 @module_loop
 async def test_a_plane_runs_exit_counts_each_cells_newest_cell_run_only(space):
     """A failed cell run run again and ok: the plane run ends ok, the failure superseded."""
     p, (keep, c) = await space.plane(FOREVER, RAISES)
-    r = await space.run(ops.plane_run(p))
+    r = await space.made(ops.plane_run(p, into=MADE))
     await space.run_row(r, lambda x: cell_of(x, c).get("exit") == EXIT_FAILED, SLOW)
     await space.run(ops.set_prog(p, c, SET_42))
-    again = await space.run(ops.cell_run(r, c))
+    await space.run(ops.cell_run(r, c))
+    again = await space.read(ops.latest(r, c))
     await space.run_row(r, lambda x: ended(cell_of(x, c)) and cell_of(x, c)["id"] == again, SLOW)
     await space.run(ops.cell_interrupt(r, cell_of(await space.read(ops.run(r)), keep)["id"]))
     row = await space.run_row(r, ended, SLOW)
@@ -231,7 +237,7 @@ async def test_a_plane_runs_exit_counts_each_cells_newest_cell_run_only(space):
 @module_loop
 async def test_plane_interrupt_ends_every_cell_run(space):
     p, (a, b) = await space.plane(FOREVER, FOREVER)
-    r = await space.run(ops.plane_run(p))
+    r = await space.made(ops.plane_run(p, into=MADE))
     await space.run_row(r, lambda x: live(cell_of(x, a)) and live(cell_of(x, b)), SLOW)
     await space.run(ops.plane_interrupt(r))
     row = await space.run_row(r, ended, SLOW)
@@ -245,7 +251,7 @@ async def test_plane_interrupt_ends_every_cell_run(space):
 @module_loop
 async def test_plane_stop_interrupts_a_cell_that_listens(space):
     p, (c,) = await space.plane(FOREVER)
-    r = await space.run(ops.plane_run(p))
+    r = await space.made(ops.plane_run(p, into=MADE))
     await live_cell(space, r, c)
     started = time.monotonic()
     await space.run(ops.plane_stop(r))
@@ -262,7 +268,7 @@ async def test_plane_stop_interrupts_a_cell_that_listens(space):
 @module_loop
 async def test_plane_stop_kills_after_the_grace(space):
     p, (c,) = await space.plane(BLOCKS)
-    r = await space.run(ops.plane_run(p))
+    r = await space.made(ops.plane_run(p, into=MADE))
     await live_cell(space, r, c)
     # Past the program's first step: from here its loop is held.
     await asyncio.sleep(0.5)
@@ -280,7 +286,7 @@ async def test_plane_stop_kills_after_the_grace(space):
 @module_loop
 async def test_plane_kill_tears_the_run_down(space, backend):
     p, (a, b) = await space.plane(FOREVER, FOREVER, backend=backend)
-    r = await space.run(ops.plane_run(p))
+    r = await space.made(ops.plane_run(p, into=MADE))
     row = await space.run_row(r, lambda x: live(cell_of(x, a)) and live(cell_of(x, b)), SLOW)
     workers = row["workers"]
     assert set(workers) <= {w["id"] for w in await space.read(ops.workers())}
@@ -299,7 +305,7 @@ async def test_plane_kill_tears_the_run_down(space, backend):
 @module_loop
 async def test_mp_a_crash_ends_only_that_cell_run(space):
     p, (steady, crash) = await space.plane(FOREVER, CRASHES, backend="mp")
-    r = await space.run(ops.plane_run(p))
+    r = await space.made(ops.plane_run(p, into=MADE))
     row = await space.run_row(r, lambda x: ended(cell_of(x, crash)), SLOW)
     gone = cell_of(row, crash)
     assert gone["exit"] == EXIT_FAILED
@@ -315,7 +321,7 @@ async def test_mp_a_crash_ends_only_that_cell_run(space):
 @module_loop
 async def test_async_a_crash_ends_every_cell_run(space):
     p, (steady, crash) = await space.plane(FOREVER, CRASHES)
-    r = await space.run(ops.plane_run(p))
+    r = await space.made(ops.plane_run(p, into=MADE))
     row = await space.run_row(r, ended, SLOW)
     assert row["exit"] == EXIT_FAILED
     for cell in (steady, crash):
@@ -436,7 +442,7 @@ PINGS = _SHARED.format(
 async def test_two_workers_share_the_store_and_hear_each_others_writes(space):
     """Each worker opens the store itself: a write in one wakes a subscriber in the other."""
     p, (listens, pings) = await space.plane(LISTENS, PINGS, backend="mp")
-    r = await space.run(ops.plane_run(p))
+    r = await space.made(ops.plane_run(p, into=MADE))
     row = await space.run_row(r, lambda x: ended(cell_of(x, listens)), SLOW)
     heard = cell_of(row, listens)
     assert (heard["exit"], heard["error"]) == (EXIT_OK, "")
@@ -452,7 +458,7 @@ async def test_two_workers_share_the_store_and_hear_each_others_writes(space):
 @module_loop
 async def test_live_reads_walk_the_indexes(space):
     p, (c,) = await space.plane(FOREVER)
-    r = await space.run(ops.plane_run(p, by="test"))
+    r = await space.made(ops.plane_run(p, by="test", into=MADE))
     await live_cell(space, r, c)
     (row,) = await space.read(ops.runs(plane=p))
     assert (row["id"], row["by"], row["plane"]) == (r, "test", p)
@@ -481,7 +487,7 @@ async def test_reopen_reconciles_then_starts_init(tmp_path):
     path = str(tmp_path / "space")
     first = await opened("nuspace-reopen", path=path, spares=0)
     p, (c,) = await first.plane(FOREVER)
-    r = await first.run(ops.plane_run(p))
+    r = await first.made(ops.plane_run(p, into=MADE))
     row = await live_cell(first, r, c)
     (w,) = row["workers"]
     await first.close()
@@ -501,10 +507,10 @@ async def test_reopen_reconciles_then_starts_init(tmp_path):
 
 
 async def test_reconcile_ends_what_was_live(store):
-    p = await store.run(ops.add_plane(backend="async"))
-    c = await store.run(ops.add_cell(p, SET_42))
-    r_live = await store.run(ops.plane_run(p))
-    r_done = await store.run(ops.plane_run(p))
+    p = await store.made(ops.add_plane(backend="async", into=MADE))
+    c = await store.made(ops.add_cell(p, SET_42, into=MADE))
+    r_live = await store.made(ops.plane_run(p, into=MADE))
+    r_done = await store.made(ops.plane_run(p, into=MADE))
     await store.run(atomic(kernel.running.discard(r_done) >> kernel.runs[r_done].exit.set("ok")))
     w = "w_test"
     await store.run(atomic(kernel.workers[w].run.set(r_live) >> kernel.workers_running.add(w)))

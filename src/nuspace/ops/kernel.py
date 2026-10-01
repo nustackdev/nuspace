@@ -22,7 +22,7 @@ import nustd.kv
 from nuspace.shapes import Space
 
 from .read import cell_exists, cells, plane_exists
-from .utils import MintId, Then, atomic, flag, fresh, or_else, text
+from .utils import MintId, atomic, flag, fresh, or_else, text
 
 
 if TYPE_CHECKING:
@@ -166,6 +166,7 @@ def plane_run(
     *,
     by: nu.StrArg = "",
     envs: Sequence[Sequence[str]] | nu.Nu = (),
+    into: nu.Ref | None = None,
 ) -> nu.Nu:
     """Run a plane: a new plane run with a cell run per cell, in order. One commit.
 
@@ -178,18 +179,17 @@ def plane_run(
         by: Who asked, eg ``nav``.
         envs: Env specs its cells run inside, outermost first, each
             ``env(name, *args)``.
-
-    Yields:
-        The run id, minted at evaluation. ``""`` when the plane is missing.
+        into: Set to the run id in the commit, ``""`` when the plane is
+            missing, for a caller that needs it: the record does not say
+            which run this call made. A retried commit sets it again, so it
+            names the run that landed.
     """
 
     def write(rid: nu.ObjectRef) -> nu.Nu:
-        made = nu.IfDo(
-            plane_exists(plane_id),
-            add_plane_run(nu.Str(rid), plane_id, by=by, envs=envs),
-            rid.set(nu.Str("")),
-        )
-        return Then(made, rid)
+        made = add_plane_run(nu.Str(rid), plane_id, by=by, envs=envs)
+        if into is None:
+            return made
+        return made >> into.set(nu.If(plane_exists(plane_id), nu.Str(rid), nu.Str("")))
 
     return atomic(nu.let(MintId("r"), write))
 
@@ -210,20 +210,11 @@ def add_cell_run(
 def cell_run(run_id: nu.StrArg, cell_id: nu.StrArg, *, by: nu.StrArg = "") -> nu.Nu:
     """Run a cell inside a live plane run: a new cell run, beside any other of it. One commit.
 
-    Yields:
-        The cell run id, minted at evaluation. ``""`` when the plane run is
-        not live or its plane has no such cell.
+    The new cell run is the cell's :func:`latest` in the run, where a caller
+    reads it. Nothing is written when the plane run is not live or its plane
+    has no such cell.
     """
-    plane = text(_kernel.runs[run_id].plane)
-
-    def write(cr: nu.ObjectRef) -> nu.Nu:
-        live = nu.And(_kernel.running.contains(run_id), cell_exists(plane, cell_id))
-        made = nu.IfDo(
-            live, _add_cell_run(run_id, plane, cell_id, nu.Str(cr), by), cr.set(nu.Str(""))
-        )
-        return Then(made, cr)
-
-    return atomic(nu.let(MintId("cr"), write))
+    return atomic(nu.let(MintId("cr"), lambda cr: add_cell_run(run_id, cell_id, nu.Str(cr), by)))
 
 
 def interrupt(run_id: nu.StrArg, cell_run_id: nu.StrArg) -> nu.Nu:
