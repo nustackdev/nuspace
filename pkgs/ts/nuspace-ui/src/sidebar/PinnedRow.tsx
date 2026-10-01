@@ -1,6 +1,7 @@
-// The pinned row, the top shelf of the rail's body under the divider,
-// scrolling with the tree: one icon per pinned Plane, in order. A pin is a
-// shortcut: the Plane is in the tree as well. Hidden when nothing is pinned.
+// The pinned row, the last strip of the rail's header group, under search and
+// fixed while the tree scrolls: one icon per pinned Plane, in order. A pin is
+// a shortcut: the Plane is in the tree as well. Hidden when nothing is pinned,
+// its shelf with it.
 //
 // An icon opens its Plane the way a tree row does, through the same handler:
 // a plain click in the focused pane, cmd/ctrl-click in a browser tab. The name
@@ -50,9 +51,16 @@ export function PinnedRow(props: {
 	/** The focused pane's Plane. */
 	selKey: string;
 	reveal: (key: string) => void;
+	/** The shelf's class, around the strip, so it goes when the strip does. */
+	className?: string;
 }) {
+	const { className, ...rest } = props;
 	const shown = props.pins.ids.filter((id) => props.tree[id]);
-	return shown.length ? <PinStrip {...props} shown={shown} /> : null;
+	return shown.length ? (
+		<div className={className}>
+			<PinStrip {...rest} shown={shown} />
+		</div>
+	) : null;
 }
 
 function PinStrip({

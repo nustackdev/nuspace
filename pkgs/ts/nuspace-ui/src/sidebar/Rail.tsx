@@ -1,5 +1,6 @@
-// The sidebar rail: a header group (top bar, search), a divider, a body (the
-// pinned planes fixed over the scrolling tree), a bottom bar.
+// The sidebar rail: a header group (top bar, search, the pinned planes), a
+// divider shown only while the body is scrolled, a body (the scrolling tree),
+// a bottom bar.
 //
 // Planes only. Cells are parts of a Plane, not navigable entities, so they
 // never appear here.
@@ -24,7 +25,7 @@
 //   RailHeader.tsx    the top bar: collapse, new plane
 //   SearchTrigger.tsx the search entry under it
 //   SearchPalette.tsx the search popup
-//   PinnedRow.tsx     the pinned planes, the body's top shelf
+//   PinnedRow.tsx     the pinned planes, the header group's last strip
 //   RailFooter.tsx    the bottom bar: links, connection, theme
 //   pin.ts            the pins and their ops
 //   RailTree.tsx      the tree: keyboard, drop marks
@@ -42,13 +43,14 @@
 // Every class string and the geometry are in design/rail.ts.
 
 import { Skeleton } from "@nustackdev/ui-kit";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useSkeleton } from "../core/delay";
 import { useFocusedRoute, useRoutes } from "../core/router";
 import {
 	railAside,
 	railDivider,
 	railIndent,
+	railPinShelf,
 	railResizeHandle,
 	railScroll,
 	railSkeletonBar,
@@ -104,6 +106,8 @@ export function Rail({
 	);
 
 	const reveal = useReveal({ tree, root, routes, selKey, expanded, onToggle });
+	// Whether the tree has scrolled under the header, which shows the divider.
+	const [scrolled, setScrolled] = useState(false);
 
 	return (
 		// Collapsed is hidden, not unmounted: the Add plane popup lives here and
@@ -112,32 +116,37 @@ export function Rail({
 		<aside aria-label="Sidebar" className={railAside(collapsed)} style={{ width }}>
 			<RailHeader />
 			<SearchTrigger />
-			<hr className={railDivider} />
-			<nav aria-label="Planes" className={railScroll}>
+			{loading ? null : (
+				<PinnedRow
+					tree={tree}
+					pins={pins}
+					registered={registered}
+					routes={routes}
+					selKey={selKey}
+					reveal={reveal}
+					className={railPinShelf}
+				/>
+			)}
+			<hr className={railDivider(scrolled)} />
+			<nav
+				aria-label="Planes"
+				className={railScroll}
+				onScroll={(e) => setScrolled(e.currentTarget.scrollTop > 0)}
+			>
 				{loading ? (
 					<RailSkeleton />
 				) : (
-					<>
-						<PinnedRow
-							tree={tree}
-							pins={pins}
-							registered={registered}
-							routes={routes}
-							selKey={selKey}
-							reveal={reveal}
-						/>
-						<RailTree
-							tree={tree}
-							rows={rows}
-							registered={registered}
-							routes={routes}
-							selKey={selKey}
-							onToggle={onToggle}
-							reveal={reveal}
-							notify={notify}
-							pins={pins}
-						/>
-					</>
+					<RailTree
+						tree={tree}
+						rows={rows}
+						registered={registered}
+						routes={routes}
+						selKey={selKey}
+						onToggle={onToggle}
+						reveal={reveal}
+						notify={notify}
+						pins={pins}
+					/>
 				)}
 			</nav>
 			<RailFooter />

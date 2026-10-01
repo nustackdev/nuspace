@@ -96,15 +96,16 @@
 	--rail-indent: 1.25rem; /* 20 per level: a child's icon clears its
 	                         * parent's by a whole lane                     */
 	--rail-bar-pad: 0.75rem; /* 12 top and bottom bar side padding          */
-	--rail-top-gap: 0.5rem; /* 8 search to divider, divider to pins or tree,
-	                         * pins to tree                              */
+	/* The header group's one step, 4: the top bar's buttons to search (the
+	 * bar's own 36 - 28 over two), search to pins, pin to pin, and once each
+	 * side of the divider, so the line sits centred between header and tree. */
+	--rail-top-gap: 0.25rem;
 	--rail-fade: 1rem; /* 16     the pinned row's fade over a clipped edge  */
-	--rail-pin: 1.625rem; /* 26  a pinned plane's box                       */
-	/* The pins strip's left pad, inside the tree's inset: puts the first pin's
-	 * glyph centre on the rows' icon centre, row pad 8 + lane 20 / 2 = 18 in,
-	 * so 18 - pin 26 / 2 = 5. The box overhangs the column a little; the
-	 * glyph is what lines up. */
-	--rail-pin-pad: calc(var(--rail-row-pad) + var(--rail-lane) / 2 - var(--rail-pin) / 2);
+	/* A pinned plane's box, square: the search entry's lead around a 16px
+	 * glyph on every side. Its row pad 8 + the lane's 2 around the glyph = 10,
+	 * so 10 + 16 + 10 = 36. With the box on the search entry's edge, its glyph
+	 * lands on the search glyph's column and the rows' icon column. */
+	--rail-pin: calc(2 * var(--rail-row-pad) + var(--rail-lane)); /* 36 */
 
 	/* --- Plane grid -------------------------------------------------------
 	 * Every row of a plane (the title, each cell, a ghost, a draft, a drop
@@ -218,7 +219,6 @@
 	--spacing-rail-bar-pad: var(--rail-bar-pad);
 	--spacing-rail-top-gap: var(--rail-top-gap);
 	--spacing-rail-pin: var(--rail-pin);
-	--spacing-rail-pin-pad: var(--rail-pin-pad);
 
 	/* --- Cell status --> text-cell-running, bg-cell-failed-wash --*/
 	--color-cell-invalid: var(--cell-invalid);
