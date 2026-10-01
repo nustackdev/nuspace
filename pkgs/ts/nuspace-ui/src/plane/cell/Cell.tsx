@@ -9,8 +9,13 @@
 // compiles, runs, is supervised and reports status identically. See
 // ./address.ts for where that address is.
 //
-// `editable` is the plane's setting. Off, the cell draws its output and
-// nothing else: no gutter, and its source never opens.
+// `editable` is the plane's setting. Off, the cell is read-only: its gutter
+// keeps only copy-id and the source toggle, and the source opens in a
+// read-only editor that never saves.
+//
+// The gutter is always mounted but shows only on the plane's one gutter
+// owner (`gutterOwner`, ../state.ts). The cell does not
+// decide that; it is told, and reports the pointer entering and leaving.
 //
 // A text cell's keys (../useTextCells.ts) are caught on the row, before the
 // editor inside it sees them.
@@ -30,6 +35,10 @@ export function Cell({
 	hidden,
 	selected,
 	selectedStrong,
+	owner = false,
+	menu = false,
+	onMenu,
+	onHover,
 	focused,
 	editing,
 	focusReq,
@@ -56,6 +65,13 @@ export function Cell({
 	selected: boolean;
 	/** Part of a multi-cell selection. */
 	selectedStrong: boolean;
+	/** This cell is the plane's gutter owner: its gutter shows. */
+	owner?: boolean;
+	/** Its gutter menu is open. Plane state, since it holds ownership. */
+	menu?: boolean;
+	onMenu?: (open: boolean) => void;
+	/** The pointer entered (true) or left (false) the row. */
+	onHover?: (on: boolean) => void;
 	/** The caret lives in here. */
 	focused: boolean;
 	/** Source open. */
@@ -85,26 +101,29 @@ export function Cell({
 			ref={setEl}
 			data-cell={cell.id}
 			hidden={hidden}
-			className={docCellRow({ focused, dragging })}
+			className={docCellRow({ focused, dragging, owner })}
 			onKeyDownCapture={onTextKey}
+			onPointerEnter={() => onHover?.(true)}
+			onPointerLeave={() => onHover?.(false)}
 			onMouseDown={(e) => {
 				// A plain click inside a cell leaves cell-selection mode;
 				// the cell's own editor takes over from here.
 				if (e.button === 0) onPointerIn();
 			}}
 		>
-			{editable ? (
-				<Gutter
-					cellId={cell.id}
-					state={cell.status.state}
-					pinned={editing || selected}
-					editing={editing}
-					onSetEditing={onSetEditing}
-					onDrag={onDrag}
-					onPlus={onPlus}
-					onDelete={onDelete}
-				/>
-			) : null}
+			<Gutter
+				editable={editable}
+				cellId={cell.id}
+				state={cell.status.state}
+				shown={owner}
+				menu={menu}
+				onMenu={onMenu ?? (() => {})}
+				editing={editing}
+				onSetEditing={onSetEditing}
+				onDrag={onDrag}
+				onPlus={onPlus}
+				onDelete={onDelete}
+			/>
 			<div className={docCell({ selected, selectedStrong })} data-cell-body="">
 				{dropAbove ? <span className={`${docDropIndicator} top-0`} /> : null}
 				<ProgramCell
@@ -119,6 +138,7 @@ export function Cell({
 					onExit={onExit}
 					onSelectSelf={onSelect}
 					onSetEditing={onSetEditing}
+					readOnly={!editable}
 				/>
 			</div>
 		</div>

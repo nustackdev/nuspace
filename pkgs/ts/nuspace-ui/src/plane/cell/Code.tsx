@@ -29,10 +29,17 @@ export type CodeBoxProps = {
 	onEscape: () => void;
 	/** Live read of the buffer, for the parent's unsaved indicator. */
 	onDirty: (dirty: boolean) => void;
+	/**
+	 * Show the source without letting it change: Monaco's own `readOnly`, and
+	 * nothing is ever committed (no save on blur, Escape or the arrows, no
+	 * mod+enter run). The boundary keys still leave the editor.
+	 */
+	readOnly?: boolean;
 };
 
 export function CodeBox(props: CodeBoxProps) {
 	const { source, focusReq, onFocusConsumed, onCommit, onExit, onEscape, onDirty } = props;
+	const readOnly = props.readOnly ?? false;
 
 	const hostRef = useRef<HTMLDivElement | null>(null);
 	const editorRef = useRef<CodeEditor | null>(null);
@@ -40,6 +47,9 @@ export function CodeBox(props: CodeBoxProps) {
 	// Callbacks change identity every render; monaco listeners bind once.
 	const cb = useRef({ onCommit, onExit, onEscape, onDirty });
 	cb.current = { onCommit, onExit, onEscape, onDirty };
+	// Read once, like the callbacks: the editor is built for one mode.
+	const readOnlyRef = useRef(readOnly);
+	readOnlyRef.current = readOnly;
 	const sourceRef = useRef(source);
 	sourceRef.current = source;
 
@@ -54,6 +64,8 @@ export function CodeBox(props: CodeBoxProps) {
 			const editor = monaco.editor.create(host, {
 				value: sourceRef.current,
 				language: "python",
+				readOnly: readOnlyRef.current,
+				domReadOnly: readOnlyRef.current,
 				// One theme name; `monaco.ts` restains it in place on a flip.
 				theme: NU_THEME,
 				automaticLayout: true,
@@ -72,7 +84,7 @@ export function CodeBox(props: CodeBoxProps) {
 					alwaysConsumeMouseWheel: false,
 				},
 				padding: { top: 8, bottom: 8 },
-				// Editor tier, one step under the document's 16px body type
+				// Editor tier, one step under the document's 14px body type
 				// (typography.md §2).
 				fontSize: 13,
 				fontFamily:
@@ -100,6 +112,12 @@ export function CodeBox(props: CodeBoxProps) {
 			};
 			fit();
 
+			// A read-only buffer never differs from the source, so there is never
+			// anything to save.
+			const save = () => {
+				if (!readOnlyRef.current) cb.current.onCommit(editor.getValue());
+			};
+
 			const subs = [
 				editor.onDidContentSizeChange(fit),
 				editor.onDidChangeModelContent(() => {
@@ -115,14 +133,15 @@ export function CodeBox(props: CodeBoxProps) {
 					if (e.keyCode === monaco.KeyCode.Escape) {
 						e.preventDefault();
 						e.stopPropagation();
-						cb.current.onCommit(editor.getValue());
+						save();
 						cb.current.onEscape();
 						return;
 					}
 					if (e.keyCode === monaco.KeyCode.Enter && (e.metaKey || e.ctrlKey)) {
+						if (readOnlyRef.current) return;
 						e.preventDefault();
 						e.stopPropagation();
-						cb.current.onCommit(editor.getValue());
+						save();
 						return;
 					}
 					if (!collapsed) return;
@@ -134,21 +153,19 @@ export function CodeBox(props: CodeBoxProps) {
 					if (e.keyCode === monaco.KeyCode.UpArrow && pos.lineNumber === 1) {
 						e.preventDefault();
 						e.stopPropagation();
-						cb.current.onCommit(editor.getValue());
+						save();
 						cb.current.onExit("up", pos.column - 1);
 						return;
 					}
 					if (e.keyCode === monaco.KeyCode.DownArrow && pos.lineNumber === model.getLineCount()) {
 						e.preventDefault();
 						e.stopPropagation();
-						cb.current.onCommit(editor.getValue());
+						save();
 						cb.current.onExit("down", pos.column - 1);
 					}
 				}),
 				editor.onDidBlurEditorText(() => {
-					if (editor.getValue() !== sourceRef.current) {
-						cb.current.onCommit(editor.getValue());
-					}
+					if (editor.getValue() !== sourceRef.current) save();
 				}),
 			];
 
@@ -225,7 +242,7 @@ export function SourceEditor(props: Omit<CodeBoxProps, "onDirty">) {
 	return (
 		<>
 			<CodeBox {...props} onCommit={commit} onDirty={setDirty} />
-			{dirty ? (
+			{dirty && !props.readOnly ? (
 				<span className={docSourceDirty}>
 					unsaved
 					<Shortcut keys={["mod", "enter"]} size="sm" />

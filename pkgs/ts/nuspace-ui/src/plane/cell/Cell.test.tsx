@@ -1,6 +1,6 @@
 // A program cell that draws nothing, rendered in jsdom: one quiet "No view"
-// line on an editable plane and a read-only one alike, beside the gutter's
-// status, and an error stands in for it. A cell that draws but whose view has
+// line on an editable plane and a read-only one alike, and an error stands
+// in for it. The gutter's source toggle carries the cell's status. A cell that draws but whose view has
 // not arrived waits quietly, then shows a skeleton, until its run is over.
 
 import { TooltipProvider } from "@nustackdev/ui-kit";
@@ -21,6 +21,7 @@ function render(
 	state: CellState = "idle",
 	error = "",
 	has_ui: boolean | null = false,
+	selection: { selected?: boolean; multi?: boolean; owner?: boolean } = {},
 ) {
 	const noop = () => {};
 	act(() => {
@@ -37,8 +38,9 @@ function render(
 					}}
 					uiPath={["viewer", "cells", "c1"]}
 					editable={editable}
-					selected={false}
-					selectedStrong={false}
+					selected={selection.selected ?? false}
+					selectedStrong={(selection.selected ?? false) && (selection.multi ?? false)}
+					owner={selection.owner ?? false}
 					focused={false}
 					editing={false}
 					focusReq={null}
@@ -91,6 +93,56 @@ describe("a cell with no view", () => {
 		render(editable, "failed", "boom");
 		expect(body()).toContain("boom");
 		expect(body()).not.toContain("No view");
+	});
+});
+
+describe("the cell's status, on the source toggle", () => {
+	const toggle = () => host.querySelector("[data-cell-status]");
+
+	it.each([
+		["idle", "text-cell-idle"],
+		["starting", "text-cell-starting"],
+		["running", "text-cell-running"],
+		["stopped", "text-cell-stopped"],
+		["failed", "text-cell-failed"],
+		["invalid", "text-cell-invalid"],
+	] as [CellState, string][])("tints the glyph and names the state, %s", (state, hue) => {
+		render(true, state);
+		expect(toggle()?.getAttribute("aria-label")).toBe(`Show source · ${state}`);
+		expect(toggle()?.querySelector("svg")?.getAttribute("class")).toContain(hue);
+	});
+
+	it("tints it on a read-only plane too", () => {
+		render(false, "running");
+		expect(toggle()?.getAttribute("aria-label")).toBe("Show source · running");
+		expect(toggle()?.querySelector("svg")?.getAttribute("class")).toContain("text-cell-running");
+	});
+});
+
+describe("a read-only plane's gutter", () => {
+	it("keeps exactly copy-id and the source toggle", () => {
+		render(false, "running");
+		const labels = [...host.querySelectorAll("[data-cell-gutter] button")].map((b) =>
+			b.getAttribute("aria-label"),
+		);
+		expect(labels).toEqual(["Copy this cell's cell id", "Show source · running"]);
+		expect(host.querySelector("[data-cell-grip]")).toBeNull();
+	});
+});
+
+describe("the gutter shows on its owner only", () => {
+	const stack = () => host.querySelector("[data-cell-gutter] > div");
+	const shown = () => stack()?.classList.contains("opacity-100") ?? false;
+
+	it("shows on the owner", () => {
+		render(true, "idle", "", false, { owner: true });
+		expect(shown()).toBe(true);
+	});
+
+	it.each([true, false])("stays hidden off the owner, selected=%s", (selected) => {
+		render(true, "idle", "", false, { selected, owner: false });
+		expect(stack()).not.toBeNull();
+		expect(shown()).toBe(false);
 	});
 });
 

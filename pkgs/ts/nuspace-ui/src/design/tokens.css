@@ -252,8 +252,10 @@
 	 * Density rule for a document surface, stated once: horizontally it is
 	 * the kit's density (a cell's inner chrome is panel chrome and uses the
 	 * kit's 32px rows). Vertically it is looser than a panel, because reading
-	 * rhythm is set by line-height, not by padding. So cell padding stays
-	 * tiny (4px) and the air comes from the 16px/1.55 body line box. A
+	 * rhythm is set by line-height, not by padding. So a cell is a near-plain
+	 * box: one tiny pad on every side for every kind of cell, enough that a
+	 * bare control never touches its neighbour, and the air comes from what
+	 * the cell holds (the 14px/1.45 prose line box, a widget's own chrome). A
 	 * document is not a place to spend spacing tokens.
 	 * --------------------------------------------------------------------- */
 
@@ -281,16 +283,28 @@
 	--spacing-doc-gutter: var(--doc-gutter); /* 56  a gutter track's WIDTH.
 	                               * The widest row of a cell's stack, two kit
 	                               * `sm` IconButtons (24 + 2 gap + 24), plus
-	                               * the 4px that holds it off the text edge.
+	                               * the 4px that holds it off the cell's edge.
 	                               * The narrower rows right-align into it, so
 	                               * the gutter stays one lane, not two that
 	                               * overlap. Height is the row's, not a token:
 	                               * see `docGutter` for the stack that is
 	                               * taller than a short cell. */
-	--spacing-doc-cell-x: 0.5rem; /* 8            wash overhangs the text  */
-	--spacing-doc-cell-y: 0.25rem; /* 4           ghost line pad-y         */
-	--spacing-doc-cell-y-program: 0.5rem; /* 8    cell pad-y              */
-	--spacing-doc-cell-gap: 0.125rem; /* 2        cells are contiguous    */
+	--spacing-doc-cell: 0.25rem; /* 4    a cell's pad, every side, every
+	                               * kind. Content brings its own air, so
+	                               * the box only keeps it off the wash edge
+	                               * and off the next cell. Rows that line up
+	                               * with a cell's content (the trail, the
+	                               * title, a ghost, a draft) pay it too.    */
+	--spacing-doc-cell-gap: 0.25rem; /* 4         air between cells       */
+	--spacing-doc-line: 0.5rem; /* 8       where a text cell's first line
+	                               * starts: the cell's 4 plus the prose
+	                               * box's own 4. A ghost and a draft pad to it so
+	                               * their line is the cell's line.         */
+	--spacing-doc-gutter-top: 0.375rem; /* 6  the gutter's top pad: the
+	                               * first line's 8 less half of what the
+	                               * 24px control row is taller than the
+	                               * ~20px (14px/1.45) line, so the row
+	                               * centres on the line.                   */
 	--spacing-doc-tail: 30vh; /* The dead air under the last cell. A document
 	                           * that ends at the window bottom has nowhere to
 	                           * click to start writing, and reads as though it
@@ -301,7 +315,7 @@
 	                           * panel alike. Clicking it lands in the
 	                           * end-of-plane ghost -- see `docTail`.          */
 	--spacing-doc-dot: 0.5rem; /* 8               status dot                */
-	--spacing-doc-rail: 0.125rem; /* 2            status / focus rail width */
+	--spacing-doc-rail: 0.125rem; /* 2            drop line thickness       */
 	--spacing-doc-title-gap: 8rem; /* 128         blank air above the title.
 	                                * A plane with no cover still opens on
 	                                * emptiness rather than on ink: the run-up

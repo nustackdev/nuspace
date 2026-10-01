@@ -11,12 +11,12 @@
 //
 // Density note. A document is not a panel. Horizontally it uses kit density
 // (a cell's inner chrome is chrome: 32px rows, 6px radii). Vertically it is
-// looser, but the air comes from the 16px/1.55 body line box, not from
-// padding. See tokens.css for the full rule.
+// looser, but the air comes from the 14px/1.45 prose line box, not from
+// padding: a cell is a near-plain box. See tokens.css for the full rule.
 
 import { cn, menuContentClasses } from "@nustackdev/ui-kit";
 
-import type { CellStatus } from "./cell-status";
+import { CELL_STATUS, type CellStatus } from "./cell-status";
 
 /* ============================== Plane + column ============================ */
 
@@ -102,14 +102,15 @@ export const docPlaneAbsent = cn(docRow, docPlaneWidth(false), "flex-1 content-c
  * conditional label: the text is always there for a screen reader, it is
  * merely not ink until you are in it.
  *
- * It sits in a `docRow`'s content track, where a cell's box sits.
+ * It sits in a `docRow`'s content track, where a cell's box sits, and its
+ * line is a text cell's first line: same inset, same type.
  */
 export const docGhost = (hinted: boolean) =>
 	cn(
 		docContentTrack,
 		"w-full rounded-sm border-0 bg-transparent outline-none",
-		"px-doc-cell-x py-doc-cell-y",
-		"text-xl leading-relaxed text-text-primary",
+		"px-doc-cell py-doc-line",
+		"text-lg text-text-primary",
 		// An empty plane shows its hint at rest; otherwise only with the caret in.
 		hinted
 			? "placeholder:text-text-muted"
@@ -119,16 +120,16 @@ export const docGhost = (hinted: boolean) =>
 /**
  * A draft: what was typed into a ghost while its text cell is on the way.
  *
- * Plain text set where and how a text cell's first paragraph sits (cell pad,
- * field pad and the paragraph's own margin make the `py-5`), so the handoff
- * to the real editor moves nothing. Like a ghost, in a `docRow`'s content
- * track.
+ * Plain text set where and how a text cell's first paragraph sits (the
+ * cell's pad plus the prose box's, see `--spacing-doc-line`; the first
+ * paragraph has no margin of its own there), so the handoff to the real
+ * editor moves nothing. Like a ghost, in a `docRow`'s content track.
  */
 export const docDraft = cn(
 	docContentTrack,
 	"w-full resize-none rounded-sm border-0 bg-transparent outline-none [field-sizing:content]",
-	"px-doc-cell-x py-5",
-	"font-display text-base leading-normal text-text-primary",
+	"px-doc-cell py-doc-line",
+	"font-display text-lg text-text-primary",
 );
 
 /**
@@ -151,9 +152,9 @@ export const docTail = "h-doc-tail w-full shrink-0 cursor-text";
 // writing off the fold.
 //
 // One left edge runs through all three of these and the cells below. A
-// cell's text starts at the content track's edge plus the cell's own 8px
-// inset, so the trail and the title pay the same 8px -- `px-doc-cell-x` on
-// both is alignment, not padding for its own sake.
+// cell's text starts at the content track's edge plus the cell's own pad,
+// so the trail and the title pay the same pad -- `px-doc-cell` on both is
+// alignment, not padding for its own sake.
 
 /**
  * The band the trail and the title sit in. The same width as `docColumn`,
@@ -184,7 +185,7 @@ export function docTitleRow(compact = false): string {
  * Small and quiet on purpose. It is the one thing up here you can click, and
  * the whole point of the air under it is that the title arrives on its own.
  */
-export const docTrail = "px-doc-cell-x";
+export const docTrail = "px-doc-cell";
 
 /**
  * The editable title. It is an `h1` with `contenteditable`, not an input and
@@ -212,7 +213,7 @@ export const docTrail = "px-doc-cell-x";
 export function docTitle(): string {
 	return `${cn(
 		docContentTrack,
-		"block px-doc-cell-x py-0.5",
+		"block px-doc-cell py-0.5",
 		"font-bold text-text-primary",
 		"cursor-text whitespace-pre-wrap break-words outline-none",
 		"empty:before:pointer-events-none empty:before:text-text-muted",
@@ -226,7 +227,7 @@ export const docCode = "font-mono text-lg text-text-primary";
 /* ============================== Cell ==================================== */
 
 export interface CellStateFlags {
-	/** The caret lives in this cell. No fill, gutter rail only. */
+	/** The caret lives in this cell. No fill: the caret marks it. */
 	focused?: boolean;
 	/** Whole-cell selection (across an island boundary). Accent fill. */
 	selected?: boolean;
@@ -234,14 +235,17 @@ export interface CellStateFlags {
 	selectedStrong?: boolean;
 	/** This cell is the one being dragged. Ghosted while it travels. */
 	dragging?: boolean;
+	/** This cell owns the plane's one visible gutter (`gutterOwner`). */
+	owner?: boolean;
 }
 
 /**
  * A cell's row: its gutter in the left track, its box (`docCell`) in the
- * content track. The row is the hover group, so standing anywhere on it,
- * the controls included, counts as being on the cell.
+ * content track. Standing anywhere on the row, the controls included, counts
+ * as being on the cell: the row reports pointer enter and leave to the plane,
+ * which picks the one gutter owner (`gutterOwner`, plane/state.ts).
  *
- * The hovered row rides above its neighbours, so a gutter stack taller than
+ * The owner's row rides above its neighbours, so a gutter stack taller than
  * a short cell stays on top of the next row where it overhangs it, and wins
  * the pointer there (see `docGutter`). The caret's row rides one step lower.
  * A dragged cell fades whole, controls and all, while it travels.
@@ -249,8 +253,9 @@ export interface CellStateFlags {
 export function docCellRow(state: CellStateFlags = {}): string {
 	return cn(
 		docRow,
-		"group/cell relative hover:z-20",
-		state.focused && "z-10",
+		"group/cell relative",
+		state.owner && "z-20",
+		state.focused && !state.owner && "z-10",
 		state.dragging && "opacity-40",
 	);
 }
@@ -259,6 +264,11 @@ export function docCellRow(state: CellStateFlags = {}): string {
  * One cell's box, in its row's content track. The content flows normally at
  * full measure; the gutter is its own track beside it, so nothing the gutter
  * renders can shift the reading column.
+ *
+ * Near-plain: the same small pad on every side for every cell, whatever it
+ * mounts. What it holds brings its own air (prose pads its own box, a widget
+ * has its chrome), so the cell adds only enough that its content never
+ * touches the wash edge or the next cell.
  *
  * Hover and pressed are NEUTRAL (doc-hover / doc-active); selection is the
  * accent tier. That split is deliberate - on a document, hovering every
@@ -277,8 +287,7 @@ export function docCell(state: CellStateFlags = {}): string {
 	return cn(
 		docContentTrack,
 		"relative rounded-sm",
-		"px-doc-cell-x",
-		"py-doc-cell-y-program",
+		"p-doc-cell",
 		"transition-colors duration-fast ease-out",
 		// The grip is in the gutter, a sibling of this box, so its hover is
 		// read off the row.
@@ -291,74 +300,59 @@ export function docCell(state: CellStateFlags = {}): string {
 
 /**
  * The gutter: the left track of a cell's row. It holds every affordance the
- * cell has: add and drag, copy the cell id, open the source. Hidden at rest
- * and revealed on hover or keyboard focus - a document at rest shows text,
- * not controls.
+ * cell has: add and drag, copy the cell id, open the source. Hidden unless
+ * the cell is the plane's one gutter owner (`gutterOwner`, plane/state.ts) -
+ * a document at rest shows text, not controls, and never more than one
+ * cell's worth of them.
  *
  * The track is sized to hold the widest row of the stack - two `sm`
  * IconButtons side by side (24px each + a 2px gap) - and the rows
  * right-align into it, so their right edge is the content edge. The top pad
- * lines the first row up with the cell's output, which sits 8px in.
+ * (`--spacing-doc-gutter-top`) centres the first row's 24px box on a text
+ * cell's first line, which starts `--spacing-doc-line` down and is about
+ * 20px tall.
  *
- * The lane is as tall as the cell and no taller. The stack is 58px (8 of pad,
+ * The lane is as tall as the cell and no taller. The stack is 56px (6 of pad,
  * two 24px rows and a 2px gap), taller than a short cell, and if the lane
  * took its height a one-line cell would grow to fit its own controls. Size
  * containment keeps the stack out of the row's height, so it overhangs the
- * next row instead, and `hover:z-20` on the hovered row (`docCellRow`) lifts
- * it over that row so the overhang takes the pointer.
+ * next row instead, and `z-20` on the owner's row (`docCellRow`) lifts it
+ * over that row so the overhang takes the pointer.
  *
  * The lane itself is a live hover target: it is part of the row, so
- * standing anywhere on it keeps the row's `group-hover/cell`. The 4px that
+ * standing anywhere on it keeps the row hovered. The 4px that
  * holds the controls off the text is padding INSIDE the stack, not on the
  * lane, so the stack's hit rect meets the content edge and the walk from the
  * text out to the controls never crosses a dead strip.
  */
 export const docGutter = cn(
 	docGutterTrack,
-	"relative pt-2 [contain:size]",
+	"pt-doc-gutter-top [contain:size]",
 	"flex flex-col items-end gap-0.5 select-none",
 );
 
 /**
- * Wrapper for the hover-only affordances inside the gutter. One reveal for all
- * three rows, so the cell's chrome arrives and leaves as a single object
- * rather than as six loose glyphs fading independently.
+ * Wrapper for the affordances inside the gutter. One reveal for all rows, so
+ * the cell's chrome arrives and leaves as a single object rather than as
+ * loose glyphs fading independently. Whether it shows is decided once for the
+ * whole plane (`gutterOwner`, plane/state.ts); this only draws the answer.
  *
  * Revealed and live are the same state, always. Hidden means `pointer-events:
  * none`, which is what keeps a neighbour's invisible stack from stealing the
- * pointer where it overhangs (see `docGutter`). Hover survives the walk off
- * the end of a short cell because `:hover` follows the DOM, not the box: the
- * stack is a descendant of the row, so standing on it keeps the row hovered
- * even where it is painted past the row's bottom. And the wrapper is one rect
- * covering both rows, so sliding between rows never crosses a dead strip even
- * where a row is narrower than the lane.
- *
- * Reveal rules, in order of how they burn:
- *  - Hover, the ordinary one.
- *  - Focus-within scoped to the STACK, not to the cell. Cell-scoped
- *    focus-within pinned the controls open for as long as the caret sat in the
- *    cell, which is most of the time you are writing; a keyboard user who has
- *    tabbed onto one of these buttons still keeps them.
- *  - An open menu or popover. Tooltips cannot pin it: Radix reports them as
- *    `delayed-open`/`instant-open` and portals the content out of this
- *    subtree, so neither half of the selector can see one.
+ * pointer where it overhangs (see `docGutter`). Pointer enter and leave
+ * follow the DOM, not the box: the stack is a descendant of the row, so
+ * standing on it keeps the row hovered even where it is painted past the
+ * row's bottom. And the wrapper is one rect covering both rows, so sliding
+ * between rows never crosses a dead strip even where a row is narrower than
+ * the lane.
  */
-export function docGutterAffordances(pinned = false): string {
+export function docGutterAffordances(shown = false): string {
 	return cn(
 		// Sticky: in a tall cell the stack rides the top of the viewport while
 		// the cell is on screen, and the cell-high lane is its track.
 		"sticky top-2 flex flex-col items-end gap-0.5 pr-1",
 		"transition-opacity duration-fast ease-out",
-		pinned
-			? "pointer-events-auto opacity-100"
-			: cn(
-					"pointer-events-none opacity-0",
-					"group-hover/cell:pointer-events-auto group-hover/cell:opacity-100",
-					// Keyboard focus only: a mouse click leaves focus on the button and must
-					// not pin the stack open after the pointer leaves.
-					"has-[:focus-visible]:pointer-events-auto has-[:focus-visible]:opacity-100",
-					"[&:has([data-state=open])]:pointer-events-auto [&:has([data-state=open])]:opacity-100",
-				),
+		shown ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0",
 	);
 }
 
@@ -422,8 +416,12 @@ export const docProgram = "flex flex-col gap-1";
  */
 export const docSourceDirty = "flex items-center gap-1 self-end text-xs text-text-muted";
 
-/** The cell's mounted ui refs. Looser gap: these are whole widgets. */
-export const docProgramFields = "flex flex-col gap-3 py-1";
+/**
+ * The cell's mounted ui refs. The gap is what two cells put between their
+ * contents (a pad, the gap between cells, a pad: 4 + 4 + 4), so two text
+ * blocks sit the same distance apart whether they share a cell or not.
+ */
+export const docProgramFields = "flex flex-col gap-3";
 
 /**
  * The line a cell that mounts nothing keeps, one line high: a kit `Badge
@@ -454,10 +452,7 @@ export const docSkeleton = "flex min-w-0 flex-1 flex-col";
 export const docSkeletonTitle = cn(docContentTrack, "h-9 w-1/2 self-center");
 
 /** One cell's worth: text lines in the content track, at the cell's pad. */
-export const docSkeletonCell = cn(
-	docContentTrack,
-	"flex flex-col gap-2 px-doc-cell-x py-doc-cell-y-program",
-);
+export const docSkeletonCell = cn(docContentTrack, "flex flex-col gap-2 p-doc-cell");
 
 /**
  * The code box around Monaco. Bordered and sunken, so a source editor looks
@@ -473,27 +468,16 @@ export const docCodeBox = cn(
 /* ============================== Status ================================== */
 
 /**
- * The status rail: a 2px line down the gutter lane's inner edge (beside the
- * cell, not on it), in the cell's hue, running the lane's full height, which
- * is the cell's. It
- * is the cell's one state indicator, so every state paints one, idle
- * included (muted gray). Same visibility as the gutter controls: cell hover,
- * or pinned while the source is open or the cell is selected.
+ * The cell's status, on the source toggle's glyph: the code icon takes the
+ * cell's hue. It is the cell's one state indicator, so every state paints
+ * one, idle included (muted gray). The glyph carries its own colour class,
+ * which beats the colour the kit `Toggle` sets on itself, so the hue holds
+ * on hover and while pressed. Colour is never the only cue: the toggle's
+ * label and tooltip name the state. It shows only when its gutter does, on
+ * the plane's one gutter owner.
  */
-export function docStatusRail(status: CellStatus, pinned = false): string {
-	return cn(
-		"absolute right-0 top-0 bottom-0 w-doc-rail rounded-full",
-		"transition-[color,background-color,opacity] duration-fast ease-out",
-		pinned ? "opacity-100" : "opacity-0 group-hover/cell:opacity-100",
-		{
-			invalid: "bg-cell-invalid",
-			idle: "bg-cell-idle",
-			starting: "bg-cell-starting",
-			running: "bg-cell-running",
-			stopped: "bg-cell-stopped",
-			failed: "bg-cell-failed",
-		}[status],
-	);
+export function docGutterStatus(status: CellStatus): string {
+	return CELL_STATUS[status].fg;
 }
 
 /**

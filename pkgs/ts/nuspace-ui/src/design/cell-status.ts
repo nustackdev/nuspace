@@ -138,17 +138,6 @@ export const CELL_STATUS: Record<CellStatus, CellStatusToken> = {
 	},
 };
 
-/**
- * Whether the cell should paint a status rail down its gutter.
- *
- * Rest states stay silent - a plane of idle cells with six colored rails is
- * a christmas tree, not a document. The rail is for states the author has to
- * do something about, plus `running` so a live plane reads as live.
- */
-export function hasGutterRail(status: CellStatus): boolean {
-	return status === "invalid" || status === "failed" || status === "running";
-}
-
 /** Whether the cell renders an inline payload panel under its content. */
 export function hasPayload(status: CellStatus): boolean {
 	return CELL_STATUS[status].carries !== null;

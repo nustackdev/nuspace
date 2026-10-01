@@ -1,9 +1,9 @@
 // A plane: one Plane's cells, as a document you write in.
 //
 // `editable` is the plane's own setting and the thing here that branches on
-// it: with it you get the gutter, the insert affordances, the drag handle,
-// the code toggle and the keyboard, and without it the same cells render
-// their output with none of them. `wide` is the full-width setting.
+// it: with it you get the insert affordances, the drag handle, a source you
+// can edit and the keyboard. Without it the same cells render their output
+// and keep a reduced gutter: copy the id, and read the source. `wide` is the full-width setting.
 //
 // Everything structural lives in this directory and nowhere else: ordering,
 // keyboard, selection, focus routing, the slash menu, drag reorder, cell
@@ -23,7 +23,7 @@
 
 import type { Path } from "@nustackdev/ui-core";
 import { pathKey } from "@nustackdev/ui-kit";
-import { Fragment, useCallback, useEffect, useRef } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import {
 	docBoxSelect,
 	docColumn,
@@ -39,7 +39,7 @@ import { Ghost } from "./Ghost";
 import type { PlaneModel } from "./model";
 import type { Notify } from "./ops";
 import { SlashMenu } from "./SlashMenu";
-import { type EditorPatch, patchEditor, useEditorState } from "./state";
+import { type EditorPatch, gutterOwner, patchEditor, useEditorState } from "./state";
 import type { ActivePlane, SlashSnippet } from "./types";
 import { useBoxSelect } from "./useBoxSelect";
 import { useCellDrag } from "./useCellDrag";
@@ -51,7 +51,15 @@ import { useStructure } from "./useStructure";
 import { useTextCells } from "./useTextCells";
 
 const NO_SNIPPETS: SlashSnippet[] = [];
-const NONE: string[] = [];
+
+/** `:focus-visible`, read defensively: an engine without it reports false. */
+function focusVisible(el: HTMLElement): boolean {
+	try {
+		return el.matches(":focus-visible");
+	} catch {
+		return false;
+	}
+}
 
 export function Plane({
 	viewerPath,
@@ -188,14 +196,20 @@ export function Plane({
 	//
 	// `editor.focus` is an intent and is consumed the instant a cell honours
 	// it, so it cannot answer "which cell is the caret in" -- which is what
-	// the gutter's focus rail needs. Focus events bubble (focusin/focusout), so
+	// the gutter owner needs. Focus events bubble (focusin/focusout), so
 	// one listener on the plane root reports the standing fact for every editor
 	// inside it, including ones we do not own (Monaco, a cell's refs).
 
+	// A mouse click on a gutter control leaves focus on the button, and that is
+	// not the caret: counting it would pin the gutter (see `gutterOwner`) after
+	// the pointer leaves. Keyboard focus there does count, so a keyboard user
+	// who tabs onto the controls keeps them.
 	const onPlaneFocus = useCallback(
 		(e: React.FocusEvent) => {
-			const host = (e.target as HTMLElement).closest?.("[data-cell]");
-			const id = host?.getAttribute("data-cell") ?? null;
+			const target = e.target as HTMLElement;
+			const host = target.closest?.("[data-cell]");
+			const byMouse = target.closest?.("[data-cell-gutter]") != null && !focusVisible(target);
+			const id = byMouse ? null : (host?.getAttribute("data-cell") ?? null);
 			patch((ed) => (ed.focused === id ? {} : { focused: id }));
 		},
 		[patch],
@@ -212,6 +226,25 @@ export function Plane({
 		[patch],
 	);
 
+	// -- Whose gutter shows ---------------------------------------------------
+	//
+	// One owner for the whole plane (see `gutterOwner` in ./state.ts). Hover
+	// is plane state rather than CSS so it can lose to a pinned cell; it
+	// changes only when the pointer crosses into another row, never per move.
+	// The open gutter menu lives here too, since it holds ownership.
+
+	const [hovered, setHovered] = useState<string | null>(null);
+	const [menuFor, setMenuFor] = useState<string | null>(null);
+	const hover = useCallback((id: string, on: boolean) => {
+		setHovered((cur) => (on ? id : cur === id ? null : cur));
+	}, []);
+	const multiSelected = editor.selected.length > 1;
+	// A selection growing past one cell closes a menu that was open.
+	useEffect(() => {
+		if (multiSelected) setMenuFor(null);
+	}, [multiSelected]);
+	const owner = gutterOwner(editor, hovered, menuFor);
+
 	// -- Render ---------------------------------------------------------------
 
 	const setEl = useCallback((id: string, el: HTMLElement | null) => {
@@ -219,11 +252,11 @@ export function Plane({
 		else elRefs.current.delete(id);
 	}, []);
 
-	// A read-only plane has no open source, whatever the editor state still
-	// remembers from before the switch flipped. It keeps its selection: a box
-	// selects there too, to copy.
+	// A read-only plane keeps its selection (a box selects there too, to copy)
+	// and its open sources, which show read-only.
 	const selectedIds = editor.selected;
-	const editingIds = editable ? editor.editing : NONE;
+	const multi = selectedIds.length > 1;
+	const editingIds = editor.editing;
 	const drag = editor.drag;
 	const lastId = cells.length ? cells[cells.length - 1].id : null;
 
@@ -260,7 +293,11 @@ export function Plane({
 							editable={editable}
 							hidden={draft?.id === cell.id}
 							selected={selected}
-							selectedStrong={selected && selectedIds.length > 1}
+							selectedStrong={selected && multi}
+							owner={owner === cell.id}
+							menu={menuFor === cell.id}
+							onMenu={(open) => setMenuFor(open ? cell.id : null)}
+							onHover={(on) => hover(cell.id, on)}
 							focused={editor.focused === cell.id}
 							editing={editing}
 							focusReq={editor.focus?.cellId === cell.id ? editor.focus : null}

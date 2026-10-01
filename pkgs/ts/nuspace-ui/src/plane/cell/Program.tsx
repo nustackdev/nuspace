@@ -76,6 +76,8 @@ export type ProgramProps = {
 	onExit: (dir: ExitDir, column: number | undefined) => void;
 	onSelectSelf: () => void;
 	onSetEditing: (on: boolean) => void;
+	/** The plane is read-only: an open source shows but never saves. */
+	readOnly?: boolean;
 };
 
 export function ProgramCell(props: ProgramProps) {
@@ -91,6 +93,7 @@ export function ProgramCell(props: ProgramProps) {
 		onExit,
 		onSelectSelf,
 		onSetEditing,
+		readOnly = false,
 	} = props;
 
 	const hasUi = useCellHasUi(uiPath);
@@ -128,6 +131,7 @@ export function ProgramCell(props: ProgramProps) {
 					onCommit={onCommit}
 					onExit={onExit}
 					onEscape={leaveEditor}
+					readOnly={readOnly}
 				/>
 			) : null}
 

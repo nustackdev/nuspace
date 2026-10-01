@@ -12,6 +12,8 @@ separately here.
 
 ## Unreleased
 
+- Even cell spacing, one gutter at a time, status on the code toggle
+- Read-only planes can copy cell ids and view each cell's source
 - A rebuilt web bundle shows on restart in a checkout, no reinstall
 - Program code reads plainly: forms, lambdas and fallbacks replace hand-rolled helpers
 - The split button's tooltip shows its shortcut
