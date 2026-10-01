@@ -1,0 +1,16 @@
+{
+	// Typecheck against the kit source in the nu checkout, the counterpart of
+	// NU_KIT=local in vite.config.ts. `npm run typecheck:local`. Assumes the
+	// sibling checkout; NU_KIT_PATH is for the bundler only.
+	"extends": "./tsconfig.app.json",
+	"compilerOptions": {
+		"incremental": true,
+		"tsBuildInfoFile": "./node_modules/.tmp/tsconfig.local.tsbuildinfo",
+		"paths": {
+			"@/*": ["./src/*"],
+			"@nustackdev/ui-kit": ["../../../../nu/pkgs/ts/ui-kit/src/index.ts"],
+			"@nustackdev/ui-kit/tree": ["../../../../nu/pkgs/ts/ui-kit/src/tree/index.ts"],
+			"@nustackdev/ui-kit/nodes": ["../../../../nu/pkgs/ts/ui-kit/src/nodes/index.ts"]
+		}
+	}
+}

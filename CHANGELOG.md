@@ -12,6 +12,7 @@ separately here.
 
 ## Unreleased
 
+- The web UI can build against a local ui-kit checkout, never for a wheel
 - Keyboard shortcuts sheet, new plane keys, split on Option, one plane menu everywhere
 - Plane ids sort in one plain call
 - Follows the core's single rule for missing values

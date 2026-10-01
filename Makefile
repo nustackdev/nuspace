@@ -1,4 +1,4 @@
-.PHONY: help install sync dev test lint format check clean clean-all web-install web-dev web-build build-nuspace build-ui build-all ci
+.PHONY: help install sync dev test lint format check clean clean-all web-install web-dev web-build web-kit-css web-dev-local web-build-local build-nuspace build-ui build-all ci
 
 BLUE := \033[0;34m
 GREEN := \033[0;32m
@@ -6,6 +6,8 @@ YELLOW := \033[1;33m
 NC := \033[0m
 
 UI_DIR := pkgs/ts/nuspace-ui
+# The nu checkout's ts workspace, for building the ui against the local kit.
+NU_TS_DIR ?= ../nu/pkgs/ts
 
 help:
 	@echo "$(BLUE)nuspace$(NC)"
@@ -29,6 +31,8 @@ help:
 	@echo "  make web-install     npm install in the ui workspace"
 	@echo "  make web-dev         Run vite dev server"
 	@echo "  make web-build       Build the vite bundle into $(UI_DIR)/dist"
+	@echo "  make web-dev-local   Vite dev server against the local ui-kit source"
+	@echo "  make web-build-local Build the bundle against the local ui-kit source"
 	@echo ""
 	@echo "$(GREEN)Packages:$(NC)"
 	@echo "  make build-nuspace   Build the nuspace wheel"
@@ -100,12 +104,28 @@ web-build:
 	cd $(UI_DIR) && npm run build
 	@echo "$(GREEN)Built: $(UI_DIR)/dist/$(NC)"
 
+# The local kit's stylesheet: the npm package ships it prebuilt, the source does not.
+web-kit-css:
+	@echo "$(BLUE)Building the local ui-kit stylesheet...$(NC)"
+	cd $(NU_TS_DIR) && npm run build:css --workspace @nustackdev/ui-kit
+
+web-dev-local: web-kit-css
+	@echo "$(BLUE)Starting vite dev server against the local ui-kit...$(NC)"
+	cd $(UI_DIR) && npm run dev:local
+
+web-build-local: web-kit-css
+	@echo "$(BLUE)Building nuspace-ui against the local ui-kit...$(NC)"
+	cd $(UI_DIR) && npm run build:local
+	@echo "$(YELLOW)Built against the LOCAL ui-kit: for trying out, never for a wheel$(NC)"
+
 build-nuspace:
 	@echo "$(BLUE)Building nuspace wheel...$(NC)"
 	uv build --wheel
 	@echo "$(GREEN)Built: dist/$(NC)"
 
 build-ui: web-build
+	@# A wheel is only ever built against the npm kit package.json pins.
+	@if [ "$$NU_KIT" = "local" ]; then echo "NU_KIT=local is set: a wheel never ships the local ui-kit"; exit 1; fi
 	@echo "$(BLUE)Building nuspace-ui web-bundle wheel...$(NC)"
 	# --out-dir keeps the wheel out of dist/, which IS the vite output we
 	# force-include into it. Writing there packages the last wheel into the next.

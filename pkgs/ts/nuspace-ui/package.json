@@ -6,9 +6,12 @@
 	"type": "module",
 	"scripts": {
 		"dev": "vite",
+		"dev:local": "NU_KIT=local vite",
 		"build": "tsc -b && vite build",
+		"build:local": "tsc -p tsconfig.local.json && NU_KIT=local vite build",
 		"preview": "vite preview",
 		"typecheck": "tsc -b",
+		"typecheck:local": "tsc -p tsconfig.local.json",
 		"check": "biome check .",
 		"check:fix": "biome check --write .",
 		"test": "vitest run"

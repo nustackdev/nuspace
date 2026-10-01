@@ -10,10 +10,32 @@ import { defineConfig } from "vite";
 const REACT = path.resolve(__dirname, "node_modules/react");
 const REACT_DOM = path.resolve(__dirname, "node_modules/react-dom");
 
+// Which ui-kit to build against. By default the npm release package.json
+// pins, which is what CI and every shipped wheel use. NU_KIT=local swaps in the
+// kit's source from the nu checkout instead, so a kit change shows here
+// without a release: `make web-build-local` / `make web-dev-local`, which also
+// rebuild the kit's stylesheet first. NU_KIT_PATH points elsewhere when the
+// checkout is not the sibling one. package.json and the lockfile never change.
+const KIT =
+	process.env.NU_KIT === "local"
+		? path.resolve(process.env.NU_KIT_PATH ?? path.resolve(__dirname, "../../../../nu/pkgs/ts/ui-kit"))
+		: null;
+if (KIT) console.log(`ui-kit: local (${KIT})`);
+
+/** The kit's entry points, as its package.json exports them, off its source. */
+const LOCAL_KIT = KIT
+	? [
+			{ find: /^@nustackdev\/ui-kit$/, replacement: `${KIT}/src/index.ts` },
+			{ find: /^@nustackdev\/ui-kit\/(tree|nodes)$/, replacement: `${KIT}/src/$1/index.ts` },
+			{ find: /^@nustackdev\/ui-kit\/styles$/, replacement: `${KIT}/dist/styles.css` },
+		]
+	: [];
+
 export default defineConfig({
 	plugins: [react(), tailwindcss()],
 	resolve: {
 		alias: [
+			...LOCAL_KIT,
 			{ find: /^react$/, replacement: REACT },
 			{ find: /^react-dom$/, replacement: REACT_DOM },
 			{ find: /^react\/(.*)$/, replacement: `${REACT}/$1` },
@@ -41,6 +63,8 @@ export default defineConfig({
 		},
 	},
 	server: {
+		// The local kit sits outside this package; let the dev server read it.
+		fs: KIT ? { allow: [__dirname, KIT] } : undefined,
 		proxy: {
 			"/ws": {
 				target: "ws://localhost:8080",
