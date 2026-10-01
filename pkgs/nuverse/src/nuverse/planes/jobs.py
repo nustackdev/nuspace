@@ -42,48 +42,44 @@ class Listing(nustd.ui.Column):
     )
 
 
-def flag(ref):
-    return nu.If(ref.exists(), nu.ToBool(ref), nu.Bool(False))
+def jobs():
+    def headless(p):
+        props = nuspace.Space.planes[nu.Str(p)].props
+        return props.ui.fallback(False).not_().and_(props.system.fallback(False).not_())
 
-
-def jobs(key):
-    props = nuspace.Space.planes[nu.Str(nu.Attr(key))].props
-    headless = nu.And(nu.Not(flag(props.ui)), nu.Not(flag(props.system)))
-    return nu.List(nu.Collect(nu.Filter(ops.planes(), headless, key=key)))
+    return ops.planes().iter().filter(headless).to_list()
 
 
 def running():
     # Live runs are few: their planes, not every run ever recorded.
-    run = nu.Attr("live")
-    return nu.List(nu.Collect(nu.Unique(nu.Map(nu.Iter(ops.runs()), run["plane"], key="live"))))
+    return nu.List(nu.Collect(nu.Unique(nu.Map(nu.Iter(ops.runs()), lambda run: run["plane"]))))
 
 
 def restart(pid):
     policy = supervisor.policy_of(pid)
     delay = supervisor.delay_of(pid)
-    label = nu.If(
-        nu.Eq(policy, "always"),
-        nu.Str("always"),
-        nu.If(nu.Eq(policy, "on-failure"), nu.Str("on failure"), nu.Str("off")),
+    label = nu.Str(
+        nu.Switch(policy, {"always": "always", "on-failure": "on failure"}, default="off")
     )
-    timed = nu.And(nu.Ne(policy, ""), nu.Ge(delay, 0.0))
-    return nu.If(timed, label + nu.Str(", ") + nu.Format(delay, "g") + nu.Str("s"), label)
+    timed = (policy != "").and_(delay >= 0.0)
+    return nu.If(timed, label + ", " + nu.format(delay, "g") + "s", label)
 
 
 def table(booted, live):
-    j = nu.Str(nu.Attr("j"))
-    name = nuspace.Space.planes[j].name
-    row = nu.List.of(
-        nu.If(name.exists(), nu.ToStr(name), j),
-        j,
-        nu.If(nu.List(booted).contains(j), "yes", "no"),
-        restart(j),
-        nu.If(nu.List(live).contains(j), "yes", "no"),
-    )
+    def row(at):
+        j = nu.Str(at)
+        return nu.List.of(
+            nuspace.Space.planes[j].name.fallback(j),
+            j,
+            nu.If(nu.List(booted).contains(j), "yes", "no"),
+            restart(j),
+            nu.If(nu.List(live).contains(j), "yes", "no"),
+        )
+
     return Listing.table.set(
         nu.Dict.of(
             columns=["Name", "ID", "Boot", "Restart", "Running"],
-            rows=nu.Collect(nu.Map(nu.Iter(jobs("jobs.draw")), row, key="j")),
+            rows=jobs().iter().map(row).to_list(),
         )
     )
 
@@ -95,18 +91,17 @@ def draw():
     return ops.snapshot(body)
 
 
-def select():
-    click = nu.Attr("click")
-    at = nu.ToInt(click["row_index"])
+def select(click):
+    at = nu.int(click["row_index"])
 
     def pick(ids):
-        return nu.IfDo(nu.Gt(nu.Len(ids), at), Jobs.selected.set(nu.ToStr(nu.List(ids)[at])))
+        return nu.IfDo(nu.List(ids).len() > at, Jobs.selected.set(nu.str(nu.List(ids)[at])))
 
     # The rows are the jobs in creation order: the same read finds the one clicked.
     return nu.IfDo(
-        nu.Contains(click, "row_index"),
+        click.contains("row_index"),
         nustd.kv.Transaction(
-            nustd.kv.Snapshot(nu.let(jobs("jobs.pick"), pick), scope=nuspace.Space),
+            nustd.kv.Snapshot(nu.let(jobs(), pick), scope=nuspace.Space),
             scope=nuspace.States,
         ),
     )
@@ -115,7 +110,7 @@ def select():
 def out():
     return draw() >> nu.ParallelAsync(
         nu.ForeverDo(nu.DelayedDo(1.0, draw())),
-        nu.ReactForever(Listing.table.on_row_click(), select(), changed_key="click"),
+        nu.ReactForever(Listing.table.on_row_click(), select),
     )
 """
 
@@ -163,7 +158,7 @@ def create(name):
 
 def out():
     typed = nu.Str(Form.name)
-    name = nu.If(nu.Eq(typed, ""), nu.Str("New job"), typed)
+    name = nu.If(typed == "", "New job", typed)
     make = nu.let(name, lambda held: create(nu.Str(held)) >> Form.name.set(""))
     return (
         Form.name.set("")
@@ -235,16 +230,15 @@ def snap(term):
 
 def draw(job):
     d = View.detail
-    name = nuspace.Space.planes[job].name
     policy = supervisor.policy_of(job)
     delay = supervisor.delay_of(job)
     return snap(
-        d.title.set(nu.If(name.exists(), nu.ToStr(name), job))
+        d.title.set(nuspace.Space.planes[job].name.fallback(job))
         >> d.editor.set(ops.prog(job, "main"))
         >> d.save.set("Save")
-        >> d.boot.set(nu.List(init.booted()).contains(job))
-        >> d.restart.policy.choice.set(nu.If(nu.Eq(policy, ""), nu.Str(OFF), policy))
-        >> d.restart.delay.set(nu.If(nu.Ge(delay, 0.0), delay, nu.Float(0.0)))
+        >> d.boot.set(init.booted().contains(job))
+        >> d.restart.policy.choice.set(nu.If(policy == "", OFF, policy))
+        >> d.restart.delay.set(nu.If(delay >= 0.0, delay, 0.0))
         >> d.delete.set("Delete job", variant="danger")
     )
 
@@ -253,17 +247,17 @@ def restart(job):
     # Plane level: the supervisor keeps the job running, off stops its run.
     choice, delay = Asked.choice, Asked.delay
     apply = nu.IfDo(
-        nu.Eq(choice, OFF),
+        choice == OFF,
         supervisor.unsupervise(job),
         nu.IfDo(
-            nu.Gt(delay, 0.0),
+            delay > 0.0,
             supervisor.supervise(job, choice, delay=delay),
             supervisor.supervise(job, choice),
         ),
     )
     asked = View.detail.restart
     return nu.Frame(
-        Asked, apply, choice=nu.Str(asked.policy.choice), delay=nu.ToFloat(asked.delay)
+        Asked, apply, choice=nu.Str(asked.policy.choice), delay=nu.float(asked.delay)
     )
 
 
@@ -285,7 +279,7 @@ def delete(job):
         click = nu.IfDo(
             nu.Bool(armed),
             remove(job),
-            armed.set(nu.Bool(True)) >> button.set("Click again to delete", variant="danger"),
+            armed.set(True) >> button.set("Click again to delete", variant="danger"),
         )
         return nu.ReactForever(button.on_click(), click)
 
@@ -295,7 +289,7 @@ def delete(job):
 def shown(job):
     d = View.detail
     save = nu.let(nu.Str(d.editor), lambda source: ops.set_prog(job, "main", source))
-    boot = nu.IfDo(nu.ToBool(d.boot), init.boot(job), init.unboot(job))
+    boot = nu.IfDo(nu.bool(d.boot), init.boot(job), init.unboot(job))
     return (
         View.empty.erase()
         >> draw(job)
@@ -314,7 +308,7 @@ def hint():
 
 
 def showing(job):
-    there = nu.And(nu.Ne(job, ""), snap(ops.plane_exists(job)))
+    there = (nu.Str(job) != "").and_(snap(ops.plane_exists(job)))
     return nu.IfDo(there, shown(job), hint())
 
 

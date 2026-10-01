@@ -94,8 +94,11 @@ def _write_prog(row: nu.Nu, prog: nu.StrArg, has_ui: nu.Nu) -> nu.Nu:
     ``version`` goes up by one per write, from 1, so a cell run recording an
     older one is running an older prog.
     """
-    version = nu.If(row.version.exists(), nu.ToInt(row.version) + nu.Int(1), nu.Int(1))
-    return row.prog.set(prog) >> row.props.has_ui.set(has_ui) >> row.version.set(version)
+    return (
+        row.prog.set(prog)
+        >> row.props.has_ui.set(has_ui)
+        >> row.version.set(row.version.fallback(0) + 1)
+    )
 
 
 def _knowing_ui(
@@ -116,7 +119,7 @@ def _knowing_ui(
 def _place(order: nu.ListRef, cell_id: nu.StrArg, index: nu.IntArg | None) -> nu.Nu:
     """Put ``cell_id`` in ``order`` at ``index``, the end when None, once."""
     put = order.append(cell_id) if index is None else order.insert(index, cell_id)
-    return nu.IfDo(nu.Not(order.contains(cell_id)), put)
+    return nu.IfDo(order.contains(cell_id).not_(), put)
 
 
 def add_cell(
@@ -158,14 +161,13 @@ def add_cell(
             )
             if into is None:
                 return atomic(placed)
-            made = nu.If(plane_exists(plane_id), cid, nu.Str(""))
-            return atomic(placed >> into.set(made))
+            return atomic(placed >> into.set(nu.If(plane_exists(plane_id), cid, "")))
 
         return _knowing_ui(prog, plane_id, cid, commit)
 
     # Minted ahead of the bracket, so has_ui is worked out outside it, and a
     # retried commit writes the same id again.
-    return nu.let(MintId("c") if cell_id is None else nu.Str(cell_id), knowing)
+    return nu.let(MintId("c") if cell_id is None else cell_id, knowing)
 
 
 def cell_writes(
@@ -204,7 +206,7 @@ def remove_cell(plane_id: nu.StrArg, cell_id: nu.StrArg) -> nu.Nu:
         nu.IfDo(
             cell_exists(plane_id, cell_id),
             interrupt_cell(plane_id, cell_id)
-            >> nu.IfDo(plane.order.contains(cell_id), plane.order.remove(cell_id))
+            >> plane.order.remove(cell_id, missing_ok=True)
             >> plane.cells.del_item(cell_id),
         )
     )
@@ -271,7 +273,7 @@ def move_cell(
     """
     src, dst = Space.planes[plane_id], Space.planes[to_plane_id]
     movable = nu.And(
-        nu.Ne(plane_id, to_plane_id),
+        nu.Str(plane_id) != to_plane_id,
         cell_exists(plane_id, cell_id),
         plane_exists(to_plane_id),
     )
@@ -281,7 +283,7 @@ def move_cell(
             interrupt_cell(plane_id, cell_id)
             >> dst.cells.set_item(cell_id, src.cells[cell_id].extract())
             >> _place(dst.order, cell_id, index)
-            >> nu.IfDo(src.order.contains(cell_id), src.order.remove(cell_id))
+            >> src.order.remove(cell_id, missing_ok=True)
             >> src.cells.del_item(cell_id),
         )
     )
@@ -295,5 +297,7 @@ def move_cell(
 def _copy_state(plane_id: nu.StrArg, cell_id: nu.StrArg, to_plane_id: nu.StrArg) -> nu.Nu:
     """The cell's state written whole under ``to_plane_id``, when it has any. No bracket."""
     src = States.planes[plane_id].cells
-    held = nu.And(States.planes.contains(plane_id), src.contains(cell_id))
-    return nu.IfDo(held, States.planes[to_plane_id].cells.set_item(cell_id, src[cell_id].extract()))
+    return nu.IfDo(
+        States.planes.contains(plane_id).and_(src.contains(cell_id)),
+        States.planes[to_plane_id].cells.set_item(cell_id, src[cell_id].extract()),
+    )

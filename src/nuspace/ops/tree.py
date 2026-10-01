@@ -16,7 +16,7 @@ import nu
 from nuspace.shapes import ROOT, Space
 
 from .read import plane_exists
-from .utils import atomic, fresh
+from .utils import atomic
 
 
 if TYPE_CHECKING:
@@ -40,40 +40,18 @@ def subtree(plane_id: nu.StrArg, body: Callable[[nu.Nu], nu.Nu]) -> nu.Nu:
     reads the store as it goes and carries what it already reached, so a
     cycle written by hand ends rather than going round forever.
     """
-    going, edge = _Walk.going, _Walk.edge
-    at, reached = fresh("edge_at"), fresh("reached")
-    step = nu.List(
-        nu.Collect(
-            nu.Filter(
-                nu.Unique(
-                    nu.Flatten(
-                        nu.Map(
-                            nu.List(edge),
-                            nu.list(Space.tree[nu.Str(nu.Attr(at))].children),
-                            key=at,
-                        )
-                    )
-                ),
-                nu.Not(nu.List(going).contains(nu.Attr(reached))),
-                key=reached,
-            )
-        )
-    )
-    walk = nu.WhileDo(
-        nu.Gt(edge.len(), nu.Int(0)),
-        going.set(nu.List(going) + nu.List(edge)) >> edge.set(step),
-    )
-    return nu.Frame(_Walk, walk >> body(going), going=nu.Literal([]), edge=nu.List.of(plane_id))
+    going, edge = nu.List(_Walk.going), nu.List(_Walk.edge)
+    below = nu.Flatten(nu.Map(edge, lambda node: nu.list(Space.tree[nu.Str(node)].children)))
+    step = nu.List(nu.Collect(nu.Filter(nu.Unique(below), lambda p: going.contains(p).not_())))
+    walk = nu.WhileDo(edge.len() > 0, _Walk.going.set(going + edge) >> _Walk.edge.set(step))
+    return nu.Frame(_Walk, walk >> body(_Walk.going), going=[], edge=nu.List.of(plane_id))
 
 
 def unlink(plane_id: nu.StrArg) -> nu.Nu:
     """Drop ``plane_id`` from every tree node listing it. No bracket."""
-    item = fresh("unlink")
-    node = Space.tree[nu.Str(nu.Attr(item))].children
     return nu.ForEachDo(
         nu.list(Space.tree.keys()),
-        nu.IfDo(node.contains(plane_id), node.remove(plane_id)),
-        item=item,
+        lambda node: Space.tree[nu.Str(node)].children.remove(plane_id, missing_ok=True),
     )
 
 
@@ -95,22 +73,17 @@ def move_plane(
     make a cycle. Whether it moved is in the record: the plane's parent
     and its place among the children.
     """
-    return atomic(nu.let(False, lambda moved: _move_body(plane_id, parent, index, moved)))
 
+    def move(moved: nu.ObjectRef) -> nu.Nu:
+        def check(ids: nu.Nu) -> nu.Nu:
+            ok = nu.And(
+                plane_exists(plane_id),
+                (nu.Str(parent) == ROOT).or_(plane_exists(parent)),
+                nu.List(ids).contains(parent).not_(),
+            )
+            return moved.set(ok)
 
-def _move_body(
-    plane_id: nu.StrArg, parent: nu.StrArg, index: nu.IntArg | None, moved: nu.ObjectRef
-) -> nu.Nu:
-    """Decide into ``moved``, then move the plane when it said yes."""
+        moving = unlink(plane_id) >> link(plane_id, parent, index)
+        return subtree(plane_id, check) >> nu.IfDo(nu.Bool(moved), moving)
 
-    def check(ids: nu.Nu) -> nu.Nu:
-        ok = nu.And(
-            plane_exists(plane_id),
-            nu.Or(nu.Eq(parent, nu.Str(ROOT)), plane_exists(parent)),
-            nu.Not(nu.List(ids).contains(parent)),
-        )
-        return moved.set(ok)
-
-    return subtree(plane_id, check) >> nu.IfDo(
-        nu.Bool(moved), unlink(plane_id) >> link(plane_id, parent, index)
-    )
+    return atomic(nu.let(False, move))

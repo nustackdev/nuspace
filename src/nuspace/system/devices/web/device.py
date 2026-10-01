@@ -29,7 +29,7 @@ from typing import TYPE_CHECKING
 
 import nu
 from nuspace import ops
-from nuspace.ops.utils import atomic, flag, fresh, or_else
+from nuspace.ops.utils import atomic
 from nuspace.shapes import RECENTS_CAP, Space
 from nuspace.system.devices.web.env import SESSION_ENV, session_env
 from nuspace.system.devices.web.session import served_sessions
@@ -75,14 +75,13 @@ __all__ = [
 BANNER = "nuspace"
 
 _arms = Arms("device")
-_ROUTE = "nuspace.web.route"
 _connections = Space.connections
 
 
 def open_connection(sid: nu.StrArg) -> nu.Nu:
     """Publish connection ``sid``: opened now, no plane open. One commit."""
     row = _connections[sid]
-    return atomic(row.opened.set(Now()) >> row.routes.set(nu.Literal([])))
+    return atomic(row.opened.set(Now()) >> row.routes.set([]))
 
 
 def close_connection(sid: nu.StrArg) -> nu.Nu:
@@ -92,24 +91,19 @@ def close_connection(sid: nu.StrArg) -> nu.Nu:
 
 def _erase(viewer: Ref, plane: nu.Nu) -> nu.Nu:
     """A plane's cells erased as drawn, so nothing of a closed pane stays on screen."""
-    cell = fresh("web_erase_cell")
-    ids = nu.If(ops.plane_exists(plane), ops.cells(plane), nu.List.of())
-    return nu.ForEachDo(snap(ids), cell_ui(viewer, nu.Str(nu.Attr(cell))).erase(), item=cell)
+    ids = nu.If(ops.plane_exists(plane), ops.cells(plane), [])
+    return nu.ForEachDo(snap(ids), lambda cell: cell_ui(viewer, nu.Str(cell)).erase())
 
 
-def _remembered(plane: nu.Nu) -> nu.Nu:
+def _remembered(plane: nu.Nu) -> nu.Bool:
     """Whether an opened plane goes in recents: not home, settings or search, and not a service.
 
     A plane not written yet counts: a new plane is routed before its create
     lands (D41), and the home cell drops ids that never came to exist.
     """
     props = Space.planes[plane].props
-    return nu.And(
-        nu.Ne(plane, nu.Str(HOME)),
-        nu.Ne(plane, nu.Str(SETTINGS)),
-        nu.Ne(plane, nu.Str(SEARCH)),
-        nu.Not(nu.And(flag(props.system, False), nu.Not(flag(props.ui, False)))),
-    )
+    service = props.system.fallback(False).and_(props.ui.fallback(False).not_())
+    return nu.List.of(HOME, SETTINGS, SEARCH).contains(plane).or_(service).not_()
 
 
 def remember(opened: nu.Nu) -> nu.Nu:
@@ -120,19 +114,15 @@ def remember(opened: nu.Nu) -> nu.Nu:
     :data:`~nuspace.shapes.RECENTS_CAP`, and written whole (D24).
     """
     recents = Space.state.recents
-    item = fresh("web_recent")
-    at = nu.Attr(item)
-    wanted = nu.List(
-        nu.Collect(nu.Reversed(nu.Filter(nu.List(opened), _remembered(nu.ToStr(at)), key=item)))
-    )
+    wanted = nu.Reversed(nu.Filter(nu.List(opened), lambda p: _remembered(nu.str(p))))
 
     def push(held: nu.ObjectRef) -> nu.Nu:
         pushed = nu.List(held)
-        kept = nu.Filter(nu.List(or_else(recents, [])), nu.Not(pushed.contains(at)), key=item)
-        merged = nu.List(pushed + nu.List(nu.Collect(kept)))[0:RECENTS_CAP]
-        return nu.IfDo(nu.Gt(pushed.len(), nu.Int(0)), recents.set(merged))
+        kept = recents.fallback([]).iter().filter(lambda p: pushed.contains(p).not_())
+        merged = (pushed + kept.to_list())[0:RECENTS_CAP]
+        return nu.IfDo(pushed.len() > 0, recents.set(merged))
 
-    return nu.let(wanted, push)
+    return nu.let(nu.List(nu.Collect(wanted)), push)
 
 
 def route_arm(viewer: Ref, sid: nu.StrArg) -> nu.Nu:
@@ -144,40 +134,22 @@ def route_arm(viewer: Ref, sid: nu.StrArg) -> nu.Nu:
     recents in the same commit as ``routes``.
     """
     row = _connections[sid]
-    item, left, entered = fresh("web_open"), fresh("web_closed"), fresh("web_entered")
-    at = nu.Attr(item)
-    ids = nu.List(
-        nu.Collect(
-            nu.Unique(
-                nu.Filter(
-                    nu.Map(field_ids(_ROUTE, "plane_ids"), nu.ToStr(at), key=item),
-                    nu.Ne(at, nu.Str("")),
-                    key=item,
-                )
-            )
-        )
-    )
+    routes = row.routes.fallback([])
 
     def routed(wanted: nu.ObjectRef) -> nu.Nu:
         kept = nu.List(wanted)
-        closed = nu.Filter(
-            nu.List(snap(or_else(row.routes, []))),
-            nu.Not(kept.contains(nu.Attr(left))),
-            key=left,
-        )
+        closed = nu.Filter(snap(routes), lambda p: kept.contains(p).not_())
         # Read inside the commit, so a burst of opens never pushes one twice.
-        opened = nu.Filter(
-            kept,
-            nu.Not(nu.List(or_else(row.routes, [])).contains(nu.Attr(entered))),
-            key=entered,
-        )
-        write = nu.let(nu.List(nu.Collect(opened)), remember) >> row.routes.set(kept)
-        erase = nu.ForEachDo(
-            nu.List(nu.Collect(closed)), _erase(viewer, nu.Str(nu.Attr(left))), item=left
-        )
+        opened = kept.iter().filter(lambda p: routes.contains(p).not_())
+        write = nu.let(opened.to_list(), remember) >> row.routes.set(kept)
+        erase = nu.ForEachDo(nu.List(nu.Collect(closed)), lambda p: _erase(viewer, nu.Str(p)))
         return erase >> atomic(nu.IfDo(_connections.contains(sid), write))
 
-    return _arms.event(_ROUTE, on_open(viewer), nu.let(ids, routed))
+    def route(event: nu.Attr) -> nu.Nu:
+        ids = nu.Map(field_ids(event, "plane_ids"), lambda p: nu.str(p))
+        return nu.let(nu.List(nu.Collect(nu.Unique(nu.Filter(ids, lambda p: p != "")))), routed)
+
+    return _arms.event("route", on_open(viewer), route)
 
 
 def connection(

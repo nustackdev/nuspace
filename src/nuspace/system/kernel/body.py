@@ -31,7 +31,7 @@ import nu
 import nu.prog
 import nustd.kv
 from nuspace.ops import Here
-from nuspace.ops.utils import atomic, flag
+from nuspace.ops.utils import atomic
 from nuspace.shapes import EXIT_FAILED, EXIT_INTERRUPTED, EXIT_OK, Reroot, Space, States
 
 from .out import Captured, ErrorText, HasOut, TakeOut
@@ -53,9 +53,6 @@ __all__ = ["FLUSH_SECONDS", "Bracketed", "Rewrites", "build_body", "end_cell_run
 FLUSH_SECONDS = 1.0
 
 _kernel = Space.kernel
-
-# What the body's TryCatch binds the error under, for its catch to read.
-_ERROR = "nuspace.kernel.error"
 
 
 class _Ending(nu.Shape):
@@ -124,15 +121,9 @@ def end_cell_run(
     if out is not None:
         writes = cr.out.set(out) >> writes
     writes = writes >> cr.terminated_at.set(Now())
-    return nu.IfDo(nu.Not(cr.terminated_at.exists()), writes) >> nu.IfDo(
-        row.cells_running.contains(cell_run_id), row.cells_running.discard(cell_run_id)
+    return nu.IfDo(cr.terminated_at.missing(), writes) >> row.cells_running.remove(
+        cell_run_id, missing_ok=True
     )
-
-
-def _mark_started(run_id: str, cell_run_id: str) -> nu.Nu:
-    """``started_at``, stamped once."""
-    cr = _kernel.runs[run_id].cells[cell_run_id]
-    return atomic(nu.IfDo(nu.Not(cr.started_at.exists()), cr.started_at.set(Now())))
 
 
 def _flush(run_id: str, cell_run_id: str) -> nu.Nu:
@@ -189,27 +180,26 @@ def build_body(
     )
     # On the loop: a program that subscribes is async only.
     program = nu.ParallelAsync(nu.prog.Eval(load))
-    asked = _kernel.runs[run_id].cells[cell_run_id].interrupt_requested
-    interrupted = until(flag(asked, False), asked.on_change())
+    cr = _kernel.runs[run_id].cells[cell_run_id]
+    asked = cr.interrupt_requested.fallback(False)
+    interrupted = until(asked, cr.interrupt_requested.on_change())
     flusher = nu.ForeverDo(nu.Delay(FLUSH_SECONDS) >> _flush(run_id, cell_run_id))
     # The record says why the race ended: an asked interrupt, or the program
     # finishing. The flusher never wins.
-    exit_ = nu.If(flag(asked, False), nu.Str(EXIT_INTERRUPTED), nu.Str(EXIT_OK))
     run = (
-        _mark_started(run_id, cell_run_id)
+        atomic(cr.started_at.init(Now()))
         >> nu.Race(program, interrupted, flusher)
-        >> _finish(run_id, cell_run_id, exit_)
+        >> _finish(run_id, cell_run_id, nu.If(asked, EXIT_INTERRUPTED, EXIT_OK))
     )
     for env in reversed(envs):
         if env.wrap is not None:
             run = env.wrap(run)
     # Outside the wraps, so an env failing to open is this cell run failing.
-    failed = _finish(
-        run_id,
-        cell_run_id,
-        EXIT_FAILED,
-        error=ErrorText(nu.Attr(_ERROR)),
-        extra=ErrorText(nu.Attr(_ERROR), full=True),
+    caught = nu.TryCatch(
+        run,
+        catch=lambda err: _finish(
+            run_id, cell_run_id, EXIT_FAILED, error=ErrorText(err), extra=ErrorText(err, full=True)
+        ),
     )
-    body = nu.With(Captured(), body=nu.TryCatch(run, catch=failed, error_key=_ERROR))
+    body = nu.With(Captured(), body=caught)
     return nu.Frame(Here, body, plane=plane, cell=cell, run=run_id, cell_run=cell_run_id)

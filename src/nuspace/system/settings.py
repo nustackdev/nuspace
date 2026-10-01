@@ -60,7 +60,7 @@ def draw():
 def out():
     switch = Settings.telemetry.on
     return draw() >> nu.ParallelAsync(
-        nu.ReactForever(switch.on_change(), ops.set_telemetry(nu.ToBool(switch))),
+        nu.ReactForever(switch.on_change(), ops.set_telemetry(nu.bool(switch))),
         nu.ReactForever(nuspace.Space.settings.telemetry.on_change(), draw()),
     )
 """

@@ -22,39 +22,36 @@ from nuspace import ops
 
 def made(p):
     props = nu.Dict(p["props"])
-    made_by = nu.ToStr(props["made_by"])
-    return nu.If(
-        props["system"], nu.Str("system"), nu.If(nu.Eq(made_by, ""), nu.Str("-"), made_by)
-    )
+    made_by = nu.str(props["made_by"])
+    return nu.If(props["system"], "system", nu.If(made_by == "", "-", made_by))
 
 
 def cell_count(pid):
-    return nu.Len(nu.list(nuspace.Space.planes[pid].cells.keys()))
+    return nu.list(nuspace.Space.planes[pid].cells.keys()).len()
 
 
 def members(planes, m):
-    return nu.Filter(nu.Iter(planes), nu.Eq(nu.Attr("p")["made"], m), key="p")
+    return nu.Filter(nu.Iter(planes), lambda p: p["made"] == m)
 
 
 def table(planes):
-    p, m = nu.Attr("p"), nu.Str(nu.Attr("m"))
-    row = nu.List.of(
-        m, nu.Count(members(planes, m)), nu.Sum(nu.Map(members(planes, m), p["cells"], key="p"))
-    )
-    makers = nu.Unique(nu.Map(nu.Iter(planes), p["made"], key="p"))
+    def row(at):
+        m = nu.Str(at)
+        cells = nu.Sum(nu.Map(members(planes, m), lambda p: p["cells"]))
+        return nu.List.of(m, nu.Count(members(planes, m)), cells)
+
+    makers = nu.Unique(nu.Map(nu.Iter(planes), lambda p: p["made"]))
     return nustd.ui.TableRef("made by").set(
         nu.Dict.of(
             columns=["Made by", "Planes", "Cells"],
-            rows=nu.Collect(nu.Map(makers, row, key="m")),
+            rows=nu.Collect(nu.Map(makers, row)),
         )
     )
 
 
 def draw():
-    p = nu.Attr("p")
-    tagged = nu.Collect(
-        nu.Map(ops.plane_rows(), nu.Dict.of(made=made(p), cells=cell_count(p["id"])), key="p")
-    )
+    rows = ops.plane_rows().iter()
+    tagged = rows.map(lambda p: nu.Dict.of(made=made(p), cells=cell_count(p["id"]))).to_list()
     return nustd.kv.Snapshot(nu.let(tagged, table), scope=nuspace.Space)
 
 
@@ -76,18 +73,18 @@ def prop(p, name):
 
 
 def cell_count(pid):
-    return nu.Len(nu.list(nuspace.Space.planes[pid].cells.keys()))
+    return nu.list(nuspace.Space.planes[pid].cells.keys()).len()
 
 
 def draw():
-    p = nu.Attr("p")
-    row = nu.List.of(
-        p["name"], prop(p, "made_by"), nu.If(prop(p, "system"), "yes", "no"), cell_count(p["id"])
-    )
+    def row(p):
+        system = nu.If(prop(p, "system"), "yes", "no")
+        return nu.List.of(p["name"], prop(p, "made_by"), system, cell_count(p["id"]))
+
     table = nustd.ui.TableRef("planes").set(
         nu.Dict.of(
             columns=["Name", "Made by", "System", "Cells"],
-            rows=nu.Collect(nu.Map(ops.plane_rows(), row, key="p")),
+            rows=ops.plane_rows().iter().map(row).to_list(),
         )
     )
     return nustd.kv.Snapshot(table, scope=nuspace.Space)

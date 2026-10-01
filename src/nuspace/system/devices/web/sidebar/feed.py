@@ -35,12 +35,12 @@ from typing import TYPE_CHECKING
 
 import nu
 from nuspace import ops
-from nuspace.ops.utils import flag, fresh
+from nuspace.ops.utils import field_str
 from nuspace.shapes import ROOT, Space
 from nuspace.system import search
 from nuspace.system.devices.web.sidebar import interactions
 from nuspace.system.devices.web.sidebar.interactions import KIND_PLANE, KIND_SPACE, ROOT_ID
-from nuspace.system.devices.web.utils import Arms, field_ids, field_str
+from nuspace.system.devices.web.utils import Arms, field_ids, field_index
 from nuspace.system.kernel.utils import snap
 
 
@@ -56,41 +56,15 @@ __all__ = ["create", "move", "node", "pins", "rows", "searched", "sidebar_feed"]
 
 _arms = Arms("sidebar")
 
-# The names each arm binds its event under.
-_CREATE = "nuspace.web.sidebar.create"
-_RENAME = "nuspace.web.sidebar.rename"
-_DELETE = "nuspace.web.sidebar.delete"
-_MOVE = "nuspace.web.sidebar.move"
-_ICON = "nuspace.web.sidebar.icon"
-_PIN = "nuspace.web.sidebar.pin"
-_UNPIN = "nuspace.web.sidebar.unpin"
-_PIN_MOVE = "nuspace.web.sidebar.pin_move"
-_SEARCH = "nuspace.web.sidebar.search"
 
-
-def _text(row: nu.Nu, field: str) -> nu.Nu:
-    return nu.ToStr(row.get_item(nu.Str(field), nu.Str("")))
-
-
-def _prop(row: nu.Nu, field: str) -> nu.Nu:
+def _prop(row: nu.Nu, field: str) -> nu.Object:
     """One of a plane row's props. The row carries them whole, defaults filled in."""
-    return nu.Dict(row.get_item(nu.Str("props"), nu.Dict.of())).get_item(nu.Str(field))
+    return nu.Dict(nu.Dict(row).get_item("props", nu.Dict.of())).get_item(field)
 
 
-def _icon(row: nu.Nu) -> nu.Nu:
-    """A plane row's ``meta.icon``, ``""`` when it has none."""
-    meta = nu.Dict(row.get_item(nu.Str("meta"), nu.Dict.of()))
-    return nu.ToStr(meta.get_item(nu.Str("icon"), nu.Str("")))
-
-
-def node(parent_id: nu.Nu) -> nu.Nu:
+def node(parent_id: nu.Nu) -> nu.Str:
     """The store's tree node for a browser parent id: :data:`ROOT_ID` and ``""`` are ``ROOT``."""
-    top = nu.Or(nu.Eq(parent_id, nu.Str(ROOT_ID)), nu.Eq(parent_id, nu.Str("")))
-    return nu.If(top, nu.Str(ROOT), parent_id)
-
-
-def _drawn(plane_id: nu.Nu) -> nu.Nu:
-    return flag(Space.planes[plane_id].props.ui, False)
+    return nu.Str(nu.Switch(parent_id, {ROOT_ID: ROOT, "": ROOT}, default=parent_id))
 
 
 class _Listing(nu.Shape):
@@ -120,67 +94,52 @@ def rows() -> nu.Nu:
         planes with ``made_by``, ``icon`` and ``system`` too. Planes in
         creation order, ``children`` in sibling order.
     """
-    pick, each, kid = fresh("sidebar_pick"), fresh("sidebar_row"), fresh("sidebar_kid")
-    picked, row = nu.Dict(nu.Attr(pick)), nu.Dict(nu.Attr(each))
     held, ids = _Listing.rows, _Listing.ids
-    shown = nu.List(
-        nu.Collect(nu.Filter(ops.plane_rows(), nu.ToBool(_prop(picked, "ui")), key=pick))
-    )
 
-    def kids(node_id: nu.Nu) -> nu.Nu:
-        return nu.List(
-            nu.Collect(nu.Filter(ops.children(node_id), ids.contains(nu.Attr(kid)), key=kid))
-        )
+    def kids(node_id: nu.Nu) -> nu.List:
+        return ops.children(node_id).iter().filter(lambda kid: ids.contains(kid)).to_list()
 
-    def listed_under(row: nu.Nu) -> nu.Nu:
+    def listed_under(row: nu.Nu) -> nu.Bool:
         """Whether the row's parent is drawn too, so the row hangs under it."""
-        return ids.contains(_text(row, "parent"))
+        return ids.contains(field_str(row, "parent"))
+
+    def plane(row: nu.Attr) -> nu.Dict:
+        return nu.Dict.of(
+            id=field_str(row, "id"),
+            kind=KIND_PLANE,
+            title=field_str(row, "name"),
+            parent=nu.If(listed_under(row), field_str(row, "parent"), ROOT_ID),
+            children=kids(field_str(row, "id")),
+            made_by=nu.str(_prop(row, "made_by")),
+            icon=field_str(nu.Dict(row).get_item("meta", nu.Dict.of()), "icon"),
+            system=nu.bool(_prop(row, "system")),
+        )
 
     # Drawn planes whose parent is neither drawn nor the root: shown at the top.
     stray = nu.Filter(
         held,
-        nu.And(nu.Ne(_text(picked, "parent"), nu.Str(ROOT)), nu.Not(listed_under(picked))),
-        key=pick,
+        lambda row: (field_str(row, "parent") != ROOT).and_(listed_under(row).not_()),
     )
     space = nu.Dict.of(
-        id=nu.Str(ROOT_ID),
-        kind=nu.Str(KIND_SPACE),
+        id=ROOT_ID,
+        kind=KIND_SPACE,
         # Empty: the browser draws its own word for the space here.
-        title=nu.Str(""),
-        parent=nu.Str(ROOT_ID),
-        children=kids(nu.Str(ROOT))
-        + nu.List(nu.Collect(nu.Map(stray, _text(row, "id"), key=each))),
-    )
-    planes = nu.List(
-        nu.Collect(
-            nu.Map(
-                held,
-                nu.Dict.of(
-                    id=_text(row, "id"),
-                    kind=nu.Str(KIND_PLANE),
-                    title=_text(row, "name"),
-                    parent=nu.If(listed_under(row), _text(row, "parent"), nu.Str(ROOT_ID)),
-                    children=kids(_text(row, "id")),
-                    made_by=nu.ToStr(_prop(row, "made_by")),
-                    icon=_icon(row),
-                    system=nu.ToBool(_prop(row, "system")),
-                ),
-                key=each,
-            )
-        )
+        title="",
+        parent=ROOT_ID,
+        children=kids(ROOT) + nu.List(nu.Collect(nu.Map(stray, lambda row: field_str(row, "id")))),
     )
     return nu.Frame(
         _Listing,
-        nu.List.of(space) + planes,
-        rows=shown,
-        ids=nu.List(nu.Collect(nu.Map(held, _text(picked, "id"), key=pick))),
+        nu.List.of(space) + nu.List(nu.Collect(nu.Map(held, plane))),
+        rows=ops.plane_rows().iter().filter(lambda row: nu.bool(_prop(row, "ui"))).to_list(),
+        ids=nu.List(nu.Collect(nu.Map(held, lambda row: field_str(row, "id")))),
     )
 
 
-def pins() -> nu.Nu:
+def pins() -> nu.List:
     """The pinned plane ids, in order, those that draw only. Bare read."""
-    at = fresh("sidebar_pin")
-    return nu.List(nu.Collect(nu.Filter(ops.pinned(), _drawn(nu.Str(nu.Attr(at))), key=at)))
+    pinned = ops.pinned().iter()
+    return pinned.filter(lambda p: Space.planes[nu.Str(p)].props.ui.fallback(False)).to_list()
 
 
 def create(
@@ -193,21 +152,22 @@ def create(
     """
     if not planes:
         return None
-    named = [nu.Eq(made_by, nu.Str(spec.name)) for spec in planes]
-    unknown = nu.Not(named[0] if len(named) == 1 else nu.Or(*named))
-    branches = [
-        nu.IfDo(
-            nu.Or(named[0], unknown) if i == 0 else named[i],
-            ops.create_plane(
-                spec,
-                parent=node(parent_id),
-                name=nu.If(nu.Eq(title, nu.Str("")), nu.Str(spec.label), title),
-                plane_id=plane_id,
-            ),
+    named = [nu.Str(made_by) == spec.name for spec in planes]
+    unknown = nu.Not(nu.Or(*named))
+    return nu.Sequential(
+        *(
+            nu.IfDo(
+                named[0].or_(unknown) if i == 0 else named[i],
+                ops.create_plane(
+                    spec,
+                    parent=node(parent_id),
+                    name=nu.If(nu.Str(title) == "", spec.label, title),
+                    plane_id=plane_id,
+                ),
+            )
+            for i, spec in enumerate(planes)
         )
-        for i, spec in enumerate(planes)
-    ]
-    return branches[0] if len(branches) == 1 else nu.Sequential(*branches)
+    )
 
 
 def move(plane_id: nu.Nu, parent_id: nu.Nu, index: nu.Nu) -> nu.Nu:
@@ -217,23 +177,17 @@ def move(plane_id: nu.Nu, parent_id: nu.Nu, index: nu.Nu) -> nu.Nu:
     does not (services, for one). The position goes in before the drawn
     sibling the browser named, or at the end when it named none.
     """
-    at = fresh("sidebar_at")
-    item = nu.Attr(at)
-    under, others = _Moving.under, _Moving.others
-    everyone = nu.List(nu.Collect(nu.Filter(ops.children(under), nu.Ne(item, plane_id), key=at)))
-    shown = nu.List(nu.Collect(nu.Filter(others, _drawn(nu.ToStr(item)), key=at)))
-    rest, seen = nu.List(others), nu.List(_Moving.drawn)
-    position = nu.If(
-        nu.And(nu.Ge(index, nu.Int(0)), nu.Lt(index, seen.len())),
-        rest.index(seen[index]),
-        rest.len(),
-    )
+    under, rest, seen = _Moving.under, nu.List(_Moving.others), nu.List(_Moving.drawn)
+    i = nu.Int(index)
+    position = nu.If((i >= 0).and_(i < seen.len()), rest.index(seen[i]), rest.len())
+    others = ops.children(under).iter().filter(lambda p: p != plane_id)
+    drawn = rest.iter().filter(lambda p: Space.planes[nu.Str(p)].props.ui.fallback(False))
     return nu.Frame(
         _Moving,
         ops.move_plane(plane_id, parent=under, index=position),
         under=node(parent_id),
-        others=snap(everyone),
-        drawn=snap(shown),
+        others=snap(others.to_list()),
+        drawn=snap(drawn.to_list()),
     )
 
 
@@ -255,11 +209,6 @@ def _changes() -> list[nu.Nu]:
     ]
 
 
-def _index(name: str) -> nu.Nu:
-    """An event's ``index``, -1 (the end) when it has none."""
-    return nu.ToInt(nu.Dict(nu.Attr(name)).get_item(nu.Str("index"), nu.Int(-1)))
-
-
 def _ship(sidebar: Ref) -> nu.Nu:
     def ship(held: nu.ObjectRef) -> nu.Nu:
         return nu.let(snap(pins()), lambda pinned: interactions.set_tree(sidebar, held, pinned))
@@ -267,17 +216,16 @@ def _ship(sidebar: Ref) -> nu.Nu:
     return nu.let(snap(rows()), ship)
 
 
-def searched(snippets: Sequence[Snippet]) -> nu.Nu:
-    """``search.run``'s op: a search over what it names, when the query is not blank."""
-    query = field_str(_SEARCH, "query")
-    titles = nu.ToBool(nu.Dict(nu.Attr(_SEARCH)).get_item(nu.Str("titles"), nu.Bool(True)))
+def searched(snippets: Sequence[Snippet], event: nu.Nu) -> nu.Nu:
+    """``search.run``'s op: a search over what ``event`` names, when the query is not blank."""
+    query = field_str(event, "query")
     made = search.search(
         query,
-        field_ids(_SEARCH, "snippets"),
-        titles,
+        field_ids(event, "snippets"),
+        nu.bool(nu.Dict(event).get_item("titles", True)),
         searchers=search.searchable(snippets),
     )
-    return nu.IfDo(nu.Ne(nu.Str(query).strip(), nu.Str("")), made)
+    return nu.IfDo(query.strip() != "", made)
 
 
 def sidebar_feed(sidebar: Ref, planes: Sequence[Plane], snippets: Sequence[Snippet] = ()) -> nu.Nu:
@@ -289,78 +237,47 @@ def sidebar_feed(sidebar: Ref, planes: Sequence[Plane], snippets: Sequence[Snipp
         snippets: The registered snippets, what ``search.run`` can search.
     """
     arms = [_arms.state("tree", _changes(), _ship(sidebar))]
-    plane_id = field_str(_CREATE, "plane_id")
-    made = create(
-        planes,
-        field_str(_CREATE, "made_by"),
-        plane_id,
-        field_str(_CREATE, "parent_id"),
-        field_str(_CREATE, "title"),
-    )
-    if made is not None:
-        arms.append(
-            _arms.event(
-                _CREATE,
-                interactions.on_create_plane(sidebar),
-                nu.IfDo(nu.Ne(plane_id, nu.Str("")), made),
-            )
-        )
-    renamed = field_str(_RENAME, "plane_id")
-    deleted = field_str(_DELETE, "plane_id")
-    moved = field_str(_MOVE, "plane_id")
-    iconed = field_str(_ICON, "plane_id")
-    pinning = field_str(_PIN, "plane_id")
-    unpinning = field_str(_UNPIN, "plane_id")
-    shifted = field_str(_PIN_MOVE, "plane_id")
-    arms += [
-        _arms.event(
-            _RENAME,
+    if planes:
+
+        def made(plane_id: nu.Str, event: nu.Attr) -> nu.Nu:
+            made_by, parent_id = field_str(event, "made_by"), field_str(event, "parent_id")
+            return create(planes, made_by, plane_id, parent_id, field_str(event, "title"))
+
+        arms.append(_arms.plane_event("create", interactions.on_create_plane(sidebar), made))
+    return nu.ParallelAsync(
+        *arms,
+        _arms.plane_event(
+            "rename",
             interactions.on_rename_plane(sidebar),
-            nu.IfDo(
-                nu.Ne(renamed, nu.Str("")),
-                ops.rename_plane(renamed, field_str(_RENAME, "title")),
-            ),
+            lambda p, event: ops.rename_plane(p, field_str(event, "title")),
         ),
-        _arms.event(
-            _DELETE,
-            interactions.on_delete_plane(sidebar),
-            nu.IfDo(nu.Ne(deleted, nu.Str("")), ops.remove_plane(deleted)),
+        _arms.plane_event(
+            "delete", interactions.on_delete_plane(sidebar), lambda p, _: ops.remove_plane(p)
         ),
-        _arms.event(
-            _MOVE,
+        _arms.plane_event(
+            "move",
             interactions.on_move_plane(sidebar),
-            nu.IfDo(
-                nu.Ne(moved, nu.Str("")),
-                move(
-                    moved,
-                    field_str(_MOVE, "parent_id"),
-                    _index(_MOVE),
-                ),
+            lambda p, event: move(
+                p, field_str(event, "parent_id"), field_index(event, "index", -1)
             ),
         ),
-        _arms.event(
-            _ICON,
+        _arms.plane_event(
+            "icon",
             interactions.on_set_icon(sidebar),
-            nu.IfDo(
-                nu.Ne(iconed, nu.Str("")),
-                ops.set_plane_icon(iconed, field_str(_ICON, "icon")),
-            ),
+            lambda p, event: ops.set_plane_icon(p, field_str(event, "icon")),
         ),
-        _arms.event(
-            _PIN,
+        _arms.plane_event(
+            "pin",
             interactions.on_pin_plane(sidebar),
-            nu.IfDo(nu.Ne(pinning, nu.Str("")), ops.pin_plane(pinning, _index(_PIN))),
+            lambda p, event: ops.pin_plane(p, field_index(event, "index", -1)),
         ),
-        _arms.event(
-            _UNPIN,
-            interactions.on_unpin_plane(sidebar),
-            nu.IfDo(nu.Ne(unpinning, nu.Str("")), ops.unpin_plane(unpinning)),
+        _arms.plane_event(
+            "unpin", interactions.on_unpin_plane(sidebar), lambda p, _: ops.unpin_plane(p)
         ),
-        _arms.event(
-            _PIN_MOVE,
+        _arms.plane_event(
+            "pin_move",
             interactions.on_move_pin(sidebar),
-            nu.IfDo(nu.Ne(shifted, nu.Str("")), ops.move_pin(shifted, _index(_PIN_MOVE))),
+            lambda p, event: ops.move_pin(p, field_index(event, "index", -1)),
         ),
-        _arms.event(_SEARCH, interactions.on_search(sidebar), searched(snippets)),
-    ]
-    return nu.ParallelAsync(*arms)
+        _arms.event("search", interactions.on_search(sidebar), lambda e: searched(snippets, e)),
+    )

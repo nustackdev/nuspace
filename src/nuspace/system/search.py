@@ -36,7 +36,7 @@ import nustd.kv
 from nuspace import ops
 from nuspace.ops.cell import HasUi, cell_writes
 from nuspace.ops.plane import plane_writes
-from nuspace.ops.utils import MintId, atomic, atomic_state, flag, text
+from nuspace.ops.utils import MintId, atomic, atomic_state, field_str
 from nuspace.shapes import PlaneState, Space
 
 from .home import seed
@@ -138,13 +138,13 @@ class Search(PlaneState):
 # --- Matching, for any snippet's search ------------------------------------------------
 
 
-def matches(value: nu.StrArg, query: nu.StrArg) -> nu.Nu:
+def matches(value: nu.StrArg, query: nu.StrArg) -> nu.Bool:
     """Whether ``query`` is in ``value``, ignoring case. An empty query matches nothing."""
     q = nu.Str(query).lower()
-    return nu.And(nu.Ne(q, nu.Str("")), nu.Ge(nu.Str(value).lower().find(q), nu.Int(0)))
+    return (q != "").and_(nu.Str(value).lower().find(q) >= 0)
 
 
-def excerpt(value: nu.StrArg, query: nu.StrArg, width: int = EXCERPT_WIDTH) -> nu.Nu:
+def excerpt(value: nu.StrArg, query: nu.StrArg, width: int = EXCERPT_WIDTH) -> nu.Str:
     """The text around the first match of ``query`` in ``value``, on one line.
 
     ``width`` characters each side, an ellipsis where it was cut. ``value``
@@ -152,12 +152,10 @@ def excerpt(value: nu.StrArg, query: nu.StrArg, width: int = EXCERPT_WIDTH) -> n
     """
     body = nu.Str(value)
     at = body.lower().find(nu.Str(query).lower())
-    begin = nu.Int(nu.If(nu.Gt(at, nu.Int(width)), at - nu.Int(width), nu.Int(0)))
-    end = nu.Int(nu.If(nu.Ge(at, nu.Int(0)), at, nu.Int(0))) + nu.Len(query) + nu.Int(width)
+    begin = nu.Int(nu.If(at > width, at - width, 0))
+    end = nu.Int(nu.If(at >= 0, at, 0)) + nu.Str(query).len() + width
     cut = body[begin:end].replace("\n", " ").strip()
-    before = nu.If(nu.Gt(begin, nu.Int(0)), nu.Str("…"), nu.Str(""))
-    after = nu.If(nu.Lt(end, nu.Len(body)), nu.Str("…"), nu.Str(""))
-    return before + cut + after
+    return nu.Str(nu.If(begin > 0, "…", "")) + cut + nu.If(end < body.len(), "…", "")
 
 
 # --- Searchers: a snippet's search, named so a worker can import it --------------------
@@ -184,12 +182,6 @@ def searchable(snippets: Sequence[Snippet]) -> dict[str, str]:
 
 # --- The search's own cell --------------------------------------------------------------
 
-# What the walk's loops bind their items under. One program, one cell:
-# nothing runs beside it, so fixed names are safe.
-_PLANE = "nuspace.search.plane"
-_ROW = "nuspace.search.row"
-_HIT = "nuspace.search.hit"
-
 
 class _Asked(nu.Shape):
     """What a search looks for, read once before its walk."""
@@ -212,53 +204,51 @@ class _AtCell(nu.Shape):
     made_by = nu.StrRef.slot()
 
 
-def _field(row: nu.Nu, key: str) -> nu.Nu:
-    return nu.ToStr(nu.Dict(row).get_item(nu.Str(key), nu.Str("")))
-
-
 def _append(found: nu.Nu, by: nu.StrArg) -> nu.Nu:
     """``found`` appended to ``Search.hits``, titled and tagged, in one commit. Nothing when empty."""
-    hit = nu.Attr(_HIT)
-    row = nu.Dict.of(
-        plane=_field(hit, "plane"),
-        cell=_field(hit, "cell"),
-        title=_AtPlane.title,
-        excerpt=_field(hit, "excerpt"),
-        by=by,
-    )
-    add = atomic_state(nu.ForEachDo(nu.List(found), Search.hits.append(row), item=_HIT))
-    return nu.IfDo(nu.Gt(nu.Len(found), nu.Int(0)), add)
+
+    def add(hit: nu.Attr) -> nu.Nu:
+        return Search.hits.append(
+            nu.Dict.of(
+                plane=field_str(hit, "plane"),
+                cell=field_str(hit, "cell"),
+                title=_AtPlane.title,
+                excerpt=field_str(hit, "excerpt"),
+                by=by,
+            )
+        )
+
+    return nu.IfDo(nu.List(found).len() > 0, atomic_state(nu.ForEachDo(nu.List(found), add)))
 
 
-def _drawn_planes() -> nu.Nu:
+def _drawn_planes() -> nu.List:
     """The ids of every plane that draws, in creation order: the planes a hit can open."""
-    at = "nuspace.search.drawn"
-    ui = flag(Space.planes[nu.Str(nu.Attr(at))].props.ui, False)
-    return nu.List(nu.Collect(nu.Filter(ops.planes(), ui, key=at)))
+    planes = ops.planes().iter()
+    return planes.filter(lambda p: Space.planes[nu.Str(p)].props.ui.fallback(False)).to_list()
 
 
-def _cell_rows(plane: nu.Nu) -> nu.Nu:
+def _cell_rows(plane: nu.Nu) -> nu.List:
     """A plane's cells as ``{id, made_by}``, in order."""
-    at = "nuspace.search.cell_row"
-    cid = nu.Str(nu.Attr(at))
-    made = text(Space.planes[plane].cells[cid].props.made_by)
-    return nu.List(nu.Collect(nu.Map(ops.cells(plane), nu.Dict.of(id=cid, made_by=made), key=at)))
+
+    def row(cell: nu.Attr) -> nu.Dict:
+        made_by = Space.planes[plane].cells[nu.Str(cell)].props.made_by.fallback("")
+        return nu.Dict.of(id=cell, made_by=made_by)
+
+    return ops.cells(plane).iter().map(row).to_list()
 
 
-def _by_snippet(name: str, fn: Callable[..., nu.Nu]) -> nu.Nu:
+def _by_snippet(name: str, fn: Callable[..., nu.Nu], plane: nu.Str) -> nu.Nu:
     """The cell at hand searched by ``fn``, when its snippet is ``name`` and ``name`` was picked."""
-    picked = nu.And(
-        nu.Eq(_AtCell.made_by, nu.Str(name)), nu.List(_Asked.snippets).contains(nu.Str(name))
-    )
-    hits = snap(nu.List(fn(_Asked.query, nu.Str(nu.Attr(_PLANE)), _AtCell.cell_id)))
+    picked = (_AtCell.made_by == name).and_(nu.List(_Asked.snippets).contains(name))
+    hits = snap(nu.List(fn(_Asked.query, plane, _AtCell.cell_id)))
     return nu.IfDo(picked, nu.let(hits, lambda found: _append(found, name)))
 
 
-def _title() -> nu.Nu:
+def _title(plane: nu.Str) -> nu.Nu:
     """The plane at hand, a hit when titles count and its name matches."""
     name = _AtPlane.title
-    hit = nu.List.of(nu.Dict.of(plane=nu.Str(nu.Attr(_PLANE)), cell=nu.Str(""), excerpt=name))
-    return nu.IfDo(nu.And(_Asked.titles, matches(name, _Asked.query)), _append(hit, TITLES))
+    hit = nu.List.of(nu.Dict.of(plane=plane, cell="", excerpt=name))
+    return nu.IfDo(_Asked.titles.and_(matches(name, _Asked.query)), _append(hit, TITLES))
 
 
 def run(searchers: Mapping[str, str]) -> nu.Nu:
@@ -275,43 +265,46 @@ def run(searchers: Mapping[str, str]) -> nu.Nu:
             :func:`searcher_ref`. A picked snippet missing from it is not
             searched.
     """
-    per_snippet = [_by_snippet(name, load_searcher(ref)) for name, ref in searchers.items()]
-    row = nu.Attr(_ROW)
-    each_cell = nu.Frame(
-        _AtCell,
-        nu.Sequential(*per_snippet),
-        cell_id=_field(row, "id"),
-        made_by=_field(row, "made_by"),
-    )
-    plane = nu.Str(nu.Attr(_PLANE))
-    name = snap(text(Space.planes[plane].name))
-    cells = nu.ForEachDo(snap(_cell_rows(plane)), each_cell, item=_ROW)
-    each_plane = nu.Frame(
-        _AtPlane,
-        _title() >> (cells if per_snippet else nu.Noop()),
-        title=nu.If(nu.Eq(name, nu.Str("")), nu.Str("Untitled"), name),
-    )
-    walk = nu.ForEachDo(snap(_drawn_planes()), each_plane, item=_PLANE)
+    loaded = [(name, load_searcher(ref)) for name, ref in searchers.items()]
+
+    def each_cell(plane: nu.Str, row: nu.Attr) -> nu.Nu:
+        return nu.Frame(
+            _AtCell,
+            nu.Sequential(*[_by_snippet(name, fn, plane) for name, fn in loaded]),
+            cell_id=field_str(row, "id"),
+            made_by=field_str(row, "made_by"),
+        )
+
+    def each_plane(at: nu.Attr) -> nu.Nu:
+        plane = nu.Str(at)
+        name = nu.Str(snap(Space.planes[plane].name.fallback("")))
+        cells = nu.ForEachDo(snap(_cell_rows(plane)), lambda row: each_cell(plane, row))
+        return nu.Frame(
+            _AtPlane,
+            _title(plane) >> (cells if loaded else nu.Noop()),
+            title=nu.If(name == "", "Untitled", name),
+        )
+
     asked = snap(
         nu.Dict.of(
-            query=text(Search.query),
-            snippets=nu.If(Search.snippets.exists(), nu.list(Search.snippets), nu.Literal([])),
-            titles=flag(Search.titles, False),
+            query=Search.query.fallback(""),
+            snippets=nu.list(Search.snippets).fallback([]),
+            titles=Search.titles.fallback(False),
         )
     )
 
     def looking(held: nu.ObjectRef) -> nu.Nu:
         got = nu.Dict(held)
+        walk = nu.ForEachDo(snap(_drawn_planes()), each_plane)
         return nu.Frame(
             _Asked,
-            nu.IfDo(nu.Ne(_Asked.query.strip(), nu.Str("")), walk),
-            query=_field(held, "query"),
-            titles=nu.ToBool(got.get_item(nu.Str("titles"), nu.Bool(False))),
-            snippets=nu.List(got.get_item(nu.Str("snippets"), nu.Literal([]))),
+            nu.IfDo(_Asked.query.strip() != "", walk),
+            query=field_str(held, "query"),
+            titles=nu.bool(got.get_item("titles", False)),
+            snippets=nu.List(got.get_item("snippets", [])),
         )
 
-    body = nu.let(asked, looking)
-    return nu.TryCatch(body, finally_=atomic_state(Search.finished_at.set(Now())))
+    return nu.TryCatch(nu.let(asked, looking), finally_=atomic_state(Search.finished_at.set(Now())))
 
 
 _SOURCE = """\
@@ -338,7 +331,7 @@ def source(searchers: Mapping[str, str]) -> str:
 def _searches() -> nu.Nu:
     """The system parent every search hangs under, made when missing. Not drawn. No bracket."""
     made = plane_writes(SEARCHES, backend="mp", name=SEARCHES_NAME, system=True)
-    return nu.IfDo(nu.Not(ops.plane_exists(SEARCHES)), made)
+    return nu.IfDo(ops.plane_exists(SEARCHES).not_(), made)
 
 
 def search(
@@ -366,7 +359,7 @@ def search(
     viewer finds it.
     """
     prog = source(searchers or {})
-    picked = snippets if isinstance(snippets, nu.Nu) else nu.Literal(list(snippets))
+    picked = snippets if isinstance(snippets, nu.Nu) else list(snippets)
 
     def fill(minted: nu.ObjectRef) -> nu.Nu:
         pid = nu.Str(minted)
@@ -424,18 +417,13 @@ class Seen(nu.Shape):
     ids = nu.ObjectRef.slot()
 
 
-def text(ref):
-    return nu.If(ref.exists(), nu.ToStr(ref), nu.Str(""))
-
-
 def newest_first():
     # The children of one node: as many reads as there are searches.
     return nu.List(nu.Collect(nu.Reversed(nu.Iter(ops.children(search.SEARCHES)))))
 
 
-def label(pid):
-    name = nuspace.Space.planes[pid].name
-    return nu.If(nu.And(name.exists(), nu.Ne(nu.ToStr(name), "")), nu.ToStr(name), pid)
+def first_of(ids):
+    return nu.str(nu.List(ids).first_elem()).fallback("")
 
 
 def draw():
@@ -443,16 +431,17 @@ def draw():
 
 
 def draw_ids(ids):
-    s = nu.Str(nu.Attr("s"))
-    options = nu.Collect(nu.Map(nu.Iter(ids), nu.Dict.of(value=s, label=label(s)), key="s"))
-    newest = nu.If(nu.Gt(nu.Len(ids), 0), nu.ToStr(ids[0]), nu.Str(""))
-    picked = text(Chosen.picked)
+    options = nu.Collect(
+        nu.Map(nu.Iter(ids), lambda s: nu.Dict.of(value=s, label=ops.plane_title(nu.Str(s))))
+    )
+    newest = first_of(ids)
+    picked = Chosen.picked.fallback("")
     held = nu.And(
-        nu.Ne(picked, ""), nu.Eq(text(Chosen.newest), newest), nu.List(ids).contains(picked)
+        picked != "", Chosen.newest.fallback("") == newest, nu.List(ids).contains(picked)
     )
 
     def show(shown):
-        write = nu.IfDo(nu.Ne(text(Chosen.shown), nu.Str(shown)), Chosen.shown.set(shown))
+        write = nu.IfDo(Chosen.shown.fallback("") != shown, Chosen.shown.set(shown))
         return (
             View.pick.search.set_options(ops.snapshot(options))
             >> View.pick.search.set(shown)
@@ -465,20 +454,18 @@ def draw_ids(ids):
 
 def pick():
     value = nu.Str(View.pick.search)
-    ids = nu.List(ops.snapshot(newest_first()))
-    newest = nu.If(nu.Gt(nu.Len(ids), 0), nu.ToStr(ids[0]), nu.Str(""))
-    keep = Chosen.picked.set(value) >> Chosen.newest.set(newest)
+    keep = Chosen.picked.set(value) >> Chosen.newest.set(first_of(ops.snapshot(newest_first())))
     return nustd.kv.Transaction(keep, scope=nuspace.States) >> draw()
 
 
 def out():
     # Searches are made anywhere: read the list again every second, redraw on a change.
-    changed = nu.Ne(ops.snapshot(newest_first()), Seen.ids)
+    changed = Seen.ids != ops.snapshot(newest_first())
     body = draw() >> nu.ParallelAsync(
         nu.ReactForever(View.pick.search.on_change(), pick()),
         nu.ForeverDo(nu.DelayedDo(1.0, nu.IfDo(changed, draw()))),
     )
-    return nu.Frame(Seen, body, ids=nu.Literal([]))
+    return nu.Frame(Seen, body, ids=[])
 """
 
 
@@ -522,15 +509,13 @@ def of(sel, term):
 
 
 def hit(i, h):
-    row = nustd.ui.core.SectionRef(
-        nu.Str("h") + nu.ToStr(i), section_cls=Hit, parent_ref=Results.hits
-    )
-    by = nu.ToStr(h["by"])
-    title = nu.Eq(by, search.TITLES)
+    row = nustd.ui.core.SectionRef(nu.Str("h") + nu.str(i), section_cls=Hit, parent_ref=Results.hits)
+    by = nu.str(h["by"])
+    title = by == search.TITLES
     return (
-        row.head.link.set(href=nu.Str("/") + nu.ToStr(h["plane"]), label=nu.ToStr(h["title"]))
-        >> row.head.by.set(nu.If(title, nu.Str("title"), by))
-        >> nu.IfDo(nu.Not(title), row.excerpt.set(nu.ToStr(h["excerpt"])))
+        row.head.link.set(href=nu.Str("/") + nu.str(h["plane"]), label=nu.str(h["title"]))
+        >> row.head.by.set(nu.If(title, "title", by))
+        >> nu.IfDo(title.not_(), row.excerpt.set(nu.str(h["excerpt"])))
     )
 
 
@@ -539,35 +524,34 @@ def more(sel, drawn, upto):
     n = nu.Int(drawn)
     one = ops.snapshot(of(sel, search.Search.hits)[n].extract())
     draw = nu.let(one, lambda h: hit(n, h)) >> drawn.set(n + 1)
-    return nu.WhileDo(nu.Lt(n, upto), draw)
+    return nu.WhileDo(n < upto, draw)
 
 
 def status(total, done):
-    hits = nu.Str(nu.ToStr(total)) + nu.If(nu.Eq(total, 1), nu.Str(" hit"), nu.Str(" hits"))
-    cut = nu.If(nu.Gt(total, SHOWN), nu.Str(f", the first {SHOWN} shown"), nu.Str(""))
-    line = nu.Str(nu.If(done, nu.Str("Done: "), nu.Str("Searching: "))) + hits + cut
+    hits = nu.str(total) + nu.If(total == 1, " hit", " hits")
+    cut = nu.If(total > SHOWN, f", the first {SHOWN} shown", "")
+    line = nu.Str(nu.If(done, "Done: ", "Searching: ")) + hits + cut
     empty = Results.empty.set(label="Nothing found", description="Try other words, or tick more kinds.")
-    return Results.status.set(line) >> nu.IfDo(nu.And(done, nu.Eq(total, 0)), empty)
+    return Results.status.set(line) >> nu.IfDo(done.and_(total == 0), empty)
 
 
 def look(sel, drawn):
     hits = of(sel, search.Search.hits)
     read = nu.Dict.of(
-        total=nu.If(hits.exists(), nu.Len(hits), nu.Int(0)),
+        total=nu.If(hits.exists(), hits.len(), 0),
         done=of(sel, search.Search.finished_at).exists(),
     )
 
     def show(got):
-        total, done = nu.ToInt(got["total"]), nu.ToBool(got["done"])
-        upto = nu.If(nu.Gt(total, SHOWN), nu.Int(SHOWN), total)
+        total, done = nu.int(got["total"]), nu.bool(got["done"])
+        upto = nu.If(total > SHOWN, SHOWN, total)
         return more(sel, drawn, upto) >> status(total, done)
 
     return nu.let(ops.snapshot(read), show)
 
 
 def shown(sel):
-    query = of(sel, search.Search.query)
-    said = ops.snapshot(nu.If(query.exists(), nu.ToStr(query), nu.Str("")))
+    said = ops.snapshot(of(sel, search.Search.query).fallback(""))
     # Hits land while it runs: look twice a second until it is done, then once more.
     done = ops.snapshot(of(sel, search.Search.finished_at).exists())
 
@@ -594,7 +578,7 @@ def none():
 
 
 def showing(sel):
-    there = nu.And(nu.Ne(sel, ""), ops.snapshot(ops.plane_exists(sel)))
+    there = (nu.Str(sel) != "").and_(ops.snapshot(ops.plane_exists(sel)))
     return nu.IfDo(there, shown(sel), none())
 
 

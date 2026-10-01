@@ -40,17 +40,16 @@ class Doc(nuspace.CellState):
 
 def out():
     body = nustd.ui.ProseRef("text")
-    held = nu.If(Doc.text.exists(), nu.ToStr(Doc.text), nu.Str(""))
     return (
-        body.set(held)
-        >> body.set_placeholder(nu.Str("Write, or press / for cells"))
+        body.set(Doc.text.fallback(""))
+        >> body.set_placeholder("Write, or press / for cells")
         >> nu.ParallelAsync(
             # This tab typed: keep it. Every other tab on the plane hears it
             # through the store.
             nu.ReactForever(body.on_change(), Doc.text.set(nu.Str(body))),
             # Somebody else typed: show it. The echo back to the author is a
             # no-op, the text is already what it says.
-            nu.ReactForever(Doc.text.on_change(), body.set(nu.ToStr(Doc.text))),
+            nu.ReactForever(Doc.text.on_change(), body.set(nu.str(Doc.text))),
         )
     )
 """
@@ -58,13 +57,12 @@ def out():
 
 def search(query: nu.StrArg, plane: nu.StrArg, cell: nu.StrArg) -> nu.Nu:
     """One text cell searched: ``[{plane, cell, excerpt}]`` when its text holds ``query``, else ``[]``."""
-    held = ops.cell_state(plane, cell, nu.If(Doc.text.exists(), nu.ToStr(Doc.text), nu.Str("")))
 
     def found(text: nu.ObjectRef) -> nu.Nu:
         hit = nu.List.of(nu.Dict.of(plane=plane, cell=cell, excerpt=excerpt(text, query)))
-        return nu.If(matches(text, query), hit, nu.List.of())
+        return nu.If(matches(text, query), hit, [])
 
-    return nu.let(held, found)
+    return nu.let(ops.cell_state(plane, cell, Doc.text.fallback("")), found)
 
 
 SNIPPET = Snippet(TEXT, "Text", SOURCE, search=search)

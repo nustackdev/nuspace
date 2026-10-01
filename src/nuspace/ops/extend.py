@@ -137,7 +137,7 @@ def create_plane(
             this call made.
     """
     pid = _Seeding.ids["p0"]
-    first: list[nu.Nu] = [pid.set(MintId("p") if plane_id is None else nu.Str(plane_id))]
+    first: list[nu.Nu] = [pid.set(MintId("p") if plane_id is None else plane_id)]
     label = spec.label if name is None else name
     writes = [atomic(_seeded(spec, pid, parent, label, first))]
     if into is not None:

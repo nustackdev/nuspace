@@ -35,7 +35,7 @@ from __future__ import annotations
 import nu
 import nustd.kv
 from nuspace.ops import cell_exists, cell_run, cells, plane_exists, plane_run, plane_stop
-from nuspace.ops.utils import atomic, atomic_state, flag, fresh, or_else
+from nuspace.ops.utils import atomic, atomic_state
 from nuspace.shapes import CellState, Space, reroot
 
 from ..utils import Ticking, park, snap, until, wake
@@ -81,10 +81,6 @@ def out():
 
 _kernel = Space.kernel
 
-_SID = "nuspace.nav.connection"
-_ROUTE = "nuspace.nav.route"
-_CELL = "nuspace.nav.cell"
-
 
 class Panes(CellState):
     """nav's state: the plane run of each open pane, keyed ``"<connection>/<plane>"``."""
@@ -97,13 +93,9 @@ def _here(term: nu.Nu) -> nu.Nu:
     return reroot(term, PLANE, CELL)
 
 
-def pane_key(sid: nu.StrArg, plane: nu.StrArg) -> nu.Nu:
+def pane_key(sid: nu.StrArg, plane: nu.StrArg) -> nu.Str:
     """A pane's key in :class:`Panes`: ``"<connection>/<plane>"``."""
-
-    def part(x: nu.StrArg) -> nu.Nu:
-        return nu.Str(x) if isinstance(x, str) else x
-
-    return part(sid) + nu.Str("/") + part(plane)
+    return nu.Str(sid) + "/" + plane
 
 
 def panes() -> nu.Nu:
@@ -111,19 +103,17 @@ def panes() -> nu.Nu:
     return _here(Panes.runs)
 
 
-def pane_run(sid: nu.StrArg, plane: nu.StrArg) -> nu.Nu:
+def pane_run(sid: nu.StrArg, plane: nu.StrArg) -> nu.Str:
     """The plane run nav keeps for a connection's pane, ``""`` when none. Bare read, from anywhere."""
-    runs = panes()
-    key = pane_key(sid, plane)
-    return nu.If(runs.contains(key), nu.ToStr(runs[key]), nu.Str(""))
+    return panes().get_item(pane_key(sid, plane), "")
 
 
 def clear_connections() -> nu.Nu:
     """Drop every connection: what a previous open left behind. One commit."""
     connections = Space.connections
-    item = fresh("nav_stale")
-    at = nu.Str(nu.Attr(item))
-    return atomic(nu.ForEachDo(nu.list(connections.keys()), connections.del_item(at), item=item))
+    return atomic(
+        nu.ForEachDo(nu.list(connections.keys()), lambda c: connections.del_item(nu.Str(c)))
+    )
 
 
 def routable(route: nu.Nu) -> nu.Nu:
@@ -134,21 +124,18 @@ def routable(route: nu.Nu) -> nu.Nu:
     tells a pane why it is left empty off the same answer.
     """
     return nu.And(
-        nu.Ne(route, nu.Str("")),
+        nu.Str(route) != "",
         plane_exists(route),
-        flag(Space.planes[route].props.ui, False),
+        Space.planes[route].props.ui.fallback(False),
     )
 
 
-def _has_cell_run(run_id: nu.StrArg, cell_id: nu.StrArg) -> nu.Nu:
-    """Whether the plane run ever had a cell run of the cell. A point read of its ``latest``."""
-    return _kernel.runs[run_id].latest.contains(cell_id)
+def _cell_arm(route: nu.Str, run_id: nu.Str, cell: nu.Str) -> nu.Nu:
+    """One cell of the routed plane: run in the pane's run if it never was, then parked.
 
-
-def _cell_arm(route: nu.Str, run_id: nu.Str) -> nu.Nu:
-    """One cell of the routed plane: run in the pane's run if it never was, then parked."""
-    cell = nu.Str(nu.Attr(_CELL))
-    new = nu.And(cell_exists(route, cell), nu.Not(_has_cell_run(run_id, cell)))
+    Whether it ever was is a point read of the run's ``latest``.
+    """
+    new = cell_exists(route, cell).and_(_kernel.runs[run_id].latest.contains(cell).not_())
     return nu.IfDo(snap(new), cell_run(run_id, cell, by=BY)) >> park()
 
 
@@ -160,26 +147,26 @@ def _cells_fold(route: nu.Str, run_id: nu.Str) -> nu.Nu:
     never fires. A plane gone parks: nothing to follow until the route moves.
     """
     plane_cells = Space.planes[route].cells
-    ids = nu.If(plane_exists(route), nu.list(plane_cells.keys()), nu.Literal([]))
+    ids = nu.If(plane_exists(route), nu.list(plane_cells.keys()), [])
     return atomic(nu.IfDo(plane_exists(route), plane_cells.init(nu.Dict.create()))) >> nu.IfDo(
         snap(plane_exists(route)),
         nu.ForEachParReactive(
             snap(ids),
             Ticking(snap(plane_cells.on_children_change())),
-            _cell_arm(route, run_id),
-            _CELL,
+            lambda cell: _cell_arm(route, run_id, nu.Str(cell)),
         ),
         park(),
     )
 
 
-def _cells_seen(route: nu.Str) -> nu.Nu:
+def _cells_seen(route: nu.Str) -> nu.Str:
     """The plane's cells and their versions, as one str to tell a change by. Bare read."""
-    item = fresh("nav_seen")
-    at = nu.Str(nu.Attr(item))
-    version = Space.planes[route].cells[at].version
-    each = at + nu.Str(":") + nu.If(version.exists(), nu.ToStr(version), nu.Str("0"))
-    return nu.Str(",").join(nu.Collect(nu.Map(cells(route), each, key=item)))
+
+    def seen(at: nu.Attr) -> nu.Str:
+        cell = nu.Str(at)
+        return cell + ":" + nu.str(Space.planes[route].cells[cell].version.fallback(0))
+
+    return nu.Str(",").join(cells(route).iter().map(seen).to_list())
 
 
 def _changed(route: nu.Str) -> nu.Nu:
@@ -187,7 +174,7 @@ def _changed(route: nu.Str) -> nu.Nu:
     edits = Space.planes[route].cells.on_descendants_change("*", "version")
     return nu.let(
         snap(_cells_seen(route)),
-        lambda seen: nu.WhileDo(nu.Eq(snap(_cells_seen(route)), seen), wake(edits)),
+        lambda seen: nu.WhileDo(seen == snap(_cells_seen(route)), wake(edits)),
     )
 
 
@@ -198,15 +185,15 @@ def _turn(sid: nu.Str, route: nu.Str) -> nu.Nu:
     the run is over by itself, waits for the plane's cells to change, and
     the next turn runs it again.
     """
-    envs = nu.List.of(nu.List.of(nu.Str(SESSION), sid))
+    envs = nu.List.of(nu.List.of(SESSION, sid))
 
     def follow(made: nu.ObjectRef) -> nu.Nu:
         run_id = nu.Str(made)
         running = _kernel.running
-        ended = until(nu.Not(running.contains(run_id)), running.on_children_change())
-        live = snap(running.contains(run_id))
+        ended = until(running.contains(run_id).not_(), running.on_children_change())
         followed = nu.TryCatch(
-            nu.Race(_cells_fold(route, run_id), ended), finally_=nu.IfDo(live, plane_stop(run_id))
+            nu.Race(_cells_fold(route, run_id), ended),
+            finally_=nu.IfDo(snap(running.contains(run_id)), plane_stop(run_id)),
         )
         remember = atomic_state(_here(Panes.runs.set_item(pane_key(sid, route), run_id)))
         start = plane_run(route, by=BY, envs=envs, into=made)
@@ -217,7 +204,7 @@ def _turn(sid: nu.Str, route: nu.Str) -> nu.Nu:
     # wait for the plane rather than giving up on the route; the routes will
     # not change again to retry.
     shown = nu.WhileDo(nu.Not(snap(routable(route))), wake(Space.planes.on_children_change()))
-    return shown >> nu.let(nu.Str(""), follow)
+    return shown >> nu.let("", follow)
 
 
 def _open(sid: nu.Str, route: nu.Str) -> nu.Nu:
@@ -228,26 +215,21 @@ def _open(sid: nu.Str, route: nu.Str) -> nu.Nu:
     return nu.TryCatch(nu.ForeverDo(_turn(sid, route)), finally_=forget)
 
 
-def _routes(sid: nu.Str) -> nu.Nu:
-    """A connection's open plane ids, ``[]`` before any are written. Unbracketed."""
-    return nu.List(or_else(Space.connections[sid].routes, []))
-
-
 def _arm(sid: nu.Str) -> nu.Nu:
     """One connection: :func:`_open` per plane in its routes, opens and closes included.
 
     A plane leaving ``routes`` cancels its arm, which stops its run. A
     connection gone parks rather than subscribing to a row that is not there,
-    and waits for the fold over connections to cancel it.
+    and waits for the fold over connections to cancel it. ``routes`` reads
+    ``[]`` before any are written.
     """
     routes = Space.connections[sid].routes
     return nu.IfDo(
         snap(Space.connections.contains(sid)),
         nu.ForEachParReactive(
-            snap(_routes(sid)),
+            snap(routes.fallback([])),
             Ticking(snap(routes.on_change())),
-            _open(sid, nu.Str(nu.Attr(_ROUTE))),
-            _ROUTE,
+            lambda route: _open(sid, nu.Str(route)),
         ),
         park(),
     )
@@ -261,11 +243,10 @@ def program() -> nu.Nu:
     """
     connections = Space.connections
     fresh_state = atomic(connections.init(nu.Dict.create())) >> atomic_state(
-        _here(Panes.runs.set(nu.Literal({})))
+        _here(Panes.runs.set({}))
     )
     return fresh_state >> nu.ForEachParReactive(
         snap(nu.list(connections.keys())),
         Ticking(snap(connections.on_children_change())),
-        _arm(nu.Str(nu.Attr(_SID))),
-        _SID,
+        lambda sid: _arm(nu.Str(sid)),
     )

@@ -25,7 +25,7 @@ from .pin import unpin
 from .read import plane_exists
 from .state import drop_plane_state
 from .tree import link, subtree, unlink
-from .utils import MintId, atomic, atomic_state, flag, fresh
+from .utils import MintId, atomic, atomic_state
 
 
 __all__ = [
@@ -50,16 +50,11 @@ ICON_EMOJI = "emoji:"
 NO_BACKEND = "A plane needs a backend, eg mp or async: none was given"
 
 
-def _merge(meta: nu.Nu, fields: dict[str, Any] | nu.Nu) -> nu.Nu:
-    """Merge ``fields`` into a meta dict: named keys replaced, others kept."""
-    return meta.update(fields)
-
-
 def _refuse_empty(backend: nu.StrArg) -> nu.Nu:
     """Raise :data:`NO_BACKEND` when ``backend`` evaluates to ``""``: the commit makes nothing."""
     if isinstance(backend, str):
         return nu.Noop()
-    return nu.IfDo(nu.Eq(backend, nu.Str("")), nu.Raise(nu.Str(NO_BACKEND), exc_cls=ValueError))
+    return nu.IfDo(nu.Str(backend) == "", nu.Raise(NO_BACKEND, exc_cls=ValueError))
 
 
 def add_plane(
@@ -120,8 +115,7 @@ def add_plane(
         )
         return writes if into is None else writes >> into.set(nu.Str(pid))
 
-    value = MintId("p") if plane_id is None else nu.Str(plane_id)
-    return atomic(nu.let(value, write))
+    return atomic(nu.let(MintId("p") if plane_id is None else plane_id, write))
 
 
 def plane_writes(
@@ -137,10 +131,9 @@ def plane_writes(
 ) -> nu.Nu:
     """:func:`add_plane`'s writes for a plane id already known. No bracket."""
     row = Space.planes[plane_id]
-    under = nu.If(nu.Or(nu.Eq(parent, nu.Str(ROOT)), plane_exists(parent)), parent, nu.Str(ROOT))
     writes = (
         _refuse_empty(backend)
-        >> nu.IfDo(nu.Not(plane_exists(plane_id)), row.order.set(nu.Literal([])))
+        >> nu.IfDo(plane_exists(plane_id).not_(), row.order.set([]))
         >> row.name.set(name)
         >> row.props.system.set(system)
         >> row.props.ui.set(ui)
@@ -148,7 +141,8 @@ def plane_writes(
         >> row.props.backend.set(backend)
     )
     if meta is not None:
-        writes = writes >> _merge(row.meta, meta)
+        writes = writes >> row.meta.update(meta)
+    under = nu.If((nu.Str(parent) == ROOT).or_(plane_exists(parent)), parent, ROOT)
     return writes >> unlink(plane_id) >> link(plane_id, under)
 
 
@@ -166,13 +160,13 @@ def remove_plane(plane_id: nu.StrArg) -> nu.Nu:
     :func:`~nuspace.ops.cell.remove_cell` does, so no plane still there
     reads its state gone.
     """
-    each = fresh("removed_each")
-
-    def drop(gone: nu.ObjectRef) -> nu.Nu:
-        states = nu.ForEachDo(nu.List(gone), drop_plane_state(nu.Str(nu.Attr(each))), item=each)
-        return _remove_rows(plane_id, gone) >> atomic_state(states)
-
-    return nu.let(nu.Literal([]), drop)
+    return nu.let(
+        [],
+        lambda gone: (
+            _remove_rows(plane_id, gone)
+            >> atomic_state(nu.ForEachDo(nu.List(gone), lambda p: drop_plane_state(nu.Str(p))))
+        ),
+    )
 
 
 def _remove_rows(plane_id: nu.StrArg, gone: nu.Ref) -> nu.Nu:
@@ -182,28 +176,26 @@ def _remove_rows(plane_id: nu.StrArg, gone: nu.Ref) -> nu.Nu:
     landed removed.
     """
 
+    def delete(at: nu.Attr) -> nu.Nu:
+        p = nu.Str(at)
+        return (
+            unlink(p)
+            >> unpin(p)
+            >> nu.IfDo(Space.planes.contains(p), Space.planes.del_item(p))
+            >> nu.IfDo(Space.tree.contains(p), Space.tree.del_item(p))
+        )
+
     def drop(ids: nu.Nu) -> nu.Nu:
-        item = fresh("drop")
-        at = nu.Str(nu.Attr(item))
-        system = nu.List(
-            nu.Collect(
-                nu.Filter(nu.List(ids), flag(Space.planes[at].props.system, False), key=item)
-            )
-        )
         going = nu.List(ids)
-        each = fresh("drop_each")
-        each_ref = nu.Str(nu.Attr(each))
-        delete = nu.ForEachDo(
-            going,
-            unlink(each_ref)
-            >> unpin(each_ref)
-            >> nu.IfDo(Space.planes.contains(each_ref), Space.planes.del_item(each_ref))
-            >> nu.IfDo(Space.tree.contains(each_ref), Space.tree.del_item(each_ref)),
-            item=each,
+        system = going.iter().filter(lambda p: Space.planes[nu.Str(p)].props.system.fallback(False))
+        removed = (
+            live_runs_of(going.contains, kill) >> nu.ForEachDo(going, delete) >> gone.set(going)
         )
-        ok = nu.And(plane_exists(plane_id), nu.Eq(system.len(), nu.Int(0)))
-        removed = live_runs_of(going.contains, kill) >> delete >> gone.set(going)
-        return nu.IfDo(ok, removed, gone.set(nu.Literal([])))
+        return nu.IfDo(
+            plane_exists(plane_id).and_(system.to_list().len() == 0),
+            removed,
+            gone.set([]),
+        )
 
     return atomic(subtree(plane_id, drop))
 
@@ -218,7 +210,7 @@ def set_plane_meta(plane_id: nu.StrArg, fields: dict[str, Any] | nu.Nu) -> nu.Nu
 
     Props are not reachable from here: they are set by :func:`add_plane`.
     """
-    return atomic(nu.IfDo(plane_exists(plane_id), _merge(Space.planes[plane_id].meta, fields)))
+    return atomic(nu.IfDo(plane_exists(plane_id), Space.planes[plane_id].meta.update(fields)))
 
 
 def plane_icon(icon: str) -> str:

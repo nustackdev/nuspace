@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import nu
 from nuspace.ops.kernel import add_cell_run, interrupt
-from nuspace.ops.utils import MintId, atomic, fresh, text
+from nuspace.ops.utils import MintId, atomic
 from nuspace.shapes import Space
 
 from ..utils import Ticking, snap, wake
@@ -43,26 +43,23 @@ def out():
 
 _kernel = Space.kernel
 
-_RUN = "nuspace.reload.run"
 
-
-def _version(plane: nu.StrArg, cell: nu.Nu) -> nu.Nu:
-    ref = Space.planes[plane].cells[cell].version
-    return nu.If(ref.exists(), nu.ToInt(ref), nu.Int(0))
-
-
-def behind(run_id: nu.StrArg, plane: nu.StrArg) -> nu.Nu:
+def behind(run_id: nu.StrArg, plane: nu.StrArg) -> nu.List:
     """The live cell runs of a plane run whose cell was rewritten since. Bare read.
 
     A cell gone is not behind: removing it interrupted its runs already.
+    An unwritten version reads 0.
     """
     row = _kernel.runs[run_id]
-    item = fresh("reload_behind")
-    cr = row.cells[nu.Str(nu.Attr(item))]
-    cell = text(cr.cell)
-    ran = nu.If(cr.version.exists(), nu.ToInt(cr.version), nu.Int(0))
-    stale = nu.And(Space.planes[plane].cells.contains(cell), nu.Lt(ran, _version(plane, cell)))
-    return nu.List(nu.Collect(nu.Filter(nu.list(row.cells_running), stale, key=item)))
+    cells = Space.planes[plane].cells
+
+    def stale(at: nu.Attr) -> nu.Bool:
+        cr = row.cells[nu.Str(at)]
+        cell = cr.cell.fallback("")
+        newer = cr.version.fallback(0) < cells[cell].version.fallback(0)
+        return cells.contains(cell).and_(newer)
+
+    return nu.list(row.cells_running).iter().filter(stale).to_list()
 
 
 def _replace(run_id: nu.StrArg, plane: nu.StrArg) -> nu.Nu:
@@ -72,12 +69,14 @@ def _replace(run_id: nu.StrArg, plane: nu.StrArg) -> nu.Nu:
     replaced is left alone.
     """
     row = _kernel.runs[run_id]
-    item = fresh("reload_one")
-    cr = nu.Str(nu.Attr(item))
-    cell = text(row.cells[cr].cell)
-    again = nu.let(MintId("cr"), lambda new: add_cell_run(run_id, cell, nu.Str(new), by=BY))
-    one = atomic(nu.IfDo(behind(run_id, plane).contains(cr), interrupt(run_id, cr) >> again))
-    return nu.ForEachDo(snap(behind(run_id, plane)), one, item=item)
+
+    def one(at: nu.Attr) -> nu.Nu:
+        cr = nu.Str(at)
+        cell = row.cells[cr].cell.fallback("")
+        again = nu.let(MintId("cr"), lambda new: add_cell_run(run_id, cell, nu.Str(new), by=BY))
+        return atomic(nu.IfDo(behind(run_id, plane).contains(cr), interrupt(run_id, cr) >> again))
+
+    return nu.ForEachDo(snap(behind(run_id, plane)), one)
 
 
 def _arm(run_id: nu.Str) -> nu.Nu:
@@ -88,7 +87,7 @@ def _arm(run_id: nu.Str) -> nu.Nu:
         edits = Space.planes[plane].cells.on_descendants_change("*", "version")
         return nu.ForeverDo(_replace(run_id, plane) >> wake(edits))
 
-    return nu.let(snap(text(_kernel.runs[run_id].plane)), watch)
+    return nu.let(snap(_kernel.runs[run_id].plane.fallback("")), watch)
 
 
 def program() -> nu.Nu:
@@ -97,6 +96,5 @@ def program() -> nu.Nu:
     return nu.ForEachParReactive(
         snap(nu.list(running)),
         Ticking(snap(running.on_children_change())),
-        _arm(nu.Str(nu.Attr(_RUN))),
-        _RUN,
+        lambda rid: _arm(nu.Str(rid)),
     )

@@ -37,13 +37,14 @@ def out(plane, cell):
         return nustd.kv.Snapshot(term, scope=nuspace.Space)
 
     # The plane's cells in order, labelled by name, or by id when unnamed.
-    row = nu.Attr("row")
-    label = nu.If(nu.Ne(row["name"], ""), row["name"], row["id"])
-    option = nu.Dict.of(value=row["id"], label=label)
-    options = read(nu.Collect(nu.Map(ops.cell_rows(plane), option, key="row")))
+    def option(row):
+        label = nu.If(row["name"] != "", row["name"], row["id"])
+        return nu.Dict.of(value=row["id"], label=label)
+
+    options = read(ops.cell_rows(plane).iter().map(option).to_list())
     # The first cell that is not this one, or this one when it is alone.
-    others = nu.First(nu.Filter(ops.cells(plane), nu.Ne(nu.Attr("id"), cell), key="id"))
-    first = read(nu.If(nu.IsEmpty(others), nu.Str(cell), others))
+    others = ops.cells(plane).iter().filter(lambda c: c != cell).first()
+    first = read(nu.Str(others).fallback(cell))
 
     # browse never finishes: each pick cancels it and starts it on the new cell.
     lens_on_pick = nu.ReactLatest(pick.on_change(), nu.let(nu.Str(pick), browse), initial=True)

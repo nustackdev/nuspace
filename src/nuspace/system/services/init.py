@@ -55,8 +55,6 @@ def out():
 #: plane before the first open does not leave the services out.
 BOOTED = ("nav", "supervisor", "reload", "reactions")
 
-_ITEM = "nuspace.init.plane"
-
 
 class Boot(CellState):
     """init's state: the plane ids to bring up at open, in order."""
@@ -76,7 +74,7 @@ def seed(planes: list[str]) -> nu.Nu:
     as there and empty.
     """
     listed = States.planes[PLANE].cells[CELL].contains("planes")
-    return nu.IfDo(nu.Not(listed), _here(Boot.planes.set(nu.Literal(list(planes)))))
+    return nu.IfDo(listed.not_(), _here(Boot.planes.set(list(planes))))
 
 
 def boot(plane_id: nu.StrArg) -> nu.Nu:
@@ -88,29 +86,25 @@ def boot(plane_id: nu.StrArg) -> nu.Nu:
     listed = Boot.planes
     return atomic_state(
         seed(list(BOOTED))
-        >> _here(nu.IfDo(nu.Not(listed.contains(plane_id)), listed.append(plane_id)))
+        >> _here(nu.IfDo(listed.contains(plane_id).not_(), listed.append(plane_id)))
     )
 
 
 def unboot(plane_id: nu.StrArg) -> nu.Nu:
     """Take a plane off init's boot list. A no-op when it is not listed."""
-    listed = Boot.planes
-    return atomic_state(_here(nu.IfDo(listed.contains(plane_id), listed.remove(plane_id))))
+    return atomic_state(_here(Boot.planes.remove(plane_id, missing_ok=True)))
 
 
-def booted() -> nu.Nu:
+def booted() -> nu.List:
     """The boot list, from anywhere. Bare read, ``[]`` when there is none."""
     return nu.list(_here(Boot.planes))
 
 
 def program() -> nu.Nu:
     """Every listed plane that exists, run. Then parked."""
-    plane = nu.Str(nu.Attr(_ITEM))
-    return (
-        nu.ForEachDo(
-            snap(nu.list(Boot.planes)),
-            nu.IfDo(snap(plane_exists(plane)), plane_run(plane, by=BY)),
-            item=_ITEM,
-        )
-        >> park()
-    )
+
+    def up(at: nu.Attr) -> nu.Nu:
+        plane = nu.Str(at)
+        return nu.IfDo(snap(plane_exists(plane)), plane_run(plane, by=BY))
+
+    return nu.ForEachDo(snap(nu.list(Boot.planes)), up) >> park()

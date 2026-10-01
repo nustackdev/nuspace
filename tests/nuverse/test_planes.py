@@ -241,9 +241,9 @@ async def test_the_jobs_table_lists_jobs_only_and_selects_on_click(store):
         ["Nightly", job, "yes", "always, 5s", "no"],
         ["Hourly", other, "no", "off", "no"],
     ]
-    select = _cell(jobs.TABLE)["select"]()
-    # The row click as the table's reaction hands it over: bound under ``click``.
-    click = nu.ForEachDo(nu.Iter(nu.Literal([{"row_index": 0}])), select, item="click")
+    select = _cell(jobs.TABLE)["select"]
+    # The row click handed to ``select`` as the table's reaction hands it over.
+    click = nu.ForEachDo(nu.Iter(nu.Literal([{"row_index": 0}])), select)
     await store.run(_as("jobs", click))
     assert await store.read(SELECTED) == job
 

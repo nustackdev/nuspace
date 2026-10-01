@@ -43,15 +43,15 @@ def _service(plane_id: str, shim: str) -> nu.Nu:
     outside the bracket, and only when the cell is missing.
     """
     row = Space.planes[plane_id]
-    no_plane = nu.Not(row.contains("name"))
-    no_cell = nu.Not(row.cells[init.CELL].contains("prog"))
+    no_plane = row.contains("name").not_()
+    no_cell = row.cells[init.CELL].contains("prog").not_()
     made = nu.IfDo(no_plane, plane_writes(plane_id, backend="mp", name=plane_id, system=True))
 
     def both(ui: nu.ObjectRef) -> nu.Nu:
         cell = cell_writes(plane_id, init.CELL, shim, nu.Bool(ui), name=init.CELL)
         return atomic(made >> nu.IfDo(no_cell, cell))
 
-    return nu.IfDo(snap(nu.Or(no_plane, no_cell)), nu.let(HasUi(shim, plane_id, init.CELL), both))
+    return nu.IfDo(snap(no_plane.or_(no_cell)), nu.let(HasUi(shim, plane_id, init.CELL), both))
 
 
 def ensure_system() -> nu.Nu:

@@ -11,7 +11,7 @@ container that is not there never hears anything.
 from __future__ import annotations
 
 import nu
-from nuspace.ops.utils import atomic, fresh
+from nuspace.ops.utils import atomic
 from nuspace.shapes import EXIT_KILLED, Space
 
 from .runs import end_run
@@ -36,23 +36,16 @@ def _containers() -> nu.Nu:
 
 def reconcile() -> nu.Nu:
     """End every live plane run and worker ``killed``, empty the indexes. One commit."""
-    w_item, r_item = fresh("reconcile_w"), fresh("reconcile_r")
-    worker = _kernel.workers[nu.Str(nu.Attr(w_item))]
-    workers = nu.ForEachDo(
-        nu.list(_kernel.workers_running),
-        nu.IfDo(
-            nu.Not(worker.terminated_at.exists()),
-            worker.terminated_at.set(Now()) >> worker.exit.set(EXIT_KILLED),
-        ),
-        item=w_item,
-    )
-    runs = nu.ForEachDo(
-        nu.list(_kernel.running), end_run(nu.Str(nu.Attr(r_item)), EXIT_KILLED), item=r_item
-    )
+
+    def kill_worker(wid: nu.Attr) -> nu.Nu:
+        worker = _kernel.workers[nu.Str(wid)]
+        killed = worker.terminated_at.set(Now()) >> worker.exit.set(EXIT_KILLED)
+        return nu.IfDo(worker.terminated_at.missing(), killed)
+
     return atomic(
         _containers()
-        >> workers
-        >> runs
+        >> nu.ForEachDo(nu.list(_kernel.workers_running), kill_worker)
+        >> nu.ForEachDo(nu.list(_kernel.running), lambda rid: end_run(nu.Str(rid), EXIT_KILLED))
         >> _kernel.workers_running.clear()
         >> _kernel.running.clear()
     )

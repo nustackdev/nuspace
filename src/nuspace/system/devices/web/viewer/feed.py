@@ -42,9 +42,9 @@ from typing import TYPE_CHECKING
 
 import nu
 from nuspace import ops
-from nuspace.ops.utils import fresh, or_else, text
+from nuspace.ops.utils import field_str
 from nuspace.shapes import EXIT_FAILED, EXIT_INTERRUPTED, EXIT_KILLED, Space
-from nuspace.system.devices.web.utils import Arms, field_ids, field_index, field_str
+from nuspace.system.devices.web.utils import Arms, field_ids, field_index
 from nuspace.system.devices.web.viewer import interactions
 from nuspace.system.devices.web.viewer.interactions import (
     ABSENT_HEADLESS,
@@ -60,7 +60,7 @@ from nuspace.system.services.nav import pane_run, panes, routable
 
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Sequence
+    from collections.abc import Callable, Iterable, Sequence
 
     from nuspace.ops import Snippet
     from nustd.ui.core import Ref
@@ -72,14 +72,6 @@ __all__ = ["PLANE_META", "plane_cells", "plane_view", "statuses", "viewer_feed"]
 _arms = Arms("viewer")
 _runs = Space.kernel.runs
 
-# The names each arm binds its event under.
-_CREATE = "nuspace.web.viewer.create"
-_UPDATE = "nuspace.web.viewer.update"
-_DELETE = "nuspace.web.viewer.delete"
-_MOVE = "nuspace.web.viewer.move"
-_REORDER = "nuspace.web.viewer.reorder"
-_META = "nuspace.web.viewer.meta"
-
 #: What a shipped plane's meta says where the stored one does not: the keys the browser reads.
 PLANE_META = {"editable": False, "full_width": False}
 
@@ -87,28 +79,24 @@ PLANE_META = {"editable": False, "full_width": False}
 # --- What the browser is handed: bare reads ----------------------------------
 
 
-def plane_cells(plane_id: nu.StrArg) -> nu.Nu:
+def plane_cells(plane_id: nu.StrArg) -> nu.List:
     """A plane's cells as ``{id, name, source, made_by, has_ui}``, in order. Bare read.
 
     ``made_by`` is the snippet the cell was made from, ``""`` when none.
     ``has_ui`` is whether its program draws, True where never worked out.
     """
-    item = fresh("viewer_cell")
-    row = nu.Dict(nu.Attr(item))
-    props = nu.Dict(row.get_item(nu.Str("props"), nu.Dict.of()))
-    return nu.Collect(
-        nu.Map(
-            ops.cell_rows(plane_id),
-            nu.Dict.of(
-                id=nu.ToStr(row.get_item(nu.Str("id"), nu.Str(""))),
-                name=nu.ToStr(row.get_item(nu.Str("name"), nu.Str(""))),
-                source=nu.ToStr(row.get_item(nu.Str("prog"), nu.Str(""))),
-                made_by=nu.ToStr(props.get_item(nu.Str("made_by"), nu.Str(""))),
-                has_ui=nu.ToBool(props.get_item(nu.Str("has_ui"), nu.Bool(True))),
-            ),
-            key=item,
+
+    def cell(row: nu.Attr) -> nu.Dict:
+        props = nu.Dict(nu.Dict(row).get_item("props", nu.Dict.of()))
+        return nu.Dict.of(
+            id=field_str(row, "id"),
+            name=field_str(row, "name"),
+            source=field_str(row, "prog"),
+            made_by=field_str(props, "made_by"),
+            has_ui=nu.bool(props.get_item("has_ui", True)),
         )
-    )
+
+    return ops.cell_rows(plane_id).iter().map(cell).to_list()
 
 
 def plane_view(plane_id: nu.StrArg) -> nu.Nu:
@@ -122,47 +110,34 @@ def plane_view(plane_id: nu.StrArg) -> nu.Nu:
     return nu.If(
         ops.plane_exists(plane_id),
         nu.Dict.of(
-            title=text(row.name),
-            meta=nu.Dict(nu.Literal(PLANE_META)).merge(row.meta.extract()),
+            title=row.name.fallback(""),
+            meta=nu.Dict(PLANE_META).merge(row.meta.extract()),
             cells=plane_cells(plane_id),
         ),
-        nu.Dict.of(title=nu.Str(""), meta=nu.Literal(PLANE_META), cells=nu.List.of()),
+        nu.Dict.of(title="", meta=PLANE_META, cells=[]),
     )
 
 
-def _state(run_id: nu.StrArg, cell_run_id: nu.Nu) -> nu.Nu:
+def _state(run_id: nu.StrArg, cell_run_id: nu.Nu) -> nu.Str:
     """The browser state a cell run of the run says, ``""`` being none."""
     row = _runs[run_id]
     cr = row.cells[cell_run_id]
-    exit_ = text(cr.exit)
-
-    def eq(value: nu.Nu, *options: str) -> nu.Nu:
-        conds = [nu.Eq(value, nu.Str(option)) for option in options]
-        return conds[0] if len(conds) == 1 else nu.Or(*conds)
-
-    ended = nu.If(
-        eq(exit_, EXIT_FAILED),
-        nu.Str(STATE_FAILED),
-        nu.If(eq(exit_, EXIT_INTERRUPTED, EXIT_KILLED), nu.Str(STATE_STOPPED), nu.Str(STATE_IDLE)),
+    ended = nu.Switch(
+        cr.exit.fallback(""),
+        {EXIT_FAILED: STATE_FAILED, EXIT_INTERRUPTED: STATE_STOPPED, EXIT_KILLED: STATE_STOPPED},
+        default=STATE_IDLE,
     )
-    live = nu.If(cr.started_at.exists(), nu.Str(STATE_RUNNING), nu.Str(STATE_STARTING))
-    return nu.If(
-        nu.Eq(cell_run_id, nu.Str("")),
-        nu.Str(STATE_IDLE),
-        nu.If(row.cells_running.contains(cell_run_id), live, ended),
+    return nu.Str(
+        nu.If(
+            nu.Str(cell_run_id) == "",
+            STATE_IDLE,
+            nu.If(
+                row.cells_running.contains(cell_run_id),
+                nu.If(cr.started_at.exists(), STATE_RUNNING, STATE_STARTING),
+                ended,
+            ),
+        )
     )
-
-
-def _idle(plane_id: nu.StrArg) -> nu.Nu:
-    """Every cell of the plane idle, in order. Bare read."""
-    cell = fresh("status_idle")
-    row = nu.Dict.of(
-        cell_id=nu.Str(nu.Attr(cell)),
-        state=nu.Str(STATE_IDLE),
-        error=nu.Str(""),
-        started_at=nu.Int(0),
-    )
-    return nu.Collect(nu.Map(ops.cells(plane_id), row, key=cell))
 
 
 class _Status(nu.Shape):
@@ -180,35 +155,27 @@ def statuses(plane_id: nu.StrArg, run_id: nu.StrArg) -> nu.Nu:
     reload. A ``run_id`` of ``""`` is every cell idle.
     """
     row = _runs[run_id]
-    cell = fresh("status_cell")
-    here = nu.Str(nu.Attr(cell))
     picked, said = _Status.pick, _Status.state
-    started = row.cells[picked].started_at
-    entry = nu.Dict.of(
-        cell_id=here,
-        state=said,
-        error=nu.If(nu.Eq(said, nu.Str(STATE_FAILED)), text(row.cells[picked].error), nu.Str("")),
-        started_at=nu.If(
-            nu.And(nu.Ne(picked, nu.Str("")), started.exists()), nu.ToFloat(started), nu.Int(0)
-        ),
-    )
-    each_cell = nu.Frame(
-        _Status, entry, pick=ops.latest(run_id, here), state=_state(run_id, picked)
-    )
-    shown = nu.Collect(nu.Map(ops.cells(plane_id), each_cell, key=cell))
-    return nu.If(nu.Eq(run_id, nu.Str("")), _idle(plane_id), shown)
+
+    def status(cell: nu.Attr) -> nu.Nu:
+        entry = nu.Dict.of(
+            cell_id=cell,
+            state=said,
+            error=nu.If(said == STATE_FAILED, row.cells[picked].error.fallback(""), ""),
+            started_at=nu.If(picked != "", row.cells[picked].started_at.fallback(0), 0),
+        )
+        return nu.Frame(
+            _Status, entry, pick=ops.latest(run_id, nu.Str(cell)), state=_state(run_id, picked)
+        )
+
+    def idle(cell: nu.Attr) -> nu.Dict:
+        return nu.Dict.of(cell_id=cell, state=STATE_IDLE, error="", started_at=0)
+
+    cells = ops.cells(plane_id).iter()
+    return nu.If(nu.Str(run_id) == "", cells.map(idle).to_list(), cells.map(status).to_list())
 
 
 # --- Shipping ------------------------------------------------------------------
-
-
-def _absence(plane: nu.Nu) -> nu.Nu:
-    """Why a pane has no plane to draw, ``""`` when it has one. Bare read."""
-    return nu.If(
-        routable(plane),
-        nu.Str(""),
-        nu.If(ops.plane_exists(plane), nu.Str(ABSENT_HEADLESS), nu.Str(ABSENT_MISSING)),
-    )
 
 
 def _ship_plane(viewer: Ref, plane: nu.Nu) -> nu.Nu:
@@ -217,22 +184,26 @@ def _ship_plane(viewer: Ref, plane: nu.Nu) -> nu.Nu:
         return interactions.set_plane(
             viewer,
             plane,
-            title=nu.ToStr(got.get_item(nu.Str("title"), nu.Str(""))),
-            meta=nu.Dict(got.get_item(nu.Str("meta"), nu.Dict.of())),
-            cells=nu.List(got.get_item(nu.Str("cells"), nu.List.of())),
+            title=field_str(got, "title"),
+            meta=nu.Dict(got.get_item("meta", nu.Dict.of())),
+            cells=nu.List(got.get_item("cells", nu.List.of())),
         )
 
     def ship(absent: nu.ObjectRef) -> nu.Nu:
         why = nu.Str(absent)
         shown = nu.let(snap(plane_view(plane)), show)
-        return nu.IfDo(nu.Eq(why, nu.Str("")), shown, interactions.set_absent(viewer, plane, why))
+        return nu.IfDo(why == "", shown, interactions.set_absent(viewer, plane, why))
 
-    return nu.let(snap(_absence(plane)), ship)
+    # Why a pane has no plane to draw, "" when it has one.
+    absence = nu.If(
+        routable(plane), "", nu.If(ops.plane_exists(plane), ABSENT_HEADLESS, ABSENT_MISSING)
+    )
+    return nu.let(snap(absence), ship)
 
 
 def _ship_status(viewer: Ref, sid: nu.StrArg, plane: nu.Nu) -> nu.Nu:
     def ship(run: nu.ObjectRef) -> nu.Nu:
-        read = nu.If(ops.plane_exists(plane), statuses(plane, nu.Str(run)), nu.List.of())
+        read = nu.If(ops.plane_exists(plane), statuses(plane, nu.Str(run)), [])
         return nu.let(snap(read), lambda held: interactions.set_status(viewer, plane, held))
 
     return nu.let(snap(pane_run(sid, plane)), ship)
@@ -283,100 +254,61 @@ def _status_changes() -> list[nu.Nu]:
 # --- The composition -------------------------------------------------------------
 
 
-def _create_prog(snippets: Sequence[Snippet]) -> tuple[nu.Nu, nu.Nu]:
-    """The prog and ``made_by`` a created cell stores: the snippet its ``name`` names.
+def _on_cell(name: str, change: nu.Nu, op: Callable[[nu.Str, nu.Str, nu.Attr], nu.Nu]) -> nu.Nu:
+    """An arm running ``op(plane_id, cell_id, event)`` for each event that names a cell."""
 
-    An unknown or empty name stores a blank program and ``""``.
-    """
-    name = field_str(_CREATE, "name")
-    prog: nu.Nu = nu.Str("")
-    made_by: nu.Nu = nu.Str("")
-    for snippet in reversed(snippets):
-        known = nu.Eq(name, nu.Str(snippet.name))
-        prog = nu.If(known, nu.Str(snippet.source), prog)
-        made_by = nu.If(known, nu.Str(snippet.name), made_by)
-    return prog, made_by
+    def body(event: nu.Attr) -> nu.Nu:
+        plane_id, cell_id = field_str(event, "plane_id"), field_str(event, "cell_id")
+        return nu.IfDo((plane_id != "").and_(cell_id != ""), op(plane_id, cell_id, event))
+
+    return _arms.event(name, change, body)
 
 
 def _events(viewer: Ref, snippets: Sequence[Snippet]) -> list[nu.Nu]:
-    """Browser to store: one arm per viewer op."""
+    """Browser to store: one arm per viewer op.
 
-    def named(name: str) -> nu.Nu:
-        return nu.And(
-            nu.Ne(field_str(name, "plane_id"), nu.Str("")),
-            nu.Ne(field_str(name, "cell_id"), nu.Str("")),
+    A created cell stores the prog and ``made_by`` of the snippet its
+    ``name`` names; an unknown or empty name stores a blank program and ``""``.
+    """
+
+    def create(plane_id: nu.Str, cell_id: nu.Str, event: nu.Attr) -> nu.Nu:
+        name = field_str(event, "name")
+        return ops.add_cell(
+            plane_id,
+            nu.Switch(name, {s.name: s.source for s in snippets}, default=""),
+            cell_id=cell_id,
+            name=name,
+            index=field_index(event, "index", ops.cells(plane_id).len()),
+            made_by=nu.Switch(name, {s.name: s.name for s in snippets}, default=""),
         )
 
-    prog, made_by = _create_prog(snippets)
-    create_in = field_str(_CREATE, "plane_id")
-    move_to = field_str(_MOVE, "to_plane_id")
+    def move(plane_id: nu.Str, cell_id: nu.Str, event: nu.Attr) -> nu.Nu:
+        to = field_str(event, "to_plane_id")
+        index = field_index(event, "index", ops.cells(to).len())
+        return nu.IfDo(to != "", ops.move_cell(plane_id, cell_id, to, index=index))
+
     return [
-        _arms.event(
-            _CREATE,
-            interactions.on_create_cell(viewer),
-            nu.IfDo(
-                named(_CREATE),
-                ops.add_cell(
-                    create_in,
-                    prog,
-                    cell_id=field_str(_CREATE, "cell_id"),
-                    name=field_str(_CREATE, "name"),
-                    index=field_index(_CREATE, "index", nu.Len(ops.cells(create_in))),
-                    made_by=made_by,
-                ),
-            ),
-        ),
-        _arms.event(
-            _UPDATE,
+        _on_cell("create", interactions.on_create_cell(viewer), create),
+        _on_cell(
+            "update",
             interactions.on_update_cell(viewer),
-            nu.IfDo(
-                named(_UPDATE),
-                ops.set_prog(
-                    field_str(_UPDATE, "plane_id"),
-                    field_str(_UPDATE, "cell_id"),
-                    field_str(_UPDATE, "source"),
-                ),
-            ),
+            lambda p, c, event: ops.set_prog(p, c, field_str(event, "source")),
         ),
-        _arms.event(
-            _DELETE,
-            interactions.on_delete_cell(viewer),
-            nu.IfDo(
-                named(_DELETE),
-                ops.remove_cell(field_str(_DELETE, "plane_id"), field_str(_DELETE, "cell_id")),
-            ),
+        _on_cell(
+            "delete", interactions.on_delete_cell(viewer), lambda p, c, _: ops.remove_cell(p, c)
         ),
-        _arms.event(
-            _MOVE,
-            interactions.on_move_cell(viewer),
-            nu.IfDo(
-                nu.And(named(_MOVE), nu.Ne(move_to, nu.Str(""))),
-                ops.move_cell(
-                    field_str(_MOVE, "plane_id"),
-                    field_str(_MOVE, "cell_id"),
-                    move_to,
-                    index=field_index(_MOVE, "index", nu.Len(ops.cells(move_to))),
-                ),
-            ),
-        ),
-        _arms.event(
-            _META,
+        _on_cell("move", interactions.on_move_cell(viewer), move),
+        _arms.plane_event(
+            "meta",
             interactions.on_set_meta(viewer),
-            nu.IfDo(
-                nu.Ne(field_str(_META, "plane_id"), nu.Str("")),
-                ops.set_plane_meta(
-                    field_str(_META, "plane_id"),
-                    nu.Dict(nu.Dict(nu.Attr(_META)).get_item(nu.Str("meta"), nu.Dict.of())),
-                ),
+            lambda p, event: ops.set_plane_meta(
+                p, nu.Dict(nu.Dict(event).get_item("meta", nu.Dict.of()))
             ),
         ),
-        _arms.event(
-            _REORDER,
+        _arms.plane_event(
+            "reorder",
             interactions.on_reorder_cells(viewer),
-            nu.IfDo(
-                nu.Ne(field_str(_REORDER, "plane_id"), nu.Str("")),
-                ops.reorder_cells(field_str(_REORDER, "plane_id"), field_ids(_REORDER, "cell_ids")),
-            ),
+            lambda p, event: ops.reorder_cells(p, field_ids(event, "cell_ids")),
         ),
     ]
 
@@ -392,20 +324,20 @@ def viewer_feed(viewer: Ref, sid: nu.StrArg, snippets: Iterable[Snippet] = ()) -
     """
     snippets = list(snippets)
     routes = Space.connections[sid].routes
-    at = fresh("viewer_route")
-    plane = nu.Str(nu.Attr(at))
-    shown = nu.ParallelAsync(
-        _arms.state(
-            "plane",
-            _plane_changes(plane),
-            _ship_plane(viewer, plane) >> _ship_status(viewer, sid, plane),
-        ),
-        _arms.state("status", _status_changes(), _ship_status(viewer, sid, plane)),
-    )
+
+    def shown(at: nu.Attr) -> nu.Nu:
+        plane = nu.Str(at)
+        return nu.ParallelAsync(
+            _arms.state(
+                "plane",
+                _plane_changes(plane),
+                _ship_plane(viewer, plane) >> _ship_status(viewer, sid, plane),
+            ),
+            _arms.state("status", _status_changes(), _ship_status(viewer, sid, plane)),
+        )
+
     # One arm per open plane: a plane opened gets itself and its statuses
     # shipped, a plane closed has its subscriptions torn down, and the other
     # panes' arms are untouched.
-    routed = nu.ForEachParReactive(
-        snap(nu.List(or_else(routes, []))), snap(routes.on_change()), shown, at
-    )
+    routed = nu.ForEachParReactive(snap(routes.fallback([])), snap(routes.on_change()), shown)
     return nu.ParallelAsync(_arms.guard(routed, "routes"), *_events(viewer, snippets))

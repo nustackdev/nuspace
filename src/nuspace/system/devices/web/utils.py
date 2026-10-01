@@ -29,11 +29,12 @@ from typing import TYPE_CHECKING
 import nu
 import nustd.ui
 from nu.core.io import STDOUT
+from nuspace.ops.utils import field_str
 from nustd.ui.core import Changed, Ref, SectionRef, Write
 
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Callable, Sequence
 
     from nu.domains.shape.refs.base import StructuredRef
 
@@ -51,7 +52,6 @@ __all__ = [
     "event",
     "field_ids",
     "field_index",
-    "field_str",
     "park",
     "rooted",
     "watch",
@@ -190,19 +190,15 @@ class Arms:
     def __init__(self, label: str) -> None:
         self.label = label
 
-    def report(self, what: str) -> nu.Nu:
-        """Say something went wrong, on this process's stdout."""
-        return nu.Print(
-            STDOUT,
-            nu.Str(f"nuspace web {self.label}: {what}: "),
-            nu.ToStr(nu.Attr("error")),
-        )
+    def report(self, what: str, error: nu.Nu) -> nu.Nu:
+        """Say ``error`` went wrong, on this process's stdout."""
+        return nu.Print(STDOUT, nu.Str(f"nuspace web {self.label}: {what}: "), nu.str(error))
 
     def guard(self, term: nu.Nu, what: str) -> nu.Nu:
         """Run ``term``, and survive it raising."""
-        return nu.TryCatch(term, catch=self.report(what))
+        return nu.TryCatch(term, catch=lambda err: self.report(what, err))
 
-    def event(self, name: str, change: nu.Nu, body: nu.Nu) -> nu.Nu:
+    def event(self, name: str, change: nu.Nu, body: Callable[[nu.Attr], nu.Nu]) -> nu.Nu:
         """One browser subscription, forever, twice guarded.
 
         The inner guard keeps the loop alive across a bad frame, the outer
@@ -210,11 +206,22 @@ class Arms:
         the tab's other arms with it.
 
         Args:
-            name: The name the event is bound under, and what failures say.
+            name: What failures say.
             change: The subscription, built fresh per arm.
-            body: What runs per event, reading it via ``nu.Attr(name)``.
+            body: Builds what runs per event from the event's ref.
         """
-        return self.guard(nu.ReactForever(change, self.guard(body, name), changed_key=name), name)
+        return self.guard(nu.ReactForever(change, lambda ev: self.guard(body(ev), name)), name)
+
+    def plane_event(
+        self, name: str, change: nu.Nu, op: Callable[[nu.Str, nu.Attr], nu.Nu]
+    ) -> nu.Nu:
+        """:meth:`event` for an op on a plane: ``op(plane_id, event)`` when the event names one."""
+
+        def body(event: nu.Attr) -> nu.Nu:
+            plane_id = field_str(event, "plane_id")
+            return nu.IfDo(plane_id != "", op(plane_id, event))
+
+        return self.event(name, change, body)
 
     def state(self, name: str, changes: Sequence[nu.Nu], ship: nu.Nu) -> nu.Nu:
         """:func:`watch`, guarded: ship now and on every change."""
@@ -224,23 +231,19 @@ class Arms:
 # --- Reading one event's fields ---------------------------------------------
 #
 # Total on purpose: a field the browser left out reads as its default, not as
-# EMPTY, so an op is handed a string where it wants one.
+# EMPTY, so an op is handed what it wants. A string field is
+# :func:`~nuspace.ops.utils.field_str`, shared with the rows the ops read.
 
 
-def field_str(name: str, field: str) -> nu.Nu:
-    """One string field off the arm's event. ``""`` when absent."""
-    return nu.ToStr(nu.Dict(nu.Attr(name)).get_item(nu.Str(field), nu.Str("")))
+def field_ids(row: nu.Nu, field: str) -> nu.List:
+    """One list of ids off an event or a row. Empty when absent."""
+    return nu.List(nu.Dict(row).get_item(field, nu.List.of()))
 
 
-def field_ids(name: str, field: str) -> nu.Nu:
-    """One list of ids off the arm's event. Empty when absent."""
-    return nu.List(nu.Dict(nu.Attr(name)).get_item(nu.Str(field), nu.List.of()))
-
-
-def field_index(name: str, field: str, length: nu.Nu) -> nu.Nu:
-    """One position off the arm's event, one past the end when absent.
+def field_index(row: nu.Nu, field: str, end: nu.IntArg) -> nu.Int:
+    """One position off an event, ``end`` when absent: a position the op reads as the end.
 
     Zero is a real position, so a ``0`` default would prepend everything a
     caller forgot to place.
     """
-    return nu.ToInt(nu.Dict(nu.Attr(name)).get_item(nu.Str(field), length))
+    return nu.int(nu.Dict(row).get_item(field, end))

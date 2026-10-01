@@ -105,9 +105,10 @@ def drop_cell_state(plane_id: nu.StrArg, cell_id: nu.StrArg) -> nu.Nu:
     between keeps what it has. One delete of the cell's subtree.
     """
     cells = States.planes[plane_id].cells
-    gone = nu.Not(cell_exists(plane_id, cell_id))
-    held = nu.IfDo(cells.contains(cell_id), cells.del_item(cell_id))
-    return nu.IfDo(nu.And(gone, States.planes.contains(plane_id)), held)
+    return nu.IfDo(
+        cell_exists(plane_id, cell_id).not_().and_(States.planes.contains(plane_id)),
+        nu.IfDo(cells.contains(cell_id), cells.del_item(cell_id)),
+    )
 
 
 def drop_plane_state(plane_id: nu.StrArg) -> nu.Nu:
@@ -117,5 +118,6 @@ def drop_plane_state(plane_id: nu.StrArg) -> nu.Nu:
     cell. One delete of the plane's subtree.
     """
     planes = States.planes
-    gone = nu.Not(plane_exists(plane_id))
-    return nu.IfDo(nu.And(gone, planes.contains(plane_id)), planes.del_item(plane_id))
+    return nu.IfDo(
+        plane_exists(plane_id).not_().and_(planes.contains(plane_id)), planes.del_item(plane_id)
+    )

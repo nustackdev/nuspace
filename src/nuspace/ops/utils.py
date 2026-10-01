@@ -1,4 +1,4 @@
-"""Helpers the ops share: the bracket, run time ids, reads with a floor.
+"""Helpers the ops share: the bracket, run time ids, a total field read, a reorder.
 
 Nothing here knows what a plane or a cell is.
 """
@@ -25,21 +25,16 @@ if TYPE_CHECKING:
 
 __all__ = [
     "MintId",
-    "as_list",
     "atomic",
     "atomic_state",
-    "flag",
-    "fresh",
+    "field_str",
     "keep_order",
     "mint_ordered_id",
-    "or_else",
     "snapshot",
-    "text",
 ]
 
 
 _ORDER_COUNTER = itertools.count()
-_FRESH = itertools.count()
 
 
 def mint_ordered_id(prefix: str) -> str:
@@ -56,17 +51,6 @@ def mint_ordered_id(prefix: str) -> str:
     # processes, where the counter restarts from zero.
     seq = format(next(_ORDER_COUNTER) % 0x10000, "04x")
     return f"{prefix}_{stamp}_{seq}_{uuid.uuid4().hex[:4]}"
-
-
-def fresh(tag: str) -> str:
-    """A name for a loop's item that no other op term uses.
-
-    A loop binds its item in ``ctx.attrs`` for its body, shadowing any outer
-    binding of the name. A term handed into the body from outside may read
-    an outer loop's item, so every loop an op builds names its item apart.
-    The name is fixed per term, the value per run.
-    """
-    return f"_nsop_{tag}_{next(_FRESH)}"
 
 
 class MintId(ScalarQuery):
@@ -150,28 +134,12 @@ def snapshot(term: nu.Nu) -> nu.Nu:
     return nustd.kv.Snapshot(nustd.kv.Snapshot(term, scope=States), scope=Space)
 
 
-def as_list(items: Sequence[nu.StrArg] | nu.Nu) -> nu.List:
-    """A python sequence or a Nu term yielding a list, as a list term."""
-    return nu.List(items) if isinstance(items, nu.Nu) else nu.List.of(*items)
+def field_str(row: nu.Nu, field: str) -> nu.Str:
+    """One string field off a dict, a row or a browser event: ``""`` when absent.
 
-
-def text(ref: nu.Nu, default: nu.StrArg = "") -> nu.Nu:
-    """``ref`` as a str, ``default`` where nothing was written.
-
-    An unwritten leaf reads EMPTY and a Query touching EMPTY is EMPTY too, so a
-    value on its way out of the store needs a floor.
+    Total on purpose, so a field left out hands an op a string, not EMPTY.
     """
-    return nu.If(ref.exists(), nu.ToStr(ref), nu.Str(default))
-
-
-def flag(ref: nu.Nu, default: nu.BoolArg) -> nu.Nu:
-    """``ref`` as a bool, ``default`` where nothing was written."""
-    return nu.If(ref.exists(), nu.ToBool(ref), nu.Bool(default))
-
-
-def or_else(ref: nu.Nu, default: object) -> nu.Nu:
-    """``ref`` as it is, ``default`` where nothing was written."""
-    return nu.If(ref.exists(), ref, nu.Literal(default))
+    return nu.str(nu.Dict(row).get_item(field, ""))
 
 
 def keep_order(
@@ -187,11 +155,9 @@ def keep_order(
             or a Nu term yielding a list.
         member: The collection that decides whether an id is real.
     """
-    item = fresh("order")
-    at = nu.Attr(item)
-    listed = as_list(wanted)
-    kept = nu.List(nu.Collect(nu.Filter(listed, member.contains(at), key=item)))
+    listed = nu.List(wanted) if isinstance(wanted, nu.Nu) else nu.List.of(*wanted)
+    kept = listed.iter().filter(lambda c: member.contains(c)).to_list()
     # Ids left out keep their place after the named ones, so a partial order
     # is a move rather than a truncation.
-    rest = nu.List(nu.Collect(nu.Filter(nu.list(current), nu.Not(listed.contains(at)), key=item)))
+    rest = nu.list(current).iter().filter(lambda c: listed.contains(c).not_()).to_list()
     return current.set(kept + rest)

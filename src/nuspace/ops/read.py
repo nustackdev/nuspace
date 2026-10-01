@@ -14,8 +14,6 @@ from __future__ import annotations
 import nu
 from nuspace.shapes import ROOT, Space
 
-from .utils import flag, fresh, text
-
 
 __all__ = [
     "cell_exists",
@@ -25,17 +23,18 @@ __all__ = [
     "parent",
     "plane_exists",
     "plane_rows",
+    "plane_title",
     "planes",
     "prog",
 ]
 
 
-def planes() -> nu.Nu:
+def planes() -> nu.List:
     """Every plane id. Minted ids sort by creation, so this is creation order."""
     return nu.list(Space.planes.keys())
 
 
-def plane_exists(plane_id: nu.StrArg) -> nu.Nu:
+def plane_exists(plane_id: nu.StrArg) -> nu.Bool:
     """Whether a plane is stored under this id.
 
     ``contains``, since a container ref always materialises a view and
@@ -44,7 +43,13 @@ def plane_exists(plane_id: nu.StrArg) -> nu.Nu:
     return Space.planes.contains(plane_id)
 
 
-def cells(plane_id: nu.StrArg) -> nu.Nu:
+def plane_title(plane_id: nu.StrArg) -> nu.Str:
+    """What to call a plane: its name, its id where the name is unwritten or ``""``. Bare read."""
+    name = Space.planes[plane_id].name.fallback("")
+    return nu.Str(nu.If(name == "", plane_id, name))
+
+
+def cells(plane_id: nu.StrArg) -> nu.List:
     """A plane's cell ids, in order.
 
     ``order`` filtered to cells that exist, then any cell missing from
@@ -52,97 +57,78 @@ def cells(plane_id: nu.StrArg) -> nu.Nu:
     listed last rather than not at all.
     """
     plane = Space.planes[plane_id]
-    item = fresh("cells")
-    at = nu.Attr(item)
-    placed = nu.List(
-        nu.Collect(nu.Filter(nu.list(plane.order), plane.cells.contains(at), key=item))
-    )
-    unplaced = nu.List(
-        nu.Collect(
-            nu.Filter(nu.list(plane.cells.keys()), nu.Not(plane.order.contains(at)), key=item)
-        )
-    )
-    return placed + unplaced
+    placed = nu.list(plane.order).iter().filter(lambda c: plane.cells.contains(c))
+    unplaced = nu.list(plane.cells.keys()).iter().filter(lambda c: plane.order.contains(c).not_())
+    return placed.to_list() + unplaced.to_list()
 
 
-def cell_exists(plane_id: nu.StrArg, cell_id: nu.StrArg) -> nu.Nu:
+def cell_exists(plane_id: nu.StrArg, cell_id: nu.StrArg) -> nu.Bool:
     """Whether the plane holds a cell under this id."""
     return Space.planes[plane_id].cells.contains(cell_id)
 
 
-def children(node_id: nu.StrArg = ROOT) -> nu.Nu:
+def children(node_id: nu.StrArg = ROOT) -> nu.List:
     """A tree node's child plane ids, in order. ``[]`` for a node never written."""
     return nu.list(Space.tree[node_id].children)
 
 
-def parent(plane_id: nu.StrArg) -> nu.Nu:
+def parent(plane_id: nu.StrArg) -> nu.Str:
     """The tree node listing this plane: a plane id, or ``ROOT``.
 
     ``""`` for a plane no node lists, eg one written by hand or removed.
     """
-    item = fresh("parent")
-    at = nu.Str(nu.Attr(item))
-    found = nu.First(
-        nu.Filter(nu.list(Space.tree.keys()), Space.tree[at].children.contains(plane_id), key=item)
-    )
-    return nu.If(nu.IsEmpty(found), nu.Str(""), found)
+    nodes = nu.list(Space.tree.keys()).iter()
+    under = nodes.filter(lambda node: Space.tree[nu.Str(node)].children.contains(plane_id))
+    return nu.Str(under.first()).fallback("")
 
 
-def prog(plane_id: nu.StrArg, cell_id: nu.StrArg) -> nu.Nu:
+def prog(plane_id: nu.StrArg, cell_id: nu.StrArg) -> nu.Str:
     """A cell's source, ``""`` where there is none."""
-    return text(Space.planes[plane_id].cells[cell_id].prog)
+    return nu.str(Space.planes[plane_id].cells[cell_id].prog).fallback("")
 
 
-def plane_rows() -> nu.Nu:
+def plane_rows() -> nu.List:
     """Every plane as ``id, name, props, meta, parent``. One read fills a sidebar.
 
     ``props`` is always whole, ``{system, ui, made_by, backend}``, defaults
     filled in. ``backend`` is ``""`` for a plane that names none.
     """
-    item = fresh("plane_rows")
-    at = nu.Str(nu.Attr(item))
-    plane = Space.planes[at]
-    return nu.Collect(
-        nu.Map(
-            planes(),
-            nu.Dict.of(
-                id=at,
-                name=text(plane.name),
-                props=nu.Dict.of(
-                    system=flag(plane.props.system, False),
-                    ui=flag(plane.props.ui, False),
-                    made_by=text(plane.props.made_by),
-                    backend=text(plane.props.backend),
-                ),
-                meta=plane.meta.extract(),
-                parent=parent(at),
+
+    def row(at: nu.Attr) -> nu.Dict:
+        plane = Space.planes[nu.Str(at)]
+        return nu.Dict.of(
+            id=at,
+            name=plane.name.fallback(""),
+            props=nu.Dict.of(
+                system=plane.props.system.fallback(False),
+                ui=plane.props.ui.fallback(False),
+                made_by=plane.props.made_by.fallback(""),
+                backend=plane.props.backend.fallback(""),
             ),
-            key=item,
+            meta=plane.meta.extract(),
+            parent=parent(nu.Str(at)),
         )
-    )
+
+    return planes().iter().map(row).to_list()
 
 
-def cell_rows(plane_id: nu.StrArg) -> nu.Nu:
+def cell_rows(plane_id: nu.StrArg) -> nu.List:
     """A plane's cells as ``id, name, prog, props, meta``, in order. One read fills an editor.
 
     ``props`` is always whole, ``{made_by, has_ui}``, defaults filled in.
     ``has_ui`` reads True where it was never worked out: maybe it draws.
     """
-    item = fresh("cell_rows")
-    at = nu.Str(nu.Attr(item))
-    cell = Space.planes[plane_id].cells[at]
-    return nu.Collect(
-        nu.Map(
-            cells(plane_id),
-            nu.Dict.of(
-                id=at,
-                name=text(cell.name),
-                prog=text(cell.prog),
-                props=nu.Dict.of(
-                    made_by=text(cell.props.made_by), has_ui=flag(cell.props.has_ui, True)
-                ),
-                meta=cell.meta.extract(),
+
+    def row(at: nu.Attr) -> nu.Dict:
+        cell = Space.planes[plane_id].cells[nu.Str(at)]
+        return nu.Dict.of(
+            id=at,
+            name=cell.name.fallback(""),
+            prog=nu.str(cell.prog).fallback(""),
+            props=nu.Dict.of(
+                made_by=cell.props.made_by.fallback(""), has_ui=cell.props.has_ui.fallback(True)
             ),
-            key=item,
+            meta=cell.meta.extract(),
         )
-    )
+
+    return cells(plane_id).iter().map(row).to_list()

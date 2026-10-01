@@ -14,7 +14,6 @@ import nu
 import nustd.kv
 from nu.engine.structure import Declared
 from nu.lang import ScalarAction
-from nuspace.ops.utils import or_else, text
 from nuspace.shapes import Space
 from nuspace.system.backends import BackendRef, require_backend
 
@@ -62,9 +61,9 @@ class RunCell(ScalarAction):
         row = Space.kernel.runs[run_id]
         record = nustd.kv.Snapshot(
             nu.Dict.of(
-                plane=text(row.plane),
-                cell=text(row.cells[cell_run_id].cell),
-                envs=or_else(row.envs, []),
+                plane=row.plane.fallback(""),
+                cell=row.cells[cell_run_id].cell.fallback(""),
+                envs=row.envs.fallback([]),
             ),
             scope=Space,
         )

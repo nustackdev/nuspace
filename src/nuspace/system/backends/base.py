@@ -33,7 +33,7 @@ from nu.context import FabricRef
 from nu.engine.structure import Declared
 from nu.lang import ScalarAction
 from nu.lang.sentinels import EMPTY
-from nuspace.ops.utils import atomic, fresh
+from nuspace.ops.utils import atomic
 from nuspace.shapes import EXIT_FAILED, Space
 from nuspace.system.kernel.utils import Now
 
@@ -253,30 +253,30 @@ def _made(backend: nu.StrArg, run_id: nu.StrArg, made: nu.Nu) -> nu.Nu:
     A worker whose end landed first (it died before this commit) keeps its
     end and stays out of ``workers_running``.
     """
-    item = fresh("made")
-    pair = nu.List(nu.Attr(item))
-    wid = nu.ToStr(pair[0])
-    row = _kernel.workers[wid]
-    write = (
-        row.backend.set(backend)
-        >> row.run.set(run_id)
-        >> row.handle.set(nu.ToStr(pair[1]))
-        >> row.started_at.set(Now())
-        >> _kernel.runs[run_id].workers.add(wid)
-        >> nu.IfDo(nu.Not(row.terminated_at.exists()), _kernel.workers_running.add(wid))
-    )
-    return nu.ForEachDo(nu.List(made), write, item=item)
+
+    def record(at: nu.Attr) -> nu.Nu:
+        pair = nu.List(at)
+        wid = nu.str(pair[0])
+        row = _kernel.workers[wid]
+        return (
+            row.backend.set(backend)
+            >> row.run.set(run_id)
+            >> row.handle.set(nu.str(pair[1]))
+            >> row.started_at.set(Now())
+            >> _kernel.runs[run_id].workers.add(wid)
+            >> nu.IfDo(row.terminated_at.missing(), _kernel.workers_running.add(wid))
+        )
+
+    return nu.ForEachDo(nu.List(made), record)
 
 
 def _ended(worker_id: nu.StrArg, exit_: nu.StrArg, error: nu.StrArg = "") -> nu.Nu:
     """A worker's end, written once, and out of ``workers_running``. No bracket."""
     row = _kernel.workers[worker_id]
     return nu.IfDo(
-        nu.Not(row.terminated_at.exists()),
+        row.terminated_at.missing(),
         row.terminated_at.set(Now()) >> row.exit.set(exit_) >> row.error.set(error),
-    ) >> nu.IfDo(
-        _kernel.workers_running.contains(worker_id), _kernel.workers_running.discard(worker_id)
-    )
+    ) >> _kernel.workers_running.remove(worker_id, missing_ok=True)
 
 
 def released(run_id: nu.StrArg, exit_: nu.StrArg) -> nu.Nu:
@@ -289,18 +289,17 @@ def released(run_id: nu.StrArg, exit_: nu.StrArg) -> nu.Nu:
     Walks ``workers_running``, the live workers, never the run's own
     ``workers``: with ``mp`` that is a worker per cell run ever.
     """
-    item = fresh("released")
-    wid = nu.Str(nu.Attr(item))
-    mine = nu.Eq(nu.ToStr(_kernel.workers[wid].run), run_id)
-    return nu.ForEachDo(
-        nu.list(_kernel.workers_running), nu.IfDo(mine, _ended(wid, exit_)), item=item
-    )
+
+    def release(at: nu.Attr) -> nu.Nu:
+        wid = nu.Str(at)
+        return nu.IfDo(_kernel.workers[wid].run == run_id, _ended(wid, exit_))
+
+    return nu.ForEachDo(nu.list(_kernel.workers_running), release)
 
 
 def _let_go(ids: nu.Nu, exit_: nu.StrArg) -> nu.Nu:
     """Every worker id in ``ids`` ended ``exit_``. One commit."""
-    item = fresh("let_go")
-    return atomic(nu.ForEachDo(nu.List(ids), _ended(nu.Str(nu.Attr(item)), exit_), item=item))
+    return atomic(nu.ForEachDo(nu.List(ids), lambda wid: _ended(nu.Str(wid), exit_)))
 
 
 def start(backend: nu.StrArg, run_id: nu.StrArg) -> nu.Nu:
@@ -321,7 +320,7 @@ def placed(backend: nu.StrArg, run_id: nu.StrArg, cell_run_id: nu.StrArg, place:
     """
     got = nu.List(place)
     cr = _kernel.runs[run_id].cells[cell_run_id]
-    return atomic(cr.worker.set(nu.ToStr(got[0])) >> _made(backend, run_id, got[1]))
+    return atomic(cr.worker.set(nu.str(got[0])) >> _made(backend, run_id, got[1]))
 
 
 def lost(worker_id: nu.StrArg, why: nu.StrArg) -> nu.Nu:

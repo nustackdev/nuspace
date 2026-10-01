@@ -27,7 +27,7 @@ commit; the fold sees the run leave ``running`` and cancels the arm.
 from __future__ import annotations
 
 import nu
-from nuspace.ops.utils import atomic, flag, fresh, text
+from nuspace.ops.utils import atomic
 from nuspace.shapes import EXIT_FAILED, EXIT_INTERRUPTED, EXIT_KILLED, EXIT_OK, Space
 from nuspace.system import backends
 from nuspace.system.backends import BackendRef, PlaceCell
@@ -38,23 +38,15 @@ from .out import ErrorText
 from .utils import Now, Ticking, park, snap, until
 
 
-__all__ = ["RUN_ATTR", "end_run", "outcome", "run_arm", "run_fold"]
+__all__ = ["end_run", "outcome", "run_arm", "run_fold"]
 
-
-#: What the fold binds each plane run id under.
-RUN_ATTR = "nuspace.kernel.run"
 
 _kernel = Space.kernel
 
 _ORPHAN = "Cell run lost its host arm"
 
-# What the cell fold binds each cell run id under, and a TryCatch the error.
-# Each fold arm runs on a context branch of its own, so one name serves every arm.
-_CELL_RUN = "nuspace.kernel.cell_run"
-_ERROR = "nuspace.kernel.error"
 
-
-def outcome(run_id: nu.StrArg) -> nu.Nu:
+def outcome(run_id: nu.StrArg) -> nu.Str:
     """A plane run's exit, read off each cell's newest cell run (``latest``). Bare read.
 
     ``failed`` if any failed, else ``ok`` if any returned, else
@@ -63,21 +55,18 @@ def outcome(run_id: nu.StrArg) -> nu.Nu:
     the run's cells, never its history, once, as it ends.
     """
     row = _kernel.runs[run_id]
-    item = fresh("outcome")
-    newest = row.cells[nu.ToStr(row.latest[nu.Str(nu.Attr(item))])]
-    exits = nu.List(nu.Collect(nu.Map(nu.list(row.latest.keys()), text(newest.exit), key=item)))
-
-    def some(exit_: str) -> nu.Nu:
-        return exits.contains(nu.Str(exit_))
-
-    return nu.If(
-        some(EXIT_FAILED),
-        nu.Str(EXIT_FAILED),
+    cells = nu.list(row.latest.keys()).iter()
+    exits = cells.map(lambda cell: row.cells[row.latest[nu.Str(cell)]].exit.fallback("")).to_list()
+    return nu.Str(
         nu.If(
-            some(EXIT_OK),
-            nu.Str(EXIT_OK),
-            nu.If(some(EXIT_INTERRUPTED), nu.Str(EXIT_INTERRUPTED), nu.Str(EXIT_OK)),
-        ),
+            exits.contains(EXIT_FAILED),
+            EXIT_FAILED,
+            nu.If(
+                exits.contains(EXIT_OK),
+                EXIT_OK,
+                nu.If(exits.contains(EXIT_INTERRUPTED), EXIT_INTERRUPTED, EXIT_OK),
+            ),
+        )
     )
 
 
@@ -89,21 +78,18 @@ def end_run(run_id: nu.StrArg, exit_: nu.StrArg, error: nu.StrArg | None = None)
     Written once: a run already ended keeps the end it has.
     """
     row = _kernel.runs[run_id]
-    item = fresh("end_run")
-    cells = nu.ForEachDo(
-        nu.list(row.cells_running),
-        end_cell_run(run_id, nu.Str(nu.Attr(item)), exit_, error),
-        item=item,
-    )
     own = row.exit.set(exit_)
     if error is not None:
         own = own >> row.error.set(error)
-    workers = nu.If(nu.Eq(exit_, nu.Str(EXIT_KILLED)), nu.Str(EXIT_KILLED), nu.Str(EXIT_OK))
+    workers = nu.If(nu.Str(exit_) == EXIT_KILLED, EXIT_KILLED, EXIT_OK)
     return (
-        cells
-        >> nu.IfDo(nu.Not(row.terminated_at.exists()), own >> row.terminated_at.set(Now()))
+        nu.ForEachDo(
+            nu.list(row.cells_running),
+            lambda cr: end_cell_run(run_id, nu.Str(cr), exit_, error),
+        )
+        >> nu.IfDo(row.terminated_at.missing(), own >> row.terminated_at.set(Now()))
         >> backends.released(run_id, workers)
-        >> nu.IfDo(_kernel.running.contains(run_id), _kernel.running.discard(run_id))
+        >> _kernel.running.remove(run_id, missing_ok=True)
     )
 
 
@@ -113,7 +99,7 @@ def _end_if_done(run_id: nu.StrArg) -> nu.Nu:
     Checked inside the commit, so a ``cell_run`` landing first keeps it alive.
     """
     row = _kernel.runs[run_id]
-    done = nu.And(_kernel.running.contains(run_id), nu.Eq(row.cells_running.len(), nu.Int(0)))
+    done = _kernel.running.contains(run_id).and_(row.cells_running.len() == 0)
     return atomic(nu.IfDo(done, end_run(run_id, outcome(run_id))))
 
 
@@ -137,20 +123,19 @@ def _cell_arm(run_id: nu.StrArg, cell_run_id: nu.StrArg, backend: nu.StrArg) -> 
     )
 
     def lost(why: nu.ObjectRef) -> nu.Nu:
-        ended = backends.lost(text(cr.worker), why) >> end_cell_run(
+        ended = backends.lost(cr.worker.fallback(""), why) >> end_cell_run(
             run_id, cell_run_id, EXIT_FAILED, why
         )
-        return nu.IfDo(nu.Ne(nu.Str(why), nu.Str("")), atomic(ended))
+        return nu.IfDo(nu.Str(why) != "", atomic(ended))
+
+    def failed(why: nu.Nu) -> nu.Nu:
+        return atomic(end_cell_run(run_id, cell_run_id, EXIT_FAILED, why))
 
     run = nu.let(RunCell(backend, run_id, cell_run_id), lost)
-    failed = nu.let(
-        ErrorText(nu.Attr(_ERROR)),
-        lambda why: atomic(end_cell_run(run_id, cell_run_id, EXIT_FAILED, why)),
-    )
     go = nu.IfDo(
-        snap(nu.Not(cr.worker.exists())),
-        nu.TryCatch(place >> run, catch=failed, error_key=_ERROR),
-        atomic(end_cell_run(run_id, cell_run_id, EXIT_FAILED, _ORPHAN)),
+        snap(cr.worker.missing()),
+        nu.TryCatch(place >> run, catch=lambda err: nu.let(ErrorText(err), failed)),
+        failed(_ORPHAN),
     )
     return nu.TryCatch(go, finally_=backends.end_cell(backend, run_id, cell_run_id, EXIT_OK))
 
@@ -164,7 +149,7 @@ def _killed(run_id: nu.StrArg, backend: nu.StrArg) -> nu.Nu:
     """
     asked = _kernel.runs[run_id].termination_requested
     return (
-        until(flag(asked, False), asked.on_change())
+        until(asked.fallback(False), asked.on_change())
         >> atomic(end_run(run_id, EXIT_KILLED))
         >> backends.kill(backend, run_id, EXIT_KILLED)
     )
@@ -176,8 +161,7 @@ def _cells(run_id: nu.StrArg, backend: nu.StrArg) -> nu.Nu:
     return nu.ForEachParReactive(
         snap(nu.list(live)),
         Ticking(snap(live.on_children_change())),
-        _cell_arm(run_id, nu.Str(nu.Attr(_CELL_RUN)), backend),
-        _CELL_RUN,
+        lambda cr: _cell_arm(run_id, nu.Str(cr), backend),
     )
 
 
@@ -186,7 +170,7 @@ def _done(run_id: nu.StrArg) -> nu.Nu:
     live = _kernel.runs[run_id].cells_running
     return nu.WhileDo(
         snap(_kernel.running.contains(run_id)),
-        until(nu.Eq(live.len(), nu.Int(0)), live.on_children_change()) >> _end_if_done(run_id),
+        until(live.len() == 0, live.on_children_change()) >> _end_if_done(run_id),
     )
 
 
@@ -196,23 +180,21 @@ def run_arm(run_id: nu.StrArg) -> nu.Nu:
 
     def life(held: nu.ObjectRef) -> nu.Nu:
         backend = nu.Str(held)
-        started = backends.start(backend, run_id) >> atomic(
-            nu.IfDo(nu.Not(row.started_at.exists()), row.started_at.set(Now()))
-        )
-        failed = nu.let(
-            nu.Str("Backend failed to start: ") + ErrorText(nu.Attr(_ERROR)),
-            lambda why: atomic(end_run(run_id, EXIT_FAILED, why)),
+        started = nu.TryCatch(
+            backends.start(backend, run_id) >> atomic(row.started_at.init(Now())),
+            catch=lambda err: nu.let(
+                nu.Str("Backend failed to start: ") + ErrorText(err),
+                lambda why: atomic(end_run(run_id, EXIT_FAILED, why)),
+            ),
         )
         live = nu.Race(_killed(run_id, backend), _cells(run_id, backend), _done(run_id))
-        lived = nu.TryCatch(started, catch=failed, error_key=_ERROR) >> nu.IfDo(
-            snap(_kernel.running.contains(run_id)), live
-        )
+        lived = started >> nu.IfDo(snap(_kernel.running.contains(run_id)), live)
         # Its workers go when the run is over, or the arm is cancelled: killed
         # when somebody asked for it, let go otherwise.
-        let_go = nu.If(flag(row.termination_requested, False), nu.Str(EXIT_KILLED), nu.Str(EXIT_OK))
+        let_go = nu.If(row.termination_requested.fallback(False), EXIT_KILLED, EXIT_OK)
         return nu.TryCatch(lived, finally_=backends.kill(backend, run_id, let_go)) >> park()
 
-    return nu.let(snap(text(row.backend)), life)
+    return nu.let(snap(row.backend.fallback("")), life)
 
 
 def run_fold() -> nu.Nu:
@@ -224,6 +206,5 @@ def run_fold() -> nu.Nu:
     return nu.ForEachParReactive(
         snap(nu.list(running)),
         Ticking(snap(running.on_children_change())),
-        run_arm(nu.Str(nu.Attr(RUN_ATTR))),
-        RUN_ATTR,
+        lambda rid: run_arm(nu.Str(rid)),
     )

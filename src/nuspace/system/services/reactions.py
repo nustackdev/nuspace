@@ -67,7 +67,7 @@ import nustd.kv
 from nuspace.ops import add_cell, add_plane, cell_exists, cell_interrupt, latest, remove_cell
 from nuspace.ops.kernel import add_cell_run, add_plane_run
 from nuspace.ops.state import plane_state
-from nuspace.ops.utils import MintId, atomic, atomic_state, fresh, text
+from nuspace.ops.utils import MintId, atomic, atomic_state
 from nuspace.shapes import PlaneState, Space
 
 from ..utils import snap, until
@@ -119,7 +119,7 @@ def _here(term: nu.Nu) -> nu.Nu:
 
 def ensure_reactions() -> nu.Nu:
     """The plane, made when missing. No cells: each is a reaction. init's boot list runs it."""
-    missing = snap(nu.Not(Space.planes[PLANE].contains("name")))
+    missing = snap(Space.planes[PLANE].contains("name").not_())
     return nu.IfDo(missing, add_plane(PLANE, backend="async", name=PLANE, system=True))
 
 
@@ -156,23 +156,23 @@ def source(change: nu.StrArg, plane_id: nu.StrArg, imports: str = "") -> nu.Nu:
 # --- Reads --------------------------------------------------------------------------
 
 
-def _live_of(plane_id: nu.StrArg, by: nu.StrArg | None = None) -> nu.Nu:
+def _live_of(plane_id: nu.StrArg, by: nu.StrArg | None = None) -> nu.Str:
     """A live plane run of the plane, ``by`` when given, ``""`` when none. A filter of ``running``, O(k)."""
-    item = fresh("live_of")
-    row = _kernel.runs[nu.Str(nu.Attr(item))]
-    mine = nu.Eq(text(row.plane), plane_id)
-    if by is not None:
-        mine = nu.And(mine, nu.Eq(text(row.by), by))
-    found = nu.List(nu.Collect(nu.Filter(nu.list(_kernel.running), mine, key=item)))
-    return nu.If(nu.Gt(found.len(), nu.Int(0)), nu.ToStr(found[0]), nu.Str(""))
+
+    def mine(rid: nu.Attr) -> nu.Bool:
+        row = _kernel.runs[nu.Str(rid)]
+        same = row.plane == plane_id
+        return same if by is None else same.and_(row.by == by)
+
+    return nu.Str(nu.list(_kernel.running).iter().filter(mine).first()).fallback("")
 
 
-def live_run() -> nu.Nu:
+def live_run() -> nu.Str:
     """The plane's live run, the one reactions run in, ``""`` when it is down. Bare read, O(k)."""
     return _live_of(PLANE)
 
 
-def react_run(plane_id: nu.StrArg, by: nu.StrArg = BY) -> nu.Nu:
+def react_run(plane_id: nu.StrArg, by: nu.StrArg = BY) -> nu.Str:
     """A live plane run of the plane ``by`` :data:`BY`, ``""`` when none. Bare read, O(k).
 
     There is at most one: :func:`up_plane` only starts one in a commit that
@@ -181,19 +181,13 @@ def react_run(plane_id: nu.StrArg, by: nu.StrArg = BY) -> nu.Nu:
     return _live_of(plane_id, by)
 
 
-def _indexed(key: nu.Nu) -> nu.Nu:
-    """The cell ``key`` maps to, ``""`` when none. Unrerooted."""
-    cells = Registry.cells
-    return nu.If(cells.contains(key), nu.ToStr(cells[key]), nu.Str(""))
-
-
-def _known(key: nu.Nu) -> nu.Nu:
+def _known(key: nu.Nu) -> nu.Str:
     """The reaction cell under ``key``, ``""`` when none or when it is gone. Unrerooted."""
-    cid = _indexed(key)
-    return nu.If(nu.And(nu.Ne(cid, nu.Str("")), cell_exists(PLANE, cid)), cid, nu.Str(""))
+    cid = Registry.cells.get_item(key, "")
+    return nu.Str(nu.If((cid != "").and_(cell_exists(PLANE, cid)), cid, ""))
 
 
-def reaction_of(change: nu.StrArg, plane_id: nu.StrArg) -> nu.Nu:
+def reaction_of(change: nu.StrArg, plane_id: nu.StrArg) -> nu.Str:
     """The reaction cell of a change and a plane, ``""`` when there is none. Bare read, from anywhere."""
     return _here(_known(_key(change, plane_id)))
 
@@ -221,9 +215,9 @@ def up_plane(plane_id: nu.StrArg, by: nu.StrArg = BY) -> nu.Nu:
         rid = nu.Str(live)
         over = _kernel.runs[rid].terminated_at
         ended = until(over.exists(), over.on_change()) >> live.set(snap(react_run(plane_id, by)))
-        return nu.WhileDo(nu.Ne(rid, nu.Str("")), ended)
+        return nu.WhileDo(rid != "", ended)
 
-    none = nu.Eq(react_run(plane_id, by), nu.Str(""))
+    none = react_run(plane_id, by) == ""
 
     def start(new: nu.ObjectRef) -> nu.Nu:
         return atomic(nu.IfDo(none, add_plane_run(nu.Str(new), plane_id, by=by)))
@@ -245,11 +239,11 @@ def _start(cid: nu.StrArg) -> nu.Nu:
     def into_or_up(live: nu.ObjectRef) -> nu.Nu:
         rid = nu.Str(live)
         into = nu.IfDo(
-            nu.Not(_kernel.runs[rid].latest.contains(cid)),
+            _kernel.runs[rid].latest.contains(cid).not_(),
             nu.let(MintId("cr"), lambda cr: add_cell_run(rid, cid, nu.Str(cr), BY)),
         )
         up = nu.let(MintId("r"), lambda new: add_plane_run(nu.Str(new), PLANE, by=BY))
-        return nu.IfDo(nu.Ne(rid, nu.Str("")), into, up)
+        return nu.IfDo(rid != "", into, up)
 
     return atomic(nu.let(live_run(), into_or_up))
 
@@ -297,9 +291,8 @@ def enable_react(change: nu.StrArg, plane_id: nu.StrArg, *, imports: str = "") -
     """
     key, src, known, cid = _Enabling.key, _Enabling.src, _Enabling.known, _Enabling.cid
     loads = nu.prog.LoadNu(src, scope={"plane": nu.Str(PLANE), "cell": cid})
-    free = nu.Eq(_known(key), nu.Str(""))
-    claim = atomic_state(_here(nu.IfDo(free, Registry.cells.set_item(key, cid))))
-    won = snap(_here(nu.Eq(_indexed(key), cid)))
+    claim = atomic_state(_here(nu.IfDo(_known(key) == "", Registry.cells.set_item(key, cid))))
+    won = snap(_here(Registry.cells.get_item(key, "") == cid))
     lost = remove_cell(PLANE, cid)
     made = (
         add_cell(PLANE, src, cell_id=cid, name=plane_id) >> claim >> nu.IfDo(won, _start(cid), lost)
@@ -309,11 +302,11 @@ def enable_react(change: nu.StrArg, plane_id: nu.StrArg, *, imports: str = "") -
     make = nu.let(loads, lambda _: made)
     return nu.Frame(
         _Enabling,
-        nu.IfDo(nu.Eq(known, nu.Str("")), make),
+        nu.IfDo(known == "", make),
         key=_key(change, plane_id),
         src=source(change, plane_id, imports),
         known=snap(_here(_known(key))),
-        cid=nu.If(nu.Eq(known, nu.Str("")), MintId("react"), known),
+        cid=nu.If(known == "", MintId("react"), known),
     )
 
 
@@ -330,14 +323,16 @@ def disable_react(change: nu.StrArg, plane_id: nu.StrArg) -> nu.Nu:
 
     def interrupting(live: nu.ObjectRef) -> nu.Nu:
         r = nu.Str(live)
-        return nu.IfDo(nu.Ne(r, nu.Str("")), cell_interrupt(r, latest(r, c)))
+        return nu.IfDo(r != "", cell_interrupt(r, latest(r, c)))
 
     interrupt = nu.let(snap(live_run()), interrupting)
-    forget = atomic_state(_here(nu.IfDo(nu.Eq(_indexed(k), c), Registry.cells.del_item(k))))
+    forget = atomic_state(
+        _here(nu.IfDo(Registry.cells.get_item(k, "") == c, Registry.cells.del_item(k)))
+    )
     gone = interrupt >> remove_cell(PLANE, c) >> forget
     return nu.Frame(
         _Disabling,
-        nu.IfDo(nu.Ne(c, nu.Str("")), gone),
+        nu.IfDo(c != "", gone),
         key=_key(change, plane_id),
-        cid=snap(_here(_indexed(k))),
+        cid=snap(_here(Registry.cells.get_item(k, ""))),
     )

@@ -85,39 +85,28 @@ import nuspace
 
 
 def uptime(seconds):
-    s = nu.ToInt(seconds)
-    m = s // nu.Int(60)
-    h = m // nu.Int(60)
+    s = nu.int(seconds)
+    m = s // 60
+    h = m // 60
     return nu.If(
-        nu.Lt(s, 60),
-        nu.ToStr(s) + nu.Str("s"),
-        nu.If(
-            nu.Lt(m, 60),
-            nu.ToStr(m) + nu.Str("m"),
-            nu.ToStr(h) + nu.Str("h ") + nu.ToStr(m % nu.Int(60)) + nu.Str("m"),
-        ),
+        s < 60,
+        nu.str(s) + "s",
+        nu.If(m < 60, nu.str(m) + "m", nu.str(h) + "h " + nu.str(m % 60) + "m"),
     )
 
 
 def versions(v):
-    k = nu.Str(nu.Attr("k"))
-    each = nu.Map(nu.list(v.keys()), k + nu.Str(" ") + nu.ToStr(v[k]), key="k")
-    return nu.If(v.exists(), nu.Str(", ").join(nu.Collect(each)), nu.Str(""))
+    each = nu.list(v.keys()).iter().map(lambda k: nu.Str(k) + " " + nu.str(v[k]))
+    return nu.If(v.exists(), nu.Str(", ").join(each.to_list()), "")
 
 
 def draw():
     info = nuspace.Space.state.info
-    path = nu.If(info.path.exists(), nu.ToStr(info.path), nu.Str(""))
-    where = nu.If(nu.Eq(path, ""), nu.Str("Throwaway store"), path)
-    up = nu.If(
-        info.opened.exists(),
-        nu.Str("Up ") + uptime(nustd.time.time() - info.opened),
-        nu.Str(""),
-    )
-    parts = nu.List.of(nu.Str("nuspace"), where, versions(info.versions), up)
-    line = nu.Str("  ·  ").join(
-        nu.Collect(nu.Filter(nu.Iter(parts), nu.Ne(nu.Attr("x"), ""), key="x"))
-    )
+    path = info.path.fallback("")
+    where = nu.If(path == "", "Throwaway store", path)
+    up = nu.If(info.opened.exists(), nu.Str("Up ") + uptime(nustd.time.time() - info.opened), "")
+    parts = nu.List.of("nuspace", where, versions(info.versions), up)
+    line = nu.Str("  ·  ").join(parts.iter().filter(lambda x: x != "").to_list())
     return nustd.kv.Snapshot(nustd.ui.TextRef("info").set(line), scope=nuspace.Space)
 
 
@@ -136,33 +125,26 @@ from nuspace import ops
 SHOWN = {RECENT_SHOWN}
 
 
-def plane_name(pid):
-    name = nuspace.Space.planes[pid].name
-    return nu.If(nu.And(name.exists(), nu.Ne(nu.ToStr(name), "")), nu.ToStr(name), pid)
-
-
 def link(ids, i):
     ref = nustd.ui.LinkRef("r" + str(i))
-    pid = nu.ToStr(ids[i])
+    pid = nu.str(ids[i])
     return nu.IfDo(
-        nu.Gt(nu.Len(ids), i),
-        ref.set(href=nu.Str("/") + pid, label=plane_name(pid)),
+        nu.List(ids).len() > i,
+        ref.set(href=nu.Str("/") + pid, label=ops.plane_title(pid)),
         ref.erase(),
     )
 
 
 def show(ids):
     none = nustd.ui.TextRef("none")
-    empty = nu.IfDo(nu.Eq(nu.Len(ids), 0), none.set("Nothing opened yet."), none.erase())
+    empty = nu.IfDo(nu.List(ids).len() == 0, none.set("Nothing opened yet."), none.erase())
     links = nu.Sequential(*[link(ids, i) for i in range(SHOWN)])
     return nustd.ui.HeadingRef("title").set("Recent", level=3) >> links >> empty
 
 
 def draw():
-    recents = nuspace.Space.state.recents
-    listed = nu.If(recents.exists(), nu.List(recents), nu.List.of())
-    r = nu.Str(nu.Attr("r"))
-    ids = nu.List(nu.Collect(nu.Filter(nu.Iter(listed), ops.plane_exists(r), key="r")))[0:SHOWN]
+    listed = nuspace.Space.state.recents.fallback([])
+    ids = listed.iter().filter(lambda p: ops.plane_exists(p)).to_list()[0:SHOWN]
     return nustd.kv.Snapshot(nu.let(ids, show), scope=nuspace.Space)
 
 
@@ -202,38 +184,35 @@ def prop(p, name):
 
 
 def drawn(planes):
-    p = nu.Attr("p")
-    drawn = nu.And(nu.ToBool(prop(p, "ui")), nu.Not(nu.ToBool(prop(p, "system"))))
-    return nu.Count(nu.Filter(nu.Iter(planes), nu.And(drawn, nu.Ne(p["id"], "home")), key="p"))
+    def counted(p):
+        return nu.And(nu.bool(prop(p, "ui")), nu.bool(prop(p, "system")).not_(), p["id"] != "home")
+
+    return nu.Count(nu.Filter(nu.Iter(planes), counted))
 
 
 def live_cells(runs):
-    r = nu.Attr("r")
-    return nu.Sum(nu.Map(nu.Iter(runs), nu.Len(nu.List(r["cells_running"])), key="r"))
+    return nu.Sum(nu.Map(nu.Iter(runs), lambda r: nu.List(r["cells_running"]).len()))
 
 
 def first(planes, made_by):
-    p = nu.Attr("p")
-    made = nu.Filter(
-        nu.Iter(planes),
-        nu.And(nu.Eq(nu.ToStr(prop(p, "made_by")), made_by), nu.ToBool(prop(p, "ui"))),
-        key="p",
-    )
-    ids = nu.List(nu.Collect(nu.Map(made, p["id"], key="p")))
-    return nu.If(nu.Gt(nu.Len(ids), 0), nu.ToStr(ids[0]), nu.Str(""))
+    def made(p):
+        return (nu.str(prop(p, "made_by")) == made_by).and_(nu.bool(prop(p, "ui")))
+
+    ids = nu.Map(nu.Filter(nu.Iter(planes), made), lambda p: p["id"])
+    return nu.str(nu.First(ids)).fallback("")
 
 
 def link(ref, planes, made_by, label):
     pid = first(planes, made_by)
-    return nu.IfDo(nu.Ne(pid, ""), ref.set(href=nu.Str("/") + pid, label=label), ref.erase())
+    return nu.IfDo(pid != "", ref.set(href=nu.Str("/") + pid, label=label), ref.erase())
 
 
 def show(runs, planes):
     tiles = (
-        Glance.tiles.planes.set(nu.ToStr(drawn(planes)))
-        >> Glance.tiles.live.set(nu.ToStr(nu.Len(runs)))
-        >> Glance.tiles.cells.set(nu.ToStr(live_cells(runs)))
-        >> Glance.tiles.workers.set(nu.ToStr(nu.Len(ops.workers())))
+        Glance.tiles.planes.set(nu.str(drawn(planes)))
+        >> Glance.tiles.live.set(nu.str(nu.List(runs).len()))
+        >> Glance.tiles.cells.set(nu.str(live_cells(runs)))
+        >> Glance.tiles.workers.set(nu.str(ops.workers().len()))
     )
     links = (
         link(Glance.links.runs, planes, "runs", "Runs")
@@ -316,7 +295,7 @@ def seed(
         backend: The backend its runs execute on. Required: there is no default.
         pin: Pin it, after the pins there are.
     """
-    missing = nu.Not(Space.planes[plane].contains("name"))
+    missing = Space.planes[plane].contains("name").not_()
     writes = plane_writes(
         plane,
         backend=backend,
@@ -359,6 +338,4 @@ def write_info(path: str | None) -> nu.Nu:
     """
     info = Space.state.info
     where = "" if path is None else str(Path(path).resolve())
-    return atomic(
-        info.path.set(where) >> info.opened.set(Now()) >> info.versions.set(nu.Literal(versions()))
-    )
+    return atomic(info.path.set(where) >> info.opened.set(Now()) >> info.versions.set(versions()))

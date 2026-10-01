@@ -22,14 +22,14 @@ from nuspace import ops
 
 
 def count(workers, backend):
-    w = nu.Attr("w")
-    return nu.Count(nu.Filter(nu.Iter(workers), nu.Eq(w["backend"], backend), key="w"))
+    return nu.Count(nu.Filter(nu.Iter(workers), lambda w: w["backend"] == backend))
 
 
 def tiles(workers):
-    return nustd.ui.StatRef("up").set(nu.ToStr(nu.Len(workers)), label="Up") >> nu.Sequential(
+    up = nustd.ui.StatRef("up").set(nu.str(nu.List(workers).len()), label="Up")
+    return up >> nu.Sequential(
         *[
-            nustd.ui.StatRef(backend).set(nu.ToStr(count(workers, backend)), label=backend)
+            nustd.ui.StatRef(backend).set(nu.str(count(workers, backend)), label=backend)
             for backend in ("async", "mp")
         ]
     )
@@ -51,34 +51,27 @@ import nustd.time
 import nustd.ui
 import nuspace
 from nuspace import ops
-
-
-def plane_name(pid):
-    name = nuspace.Space.planes[pid].name
-    return nu.If(name.exists(), nu.ToStr(name), pid)
-
-
-def age(now, t):
-    return nu.If(nu.Is(t, None), nu.Str(""), nu.Format(nu.Float(now) - t, ".0f") + nu.Str("s"))
+from nuverse.planes.runs import age
 
 
 def cells_on(w):
     # The run's live cell runs placed on this worker: a walk of what is live.
-    c = nu.Attr("c")
-    live = nu.Iter(ops.cell_runs(nu.ToStr(w["run"]), live=True))
-    return nu.Count(nu.Filter(live, nu.Eq(c["worker"], w["id"]), key="c"))
+    live = ops.cell_runs(nu.str(w["run"]), live=True).iter()
+    return nu.Count(live.filter(lambda c: c["worker"] == w["id"]))
 
 
 def table(now):
-    w = nu.Attr("w")
-    row = nu.List.of(
-        w["id"], w["backend"], plane_name(w["plane"]), w["run"], cells_on(w), age(now, w["started_at"])
-    )
+    def row(w):
+        name = nuspace.Space.planes[w["plane"]].name.fallback(w["plane"])
+        return nu.List.of(
+            w["id"], w["backend"], name, w["run"], cells_on(w), age(now, w["started_at"])
+        )
+
     newest = nu.List(nu.Collect(nu.Reversed(ops.workers())))
     return nustd.ui.TableRef("workers").set(
         nu.Dict.of(
             columns=["ID", "Backend", "Plane", "Run", "Cells", "Age"],
-            rows=nu.Collect(nu.Map(nu.Iter(newest), row, key="w")),
+            rows=newest.iter().map(row).to_list(),
         )
     )
 

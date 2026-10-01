@@ -66,6 +66,7 @@ from .read import (
     parent,
     plane_exists,
     plane_rows,
+    plane_title,
     planes,
     prog,
 )
@@ -112,6 +113,7 @@ __all__ = [
     "plane_run",
     "plane_state",
     "plane_stop",
+    "plane_title",
     "planes",
     "prog",
     "remove_cell",

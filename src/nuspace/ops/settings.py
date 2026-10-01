@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 
 from nuspace.shapes import Space
 
-from .utils import atomic, flag
+from .utils import atomic
 
 
 if TYPE_CHECKING:
@@ -19,9 +19,9 @@ if TYPE_CHECKING:
 __all__ = ["set_telemetry", "telemetry"]
 
 
-def telemetry() -> nu.Nu:
+def telemetry() -> nu.Bool:
     """Whether telemetry is on, False where it was never set. Bare read."""
-    return flag(Space.settings.telemetry, False)
+    return Space.settings.telemetry.fallback(False)
 
 
 def set_telemetry(on: nu.BoolArg) -> nu.Nu:
