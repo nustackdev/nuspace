@@ -29,11 +29,7 @@ export function SearchTrigger() {
 					<SearchIcon />
 				</span>
 				<span className={railSearchText}>Search</span>
-				<Shortcut
-					keys={SEARCH_KEYS}
-					className={railSearchHint}
-					aria-hidden="true"
-				/>
+				<Shortcut keys={SEARCH_KEYS} className={railSearchHint} aria-hidden="true" />
 			</button>
 		</div>
 	);

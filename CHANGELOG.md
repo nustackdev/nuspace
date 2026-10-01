@@ -12,6 +12,7 @@ separately here.
 
 ## Unreleased
 
+- The split button's tooltip shows its shortcut
 - The search shortcut sits in its own chip
 - The web UI can build against a local ui-kit checkout, never for a wheel
 - Keyboard shortcuts sheet, new plane keys, split on Option, one plane menu everywhere

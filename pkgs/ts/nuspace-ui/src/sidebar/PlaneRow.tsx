@@ -294,7 +294,10 @@ export function PlaneRow({
 								<Columns2 />
 							</IconButton>
 						</TooltipTrigger>
-						<TooltipContent side="bottom">Open in split</TooltipContent>
+						<TooltipContent side="bottom">
+							Open in split
+							<Shortcut keys={SPLIT_KEYS} size="sm" className={railTooltipHint} />
+						</TooltipContent>
 					</Tooltip>
 					<Tooltip>
 						<TooltipTrigger asChild>

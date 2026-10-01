@@ -292,7 +292,7 @@ describe("rail actions", () => {
 		const lane = moreOf("b")?.parentElement;
 		const [split, add] = lane?.querySelectorAll("button") ?? [];
 		act(() => (split as HTMLElement).focus());
-		expect(tooltip()).toBe("Open in split");
+		expect(tooltip()).toMatch(/^Open in split.+/);
 		act(() => (add as HTMLElement).focus());
 		// The label, then its shortcut's caps.
 		expect(tooltip()).toMatch(/^Add plane inside.+N/);
