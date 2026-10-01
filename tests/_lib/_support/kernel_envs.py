@@ -13,8 +13,16 @@ from nuspace.shapes import States
 from nuspace.system.kernel import Env
 
 
-#: The attr the tagged env binds around a body.
-TAG_ATTR = "test.tag"
+class Tag(nu.Shape):
+    """What the tagged envs hold in a frame around a body, for the program to read."""
+
+    value = nu.StrRef.slot()
+
+
+class Connection(nu.Shape):
+    """What the test session env holds around a body: the connection id."""
+
+    sid = nu.StrRef.slot()
 
 
 class Stamp:
@@ -29,14 +37,19 @@ class Stamp:
 
 
 def tagged(value: str) -> Env:
-    """An env that binds ``value`` under :data:`TAG_ATTR` and stamps the program."""
+    """An env that holds ``value`` in a :class:`Tag` frame and stamps the program."""
     return Env(
-        wrap=lambda body: nu.Let(TAG_ATTR, nu.Str(value), body),
+        wrap=lambda body: nu.Frame(Tag, body, value=value),
         rewrite=Stamp(),
         label=f"tagged:{value}",
     )
 
 
 def outer() -> Env:
-    """A space-wide env: binds :data:`TAG_ATTR` too, so an inner one shadows it."""
-    return Env(wrap=lambda body: nu.Let(TAG_ATTR, nu.Str("outer"), body), label="outer")
+    """A space-wide env: a :class:`Tag` frame too, so an inner one shadows it."""
+    return Env(wrap=lambda body: nu.Frame(Tag, body, value="outer"), label="outer")
+
+
+def session(sid: str) -> Env:
+    """What the web device registers, minus the device: the connection held in a frame."""
+    return Env(wrap=lambda body: nu.Frame(Connection, body, sid=sid), label=f"session:{sid}")

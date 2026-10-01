@@ -88,7 +88,7 @@ class Backend:
         """Pick where a cell run goes, before its body exists. ``[worker, made]``."""
         raise NotImplementedError
 
-    async def arun(self, run_id: str, cell_run_id: str, body: nu.Nu, attrs: dict[str, str]) -> str:
+    async def arun(self, run_id: str, cell_run_id: str, body: nu.Nu) -> str:
         """Run a placed cell run's body on its worker, and return once it has ended.
 
         ``""`` when the body ran to its end, which it writes itself. Why,
@@ -254,7 +254,7 @@ def _made(backend: nu.StrArg, run_id: nu.StrArg, made: nu.Nu) -> nu.Nu:
     end and stays out of ``workers_running``.
     """
     item = fresh("made")
-    pair = nu.List(nu.ObjectRef(item))
+    pair = nu.List(nu.Attr(item))
     wid = nu.ToStr(pair[0])
     row = _kernel.workers[wid]
     write = (
@@ -290,7 +290,7 @@ def released(run_id: nu.StrArg, exit_: nu.StrArg) -> nu.Nu:
     ``workers``: with ``mp`` that is a worker per cell run ever.
     """
     item = fresh("released")
-    wid = nu.StrRef(item)
+    wid = nu.Str(nu.Attr(item))
     mine = nu.Eq(nu.ToStr(_kernel.workers[wid].run), run_id)
     return nu.ForEachDo(
         nu.list(_kernel.workers_running), nu.IfDo(mine, _ended(wid, exit_)), item=item
@@ -300,16 +300,13 @@ def released(run_id: nu.StrArg, exit_: nu.StrArg) -> nu.Nu:
 def _let_go(ids: nu.Nu, exit_: nu.StrArg) -> nu.Nu:
     """Every worker id in ``ids`` ended ``exit_``. One commit."""
     item = fresh("let_go")
-    return atomic(nu.ForEachDo(nu.List(ids), _ended(nu.StrRef(item), exit_), item=item))
+    return atomic(nu.ForEachDo(nu.List(ids), _ended(nu.Str(nu.Attr(item)), exit_), item=item))
 
 
 def start(backend: nu.StrArg, run_id: nu.StrArg) -> nu.Nu:
     """:class:`StartRun`, and the workers it brought up recorded. One commit for the records."""
-    made = fresh("start")
-    return nu.Let(
-        made,
-        StartRun(BackendRef(backend), run_id),
-        atomic(_made(backend, run_id, nu.ObjectRef(made))),
+    return nu.let(
+        StartRun(BackendRef(backend), run_id), lambda made: atomic(_made(backend, run_id, made))
     )
 
 
@@ -341,15 +338,11 @@ def end_cell(
     backend: nu.StrArg, run_id: nu.StrArg, cell_run_id: nu.StrArg, exit_: nu.StrArg
 ) -> nu.Nu:
     """:class:`EndCell`, and the workers it let go recorded ended ``exit_``."""
-    gone = fresh("end_cell")
-    return nu.Let(
-        gone,
-        EndCell(BackendRef(backend), run_id, cell_run_id),
-        _let_go(nu.ObjectRef(gone), exit_),
+    return nu.let(
+        EndCell(BackendRef(backend), run_id, cell_run_id), lambda gone: _let_go(gone, exit_)
     )
 
 
 def kill(backend: nu.StrArg, run_id: nu.StrArg, exit_: nu.StrArg) -> nu.Nu:
     """:class:`KillRun`, and the workers it let go recorded ended ``exit_``."""
-    gone = fresh("kill")
-    return nu.Let(gone, KillRun(BackendRef(backend), run_id), _let_go(nu.ObjectRef(gone), exit_))
+    return nu.let(KillRun(BackendRef(backend), run_id), lambda gone: _let_go(gone, exit_))

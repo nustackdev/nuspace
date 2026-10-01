@@ -113,7 +113,8 @@ def _keys(columns: dict) -> dict:
 
 
 async def _running(ctx: nu.Context, plane: str, cell: str, browser: _Browser) -> asyncio.Task:
-    term = await _load(ctx, plane, cell)
+    """The cell's program run as the kernel runs it: inside its ``Here`` frame."""
+    term = nu.Frame(ops.Here, await _load(ctx, plane, cell), plane=plane, cell=cell)
     return asyncio.create_task(nu.arun(term, ctx.bind(Session, browser)))
 
 

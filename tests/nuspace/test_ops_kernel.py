@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-import pickle
-
 import pytest
 
 import nu
+from nu.lang import wire
 from nuspace import ops
 from nuspace.ops.utils import atomic
 from nuspace.shapes import Space
@@ -58,7 +57,7 @@ async def test_plane_run_mints_at_evaluation(store):
     p, _ = await plane_with(store, 1)
     term = ops.plane_run(p)
     first, second = await store.run(term), await store.run(term)
-    again = await store.run(pickle.loads(pickle.dumps(ops.plane_run(p))))  # noqa: S301
+    again = await store.run(wire.loads(wire.dumps(ops.plane_run(p))))
     assert len({first, second, again}) == 3
     assert await store.run(ops.plane_run("nope")) == ""
 
@@ -142,8 +141,8 @@ def test_env_is_plain_data():
 
 
 @pytest.mark.parametrize("name", ["plane", "cell", "run", "cell_run"])
-def test_run_attrs(name):
-    assert nu.run(nu.Let(name, nu.Str("x"), getattr(ops.Here, name)))[0] == "x"
+def test_here_reads_its_frame(name):
+    assert nu.run(nu.Frame(ops.Here, getattr(ops.Here, name), **{name: "x"}))[0] == "x"
 
 
 async def test_run_records_round_trip_through_sqlite(disk):

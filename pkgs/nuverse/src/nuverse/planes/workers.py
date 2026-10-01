@@ -22,19 +22,21 @@ from nuspace import ops
 
 
 def count(workers, backend):
-    w = nu.ObjectRef("w")
+    w = nu.Attr("w")
     return nu.Count(nu.Filter(nu.Iter(workers), nu.Eq(w["backend"], backend), key="w"))
 
 
-def draw():
-    workers = nu.ObjectRef("workers")
-    tiles = nustd.ui.StatRef("up").set(nu.ToStr(nu.Len(workers)), label="Up") >> nu.Sequential(
+def tiles(workers):
+    return nustd.ui.StatRef("up").set(nu.ToStr(nu.Len(workers)), label="Up") >> nu.Sequential(
         *[
             nustd.ui.StatRef(backend).set(nu.ToStr(count(workers, backend)), label=backend)
             for backend in ("async", "mp")
         ]
     )
-    return nustd.kv.Snapshot(nu.Let("workers", ops.workers(), tiles), scope=nuspace.Space)
+
+
+def draw():
+    return nustd.kv.Snapshot(nu.let(ops.workers(), tiles), scope=nuspace.Space)
 
 
 def out():
@@ -56,31 +58,33 @@ def plane_name(pid):
     return nu.If(name.exists(), nu.ToStr(name), pid)
 
 
-def age(t):
-    now = nu.FloatRef("now")
-    return nu.If(nu.Is(t, None), nu.Str(""), nu.Format(now - t, ".0f") + nu.Str("s"))
+def age(now, t):
+    return nu.If(nu.Is(t, None), nu.Str(""), nu.Format(nu.Float(now) - t, ".0f") + nu.Str("s"))
 
 
 def cells_on(w):
     # The run's live cell runs placed on this worker: a walk of what is live.
-    c = nu.ObjectRef("c")
+    c = nu.Attr("c")
     live = nu.Iter(ops.cell_runs(nu.ToStr(w["run"]), live=True))
     return nu.Count(nu.Filter(live, nu.Eq(c["worker"], w["id"]), key="c"))
 
 
-def draw():
-    w = nu.ObjectRef("w")
+def table(now):
+    w = nu.Attr("w")
     row = nu.List.of(
-        w["id"], w["backend"], plane_name(w["plane"]), w["run"], cells_on(w), age(w["started_at"])
+        w["id"], w["backend"], plane_name(w["plane"]), w["run"], cells_on(w), age(now, w["started_at"])
     )
     newest = nu.List(nu.Collect(nu.Reversed(ops.workers())))
-    table = nustd.ui.TableRef("workers").set(
+    return nustd.ui.TableRef("workers").set(
         nu.Dict.of(
             columns=["ID", "Backend", "Plane", "Run", "Cells", "Age"],
             rows=nu.Collect(nu.Map(nu.Iter(newest), row, key="w")),
         )
     )
-    return nustd.kv.Snapshot(nu.Let("now", nustd.time.time(), table), scope=nuspace.Space)
+
+
+def draw():
+    return nustd.kv.Snapshot(nu.let(nustd.time.time(), table), scope=nuspace.Space)
 
 
 def out():

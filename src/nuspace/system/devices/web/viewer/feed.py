@@ -72,7 +72,7 @@ __all__ = ["PLANE_META", "plane_cells", "plane_view", "statuses", "viewer_feed"]
 _arms = Arms("viewer")
 _runs = Space.kernel.runs
 
-# The event attrs, one per arm: parallel arms share one ``ctx.attrs``.
+# The names each arm binds its event under.
 _CREATE = "nuspace.web.viewer.create"
 _UPDATE = "nuspace.web.viewer.update"
 _DELETE = "nuspace.web.viewer.delete"
@@ -94,7 +94,7 @@ def plane_cells(plane_id: nu.StrArg) -> nu.Nu:
     ``has_ui`` is whether its program draws, True where never worked out.
     """
     item = fresh("viewer_cell")
-    row = nu.Dict(nu.ObjectRef(item))
+    row = nu.Dict(nu.Attr(item))
     props = nu.Dict(row.get_item(nu.Str("props"), nu.Dict.of()))
     return nu.Collect(
         nu.Map(
@@ -157,12 +157,19 @@ def _idle(plane_id: nu.StrArg) -> nu.Nu:
     """Every cell of the plane idle, in order. Bare read."""
     cell = fresh("status_idle")
     row = nu.Dict.of(
-        cell_id=nu.StrRef(cell),
+        cell_id=nu.Str(nu.Attr(cell)),
         state=nu.Str(STATE_IDLE),
         error=nu.Str(""),
         started_at=nu.Int(0),
     )
     return nu.Collect(nu.Map(ops.cells(plane_id), row, key=cell))
+
+
+class _Status(nu.Shape):
+    """One cell's status as it is worked out: its newest cell run, and the state that run is in."""
+
+    pick = nu.StrRef.slot()
+    state = nu.StrRef.slot()
 
 
 def statuses(plane_id: nu.StrArg, run_id: nu.StrArg) -> nu.Nu:
@@ -173,11 +180,9 @@ def statuses(plane_id: nu.StrArg, run_id: nu.StrArg) -> nu.Nu:
     reload. A ``run_id`` of ``""`` is every cell idle.
     """
     row = _runs[run_id]
-    cell, pick, state = fresh("status_cell"), fresh("status_pick"), fresh("status_state")
-    here = nu.StrRef(cell)
-    chosen = ops.latest(run_id, here)
-    picked = nu.StrRef(pick)
-    said = nu.StrRef(state)
+    cell = fresh("status_cell")
+    here = nu.Str(nu.Attr(cell))
+    picked, said = _Status.pick, _Status.state
     started = row.cells[picked].started_at
     entry = nu.Dict.of(
         cell_id=here,
@@ -187,7 +192,9 @@ def statuses(plane_id: nu.StrArg, run_id: nu.StrArg) -> nu.Nu:
             nu.And(nu.Ne(picked, nu.Str("")), started.exists()), nu.ToFloat(started), nu.Int(0)
         ),
     )
-    each_cell = nu.Let(pick, chosen, nu.Let(state, _state(run_id, picked), entry))
+    each_cell = nu.Frame(
+        _Status, entry, pick=ops.latest(run_id, here), state=_state(run_id, picked)
+    )
     shown = nu.Collect(nu.Map(ops.cells(plane_id), each_cell, key=cell))
     return nu.If(nu.Eq(run_id, nu.Str("")), _idle(plane_id), shown)
 
@@ -205,35 +212,30 @@ def _absence(plane: nu.Nu) -> nu.Nu:
 
 
 def _ship_plane(viewer: Ref, plane: nu.Nu) -> nu.Nu:
-    held, absent = fresh("viewer_plane"), fresh("viewer_absent")
-    got = nu.Dict(nu.ObjectRef(held))
-    why = nu.StrRef(absent)
-    shown = nu.Let(
-        held,
-        snap(plane_view(plane)),
-        interactions.set_plane(
+    def show(held: nu.ObjectRef) -> nu.Nu:
+        got = nu.Dict(held)
+        return interactions.set_plane(
             viewer,
             plane,
             title=nu.ToStr(got.get_item(nu.Str("title"), nu.Str(""))),
             meta=nu.Dict(got.get_item(nu.Str("meta"), nu.Dict.of())),
             cells=nu.List(got.get_item(nu.Str("cells"), nu.List.of())),
-        ),
-    )
-    return nu.Let(
-        absent,
-        snap(_absence(plane)),
-        nu.IfDo(nu.Eq(why, nu.Str("")), shown, interactions.set_absent(viewer, plane, why)),
-    )
+        )
+
+    def ship(absent: nu.ObjectRef) -> nu.Nu:
+        why = nu.Str(absent)
+        shown = nu.let(snap(plane_view(plane)), show)
+        return nu.IfDo(nu.Eq(why, nu.Str("")), shown, interactions.set_absent(viewer, plane, why))
+
+    return nu.let(snap(_absence(plane)), ship)
 
 
 def _ship_status(viewer: Ref, sid: nu.StrArg, plane: nu.Nu) -> nu.Nu:
-    held, run = fresh("viewer_status"), fresh("viewer_run")
-    read = nu.If(ops.plane_exists(plane), statuses(plane, nu.StrRef(run)), nu.List.of())
-    return nu.Let(
-        run,
-        snap(pane_run(sid, plane)),
-        nu.Let(held, snap(read), interactions.set_status(viewer, plane, nu.ObjectRef(held))),
-    )
+    def ship(run: nu.ObjectRef) -> nu.Nu:
+        read = nu.If(ops.plane_exists(plane), statuses(plane, nu.Str(run)), nu.List.of())
+        return nu.let(snap(read), lambda held: interactions.set_status(viewer, plane, held))
+
+    return nu.let(snap(pane_run(sid, plane)), ship)
 
 
 def _plane_changes(plane: nu.Nu) -> list[nu.Nu]:
@@ -364,7 +366,7 @@ def _events(viewer: Ref, snippets: Sequence[Snippet]) -> list[nu.Nu]:
                 nu.Ne(field_str(_META, "plane_id"), nu.Str("")),
                 ops.set_plane_meta(
                     field_str(_META, "plane_id"),
-                    nu.Dict(nu.Dict(nu.ObjectRef(_META)).get_item(nu.Str("meta"), nu.Dict.of())),
+                    nu.Dict(nu.Dict(nu.Attr(_META)).get_item(nu.Str("meta"), nu.Dict.of())),
                 ),
             ),
         ),
@@ -391,7 +393,7 @@ def viewer_feed(viewer: Ref, sid: nu.StrArg, snippets: Iterable[Snippet] = ()) -
     snippets = list(snippets)
     routes = Space.connections[sid].routes
     at = fresh("viewer_route")
-    plane = nu.StrRef(at)
+    plane = nu.Str(nu.Attr(at))
     shown = nu.ParallelAsync(
         _arms.state(
             "plane",

@@ -6,12 +6,11 @@ in any process would, then read back.
 
 from __future__ import annotations
 
-import pickle
-
 import pytest
 
 import nu
 import nustd.kv
+from nu.lang import wire
 from nuspace import ops
 from nuspace.ops.utils import atomic
 from nuspace.shapes import ROOT, Space, States
@@ -66,7 +65,7 @@ async def test_add_plane_mints_at_evaluation(store):
     term = ops.add_plane(name="x", backend="async")
     a, b = await store.run(term), await store.run(term)
     assert a != b
-    again = pickle.loads(pickle.dumps(term))  # noqa: S301
+    again = wire.loads(wire.dumps(term))
     c = await store.run(again)
     assert await store.read(ops.planes()) == [a, b, c]
 
@@ -82,10 +81,9 @@ async def test_add_plane_given_id_and_parent(store):
 
 
 async def test_yielding_ops_chain_and_bind(store):
-    """A yielding op is an Action: ``>>`` takes it, ``nu.Let`` binds it."""
-    pid = nu.StrRef("p")
-    term = ops.add_plane(name="a", backend="async") >> nu.Let(
-        "p", ops.add_plane(name="b", backend="async"), ops.add_cell(pid, "src", name="c")
+    """A yielding op is an Action: ``>>`` takes it, ``nu.let`` binds it."""
+    term = ops.add_plane(name="a", backend="async") >> nu.let(
+        ops.add_plane(name="b", backend="async"), lambda pid: ops.add_cell(pid, "src", name="c")
     )
     await store.run(term)
     rows = await store.read(ops.plane_rows())

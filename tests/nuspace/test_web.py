@@ -17,6 +17,7 @@ from _support.kernel import Kernel, _Hold
 
 import nu
 import nustd.ui
+from nu.lang import wire
 from nuspace import ops
 from nuspace.ops import TEXT, Plane, Snippet
 from nuspace.ops.utils import atomic, atomic_state
@@ -60,7 +61,7 @@ def test_session_env_builds_and_pickles():
     assert isinstance(env.rewrite, CellRoot)
     # What crosses into the worker: the rewrite rides inside the body.
     assert pickle.loads(pickle.dumps(env.rewrite)) is not None  # noqa: S301
-    assert isinstance(pickle.loads(pickle.dumps(body)), nu.Nu)  # noqa: S301
+    assert isinstance(wire.loads(wire.dumps(body)), nu.Nu)
 
 
 def test_rewrite_roots_bare_ui_under_the_cell():
@@ -76,7 +77,7 @@ def test_rewrite_roots_bare_ui_under_the_cell():
 def test_worker_unpickling_imports_no_web_server(tmp_path):
     env, body = _body()
     path = tmp_path / "body.pkl"
-    path.write_bytes(pickle.dumps((body, env.rewrite)))
+    path.write_bytes(wire.dumps((body, env.rewrite)))
     code = (
         "import pickle, sys\n"
         f"pickle.loads(open({str(path)!r}, 'rb').read())\n"

@@ -33,26 +33,29 @@ def cell_count(pid):
 
 
 def members(planes, m):
-    return nu.Filter(nu.Iter(planes), nu.Eq(nu.ObjectRef("p")["made"], m), key="p")
+    return nu.Filter(nu.Iter(planes), nu.Eq(nu.Attr("p")["made"], m), key="p")
 
 
-def draw():
-    p, m = nu.ObjectRef("p"), nu.StrRef("m")
-    planes = nu.ObjectRef("planes")
-    tagged = nu.Collect(
-        nu.Map(ops.plane_rows(), nu.Dict.of(made=made(p), cells=cell_count(p["id"])), key="p")
-    )
+def table(planes):
+    p, m = nu.Attr("p"), nu.Str(nu.Attr("m"))
     row = nu.List.of(
         m, nu.Count(members(planes, m)), nu.Sum(nu.Map(members(planes, m), p["cells"], key="p"))
     )
     makers = nu.Unique(nu.Map(nu.Iter(planes), p["made"], key="p"))
-    table = nustd.ui.TableRef("made by").set(
+    return nustd.ui.TableRef("made by").set(
         nu.Dict.of(
             columns=["Made by", "Planes", "Cells"],
             rows=nu.Collect(nu.Map(makers, row, key="m")),
         )
     )
-    return nustd.kv.Snapshot(nu.Let("planes", tagged, table), scope=nuspace.Space)
+
+
+def draw():
+    p = nu.Attr("p")
+    tagged = nu.Collect(
+        nu.Map(ops.plane_rows(), nu.Dict.of(made=made(p), cells=cell_count(p["id"])), key="p")
+    )
+    return nustd.kv.Snapshot(nu.let(tagged, table), scope=nuspace.Space)
 
 
 def out():
@@ -77,7 +80,7 @@ def cell_count(pid):
 
 
 def draw():
-    p = nu.ObjectRef("p")
+    p = nu.Attr("p")
     row = nu.List.of(
         p["name"], prop(p, "made_by"), nu.If(prop(p, "system"), "yes", "no"), cell_count(p["id"])
     )

@@ -55,15 +55,16 @@ def out():
     )
 """
 
-_TEXT = "nuverse.text.search"
-
 
 def search(query: nu.StrArg, plane: nu.StrArg, cell: nu.StrArg) -> nu.Nu:
     """One text cell searched: ``[{plane, cell, excerpt}]`` when its text holds ``query``, else ``[]``."""
     held = ops.cell_state(plane, cell, nu.If(Doc.text.exists(), nu.ToStr(Doc.text), nu.Str("")))
-    text = nu.StrRef(_TEXT)
-    hit = nu.List.of(nu.Dict.of(plane=plane, cell=cell, excerpt=excerpt(text, query)))
-    return nu.Let(_TEXT, held, nu.If(matches(text, query), hit, nu.List.of()))
+
+    def found(text: nu.ObjectRef) -> nu.Nu:
+        hit = nu.List.of(nu.Dict.of(plane=plane, cell=cell, excerpt=excerpt(text, query)))
+        return nu.If(matches(text, query), hit, nu.List.of())
+
+    return nu.let(held, found)
 
 
 SNIPPET = Snippet(TEXT, "Text", SOURCE, search=search)

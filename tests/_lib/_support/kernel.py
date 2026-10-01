@@ -46,15 +46,16 @@ def prog(*lines: str) -> str:
 SET_42 = prog("return Tick.n.set(42)")
 RAISES = prog('raise ValueError("boom")')
 FOREVER = prog('print("built")', 'return nu.print("tick") >> nu.ForeverDo(nu.Delay(0.05))')
-READS_TAG = prog('return Tick.s.set(nu.StrRef("test.tag"))')
+READS_TAG = prog("from _support.kernel_envs import Tag", "return Tick.s.set(Tag.value)")
 #: Holds its worker's loop, so it never hears an interrupt.
 BLOCKS = prog(
     "from _support.actions import Block",
-    "return nu.Delay(0.2) >> nu.Let('x', Block(60), nu.Noop())",
+    "return nu.Delay(0.2) >> nu.let(Block(60), lambda _: nu.Noop())",
 )
 #: Takes its own worker process down, a moment in.
 CRASHES = prog(
-    "from _support.actions import Crash", "return nu.Delay(0.3) >> nu.Let('x', Crash(3), nu.Noop())"
+    "from _support.actions import Crash",
+    "return nu.Delay(0.3) >> nu.let(Crash(3), lambda _: nu.Noop())",
 )
 
 
@@ -175,7 +176,7 @@ def worker(wid: str) -> nu.Nu:
 def history(plane: str | None = None) -> nu.Nu:
     """Every plane run ever, oldest first, as :func:`nuspace.ops.run` rows. Test only: O(n)."""
     item = "test.history"
-    rid = nu.StrRef(item)
+    rid = nu.Str(nu.Attr(item))
     ids: nu.Nu = nu.list(Space.kernel.runs.keys())
     if plane is not None:
         ids = nu.Filter(ids, nu.Eq(Space.kernel.runs[rid].plane, plane), key=item)
@@ -190,8 +191,7 @@ async def opened(name: str = "nuspace-test", **kwargs: object) -> Kernel:
     """A kernel open on this loop, held until :meth:`Kernel.close`."""
     loop = asyncio.get_running_loop()
     ready, done = loop.create_future(), asyncio.Event()
-    hold = nu.Let("test.held", _Hold(ready, done), nu.ObjectRef("test.x").set(1))
-    body = nu.Let("test.x", body=hold)
-    task = asyncio.create_task(nu.arun(open_kernel(body, name=name, **kwargs)))
+    hold = nu.let(_Hold(ready, done), lambda _: nu.Noop())
+    task = asyncio.create_task(nu.arun(open_kernel(hold, name=name, **kwargs)))
     ctx = await asyncio.wait_for(asyncio.shield(ready), 20)
     return Kernel(ctx, done, task)

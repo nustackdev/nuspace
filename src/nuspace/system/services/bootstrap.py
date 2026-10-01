@@ -11,7 +11,7 @@ from __future__ import annotations
 import nu
 from nuspace.ops.cell import HasUi, cell_writes
 from nuspace.ops.plane import plane_writes
-from nuspace.ops.utils import atomic, atomic_state, fresh
+from nuspace.ops.utils import atomic, atomic_state
 from nuspace.shapes import Space
 
 from ..utils import snap
@@ -45,13 +45,13 @@ def _service(plane_id: str, shim: str) -> nu.Nu:
     row = Space.planes[plane_id]
     no_plane = nu.Not(row.contains("name"))
     no_cell = nu.Not(row.cells[init.CELL].contains("prog"))
-    ui = fresh("service_ui")
     made = nu.IfDo(no_plane, plane_writes(plane_id, backend="mp", name=plane_id, system=True))
-    cell = cell_writes(plane_id, init.CELL, shim, nu.BoolRef(ui), name=init.CELL)
-    both = atomic(made >> nu.IfDo(no_cell, cell))
-    return nu.IfDo(
-        snap(nu.Or(no_plane, no_cell)), nu.Let(ui, HasUi(shim, plane_id, init.CELL), both)
-    )
+
+    def both(ui: nu.ObjectRef) -> nu.Nu:
+        cell = cell_writes(plane_id, init.CELL, shim, nu.Bool(ui), name=init.CELL)
+        return atomic(made >> nu.IfDo(no_cell, cell))
+
+    return nu.IfDo(snap(nu.Or(no_plane, no_cell)), nu.let(HasUi(shim, plane_id, init.CELL), both))
 
 
 def ensure_system() -> nu.Nu:

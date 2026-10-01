@@ -106,13 +106,10 @@ _kernel = Space.kernel
 _PLANE = "nuspace.supervisor.plane"
 
 
-class Attrs(nu.Shape):
-    """The names one supervised plane's arm declares."""
+class _Arm(nu.Shape):
+    """What one supervised plane's arm keeps across its turns: the backoff it waits next."""
 
-    mine = nu.StrRef.slot()
     delay = nu.FloatRef.slot()
-    fixed = nu.FloatRef.slot()
-    new = nu.StrRef.slot()
 
 
 class Policy(CellState):
@@ -220,11 +217,13 @@ def unsupervise(plane_id: nu.StrArg) -> nu.Nu:
     drop it.
     """
     forget = _here(_drop(Policy.planes, plane_id) >> _drop(Policy.delays, plane_id))
-    gone = fresh("unsupervise")
-    run = nu.StrRef(gone)
-    live = nu.And(nu.Ne(run, nu.Str("")), _kernel.running.contains(run))
-    stop = nu.Let(gone, snap(_here(_mine(plane_id))), nu.IfDo(snap(live), plane_stop(run)))
-    return atomic_state(forget) >> stop
+
+    def stop(held: nu.ObjectRef) -> nu.Nu:
+        run = nu.Str(held)
+        live = nu.And(nu.Ne(run, nu.Str("")), _kernel.running.contains(run))
+        return nu.IfDo(snap(live), plane_stop(run))
+
+    return atomic_state(forget) >> nu.let(snap(_here(_mine(plane_id))), stop)
 
 
 def policy_of(plane_id: nu.StrArg) -> nu.Nu:
@@ -248,7 +247,7 @@ def run_of(plane_id: nu.StrArg) -> nu.Nu:
 # --- One plane -----------------------------------------------------------------
 
 
-def _start(plane: nu.StrRef, mine: nu.StrRef) -> nu.Nu:
+def _start(plane: nu.Str, mine: nu.Str) -> nu.Nu:
     """A new plane run of the plane, ``by`` supervisor, then remembered.
 
     Written only while the plane is still supervised and its remembered run
@@ -261,23 +260,26 @@ def _start(plane: nu.StrRef, mine: nu.StrRef) -> nu.Nu:
     second: one of them landing in between refuses it, and the run just
     started, now tracked by nobody, is stopped.
     """
-    new = Attrs.new
     still = nu.And(
         nu.Ne(_policy(plane), nu.Str("")), nu.Eq(_mine(plane), mine), plane_exists(plane)
     )
-    start = atomic(nu.IfDo(still, add_plane_run(new, plane, by=BY)))
-    made = _kernel.runs.contains(new)
-    remember = atomic_state(nu.IfDo(nu.And(made, still), Policy.runs.set_item(plane, new)))
-    orphan = nu.And(made, nu.Ne(_mine(plane), new))
-    write = start >> remember >> nu.IfDo(snap(orphan), plane_stop(new))
+
+    def write(minted: nu.ObjectRef) -> nu.Nu:
+        new = nu.Str(minted)
+        start = atomic(nu.IfDo(still, add_plane_run(new, plane, by=BY)))
+        made = _kernel.runs.contains(new)
+        remember = atomic_state(nu.IfDo(nu.And(made, still), Policy.runs.set_item(plane, new)))
+        orphan = nu.And(made, nu.Ne(_mine(plane), new))
+        return start >> remember >> nu.IfDo(snap(orphan), plane_stop(new))
+
     return nu.IfDo(
         snap(plane_exists(plane)),
-        nu.Let(new, MintId("r"), write),
+        nu.let(MintId("r"), write),
         wake(Space.planes.on_children_change()),
     )
 
 
-def _covered(plane: nu.StrRef, exit_: nu.Nu) -> nu.Nu:
+def _covered(plane: nu.Str, exit_: nu.Nu) -> nu.Nu:
     """Whether the plane's policy restarts after ``exit_``."""
     return nu.Or(
         nu.Eq(exit_, nu.Str(EXIT_FAILED)),
@@ -287,54 +289,59 @@ def _covered(plane: nu.StrRef, exit_: nu.Nu) -> nu.Nu:
 
 def _wait() -> nu.Nu:
     """The wait before a restart: the fixed delay, read as it is due, else the backoff, doubled after."""
-    plane = nu.StrRef(_PLANE)
-    delay, fixed = Attrs.delay, Attrs.fixed
+    plane = nu.Str(nu.Attr(_PLANE))
+    delay = _Arm.delay
     doubled = delay * nu.Float(2.0)
     backoff = nu.Delay(delay) >> delay.set(
         nu.If(nu.Gt(doubled, nu.Float(BACKOFF_CAP)), nu.Float(BACKOFF_CAP), doubled)
     )
-    return nu.Let(
-        fixed, snap(_fixed(plane)), nu.IfDo(nu.Ge(fixed, nu.Float(0.0)), nu.Delay(fixed), backoff)
-    )
+
+    def wait(held: nu.ObjectRef) -> nu.Nu:
+        fixed = nu.Float(held)
+        return nu.IfDo(nu.Ge(fixed, nu.Float(0.0)), nu.Delay(fixed), backoff)
+
+    return nu.let(snap(_fixed(plane)), wait)
 
 
-def _ended(plane: nu.StrRef, mine: nu.StrRef) -> nu.Nu:
+def _ended(plane: nu.Str, mine: nu.Str) -> nu.Nu:
     """Its run is over: restarted after the wait when the policy covers the exit.
 
     Otherwise left down, until its remembered run moves (supervised again).
     """
     exit_ = text(_kernel.runs[mine].exit)
-    delay = Attrs.delay
     again = (
-        nu.IfDo(snap(nu.Eq(exit_, nu.Str(EXIT_OK))), delay.set(nu.Float(BACKOFF_START)))
+        nu.IfDo(snap(nu.Eq(exit_, nu.Str(EXIT_OK))), _Arm.delay.set(nu.Float(BACKOFF_START)))
         >> _wait()
         >> _start(plane, mine)
     )
     return nu.IfDo(snap(_covered(plane, exit_)), again, moved(Policy.runs[plane], mine))
 
 
-def _turn(plane: nu.StrRef) -> nu.Nu:
+def _turn(plane: nu.Str) -> nu.Nu:
     """One look at the plane's own run: start one, wait for it to end, or act on how it ended.
 
     A plane no longer supervised parks until the fold cancels the arm, so
     the loop never spins on a start its commit refuses.
     """
-    mine = Attrs.mine
     running = _kernel.running
-    live = until(nu.Not(running.contains(mine)), running.on_children_change())
-    look = nu.IfDo(
-        nu.Eq(mine, nu.Str("")),
-        _start(plane, mine),
-        nu.IfDo(snap(running.contains(mine)), live, _ended(plane, mine)),
-    )
+
+    def look(held: nu.ObjectRef) -> nu.Nu:
+        mine = nu.Str(held)
+        live = until(nu.Not(running.contains(mine)), running.on_children_change())
+        return nu.IfDo(
+            nu.Eq(mine, nu.Str("")),
+            _start(plane, mine),
+            nu.IfDo(snap(running.contains(mine)), live, _ended(plane, mine)),
+        )
+
     return nu.IfDo(
-        snap(nu.Eq(_policy(plane), nu.Str(""))), park(), nu.Let(mine, snap(_mine(plane)), look)
+        snap(nu.Eq(_policy(plane), nu.Str(""))), park(), nu.let(snap(_mine(plane)), look)
     )
 
 
-def _arm(plane: nu.StrRef) -> nu.Nu:
+def _arm(plane: nu.Str) -> nu.Nu:
     """One supervised plane, kept up for as long as it is listed."""
-    return nu.Let(Attrs.delay, nu.Float(BACKOFF_START), nu.ForeverDo(_turn(plane)))
+    return nu.Frame(_Arm, nu.ForeverDo(_turn(plane)), delay=nu.Float(BACKOFF_START))
 
 
 def _forget_ended() -> nu.Nu:
@@ -345,7 +352,7 @@ def _forget_ended() -> nu.Nu:
     again rather than reading that as a request.
     """
     item = fresh("sup_forget")
-    plane = nu.StrRef(item)
+    plane = nu.Str(nu.Attr(item))
     runs = Policy.runs
     over = nu.Or(
         nu.Not(Policy.planes.contains(plane)),
@@ -360,6 +367,6 @@ def program() -> nu.Nu:
     return atomic_state(_made() >> _forget_ended()) >> nu.ForEachParReactive(
         snap(nu.list(planes.keys())),
         Ticking(snap(planes.on_children_change())),
-        _arm(nu.StrRef(_PLANE)),
+        _arm(nu.Str(nu.Attr(_PLANE))),
         _PLANE,
     )

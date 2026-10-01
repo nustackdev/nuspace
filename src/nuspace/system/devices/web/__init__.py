@@ -17,7 +17,6 @@ from typing import Any
 
 from nuspace.system.devices.web.env import SESSION_ENV, SessionWrap, session_env
 from nuspace.system.devices.web.session import (
-    SESSION_ATTR,
     ConnectedSession,
     Connections,
     FrameCodec,
@@ -35,7 +34,6 @@ from nuspace.system.devices.web.viewer import ViewerRef, viewer_feed
 __all__ = [
     "BANNER",
     "CELLS",
-    "SESSION_ATTR",
     "SESSION_ENV",
     "Boot",
     "CellRoot",

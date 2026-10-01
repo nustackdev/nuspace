@@ -42,10 +42,6 @@ class RunCell(ScalarAction):
     :meth:`~nuspace.system.backends.Backend.arun`. Cancelled, the backend
     cancels the body where it runs.
 
-    The request carries the ids as attrs, which also gives the body a
-    context copy of its own on the worker: bodies sharing a worker do not
-    share attrs.
-
     Args:
         backend: The backend's registered name, any ``StrArg``.
         run_id: The plane run's store id.
@@ -93,9 +89,6 @@ class RunCell(ScalarAction):
             plane, cell = record["plane"], record["cell"]
             envs = config.resolve(record["envs"])
             body = build_body(run_id, cell_run_id, plane, cell, envs)
-            # The names ops.Here declares. The body declares them again, but a
-            # request carrying attrs runs on a context copy of its own.
-            attrs = {"plane": plane, "cell": cell, "run": run_id, "cell_run": cell_run_id}
-            return await backend.arun(run_id, cell_run_id, body, attrs)
+            return await backend.arun(run_id, cell_run_id, body)
 
         return athunk

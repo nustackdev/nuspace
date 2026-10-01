@@ -34,7 +34,7 @@ def sibling(cell_id: nu.StrArg, term: nu.Nu) -> nu.Nu:
 
     The sibling is ``cell_id`` in the plane of the run evaluating this: the
     plane is read from :attr:`~nuspace.ops.kernel.Here.plane`, which the
-    kernel declares inside every run. Rerooted here, the chains no longer root
+    kernel holds in a frame around every run. Rerooted here, the chains no longer root
     at ``CellState``, so the kernel's own reroot leaves them alone.
     ``PlaneState`` chains are untouched and land at the shared plane state.
 

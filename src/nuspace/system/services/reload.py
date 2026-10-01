@@ -58,7 +58,7 @@ def behind(run_id: nu.StrArg, plane: nu.StrArg) -> nu.Nu:
     """
     row = _kernel.runs[run_id]
     item = fresh("reload_behind")
-    cr = row.cells[nu.StrRef(item)]
+    cr = row.cells[nu.Str(nu.Attr(item))]
     cell = text(cr.cell)
     ran = nu.If(cr.version.exists(), nu.ToInt(cr.version), nu.Int(0))
     stale = nu.And(Space.planes[plane].cells.contains(cell), nu.Lt(ran, _version(plane, cell)))
@@ -72,28 +72,23 @@ def _replace(run_id: nu.StrArg, plane: nu.StrArg) -> nu.Nu:
     replaced is left alone.
     """
     row = _kernel.runs[run_id]
-    item, new = fresh("reload_one"), fresh("reload_new")
-    cr = nu.StrRef(item)
-    again = add_cell_run(run_id, text(row.cells[cr].cell), nu.StrRef(new), by=BY)
-    one = atomic(
-        nu.IfDo(
-            behind(run_id, plane).contains(cr),
-            interrupt(run_id, cr) >> nu.Let(new, MintId("cr"), again),
-        )
-    )
+    item = fresh("reload_one")
+    cr = nu.Str(nu.Attr(item))
+    cell = text(row.cells[cr].cell)
+    again = nu.let(MintId("cr"), lambda new: add_cell_run(run_id, cell, nu.Str(new), by=BY))
+    one = atomic(nu.IfDo(behind(run_id, plane).contains(cr), interrupt(run_id, cr) >> again))
     return nu.ForEachDo(snap(behind(run_id, plane)), one, item=item)
 
 
-def _arm(run_id: nu.StrRef) -> nu.Nu:
+def _arm(run_id: nu.Str) -> nu.Nu:
     """One live plane run: replace what is stale, then again on every rewrite of its plane's cells."""
-    plane = nu.StrRef("nuspace.reload.plane")
-    edits = Space.planes[plane].cells.on_descendants_change("*", "version")
-    look = _replace(run_id, plane) >> wake(edits)
-    return nu.Let(
-        plane,
-        snap(text(_kernel.runs[run_id].plane)),
-        nu.ForeverDo(look),
-    )
+
+    def watch(held: nu.ObjectRef) -> nu.Nu:
+        plane = nu.Str(held)
+        edits = Space.planes[plane].cells.on_descendants_change("*", "version")
+        return nu.ForeverDo(_replace(run_id, plane) >> wake(edits))
+
+    return nu.let(snap(text(_kernel.runs[run_id].plane)), watch)
 
 
 def program() -> nu.Nu:
@@ -102,6 +97,6 @@ def program() -> nu.Nu:
     return nu.ForEachParReactive(
         snap(nu.list(running)),
         Ticking(snap(running.on_children_change())),
-        _arm(nu.StrRef(_RUN)),
+        _arm(nu.Str(nu.Attr(_RUN))),
         _RUN,
     )

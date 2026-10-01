@@ -10,6 +10,7 @@ import nu
 import nuspace
 import nustd.kv
 from nuspace import Snippet, ops
+from nuspace.ops.utils import Then
 from nuspace.system.search import excerpt, matches
 
 
@@ -39,14 +40,17 @@ def out():
 def search(query: nu.StrArg, plane: nu.StrArg, cell: nu.StrArg) -> nu.Nu:
     """``[{plane, cell, excerpt}]`` when the note's body holds ``query``."""
     held = ops.cell_state(plane, cell, nu.If(Note.body.exists(), nu.ToStr(Note.body), nu.Str("")))
-    body = nu.StrRef("test.note")
-    hit = nu.List.of(nu.Dict.of(plane=plane, cell=cell, excerpt=excerpt(body, query)))
-    return nu.Let("test.note", held, nu.If(matches(body, query), hit, nu.List.of()))
+
+    def found(body: nu.ObjectRef) -> nu.Nu:
+        hit = nu.List.of(nu.Dict.of(plane=plane, cell=cell, excerpt=excerpt(body, query)))
+        return nu.If(matches(body, query), hit, nu.List.of())
+
+    return nu.let(held, found)
 
 
 def slow(query: nu.StrArg, plane: nu.StrArg, cell: nu.StrArg) -> nu.Nu:
     """:func:`search`, a moment later."""
-    return nu.Let("test.slow", nu.Delay(SLOW), search(query, plane, cell))
+    return Then(nu.Delay(SLOW), search(query, plane, cell))
 
 
 def write(plane: str, cell: str, body: str) -> nu.Nu:

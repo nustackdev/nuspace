@@ -47,14 +47,14 @@ def flag(ref):
 
 
 def jobs(key):
-    props = nuspace.Space.planes[nu.StrRef(key)].props
+    props = nuspace.Space.planes[nu.Str(nu.Attr(key))].props
     headless = nu.And(nu.Not(flag(props.ui)), nu.Not(flag(props.system)))
     return nu.List(nu.Collect(nu.Filter(ops.planes(), headless, key=key)))
 
 
 def running():
     # Live runs are few: their planes, not every run ever recorded.
-    run = nu.ObjectRef("live")
+    run = nu.Attr("live")
     return nu.List(nu.Collect(nu.Unique(nu.Map(nu.Iter(ops.runs()), run["plane"], key="live"))))
 
 
@@ -70,10 +70,9 @@ def restart(pid):
     return nu.If(timed, label + nu.Str(", ") + nu.Format(delay, "g") + nu.Str("s"), label)
 
 
-def draw():
-    j = nu.StrRef("j")
+def table(booted, live):
+    j = nu.Str(nu.Attr("j"))
     name = nuspace.Space.planes[j].name
-    booted, live = nu.ObjectRef("booted"), nu.ObjectRef("running")
     row = nu.List.of(
         nu.If(name.exists(), nu.ToStr(name), j),
         j,
@@ -81,26 +80,33 @@ def draw():
         restart(j),
         nu.If(nu.List(live).contains(j), "yes", "no"),
     )
-    table = Listing.table.set(
+    return Listing.table.set(
         nu.Dict.of(
             columns=["Name", "ID", "Boot", "Restart", "Running"],
             rows=nu.Collect(nu.Map(nu.Iter(jobs("jobs.draw")), row, key="j")),
         )
     )
-    body = nu.Let("booted", init.booted(), nu.Let("running", running(), table))
+
+
+def draw():
+    body = nu.let(
+        init.booted(), lambda booted: nu.let(running(), lambda live: table(booted, live))
+    )
     return ops.snapshot(body)
 
 
 def select():
-    click = nu.ObjectRef("click")
-    ids = nu.ObjectRef("ids")
+    click = nu.Attr("click")
     at = nu.ToInt(click["row_index"])
-    pick = nu.IfDo(nu.Gt(nu.Len(ids), at), Jobs.selected.set(nu.ToStr(nu.List(ids)[at])))
+
+    def pick(ids):
+        return nu.IfDo(nu.Gt(nu.Len(ids), at), Jobs.selected.set(nu.ToStr(nu.List(ids)[at])))
+
     # The rows are the jobs in creation order: the same read finds the one clicked.
     return nu.IfDo(
         nu.Contains(click, "row_index"),
         nustd.kv.Transaction(
-            nustd.kv.Snapshot(nu.Let("ids", jobs("jobs.pick"), pick), scope=nuspace.Space),
+            nustd.kv.Snapshot(nu.let(jobs("jobs.pick"), pick), scope=nuspace.Space),
             scope=nuspace.States,
         ),
     )
@@ -141,18 +147,21 @@ class Form(nustd.ui.Row):
 def create(name):
     # Under the plane running this cell: the Jobs plane.
     here = ops.Here.plane
-    job = nu.StrRef("new.job")
     made = ops.add_plane(backend="mp", name=name, parent=here, ui=False, made_by="jobs")
-    fill = ops.add_cell(job, STARTER, cell_id="main", name="main") >> nustd.kv.Transaction(
-        Jobs.selected.set(job), scope=nuspace.States
-    )
-    return nu.Let("new.job", made, fill)
+
+    def fill(held):
+        job = nu.Str(held)
+        return ops.add_cell(job, STARTER, cell_id="main", name="main") >> nustd.kv.Transaction(
+            Jobs.selected.set(job), scope=nuspace.States
+        )
+
+    return nu.let(made, fill)
 
 
 def out():
     typed = nu.Str(Form.name)
     name = nu.If(nu.Eq(typed, ""), nu.Str("New job"), typed)
-    make = nu.Let("new.name", name, create(nu.StrRef("new.name")) >> Form.name.set(""))
+    make = nu.let(name, lambda held: create(nu.Str(held)) >> Form.name.set(""))
     return (
         Form.name.set("")
         >> Form.create.set("Create job")
@@ -211,6 +220,12 @@ class View(nustd.ui.Column):
     detail = Detail.slot(gap=4)
 
 
+class Asked(nu.Shape):
+    # What the restart controls say, read once per change.
+    choice = nu.StrRef.slot()
+    delay = nu.FloatRef.slot()
+
+
 def snap(term):
     return ops.snapshot(term)
 
@@ -231,9 +246,9 @@ def draw(job):
     )
 
 
-def restart(job, tag):
+def restart(job):
     # Plane level: the supervisor keeps the job running, off stops its run.
-    choice, delay = nu.StrRef(tag + ".policy"), nu.FloatRef(tag + ".delay")
+    choice, delay = Asked.choice, Asked.delay
     apply = nu.IfDo(
         nu.Eq(choice, OFF),
         supervisor.unsupervise(job),
@@ -243,11 +258,9 @@ def restart(job, tag):
             supervisor.supervise(job, choice),
         ),
     )
-    policy = View.detail.restart.policy.choice
-    return nu.Let(
-        tag + ".policy",
-        nu.Str(policy),
-        nu.Let(tag + ".delay", nu.ToFloat(View.detail.restart.delay), apply),
+    asked = View.detail.restart
+    return nu.Frame(
+        Asked, apply, choice=nu.Str(asked.policy.choice), delay=nu.ToFloat(asked.delay)
     )
 
 
@@ -264,19 +277,21 @@ def remove(job):
 def delete(job):
     # Two clicks: the first arms the button, the second deletes.
     button = View.detail.delete
-    armed = nu.BoolRef("job.armed")
-    click = nu.IfDo(
-        armed,
-        remove(job),
-        armed.set(nu.Bool(True)) >> button.set("Click again to delete", variant="danger"),
-    )
-    return nu.Let("job.armed", nu.Bool(False), nu.ReactForever(button.on_click(), click))
+
+    def clicks(armed):
+        click = nu.IfDo(
+            nu.Bool(armed),
+            remove(job),
+            armed.set(nu.Bool(True)) >> button.set("Click again to delete", variant="danger"),
+        )
+        return nu.ReactForever(button.on_click(), click)
+
+    return nu.let(False, clicks)
 
 
 def shown(job):
     d = View.detail
-    source = nu.StrRef("job.source")
-    save = nu.Let("job.source", nu.Str(d.editor), ops.set_prog(job, "main", source))
+    save = nu.let(nu.Str(d.editor), lambda source: ops.set_prog(job, "main", source))
     boot = nu.IfDo(nu.ToBool(d.boot), init.boot(job), init.unboot(job))
     return (
         View.empty.erase()
@@ -284,8 +299,8 @@ def shown(job):
         >> nu.ParallelAsync(
             nu.ReactForever(d.save.on_click(), save),
             nu.ReactForever(d.boot.on_change(), boot),
-            nu.ReactForever(d.restart.policy.choice.on_change(), restart(job, "job.choice")),
-            nu.ReactForever(d.restart.delay.on_change(), restart(job, "job.delay")),
+            nu.ReactForever(d.restart.policy.choice.on_change(), restart(job)),
+            nu.ReactForever(d.restart.delay.on_change(), restart(job)),
             delete(job),
         )
     )
@@ -295,10 +310,13 @@ def hint():
     return View.detail.erase() >> View.empty.hint.set("Select a job")
 
 
-def out():
-    job = nu.StrRef("job.id")
+def showing(job):
     there = nu.And(nu.Ne(job, ""), snap(ops.plane_exists(job)))
-    return follows(Jobs.selected, "job.id", nu.IfDo(there, shown(job), hint()))
+    return nu.IfDo(there, shown(job), hint())
+
+
+def out():
+    return follows(Jobs.selected, showing)
 """
 
 

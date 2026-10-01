@@ -12,6 +12,7 @@ separately here.
 
 ## Unreleased
 
+- Runs on the new core: program locals live in memory frames, context is read-only
 - Pinned planes sit on filled tiles without borders, matching the sidebar rows
 - Interrupted cell runs are recorded as interrupted again, read from the run record
 - Moves to Nu's per-task context; interrupted runs record as ok until fixed

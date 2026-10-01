@@ -298,7 +298,7 @@ async def test_pick_lists_searches_newest_first_and_shows_the_newest(store):
     old = await store.run(search.search("old", [], True, searchers=SEARCHERS))
     new = await store.run(search.search("new", [], True, searchers=SEARCHERS))
     got = await _frames(
-        store, search.PICK, "pick", lambda ns: nu.Let("seen", nu.Literal([]), ns["draw"]())
+        store, search.PICK, "pick", lambda ns: nu.Frame(ns["Seen"], ns["draw"](), ids=[])
     )
     select = [payload for ref, payload in got if ref == ("pick", "search")]
     assert select == [
@@ -316,7 +316,7 @@ async def test_a_picked_search_holds_until_a_newer_one_is_made(store):
     await store.run(ops.utils.atomic_state(chosen))
 
     def draw(ns):
-        return nu.Let("seen", nu.Literal([]), ns["draw"]())
+        return nu.Frame(ns["Seen"], ns["draw"](), ids=[])
 
     shown = ops.plane_state(search.PLANE, _Chosen.shown)
     await _frames(store, search.PICK, "pick", draw)
@@ -331,9 +331,7 @@ async def test_results_draw_the_shown_search(store):
     await _garden(store)
     pid = await store.run(search.search("tomato", ["note"], True, searchers=SEARCHERS))
     await _run_search(store, pid)
-    got = await _draw(
-        store, search.RESULTS, "results", lambda ns: nu.Let("sel", nu.Str(pid), ns["shown"]())
-    )
+    got = await _draw(store, search.RESULTS, "results", lambda ns: ns["shown"](nu.Str(pid)))
     assert got[("title",)]["label"] == "Results for “tomato”"
     assert got[("status",)] == "Done: 3 hits"
     assert got[("hits", "h0", "head", "link")] == {"href": "/p1", "label": "Garden"}
@@ -348,9 +346,7 @@ async def test_results_draw_the_shown_search(store):
 async def test_results_say_when_nothing_was_found_or_searched(store):
     pid = await store.run(search.search("zzz", ["note"], True, searchers=SEARCHERS))
     await _run_search(store, pid)
-    got = await _draw(
-        store, search.RESULTS, "results", lambda ns: nu.Let("sel", nu.Str(pid), ns["shown"]())
-    )
+    got = await _draw(store, search.RESULTS, "results", lambda ns: ns["shown"](nu.Str(pid)))
     assert got[("status",)] == "Done: 0 hits"
     assert got[("empty",)]["label"] == "Nothing found"
     none = await _draw(store, search.RESULTS, "results", lambda ns: ns["none"]())

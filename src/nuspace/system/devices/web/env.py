@@ -3,8 +3,8 @@
 Registered as :data:`SESSION_ENV`, a run asks for it with
 ``ops.env("session", sid)``. The kernel resolves it in the host:
 
-- **wrap**: binds the connection id, opens :func:`proxied_session` around
-  the run, and erases the cell's own ui node first, so what its last run
+- **wrap**: opens :func:`proxied_session` on the connection around the
+  run, and erases the cell's own ui node first, so what its last run
   drew goes before this one draws.
 - **rewrite**: :class:`CellRoot`, landing the program's bare ui refs under
   the cell's node on the viewer.
@@ -15,12 +15,17 @@ Everything here is safe for a worker to import.
 
 from __future__ import annotations
 
-import nu
+from typing import TYPE_CHECKING
+
 from nuspace.ops import Here
-from nuspace.system.devices.web.session import SESSION_ATTR, proxied_session
+from nuspace.system.devices.web.session import proxied_session
 from nuspace.system.devices.web.shell import Shell
 from nuspace.system.devices.web.utils import CellRoot, cell_ui
 from nuspace.system.kernel import Env, EnvFactory
+
+
+if TYPE_CHECKING:
+    import nu
 
 
 __all__ = ["SESSION_ENV", "SessionWrap", "session_env"]
@@ -47,7 +52,7 @@ class SessionWrap:
     def __call__(self, body: nu.Nu) -> nu.Nu:
         """``body``, drawing on the connection."""
         erase = cell_ui(Shell.viewer, Here.cell).erase()
-        return nu.Let(SESSION_ATTR, nu.Str(self.sid), proxied_session(self.address, erase >> body))
+        return proxied_session(self.address, self.sid, erase >> body)
 
 
 def session_env(address: str) -> EnvFactory:

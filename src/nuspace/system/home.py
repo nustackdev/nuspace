@@ -33,7 +33,7 @@ import nu
 from nuspace.ops.cell import HasUi, cell_writes
 from nuspace.ops.pin import pin as pin_last
 from nuspace.ops.plane import plane_writes
-from nuspace.ops.utils import atomic, fresh
+from nuspace.ops.utils import atomic
 from nuspace.shapes import Space
 
 from .kernel.utils import Now, snap
@@ -100,7 +100,7 @@ def uptime(seconds):
 
 
 def versions(v):
-    k = nu.StrRef("k")
+    k = nu.Str(nu.Attr("k"))
     each = nu.Map(nu.list(v.keys()), k + nu.Str(" ") + nu.ToStr(v[k]), key="k")
     return nu.If(v.exists(), nu.Str(", ").join(nu.Collect(each)), nu.Str(""))
 
@@ -116,7 +116,7 @@ def draw():
     )
     parts = nu.List.of(nu.Str("nuspace"), where, versions(info.versions), up)
     line = nu.Str("  ·  ").join(
-        nu.Collect(nu.Filter(nu.Iter(parts), nu.Ne(nu.StrRef("x"), ""), key="x"))
+        nu.Collect(nu.Filter(nu.Iter(parts), nu.Ne(nu.Attr("x"), ""), key="x"))
     )
     return nustd.kv.Snapshot(nustd.ui.TextRef("info").set(line), scope=nuspace.Space)
 
@@ -141,8 +141,7 @@ def plane_name(pid):
     return nu.If(nu.And(name.exists(), nu.Ne(nu.ToStr(name), "")), nu.ToStr(name), pid)
 
 
-def link(i):
-    ids = nu.ObjectRef("ids")
+def link(ids, i):
     ref = nustd.ui.LinkRef("r" + str(i))
     pid = nu.ToStr(ids[i])
     return nu.IfDo(
@@ -152,18 +151,19 @@ def link(i):
     )
 
 
+def show(ids):
+    none = nustd.ui.TextRef("none")
+    empty = nu.IfDo(nu.Eq(nu.Len(ids), 0), none.set("Nothing opened yet."), none.erase())
+    links = nu.Sequential(*[link(ids, i) for i in range(SHOWN)])
+    return nustd.ui.HeadingRef("title").set("Recent", level=3) >> links >> empty
+
+
 def draw():
     recents = nuspace.Space.state.recents
     listed = nu.If(recents.exists(), nu.List(recents), nu.List.of())
-    r = nu.StrRef("r")
+    r = nu.Str(nu.Attr("r"))
     ids = nu.List(nu.Collect(nu.Filter(nu.Iter(listed), ops.plane_exists(r), key="r")))[0:SHOWN]
-    none = nustd.ui.TextRef("none")
-    empty = nu.IfDo(
-        nu.Eq(nu.Len(nu.ObjectRef("ids")), 0), none.set("Nothing opened yet."), none.erase()
-    )
-    links = nu.Sequential(*[link(i) for i in range(SHOWN)])
-    body = nustd.ui.HeadingRef("title").set("Recent", level=3) >> links >> empty
-    return nustd.kv.Snapshot(nu.Let("ids", ids, body), scope=nuspace.Space)
+    return nustd.kv.Snapshot(nu.let(ids, show), scope=nuspace.Space)
 
 
 def out():
@@ -202,18 +202,18 @@ def prop(p, name):
 
 
 def drawn(planes):
-    p = nu.ObjectRef("p")
+    p = nu.Attr("p")
     drawn = nu.And(nu.ToBool(prop(p, "ui")), nu.Not(nu.ToBool(prop(p, "system"))))
     return nu.Count(nu.Filter(nu.Iter(planes), nu.And(drawn, nu.Ne(p["id"], "home")), key="p"))
 
 
 def live_cells(runs):
-    r = nu.ObjectRef("r")
+    r = nu.Attr("r")
     return nu.Sum(nu.Map(nu.Iter(runs), nu.Len(nu.List(r["cells_running"])), key="r"))
 
 
 def first(planes, made_by):
-    p = nu.ObjectRef("p")
+    p = nu.Attr("p")
     made = nu.Filter(
         nu.Iter(planes),
         nu.And(nu.Eq(nu.ToStr(prop(p, "made_by")), made_by), nu.ToBool(prop(p, "ui"))),
@@ -228,8 +228,7 @@ def link(ref, planes, made_by, label):
     return nu.IfDo(nu.Ne(pid, ""), ref.set(href=nu.Str("/") + pid, label=label), ref.erase())
 
 
-def draw():
-    planes, runs = nu.ObjectRef("planes"), nu.ObjectRef("runs")
+def show(runs, planes):
     tiles = (
         Glance.tiles.planes.set(nu.ToStr(drawn(planes)))
         >> Glance.tiles.live.set(nu.ToStr(nu.Len(runs)))
@@ -241,7 +240,13 @@ def draw():
         >> link(Glance.links.workers, planes, "workers", "Workers")
         >> link(Glance.links.planes, planes, "planes", "Planes")
     )
-    body = nu.Let("runs", ops.runs(), nu.Let("planes", ops.plane_rows(), tiles >> links))
+    return tiles >> links
+
+
+def draw():
+    body = nu.let(
+        ops.runs(), lambda runs: nu.let(ops.plane_rows(), lambda planes: show(runs, planes))
+    )
     return nustd.kv.Snapshot(body, scope=nuspace.Space)
 
 
@@ -280,6 +285,12 @@ def out():
 CELLS = (("header", HEADER), ("recent", RECENT), ("glance", GLANCE), ("start", START))
 
 
+class _Seeding(nu.Shape):
+    """What :func:`seed` works out before its bracket: each cell's ``has_ui``, by cell id."""
+
+    ui = nu.DictRef.slot(bool)
+
+
 def seed(
     plane: str,
     name: str,
@@ -306,7 +317,6 @@ def seed(
         pin: Pin it, after the pins there are.
     """
     missing = nu.Not(Space.planes[plane].contains("name"))
-    uis = [fresh("home_ui") for _ in cells]
     writes = plane_writes(
         plane,
         backend=backend,
@@ -316,14 +326,13 @@ def seed(
         made_by="",
         meta={**META, "icon": icon},
     )
-    for ui, (cell, source) in zip(uis, cells, strict=True):
-        writes = writes >> cell_writes(plane, cell, source, nu.BoolRef(ui), name=cell)
+    for cell, source in cells:
+        writes = writes >> cell_writes(plane, cell, source, _Seeding.ui[cell], name=cell)
     if pin:
         writes = writes >> pin_last(plane)
-    body = atomic(nu.IfDo(missing, writes))
-    for ui, (cell, source) in reversed(list(zip(uis, cells, strict=True))):
-        body = nu.Let(ui, HasUi(source, plane, cell), body)
-    return nu.IfDo(snap(missing), body)
+    uis = [_Seeding.ui[cell].set(HasUi(source, plane, cell)) for cell, source in cells]
+    body = nu.Sequential(*uis, atomic(nu.IfDo(missing, writes)))
+    return nu.IfDo(snap(missing), nu.Frame(_Seeding, body, ui={}))
 
 
 def ensure_home() -> nu.Nu:

@@ -14,6 +14,7 @@ import time
 
 import pytest
 import pytest_asyncio
+from _support import kernel_envs
 from _support.kernel import (
     RAISES,
     SET_42,
@@ -31,7 +32,7 @@ import nu
 from nuspace import ops
 from nuspace.ops.utils import atomic
 from nuspace.shapes import EXIT_FAILED, EXIT_INTERRUPTED, EXIT_OK, Space, States, reroot
-from nuspace.system.kernel import INIT_BY, Env, store
+from nuspace.system.kernel import INIT_BY, store
 from nuspace.system.services import (
     ALWAYS,
     BOOTED,
@@ -52,27 +53,22 @@ from nuspace.system.services import supervisor as supervisor_service
 
 module_loop = pytest.mark.asyncio(loop_scope="module")
 
-#: The attr the test session env binds the connection id under.
-SESSION_ATTR = "test.session"
-
 BOOTED_PLANE = "booted"
 
 #: The booted services that stay up: all but reactions, which has no cells of its own.
 LIVE_BOOTED = [p for p in BOOTED if p != "reactions"]
 NAME = "nuspace-services"
 
-READS_SESSION = prog('return Tick.s.set(nu.StrRef("test.session")) >> nu.ForeverDo(nu.Delay(0.05))')
+READS_SESSION = prog(
+    "from _support.kernel_envs import Connection",
+    "return Tick.s.set(Connection.sid) >> nu.ForeverDo(nu.Delay(0.05))",
+)
 #: Fails, but only after long enough for the supervisor to have seen it live.
 FAILS_LATE = prog('return nu.Delay(0.6) >> nu.Raise(nu.Str("boom"))')
 
 
 def version(v: str) -> str:
     return prog(f'return Tick.s.set("{v}") >> nu.ForeverDo(nu.Delay(0.05))')
-
-
-def session(sid: str) -> Env:
-    """What the web device registers, minus the device: the connection bound as an attr."""
-    return Env(wrap=lambda body: nu.Let(SESSION_ATTR, nu.Str(sid), body), label=f"session:{sid}")
 
 
 def boot_list() -> nu.Nu:
@@ -161,7 +157,9 @@ async def space(tmp_path_factory):
         >> boot(BOOTED_PLANE)
     )
     await nu.arun(nu.With(store(path), body=seed))
-    k = await opened(NAME, path=path, spares=2, envs={"session": session}, init=init.PLANE)
+    k = await opened(
+        NAME, path=path, spares=2, envs={"session": kernel_envs.session}, init=init.PLANE
+    )
     yield k
     await k.close()
 

@@ -2,7 +2,7 @@
 
 An env is a wrap around the body and a rewrite over the loaded program::
 
-    session = Env(wrap=lambda body: proxied_session(conn, body), label="session")
+    session = Env(wrap=lambda body: proxied_session(address, sid, body), label="session")
 
 A run cannot store a lambda, so it stores specs, ``[name, *args]``, and the
 host resolves them through factories registered at open (D2). The wrap runs

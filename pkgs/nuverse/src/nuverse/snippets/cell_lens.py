@@ -23,34 +23,30 @@ from nuspace import ops
 
 
 def out(plane, cell):
-    picked = nu.StrRef("picked")
-
-    # SHAPE is a shape class: what the lens expects to find.
-    # PREFIX is a ref: where in the store that shape lives. Here, the picked cell.
-    SHAPE = nuspace.shapes.Cell
-    PREFIX = nuspace.Space.planes[plane].cells[picked]
-
     pick = nustd.ui.SelectRef("cell")
     lens = nustd.ui.lens.LensRef("lens")
+
+    def browse(picked):
+        # SHAPE is a shape class: what the lens expects to find.
+        # PREFIX is a ref: where in the store that shape lives. Here, the picked cell.
+        SHAPE = nuspace.shapes.Cell
+        PREFIX = nuspace.Space.planes[plane].cells[nu.Str(picked)]
+        return nustd.ui.lens.browse(lens, SHAPE, prefix=PREFIX)
 
     def read(term):
         return nustd.kv.Snapshot(term, scope=nuspace.Space)
 
     # The plane's cells in order, labelled by name, or by id when unnamed.
-    row = nu.ObjectRef("row")
+    row = nu.Attr("row")
     label = nu.If(nu.Ne(row["name"], ""), row["name"], row["id"])
     option = nu.Dict.of(value=row["id"], label=label)
     options = read(nu.Collect(nu.Map(ops.cell_rows(plane), option, key="row")))
     # The first cell that is not this one, or this one when it is alone.
-    others = nu.First(nu.Filter(ops.cells(plane), nu.Ne(nu.StrRef("id"), cell), key="id"))
+    others = nu.First(nu.Filter(ops.cells(plane), nu.Ne(nu.Attr("id"), cell), key="id"))
     first = read(nu.If(nu.IsEmpty(others), nu.Str(cell), others))
 
     # browse never finishes: each pick cancels it and starts it on the new cell.
-    lens_on_pick = nu.ReactLatest(
-        pick.on_change(),
-        nu.Let("picked", nu.Str(pick), nustd.ui.lens.browse(lens, SHAPE, prefix=PREFIX)),
-        initial=True,
-    )
+    lens_on_pick = nu.ReactLatest(pick.on_change(), nu.let(nu.Str(pick), browse), initial=True)
     # Cells added or removed on the plane: list them again.
     cells_moved = nu.ReactForever(
         read(nuspace.Space.planes[plane].cells.on_children_change()),

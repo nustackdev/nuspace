@@ -22,7 +22,7 @@ import nustd.kv
 from nuspace.shapes import Space
 
 from .read import cell_exists, cells, plane_exists
-from .utils import MintId, atomic, binding, flag, fresh, or_else, text
+from .utils import MintId, Then, atomic, flag, fresh, or_else, text
 
 
 if TYPE_CHECKING:
@@ -54,10 +54,11 @@ __all__ = [
 
 
 class Here(nu.Shape):
-    """What the kernel declares around a cell run's body: where it runs.
+    """Where a cell run's body runs: the ids the kernel holds for it in a frame.
 
-    A program and its envs read these, eg ``Here.plane``, and never declare
-    them: the kernel does, once per cell run.
+    The kernel opens a frame over this Shape around every cell run's body,
+    so a program and its envs read these, eg ``Here.plane``, and never set
+    them.
     """
 
     plane = nu.StrRef.slot()
@@ -139,11 +140,10 @@ def add_plane_run(
     specs = _envs(envs)
     row = _kernel.runs[run_id]
     backend = text(Space.planes[plane_id].props.backend)
-    cell, cr = fresh("run_cell"), fresh("run_cell_run")
-    each = nu.Let(
-        cr,
+    cell = fresh("run_cell")
+    each = nu.let(
         MintId("cr"),
-        _add_cell_run(run_id, plane_id, nu.StrRef(cell), nu.StrRef(cr), by),
+        lambda cr: _add_cell_run(run_id, plane_id, nu.Str(nu.Attr(cell)), nu.Str(cr), by),
     )
     writes = (
         row.plane.set(plane_id)
@@ -183,15 +183,15 @@ def plane_run(
         The run id, minted at evaluation. ``""`` when the plane is missing.
     """
 
-    def write(rid_name: str) -> nu.Nu:
-        rid = nu.StrRef(rid_name)
-        return nu.IfDo(
+    def write(rid: nu.ObjectRef) -> nu.Nu:
+        made = nu.IfDo(
             plane_exists(plane_id),
-            add_plane_run(rid, plane_id, by=by, envs=envs),
+            add_plane_run(nu.Str(rid), plane_id, by=by, envs=envs),
             rid.set(nu.Str("")),
         )
+        return Then(made, rid)
 
-    return atomic(binding(MintId("r"), write, tag="run"))
+    return atomic(nu.let(MintId("r"), write))
 
 
 def add_cell_run(
@@ -216,12 +216,14 @@ def cell_run(run_id: nu.StrArg, cell_id: nu.StrArg, *, by: nu.StrArg = "") -> nu
     """
     plane = text(_kernel.runs[run_id].plane)
 
-    def write(cr_name: str) -> nu.Nu:
-        cr = nu.StrRef(cr_name)
+    def write(cr: nu.ObjectRef) -> nu.Nu:
         live = nu.And(_kernel.running.contains(run_id), cell_exists(plane, cell_id))
-        return nu.IfDo(live, _add_cell_run(run_id, plane, cell_id, cr, by), cr.set(nu.Str("")))
+        made = nu.IfDo(
+            live, _add_cell_run(run_id, plane, cell_id, nu.Str(cr), by), cr.set(nu.Str(""))
+        )
+        return Then(made, cr)
 
-    return atomic(binding(MintId("cr"), write, tag="cell_run"))
+    return atomic(nu.let(MintId("cr"), write))
 
 
 def interrupt(run_id: nu.StrArg, cell_run_id: nu.StrArg) -> nu.Nu:
@@ -241,11 +243,11 @@ def cell_interrupt(run_id: nu.StrArg, cell_run_id: nu.StrArg) -> nu.Nu:
     return atomic(interrupt(run_id, cell_run_id))
 
 
-def _each_live_cell(run_id: nu.StrArg, body: Callable[[nu.StrRef], nu.Nu]) -> nu.Nu:
+def _each_live_cell(run_id: nu.StrArg, body: Callable[[nu.Str], nu.Nu]) -> nu.Nu:
     """``body(cell_run_id)`` for every live cell run of a plane run. No bracket."""
     item = fresh("live_cell")
     return nu.ForEachDo(
-        nu.list(_kernel.runs[run_id].cells_running), body(nu.StrRef(item)), item=item
+        nu.list(_kernel.runs[run_id].cells_running), body(nu.Str(nu.Attr(item))), item=item
     )
 
 
@@ -296,10 +298,10 @@ def plane_stop(run_id: nu.StrArg, grace: nu.FloatArg = STOP_GRACE) -> nu.Nu:
 # --- Unbracketed parts, for ops that take away what runs belong to ----------------------
 
 
-def live_runs_of(match: Callable[[nu.Nu], nu.Nu], body: Callable[[nu.StrRef], nu.Nu]) -> nu.Nu:
+def live_runs_of(match: Callable[[nu.Nu], nu.Nu], body: Callable[[nu.Str], nu.Nu]) -> nu.Nu:
     """``body(run_id)`` for every live plane run whose plane ``match(plane)`` holds for. No bracket."""
     item = fresh("live_run")
-    rid = nu.StrRef(item)
+    rid = nu.Str(nu.Attr(item))
     plane = text(_kernel.runs[rid].plane)
     return nu.ForEachDo(nu.list(_kernel.running), nu.IfDo(match(plane), body(rid)), item=item)
 
@@ -307,8 +309,8 @@ def live_runs_of(match: Callable[[nu.Nu], nu.Nu], body: Callable[[nu.StrRef], nu
 def interrupt_cell(plane_id: nu.StrArg, cell_id: nu.StrArg) -> nu.Nu:
     """Ask every live cell run of a cell, in any live run of its plane, to stop. No bracket."""
 
-    def each(rid: nu.StrRef) -> nu.Nu:
-        def one(cr: nu.StrRef) -> nu.Nu:
+    def each(rid: nu.Str) -> nu.Nu:
+        def one(cr: nu.Str) -> nu.Nu:
             same = nu.Eq(text(_kernel.runs[rid].cells[cr].cell), cell_id)
             return nu.IfDo(same, interrupt(rid, cr))
 
@@ -335,7 +337,7 @@ def _ids(ref: nu.Nu) -> nu.Nu:
     return nu.List(nu.Collect(nu.Sorted(nu.list(ref))))
 
 
-def _cell_run_row(run_id: nu.StrArg, cr: nu.StrRef) -> nu.Nu:
+def _cell_run_row(run_id: nu.StrArg, cr: nu.Str) -> nu.Nu:
     row = _kernel.runs[run_id].cells[cr]
     return nu.Dict.of(
         id=cr,
@@ -360,13 +362,13 @@ def cell_runs(run_id: nu.StrArg, *, live: bool = False) -> nu.Nu:
     row = _kernel.runs[run_id]
     item = fresh("cell_runs")
     ids = _ids(row.cells_running) if live else nu.list(row.cells.keys())
-    return nu.Collect(nu.Map(ids, _cell_run_row(run_id, nu.StrRef(item)), key=item))
+    return nu.Collect(nu.Map(ids, _cell_run_row(run_id, nu.Str(nu.Attr(item))), key=item))
 
 
 def _live_workers(rid: nu.StrArg) -> nu.Nu:
     """The plane run's live workers, oldest first. A walk of ``workers_running``, never its history."""
     item = fresh("run_workers")
-    wid = nu.StrRef(item)
+    wid = nu.Str(nu.Attr(item))
     return nu.List(
         nu.Collect(
             nu.Filter(
@@ -405,7 +407,7 @@ def runs(plane: nu.StrArg | None = None) -> nu.Nu:
     :func:`run`.
     """
     item = fresh("runs")
-    rid = nu.StrRef(item)
+    rid = nu.Str(nu.Attr(item))
     ids: nu.Nu = _ids(_kernel.running)
     if plane is not None:
         ids = nu.Filter(ids, nu.Eq(text(_kernel.runs[rid].plane), plane), key=item)
@@ -427,7 +429,7 @@ def workers() -> nu.Nu:
     ``handle`` is the backend's own, not for reading into.
     """
     item = fresh("workers")
-    wid = nu.StrRef(item)
+    wid = nu.Str(nu.Attr(item))
     row = _kernel.workers[wid]
     return nu.Collect(
         nu.Map(

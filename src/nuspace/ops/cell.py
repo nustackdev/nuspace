@@ -23,7 +23,7 @@ from nustd.ui.core import Ref as UiRef
 from .kernel import interrupt_cell
 from .read import cell_exists, plane_exists
 from .state import drop_cell_state
-from .utils import MintId, atomic, atomic_state, binding, fresh, keep_order
+from .utils import MintId, Then, atomic, atomic_state, keep_order
 
 
 if TYPE_CHECKING:
@@ -110,8 +110,7 @@ def _knowing_ui(
     imports do. Outside the op's bracket, so the store's write lock is never
     held for it, and a retried commit does not construct again.
     """
-    name = fresh("ui")
-    return nu.Let(name, HasUi(prog, plane_id, cell_id), build(nu.BoolRef(name)))
+    return nu.let(HasUi(prog, plane_id, cell_id), lambda has_ui: build(nu.Bool(has_ui)))
 
 
 def _place(order: nu.ListRef, cell_id: nu.StrArg, index: nu.IntArg | None) -> nu.Nu:
@@ -149,29 +148,22 @@ def add_cell(
         The cell id, ``""`` when the plane is missing.
     """
 
-    def write(cid_name: str, has_ui: nu.Nu) -> nu.Nu:
-        cid = nu.StrRef(cid_name)
+    def write(cid: nu.ObjectRef, has_ui: nu.Nu) -> nu.Nu:
         placed = cell_writes(
-            plane_id, cid, prog, has_ui, name=name, index=index, made_by=made_by, meta=meta
+            plane_id, nu.Str(cid), prog, has_ui, name=name, index=index, made_by=made_by, meta=meta
         )
-        return placed >> nu.IfDo(nu.Not(plane_exists(plane_id)), cid.set(nu.Str("")))
+        return Then(placed >> nu.IfDo(nu.Not(plane_exists(plane_id)), cid.set(nu.Str(""))), cid)
 
-    # Minted ahead of the bracket, so has_ui is worked out outside it. The
-    # binding the op yields stays inside: an attr set in a retried bracket
-    # does not reach past it.
-    minted = fresh("c")
-    cid = nu.StrRef(minted)
-    value = MintId("c") if cell_id is None else nu.Str(cell_id)
-    return nu.Let(
-        minted,
-        value,
-        _knowing_ui(
-            prog,
-            plane_id,
-            cid,
-            lambda has_ui: atomic(binding(cid, lambda name: write(name, has_ui), tag="c")),
-        ),
-    )
+    def knowing(minted: nu.ObjectRef) -> nu.Nu:
+        # The id the op yields is a copy made inside the bracket, so a retried
+        # commit starts again from the minted id, whatever the last try set.
+        def commit(has_ui: nu.Nu) -> nu.Nu:
+            return atomic(nu.let(minted, lambda cid: write(cid, has_ui)))
+
+        return _knowing_ui(prog, plane_id, nu.Str(minted), commit)
+
+    # Minted ahead of the bracket, so has_ui is worked out outside it.
+    return nu.let(MintId("c") if cell_id is None else nu.Str(cell_id), knowing)
 
 
 def cell_writes(

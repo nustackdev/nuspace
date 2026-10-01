@@ -10,10 +10,16 @@ bracket and never holds a transaction open across a wait.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import nu
 from nuspace.ops.utils import text
 
 from .kernel.utils import Ticking, park, snap, until, wake
+
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 
 __all__ = ["Ticking", "follows", "moved", "park", "snap", "until", "wake"]
@@ -27,23 +33,26 @@ def moved(ref: nu.Nu, seen: nu.StrArg) -> nu.Nu:
     return nu.WhileDo(nu.Eq(snap(text(ref)), seen), wake(ref.on_change()))
 
 
-def follows(ref: nu.Nu, name: str, body: nu.Nu, *, alive: nu.Nu | None = None) -> nu.Nu:
-    """``body`` with the str at ``ref`` bound under ``name``, run again whenever it changes.
+def follows(ref: nu.Nu, body: Callable[[nu.Str], nu.Nu], *, alive: nu.Nu | None = None) -> nu.Nu:
+    """``body(value)`` with the str at ``ref`` read into a frame, run again whenever it changes.
 
-    The value is read, bound, and raced against :func:`moved`: a change
-    cancels ``body`` (its ``finally_`` runs) and the loop comes round with
-    the new value. A ``body`` that ends early waits for the change parked.
+    The value is read, held, and raced against :func:`moved`: a change
+    cancels the body (its ``finally_`` runs) and the loop comes round with
+    the new value. A body that ends early waits for the change parked.
     Never returns.
 
     Args:
         ref: A str leaf in the store.
-        name: The attr the value is bound under, per turn.
-        body: What runs while the value holds.
+        body: Builds what runs while the value holds, from the value read
+            this turn.
         alive: Whether ``ref``'s row is still there, read per turn. Once it
             reads False the turn parks rather than subscribing to a row that
             is gone, and waits to be cancelled (eg by the fold over the rows).
     """
-    turn = nu.Race(body >> park(), moved(ref, nu.StrRef(name)))
-    if alive is not None:
-        turn = nu.IfDo(snap(alive), turn, park())
-    return nu.ForeverDo(nu.Let(name, snap(text(ref)), turn))
+
+    def turn(held: nu.ObjectRef) -> nu.Nu:
+        value = nu.Str(held)
+        raced = nu.Race(body(value) >> park(), moved(ref, value))
+        return raced if alive is None else nu.IfDo(snap(alive), raced, park())
+
+    return nu.ForeverDo(nu.let(snap(text(ref)), turn))

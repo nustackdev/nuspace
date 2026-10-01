@@ -121,7 +121,7 @@ def clear_connections() -> nu.Nu:
     """Drop every connection: what a previous open left behind. One commit."""
     connections = Space.connections
     item = fresh("nav_stale")
-    at = nu.StrRef(item)
+    at = nu.Str(nu.Attr(item))
     return atomic(nu.ForEachDo(nu.list(connections.keys()), connections.del_item(at), item=item))
 
 
@@ -144,14 +144,14 @@ def _has_cell_run(run_id: nu.StrArg, cell_id: nu.StrArg) -> nu.Nu:
     return _kernel.runs[run_id].latest.contains(cell_id)
 
 
-def _cell_arm(route: nu.StrRef, run_id: nu.StrRef) -> nu.Nu:
+def _cell_arm(route: nu.Str, run_id: nu.Str) -> nu.Nu:
     """One cell of the routed plane: run in the pane's run if it never was, then parked."""
-    cell = nu.StrRef(_CELL)
+    cell = nu.Str(nu.Attr(_CELL))
     new = nu.And(cell_exists(route, cell), nu.Not(_has_cell_run(run_id, cell)))
     return nu.IfDo(snap(new), cell_run(run_id, cell, by=BY)) >> park()
 
 
-def _cells_fold(route: nu.StrRef, run_id: nu.StrRef) -> nu.Nu:
+def _cells_fold(route: nu.Str, run_id: nu.Str) -> nu.Nu:
     """:func:`_cell_arm` per cell of the routed plane, births included. Never returns.
 
     The subscription is length exact: an edited cell is not a birth. The cell
@@ -172,53 +172,53 @@ def _cells_fold(route: nu.StrRef, run_id: nu.StrRef) -> nu.Nu:
     )
 
 
-def _cells_seen(route: nu.StrRef) -> nu.Nu:
+def _cells_seen(route: nu.Str) -> nu.Nu:
     """The plane's cells and their versions, as one str to tell a change by. Bare read."""
     item = fresh("nav_seen")
-    at = nu.StrRef(item)
+    at = nu.Str(nu.Attr(item))
     version = Space.planes[route].cells[at].version
     each = at + nu.Str(":") + nu.If(version.exists(), nu.ToStr(version), nu.Str("0"))
     return nu.Str(",").join(nu.Collect(nu.Map(cells(route), each, key=item)))
 
 
-def _changed(route: nu.StrRef) -> nu.Nu:
+def _changed(route: nu.Str) -> nu.Nu:
     """Wait until a cell of the plane is added, removed or rewritten."""
-    seen = nu.StrRef("nuspace.nav.seen")
     edits = Space.planes[route].cells.on_descendants_change("*", "version")
-    return nu.Let(
-        seen,
+    return nu.let(
         snap(_cells_seen(route)),
-        nu.WhileDo(nu.Eq(snap(_cells_seen(route)), seen), wake(edits)),
+        lambda seen: nu.WhileDo(nu.Eq(snap(_cells_seen(route)), seen), wake(edits)),
     )
 
 
-def _turn(sid: nu.StrRef, route: nu.StrRef) -> nu.Nu:
+def _turn(sid: nu.Str, route: nu.Str) -> nu.Nu:
     """One plane run of the pane: made, followed cell by cell until it ends, stopped on the way out.
 
     Waits for the plane first when the route names one not there yet. Once
     the run is over by itself, waits for the plane's cells to change, and
     the next turn runs it again.
     """
-    run_id = nu.StrRef("nuspace.nav.run")
     envs = nu.List.of(nu.List.of(nu.Str(SESSION), sid))
-    ended = until(nu.Not(_kernel.running.contains(run_id)), _kernel.running.on_children_change())
-    live = snap(_kernel.running.contains(run_id))
-    followed = nu.TryCatch(
-        nu.Race(_cells_fold(route, run_id), ended), finally_=nu.IfDo(live, plane_stop(run_id))
-    )
-    remember = atomic_state(_here(Panes.runs.set_item(pane_key(sid, route), run_id)))
+
+    def follow(held: nu.ObjectRef) -> nu.Nu:
+        run_id = nu.Str(held)
+        running = _kernel.running
+        ended = until(nu.Not(running.contains(run_id)), running.on_children_change())
+        live = snap(running.contains(run_id))
+        followed = nu.TryCatch(
+            nu.Race(_cells_fold(route, run_id), ended), finally_=nu.IfDo(live, plane_stop(run_id))
+        )
+        remember = atomic_state(_here(Panes.runs.set_item(pane_key(sid, route), run_id)))
+        return remember >> followed >> _changed(route)
+
     # A route can name a plane before the plane is written: the browser mints
     # a new plane's id and opens it while its create is still in flight. So
     # wait for the plane rather than giving up on the route; the routes will
     # not change again to retry.
     shown = nu.WhileDo(nu.Not(snap(routable(route))), wake(Space.planes.on_children_change()))
-    ran = nu.Let(
-        run_id, plane_run(route, by=BY, envs=envs), remember >> followed >> _changed(route)
-    )
-    return shown >> ran
+    return shown >> nu.let(plane_run(route, by=BY, envs=envs), follow)
 
 
-def _open(sid: nu.StrRef, route: nu.StrRef) -> nu.Nu:
+def _open(sid: nu.Str, route: nu.Str) -> nu.Nu:
     """One open plane, run and run again for as long as it is open. Forgotten on the way out."""
     runs = panes()
     key = pane_key(sid, route)
@@ -226,12 +226,12 @@ def _open(sid: nu.StrRef, route: nu.StrRef) -> nu.Nu:
     return nu.TryCatch(nu.ForeverDo(_turn(sid, route)), finally_=forget)
 
 
-def _routes(sid: nu.StrRef) -> nu.Nu:
+def _routes(sid: nu.Str) -> nu.Nu:
     """A connection's open plane ids, ``[]`` before any are written. Unbracketed."""
     return nu.List(or_else(Space.connections[sid].routes, []))
 
 
-def _arm(sid: nu.StrRef) -> nu.Nu:
+def _arm(sid: nu.Str) -> nu.Nu:
     """One connection: :func:`_open` per plane in its routes, opens and closes included.
 
     A plane leaving ``routes`` cancels its arm, which stops its run. A
@@ -244,7 +244,7 @@ def _arm(sid: nu.StrRef) -> nu.Nu:
         nu.ForEachParReactive(
             snap(_routes(sid)),
             Ticking(snap(routes.on_change())),
-            _open(sid, nu.StrRef(_ROUTE)),
+            _open(sid, nu.Str(nu.Attr(_ROUTE))),
             _ROUTE,
         ),
         park(),
@@ -264,6 +264,6 @@ def program() -> nu.Nu:
     return fresh_state >> nu.ForEachParReactive(
         snap(nu.list(connections.keys())),
         Ticking(snap(connections.on_children_change())),
-        _arm(nu.StrRef(_SID)),
+        _arm(nu.Str(nu.Attr(_SID))),
         _SID,
     )

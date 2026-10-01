@@ -42,7 +42,6 @@ if TYPE_CHECKING:
 
 
 __all__ = [
-    "SESSION_ATTR",
     "ConnectedSession",
     "Connections",
     "FrameCodec",
@@ -51,10 +50,6 @@ __all__ = [
     "proxied_session",
     "served_sessions",
 ]
-
-
-#: The attr a drawing run's connection id is bound under, in the worker.
-SESSION_ATTR = "nuspace.session"
 
 
 # --- Worker side -----------------------------------------------------------------
@@ -126,30 +121,33 @@ class Connections:
 
 
 class ConnectedSession(_LifecycleBracket):
-    """Bind the connection named by :data:`SESSION_ATTR` as the session.
+    """Bind connection ``sid`` as the session.
 
     What lands on the context is the remote connection itself, not a wrapper:
     every call on it is a round trip, and a local object in between would
     have to know which of its methods are coroutines on the far side.
+
+    Args:
+        sid: The connection id, fixed when the run's env is built.
     """
+
+    def __init__(self, sid: str) -> None:
+        super().__init__()
+        self._payload["sid"] = sid
 
     @asynccontextmanager
     async def _aopen(self, ctx: Context) -> AsyncIterator[None]:
-        sid = ctx.attrs.get(SESSION_ATTR, None)
-        if sid is None:
-            msg = f"ConnectedSession found no {SESSION_ATTR!r} on the context"
-            raise LookupError(msg)
-        with ctx.fabrics.bind(Session, ctx.fabrics.get(Connections).session(sid)):
+        connection = ctx.fabrics.get(Connections).session(self._payload["sid"])
+        with ctx.fabrics.bind(Session, connection):
             yield
 
 
-def proxied_session(address: str, body: nu.Nu) -> nu.With:
-    """``body`` with its connection bound as the session it draws on.
-
-    Needs :data:`SESSION_ATTR` bound around it (the session env does that).
+def proxied_session(address: str, sid: str, body: nu.Nu) -> nu.With:
+    """``body`` with connection ``sid`` bound as the session it draws on.
 
     Args:
         address: ``host:port`` where :func:`served_sessions` listens.
+        sid: The connection id.
         body: What runs with the connection bound. Pickled into the worker.
     """
     return nu.With(
@@ -158,7 +156,7 @@ def proxied_session(address: str, body: nu.Nu) -> nu.With:
         # is a reverse proxy, which is what carries a browser edit into the
         # worker running the cell.
         nustd.proxy.InvisiblesProxy(Connections, address=address, bg_serve=True),
-        ConnectedSession(),
+        ConnectedSession(sid),
         body=body,
     )
 

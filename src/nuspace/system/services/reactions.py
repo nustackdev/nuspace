@@ -67,7 +67,7 @@ import nustd.kv
 from nuspace.ops import add_cell, add_plane, cell_exists, cell_interrupt, latest, remove_cell
 from nuspace.ops.kernel import add_cell_run, add_plane_run
 from nuspace.ops.state import plane_state
-from nuspace.ops.utils import MintId, atomic, atomic_state, binding, fresh, text
+from nuspace.ops.utils import MintId, Then, atomic, atomic_state, fresh, text
 from nuspace.shapes import PlaneState, Space
 
 from ..utils import snap, until
@@ -159,7 +159,7 @@ def source(change: nu.StrArg, plane_id: nu.StrArg, imports: str = "") -> nu.Nu:
 def _live_of(plane_id: nu.StrArg, by: nu.StrArg | None = None) -> nu.Nu:
     """A live plane run of the plane, ``by`` when given, ``""`` when none. A filter of ``running``, O(k)."""
     item = fresh("live_of")
-    row = _kernel.runs[nu.StrRef(item)]
+    row = _kernel.runs[nu.Str(nu.Attr(item))]
     mine = nu.Eq(text(row.plane), plane_id)
     if by is not None:
         mine = nu.And(mine, nu.Eq(text(row.by), by))
@@ -216,16 +216,19 @@ def up_plane(plane_id: nu.StrArg, by: nu.StrArg = BY) -> nu.Nu:
         plane_id: The plane.
         by: Who asked, what the run is recorded as, and whose live runs count.
     """
-    live, new = fresh("up_live"), fresh("up_new")
-    rid = nu.StrRef(live)
-    over = _kernel.runs[rid].terminated_at
-    ended = until(over.exists(), over.on_change()) >> rid.set(snap(react_run(plane_id, by)))
-    settled = nu.Let(live, snap(react_run(plane_id, by)), nu.WhileDo(nu.Ne(rid, nu.Str("")), ended))
+
+    def settle(live: nu.ObjectRef) -> nu.Nu:
+        rid = nu.Str(live)
+        over = _kernel.runs[rid].terminated_at
+        ended = until(over.exists(), over.on_change()) >> live.set(snap(react_run(plane_id, by)))
+        return nu.WhileDo(nu.Ne(rid, nu.Str("")), ended)
+
     none = nu.Eq(react_run(plane_id, by), nu.Str(""))
-    start = nu.Let(
-        new, MintId("r"), atomic(nu.IfDo(none, add_plane_run(nu.StrRef(new), plane_id, by=by)))
-    )
-    return settled >> start
+
+    def start(new: nu.ObjectRef) -> nu.Nu:
+        return atomic(nu.IfDo(none, add_plane_run(nu.Str(new), plane_id, by=by)))
+
+    return nu.let(snap(react_run(plane_id, by)), settle) >> nu.let(MintId("r"), start)
 
 
 # --- The ops ------------------------------------------------------------------------
@@ -238,14 +241,33 @@ def _start(cid: nu.StrArg) -> nu.Nu:
     was added, and ran every cell) is left alone. Down, a new run of the
     plane runs every cell, this one included.
     """
-    run, new, cr = fresh("react_in"), fresh("react_run"), fresh("react_cr")
-    rid = nu.StrRef(run)
-    into = nu.IfDo(
-        nu.Not(_kernel.runs[rid].latest.contains(cid)),
-        nu.Let(cr, MintId("cr"), add_cell_run(rid, cid, nu.StrRef(cr), BY)),
-    )
-    up = nu.Let(new, MintId("r"), add_plane_run(nu.StrRef(new), PLANE, by=BY))
-    return atomic(nu.Let(run, live_run(), nu.IfDo(nu.Ne(rid, nu.Str("")), into, up)))
+
+    def into_or_up(live: nu.ObjectRef) -> nu.Nu:
+        rid = nu.Str(live)
+        into = nu.IfDo(
+            nu.Not(_kernel.runs[rid].latest.contains(cid)),
+            nu.let(MintId("cr"), lambda cr: add_cell_run(rid, cid, nu.Str(cr), BY)),
+        )
+        up = nu.let(MintId("r"), lambda new: add_plane_run(nu.Str(new), PLANE, by=BY))
+        return nu.IfDo(nu.Ne(rid, nu.Str("")), into, up)
+
+    return atomic(nu.let(live_run(), into_or_up))
+
+
+class _Enabling(nu.Shape):
+    """What :func:`enable_react` works out before it writes, and the cell it yields."""
+
+    key = nu.StrRef.slot()
+    src = nu.StrRef.slot()
+    known = nu.StrRef.slot()
+    cid = nu.StrRef.slot()
+
+
+class _Disabling(nu.Shape):
+    """What :func:`disable_react` reads before it stops anything: the key, and its cell."""
+
+    key = nu.StrRef.slot()
+    cid = nu.StrRef.slot()
 
 
 def enable_react(change: nu.StrArg, plane_id: nu.StrArg, *, imports: str = "") -> nu.Nu:
@@ -273,33 +295,25 @@ def enable_react(change: nu.StrArg, plane_id: nu.StrArg, *, imports: str = "") -
         nu.prog.ConstructionError: The source does not construct (a bad
             change, a bad import). Nothing is written.
     """
-    key_name = fresh("react_key")
-    key = nu.StrRef(key_name)
-
-    src_name = fresh("react_src")
-    src = nu.StrRef(src_name)
-
-    def make(cid_name: str) -> nu.Nu:
-        cid = nu.StrRef(cid_name)
-        loads = nu.prog.LoadNu(src, scope={"plane": nu.Str(PLANE), "cell": cid})
-        free = nu.Eq(_known(key), nu.Str(""))
-        claim = atomic_state(_here(nu.IfDo(free, Registry.cells.set_item(key, cid))))
-        won = snap(_here(nu.Eq(_indexed(key), cid)))
-        lost = remove_cell(PLANE, cid) >> cid.set(snap(_here(_known(key))))
-        made = add_cell(PLANE, src, cell_id=cid, name=plane_id)
-        then = claim >> nu.IfDo(won, _start(cid), lost)
-        return nu.Let(fresh("react_loads"), loads, nu.Let(fresh("react_made"), made, then))
-
-    had = fresh("react_had")
-    known = nu.StrRef(had)
-    value = nu.If(nu.Eq(known, nu.Str("")), MintId("react"), known)
-
-    def write(cid_name: str) -> nu.Nu:
-        return nu.IfDo(nu.Eq(known, nu.Str("")), make(cid_name))
-
-    body = nu.Let(had, snap(_here(_known(key))), binding(value, write, tag="react"))
-    return nu.Let(
-        key_name, _key(change, plane_id), nu.Let(src_name, source(change, plane_id, imports), body)
+    key, src, known, cid = _Enabling.key, _Enabling.src, _Enabling.known, _Enabling.cid
+    loads = nu.prog.LoadNu(src, scope={"plane": nu.Str(PLANE), "cell": cid})
+    free = nu.Eq(_known(key), nu.Str(""))
+    claim = atomic_state(_here(nu.IfDo(free, Registry.cells.set_item(key, cid))))
+    won = snap(_here(nu.Eq(_indexed(key), cid)))
+    lost = remove_cell(PLANE, cid) >> cid.set(snap(_here(_known(key))))
+    made = (
+        add_cell(PLANE, src, cell_id=cid, name=plane_id) >> claim >> nu.IfDo(won, _start(cid), lost)
+    )
+    # Loaded first and held only for that: source that does not construct
+    # raises here, before anything is written.
+    make = nu.let(loads, lambda _: made)
+    return nu.Frame(
+        _Enabling,
+        Then(nu.IfDo(nu.Eq(known, nu.Str("")), make), cid),
+        key=_key(change, plane_id),
+        src=source(change, plane_id, imports),
+        known=snap(_here(_known(key))),
+        cid=nu.If(nu.Eq(known, nu.Str("")), MintId("react"), known),
     )
 
 
@@ -312,15 +326,18 @@ def disable_react(change: nu.StrArg, plane_id: nu.StrArg) -> nu.Nu:
     reaction, never a reaction nobody can find. A run of the plane it
     already started is left to finish.
     """
-    key, cid, run = fresh("unreact_key"), fresh("unreact_cell"), fresh("unreact_run")
-    k, c, r = nu.StrRef(key), nu.StrRef(cid), nu.StrRef(run)
-    interrupt = nu.Let(
-        run, snap(live_run()), nu.IfDo(nu.Ne(r, nu.Str("")), cell_interrupt(r, latest(r, c)))
-    )
+    k, c = _Disabling.key, _Disabling.cid
+
+    def interrupting(live: nu.ObjectRef) -> nu.Nu:
+        r = nu.Str(live)
+        return nu.IfDo(nu.Ne(r, nu.Str("")), cell_interrupt(r, latest(r, c)))
+
+    interrupt = nu.let(snap(live_run()), interrupting)
     forget = atomic_state(_here(nu.IfDo(nu.Eq(_indexed(k), c), Registry.cells.del_item(k))))
     gone = interrupt >> remove_cell(PLANE, c) >> forget
-    return nu.Let(
-        key,
-        _key(change, plane_id),
-        nu.Let(cid, snap(_here(_indexed(k))), nu.IfDo(nu.Ne(c, nu.Str("")), gone)),
+    return nu.Frame(
+        _Disabling,
+        nu.IfDo(nu.Ne(c, nu.Str("")), gone),
+        key=_key(change, plane_id),
+        cid=snap(_here(_indexed(k))),
     )

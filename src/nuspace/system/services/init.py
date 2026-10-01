@@ -105,7 +105,7 @@ def booted() -> nu.Nu:
 
 def program() -> nu.Nu:
     """Every listed plane that exists, run. Then parked."""
-    plane = nu.StrRef(_ITEM)
+    plane = nu.Str(nu.Attr(_ITEM))
     return (
         nu.ForEachDo(
             snap(nu.list(Boot.planes)),

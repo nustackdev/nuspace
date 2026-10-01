@@ -10,7 +10,7 @@ agent and the shell compose these and nothing narrower.
 - **Ids are minted at evaluation.** A term is built once and may run many
   times (eg in an arm), so an op that makes something mints its id when it
   runs and yields it. Yielding ops are Actions: they chain with ``>>`` and
-  bind with ``nu.Let``.
+  bind with ``nu.let``.
 - **Reads are bare.** They compose into any expression and read inside the
   enclosing bracket. Alone, wrap one in ``nustd.kv.Snapshot(..., scope=Space)``,
   or in :func:`snapshot` when it reads program state too.

@@ -25,16 +25,18 @@ def tile(name, label, value):
     return nustd.ui.StatRef(name).set(nu.ToStr(value), label=label)
 
 
-def draw():
-    runs = nu.ObjectRef("runs")
-    r = nu.ObjectRef("r")
+def tiles(runs):
+    r = nu.Attr("r")
     cells = nu.Sum(nu.Map(nu.Iter(runs), nu.Len(nu.List(r["cells_running"])), key="r"))
-    tiles = (
+    return (
         tile("runs", "Live runs", nu.Len(runs))
         >> tile("cells", "Live cells", cells)
         >> tile("workers", "Workers up", nu.Len(ops.workers()))
     )
-    return nustd.kv.Snapshot(nu.Let("runs", ops.runs(), tiles), scope=nuspace.Space)
+
+
+def draw():
+    return nustd.kv.Snapshot(nu.let(ops.runs(), tiles), scope=nuspace.Space)
 
 
 def out():
@@ -56,28 +58,30 @@ def plane_name(pid):
     return nu.If(name.exists(), nu.ToStr(name), pid)
 
 
-def age(t):
-    now = nu.FloatRef("now")
-    return nu.If(nu.Is(t, None), nu.Str(""), nu.Format(now - t, ".0f") + nu.Str("s"))
+def age(now, t):
+    return nu.If(nu.Is(t, None), nu.Str(""), nu.Format(nu.Float(now) - t, ".0f") + nu.Str("s"))
 
 
-def draw():
-    r = nu.ObjectRef("r")
+def table(now):
+    r = nu.Attr("r")
     row = nu.List.of(
         plane_name(r["plane"]),
         r["backend"],
         r["by"],
         nu.Len(nu.List(r["cells_running"])),
         nu.Len(nu.List(r["workers"])),
-        age(r["started_at"]),
+        age(now, r["started_at"]),
     )
-    table = nustd.ui.TableRef("live runs").set(
+    return nustd.ui.TableRef("live runs").set(
         nu.Dict.of(
             columns=["Plane", "Backend", "By", "Cells", "Workers", "Age"],
             rows=nu.Collect(nu.Map(nu.Iter(ops.runs()), row, key="r")),
         )
     )
-    return nustd.kv.Snapshot(nu.Let("now", nustd.time.time(), table), scope=nuspace.Space)
+
+
+def draw():
+    return nustd.kv.Snapshot(nu.let(nustd.time.time(), table), scope=nuspace.Space)
 
 
 def out():
@@ -98,13 +102,14 @@ def name(ref, fallback):
     return nu.If(ref.exists(), nu.ToStr(ref), fallback)
 
 
-def age(t):
-    now = nu.FloatRef("now")
-    return nu.If(nu.Is(t, None), nu.Str("starting"), nu.Format(now - t, ".0f") + nu.Str("s"))
+def age(now, t):
+    return nu.If(
+        nu.Is(t, None), nu.Str("starting"), nu.Format(nu.Float(now) - t, ".0f") + nu.Str("s")
+    )
 
 
-def draw():
-    r, c = nu.ObjectRef("r"), nu.ObjectRef("c")
+def table(now):
+    r, c = nu.Attr("r"), nu.Attr("c")
     plane = nuspace.Space.planes[nu.ToStr(r["plane"])]
     row = nu.List.of(
         name(plane.name, nu.ToStr(r["plane"])),
@@ -112,20 +117,23 @@ def draw():
         c["by"],
         c["version"],
         c["worker"],
-        age(c["started_at"]),
+        age(now, c["started_at"]),
     )
     rows = nu.Map(
         nu.Iter(ops.runs()),
         nu.Collect(nu.Map(nu.Iter(ops.cell_runs(nu.ToStr(r["id"]), live=True)), row, key="c")),
         key="r",
     )
-    table = nustd.ui.TableRef("live cells").set(
+    return nustd.ui.TableRef("live cells").set(
         nu.Dict.of(
             columns=["Plane", "Cell", "By", "Version", "Worker", "Age"],
             rows=nu.Collect(nu.Flatten(rows)),
         )
     )
-    return nustd.kv.Snapshot(nu.Let("now", nustd.time.time(), table), scope=nuspace.Space)
+
+
+def draw():
+    return nustd.kv.Snapshot(nu.let(nustd.time.time(), table), scope=nuspace.Space)
 
 
 def out():

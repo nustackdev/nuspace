@@ -2,7 +2,7 @@
 
 Everything a cell run is, as one Nu term with its ids baked in as plain strs::
 
-    Let(plane, cell, run, cell run ids)
+    Frame(Here: plane, cell, run, cell run ids)
       With(Captured)                       out, attributed to this cell run
         TryCatch(                          raised: exit failed, error, traceback
           envs' wraps, space-wide outermost
@@ -54,13 +54,12 @@ FLUSH_SECONDS = 1.0
 
 _kernel = Space.kernel
 
-# One body per context: a run request carries attrs, so the worker runs each
-# body on a context copy of its own and these names cannot collide.
+# What the body's TryCatch binds the error under, for its catch to read.
 _ERROR = "nuspace.kernel.error"
 
 
-class Attrs(nu.Shape):
-    """The names a body declares for itself, around the program and after it."""
+class _Ending(nu.Shape):
+    """What a cell run's last write works out before its commit: the output left, why it failed."""
 
     out = nu.ObjectRef.slot()
     why = nu.StrRef.slot()
@@ -139,7 +138,7 @@ def _mark_started(run_id: str, cell_run_id: str) -> nu.Nu:
 def _flush(run_id: str, cell_run_id: str) -> nu.Nu:
     """Write waiting output to the record, if there is any."""
     cr = _kernel.runs[run_id].cells[cell_run_id]
-    return nu.IfDo(HasOut(), nu.Let(Attrs.out, TakeOut(), atomic(cr.out.set(Attrs.out))))
+    return nu.IfDo(HasOut(), nu.let(TakeOut(), lambda out: atomic(cr.out.set(out))))
 
 
 def _finish(
@@ -151,11 +150,11 @@ def _finish(
     extra: nu.Nu | str = "",
 ) -> nu.Nu:
     """The last write: out flushed, exit, error, terminated_at, out of ``cells_running``. One commit."""
-    why = None if error is None else Attrs.why
-    commit = atomic(end_cell_run(run_id, cell_run_id, exit_, why, Attrs.out))
-    if error is not None:
-        commit = nu.Let(Attrs.why, error, commit)
-    return nu.Let(Attrs.out, TakeOut(extra, final=True), commit)
+    why = None if error is None else _Ending.why
+    commit = atomic(end_cell_run(run_id, cell_run_id, exit_, why, _Ending.out))
+    if error is None:
+        return nu.Frame(_Ending, commit, out=TakeOut(extra, final=True))
+    return nu.Frame(_Ending, commit, out=TakeOut(extra, final=True), why=error)
 
 
 def build_body(
@@ -176,8 +175,8 @@ def build_body(
             in the host, their rewrites ride along onto the worker.
 
     Returns:
-        A picklable term. Declares :class:`~nuspace.ops.Here` for the
-        program and its envs.
+        A picklable term. Holds :class:`~nuspace.ops.Here` in a frame for
+        the program and its envs.
     """
     rewrite = Rewrites(
         Reroot(plane, cell),
@@ -209,11 +208,8 @@ def build_body(
         run_id,
         cell_run_id,
         EXIT_FAILED,
-        error=ErrorText(nu.ObjectRef(_ERROR)),
-        extra=ErrorText(nu.ObjectRef(_ERROR), full=True),
+        error=ErrorText(nu.Attr(_ERROR)),
+        extra=ErrorText(nu.Attr(_ERROR), full=True),
     )
     body = nu.With(Captured(), body=nu.TryCatch(run, catch=failed, error_key=_ERROR))
-    ids = ((Here.plane, plane), (Here.cell, cell), (Here.run, run_id), (Here.cell_run, cell_run_id))
-    for ref, value in reversed(ids):
-        body = nu.Let(ref, nu.Str(value), body)
-    return body
+    return nu.Frame(Here, body, plane=plane, cell=cell, run=run_id, cell_run=cell_run_id)

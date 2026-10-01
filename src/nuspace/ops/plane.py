@@ -25,7 +25,7 @@ from .pin import unpin
 from .read import plane_exists
 from .state import drop_plane_state
 from .tree import link, subtree, unlink
-from .utils import MintId, atomic, atomic_state, binding, flag, fresh
+from .utils import MintId, Then, atomic, atomic_state, flag, fresh
 
 
 __all__ = [
@@ -107,9 +107,9 @@ def add_plane(
     if isinstance(backend, str) and not backend:
         raise ValueError(NO_BACKEND)
 
-    def write(pid_name: str) -> nu.Nu:
-        return plane_writes(
-            nu.StrRef(pid_name),
+    def write(pid: nu.ObjectRef) -> nu.Nu:
+        writes = plane_writes(
+            nu.Str(pid),
             backend=backend,
             name=name,
             parent=parent,
@@ -118,9 +118,10 @@ def add_plane(
             made_by=made_by,
             meta=meta,
         )
+        return Then(writes, pid)
 
     value = MintId("p") if plane_id is None else nu.Str(plane_id)
-    return atomic(binding(value, write, tag="p"))
+    return atomic(nu.let(value, write))
 
 
 def plane_writes(
@@ -166,27 +167,27 @@ def remove_plane(plane_id: nu.StrArg) -> nu.Nu:
     Yields:
         True when removed, False when refused or missing.
     """
-    gone = fresh("removed")
-    ids = nu.ObjectRef(gone)
     each = fresh("removed_each")
-    drop = atomic_state(nu.ForEachDo(nu.List(ids), drop_plane_state(nu.StrRef(each)), item=each))
-    removed = nu.Gt(nu.List(ids).len(), nu.Int(0))
-    return nu.Let(gone, _remove_rows(plane_id), binding(removed, lambda _: drop, tag="removed_ok"))
+
+    def drop(gone: nu.ObjectRef) -> nu.Nu:
+        ids = nu.List(gone)
+        states = atomic_state(nu.ForEachDo(ids, drop_plane_state(nu.Str(nu.Attr(each))), item=each))
+        return Then(states, nu.Gt(ids.len(), nu.Int(0)))
+
+    return nu.let(_remove_rows(plane_id), drop)
 
 
 def _remove_rows(plane_id: nu.StrArg) -> nu.Nu:
     """:func:`remove_plane`'s Space commit. Yields the plane ids removed, ``[]`` when refused.
 
-    Yielded rather than set on an attr: an attr set in a retried bracket
-    does not reach past it.
+    The slot it yields opens inside the bracket, so a retried commit starts
+    again from ``[]``.
     """
 
-    def body(out: str) -> nu.Nu:
-        removed = nu.ObjectRef(out)
-
-        def drop(ids: nu.ObjectRef) -> nu.Nu:
+    def body(removed: nu.ObjectRef) -> nu.Nu:
+        def drop(ids: nu.Nu) -> nu.Nu:
             item = fresh("drop")
-            at = nu.StrRef(item)
+            at = nu.Str(nu.Attr(item))
             system = nu.List(
                 nu.Collect(
                     nu.Filter(nu.List(ids), flag(Space.planes[at].props.system, False), key=item)
@@ -194,7 +195,7 @@ def _remove_rows(plane_id: nu.StrArg) -> nu.Nu:
             )
             gone = nu.List(ids)
             each = fresh("drop_each")
-            each_ref = nu.StrRef(each)
+            each_ref = nu.Str(nu.Attr(each))
             delete = nu.ForEachDo(
                 gone,
                 unlink(each_ref)
@@ -206,9 +207,9 @@ def _remove_rows(plane_id: nu.StrArg) -> nu.Nu:
             ok = nu.And(plane_exists(plane_id), nu.Eq(system.len(), nu.Int(0)))
             return nu.IfDo(ok, live_runs_of(gone.contains, kill) >> delete >> removed.set(gone))
 
-        return subtree(plane_id, drop)
+        return Then(subtree(plane_id, drop), removed)
 
-    return atomic(binding(nu.Literal([]), body, tag="remove"))
+    return atomic(nu.let(nu.Literal([]), body))
 
 
 def rename_plane(plane_id: nu.StrArg, name: nu.StrArg) -> nu.Nu:

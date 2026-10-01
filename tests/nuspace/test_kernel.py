@@ -364,7 +364,7 @@ async def test_cancelling_a_cell_run_cancels_its_body_on_the_worker(cls):
         await backend.astart("r")
         await backend.aplace("r", "c")
         wid = backend._holding("r", "c").wid
-        arm = asyncio.create_task(backend.arun("r", "c", _TICKS, {}))
+        arm = asyncio.create_task(backend.arun("r", "c", _TICKS))
         assert await _cleaned(pool, wid, want=False)
         arm.cancel()
         with pytest.raises(asyncio.CancelledError):
@@ -381,7 +381,7 @@ async def test_a_worker_dying_under_a_body_is_its_loss(cls, shared):
         for cell in ("a", "b"):
             await backend.aplace("r", cell)
         arms = {
-            cell: asyncio.create_task(backend.arun("r", cell, nu.ForeverDo(nu.Delay(0.01)), {}))
+            cell: asyncio.create_task(backend.arun("r", cell, nu.ForeverDo(nu.Delay(0.01))))
             for cell in ("a", "b")
         }
         await asyncio.sleep(0.3)
@@ -401,7 +401,7 @@ async def test_a_worker_let_go_is_no_loss(cls):
     async with _backend(cls) as (backend, _):
         await backend.astart("r")
         await backend.aplace("r", "c")
-        arm = asyncio.create_task(backend.arun("r", "c", nu.ForeverDo(nu.Delay(0.01)), {}))
+        arm = asyncio.create_task(backend.arun("r", "c", nu.ForeverDo(nu.Delay(0.01))))
         await asyncio.sleep(0.3)
         await backend.akill("r")
         assert await asyncio.wait_for(arm, SLOW) == ""

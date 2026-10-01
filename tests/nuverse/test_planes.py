@@ -192,8 +192,8 @@ def _cell(source: str) -> dict:
 
 
 def _as(cell: str, term: nu.Nu, plane: str = "jp") -> nu.Nu:
-    """``term`` as the Jobs plane's ``cell`` would run it: its state rerooted, its plane bound."""
-    return nu.Let(ops.Here.plane, nu.Str(plane), reroot(term, plane, cell))
+    """``term`` as the Jobs plane's ``cell`` would run it: its state rerooted, its plane in a frame."""
+    return nu.Frame(ops.Here, reroot(term, plane, cell), plane=plane)
 
 
 SELECTED = States.planes["jp"].state["selected"]
@@ -242,14 +242,16 @@ async def test_the_jobs_table_lists_jobs_only_and_selects_on_click(store):
         ["Hourly", other, "no", "off", "no"],
     ]
     select = _cell(jobs.TABLE)["select"]()
-    await store.run(_as("jobs", nu.Let("click", nu.Literal({"row_index": 0}), select)))
+    # The row click as the table's reaction hands it over: bound under ``click``.
+    click = nu.ForEachDo(nu.Iter(nu.Literal([{"row_index": 0}])), select, item="click")
+    await store.run(_as("jobs", click))
     assert await store.read(SELECTED) == job
 
 
 async def _restart(store, job: str, policy: str, delay: float) -> None:
     """The ``job`` cell's restart handler, the select and delay reading as given."""
     session = _Answering({"choice": policy, "delay": delay})
-    term = _as("job", _cell(jobs.DETAIL)["restart"](nu.Str(job), "t"))
+    term = _as("job", _cell(jobs.DETAIL)["restart"](nu.Str(job)))
     await nu.arun(term, store.ctx.bind(Session, session))
 
 

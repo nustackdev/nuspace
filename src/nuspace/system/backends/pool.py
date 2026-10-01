@@ -133,7 +133,7 @@ class PoolBackend(Backend):
 
     # --- Backend -----------------------------------------------------------
 
-    async def arun(self, run_id: str, cell_run_id: str, body: nu.Nu, attrs: dict[str, str]) -> str:
+    async def arun(self, run_id: str, cell_run_id: str, body: nu.Nu) -> str:
         """Run the body on the worker the cell run was placed on, until it ends.
 
         Cancelled, ``mp_pool`` cancels the body's task in the worker.
@@ -145,7 +145,7 @@ class PoolBackend(Backend):
             )
             raise RuntimeError(msg)
         try:
-            await self._require_pool().ateleport(worker.wid, body, attrs=attrs)
+            await self._require_pool().ateleport(worker.wid, body)
         except (WorkerGone, UnknownWorker):
             # Unknown: a sibling found the death first and dropped the handle.
             if worker.letting_go:

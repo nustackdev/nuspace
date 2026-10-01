@@ -14,7 +14,7 @@ from nuspace.shapes import ROOT
 
 from .cell import HasUi, add_cell, cell_writes
 from .plane import plane_icon, plane_writes
-from .utils import MintId, atomic, fresh, then
+from .utils import MintId, Then, atomic
 
 
 if TYPE_CHECKING:
@@ -104,6 +104,13 @@ class Snippet:
             raise ValueError(msg)
 
 
+class _Seeding(nu.Shape):
+    """What :func:`create_plane` works out before its bracket, under names fixed at build."""
+
+    ids = nu.DictRef.slot(str)
+    ui = nu.DictRef.slot(bool)
+
+
 def create_plane(
     spec: Plane,
     *,
@@ -128,13 +135,11 @@ def create_plane(
     Yields:
         The new plane's id.
     """
-    held = fresh("create")
-    first: list[tuple[str, nu.Nu]] = [(held, MintId("p") if plane_id is None else nu.Str(plane_id))]
+    pid = _Seeding.ids["p0"]
+    first: list[nu.Nu] = [pid.set(MintId("p") if plane_id is None else nu.Str(plane_id))]
     label = spec.label if name is None else name
-    body = then(atomic(_seeded(spec, nu.StrRef(held), parent, label, first)), held)
-    for attr, value in reversed(first):
-        body = nu.Let(attr, value, body)
-    return body
+    writes = atomic(_seeded(spec, pid, parent, label, first))
+    return nu.Frame(_Seeding, Then(nu.Sequential(*first, writes), pid), ids={}, ui={})
 
 
 def _seeded(
@@ -142,13 +147,13 @@ def _seeded(
     plane_id: nu.Nu,
     parent: nu.StrArg,
     name: nu.StrArg,
-    first: list[tuple[str, nu.Nu]],
+    first: list[nu.Nu],
 ) -> nu.Nu:
     """``spec``'s writes under ``plane_id``, children included. No bracket.
 
     What has to be known before the bracket (the cells' and children's ids,
-    each cell's ``has_ui``) is appended to ``first``, in the order it is
-    worked out.
+    each cell's ``has_ui``) is worked out into :class:`_Seeding` by the
+    writes appended to ``first``, in the order it is needed.
     """
     meta = dict(spec.meta)
     if spec.icon and "icon" not in meta:
@@ -165,13 +170,14 @@ def _seeded(
         )
     ]
     for cell, source in spec.cells:
-        cid, ui = fresh("c"), fresh("ui")
-        first += [(cid, MintId("c")), (ui, HasUi(source, plane_id, nu.StrRef(cid)))]
-        writes.append(cell_writes(plane_id, nu.StrRef(cid), source, nu.BoolRef(ui), name=cell))
+        key = f"c{len(first)}"
+        cid, ui = _Seeding.ids[key], _Seeding.ui[key]
+        first += [cid.set(MintId("c")), ui.set(HasUi(source, plane_id, cid))]
+        writes.append(cell_writes(plane_id, cid, source, ui, name=cell))
     for child in spec.children:
-        pid = fresh("p")
-        first.append((pid, MintId("p")))
-        writes.append(_seeded(child, nu.StrRef(pid), plane_id, child.label, first))
+        pid = _Seeding.ids[f"p{len(first)}"]
+        first.append(pid.set(MintId("p")))
+        writes.append(_seeded(child, pid, plane_id, child.label, first))
     return nu.Sequential(*writes)
 
 

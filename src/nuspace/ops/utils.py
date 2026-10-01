@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING
 import nu
 import nustd.kv
 from nu.engine.structure import Declared
-from nu.lang import ScalarAction, ScalarQuery
+from nu.lang import Bracket, ScalarAction, ScalarQuery
 from nu.lang.sentinels import EMPTY, INVALID
 from nuspace.shapes import Space, States
 
@@ -26,20 +26,17 @@ if TYPE_CHECKING:
 
 __all__ = [
     "MintId",
-    "PopAttr",
+    "Then",
     "as_list",
     "atomic",
     "atomic_state",
-    "binding",
     "flag",
     "fresh",
     "keep_order",
     "mint_ordered_id",
-    "minting",
     "or_else",
     "snapshot",
     "text",
-    "then",
 ]
 
 
@@ -64,10 +61,12 @@ def mint_ordered_id(prefix: str) -> str:
 
 
 def fresh(tag: str) -> str:
-    """An attr name no other op term uses.
+    """A name for a loop's item that no other op term uses.
 
-    Parallel arms share one ``ctx.attrs``, so every binding an op makes is
-    named apart at build time. The name is fixed per term, the value per run.
+    A loop binds its item in ``ctx.attrs`` for its body, shadowing any outer
+    binding of the name. A term handed into the body from outside may read
+    an outer loop's item, so every loop an op builds names its item apart.
+    The name is fixed per term, the value per run.
     """
     return f"_nsop_{tag}_{next(_FRESH)}"
 
@@ -107,34 +106,55 @@ class MintId(ScalarQuery):
         return athunk
 
 
-class PopAttr(ScalarAction):
-    """Yields what an attr holds, as an Action.
-
-    What lets an op write and then yield: a Flow yields nothing and a bare
-    read is a Query, which a ``>>`` refuses. Ending on this Action keeps the
-    whole op an Action, so it chains and it binds. The attr itself is left to
-    the ``Let`` that declared it, which unbinds it on exit.
-
-    Args:
-        name: The attr to take.
-
-    Yields:
-        The value bound under ``name``, EMPTY when nothing was.
-    """
+class _Yield(ScalarAction):
+    """Yields what ``term`` reads, as an Action, so the op ending on it chains and binds."""
 
     _mutates = Declared(value=frozenset({0}), name="mutates")
 
-    def __init__(self, name: str) -> None:
-        super().__init__(nu.ObjectRef(name))
-        self._payload = {"name": name}
-
     def _compile(self, nid: int, children: tuple[Callable, ...]) -> Callable:
-        (ref,) = children
-        return ref
+        (term,) = children
+        return term
 
     def _acompile(self, nid: int, children: tuple[Callable, ...]) -> Callable:
-        (ref,) = children
-        return ref
+        (term,) = children
+        return term
+
+
+class Then(Bracket):
+    """Runs ``effect``, then yields ``value``: how an op writes and then yields what it made.
+
+    A Flow yields nothing and a bare read is a Query, which a ``>>``
+    refuses, so ending on a read cannot follow the writes. This runs them
+    first and ends the op on an Action, so the whole op chains and binds.
+
+    Args:
+        effect: The writes.
+        value: What to yield once they ran, eg the mem ref holding a minted id.
+
+    Yields:
+        What ``value`` reads after ``effect``.
+    """
+
+    def __init__(self, effect: nu.Nu, value: nu.Nu) -> None:
+        super().__init__(_Yield(value), effect)
+
+    def _compile(self, nid: int, children: tuple[Callable, ...]) -> Callable:
+        value, effect = children
+
+        def thunk(rt: Runtime) -> object:
+            effect(rt)
+            return value(rt)
+
+        return thunk
+
+    def _acompile(self, nid: int, children: tuple[Callable, ...]) -> Callable:
+        value, effect = children
+
+        async def athunk(rt: Runtime) -> object:
+            await effect(rt)
+            return await value(rt)
+
+        return athunk
 
 
 def atomic(body: nu.Nu) -> nu.Nu:
@@ -183,36 +203,6 @@ def snapshot(term: nu.Nu) -> nu.Nu:
     return nustd.kv.Snapshot(nustd.kv.Snapshot(term, scope=States), scope=Space)
 
 
-def then(effect: nu.Nu, name: str) -> nu.Nu:
-    """Run ``effect``, then yield the attr ``name``. An Action."""
-    return nu.Let(fresh("then"), effect, PopAttr(name))
-
-
-def binding(
-    value: nu.Nu,
-    build: Callable[[str], nu.Nu],
-    *,
-    tag: str = "bind",
-) -> nu.Nu:
-    """Bind ``value`` under a fresh attr, run ``build(name)``, yield the binding.
-
-    ``build`` gets the attr name and returns the writes. The value is
-    evaluated once, before the writes, so a check made here sees the store
-    as it was.
-    """
-    name = fresh(tag)
-    return nu.Let(name, value, then(build(name), name))
-
-
-def minting(prefix: str, build: Callable[[nu.StrRef], nu.Nu]) -> nu.Nu:
-    """Mint an id at evaluation time, run ``build(id_ref)``, yield the id.
-
-    Minted when the term runs, not when it is built, so one term evaluated
-    twice makes two things.
-    """
-    return binding(MintId(prefix), lambda name: build(nu.StrRef(name)), tag=prefix)
-
-
 def as_list(items: Sequence[nu.StrArg] | nu.Nu) -> nu.List:
     """A python sequence or a Nu term yielding a list, as a list term."""
     return nu.List(items) if isinstance(items, nu.Nu) else nu.List.of(*items)
@@ -251,7 +241,7 @@ def keep_order(
         member: The collection that decides whether an id is real.
     """
     item = fresh("order")
-    at = nu.ObjectRef(item)
+    at = nu.Attr(item)
     listed = as_list(wanted)
     kept = nu.List(nu.Collect(nu.Filter(listed, member.contains(at), key=item)))
     # Ids left out keep their place after the named ones, so a partial order
