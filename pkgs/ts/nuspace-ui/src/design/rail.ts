@@ -61,8 +61,8 @@ export function railIndent(depth: number): { paddingLeft: string } {
 
 /* ============================== The aside =============================== */
 
-/** Rail width bounds, px. DEFAULT is the old fixed w-60. */
-export const RAIL_WIDTH = { MIN: 180, DEFAULT: 300, MAX: 480 } as const;
+/** Rail width bounds, px. */
+export const RAIL_WIDTH = { MIN: 200, DEFAULT: 260, MAX: 540 } as const;
 
 /**
  * The rail itself. Its own surface, a hairline edge on `rail-edge` so it holds

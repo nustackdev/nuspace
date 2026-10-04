@@ -12,6 +12,7 @@ separately here.
 
 ## Unreleased
 
+- The sidebar opens a little narrower and resizes within saner bounds
 - Sidebar titles use the full row until their controls appear
 - Even cell spacing, one gutter at a time, status on the code toggle
 - Read-only planes can copy cell ids and view each cell's source
