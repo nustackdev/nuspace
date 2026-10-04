@@ -15,7 +15,6 @@ import {
 	ContextMenuTrigger,
 	cn,
 	NavLink,
-	OverflowTooltip,
 } from "@nustackdev/ui-kit";
 import type * as React from "react";
 import {
@@ -134,15 +133,14 @@ function focusOnClick(e: React.MouseEvent<HTMLDivElement>): void {
 
 /**
  * The row's label: a real anchor that is not a tab stop, because the row it
- * sits in is the one. A name cut off by the rail's width shows whole in a
- * tooltip; one that fits shows none.
+ * sits in is the one. It carries no tooltip: a cut-off name is read by
+ * widening the rail.
  */
 export function RailRowLink({
 	href,
 	label,
 	selected,
 	titleClassName = railTitle,
-	dragging = false,
 	onClick,
 	onDoubleClick,
 }: {
@@ -151,24 +149,20 @@ export function RailRowLink({
 	selected: boolean;
 	/** Override only to drop the title a tier, e.g. for a row with no name. */
 	titleClassName?: string;
-	/** Some row is being dragged, so the tooltip stays shut. */
-	dragging?: boolean;
 	onClick: (e: React.MouseEvent<HTMLElement>) => void;
 	onDoubleClick: () => void;
 }) {
 	return (
-		<OverflowTooltip label={label} side="right" disabled={dragging}>
-			<NavLink
-				size="sm"
-				active={selected}
-				href={href}
-				tabIndex={-1}
-				onClick={onClick}
-				onDoubleClick={onDoubleClick}
-				className={railLabel}
-			>
-				<span className={titleClassName}>{label}</span>
-			</NavLink>
-		</OverflowTooltip>
+		<NavLink
+			size="sm"
+			active={selected}
+			href={href}
+			tabIndex={-1}
+			onClick={onClick}
+			onDoubleClick={onDoubleClick}
+			className={railLabel}
+		>
+			<span className={titleClassName}>{label}</span>
+		</NavLink>
 	);
 }

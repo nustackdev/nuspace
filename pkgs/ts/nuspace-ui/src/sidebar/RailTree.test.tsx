@@ -68,25 +68,6 @@ const moreOf = (key: string) =>
 /** The open tooltip's text, or null. */
 const tooltip = () => document.querySelector('[role="tooltip"]')?.textContent ?? null;
 
-/** Make `key`'s title read as cut off by the ellipsis. */
-function truncate(key: string) {
-	const span = linkOf(key)?.querySelector("span");
-	if (!span) throw new Error(`no title for ${key}`);
-	Object.defineProperty(span, "scrollWidth", { configurable: true, value: 240 });
-	Object.defineProperty(span, "clientWidth", { configurable: true, value: 120 });
-}
-
-/** A native drag event on `el`, with the one bit of dataTransfer a row uses. */
-function drag(el: Element | null | undefined, type: "dragstart" | "dragend") {
-	const e = new Event(type, { bubbles: true, cancelable: true });
-	Object.defineProperty(e, "dataTransfer", {
-		value: { effectAllowed: "", dropEffect: "", setData: () => {} },
-	});
-	act(() => {
-		el?.dispatchEvent(e);
-	});
-}
-
 // The tooltip's popper sizes itself with a ResizeObserver, which jsdom lacks.
 globalThis.ResizeObserver ??= class {
 	observe() {}
@@ -308,29 +289,6 @@ describe("rail tooltips", () => {
 	it("drops the native title for a kit tooltip", () => {
 		render([]);
 		expect(host.querySelector("[title]")).toBeNull();
-	});
-
-	it("shows a title only when it is cut off", () => {
-		render([]);
-		act(() => linkOf("b")?.focus());
-		expect(tooltip()).toBeNull();
-		act(() => linkOf("b")?.blur());
-
-		truncate("a");
-		act(() => linkOf("a")?.focus());
-		expect(tooltip()).toBe("A");
-	});
-
-	it("closes a title's tooltip on a drag and keeps it shut after", () => {
-		render([]);
-		truncate("a");
-		act(() => linkOf("a")?.focus());
-		expect(tooltip()).toBe("A");
-
-		drag(rowOf("a"), "dragstart");
-		expect(tooltip()).toBeNull();
-		drag(rowOf("a"), "dragend");
-		expect(tooltip()).toBeNull();
 	});
 
 	it("keeps More off the open menu and off the focus it hands back", async () => {

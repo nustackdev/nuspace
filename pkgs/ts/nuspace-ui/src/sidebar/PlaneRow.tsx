@@ -23,7 +23,7 @@
 // the panes. The `...` and a right-click open the same menu (`PlaneMenuItems`). "Open in new
 // tab" in both menus is the browser's tab, the same as a cmd-click. The hover `+` adds a Plane under this one,
 // through the one Add plane popup. All three actions carry a kit tooltip; the
-// title carries one only when it is cut off (the kit's `OverflowTooltip`).
+// title carries none.
 
 import {
 	DropdownMenu,
@@ -259,7 +259,6 @@ export function PlaneRow({
 						href={hrefFor(id)}
 						label={title}
 						selected={selected}
-						dragging={dragging}
 						onClick={(e) => {
 							// Option-click opens it beside the others, as Option+Enter
 							// does. Taken before the browser, whose Option-click on a
@@ -336,7 +335,9 @@ export function PlaneRow({
 /**
  * The `...` and its dropdown. Its "More" tooltip never shows over the open
  * menu, nor on the focus the menu hands back to it when it closes: that one
- * waits until the pointer comes back or focus moves on.
+ * waits until the pointer comes back or focus moves on. The refusal is the
+ * kit Tooltip's `canOpen`, so a refused tooltip never starts opening and the
+ * rail's other tooltips keep their delay.
  */
 function MoreMenu({
 	title,
@@ -354,23 +355,20 @@ function MoreMenu({
 	children: React.ReactNode;
 }) {
 	const [menu, setMenu] = useState(false);
-	const [tip, setTip] = useState(false);
 	const handedBack = useRef(false);
 
 	const onMenu = useCallback((next: boolean) => {
 		setMenu(next);
-		setTip(false);
 		if (!next) handedBack.current = true;
 	}, []);
 
-	const onTip = useCallback(
-		(next: boolean) => setTip(next && !menu && !dragging && !handedBack.current),
-		[menu, dragging],
-	);
+	const canTip = useCallback(() => !menu && !dragging && !handedBack.current, [menu, dragging]);
 
 	return (
 		<DropdownMenu open={menu} onOpenChange={onMenu}>
-			<Tooltip open={tip && !menu && !dragging} onOpenChange={onTip}>
+			{/* Uncontrolled: Radix opens and closes it (the press that opens the
+			    menu closes it), and `canOpen` is the only refusal. */}
+			<Tooltip canOpen={canTip}>
 				{/* The menu's trigger outside the tooltip's, so the row's action
 				    lane still sees the menu's data-state and stays up while it is
 				    open. */}
