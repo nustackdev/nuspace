@@ -276,15 +276,20 @@ describe("rail icon and chevron slot", () => {
 });
 
 describe("rail actions", () => {
-	it("hangs split, add and more, in that order, in a fixed-width lane", () => {
+	it("hangs split, add and more, in that order, in a lane sized only when shown", () => {
 		render([]);
 		const lane = moreOf("b")?.parentElement;
 		const labels = [...(lane?.querySelectorAll("button") ?? [])].map((b) =>
 			b.getAttribute("aria-label"),
 		);
 		expect(labels).toEqual(["Open B in split", "Add plane in B", "Actions for B"]);
-		// Sized for all three, so a title truncates at the same edge on every row.
-		expect(lane?.className).toContain("w-rail-actions");
+		// Zero wide at rest, so a title runs to the row's edge; sized for all
+		// three once revealed. Still in the DOM either way, for the keyboard.
+		const cls = lane?.className.split(" ") ?? [];
+		expect(cls).toContain("w-0");
+		expect(cls).not.toContain("w-rail-actions");
+		expect(cls).toContain("group-hover/row:w-rail-actions");
+		expect(cls).toContain("has-focus-visible:w-rail-actions");
 	});
 
 	it("gives split and add a tooltip", () => {

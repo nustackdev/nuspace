@@ -44,6 +44,9 @@ import { resizeHandle } from "./resize";
  *  |                            | chevron  |         |           |             |
  * ```
  *
+ * The actions lane has that width only while revealed (see `railActions`); at
+ * rest it is zero wide and the title runs to the row's end pad.
+ *
  * The lane holds the plane's icon, and the fold chevron in its place (the two
  * share one grid cell, see `railLane`). It is a fixed width whether or not it
  * holds a control, which is what keeps titles at every depth on one left
@@ -280,24 +283,36 @@ export const railTitle = "min-w-0 flex-1 truncate";
 export const railTitleEmpty = cn(railTitle, "text-text-muted");
 
 /**
- * The action lane. Always in flow and always the same width (--rail-actions,
- * room for its three buttons), so the title truncates against a stable edge
- * and nothing reflows on hover; only the opacity moves. The buttons sit at
- * its right end, so the `...` stays on the rail's right edge. Hidden controls are also click-through, because an invisible
- * button that still eats a click is worse than no button.
+ * The action lane. It takes no width at rest and the lane's full width
+ * (--rail-actions, room for its three buttons) only while revealed, so a
+ * title at rest runs to the row's real edge instead of truncating against
+ * buttons nobody can see. On reveal the title cuts off earlier; the row's
+ * height never moves. The buttons sit at its right end, so the `...` stays on
+ * the rail's right edge.
  *
- * Keyboard focus shows it too, but a mouse click does not: clicking a row
+ * Collapsing rather than overlaying the end of the row: an overlay would need
+ * a fade matched to every row wash (rest, hover, open, selected, pressed) to
+ * keep text from showing under the glyphs, and the reflow it saves is only
+ * the truncation point moving.
+ *
+ * Hidden is `w-0`, never `display: none`, so the buttons stay in the DOM and
+ * reachable by keyboard; keyboard focus inside reveals them. Hidden controls
+ * are also click-through, because an invisible button that still eats a click
+ * is worse than no button.
+ *
+ * Revealed by hover, by keyboard focus on the row or inside the lane, and
+ * while a menu it opened is open. A mouse click does not: clicking a row
  * focuses it, and the open row should not keep its buttons up after.
  */
 export const railActions = cn(
-	"flex w-rail-actions shrink-0 items-center justify-end gap-px",
+	"flex w-0 shrink-0 items-center justify-end gap-px overflow-hidden",
 	"pointer-events-none opacity-0",
 	"transition-opacity duration-fast ease-out",
-	"group-hover/row:pointer-events-auto group-hover/row:opacity-100",
-	"group-focus-visible/row:pointer-events-auto group-focus-visible/row:opacity-100",
-	"has-focus-visible:pointer-events-auto has-focus-visible:opacity-100",
+	"group-hover/row:pointer-events-auto group-hover/row:w-rail-actions group-hover/row:opacity-100",
+	"group-focus-visible/row:pointer-events-auto group-focus-visible/row:w-rail-actions group-focus-visible/row:opacity-100",
+	"has-focus-visible:pointer-events-auto has-focus-visible:w-rail-actions has-focus-visible:opacity-100",
 	// Keep them up while a menu they opened is still open
-	"[&:has([data-state=open])]:pointer-events-auto [&:has([data-state=open])]:opacity-100",
+	"[&:has([data-state=open])]:pointer-events-auto [&:has([data-state=open])]:w-rail-actions [&:has([data-state=open])]:opacity-100",
 );
 
 /**

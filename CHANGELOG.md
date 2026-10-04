@@ -12,6 +12,7 @@ separately here.
 
 ## Unreleased
 
+- Sidebar titles use the full row until their controls appear
 - Even cell spacing, one gutter at a time, status on the code toggle
 - Read-only planes can copy cell ids and view each cell's source
 - A rebuilt web bundle shows on restart in a checkout, no reinstall
