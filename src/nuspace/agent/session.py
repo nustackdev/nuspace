@@ -17,6 +17,10 @@ wakes the chat on that container, so a session kept in there would wake the
 chat on every write a pass makes about itself. And the two are different
 substances: ``state`` is what a chat *is*, and this is machinery one turn
 left behind.
+
+The id of the endpoint's conversation is kept beside the session, under the
+same Cell, and unlike everything else here no turn clears it: it is what a
+restarted Cell picks the conversation back up by.
 """
 
 from __future__ import annotations
@@ -39,6 +43,7 @@ __all__ = [
     "reply_of",
     "said_line_of",
     "session_of",
+    "sid_of",
     "stalled_of",
 ]
 
@@ -71,6 +76,19 @@ def session_of(plane_id: nu.StrArg, cell_id: nu.StrArg) -> nu.Nu:
         cell_id: the Cell on it that talks.
     """
     return ops.cell_state(plane_id, cell_id, Turn.session)
+
+
+def sid_of(plane_id: nu.StrArg, cell_id: nu.StrArg) -> nu.Nu:
+    """The id of the conversation the endpoint holds for this chat, as its leaf.
+
+    A ref, fresh per call for the reason :func:`session_of` gives, so one
+    caller can ask whether it is there and another write it.
+
+    Args:
+        plane_id: the Plane that runs the chat.
+        cell_id: the Cell on it that talks.
+    """
+    return ops.cell_state(plane_id, cell_id, Turn.sid)
 
 
 def _floored(leaf: nu.Nu) -> nu.Nu:

@@ -57,9 +57,11 @@ def served_model(
             model is loaded off disk on the first call.
 
     Returns:
-        A callable ``endpoint(loop, *, system)``, the same shape
-        :func:`nuspace.agent.cc.claude_code` returns. ``loop`` is what to
-        run once the endpoint is up, as a function of the per-pass ask.
+        A callable ``endpoint(loop, *, system, plane_id, cell_id)``, the same
+        shape :func:`nuspace.agent.cc.claude_code` returns. ``loop`` is what
+        to run once the endpoint is up, as a function of the per-pass ask.
+        The Cell's ids are not used: there is no conversation at the far end
+        to keep an id for.
 
     Notes:
         - The http client opens when the ``With`` is entered and closes when
@@ -67,7 +69,15 @@ def served_model(
           around a pass even though nothing is remembered inside it.
     """
 
-    def endpoint(loop: Callable[..., nu.Nu], *, system: str) -> nu.Nu:
+    def endpoint(
+        loop: Callable[..., nu.Nu],
+        *,
+        system: str,
+        plane_id: nu.StrArg,
+        cell_id: nu.StrArg,
+    ) -> nu.Nu:
+        del plane_id, cell_id
+
         def ask(*, messages: nu.Nu) -> nu.Nu:
             """One pass's call: the system prompt, then every message of the turn."""
             framing = nu.List.of(nu.Dict.of(role=nu.Str("system"), content=nu.Str(system)))

@@ -23,7 +23,8 @@ read by the loop.
 
 **``Turn`` is where the session hangs.** A ``CellState``, so it lands under
 the talking Cell like any state a program keeps, and a slot of its own beside
-the conversation rather than inside it.
+the conversation rather than inside it. The id of the conversation the endpoint
+is having hangs there too, because it outlives every turn and every restart.
 """
 
 from __future__ import annotations
@@ -114,3 +115,8 @@ class Turn(CellState):
     """
 
     session = nustd.kv.ShapeRef.slot(Session)
+
+    #: The id of the conversation the endpoint holds for this Cell, written
+    #: once, before the first prompt, and read by every start of the Cell
+    #: after. Empty for an endpoint that holds nothing.
+    sid = nustd.kv.StrRef.slot()

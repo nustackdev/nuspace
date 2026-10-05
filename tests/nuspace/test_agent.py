@@ -26,8 +26,10 @@ from __future__ import annotations
 import inspect
 import subprocess
 import sys
+import uuid
 
 import pytest
+from claude_agent_sdk import AssistantMessage, ResultMessage, TextBlock
 
 import nu
 import nu.prog
@@ -48,6 +50,7 @@ from nuspace.agent import (
     trace,
 )
 from nuspace.shapes import CellState, Space, States
+from nustd.cc import fabric
 
 
 #: The Plane a chat draws on, in every test below. The Plane that talks is
@@ -95,14 +98,17 @@ def test_the_endpoint_holds_the_whole_loop_and_not_one_pass():
     callable and the endpoint decides where it goes."""
     seen = {}
 
-    def endpoint(loop, *, system):
+    def endpoint(loop, *, system, plane_id, cell_id):
         seen["system"] = system
         seen["inside"] = loop(cc.ask)
+        seen["cell"] = (plane_id, cell_id)
         return nu.Noop()
 
     converse(RUNS, chat.CHAT_TALK, ui_plane_id=UI, talk=endpoint)
     assert "# Answering" in seen["system"]
     nu.validate(nu.compile(seen["inside"]))
+    # And it is told which Cell talks, which is where it keeps what it holds.
+    assert seen["cell"] == (RUNS, chat.CHAT_TALK)
 
 
 def test_both_endpoints_are_the_same_call():
@@ -113,7 +119,12 @@ def test_both_endpoints_are_the_same_call():
         llm.served_model(base_url="http://red:11434", model="qwen3"),
     )
     for endpoint in made:
-        term = endpoint(lambda ask: nu.print(nu.Str(nu.dict(ask(messages=[]))["text"])), system="s")
+        term = endpoint(
+            lambda ask: nu.print(nu.Str(nu.dict(ask(messages=[]))["text"])),
+            system="s",
+            plane_id=RUNS,
+            cell_id=chat.CHAT_TALK,
+        )
         nu.validate(nu.compile(term))
 
 
@@ -693,8 +704,8 @@ def _scripted(plane_id, cell_id, script):
     entry.
     """
 
-    def endpoint(loop, *, system):
-        del system
+    def endpoint(loop, *, system, **cell):
+        del system, cell
 
         def ask(*, messages):
             del messages
@@ -844,3 +855,153 @@ async def test_a_cycle_that_keeps_failing_the_same_way_gives_up_and_says_what_at
     said = (await store.read(chat.messages_of(runs, chat.CHAT_TALK)))[-1]["text"]
     assert said.startswith(f"{cycles.STUCK_HEAD}{chat.CYCLE_ANSWER}{cycles.STUCK_TIMES}2")
     assert failed[0] in said
+
+
+# --- one Claude Code conversation for the life of the chat ------------------------
+
+
+class _Claude:
+    """The CLI as far as a chat needs it: transcripts by id, and the two refusals.
+
+    ``--session-id`` on an id that has a transcript and ``--resume`` on one
+    that has none are both errors, as they are for real. Every process answers
+    from the same script, one reply per prompt in turn, so a turn is the work
+    reply and then the answer.
+    """
+
+    def __init__(self, script):
+        self.script = script
+        self.transcripts = {}
+        self.clients = []
+
+    def info(self, sid, directory=None):
+        del directory
+        return object() if sid in self.transcripts else None
+
+    def client(self, options):
+        made = _Client(self, options)
+        self.clients.append(made)
+        return made
+
+
+class _Client:
+    """One ``claude`` process: the id it opened on, and every prompt it was sent."""
+
+    def __init__(self, claude, options):
+        self.claude = claude
+        self.options = options
+        self.sid = None
+        self.prompts = []
+
+    async def connect(self):
+        held = self.claude.transcripts
+        if self.options.session_id is not None:
+            assert self.options.session_id not in held, "Session ID is already in use."
+            self.sid = self.options.session_id
+        elif self.options.resume is not None:
+            assert self.options.resume in held, "No conversation found with session ID"
+            self.sid = self.options.resume
+        else:
+            self.sid = str(uuid.uuid4())
+
+    async def query(self, prompt):
+        self.prompts.append(prompt)
+        self.claude.transcripts.setdefault(self.sid, []).append(prompt)
+
+    async def receive_response(self):
+        script = self.claude.script
+        text = script[(len(self.prompts) - 1) % len(script)]
+        yield AssistantMessage(content=[TextBlock(text=text)], model="fake")
+        yield ResultMessage(
+            subtype="success",
+            duration_ms=1,
+            duration_api_ms=1,
+            is_error=False,
+            num_turns=1,
+            session_id=self.sid,
+            result=text,
+        )
+
+    async def disconnect(self):
+        pass
+
+
+@pytest.fixture
+def claude(monkeypatch):
+    """The fake CLI behind ``nustd.cc``. Nothing in a chat may run one-shot."""
+    world = _Claude(_fenced(WORKED, ANSWERED))
+
+    def query(**_):
+        msg = "a chat prompted outside its session"
+        raise AssertionError(msg)
+
+    monkeypatch.setattr(fabric, "ClaudeSDKClient", world.client)
+    monkeypatch.setattr(fabric, "get_session_info", world.info)
+    monkeypatch.setattr(fabric, "query", query)
+    return world
+
+
+def _settled(runs):
+    """Wait until the chat owes nothing.
+
+    Polled rather than subscribed, because a subscription opened after the
+    answer landed would wait for a change that already happened.
+    """
+    return nu.WhileDo(ops.snapshot(chat.unanswered(runs, chat.CHAT_TALK)), nu.Delay(0.02))
+
+
+async def _talked(store, runs, driver, ceiling=6.0):
+    """The talking Cell on Claude Code, run until ``driver`` ends: one start of the Cell."""
+    talking = converse(runs, chat.CHAT_TALK, ui_plane_id=UI, talk=cc.claude_code())
+    here = nu.Frame(ops.Here, talking, plane=runs, cell=chat.CHAT_TALK)
+    await store.run(nu.Race(here, driver, nu.DelayedDo(ceiling, nu.Noop())))
+
+
+def _answers(said):
+    return [one["text"] for one in said if one["role"] != chat.ROLE_USER]
+
+
+async def test_the_first_message_gives_the_chat_its_conversation_id(store, claude):
+    """Minted and kept before the first prompt, and the first prompt begins
+    the conversation under it rather than under one the CLI picked."""
+    runs = await _asked(store)
+    await _talked(store, runs, _settled(runs))
+
+    sid = await store.read(session.sid_of(runs, chat.CHAT_TALK))
+    assert str(uuid.UUID(sid)) == sid
+    (client,) = claude.clients
+    assert (client.options.session_id, client.options.resume) == (sid, None)
+    assert _answers(await store.read(chat.messages_of(runs, chat.CHAT_TALK))) == ["there are two"]
+
+
+async def test_a_later_turn_talks_on_the_same_conversation(store, claude):
+    """Every turn while the Cell runs is a turn on the one process, so the
+    model keeps its own context from one to the next."""
+    runs = await _asked(store)
+    again = chat.submit(UI, nu.Str("and now?"), talk=TALK)
+    await _talked(store, runs, _settled(runs) >> again >> _settled(runs))
+
+    sid = await store.read(session.sid_of(runs, chat.CHAT_TALK))
+    (client,) = claude.clients
+    assert client.sid == sid
+    assert len(client.prompts) == 4
+    said = await store.read(chat.messages_of(runs, chat.CHAT_TALK))
+    assert _answers(said) == ["there are two", "there are two"]
+
+
+async def test_a_restarted_talking_cell_resumes_its_conversation(store, claude):
+    """The point of keeping the id. A Cell that comes back, for a new nuspace
+    or a reboot, opens the same conversation again instead of a fresh one."""
+    runs = await _asked(store)
+    await _talked(store, runs, _settled(runs))
+    sid = await store.read(session.sid_of(runs, chat.CHAT_TALK))
+
+    await store.run(chat.submit(UI, nu.Str("and now?"), talk=TALK))
+    await _talked(store, runs, _settled(runs))
+
+    assert await store.read(session.sid_of(runs, chat.CHAT_TALK)) == sid
+    opened, resumed = claude.clients
+    assert (resumed.options.resume, resumed.options.session_id) == (sid, None)
+    assert claude.transcripts[sid] == opened.prompts + resumed.prompts
+    said = await store.read(chat.messages_of(runs, chat.CHAT_TALK))
+    assert _answers(said) == ["there are two", "there are two"]

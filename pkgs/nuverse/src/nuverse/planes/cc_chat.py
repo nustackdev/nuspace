@@ -25,9 +25,9 @@ from nuspace import Plane
 __all__ = ["INPUT", "PLANE", "TALK"]
 
 
-#: The talking Cell's program. Claude Code, in one session for as long as the
-#: chat is up, against the Plane this chat draws on, which the Plane that
-#: talks reads off its own state.
+#: The talking Cell's program. Claude Code, in one conversation for the life of
+#: the chat, restarts included, against the Plane this chat draws on, which the
+#: Plane that talks reads off its own state.
 TALK = """\
 import nu
 import nuspace.agent

@@ -25,7 +25,9 @@ account the cycle that stopped wrote about itself, because a person told only
 that nothing came back has been told nothing they can do anything with.
 
 The endpoint is not here. It is brought up once, around this whole loop, so a
-Claude Code session lasts as long as the chat rather than as long as a turn.
+Claude Code process lasts as long as the Cell runs rather than as long as a
+turn, and the conversation it is having outlasts the Cell: its id is kept in
+the Cell's state and a restart opens the same one.
 
 Every read here is a snapshot of its own and every write a short commit,
 the wait's subscription and its condition included, so a chat that sits
@@ -291,10 +293,12 @@ def _opening(
     to look for.
 
     The conversation is restated at the top of every turn even when the
-    endpoint kept its session. A session is lost to any restart and the
-    conversation is not, so the turn that comes back after one has to be told
-    everything, and a turn that did not is told it twice for the price of a
-    page of tokens.
+    endpoint kept its session. Not every endpoint keeps one, a served model
+    holds nothing between calls, and one that does can still lose it: a
+    transcript deleted, a space moved to another machine. The record in the
+    store is the one copy nothing loses, so every turn is told everything, and
+    a turn whose endpoint remembered is told it twice for the price of a page
+    of tokens.
     """
     return nu.Dict.of(
         role="user",

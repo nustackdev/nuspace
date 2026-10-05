@@ -38,7 +38,7 @@ The modules::
     shapes          the slots it runs on, and the one slot the model writes
     source          fenced extraction, one attempt, and the Cell check
     panel           display(): the trace of one turn, hardcoded, drawn live
-    cc              Claude Code. one session for as long as the chat
+    cc              Claude Code. one conversation, kept across restarts
     llm             a served model over the OpenAI wire. one call per pass
     prompt          what the model reads, as markdown on disk
 
@@ -147,8 +147,8 @@ def converse(
             Cell's own ``cell``.
         ui_plane_id: the Plane the agent draws its answers onto. The other
             half of the pair a chat is, and the one the person is looking at.
-        talk: the endpoint, ``endpoint(loop, *, system)``, e.g.
-            :func:`~nuspace.agent.cc.claude_code` or
+        talk: the endpoint, ``endpoint(loop, *, system, plane_id,
+            cell_id)``, e.g. :func:`~nuspace.agent.cc.claude_code` or
             :func:`~nuspace.agent.llm.served_model`. Which model a chat talks
             to is the Plane's choice, so there is no default here.
 
@@ -161,13 +161,15 @@ def converse(
           model's programs are rerooted under the talking Cell and bracket
           themselves, as every Cell's program does.
         - The endpoint goes up once, outside the wait, so a session lasts as
-          long as the chat rather than as long as a turn.
+          long as the Cell runs rather than as long as a turn. It is handed
+          the talking Cell, so an endpoint that holds a conversation can keep
+          its id there and a restarted Cell carries on with it.
     """
 
     def loop(ask: Callable[..., nu.Nu]) -> nu.Nu:
         return conversation.answering(plane_id, cell_id, ui_plane_id=ui_plane_id, ask=ask)
 
-    return talk(loop, system=prompt.system_prompt())
+    return talk(loop, system=prompt.system_prompt(), plane_id=plane_id, cell_id=cell_id)
 
 
 def perform(
@@ -191,7 +193,9 @@ def perform(
         task: what to do, in prose. It goes in the prompt and again as the
             first message, because a prompt is what a model is told once and
             a message is what it is looking at.
-        talk: the endpoint, as for :func:`converse`.
+        talk: the endpoint, as for :func:`converse`. It is handed the job's
+            Cell the same way, so a job that is run again picks up the
+            conversation it had.
 
     Returns:
         A Flow that runs the work cycle once and ends.
@@ -200,4 +204,9 @@ def perform(
     def once(ask: Callable[..., nu.Nu]) -> nu.Nu:
         return conversation.performing(plane_id, cell_id, task, ask=ask)
 
-    return talk(once, system=prompt.system_prompt(task=task, drawing=False))
+    return talk(
+        once,
+        system=prompt.system_prompt(task=task, drawing=False),
+        plane_id=plane_id,
+        cell_id=cell_id,
+    )
