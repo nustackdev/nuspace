@@ -2,7 +2,8 @@
 
 A job is a plane with ``props.ui`` and ``props.system`` both false: nothing
 draws it, and its one cell ``main`` holds its code. The jobs this Plane makes
-hang under it, ``made_by`` ``jobs``.
+hang under it, ``made_by`` ``jobs``. A headless plane another Plane made is
+that Plane's, eg the one a chat talks through, and not a job.
 
 Three cells, meeting in the plane's shared state (``Jobs.selected``):
 
@@ -45,7 +46,9 @@ class Listing(nustd.ui.Column):
 def jobs():
     def headless(p):
         props = nuspace.Space.planes[nu.Str(p)].props
-        return props.ui.fallback(False).not_().and_(props.system.fallback(False).not_())
+        maker = props.made_by.fallback("")
+        mine = (maker == "").or_(maker == "jobs")
+        return props.ui.fallback(False).not_().and_(props.system.fallback(False).not_()).and_(mine)
 
     return ops.planes().iter().filter(headless).to_list()
 

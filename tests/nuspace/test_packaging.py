@@ -43,7 +43,14 @@ def _nuverse() -> Extension:
 def test_discovery_finds_nuverse():
     ext = _nuverse()
     assert ext == replace(nuverse.extension(), name="nuverse")
-    assert [p.name for p in ext.planes] == ["plain", "jobs", "runs", "workers", "planes"]
+    assert [p.name for p in ext.planes] == [
+        "plain",
+        "jobs",
+        "runs",
+        "workers",
+        "planes",
+        "cc_chat",
+    ]
     assert [s.name for s in ext.snippets] == [
         "text",
         "program",
@@ -69,13 +76,16 @@ def test_planes_are_well_formed():
         planes.runs.PLANE,
         planes.workers.PLANE,
         planes.planes.PLANE,
+        planes.cc_chat.PLANE,
     )
     plain = planes.plain.PLANE
     assert (plain.label, plain.cells, plain.children) == ("Plain", (), ())
     for plane in planes.PLANES:
         assert isinstance(plane, Plane)
         assert plane.name and plane.label and plane.description
-        assert plane.meta == {"editable": True, "full_width": False}
+        # A chat is read only: what is on it is what was said and drawn.
+        editable = plane is not planes.cc_chat.PLANE
+        assert plane.meta == {"editable": editable, "full_width": False}
         for name, source in plane.cells:
             assert name and "def out():" in source
     assert len({p.name for p in planes.PLANES}) == len(planes.PLANES)
@@ -133,4 +143,4 @@ def test_example_defines_nothing_of_its_own():
         print("PLANES" in space, "SNIPPETS" in space, sorted(reg.planes), sorted(reg.snippets))
         """
     )
-    assert out.startswith("False False ['jobs', 'plain', 'planes', 'runs', 'workers']")
+    assert out.startswith("False False ['cc_chat', 'jobs', 'plain', 'planes', 'runs', 'workers']")

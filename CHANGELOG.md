@@ -12,6 +12,7 @@ separately here.
 
 ## Unreleased
 
+- Claude Code chat returns as a plane, its agent part of nuspace
 - Sidebar tooltips keep their delay, and plane titles show no tooltip
 - The sidebar opens a little narrower and resizes within saner bounds
 - Sidebar titles use the full row until their controls appear

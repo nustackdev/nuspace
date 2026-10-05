@@ -61,9 +61,6 @@ class HasUi(ScalarQuery):
     Construction runs the snippet's module code in this process, offered the
     ``plane`` and ``cell`` a run offers. Source that does not construct reads
     False: as it stands it draws nothing.
-
-    Builds the term itself rather than through a ``LoadNu``, so an op holding
-    it still loads inside a program whose load binds a rewrite.
     """
 
     def __init__(self, prog: nu.StrArg, plane_id: nu.StrArg, cell_id: nu.StrArg) -> None:

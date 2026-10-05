@@ -1,0 +1,797 @@
+"""The agent a chat runs, the two cycles it runs in, and the prose it reads.
+
+What is checked here. That the terms a chat's Cells run construct at all, and
+that the endpoint they run against is the one they were handed. That the
+prompt names the Space it is about, marks and all, and teaches only ops that
+exist. That every program written out in the prose is a program: the prose
+teaches by example and an example that will not construct teaches a model to
+write one that will not either, which costs a pass every time somebody copies
+it. That a turn's working memory lands under the chat whose turn it is and
+nowhere near another chat's. That the host writes the fixed machine between
+the links of a pass. That the answer cycle builds a Cell before it appends
+one, and that a Cell which will not build comes back to the model labelled as
+the Cell rather than as the reply. And that a whole turn narrates itself as it
+goes, which is the one thing only running one can show.
+
+The program check reaches two levels down. An answer hands back the source of
+the Cell it wants drawn, as a string, so the drawn Cells are compiled and
+validated out of the modules that carry them.
+
+No test here talks to a model. Every endpoint is a fake that hands back a
+scripted reply, the same shape the real two hand back.
+"""
+
+from __future__ import annotations
+
+import inspect
+import subprocess
+import sys
+
+import pytest
+
+import nu
+import nu.prog
+import nustd.kv
+from nuspace import ops
+from nuspace.agent import (
+    cc,
+    chat,
+    conversation,
+    converse,
+    cycles,
+    display,
+    llm,
+    perform,
+    prompt,
+    session,
+    source,
+    trace,
+)
+from nuspace.shapes import CellState, Space, States
+from nuspace.system.kernel.body import Bracketed
+
+
+#: The Plane a chat draws on, in every test below. The Plane that talks is
+#: made by the first message and read back.
+UI = "p_chat"
+
+#: The panel of a chat's first turn. Built by ``submit``, addressed by
+#: everything the host writes while that turn runs.
+DISP = f"{chat.CHAT_DISPLAY_ID}1"
+
+#: What the first message makes the talking Cell with. Nothing runs it here:
+#: the turns below are run in this process, against the same ids.
+TALK = "def out():\n    return None\n"
+
+#: Ids for the terms that are only built, never run.
+RUNS = "p_talker"
+
+
+# --- the terms a chat's Cells run ----------------------------------------------
+
+
+def test_the_whole_chat_constructs_and_validates():
+    nu.validate(nu.compile(converse(RUNS, chat.CHAT_TALK, ui_plane_id=UI, talk=cc.claude_code())))
+
+
+def test_the_panel_constructs_and_validates():
+    """Hardcoded, host owned, and called by a seeded Cell on its own two ids."""
+    nu.validate(nu.compile(display(UI, DISP)))
+
+
+def test_a_job_agent_is_the_same_core_with_no_drawing():
+    """One core, two entry points. A job agent is the work cycle with a fixed
+    task, narrating into its own Cell, and it never draws or speaks."""
+    term = perform("p_job", "main", "rename the Notes plane", talk=cc.claude_code())
+    nu.validate(nu.compile(term))
+
+
+def test_the_endpoint_holds_the_whole_loop_and_not_one_pass():
+    """A session that lasts a pass is a cold start every pass. The bracket has
+    to be built around the loop, so the loop arrives at the endpoint as a
+    callable and the endpoint decides where it goes."""
+    seen = {}
+
+    def endpoint(loop, *, system):
+        seen["system"] = system
+        seen["inside"] = loop(cc.ask)
+        return nu.Noop()
+
+    converse(RUNS, chat.CHAT_TALK, ui_plane_id=UI, talk=endpoint)
+    assert "# Answering" in seen["system"]
+    nu.validate(nu.compile(seen["inside"]))
+
+
+def test_both_endpoints_are_the_same_call():
+    """Two backends, one shape. Nothing abstracts over them, so this is the
+    only thing holding the two signatures together."""
+    made = (
+        cc.claude_code(),
+        llm.served_model(base_url="http://red:11434", model="qwen3"),
+    )
+    for endpoint in made:
+        term = endpoint(lambda ask: nu.print(nu.Str(nu.dict(ask(messages=[]))["text"])), system="s")
+        nu.validate(nu.compile(term))
+
+
+def test_the_claude_code_endpoint_is_the_one_v3_shipped():
+    """One model, no tools, and permissions left at their default: the model's
+    action is the Nu program it writes, and nothing else."""
+    assert cc.MODEL == "claude-opus-5"
+    params = inspect.signature(cc.claude_code).parameters
+    assert params["allowed_tools"].default == ()
+    assert params["permission_mode"].default == "default"
+
+
+def test_an_endpoint_is_not_imported_until_somebody_wants_one():
+    """``nustd.cc`` pulls the Claude Code SDK, which is most of a second, and
+    the Cell that draws a panel reads this package for ``display`` and talks
+    to no model at all. It runs in a worker launched on every navigation to
+    the chat, so an eager import is that second paid by the one Cell that has
+    no use for it.
+
+    In a fresh interpreter, because this one has already imported both
+    endpoints to test them and nothing can unimport a module.
+    """
+    probe = (
+        "import sys, nuspace.agent;"
+        "print(sorted(n for n in ('nuspace.agent.cc', 'nuspace.agent.llm',"
+        " 'nuspace.agent.panel', 'claude_agent_sdk')"
+        " if n in sys.modules))"
+    )
+    ran = subprocess.run(  # noqa: S603
+        [sys.executable, "-c", probe], capture_output=True, text=True, check=True
+    )
+    assert ran.stdout.strip() == "[]"
+
+
+def test_the_endpoint_table_is_the_whole_of_the_mechanism():
+    """One table, read by the module ``__getattr__``, so the name still
+    resolves and the import it costs is paid by whoever asked for it."""
+    import nuspace.agent
+
+    assert set(nuspace.agent.DEFERRED) == {"claude_code", "display", "served_model"}
+    assert nuspace.agent.claude_code is cc.claude_code
+    assert nuspace.agent.served_model is llm.served_model
+    assert nuspace.agent.display is display
+    with pytest.raises(AttributeError, match="no attribute"):
+        nuspace.agent.nothing_like_this  # noqa: B018
+
+
+def test_what_stops_a_cycle_that_is_not_going_to_end():
+    """The work cycle is not capped at a number anybody would reach: long work
+    is allowed to be long, and what stops it is a failure repeating. The
+    answer cycle keeps a small budget, because there a pass that did not work
+    is a Cell that did not build and more tries is not the fix."""
+    assert chat.DEFAULT_BUDGET > cycles.ANSWER_PASSES > chat.DEFAULT_PATIENCE > 0
+    assert conversation.SILENT and conversation.ASK_AGAIN and conversation.CRASHED
+
+
+# --- the prompt ----------------------------------------------------------------
+
+
+def test_the_prompt_names_the_space_it_is_about():
+    text = prompt.system_prompt()
+    assert prompt.ROOT_MARK not in text
+    assert prompt.MODULE_MARK not in text
+    assert f"from {Space.__module__} import Space" in text
+
+
+def test_every_section_reaches_the_model():
+    text = prompt.system_prompt()
+    for heading in (
+        "# Role",
+        "# The pass protocol",
+        "# Finishing the work",
+        "# Catalogue",
+        "# Your app surface",
+        "# Working the space",
+        "# A turn is two cycles",
+        "# Answering",
+        "# Drawing an answer",
+        "# Task",
+    ):
+        assert heading in text
+
+
+def test_a_job_agent_is_not_taught_a_move_it_cannot_make():
+    """It never draws and never speaks, so the two sections about doing either
+    are a page of prompt teaching it something that would be refused."""
+    text = prompt.system_prompt(task="rename the Notes plane", drawing=False)
+    assert "# Answering" not in text
+    assert "# Drawing an answer" not in text
+    assert "# A turn is two cycles" in text
+    assert "rename the Notes plane" in text
+
+
+def test_the_prose_shipped_is_the_prose_read():
+    """A section named with no file behind it raises on the first prompt, and
+    a file nothing names is a page nobody reads."""
+    named = {f"{name}.md" for name in prompt.PROSE} | set(prompt.MESSAGES)
+    assert set(prompt.text_files()) == named
+
+
+def test_the_prompt_teaches_the_ops_it_talks_about():
+    """Every op named in the prose is one that exists. A wrong name in a
+    prompt is worse than no name: the model follows it off a cliff."""
+    text = prompt.system_prompt()
+    for name in ("note", "submit", "say", "draw"):
+        assert f"chat.{name}" in text
+        assert hasattr(chat, name)
+    assert "ops.chat" not in text
+    assert "nustd.mem" not in text
+
+
+def test_the_labels_the_prompt_promises_are_the_labels_the_host_writes():
+    """Five ways a pass carries a complaint, and the prose names each one. A
+    label a model was taught and never sees, or sees and was never taught, is
+    a pass spent looking at the wrong source."""
+    text = prompt.system_prompt()
+    for label in source.DIAGNOSTICS:
+        assert label in text
+
+
+def test_the_two_cycles_are_spelled_the_way_the_rows_are():
+    """The panel writes a cycle on every row and the prose tells the model
+    which cycle it is in. One word, two writers."""
+    text = prompt.system_prompt()
+    for cycle in chat.CYCLES:
+        assert cycle in text
+
+
+# --- the programs written out in the prose -------------------------------------
+
+
+FENCE = "```"
+
+
+def programs(text):
+    """Every ```python block, in order."""
+    return [
+        chunk[len("python\n") :]
+        for chunk in text.split(FENCE)[1::2]
+        if chunk.startswith("python\n")
+    ]
+
+
+def validated(src, name):
+    """Compile one block; where it is a whole Cell, run its entry point too.
+
+    A block with no ``out`` is a fragment showing one line, and all that can
+    be asked of it is that it parses. Anything with an entry point is a Cell
+    somebody will copy, so it is built and validated.
+    """
+    if "def out(" not in src:
+        compile(src, name, "exec")
+        return {}
+    module: dict = {}
+    exec(compile(src, name, "exec"), module)  # noqa: S102
+    entry = module["out"]
+    took = inspect.signature(entry).parameters
+    term = entry(plane=UI, cell="c_turn_1") if took else entry()
+    nu.validate(nu.compile(term))
+    return module
+
+
+def test_every_program_in_the_prose_is_a_program():
+    checked = 0
+    for filename in prompt.text_files():
+        text = prompt.read(filename)
+        for index, src in enumerate(programs(text)):
+            module = validated(src, f"<{filename}:{index}>")
+            checked += 1
+            # An answer carries the source of the Cell it wants drawn, as a
+            # string. Those are programs too, and they are the ones a person
+            # actually ends up looking at.
+            for key, value in module.items():
+                if isinstance(value, str) and "def out(" in value:
+                    validated(value, f"<{filename}:{index}:{key}>")
+                    checked += 1
+    assert checked >= 20
+
+
+# --- against a real store -------------------------------------------------------
+
+
+async def _asked(store, said="how many planes are there"):
+    """A chat somebody has spoken in, so it has a turn and a panel. The talking Plane's id."""
+    await store.run(ops.add_plane(UI, backend="async", ui=True, name="ideas"))
+    await store.run(chat.submit(UI, nu.Str(said), talk=TALK))
+    return await store.read(chat.talker_of(UI))
+
+
+def _panel(runs):
+    """The panel term the host writes through, for this chat's first turn."""
+    return trace.Panel(UI, runs, chat.CHAT_TALK)
+
+
+async def _wrote(store, term):
+    """A write the host makes inside a running chat, bracketed the way the kernel brackets it."""
+    await store.run(Bracketed()(term))
+
+
+# --- where a turn's working memory goes ------------------------------------------
+
+
+def test_the_session_routes_to_the_state_store():
+    """Spelled out under the talking Cell, so it lands in the store a Cell's
+    state lives in, and in no other."""
+    reply = session.session_of(RUNS, chat.CHAT_TALK).reply
+    assert nu.shape.root_shape(reply) is States
+
+
+async def test_the_session_sits_beside_the_conversation_and_not_in_it(store):
+    """Under the Cell, so one chat's turn cannot reach another's, and beside
+    ``state`` rather than in it, so the writes a turn makes about itself do
+    not wake the chat through the container it waits on."""
+    runs = await _asked(store)
+    await store.run(session.cleared(runs, chat.CHAT_TALK))
+    cell = States.planes[runs].cells[chat.CHAT_TALK]
+    assert sorted(await store.read(nu.list(cell.keys()))) == ["session", "state"]
+    own = ops.cell_state(runs, chat.CHAT_TALK, chat.Own.state)
+    assert sorted(await store.read(nu.list(own.keys()))) == sorted([chat.MESSAGES, chat.DISPLAY])
+
+
+async def test_two_chats_keep_two_sessions(store):
+    """The thing the nesting is for. Names alone would put both turns in one
+    place and the second one would read the first one's reply."""
+    mine = await _asked(store)
+    await store.run(ops.add_plane("p_other", backend="async", ui=True))
+    await store.run(chat.submit("p_other", nu.Str("hello"), talk=TALK))
+    theirs = await store.read(chat.talker_of("p_other"))
+    await _wrote(store, session.session_of(mine, chat.CHAT_TALK).reply.set("mine"))
+    await _wrote(store, session.session_of(theirs, chat.CHAT_TALK).reply.set("theirs"))
+    assert await store.read(session.reply_of(mine, chat.CHAT_TALK)) == "mine"
+    assert await store.read(session.reply_of(theirs, chat.CHAT_TALK)) == "theirs"
+
+
+async def test_an_untouched_session_reads_empty_rather_than_missing(store):
+    """Where every chat starts. An unwritten leaf reads EMPTY, which flows
+    through every expression it touches, so the failure would be a panel row
+    that refuses to write."""
+    runs = await _asked(store)
+    assert await store.read(session.reply_of(runs, chat.CHAT_TALK)) == ""
+    assert await store.read(session.outcome_of(runs, chat.CHAT_TALK)) == ""
+    assert await store.read(session.passes_of(runs, chat.CHAT_TALK)) == 0
+    assert await store.read(session.drawn_cell_of(runs, chat.CHAT_TALK)) == ""
+    assert await store.read(session.said_line_of(runs, chat.CHAT_TALK)) == ""
+
+
+async def test_the_reply_reads_back_as_sentences_and_not_as_the_program(store):
+    """A reply is prose and then a fence, and the fence is the action. The
+    panel wants the other half."""
+    runs = await _asked(store)
+    slots = session.session_of(runs, chat.CHAT_TALK)
+    await _wrote(
+        store, slots.reply.set("I will draw a table.\n\n```python\ndef out():\n    ...\n```")
+    )
+    assert await store.read(session.reply_of(runs, chat.CHAT_TALK)) == "I will draw a table."
+
+    await _wrote(store, slots.reply.set("```python\ndef out():\n    ...\n```"))
+    assert await store.read(session.reply_of(runs, chat.CHAT_TALK)) == ""
+
+    await _wrote(store, slots.reply.set("no code at all"))
+    assert await store.read(session.reply_of(runs, chat.CHAT_TALK)) == "no code at all"
+
+
+async def test_a_turn_starts_on_what_it_wrote_and_not_on_the_last_turn(store):
+    """A turn that skipped the clear would show the last one's sentences for
+    as long as its first model call took, and an answer cycle starting on the
+    last turn's answer would draw it again."""
+    runs = await _asked(store)
+    slots = session.session_of(runs, chat.CHAT_TALK)
+    await _wrote(
+        store,
+        slots.reply.set("last turn")
+        >> slots.outcome.set("last outcome")
+        >> slots.answer.set(nu.Dict.of(cell=nu.Str("src"), said=nu.Str("said it")))
+        >> slots.drawn.set(True),
+    )
+    await store.run(session.cleared(runs, chat.CHAT_TALK))
+    assert await store.read(session.reply_of(runs, chat.CHAT_TALK)) == ""
+    assert await store.read(session.outcome_of(runs, chat.CHAT_TALK)) == ""
+    assert await store.read(session.drawn_cell_of(runs, chat.CHAT_TALK)) == ""
+    assert await store.read(nu.Bool(slots.drawn)) is False
+
+
+async def test_clearing_a_session_under_a_cell_nobody_made_makes_nothing(store):
+    """A write under a missing key vivifies the row, and a chat dropped
+    between a turn starting and this running would grow one out of it."""
+    runs = await _asked(store)
+    await store.run(session.cleared(runs, "c_nobody"))
+    assert "c_nobody" not in await store.read(nu.list(States.planes[runs].cells.keys()))
+
+
+# --- the fixed machine, one row at a time ---------------------------------------
+
+
+async def test_the_host_writes_what_the_person_said_before_anything_runs(store):
+    """The first row of every turn and the only one that needs no model call,
+    so it is up while the endpoint is still being asked."""
+    runs = await _asked(store)
+    await _wrote(store, _panel(runs).heard(trace.asked(runs, chat.CHAT_TALK)))
+    assert await store.read(chat.trace_of(UI, DISP)) == [
+        {
+            "cycle": chat.CYCLE_WORK,
+            "kind": chat.KIND_HEARD,
+            "text": "how many planes are there",
+        }
+    ]
+
+
+async def test_a_pass_says_which_one_it_is_against_the_ceiling(store):
+    """The backstop under everything else in the panel. A model that narrates
+    nothing still moves this, so a cycle is never a list that stops growing.
+
+    The ceiling is read off the chat on every row, so a ceiling raised while a
+    turn runs is a ceiling the next row shows.
+    """
+    runs = await _asked(store)
+    slots = session.session_of(runs, chat.CHAT_TALK)
+    ceiling = chat.budget_of(runs, chat.CHAT_TALK)
+    await _wrote(store, slots.passes.set(2))
+    await _wrote(store, _panel(runs).writing(chat.CYCLE_WORK, budget=ceiling))
+    await store.run(chat.allow(runs, chat.CHAT_TALK, budget=400))
+    await _wrote(store, _panel(runs).writing(chat.CYCLE_WORK, budget=ceiling))
+    assert [row["text"] for row in await store.read(chat.trace_of(UI, DISP))] == [
+        f"{trace.PASS}2{trace.OF}{chat.DEFAULT_BUDGET}",
+        f"{trace.PASS}2{trace.OF}400",
+    ]
+
+
+async def test_a_pass_that_worked_shows_what_it_came_to(store):
+    runs = await _asked(store)
+    slots = session.session_of(runs, chat.CHAT_TALK)
+    await _wrote(store, slots.outcome.set("['p_chat', 'p_notes']"))
+    await _wrote(store, _panel(runs).ran(chat.CYCLE_WORK))
+    (row,) = await store.read(chat.trace_of(UI, DISP))
+    assert row == {
+        "cycle": chat.CYCLE_WORK,
+        "kind": chat.KIND_RUNNING,
+        "text": "['p_chat', 'p_notes']",
+    }
+
+
+async def test_a_pass_that_did_not_build_says_so_and_quotes_the_first_line(store):
+    """The one time the outcome is worth a panel row in full. Everything after
+    the first line is the diagnostic, which belongs to the model."""
+    runs = await _asked(store)
+    slots = session.session_of(runs, chat.CHAT_TALK)
+    await _wrote(store, slots.outcome.set(f"{source.FAILED_LABEL}: bad indent (line 3)\nand more"))
+    await _wrote(store, _panel(runs).ran(chat.CYCLE_WORK))
+    (row,) = await store.read(chat.trace_of(UI, DISP))
+    assert row["kind"] == chat.KIND_FAILED
+    assert row["text"] == f"{source.FAILED_LABEL}: bad indent (line 3)"
+
+
+async def test_a_cell_that_did_not_build_is_a_failed_row_too(store):
+    """Its own label, and the panel has to know it is one of the complaints or
+    a broken answer would read as an answer that worked."""
+    runs = await _asked(store)
+    slots = session.session_of(runs, chat.CHAT_TALK)
+    await _wrote(store, slots.outcome.set(f"{source.CELL_LABEL}: invalid syntax (line 9)"))
+    await _wrote(store, _panel(runs).ran(chat.CYCLE_ANSWER))
+    (row,) = await store.read(chat.trace_of(UI, DISP))
+    assert row["cycle"] == chat.CYCLE_ANSWER
+    assert row["kind"] == chat.KIND_FAILED
+
+
+async def test_a_long_line_is_cut_where_a_panel_can_hold_it(store):
+    """A diagnostic runs to a screenful and a row is a line in a table
+    somebody is watching."""
+    runs = await _asked(store)
+    slots = session.session_of(runs, chat.CHAT_TALK)
+    await _wrote(store, slots.reply.set("x" * (trace.LINE * 2)))
+    await _wrote(store, _panel(runs).thinking(chat.CYCLE_WORK))
+    (row,) = await store.read(chat.trace_of(UI, DISP))
+    assert row["text"] == "x" * trace.LINE + trace.ELLIPSIS
+
+
+async def test_a_reply_that_was_all_code_says_nothing(store):
+    """A blank row in a panel reads as something having gone wrong."""
+    runs = await _asked(store)
+    slots = session.session_of(runs, chat.CHAT_TALK)
+    await _wrote(store, slots.reply.set("```python\ndef out():\n    ...\n```"))
+    await _wrote(store, _panel(runs).thinking(chat.CYCLE_WORK))
+    assert await store.read(chat.trace_of(UI, DISP)) == []
+
+
+# --- the check the answer cycle makes -------------------------------------------
+
+
+#: A Cell that builds: what happened, and the box the next thing is typed in.
+GOOD_CELL = """import nu
+import nustd.ui
+from nuspace import ops
+from nuspace.agent import chat
+
+
+def out():
+    box = nustd.ui.TextAreaRef("message")
+    send = nustd.ui.ButtonRef("send")
+    return (
+        nustd.ui.MarkdownRef("answer").set("there are 2 planes")
+        >> box.set("")
+        >> send.set_label("send")
+        >> nu.ReactForever(send.on_click(), chat.submit(ops.Here.plane, nu.Str(box)))
+    )
+"""
+
+#: A Cell that does not parse. The commonest way a model breaks one.
+UNPARSED_CELL = "def out(plane, cell:\n    return None\n"
+
+#: A Cell that parses perfectly and breaks a Nu law. The reason the check is
+#: two checks: construction alone would let this one through.
+UNLAWFUL_CELL = """import nu
+
+
+class W(nu.Shape):
+    n = nu.IntRef.slot()
+
+
+def out():
+    return nu.Add(W.n.set(nu.Int(1)), nu.Int(2))
+"""
+
+
+def _checked(cell_source):
+    """Run the check over one Cell's source and give back what it came to.
+
+    The same two catches the answer cycle puts around it, because the check
+    raises rather than answering False: the diagnostic is on the error and
+    the error is the whole of what the model needs.
+    """
+    return nu.run(
+        nu.TryCatch(
+            nu.TryCatch(
+                nu.Str(
+                    nu.If(
+                        source.stands(cell_source, plane_id=UI, cell_id="c_turn_1"),
+                        nu.Str(""),
+                        nu.Str(""),
+                    )
+                ),
+                catch=nu.Str(f"{source.CELL_LABEL}: ") + nu.ToStr(source.diagnostic()),
+                errors=nu.prog.ConstructionError,
+            ),
+            catch=nu.Str(f"{source.CELL_LABEL}: ") + nu.ToStr(nu.Attr("error")),
+            errors=Exception,
+        )
+    )[0]
+
+
+def test_a_cell_that_builds_passes_the_check():
+    assert _checked(GOOD_CELL) == ""
+
+
+def test_a_cell_that_does_not_parse_comes_back_as_the_cell():
+    """Labelled as the Cell and not as the reply. There are two pieces of
+    source in an answer pass and a model told only "CONSTRUCTION FAILED"
+    would go looking at the wrong one."""
+    said = _checked(UNPARSED_CELL)
+    assert said.startswith(source.CELL_LABEL)
+    assert "does not parse" in said
+
+
+def test_a_cell_that_breaks_a_law_is_caught_too():
+    """The half construction cannot see. It parses, `out` returns a term, and
+    the term puts a Command where a value belongs. Validating is what the host
+    does before it drives anything, so a Cell that fails it is a Cell that
+    fails on the screen."""
+    said = _checked(UNLAWFUL_CELL)
+    assert said.startswith(source.CELL_LABEL)
+    assert "cannot hold" in said
+
+
+# --- a whole turn, narrating itself ----------------------------------------------
+
+#: What the model writes to end the work cycle. ``Run`` is redeclared flat,
+#: which is how the model reaches the slot the loop reads, and is why that one
+#: provide is left where it is.
+WORKED = """import nu
+
+
+class Run(nu.Shape):
+    done = nu.BoolRef.slot()
+
+
+def out():
+    return Run.done.set(True)
+"""
+
+#: And what it hands back in the answer cycle: a value, never a write.
+ANSWERED = '''import nu
+
+
+CELL = """{cell}"""
+
+
+def out():
+    return nu.Dict.of(cell=nu.Str(CELL), said=nu.Str("there are two"))
+'''.format(cell=GOOD_CELL.replace('"""', "'''"))
+
+#: The same, holding a Cell that will not parse. The model finds out and the
+#: chat is not left with a broken row on it.
+BROKEN = f'''import nu
+
+
+CELL = """{UNPARSED_CELL}"""
+
+
+def out():
+    return nu.Dict.of(cell=nu.Str(CELL), said=nu.Str("there are two"))
+'''
+
+#: A program that writes the talking Cell's own state, bare, the way a Cell's
+#: program would. It lands under the talking Cell because the host loads the
+#: model's programs with the rewrite it loads a Cell's with.
+KEPT = """import nu
+import nustd.kv
+import nuspace
+
+
+class Notes(nuspace.CellState):
+    seen = nustd.kv.StrRef.slot()
+
+
+class Run(nu.Shape):
+    done = nu.BoolRef.slot()
+
+
+def out():
+    return Notes.seen.set("kept") >> Run.done.set(True)
+"""
+
+
+class _Notes(CellState):
+    """What ``KEPT`` declares, declared again here to read it from outside."""
+
+    seen = nustd.kv.StrRef.slot()
+
+
+def _fenced(*sources):
+    """One reply per source, with a sentence of prose in front of each."""
+    return tuple(f"Pass {index}.\n\n```python\n{one}```" for index, one in enumerate(sources, 1))
+
+
+def _scripted(plane_id, cell_id, script):
+    """An endpoint that reads its reply off the pass the cycle is on.
+
+    No counter of its own: the loop keeps one and this is the one test that
+    wants to know the loop keeps it honestly. The counter is per cycle, so a
+    script is read per cycle too, and an index past the end floors to the last
+    entry.
+    """
+
+    def endpoint(loop, *, system):
+        del system
+
+        def ask(*, messages):
+            del messages
+            replies = nu.List.of(*[nu.Str(one) for one in script])
+            at = session.passes_of(plane_id, cell_id) - nu.Int(1)
+            return nu.Dict.of(
+                text=nu.Str(
+                    replies[
+                        nu.If(
+                            at < nu.Int(len(script)),
+                            nu.If(at < nu.Int(0), nu.Int(0), at),
+                            nu.Int(len(script) - 1),
+                        )
+                    ]
+                )
+            )
+
+        return loop(ask)
+
+    return endpoint
+
+
+async def _ran(store, runs, script, ceiling=6.0):
+    """One chat, raced against a ceiling, because the loop never ends itself.
+
+    Bracketed the way the kernel brackets a Cell's program on the way in.
+    """
+    endpoint = _scripted(runs, chat.CHAT_TALK, script)
+    talking = converse(runs, chat.CHAT_TALK, ui_plane_id=UI, talk=endpoint)
+    await store.run(nu.Race(Bracketed()(talking), nu.DelayedDo(ceiling, nu.Noop())))
+
+
+async def test_a_turn_works_then_answers_and_says_so_row_by_row(store):
+    """The one thing no term on its own can show: a whole turn, and what it
+    leaves in the panel on the way through.
+
+    Everything here is what a chat does for real except the model. Two cycles,
+    the prose the model wrote lifted out of each reply, a Cell built and
+    checked before it landed, and the record appended in the same breath.
+    """
+    runs = await _asked(store)
+    await _ran(store, runs, _fenced(WORKED, ANSWERED))
+
+    kinds = [(row["cycle"], row["kind"]) for row in await store.read(chat.trace_of(UI, DISP))]
+    assert kinds[0] == (chat.CYCLE_WORK, chat.KIND_HEARD)
+    assert (chat.CYCLE_WORK, chat.KIND_DONE) in kinds
+    assert (chat.CYCLE_ANSWER, chat.KIND_DONE) in kinds
+    assert kinds[-1] == (chat.CYCLE_ANSWER, chat.KIND_DONE)
+    # The work cycle's prose is what the answer cycle's first row shows: a
+    # model call is one atom, so the row that goes up while a person waits is
+    # written before it and carries the newest prose there is.
+    assert any(kind == chat.KIND_THINKING for _, kind in kinds)
+
+    # The answer landed as a Cell, after the panel, and the record went with
+    # it in the same breath. The escape hatch went under it, which is the
+    # host's and not the model's: whatever the answer offered, there is always
+    # one more way to say something.
+    drawn = await store.read(ops.cells(UI))
+    assert drawn == [DISP, f"{cycles.TURN_ID}1", f"{chat.CHAT_OTHER_ID}1"]
+    assert "MarkdownRef" in await store.read(ops.prog(UI, f"{cycles.TURN_ID}1"))
+    said = await store.read(chat.messages_of(runs, chat.CHAT_TALK))
+    assert [one["text"] for one in said] == ["how many planes are there", "there are two"]
+    assert await store.read(chat.unanswered(runs, chat.CHAT_TALK)) is False
+
+
+async def test_a_program_the_model_wrote_keeps_its_state_where_the_cell_does(store):
+    """The host holds the bracket, and the reroot, for the model's programs
+    too. A ``CellState`` the model declares lands under the talking Cell, in
+    the state store, exactly where the Cell's own program would put it."""
+    runs = await _asked(store)
+    await _ran(store, runs, _fenced(KEPT, ANSWERED))
+    kept = ops.cell_state(runs, chat.CHAT_TALK, _Notes.seen)
+    assert await store.read(kept) == "kept"
+
+
+async def test_a_broken_cell_is_not_appended_and_the_model_is_told(store):
+    """The whole reason the answer cycle is a loop. A Cell is only built when
+    somebody opens the chat, so a broken one appended here is a row that says
+    it failed and nobody found out until a person looked."""
+    runs = await _asked(store)
+    await _ran(store, runs, _fenced(WORKED, BROKEN))
+
+    # This turn's panel, and the escape hatch. Nothing the model drew, and the
+    # hatch anyway: a turn that gave up is the turn a person most needs a way
+    # to answer.
+    assert await store.read(ops.cells(UI)) == [DISP, f"{chat.CHAT_OTHER_ID}1"]
+    # And the model was told, in words that name the Cell rather than the reply.
+    complained = [
+        row["text"]
+        for row in await store.read(chat.trace_of(UI, DISP))
+        if row["kind"] == chat.KIND_FAILED and row["cycle"] == chat.CYCLE_ANSWER
+    ]
+    assert any(one.startswith(source.CELL_LABEL) for one in complained)
+    # It failed in two different ways here, so it was never stuck: it used the
+    # answer cycle's four passes, and the person is told that in those words.
+    assert any(one.startswith(trace.OUT_OF_PASSES) for one in complained)
+    said = (await store.read(chat.messages_of(runs, chat.CHAT_TALK)))[-1]
+    assert said["role"] == chat.ROLE_SYSTEM
+    assert said["text"] == (
+        f"{cycles.STUCK_HEAD}{chat.CYCLE_ANSWER}{cycles.SPENT}{conversation.ASK_AGAIN}"
+    )
+    # The chat is no longer owed anything, or the loop would go straight back
+    # round the same question.
+    assert await store.read(chat.unanswered(runs, chat.CHAT_TALK)) is False
+
+
+async def test_a_cycle_that_keeps_failing_the_same_way_gives_up_and_says_what_at(store):
+    """The guard that replaced the pass budget, and the reason it replaced it.
+    A model failing in new ways is working; one handed back the same first
+    line twice has stopped reading it, and no number of further passes changes
+    that. Patience is read off the chat, so this is also what says a number
+    written into the store reaches the loop."""
+    runs = await _asked(store)
+    await store.run(chat.allow(runs, chat.CHAT_TALK, patience=2))
+    await _ran(store, runs, _fenced(WORKED, BROKEN))
+
+    rows = [
+        row
+        for row in await store.read(chat.trace_of(UI, DISP))
+        if row["cycle"] == chat.CYCLE_ANSWER
+    ]
+    failed = [row["text"] for row in rows if row["kind"] == chat.KIND_FAILED]
+    # Two passes, both the same complaint, and then it stopped: it never
+    # reached the third of the four the answer cycle would have allowed.
+    assert failed[0] == failed[1]
+    assert failed[-1].startswith(trace.STUCK)
+    assert f"{trace.SAME}2{trace.TIMES}" in failed[-1]
+    said = (await store.read(chat.messages_of(runs, chat.CHAT_TALK)))[-1]["text"]
+    assert said.startswith(f"{cycles.STUCK_HEAD}{chat.CYCLE_ANSWER}{cycles.STUCK_TIMES}2")
+    assert failed[0] in said

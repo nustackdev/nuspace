@@ -293,5 +293,5 @@ def test_every_plane_names_a_registered_backend():
 
     assert all(spec.backend in BACKENDS for spec in PLANES)
     assert {spec.name: spec.backend for spec in PLANES} == dict.fromkeys(
-        ("plain", "jobs", "runs", "workers", "planes"), "async"
+        ("plain", "jobs", "runs", "workers", "planes", "cc_chat"), "async"
     )
