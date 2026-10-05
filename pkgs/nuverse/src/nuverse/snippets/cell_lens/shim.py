@@ -13,5 +13,5 @@ def out(plane: nu.StrArg, cell: nu.StrArg) -> nu.Nu:
         plane,
         cell,
         nuspace.shapes.Cell,
-        lambda picked: nuspace.Space.planes[plane].cells[picked],
+        lambda picked: nuspace.Space.cells[picked],
     )

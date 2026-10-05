@@ -37,26 +37,26 @@ def out():
 """
 
 
-def search(query: nu.StrArg, plane: nu.StrArg, cell: nu.StrArg) -> nu.Nu:
-    """``[{plane, cell, excerpt}]`` when the note's body holds ``query``."""
-    held = ops.cell_state(plane, cell, nu.If(Note.body.exists(), nu.ToStr(Note.body), nu.Str("")))
+def search(query: nu.StrArg, cell: nu.StrArg) -> nu.Nu:
+    """``[{excerpt}]`` when the note's body holds ``query``."""
+    held = ops.cell_state(cell, nu.If(Note.body.exists(), nu.ToStr(Note.body), nu.Str("")))
 
     def found(body: nu.ObjectRef) -> nu.Nu:
-        hit = nu.List.of(nu.Dict.of(plane=plane, cell=cell, excerpt=excerpt(body, query)))
+        hit = nu.List.of(nu.Dict.of(excerpt=excerpt(body, query)))
         return nu.If(matches(body, query), hit, nu.List.of())
 
     return nu.let(held, found)
 
 
-def slow(query: nu.StrArg, plane: nu.StrArg, cell: nu.StrArg) -> nu.Nu:
+def slow(query: nu.StrArg, cell: nu.StrArg) -> nu.Nu:
     """:func:`search`, once a sum of :data:`WORK` numbers is worked out."""
     worked = nu.Ge(nu.Sum(nu.Iter(range(WORK))), nu.Int(0))
-    return nu.If(worked, search(query, plane, cell), nu.List.of())
+    return nu.If(worked, search(query, cell), nu.List.of())
 
 
-def write(plane: str, cell: str, body: str) -> nu.Nu:
+def write(cell: str, body: str) -> nu.Nu:
     """A note's body, as its program would keep it. One commit."""
-    return ops.utils.atomic_state(ops.cell_state(plane, cell, Note.body.set(body)))
+    return ops.utils.atomic_state(ops.cell_state(cell, Note.body.set(body)))
 
 
 NOTE = Snippet("note", "Note", SOURCE, search=search)

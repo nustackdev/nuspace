@@ -262,7 +262,7 @@ async def test_move_counts_drawn_siblings_only(store):
 async def test_viewer_plane(store):
     await _plane(store, "p1", "Notes", {"editable": True, "tone": "calm"}, ui=True)
     await store.run(ops.insert_snippet("p1", SNIPPETS[0], cell_id="c1"))
-    await store.run(ops.rename_cell("p1", "c1", "intro"))
+    await store.run(ops.rename_cell("c1", "intro"))
     await store.run(ops.add_cell("p1", "x = 1", cell_id="c2", name="code"))
     await store.run(ops.add_cell("p1", "y = 2", cell_id="c0", name="first", index=0))
 
@@ -602,11 +602,16 @@ async def test_connection_panes(store):
         assert (got["p1"]["title"], [c["id"] for c in got["p1"]["cells"]]) == ("One", ["a1"])
         assert (got["p2"]["title"], [c["id"] for c in got["p2"]["cells"]]) == ("Two", ["b1"])
 
-        # A change on one plane reships only its pane.
+        # A change on one plane reships only its pane: its row, or a cell on it.
         before = len(session.writes("set_plane"))
         await store.run(ops.add_cell("p1", "z = 3", cell_id="a2"))
         await _until(lambda: len(shown()["p1"]["cells"]) == 2)
         assert {w["plane_id"] for w in session.writes("set_plane")[before:]} == {"p1"}
+
+        before = len(session.writes("set_plane"))
+        await store.run(ops.rename_cell("b1", "renamed"))
+        await _until(lambda: shown()["p2"]["cells"][0]["name"] == "renamed")
+        assert {w["plane_id"] for w in session.writes("set_plane")[before:]} == {"p2"}
 
         # Closing p2: its cells erased as drawn, p1's left alone, nothing more shipped for p2.
         session.notify(("viewer", "ops", "planes.open"), {"plane_ids": ["p1"]})

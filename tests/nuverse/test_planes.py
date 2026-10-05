@@ -112,7 +112,7 @@ async def test_each_cell_loads_through_the_kernel_rewrites(store, source):
     await store.run(ops.add_plane("p", backend="async") >> ops.add_cell("p", source, cell_id="c"))
     env = session_env("127.0.0.1:9")("s1")
     rewrite = Rewrites(Reroot("p", "c"), env.rewrite)
-    prog = Space.planes["p"].cells["c"].prog
+    prog = Space.cells["c"].prog
     term = await store.run(
         nustd.kv.Snapshot(
             prog.load(scope={"plane": "p", "cell": "c"}, rewrite=rewrite), scope=Space
@@ -222,7 +222,7 @@ async def test_creating_a_job_makes_a_headless_plane_with_a_main_cell(store):
     assert row["parent"] == "jp"
     assert await store.read(ops.cell_rows(job)) == [
         {
-            "id": "main",
+            "id": f"{job}_main",
             "name": "main",
             "prog": program.SNIPPET.source,
             "props": {"made_by": "", "has_ui": False},

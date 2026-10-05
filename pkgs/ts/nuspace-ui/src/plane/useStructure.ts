@@ -47,9 +47,9 @@ export function useStructure({
 
 	const commitSource = useCallback(
 		(id: string, source: string) => {
-			notify("cell.update", { plane_id: planeId, cell_id: id, source });
+			notify("cell.update", { cell_id: id, source });
 		},
-		[notify, planeId],
+		[notify],
 	);
 
 	/**
@@ -80,7 +80,7 @@ export function useStructure({
 			const first = index(ids[0]);
 			const prev = first > 0 ? cells[first - 1] : null;
 			for (const cell_id of ids) {
-				notify("cell.delete", { plane_id: planeId, cell_id });
+				notify("cell.delete", { cell_id });
 			}
 			patch({
 				selected: prev ? [prev.id] : [],
@@ -89,7 +89,7 @@ export function useStructure({
 				editing: editor.editing.filter((e) => !ids.includes(e)),
 			});
 		},
-		[cells, editor.editing, index, notify, planeId, patch],
+		[cells, editor.editing, index, notify, patch],
 	);
 
 	const moveSelected = useCallback(

@@ -85,10 +85,10 @@ def claude_code(
             matters once tools are allowed.
 
     Returns:
-        A callable ``endpoint(loop, *, system, plane_id, cell_id)``. ``loop``
-        is what to run once the endpoint is up, as a function of :func:`ask`;
-        ``system`` is the system prompt; the ids are the Cell the agent runs
-        in, whose state keeps the conversation's id. It yields whatever
+        A callable ``endpoint(loop, *, system, cell_id)``. ``loop`` is what
+        to run once the endpoint is up, as a function of :func:`ask`;
+        ``system`` is the system prompt; ``cell_id`` is the Cell the agent
+        runs in, whose state keeps the conversation's id. It yields whatever
         ``loop`` yields.
 
     Notes:
@@ -105,7 +105,6 @@ def claude_code(
         loop: Callable[..., nu.Nu],
         *,
         system: str,
-        plane_id: nu.StrArg,
         cell_id: nu.StrArg,
     ) -> nu.Nu:
         return nu.With(
@@ -116,9 +115,9 @@ def claude_code(
                 allowed_tools=list(allowed_tools),
                 permission_mode=permission_mode,
             ),
-            body=_minted(plane_id, cell_id)
+            body=_minted(cell_id)
             >> nu.let(
-                ops.snapshot(memory.sid_of(plane_id, cell_id)),
+                ops.snapshot(memory.sid_of(cell_id)),
                 lambda sid: nustd.cc.Session(loop(ask), sid=sid),
             ),
         )
@@ -126,7 +125,7 @@ def claude_code(
     return endpoint
 
 
-def _minted(plane_id: nu.StrArg, cell_id: nu.StrArg) -> nu.Nu:
+def _minted(cell_id: nu.StrArg) -> nu.Nu:
     """Give the Cell a conversation id if it has none yet. One short commit.
 
     Minting is all it takes: the conversation begins under the id on the first
@@ -137,10 +136,10 @@ def _minted(plane_id: nu.StrArg, cell_id: nu.StrArg) -> nu.Nu:
     """
     return ops.atomic_state(
         nu.IfDo(
-            ops.cell_exists(plane_id, cell_id),
+            ops.cell_exists(cell_id),
             nu.IfDo(
-                nu.Not(memory.sid_of(plane_id, cell_id).exists()),
-                memory.sid_of(plane_id, cell_id).set(nustd.cc.NewSession()),
+                nu.Not(memory.sid_of(cell_id).exists()),
+                memory.sid_of(cell_id).set(nustd.cc.NewSession()),
             ),
         )
     )

@@ -95,7 +95,7 @@ async def test_cell_state_persists_under_the_cell(tmp_path):
     write, read = _store(tmp_path)
     await write(reroot(bump() >> bump(), "p", "c"))
     await write(reroot(bump(), "p", "c"))
-    assert await read(States.planes["p"].cells["c"].extract()) == {"n": 3}
+    assert await read(States.cells["c"].extract()) == {"n": 3}
     assert await read(n_of("p", "c")) == 3
 
 
@@ -112,9 +112,12 @@ async def test_state_lands_in_the_state_file_only(tmp_path):
         value, _ = await nu.arun(nu.With(stack, body=nustd.kv.Snapshot(ref, scope=tag)))
         return value
 
-    got = await whole(STATE_FILE, States, States.planes.extract())
-    assert got == {"p": {"state": {"title": "t"}, "cells": {"c": {"n": 1}}}}
+    got = await whole(
+        STATE_FILE, States, nu.List.of(States.planes.extract(), States.cells.extract())
+    )
+    assert got == [{"p": {"state": {"title": "t"}}}, {"c": {"n": 1}}]
     assert await whole(KERNEL_FILE, Space, Space.planes.extract()) == {}
+    assert await whole(KERNEL_FILE, Space, Space.cells.extract()) == {}
 
 
 async def test_cells_do_not_share_cell_state(tmp_path):

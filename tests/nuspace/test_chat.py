@@ -46,8 +46,8 @@ TALK = "def out():\n    return None\n"
 
 #: The panel the first turn puts up, spelled out rather than read back, so a
 #: change to how one is named is a change somebody has to make here too.
-FIRST = f"{chat.CHAT_DISPLAY_ID}1"
-SECOND = f"{chat.CHAT_DISPLAY_ID}2"
+FIRST = f"{UI}_{chat.CHAT_DISPLAY_ID}1"
+SECOND = f"{UI}_{chat.CHAT_DISPLAY_ID}2"
 
 #: A deadline for the tests on real workers. Met early, it costs nothing.
 SLOW = 20.0
@@ -68,7 +68,7 @@ async def _talker(store):
 
 
 async def _messages(store):
-    return await store.read(chat.messages_of(await _talker(store), chat.CHAT_TALK))
+    return await store.read(chat.messages_of(chat.talk_of(await _talker(store))))
 
 
 # --- the pair -------------------------------------------------------------------
@@ -95,8 +95,8 @@ async def test_the_first_message_makes_the_plane_that_talks_and_starts_it(store)
         "backend": chat.TALKER_BACKEND,
     }
     assert rows[talker]["name"] == "ideas"
-    assert await store.read(ops.cells(talker)) == [chat.CHAT_TALK]
-    assert await store.read(ops.prog(talker, chat.CHAT_TALK)) == TALK
+    assert await store.read(ops.cells(talker)) == [f"{talker}_{chat.CHAT_TALK}"]
+    assert await store.read(ops.prog(chat.talk_of(talker))) == TALK
     # Up now, and back up whenever the space opens.
     assert talker in await store.read(init.booted())
     assert [run["by"] for run in await store.read(ops.runs(talker))] == [chat.BY]
@@ -116,7 +116,7 @@ async def test_a_later_message_only_appends(store):
     await _seeded(store)
     await _said(store, "first")
     talker = await _talker(store)
-    await store.run(chat.say(talker, chat.CHAT_TALK, chat.ROLE_AGENT, nu.Str("there are two")))
+    await store.run(chat.say(chat.talk_of(talker), chat.ROLE_AGENT, nu.Str("there are two")))
     await _said(store, "second")
     assert await _talker(store) == talker
     assert sorted(await store.read(ops.planes())) == sorted([UI, talker])
@@ -157,9 +157,9 @@ async def test_a_message_to_a_cell_nobody_made_makes_nothing(store):
     await _seeded(store)
     await _said(store, "hello")
     talker = await _talker(store)
-    await store.run(chat.say(talker, "c_nobody", chat.ROLE_AGENT, nu.Str("ghost")))
-    assert await store.read(ops.cells(talker)) == [chat.CHAT_TALK]
-    assert "c_nobody" not in await store.read(nu.list(States.planes[talker].cells.keys()))
+    await store.run(chat.say("c_nobody", chat.ROLE_AGENT, nu.Str("ghost")))
+    assert await store.read(ops.cells(talker)) == [f"{talker}_{chat.CHAT_TALK}"]
+    assert "c_nobody" not in await store.read(nu.list(States.cells.keys()))
 
 
 async def test_the_conversation_ships_as_values_not_views(store):
@@ -192,7 +192,7 @@ async def test_the_panel_the_running_turn_writes_into_is_the_one_just_made(store
     one that says which it is, or two callers have two answers."""
     await _seeded(store)
     await _said(store, "one")
-    assert await store.read(chat.latest_display(await _talker(store), chat.CHAT_TALK)) == FIRST
+    assert await store.read(chat.latest_display(chat.talk_of(await _talker(store)))) == FIRST
 
 
 async def test_what_the_model_says_back_does_not_move_the_panel(store):
@@ -201,9 +201,9 @@ async def test_what_the_model_says_back_does_not_move_the_panel(store):
     await _seeded(store)
     await _said(store, "one")
     talker = await _talker(store)
-    await store.run(chat.say(talker, chat.CHAT_TALK, chat.ROLE_AGENT, nu.Str("answered")))
-    await store.run(chat.say(talker, chat.CHAT_TALK, chat.ROLE_SYSTEM, nu.Str("that run ended")))
-    assert await store.read(chat.latest_display(talker, chat.CHAT_TALK)) == FIRST
+    await store.run(chat.say(chat.talk_of(talker), chat.ROLE_AGENT, nu.Str("answered")))
+    await store.run(chat.say(chat.talk_of(talker), chat.ROLE_SYSTEM, nu.Str("that run ended")))
+    assert await store.read(chat.latest_display(chat.talk_of(talker))) == FIRST
     assert await store.read(ops.cells(UI)) == [FIRST]
 
 
@@ -212,7 +212,7 @@ async def test_a_second_turn_gets_a_panel_of_its_own(store):
     await _said(store, "one")
     await _said(store, "two")
     assert await store.read(ops.cells(UI)) == [FIRST, SECOND]
-    assert await store.read(chat.latest_display(await _talker(store), chat.CHAT_TALK)) == SECOND
+    assert await store.read(chat.latest_display(chat.talk_of(await _talker(store)))) == SECOND
 
 
 @pytest.mark.parametrize(
@@ -224,7 +224,7 @@ async def test_the_cells_the_host_appends_load_the_way_the_kernel_loads_them(sto
     session. Nothing brackets them: they bracket themselves."""
     await store.run(ops.add_plane("p", backend="async") >> ops.add_cell("p", source, cell_id="c"))
     rewrite = Rewrites(Reroot("p", "c"), session_env("127.0.0.1:9")("s1").rewrite)
-    prog = Space.planes["p"].cells["c"].prog
+    prog = Space.cells["c"].prog
     term = await store.run(
         nustd.kv.Snapshot(
             prog.load(scope={"plane": "p", "cell": "c"}, rewrite=rewrite), scope=Space
@@ -240,8 +240,8 @@ async def test_a_chat_nobody_started_is_owed_nothing(store):
     await _seeded(store)
     await _said(store, "one")
     talker = await _talker(store)
-    await store.run(chat.say(talker, chat.CHAT_TALK, chat.ROLE_AGENT, nu.Str("answered")))
-    assert await store.read(chat.unanswered("p_nobody", chat.CHAT_TALK)) is False
+    await store.run(chat.say(chat.talk_of(talker), chat.ROLE_AGENT, nu.Str("answered")))
+    assert await store.read(chat.unanswered(chat.talk_of("p_nobody"))) is False
 
 
 async def test_a_message_the_cell_never_heard_is_still_answered(store):
@@ -249,7 +249,7 @@ async def test_a_message_the_cell_never_heard_is_still_answered(store):
     heard the change that carried it. This is what it asks instead."""
     await _seeded(store)
     await _said(store, "what is here")
-    assert await store.read(chat.unanswered(await _talker(store), chat.CHAT_TALK)) is True
+    assert await store.read(chat.unanswered(chat.talk_of(await _talker(store)))) is True
 
 
 async def test_a_reboot_does_not_replay_an_answered_conversation(store):
@@ -259,10 +259,10 @@ async def test_a_reboot_does_not_replay_an_answered_conversation(store):
     await _seeded(store)
     await _said(store, "one")
     talker = await _talker(store)
-    await store.run(chat.say(talker, chat.CHAT_TALK, chat.ROLE_AGENT, nu.Str("answered one")))
+    await store.run(chat.say(chat.talk_of(talker), chat.ROLE_AGENT, nu.Str("answered one")))
     await _said(store, "two")
-    await store.run(chat.say(talker, chat.CHAT_TALK, chat.ROLE_AGENT, nu.Str("answered two")))
-    assert await store.read(chat.unanswered(talker, chat.CHAT_TALK)) is False
+    await store.run(chat.say(chat.talk_of(talker), chat.ROLE_AGENT, nu.Str("answered two")))
+    assert await store.read(chat.unanswered(chat.talk_of(talker))) is False
 
 
 def test_a_fresh_subscription_every_time_and_two_containers_for_two_things():
@@ -272,18 +272,18 @@ def test_a_fresh_subscription_every_time_and_two_containers_for_two_things():
     keeps the loop from waking once a pass on a row it does not read. Fresh
     nodes because a subscription is a handle and the first arm to end closes
     it under the other."""
-    watch = chat.trace_changed(UI, FIRST)
-    assert repr(watch) == repr(ops.cell_state(UI, FIRST, chat.Own.state).on_change())
-    assert watch is not chat.trace_changed(UI, FIRST)
-    assert repr(watch) != repr(chat.changed("p_talker", chat.CHAT_TALK))
+    watch = chat.trace_changed(FIRST)
+    assert repr(watch) == repr(ops.cell_state(FIRST, chat.Own.state).on_change())
+    assert watch is not chat.trace_changed(FIRST)
+    assert repr(watch) != repr(chat.changed(chat.talk_of("p_talker")))
 
 
 def test_the_conversation_and_the_working_memory_are_two_containers():
     """A pass writes its working memory on every link, and the chat waits on
     the conversation. One container for both would wake the chat once a pass."""
-    talked = repr(chat.changed("p_talker", chat.CHAT_TALK))
-    assert repr(session.changed("p_talker", chat.CHAT_TALK)) != talked
-    assert repr(chat.changed("p_talker", chat.CHAT_TALK)) == talked
+    talked = repr(chat.changed(chat.talk_of("p_talker")))
+    assert repr(session.changed(chat.talk_of("p_talker"))) != talked
+    assert repr(chat.changed(chat.talk_of("p_talker"))) == talked
 
 
 async def test_the_host_speaking_closes_an_unanswered_run(store):
@@ -292,8 +292,8 @@ async def test_the_host_speaking_closes_an_unanswered_run(store):
     await _seeded(store)
     await _said(store, "do a thing")
     talker = await _talker(store)
-    await store.run(chat.say(talker, chat.CHAT_TALK, chat.ROLE_SYSTEM, nu.Str("that run ended")))
-    assert await store.read(chat.unanswered(talker, chat.CHAT_TALK)) is False
+    await store.run(chat.say(chat.talk_of(talker), chat.ROLE_SYSTEM, nu.Str("that run ended")))
+    assert await store.read(chat.unanswered(chat.talk_of(talker))) is False
 
 
 # --- what a turn draws -------------------------------------------------------------
@@ -341,8 +341,8 @@ async def test_a_turn_drawn_on_a_plane_nobody_made_draws_nothing(store):
 
 async def _wrote(store, cycle, kind, text):
     """One state, into whichever panel the running turn is writing into."""
-    panel = chat.latest_display(chat.talker_of(UI), chat.CHAT_TALK)
-    await store.run(chat.state(UI, ops.snapshot(panel), cycle, kind, nu.Str(text)))
+    panel = chat.latest_display(chat.talk_of(chat.talker_of(UI)))
+    await store.run(chat.state(ops.snapshot(panel), cycle, kind, nu.Str(text)))
 
 
 async def test_the_trace_reads_back_in_the_order_it_was_written(store):
@@ -350,7 +350,7 @@ async def test_the_trace_reads_back_in_the_order_it_was_written(store):
     await _said(store, "what is here")
     await _wrote(store, chat.CYCLE_WORK, chat.KIND_HEARD, "what is here")
     await _wrote(store, chat.CYCLE_ANSWER, chat.KIND_DONE, "answer")
-    assert await store.read(chat.trace_of(UI, FIRST)) == [
+    assert await store.read(chat.trace_of(FIRST)) == [
         {"cycle": chat.CYCLE_WORK, "kind": chat.KIND_HEARD, "text": "what is here"},
         {"cycle": chat.CYCLE_ANSWER, "kind": chat.KIND_DONE, "text": "answer"},
     ]
@@ -361,8 +361,8 @@ async def test_a_note_is_the_one_row_the_model_writes(store):
     whoever wrote it, so this row is the model's and the host composes none."""
     await _seeded(store)
     await _said(store, "make me a table")
-    await store.run(chat.note(UI, FIRST, chat.CYCLE_WORK, nu.Str("drew the planes table")))
-    assert await store.read(chat.trace_of(UI, FIRST)) == [
+    await store.run(chat.note(FIRST, chat.CYCLE_WORK, nu.Str("drew the planes table")))
+    assert await store.read(chat.trace_of(FIRST)) == [
         {"cycle": chat.CYCLE_WORK, "kind": chat.KIND_NOTE, "text": "drew the planes table"}
     ]
 
@@ -375,8 +375,8 @@ async def test_the_turn_you_scroll_back_to_still_holds_its_own_work(store):
     await _wrote(store, chat.CYCLE_WORK, chat.KIND_RUNNING, "counted the planes")
     await _said(store, "two")
     await _wrote(store, chat.CYCLE_WORK, chat.KIND_RUNNING, "counted the cells")
-    first = await store.read(chat.trace_of(UI, FIRST))
-    second = await store.read(chat.trace_of(UI, SECOND))
+    first = await store.read(chat.trace_of(FIRST))
+    second = await store.read(chat.trace_of(SECOND))
     assert [row["text"] for row in first] == ["counted the planes"]
     assert [row["text"] for row in second] == ["counted the cells"]
 
@@ -386,15 +386,15 @@ async def test_a_turn_that_has_written_nothing_reads_empty(store):
     until the run says something, and an unwritten leaf reads EMPTY."""
     await _seeded(store)
     await _said(store, "one")
-    assert await store.read(chat.trace_of(UI, FIRST)) == []
+    assert await store.read(chat.trace_of(FIRST)) == []
 
 
 async def test_a_panel_nobody_put_up_has_nothing_to_read(store):
     """A store key may not hold an empty segment, so the id ``latest_display``
     answers before the first submit is tested before anything takes it."""
     await _seeded(store)
-    assert await store.read(chat.trace_of(UI, "")) == []
-    await store.run(chat.state(UI, "", chat.CYCLE_WORK, chat.KIND_HEARD, nu.Str("into the void")))
+    assert await store.read(chat.trace_of("")) == []
+    await store.run(chat.state("", chat.CYCLE_WORK, chat.KIND_HEARD, nu.Str("into the void")))
     assert await store.read(ops.cells(UI)) == []
 
 
@@ -404,7 +404,7 @@ async def test_the_trace_ships_as_values_not_views(store):
     await _seeded(store)
     await _said(store, "one")
     await _wrote(store, chat.CYCLE_ANSWER, chat.KIND_DONE, "said it")
-    rows = await store.read(chat.trace_of(UI, FIRST))
+    rows = await store.read(chat.trace_of(FIRST))
     assert all(type(one) is dict for one in rows)
     assert msgpack.packb(rows) is not None
 
@@ -412,11 +412,10 @@ async def test_the_trace_ships_as_values_not_views(store):
 async def test_a_state_written_at_a_cell_nobody_made_makes_nothing(store):
     await _seeded(store)
     await _said(store, "one")
-    await store.run(chat.state(UI, "c_nobody", chat.CYCLE_WORK, chat.KIND_DONE, nu.Str("ghost")))
-    await store.run(chat.state("p_nobody", FIRST, chat.CYCLE_WORK, chat.KIND_DONE, nu.Str("x")))
+    await store.run(chat.state("c_nobody", chat.CYCLE_WORK, chat.KIND_DONE, nu.Str("ghost")))
     assert await store.read(ops.cells(UI)) == [FIRST]
     assert sorted(await store.read(ops.planes())) == sorted([UI, await _talker(store)])
-    assert await store.read(States.planes.contains("p_nobody")) is False
+    assert await store.read(States.cells.contains("c_nobody")) is False
 
 
 # --- on real workers ---------------------------------------------------------------
@@ -430,7 +429,7 @@ async def test_a_state_written_at_a_cell_nobody_made_makes_nothing(store):
 #: show it resolving in a worker through the proxied Navigator is a worker
 #: doing it.
 #:
-#: Nothing is baked in: the Plane it draws into is read off its own Plane's
+#: Nothing is baked in: the panel it narrates into is read off its own
 #: state, where the submit that made it wrote it.
 ACK = """import nu
 from nuspace import ops
@@ -438,31 +437,28 @@ from nuspace.agent import chat, session
 
 
 def out():
-    plane, cell = ops.Here.plane, ops.Here.cell
+    cell = ops.Here.cell
 
     def owed():
-        return ops.snapshot(chat.unanswered(plane, cell))
+        return ops.snapshot(chat.unanswered(cell))
 
     def panel():
-        return chat.latest_display(plane, cell)
-
-    def ui():
-        return chat.drawn_of(plane)
+        return chat.latest_display(cell)
 
     # Bracketed by hand, as the agent is: each op commits on its own and reads
     # its arguments inside, the one bare write gets a commit of its own.
     ack = (
-        session.cleared(plane, cell)
-        >> ops.atomic_state(session.session_of(plane, cell).reply.set("acking"))
-        >> chat.state(ui(), panel(), chat.CYCLE_WORK, chat.KIND_HEARD, "working")
-        >> chat.say(plane, cell, chat.ROLE_AGENT, "ack")
-        >> chat.note(ui(), panel(), chat.CYCLE_ANSWER, "said it")
+        session.cleared(cell)
+        >> ops.atomic_state(session.session_of(cell).reply.set("acking"))
+        >> chat.state(panel(), chat.CYCLE_WORK, chat.KIND_HEARD, "working")
+        >> chat.say(cell, chat.ROLE_AGENT, "ack")
+        >> chat.note(panel(), chat.CYCLE_ANSWER, "said it")
     )
     return nu.ForeverDo(
         nu.IfDo(owed(), ack)
         >> nu.IfDo(
             nu.Not(owed()),
-            nu.ReactWhile(ops.snapshot(chat.changed(plane, cell)), nu.Not(owed()), nu.Noop()),
+            nu.ReactWhile(ops.snapshot(chat.changed(cell)), nu.Not(owed()), nu.Noop()),
         )
     )
 """
@@ -494,19 +490,19 @@ async def test_a_started_chat_answers_every_message(space):
     await space.run(ops.add_plane(UI, backend="async", ui=True, name="ideas"))
     await space.run(chat.submit(UI, nu.Str("one"), talk=ACK))
     talker = await space.read(chat.talker_of(UI))
-    said = chat.messages_of(talker, chat.CHAT_TALK)
+    said = chat.messages_of(chat.talk_of(talker))
     await space.until(said, lambda rows: len(rows) == 2, SLOW)
     await space.run(chat.submit(UI, nu.Str("two"), talk=ACK))
     kept = await space.until(said, lambda rows: len(rows) == 4, SLOW)
     assert [one["text"] for one in kept] == ["one", "ack", "two", "ack"]
     assert await space.read(ops.cells(UI)) == [FIRST, SECOND]
-    first = await space.read(chat.trace_of(UI, FIRST))
+    first = await space.read(chat.trace_of(FIRST))
     assert first == [
         {"cycle": chat.CYCLE_WORK, "kind": chat.KIND_HEARD, "text": "working"},
         {"cycle": chat.CYCLE_ANSWER, "kind": chat.KIND_NOTE, "text": "said it"},
     ]
-    assert await space.read(chat.trace_of(UI, SECOND)) == first
-    assert await space.read(session.reply_of(talker, chat.CHAT_TALK)) == "acking"
+    assert await space.read(chat.trace_of(SECOND)) == first
+    assert await space.read(session.reply_of(chat.talk_of(talker))) == "acking"
 
 
 #: A panel with the drawing taken out of it: it counts the rows it can see
@@ -520,8 +516,7 @@ from nuspace import ops
 from nuspace.agent import chat
 
 
-#: The Plane the chat draws into, and the panel on it this one is watching.
-UI = "{UI}"
+#: The panel this one is watching.
 PANEL = "{FIRST}"
 
 
@@ -531,7 +526,7 @@ class Seen(nuspace.CellState):
 
 
 def counted():
-    return Seen.seen.set(nu.Len(nu.List(chat.trace_of(UI, PANEL))))
+    return Seen.seen.set(nu.Len(nu.List(chat.trace_of(PANEL))))
 
 
 def out():
@@ -542,7 +537,7 @@ def out():
     return ops.bracketed(
         counted()
         >> Seen.woke.set(0)
-        >> nu.ReactForever(chat.trace_changed(UI, PANEL), counted() >> Seen.woke.set(Seen.woke + 1))
+        >> nu.ReactForever(chat.trace_changed(PANEL), counted() >> Seen.woke.set(Seen.woke + 1))
     )
 '''
 
@@ -567,8 +562,8 @@ async def test_a_panel_in_a_worker_hears_the_rows_a_turn_writes(space):
     await space.run(chat.submit(UI, nu.Str("one"), talk=TALK))
     p, (c,) = await space.plane(COUNTER, backend="mp")
     await space.run(ops.plane_run(p, by="test"))
-    seen = ops.cell_state(p, c, _Seen.seen)
-    woke = ops.cell_state(p, c, _Seen.woke)
+    seen = ops.cell_state(c, _Seen.seen)
+    woke = ops.cell_state(c, _Seen.woke)
     # Up, and then long enough to subscribe: the count is written before
     # the watch binds. The rows go in after that, so what it ends up holding
     # is what the watch carried and not what it read on the way in.
@@ -576,7 +571,7 @@ async def test_a_panel_in_a_worker_hears_the_rows_a_turn_writes(space):
     await asyncio.sleep(2.0)
 
     def wrote(text):
-        return chat.state(UI, FIRST, chat.CYCLE_WORK, chat.KIND_RUNNING, nu.Str(text))
+        return chat.state(FIRST, chat.CYCLE_WORK, chat.KIND_RUNNING, nu.Str(text))
 
     await space.run(wrote("counted the planes"))
     await space.until(seen.fallback(0), lambda n: n == 1, SLOW)

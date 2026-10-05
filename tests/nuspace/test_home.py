@@ -39,18 +39,18 @@ async def test_home_is_seeded_once_and_left_alone_after_edits(store):
     assert row["meta"] == {"editable": True, "full_width": False, "icon": home.ICON}
     cells = await store.read(ops.cell_rows(home.PLANE))
     assert [(c["id"], c["name"], c["prog"]) for c in cells] == [
-        (cell, cell, source) for cell, source in home.CELLS
+        (home.seeded_id(home.PLANE, name), name, source) for name, source in home.CELLS
     ]
 
     # The owner edits it: a cell gone, one rewritten, the plane renamed.
     await store.run(
-        ops.remove_cell(home.PLANE, "start")
-        >> ops.set_prog(home.PLANE, "header", "def out():\n    return None\n")
+        ops.remove_cell(home.seeded_id(home.PLANE, "start"))
+        >> ops.set_prog(home.seeded_id(home.PLANE, "header"), "def out():\n    return None\n")
         >> ops.rename_plane(home.PLANE, "Mine")
     )
     await store.run(home.ensure_home())
     cells = await store.read(ops.cell_rows(home.PLANE))
-    assert [c["id"] for c in cells] == ["header", "recent", "glance"]
+    assert [c["name"] for c in cells] == ["header", "recent", "glance"]
     assert cells[0]["prog"] == "def out():\n    return None\n"
     assert await store.read(Space.planes[home.PLANE].name) == "Mine"
     # System: protected.
@@ -185,7 +185,7 @@ async def test_each_cell_loads_through_the_kernel_rewrites(store, cell):
     await store.run(ops.add_plane("p", backend="async") >> ops.add_cell("p", source, cell_id="c"))
     env = session_env("127.0.0.1:9")("s1")
     rewrite = Rewrites(Reroot("p", "c"), env.rewrite)
-    prog = Space.planes["p"].cells["c"].prog
+    prog = Space.cells["c"].prog
     term = await store.run(
         nustd.kv.Snapshot(
             prog.load(scope={"plane": "p", "cell": "c"}, rewrite=rewrite), scope=Space

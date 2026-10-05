@@ -134,12 +134,15 @@ async def test_remove_plane_drops_it_and_its_subtree(store):
     top, keep = await plane(store, "top"), await plane(store, "keep")
     mid = await store.made(ops.add_plane(parent=top, backend="async", into=MADE))
     leaf = await store.made(ops.add_plane(parent=mid, backend="async", into=MADE))
-    await cell(store, leaf)
+    gone = [await cell(store, top), await cell(store, leaf)]
+    kept = await cell(store, keep)
     await store.run(ops.remove_plane(top))
     assert await store.read(ops.planes()) == [keep]
     assert await store.read(ops.children()) == [keep]
     assert await store.read(nu.list(Space.tree.keys())) == [ROOT]
     assert await store.read(ops.cells(leaf)) == []
+    assert await store.read(nu.list(Space.cells.keys())) == [kept]
+    assert not any([await store.read(ops.cell_exists(c)) for c in gone])
 
 
 async def test_remove_plane_refuses_system(store):
@@ -174,7 +177,7 @@ async def test_add_cell_places_by_index(store):
     c = await cell(store, p, name="c", index=0, meta={"k": 1})
     assert c.startswith("c_")
     assert await store.read(ops.cells(p)) == [c, a, b]
-    assert await store.read(ops.cell_exists(p, a)) is True
+    assert await store.read(ops.cell_exists(a)) is True
     assert (await store.read(ops.cell_rows(p)))[0] == {
         "id": c,
         "name": "c",
@@ -209,16 +212,16 @@ async def test_add_cell_has_no_ui_when_plain_or_broken(store):
     p = await plane(store)
     c = await cell(store, p, PLAIN)
     assert await has_ui(store, p, c) is False
-    await store.run(ops.set_prog(p, c, "def out("))
+    await store.run(ops.set_prog(c, "def out("))
     assert await has_ui(store, p, c) is False
 
 
 async def test_set_prog_recomputes_has_ui(store):
     p = await plane(store)
     c = await cell(store, p, PLAIN)
-    await store.run(ops.set_prog(p, c, DRAWS))
+    await store.run(ops.set_prog(c, DRAWS))
     assert await has_ui(store, p, c) is True
-    await store.run(ops.set_prog(p, c, PLAIN))
+    await store.run(ops.set_prog(c, PLAIN))
     assert await has_ui(store, p, c) is False
     await store.run(ops.add_cell(p, DRAWS, cell_id=c))
     assert await has_ui(store, p, c) is True
@@ -227,7 +230,7 @@ async def test_set_prog_recomputes_has_ui(store):
 async def test_has_ui_reads_true_where_never_worked_out(store):
     p = await plane(store)
     c = await cell(store, p, PLAIN)
-    props = Space.planes[p].cells[c].props
+    props = Space.cells[c].props
     await store.run(nustd.kv.Transaction(props.del_item("has_ui"), scope=Space))
     assert await has_ui(store, p, c) is True
 
@@ -244,21 +247,30 @@ async def test_add_cell_given_id(store):
     assert await store.read(ops.cells(p)) == ["x"]
 
 
-async def test_cells_lists_unordered_cells_last(store):
+async def test_add_cell_points_the_cell_back_at_its_plane(store):
     p = await plane(store)
     a = await cell(store, p)
-    await store.run(nustd.kv.Transaction(Space.planes[p].cells["stray"].prog.set("s"), scope=Space))
-    await store.run(nustd.kv.Transaction(Space.planes[p].order.append("ghost"), scope=Space))
-    assert await store.read(ops.cells(p)) == [a, "stray"]
+    assert await store.read(ops.cell_plane(a)) == p
+    assert await store.read(Space.planes[p].cells.extract()) == [a]
+    assert await store.read(ops.cell_plane("nope")) == ""
+
+
+async def test_add_cell_refuses_an_id_on_another_plane(store):
+    p, q = await plane(store), await plane(store)
+    await cell(store, p, cell_id="x", name="first")
+    assert await cell(store, q, cell_id="x", name="second") == ""
+    assert await store.read(ops.cells(q)) == []
+    assert await store.read(ops.cell_plane("x")) == p
+    assert (await store.read(ops.cell_rows(p)))[0]["name"] == "first"
 
 
 async def test_remove_cell(store):
     p = await plane(store)
     a, b = await cell(store, p), await cell(store, p)
     r = await store.made(ops.plane_run(p, into=MADE))
-    await store.run(ops.remove_cell(p, a) >> ops.remove_cell(p, "nope"))
+    await store.run(ops.remove_cell(a) >> ops.remove_cell("nope"))
     assert await store.read(ops.cells(p)) == [b]
-    assert await store.read(ops.cell_exists(p, a)) is False
+    assert await store.read(ops.cell_exists(a)) is False
     asked = {c["cell"]: c["interrupt_requested"] for c in await store.read(ops.cell_runs(r))}
     assert asked == {a: True, b: False}
 
@@ -266,10 +278,10 @@ async def test_remove_cell(store):
 async def test_rename_cell_and_set_prog(store):
     p = await plane(store)
     a = await cell(store, p, name="a")
-    await store.run(ops.rename_cell(p, a, "b") >> ops.set_prog(p, a, "new"))
-    await store.run(ops.set_prog(p, "nope", "x"))
-    assert await store.read(ops.prog(p, a)) == "new"
-    assert await store.read(ops.prog(p, "nope")) == ""
+    await store.run(ops.rename_cell(a, "b") >> ops.set_prog(a, "new"))
+    await store.run(ops.set_prog("nope", "x"))
+    assert await store.read(ops.prog(a)) == "new"
+    assert await store.read(ops.prog("nope")) == ""
     assert await store.read(ops.cells(p)) == [a]
     assert (await store.read(ops.cell_rows(p)))[0]["name"] == "b"
 
@@ -277,7 +289,7 @@ async def test_rename_cell_and_set_prog(store):
 async def test_set_cell_meta_merges(store):
     p = await plane(store)
     a = await cell(store, p, meta={"x": 1})
-    await store.run(ops.set_cell_meta(p, a, {"y": 2}))
+    await store.run(ops.set_cell_meta(a, {"y": 2}))
     assert (await store.read(ops.cell_rows(p)))[0]["meta"] == {"x": 1, "y": 2}
 
 
@@ -288,34 +300,6 @@ async def test_reorder_cells(store):
     assert await store.read(ops.cells(p)) == [c, a, b]
     await store.run(ops.reorder_cells(p, nu.List.of(b)))
     assert await store.read(ops.cells(p)) == [b, c, a]
-
-
-async def test_move_cell_keeps_id_and_state(store):
-    p, q = await plane(store), await plane(store)
-    a = await cell(store, p, name="a")
-    q1 = await cell(store, q)
-    cells = States.planes[p].cells
-    await store.run(nustd.kv.Transaction(cells.set_item(a, {"n": {"deep": 3}}), scope=States))
-    run = await store.made(ops.plane_run(p, into=MADE))
-    await store.run(ops.move_cell(p, a, q, 0))
-    assert await store.read(ops.cells(p)) == []
-    assert await store.read(ops.cells(q)) == [a, q1]
-    assert (await store.read(ops.cell_rows(q)))[0]["name"] == "a"
-    assert await store.read(States.planes[q].cells[a].extract()) == {"n": {"deep": 3}}
-    assert not await store.read(States.planes[p].cells.contains(a))
-    assert (await store.read(ops.cell_runs(run)))[0]["interrupt_requested"] is True
-
-
-async def test_move_cell_refuses_same_plane_and_missing(store):
-    p = await plane(store)
-    a = await cell(store, p)
-    cells = States.planes[p].cells
-    await store.run(nustd.kv.Transaction(cells.set_item(a, {"n": 1}), scope=States))
-    await store.run(ops.move_cell(p, a, p) >> ops.move_cell(p, a, "nope"))
-    assert await store.read(ops.cells(p)) == [a]
-    # Refused, the state stays where the cell is and no copy is left behind.
-    assert await store.read(nu.list(States.planes.keys())) == [p]
-    assert await store.read(cells[a].extract()) == {"n": 1}
 
 
 # --- Tree ----------------------------------------------------------------------
@@ -427,14 +411,13 @@ async def test_parent_of_an_unlinked_plane(store):
 
 
 async def test_structure_round_trips_through_sqlite(disk):
-    """The codec path: nested meta, a moved cell's props and nested state, order, the tree."""
+    """The codec path: nested meta, a cell's props and nested state, order, the tree."""
     p, q, c = "p", "q", "c"
     await disk.run(ops.add_plane(p, name="p", meta={"a": {"b": 1}}, backend="async"))
     await disk.run(ops.add_plane(q, name="q", parent=p, backend="async"))
-    await disk.run(ops.add_cell(p, "src", cell_id=c, made_by="m", meta={"m": [1, 2]}))
-    cells = States.planes[p].cells
+    await disk.run(ops.add_cell(q, "src", cell_id=c, made_by="m", meta={"m": [1, 2]}))
+    cells = States.cells
     await disk.run(nustd.kv.Transaction(cells.set_item(c, {"n": {"deep": [3]}}), scope=States))
-    await disk.run(ops.move_cell(p, c, q))
     assert await disk.read(ops.plane_rows()) == [
         {"id": p, "name": "p", "props": NO_PROPS, "meta": {"a": {"b": 1}}, "parent": ROOT},
         {"id": q, "name": "q", "props": NO_PROPS, "meta": {}, "parent": p},
@@ -448,7 +431,8 @@ async def test_structure_round_trips_through_sqlite(disk):
             "meta": {"m": [1, 2]},
         }
     ]
-    assert await disk.read(States.planes[q].cells[c].extract()) == {"n": {"deep": [3]}}
+    assert await disk.read(States.cells[c].extract()) == {"n": {"deep": [3]}}
     await disk.run(ops.remove_plane(p))
     assert await disk.read(ops.planes()) == []
     assert await disk.read(nu.list(States.planes.keys())) == []
+    assert await disk.read(nu.list(States.cells.keys())) == []

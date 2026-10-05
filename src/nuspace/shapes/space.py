@@ -5,6 +5,7 @@ from __future__ import annotations
 import nu
 import nustd.kv
 
+from .cell import Cell
 from .connection import Connection
 from .kernel import Kernel
 from .plane import Plane
@@ -58,14 +59,15 @@ class SpaceSettings(nu.Shape):
 
 
 class Space(nu.Shape):
-    """Planes, the tree between them, the kernel's records, device and space state.
+    """Planes, their cells, the tree between them, the kernel's records, device and space state.
 
-    ``planes`` is flat, so a plane is one lookup away and a route addresses it
-    directly. Nesting is ``tree``, keyed by plane id plus
+    ``planes`` and ``cells`` are flat, so a plane or a cell is one lookup
+    away by its id alone. A plane lists its cell ids in order, a cell names
+    its plane. Nesting is ``tree``, keyed by plane id plus
     :data:`~nuspace.shapes.tree.ROOT`.
 
-    One writer per subtree: people, cells and services write ``planes`` and
-    ``tree`` through ops, the ops write intents into ``kernel`` and the
+    One writer per subtree: people, cells and services write ``planes``,
+    ``cells`` and ``tree`` through ops, the ops write intents into ``kernel`` and the
     kernel and the backends its effects, the web device writes
     ``connections`` and ``state.recents``, the host writes ``state.info``,
     the settings plane writes ``settings``.
@@ -81,6 +83,7 @@ class Space(nu.Shape):
     """
 
     planes = nustd.kv.DictRef.slot(Plane)
+    cells = nustd.kv.DictRef.slot(Cell)
     tree = nustd.kv.DictRef.slot(Node)
     kernel = nustd.kv.ShapeRef.slot(Kernel)
     connections = nustd.kv.DictRef.slot(Connection)

@@ -103,7 +103,7 @@ def table(now):
         plane = nuspace.Space.planes[pid]
         return nu.List.of(
             plane.name.fallback(pid),
-            plane.cells[cid].name.fallback(cid),
+            nuspace.Space.cells[cid].name.fallback(cid),
             c["by"],
             c["version"],
             c["worker"],

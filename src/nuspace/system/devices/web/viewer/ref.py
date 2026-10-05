@@ -75,16 +75,12 @@ class ViewerRef(SpaceRef):
         return interactions.on_create_cell(self)
 
     def on_update_cell(self) -> Changed:
-        """``{plane_id, cell_id, source}``."""
+        """``{cell_id, source}``."""
         return interactions.on_update_cell(self)
 
     def on_delete_cell(self) -> Changed:
-        """``{plane_id, cell_id}``."""
+        """``{cell_id}``."""
         return interactions.on_delete_cell(self)
-
-    def on_move_cell(self) -> Changed:
-        """``{plane_id, cell_id, to_plane_id, index}``."""
-        return interactions.on_move_cell(self)
 
     def on_reorder_cells(self) -> Changed:
         """``{plane_id, cell_ids}``."""

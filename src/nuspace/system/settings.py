@@ -66,7 +66,7 @@ def out():
 """
 
 
-#: The cells settings is seeded with, in order, as ``(cell id, source)``.
+#: The cells settings is seeded with, in order, as ``(name, source)``.
 CELLS = (("header", HEADER), ("telemetry", TELEMETRY))
 
 

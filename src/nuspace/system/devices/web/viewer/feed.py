@@ -17,11 +17,12 @@ drawn again.
 device's route arm (D15), never read off the browser. One arm per plane in
 it: its subscriptions die with it when the plane leaves ``routes``.
 
-**Narrow watch.** A plane is shipped again when its plane's row, name,
-meta, ``ui`` prop, order or cells (their set, names and progs) change; the
-statuses when any pane's plane run changes or any cell run starts, begins
-or ends. Those are space wide on purpose, see :func:`_status_changes`. A
-cell writing its state or a cell run writing its output wakes neither.
+**Narrow watch.** A plane is shipped again when anything under its row
+changes, or the name or prog of a cell on it; the statuses when any pane's
+plane run changes or any cell run starts, begins or ends. The cell and
+status filters are space wide on purpose, see :func:`_plane_waits` and
+:func:`_status_changes`. A cell
+writing its state or a cell run writing its output wakes neither.
 
 **Meta goes both ways.** A shipped plane carries its whole meta, and a
 ``plane.meta`` event merges keys into it. A plane's props never reach the
@@ -209,25 +210,28 @@ def _ship_status(viewer: Ref, sid: nu.StrArg, plane: nu.Nu) -> nu.Nu:
     return nu.let(snap(pane_run(sid, plane)), ship)
 
 
-def _plane_changes(plane: nu.Nu) -> list[nu.Nu]:
-    """What reships the plane: the plane's row, name, meta, ``ui`` prop, order and cells."""
-    planes = Space.planes
-    patterns = [
-        ("name",),
-        ("meta",),
-        ("meta", "*"),
-        ("props",),
-        ("props", "ui"),
-        ("order",),
-        ("order", "*"),
-        ("cells",),
-        ("cells", "*"),
-        ("cells", "*", "name"),
-        ("cells", "*", "prog"),
+def _plane_waits(plane: nu.Nu) -> list[nu.Nu]:
+    """What reships the plane: anything under its row, or a name or prog of a cell on it.
+
+    The plane's row holds structure only, so every write under it is one the
+    browser draws. Cells are flat, so their names and progs are heard across
+    the space and each change waits out the cells on other planes, ending on
+    the first one listed in this plane's ``cells``. Never named by the
+    plane's own cell ids, though that would be narrower: those are read off
+    the store, and a filter named by something just read is not heard at
+    once (see :func:`~nuspace.system.devices.web.utils.watch`).
+    """
+    row = Space.planes[plane]
+
+    def elsewhere(key: nu.Attr) -> nu.Nu:
+        # A cell field's key ends ``..., cell id, field``.
+        return snap(nu.list(row.cells.fallback([])).contains(nu.GetItem(key, -2)).not_())
+
+    cells = [
+        nu.ReactWhile(snap(Space.cells.on_descendants_change("*", leaf)), elsewhere, nu.Noop())
+        for leaf in ("name", "prog")
     ]
-    return [snap(planes.on_child_change(plane))] + [
-        snap(planes.on_descendants_change(plane, *pattern)) for pattern in patterns
-    ]
+    return [nu.React(snap(row.on_change())), *cells]
 
 
 def _status_changes() -> list[nu.Nu]:
@@ -254,12 +258,12 @@ def _status_changes() -> list[nu.Nu]:
 # --- The composition -------------------------------------------------------------
 
 
-def _on_cell(name: str, change: nu.Nu, op: Callable[[nu.Str, nu.Str, nu.Attr], nu.Nu]) -> nu.Nu:
-    """An arm running ``op(plane_id, cell_id, event)`` for each event that names a cell."""
+def _on_cell(name: str, change: nu.Nu, op: Callable[[nu.Str, nu.Attr], nu.Nu]) -> nu.Nu:
+    """An arm running ``op(cell_id, event)`` for each event that names a cell."""
 
     def body(event: nu.Attr) -> nu.Nu:
-        plane_id, cell_id = field_str(event, "plane_id"), field_str(event, "cell_id")
-        return nu.IfDo((plane_id != "").and_(cell_id != ""), op(plane_id, cell_id, event))
+        cell_id = field_str(event, "cell_id")
+        return nu.IfDo(cell_id != "", op(cell_id, event))
 
     return _arms.event(name, change, body)
 
@@ -271,9 +275,9 @@ def _events(viewer: Ref, snippets: Sequence[Snippet]) -> list[nu.Nu]:
     ``name`` names; an unknown or empty name stores a blank program and ``""``.
     """
 
-    def create(plane_id: nu.Str, cell_id: nu.Str, event: nu.Attr) -> nu.Nu:
-        name = field_str(event, "name")
-        return ops.add_cell(
+    def create(plane_id: nu.Str, event: nu.Attr) -> nu.Nu:
+        name, cell_id = field_str(event, "name"), field_str(event, "cell_id")
+        made = ops.add_cell(
             plane_id,
             nu.Switch(name, {s.name: s.source for s in snippets}, default=""),
             cell_id=cell_id,
@@ -281,23 +285,16 @@ def _events(viewer: Ref, snippets: Sequence[Snippet]) -> list[nu.Nu]:
             index=field_index(event, "index", ops.cells(plane_id).len()),
             made_by=nu.Switch(name, {s.name: s.name for s in snippets}, default=""),
         )
-
-    def move(plane_id: nu.Str, cell_id: nu.Str, event: nu.Attr) -> nu.Nu:
-        to = field_str(event, "to_plane_id")
-        index = field_index(event, "index", ops.cells(to).len())
-        return nu.IfDo(to != "", ops.move_cell(plane_id, cell_id, to, index=index))
+        return nu.IfDo(cell_id != "", made)
 
     return [
-        _on_cell("create", interactions.on_create_cell(viewer), create),
+        _arms.plane_event("create", interactions.on_create_cell(viewer), create),
         _on_cell(
             "update",
             interactions.on_update_cell(viewer),
-            lambda p, c, event: ops.set_prog(p, c, field_str(event, "source")),
+            lambda c, event: ops.set_prog(c, field_str(event, "source")),
         ),
-        _on_cell(
-            "delete", interactions.on_delete_cell(viewer), lambda p, c, _: ops.remove_cell(p, c)
-        ),
-        _on_cell("move", interactions.on_move_cell(viewer), move),
+        _on_cell("delete", interactions.on_delete_cell(viewer), lambda c, _: ops.remove_cell(c)),
         _arms.plane_event(
             "meta",
             interactions.on_set_meta(viewer),
@@ -330,8 +327,9 @@ def viewer_feed(viewer: Ref, sid: nu.StrArg, snippets: Iterable[Snippet] = ()) -
         return nu.ParallelAsync(
             _arms.state(
                 "plane",
-                _plane_changes(plane),
+                [],
                 _ship_plane(viewer, plane) >> _ship_status(viewer, sid, plane),
+                waits=_plane_waits(plane),
             ),
             _arms.state("status", _status_changes(), _ship_status(viewer, sid, plane)),
         )

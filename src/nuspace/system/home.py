@@ -52,6 +52,7 @@ __all__ = [
     "START",
     "ensure_home",
     "seed",
+    "seeded_id",
     "versions",
     "write_info",
 ]
@@ -259,8 +260,7 @@ def out():
 '''
 
 
-#: The cells home is seeded with, in order, as ``(cell id, source)``. The id
-#: is the name too.
+#: The cells home is seeded with, in order, as ``(name, source)``.
 CELLS = (("header", HEADER), ("recent", RECENT), ("glance", GLANCE), ("start", START))
 
 
@@ -268,6 +268,15 @@ class _Seeding(nu.Shape):
     """What :func:`seed` works out before its bracket: each cell's ``has_ui``, by cell id."""
 
     ui = nu.DictRef.slot(bool)
+
+
+def seeded_id(plane: str, name: str) -> str:
+    """The id of the cell :func:`seed` makes under this name: the plane's id, then the name.
+
+    Fixed, so the cell is found without a lookup, and under the plane's id,
+    so two seeded planes' cells of one name never meet.
+    """
+    return f"{plane}_{name}"
 
 
 def seed(
@@ -291,7 +300,8 @@ def seed(
         plane: The plane id, fixed.
         name: What the plane is called.
         icon: Its icon, eg ``"emoji:<char>"``.
-        cells: ``(cell id, source)`` in order. The id is the name too.
+        cells: ``(name, source)`` in order. Each cell's id is
+            :func:`seeded_id`.
         backend: The backend its runs execute on. Required: there is no default.
         pin: Pin it, after the pins there are.
     """
@@ -305,11 +315,12 @@ def seed(
         made_by="",
         meta={**META, "icon": icon},
     )
-    for cell, source in cells:
-        writes = writes >> cell_writes(plane, cell, source, _Seeding.ui[cell], name=cell)
+    ids = [(seeded_id(plane, name), name, source) for name, source in cells]
+    for cell, name, source in ids:
+        writes = writes >> cell_writes(plane, cell, source, _Seeding.ui[cell], name=name)
     if pin:
         writes = writes >> pin_last(plane)
-    uis = [_Seeding.ui[cell].set(HasUi(source, plane, cell)) for cell, source in cells]
+    uis = [_Seeding.ui[cell].set(HasUi(source, plane, cell)) for cell, _, source in ids]
     body = nu.Sequential(*uis, atomic(nu.IfDo(missing, writes)))
     return nu.IfDo(snap(missing), nu.Frame(_Seeding, body, ui={}))
 

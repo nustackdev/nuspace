@@ -147,8 +147,8 @@ def converse(
             Cell's own ``cell``.
         ui_plane_id: the Plane the agent draws its answers onto. The other
             half of the pair a chat is, and the one the person is looking at.
-        talk: the endpoint, ``endpoint(loop, *, system, plane_id,
-            cell_id)``, e.g. :func:`~nuspace.agent.cc.claude_code` or
+        talk: the endpoint, ``endpoint(loop, *, system, cell_id)``, e.g.
+            :func:`~nuspace.agent.cc.claude_code` or
             :func:`~nuspace.agent.llm.served_model`. Which model a chat talks
             to is the Plane's choice, so there is no default here.
 
@@ -169,7 +169,7 @@ def converse(
     def loop(ask: Callable[..., nu.Nu]) -> nu.Nu:
         return conversation.answering(plane_id, cell_id, ui_plane_id=ui_plane_id, ask=ask)
 
-    return talk(loop, system=prompt.system_prompt(), plane_id=plane_id, cell_id=cell_id)
+    return talk(loop, system=prompt.system_prompt(), cell_id=cell_id)
 
 
 def perform(
@@ -207,6 +207,5 @@ def perform(
     return talk(
         once,
         system=prompt.system_prompt(task=task, drawing=False),
-        plane_id=plane_id,
         cell_id=cell_id,
     )

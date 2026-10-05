@@ -36,7 +36,7 @@ __all__ = [
 PLANE = "init"
 
 #: The one cell on the plane.
-CELL = "main"
+CELL = "init_main"
 
 #: What plane runs init starts are recorded as ``by``.
 BY = "init"
@@ -73,7 +73,7 @@ def seed(planes: list[str]) -> nu.Nu:
     Asks the cell's state for the key: a list that was never written reads
     as there and empty.
     """
-    listed = States.planes[PLANE].cells[CELL].contains("planes")
+    listed = States.cells[CELL].contains("planes")
     return nu.IfDo(listed.not_(), _here(Boot.planes.set(list(planes))))
 
 

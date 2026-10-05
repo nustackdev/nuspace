@@ -86,14 +86,13 @@ class Snippet:
         label: What the menu shows.
         source: The cell's prog.
         search: What searching one of its cells means, None when it has no
-            content to search. ``search(query, plane, cell)`` returns a term
-            yielding that cell's hits, a list of ``{plane, cell, excerpt}``,
-            ``[]`` for none. It runs inside a search's run, on a worker, so it
+            content to search. ``search(query, cell)`` returns a term
+            yielding that cell's hits, a list of ``{excerpt}``, ``[]`` for
+            none. It runs inside a search's run, on a worker, so it
             is named there by module and qualified name: a module level
             function, never a lambda or a closure.
         description: One line on what a cell made from it is for.
-        ops: The ops on a cell made from it, each taking the plane and cell
-            ids first, for whoever writes a program against its cells: the
+        ops: The ops on a cell made from it, each taking the cell id first, for whoever writes a program against its cells: the
             agent's prompt lists them, signatures and docstrings, under the
             snippet.
     """
@@ -202,13 +201,13 @@ def insert_snippet(
     """Add a cell from a snippet: its source as the prog, its name as the name and ``made_by``.
 
     ``into`` is :func:`~nuspace.ops.cell.add_cell`'s: set to the new cell's
-    id in the commit, ``""`` when the plane is missing. A program that goes
+    id in the commit, ``""`` when nothing was written. A program that goes
     on to write the cell holds it in a ``nu.let`` slot and hands the slot to
     the snippet's ops::
 
         nu.let("", lambda cell: (
             ops.insert_snippet(plane, prose.SNIPPET, into=cell)
-            >> prose.set_text(plane, cell, "Water the basil")
+            >> prose.set_text(cell, "Water the basil")
         ))
     """
     return add_cell(

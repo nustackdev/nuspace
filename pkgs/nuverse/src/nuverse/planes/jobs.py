@@ -1,7 +1,8 @@
 """The ``jobs`` Plane: headless planes, made, listed and set up from one place.
 
 A job is a plane with ``props.ui`` and ``props.system`` both false: nothing
-draws it, and its one cell ``main`` holds its code. The jobs this Plane makes
+draws it, and its one cell ``main`` holds its code, its id the job's with
+``_main`` after it, so it is unique across the space and never looked up. The jobs this Plane makes
 hang under it, ``made_by`` ``jobs``. A headless plane another Plane made is
 that Plane's, eg the one a chat talks through, and not a job.
 
@@ -136,6 +137,11 @@ class Jobs(nuspace.PlaneState):
     selected = nustd.kv.StrRef.slot()
 
 
+def main(job):
+    # A job's one cell: its id is the job's with "_main" after it.
+    return nu.Str(job) + "_main"
+
+
 class Form(nustd.ui.Row):
     name = nustd.ui.InputRef.slot(placeholder="Job name")
     create = nustd.ui.ButtonRef.slot(label="Create job")
@@ -151,7 +157,7 @@ def create(name):
             ops.add_plane(
                 backend="mp", name=name, parent=here, ui=False, made_by="jobs", into=made
             )
-            >> ops.add_cell(job, STARTER, cell_id="main", name="main")
+            >> ops.add_cell(job, STARTER, cell_id=main(job), name="main")
             >> nustd.kv.Transaction(Jobs.selected.set(job), scope=nuspace.States)
         )
 
@@ -191,6 +197,11 @@ POLICIES = [
 
 class Jobs(nuspace.PlaneState):
     selected = nustd.kv.StrRef.slot()
+
+
+def main(job):
+    # A job's one cell: its id is the job's with "_main" after it.
+    return nu.Str(job) + "_main"
 
 
 class Policy(nustd.ui.Field):
@@ -236,7 +247,7 @@ def draw(job):
     delay = supervisor.delay_of(job)
     return snap(
         d.title.set(nuspace.Space.planes[job].name.fallback(job))
-        >> d.editor.set(ops.prog(job, "main"))
+        >> d.editor.set(ops.prog(main(job)))
         >> d.save.set("Save")
         >> d.boot.set(init.booted().contains(job))
         >> d.restart.policy.choice.set(nu.If(policy == "", OFF, policy))
@@ -290,7 +301,7 @@ def delete(job):
 
 def shown(job):
     d = View.detail
-    save = nu.let(nu.Str(d.editor), lambda source: ops.set_prog(job, "main", source))
+    save = nu.let(nu.Str(d.editor), lambda source: ops.set_prog(main(job), source))
     boot = nu.IfDo(nu.bool(d.boot), init.boot(job), init.unboot(job))
     return (
         View.empty.erase()

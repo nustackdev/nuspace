@@ -5,9 +5,10 @@ Three parts, all planes and cells:
 - **a search**: a plane under the system parent :data:`SEARCHES`, made by
   :func:`search`. Not drawn. What it looks for is its plane state
   (:class:`Search`: the query, the snippets picked, whether titles count),
-  and its one cell :data:`CELL` looks: it walks the drawn planes and their
-  cells, and appends what it finds to ``Search.hits`` as it goes, a commit
-  per cell, so a reader sees them land. It stamps ``finished_at`` once it is
+  and its one cell, named :data:`CELL`, looks: it walks the drawn planes'
+  titles, then scans ``Space.cells`` for the cells on a drawn plane, and
+  appends what it finds to ``Search.hits`` as it goes, a commit per cell,
+  so a reader sees them land. It stamps ``finished_at`` once it is
   through, then ends, and its run with it. The plane stays: it is the record.
 - **what is searched**: a cell is searched by the snippet that made it
   (``props.made_by``), when the snippet registered a ``search``
@@ -91,7 +92,7 @@ NAME = "Search"
 #: Its icon, as :func:`~nuspace.ops.plane.plane_icon` spells it.
 ICON = "emoji:🔍"
 
-#: A search plane's one cell, its id and name.
+#: A search plane's one cell, its name. Its id is minted with the plane.
 CELL = "search"
 
 #: The ``by`` a search's run is started with.
@@ -191,28 +192,27 @@ class _Asked(nu.Shape):
     titles = nu.BoolRef.slot()
 
 
-class _AtPlane(nu.Shape):
-    """The plane the walk is at: what it is called."""
+class _At(nu.Shape):
+    """Where the walk is: the plane a hit opens, what that plane is called, the cell, its snippet.
 
+    ``cell_id`` and ``made_by`` are ``""`` on a title.
+    """
+
+    plane = nu.StrRef.slot()
     title = nu.StrRef.slot()
-
-
-class _AtCell(nu.Shape):
-    """The cell the walk is at: its id and the snippet that made it."""
-
     cell_id = nu.StrRef.slot()
     made_by = nu.StrRef.slot()
 
 
 def _append(found: nu.Nu, by: nu.StrArg) -> nu.Nu:
-    """``found`` appended to ``Search.hits``, titled and tagged, in one commit. Nothing when empty."""
+    """``found`` appended to ``Search.hits``, placed, titled and tagged, in one commit. Nothing when empty."""
 
     def add(hit: nu.Attr) -> nu.Nu:
         return Search.hits.append(
             nu.Dict.of(
-                plane=field_str(hit, "plane"),
-                cell=field_str(hit, "cell"),
-                title=_AtPlane.title,
+                plane=_At.plane,
+                cell=_At.cell_id,
+                title=_At.title,
                 excerpt=field_str(hit, "excerpt"),
                 by=by,
             )
@@ -221,43 +221,74 @@ def _append(found: nu.Nu, by: nu.StrArg) -> nu.Nu:
     return nu.IfDo(nu.List(found).len() > 0, atomic_state(nu.ForEachDo(nu.List(found), add)))
 
 
-def _drawn_planes() -> nu.List:
-    """The ids of every plane that draws, in creation order: the planes a hit can open."""
-    planes = ops.planes().iter()
-    return planes.filter(lambda p: Space.planes[nu.Str(p)].props.ui.fallback(False)).to_list()
+def _drawn(plane: nu.Nu) -> nu.Bool:
+    """Whether a plane draws: a hit on it can be opened."""
+    return Space.planes[plane].props.ui.fallback(False)
 
 
-def _cell_rows(plane: nu.Nu) -> nu.List:
-    """A plane's cells as ``{id, made_by}``, in order."""
-
-    def row(cell: nu.Attr) -> nu.Dict:
-        made_by = Space.planes[plane].cells[nu.Str(cell)].props.made_by.fallback("")
-        return nu.Dict.of(id=cell, made_by=made_by)
-
-    return ops.cells(plane).iter().map(row).to_list()
+def _title(plane: nu.Nu) -> nu.Str:
+    """What a hit's plane is called: its name, ``Untitled`` where it has none."""
+    name = Space.planes[plane].name.fallback("")
+    return nu.Str(nu.If(name == "", "Untitled", name))
 
 
-def _by_snippet(name: str, fn: Callable[..., nu.Nu], plane: nu.Str) -> nu.Nu:
+def _plane_rows() -> nu.List:
+    """Every plane that draws as ``{plane, title}``, in creation order."""
+
+    def row(at: nu.Attr) -> nu.Dict:
+        return nu.Dict.of(plane=at, title=_title(nu.Str(at)))
+
+    return ops.planes().iter().filter(lambda p: _drawn(nu.Str(p))).map(row).to_list()
+
+
+def _cell_rows() -> nu.List:
+    """Every cell on a plane that draws as ``{id, plane, title, made_by}``: a scan of ``Space.cells``."""
+
+    def row(at: nu.Attr) -> nu.Dict:
+        cell = Space.cells[nu.Str(at)]
+        plane = cell.plane.fallback("")
+        return nu.Dict.of(
+            id=at, plane=plane, title=_title(plane), made_by=cell.props.made_by.fallback("")
+        )
+
+    ids = nu.list(Space.cells.keys()).iter()
+    return ids.filter(lambda c: _drawn(ops.cell_plane(nu.Str(c)))).map(row).to_list()
+
+
+def _at(row: nu.Attr, body: nu.Nu) -> nu.Nu:
+    """``body`` with :class:`_At` read off a row of the walk."""
+    return nu.Frame(
+        _At,
+        body,
+        plane=field_str(row, "plane"),
+        title=field_str(row, "title"),
+        cell_id=field_str(row, "id"),
+        made_by=field_str(row, "made_by"),
+    )
+
+
+def _by_snippet(name: str, fn: Callable[..., nu.Nu]) -> nu.Nu:
     """The cell at hand searched by ``fn``, when its snippet is ``name`` and ``name`` was picked."""
-    picked = (_AtCell.made_by == name).and_(nu.List(_Asked.snippets).contains(name))
-    hits = snap(nu.List(fn(_Asked.query, plane, _AtCell.cell_id)))
+    picked = (_At.made_by == name).and_(nu.List(_Asked.snippets).contains(name))
+    hits = snap(nu.List(fn(_Asked.query, _At.cell_id)))
     return nu.IfDo(picked, nu.let(hits, lambda found: _append(found, name)))
 
 
-def _title(plane: nu.Str) -> nu.Nu:
-    """The plane at hand, a hit when titles count and its name matches."""
-    name = _AtPlane.title
-    hit = nu.List.of(nu.Dict.of(plane=plane, cell="", excerpt=name))
-    return nu.IfDo(_Asked.titles.and_(matches(name, _Asked.query)), _append(hit, TITLES))
+def _by_title() -> nu.Nu:
+    """The plane at hand, a hit when its name matches."""
+    hit = nu.List.of(nu.Dict.of(excerpt=_At.title))
+    return nu.IfDo(matches(_At.title, _Asked.query), _append(hit, TITLES))
 
 
 def run(searchers: Mapping[str, str]) -> nu.Nu:
-    """A search's cell: walk the drawn planes, append hits as they turn up, stamp ``finished_at``.
+    """A search's cell: titles, then cells, hits appended as they turn up, then ``finished_at``.
 
-    Reads what to look for from its own plane's :class:`Search`. Each read
-    is a snapshot of its own and each cell's hits one commit, so nothing is
-    held open across the walk and a reader sees hits land one cell at a
-    time. ``finished_at`` is stamped however the walk ends, a failure or an
+    Reads what to look for from its own plane's :class:`Search`. Titles are
+    the drawn planes' names; cells are a scan of ``Space.cells``, those on a
+    drawn plane, each searched by the snippet that made it. Each read is a
+    snapshot of its own and each cell's hits one commit, so nothing is held
+    open across the walk and a reader sees hits land one cell at a time.
+    ``finished_at`` is stamped however the walk ends, a failure or an
     interrupt included.
 
     Args:
@@ -266,24 +297,9 @@ def run(searchers: Mapping[str, str]) -> nu.Nu:
             searched.
     """
     loaded = [(name, load_searcher(ref)) for name, ref in searchers.items()]
-
-    def each_cell(plane: nu.Str, row: nu.Attr) -> nu.Nu:
-        return nu.Frame(
-            _AtCell,
-            nu.Sequential(*[_by_snippet(name, fn, plane) for name, fn in loaded]),
-            cell_id=field_str(row, "id"),
-            made_by=field_str(row, "made_by"),
-        )
-
-    def each_plane(at: nu.Attr) -> nu.Nu:
-        plane = nu.Str(at)
-        name = nu.Str(snap(Space.planes[plane].name.fallback("")))
-        cells = nu.ForEachDo(snap(_cell_rows(plane)), lambda row: each_cell(plane, row))
-        return nu.Frame(
-            _AtPlane,
-            _title(plane) >> (cells if loaded else nu.Noop()),
-            title=nu.If(name == "", "Untitled", name),
-        )
+    by_snippets = nu.Sequential(*[_by_snippet(name, fn) for name, fn in loaded])
+    titles = nu.ForEachDo(snap(_plane_rows()), lambda row: _at(row, _by_title()))
+    cells = nu.ForEachDo(snap(_cell_rows()), lambda row: _at(row, by_snippets))
 
     asked = snap(
         nu.Dict.of(
@@ -295,7 +311,7 @@ def run(searchers: Mapping[str, str]) -> nu.Nu:
 
     def looking(held: nu.ObjectRef) -> nu.Nu:
         got = nu.Dict(held)
-        walk = nu.ForEachDo(snap(_drawn_planes()), each_plane)
+        walk = nu.IfDo(_Asked.titles, titles) >> (cells if loaded else nu.Noop())
         return nu.Frame(
             _Asked,
             nu.IfDo(_Asked.query.strip() != "", walk),
@@ -361,8 +377,8 @@ def search(
     prog = source(searchers or {})
     picked = snippets if isinstance(snippets, nu.Nu) else list(snippets)
 
-    def fill(minted: nu.ObjectRef) -> nu.Nu:
-        pid = nu.Str(minted)
+    def fill(minted: nu.ObjectRef, cell: nu.ObjectRef) -> nu.Nu:
+        pid, cid = nu.Str(minted), nu.Str(cell)
         state = (
             Search.query.set(query)
             >> Search.snippets.set(picked)
@@ -374,13 +390,13 @@ def search(
             plane = atomic(
                 _searches()
                 >> plane_writes(pid, backend="mp", name=query, parent=SEARCHES)
-                >> cell_writes(pid, CELL, prog, nu.Bool(ui), name=CELL)
+                >> cell_writes(pid, cid, prog, nu.Bool(ui), name=CELL)
             )
             return plane >> atomic_state(ops.plane_state(pid, state)) >> ops.plane_run(pid, by=BY)
 
-        return nu.let(HasUi(prog, pid, CELL), made)
+        return nu.let(HasUi(prog, pid, cid), made)
 
-    return nu.let(MintId("p"), fill)
+    return nu.let(MintId("p"), lambda pid: nu.let(MintId("c"), lambda cid: fill(pid, cid)))
 
 
 # --- The viewer ---------------------------------------------------------------------------
@@ -587,7 +603,7 @@ def out():
 """
 
 
-#: The cells the viewer is seeded with, in order, as ``(cell id, source)``.
+#: The cells the viewer is seeded with, in order, as ``(name, source)``.
 CELLS = (("pick", PICK), ("results", RESULTS))
 
 

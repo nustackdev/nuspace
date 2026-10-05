@@ -23,7 +23,7 @@ import type { FocusReq } from "./state";
 import { type Cell, hasText, type SlashSnippet, TEXT } from "./types";
 
 export function useTextCells(
-	{ planeId, cells, editor, notify, index, rootRef }: PlaneModel,
+	{ cells, editor, notify, index, rootRef }: PlaneModel,
 	snippets: SlashSnippet[],
 	{
 		focusCell,
@@ -71,10 +71,10 @@ export function useTextCells(
 				e.preventDefault();
 				e.stopPropagation();
 				leaveUp(id);
-				notify("cell.delete", { plane_id: planeId, cell_id: id });
+				notify("cell.delete", { cell_id: id });
 			}
 		},
-		[leaveUp, notify, openGhost, planeId, rootRef],
+		[leaveUp, notify, openGhost, rootRef],
 	);
 
 	/** Enter mid-title: a text cell at the top holding `tail`, caret at its

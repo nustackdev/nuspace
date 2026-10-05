@@ -119,8 +119,10 @@ __all__ = [
     "note",
     "patience_of",
     "say",
+    "scoped",
     "state",
     "submit",
+    "talk_of",
     "talker_of",
     "trace_changed",
     "trace_of",
@@ -228,7 +230,8 @@ KINDS = (
 
 #: The Cell on the talking Plane that talks to the model and keeps what was
 #: said in its own state. A name rather than a minted id, because the Plane it
-#: is on holds it and nothing else.
+#: is on holds it and nothing else: its id is :func:`scoped` under that Plane
+#: (:func:`talk_of`).
 CHAT_TALK = "c_talk"
 
 #: The backend the talking Plane runs on: a process of its own, so a model
@@ -238,10 +241,10 @@ TALKER_BACKEND = "mp"
 #: What the plane runs this module starts are recorded as ``by``.
 BY = "chat"
 
-#: What the id of a turn's display Cell starts with, before the turn number.
-#: A stem rather than an id: there is one of these per turn and the number is
-#: which turn it is, so ``c_disp_2`` is the second thing a person said and
-#: everything the agent did about it.
+#: What a turn's display Cell is, before the turn number, :func:`scoped` under
+#: the Plane that draws. A stem rather than an id: there is one of these per
+#: turn and the number is which turn it is, so ``<plane>_c_disp_2`` is the
+#: second thing a person said and everything the agent did about it.
 CHAT_DISPLAY_ID = "c_disp_"
 
 #: What one is called, before the same number. It reads as a divider down the
@@ -261,7 +264,7 @@ from nuspace import ops
 def out():
     """What the agent did in this turn, as it does it.
 
-    Its own two ids and nothing else. The trace this draws is in this Cell's
+    Its own id and nothing else. The trace this draws is in this Cell's
     own state, so there is no chat to name: the panel a turn writes into is
     the panel that turn put up.
 
@@ -269,11 +272,11 @@ def out():
     of why scrolling back to the first thing you asked shows what was done
     about it rather than what is being done now.
     """
-    return nuspace.agent.display(ops.Here.plane, ops.Here.cell)
+    return nuspace.agent.display(ops.Here.cell)
 '''
 
-#: What the id of a turn's escape hatch starts with, before the turn number.
-#: One per answer and numbered with it, so the Cell a person says something
+#: What a turn's escape hatch is, before the turn number, scoped as a display
+#: Cell is. One per answer and numbered with it, so the Cell a person says something
 #: else in sits beside the answer they are saying it about.
 CHAT_OTHER_ID = "c_other_"
 
@@ -366,44 +369,44 @@ class Pair(PlaneState):
     drawn = nustd.kv.StrRef.slot()
 
 
-def _own(plane_id: nu.StrArg, cell_id: nu.StrArg) -> nu.Nu:
+def _own(cell_id: nu.StrArg) -> nu.Nu:
     """A Cell's own state, whichever Cell it is.
 
     A fresh ref at every call site. One node in two tree positions is one
     node, and a subscription is a handle the first holder to end would close
     under the other.
     """
-    return ops.cell_state(plane_id, cell_id, Own.state)
+    return ops.cell_state(cell_id, Own.state)
 
 
-def _held(plane_id: nu.StrArg, cell_id: nu.StrArg) -> nu.Nu:
+def _held(cell_id: nu.StrArg) -> nu.Nu:
     """The leaf the conversation is kept in. Fresh, for the reason above."""
-    return _own(plane_id, cell_id)[MESSAGES]
+    return _own(cell_id)[MESSAGES]
 
 
-def _said(plane_id: nu.StrArg, cell_id: nu.StrArg) -> nu.Nu:
+def _said(cell_id: nu.StrArg) -> nu.Nu:
     """The conversation as it lies, empty where nothing has been said.
 
     Floored, because an unwritten leaf reads EMPTY, which flows through every
     expression it touches and refuses to be stored.
     """
-    held = _held(plane_id, cell_id)
+    held = _held(cell_id)
     return nu.If(held.exists(), nu.List(held), nu.List.of())
 
 
-def _turn(plane_id: nu.StrArg, cell_id: nu.StrArg) -> nu.Nu:
+def _turn(cell_id: nu.StrArg) -> nu.Nu:
     """Which turn a chat is on: how many times a person has said something.
 
     A turn is one input looped until done, so counting inputs counts turns,
     and nothing has to store a number that a restart could lose. It only ever
     goes up, and it goes up exactly once per :func:`submit`, which is what
-    makes ``c_disp_<n>`` unique without minting anything.
+    makes ``<plane>_c_disp_<n>`` unique without minting anything.
 
     A reply the model appends does not move it, which is the point: the whole
     of a turn, however many passes it takes, writes into the one panel.
     """
     spoke = nu.Filter(
-        nu.List(_said(plane_id, cell_id)),
+        nu.List(_said(cell_id)),
         lambda said: nu.Eq(
             nu.ToStr(nu.Dict(said).get_item("role", ROLE_SYSTEM)), nu.Str(ROLE_USER)
         ),
@@ -412,11 +415,27 @@ def _turn(plane_id: nu.StrArg, cell_id: nu.StrArg) -> nu.Nu:
 
 
 def _numbered(stem: str, turn: nu.Nu) -> nu.Nu:
-    """``stem`` with the turn number after it: an id, or what it is called."""
+    """``stem`` with the turn number after it: an id's own part, or what it is called."""
     return nu.Str(stem) + nu.ToStr(turn)
 
 
-def _addressed(disp_plane_id: nu.StrArg, disp_cell_id: nu.StrArg) -> nu.Nu:
+def scoped(plane_id: nu.StrArg, local: nu.StrArg) -> nu.Str:
+    """The id of a Cell the host puts on a chat's Plane: the Plane's id, then the Cell's own.
+
+    A cell id is unique across the space, and the host's Cells are named
+    rather than minted, so the name alone would meet the same name on the
+    next chat. Under the Plane's id it never does, and it is still worked out
+    rather than looked up.
+    """
+    return nu.Str(plane_id) + "_" + local
+
+
+def talk_of(talker: nu.StrArg) -> nu.Str:
+    """The talking Cell of a talking Plane, :data:`CHAT_TALK` :func:`scoped` under it."""
+    return scoped(talker, CHAT_TALK)
+
+
+def _addressed(disp_cell_id: nu.StrArg) -> nu.Nu:
     """Whether these ids name a display Cell that is really there.
 
     The emptiness test is not redundant and it has to come first. A store key
@@ -426,23 +445,23 @@ def _addressed(disp_plane_id: nu.StrArg, disp_cell_id: nu.StrArg) -> nu.Nu:
     """
     return nu.And(
         nu.Ne(nu.ToStr(disp_cell_id), nu.Str("")),
-        ops.cell_exists(disp_plane_id, disp_cell_id),
+        ops.cell_exists(disp_cell_id),
     )
 
 
-def _kept(disp_plane_id: nu.StrArg, disp_cell_id: nu.StrArg) -> nu.Nu:
+def _kept(disp_cell_id: nu.StrArg) -> nu.Nu:
     """The leaf a turn's trace is kept in. Fresh at every call site."""
-    return _own(disp_plane_id, disp_cell_id)[TRACE]
+    return _own(disp_cell_id)[TRACE]
 
 
-def _traced(disp_plane_id: nu.StrArg, disp_cell_id: nu.StrArg) -> nu.Nu:
+def _traced(disp_cell_id: nu.StrArg) -> nu.Nu:
     """The trace as it lies, empty where the turn has written none.
 
     Floored like :func:`_said`, and guarded on the id besides: a display Cell
     exists from the submit that made it, but the id read back for a chat
     nobody has spoken in is ``""``, and an empty key segment is no address.
     """
-    kept = _kept(disp_plane_id, disp_cell_id)
+    kept = _kept(disp_cell_id)
     return nu.If(
         nu.And(nu.Ne(nu.ToStr(disp_cell_id), nu.Str("")), kept.exists()),
         nu.List(kept),
@@ -490,7 +509,7 @@ def _paired(ui_plane_id: nu.StrArg, talk: nu.StrArg) -> nu.Nu:
             ui=False,
             made_by=drawn.props.made_by.fallback(""),
         )
-        >> ops.add_cell(talker, talk, cell_id=CHAT_TALK, name="talk")
+        >> ops.add_cell(talker, talk, cell_id=talk_of(talker), name="talk")
         >> atomic_state(
             ops.plane_state(ui_plane_id, Pair.talker.set(talker))
             >> ops.plane_state(talker, Pair.drawn.set(ui_plane_id))
@@ -501,7 +520,7 @@ def _paired(ui_plane_id: nu.StrArg, talk: nu.StrArg) -> nu.Nu:
 # --- write -------------------------------------------------------------------
 
 
-def say(plane_id: nu.StrArg, cell_id: nu.StrArg, role: nu.StrArg, text: nu.StrArg) -> nu.Nu:
+def say(cell_id: nu.StrArg, role: nu.StrArg, text: nu.StrArg) -> nu.Nu:
     """Append one message to a chat. The whole write surface there is.
 
     There is no edit and no delete-one on purpose: a conversation is a log,
@@ -512,8 +531,7 @@ def say(plane_id: nu.StrArg, cell_id: nu.StrArg, role: nu.StrArg, text: nu.StrAr
     row and a chat that was deleted would grow state out of a late reply.
 
     Args:
-        plane_id: the Plane that runs the chat.
-        cell_id: the Cell on it that holds the conversation.
+        cell_id: the Cell that talks and holds the conversation.
         role: who is speaking. Not validated: an unknown role renders as
             ``system`` rather than disappearing, and a store that refused one
             would be a store that can lose a message. ``user`` is the one to
@@ -525,10 +543,10 @@ def say(plane_id: nu.StrArg, cell_id: nu.StrArg, role: nu.StrArg, text: nu.StrAr
     """
     return atomic_state(
         nu.IfDo(
-            ops.cell_exists(plane_id, cell_id),
-            _own(plane_id, cell_id).set_item(
+            ops.cell_exists(cell_id),
+            _own(cell_id).set_item(
                 MESSAGES,
-                nu.List(_said(plane_id, cell_id))
+                nu.List(_said(cell_id))
                 + nu.List.of(nu.Dict.of(role=nu.Str(role), text=nu.Str(text))),
             ),
         )
@@ -572,21 +590,22 @@ def submit(ui_plane_id: nu.StrArg, text: nu.StrArg, *, talk: nu.StrArg | None = 
     """
     talker, fresh, turn = _Submitting.talker, _Submitting.fresh, _Submitting.turn
     made = nu.IfDo(fresh, _paired(ui_plane_id, talk)) if talk is not None else nu.Noop()
+    shown = scoped(ui_plane_id, _numbered(CHAT_DISPLAY_ID, turn))
     panel = ops.add_cell(
         ui_plane_id,
         DISPLAY_SOURCE,
-        cell_id=_numbered(CHAT_DISPLAY_ID, turn),
+        cell_id=shown,
         name=_numbered(CHAT_DISPLAY_NAME, turn),
     )
     said = atomic_state(
         nu.IfDo(
-            ops.cell_exists(talker, CHAT_TALK),
-            _own(talker, CHAT_TALK).set_item(
+            ops.cell_exists(talk_of(talker)),
+            _own(talk_of(talker)).set_item(
                 MESSAGES,
-                nu.List(_said(talker, CHAT_TALK))
+                nu.List(_said(talk_of(talker)))
                 + nu.List.of(nu.Dict.of(role=nu.Str(ROLE_USER), text=nu.Str(text))),
             )
-            >> _own(talker, CHAT_TALK).set_item(DISPLAY, _numbered(CHAT_DISPLAY_ID, turn)),
+            >> _own(talk_of(talker)).set_item(DISPLAY, shown),
         )
     )
     started = nu.IfDo(
@@ -596,8 +615,8 @@ def submit(ui_plane_id: nu.StrArg, text: nu.StrArg, *, talk: nu.StrArg | None = 
     # The emptiness test first, for the reason :func:`_addressed` gives: no
     # Plane that talks reads back ``""``, and that is no key.
     body = made >> nu.IfDo(
-        nu.And(talker != "", snapshot(ops.cell_exists(talker, CHAT_TALK))),
-        turn.set(nu.Int(snapshot(_turn(talker, CHAT_TALK))) + 1) >> panel >> said >> started,
+        nu.And(talker != "", snapshot(ops.cell_exists(talk_of(talker)))),
+        turn.set(nu.Int(snapshot(_turn(talk_of(talker)))) + 1) >> panel >> said >> started,
     )
     asked = nu.And(nu.Gt(nu.Len(nu.Str(text)), nu.Int(0)), snapshot(ops.plane_exists(ui_plane_id)))
     return nu.IfDo(
@@ -644,7 +663,6 @@ def draw(ui_plane_id: nu.StrArg, source: nu.StrArg, *, name: nu.StrArg | None = 
 
 
 def state(
-    disp_plane_id: nu.StrArg,
     disp_cell_id: nu.StrArg,
     cycle: nu.StrArg,
     kind: nu.StrArg,
@@ -667,7 +685,6 @@ def state(
     deleted mid turn would grow state out of a row arriving late.
 
     Args:
-        disp_plane_id: the Plane that draws the chat.
         disp_cell_id: the display Cell this turn writes into, which is what
             :func:`latest_display` answers.
         cycle: which half of the turn this happened in, one of
@@ -680,10 +697,10 @@ def state(
     """
     return atomic_state(
         nu.IfDo(
-            _addressed(disp_plane_id, disp_cell_id),
-            _own(disp_plane_id, disp_cell_id).set_item(
+            _addressed(disp_cell_id),
+            _own(disp_cell_id).set_item(
                 TRACE,
-                nu.List(_traced(disp_plane_id, disp_cell_id))
+                nu.List(_traced(disp_cell_id))
                 + nu.List.of(nu.Dict.of(cycle=nu.Str(cycle), kind=nu.Str(kind), text=nu.Str(text))),
             ),
         )
@@ -691,7 +708,6 @@ def state(
 
 
 def note(
-    disp_plane_id: nu.StrArg,
     disp_cell_id: nu.StrArg,
     cycle: nu.StrArg,
     text: nu.StrArg,
@@ -709,16 +725,14 @@ def note(
     host composes out of a term it did not author.
 
     Args:
-        disp_plane_id: the Plane that draws the chat.
         disp_cell_id: the display Cell this turn writes into.
         cycle: which half of the turn this happened in, one of :data:`CYCLES`.
         text: what changed, in one line.
     """
-    return state(disp_plane_id, disp_cell_id, cycle, KIND_NOTE, text)
+    return state(disp_cell_id, cycle, KIND_NOTE, text)
 
 
 def allow(
-    plane_id: nu.StrArg,
     cell_id: nu.StrArg,
     *,
     budget: nu.IntArg | None = None,
@@ -737,24 +751,23 @@ def allow(
     patience.
 
     Args:
-        plane_id: the Plane that runs the chat.
-        cell_id: the Cell on it that talks.
+        cell_id: the Cell that talks.
         budget: how many passes a work cycle may take. Left alone when absent.
         patience: how many passes in a row may fail the same way before the
             cycle gives up. Left alone when absent.
     """
     written = nu.Noop()
     if budget is not None:
-        written = written >> _own(plane_id, cell_id).set_item(BUDGET, nu.Int(budget))
+        written = written >> _own(cell_id).set_item(BUDGET, nu.Int(budget))
     if patience is not None:
-        written = written >> _own(plane_id, cell_id).set_item(PATIENCE, nu.Int(patience))
-    return atomic_state(nu.IfDo(ops.cell_exists(plane_id, cell_id), written))
+        written = written >> _own(cell_id).set_item(PATIENCE, nu.Int(patience))
+    return atomic_state(nu.IfDo(ops.cell_exists(cell_id), written))
 
 
 # --- read --------------------------------------------------------------------
 
 
-def messages_of(plane_id: nu.StrArg, cell_id: nu.StrArg) -> nu.Nu:
+def messages_of(cell_id: nu.StrArg) -> nu.Nu:
     """The conversation, one ``{role, text}`` dict per message, oldest first.
 
     Rebuilt key by key rather than handed over as it lies. A list written into
@@ -765,7 +778,7 @@ def messages_of(plane_id: nu.StrArg, cell_id: nu.StrArg) -> nu.Nu:
     """
     return nu.Collect(
         nu.Map(
-            nu.List(_said(plane_id, cell_id)),
+            nu.List(_said(cell_id)),
             lambda said: nu.Dict.of(
                 role=nu.ToStr(nu.Dict(said).get_item("role", ROLE_SYSTEM)),
                 text=nu.ToStr(nu.Dict(said).get_item("text", "")),
@@ -774,7 +787,7 @@ def messages_of(plane_id: nu.StrArg, cell_id: nu.StrArg) -> nu.Nu:
     )
 
 
-def trace_of(disp_plane_id: nu.StrArg, disp_cell_id: nu.StrArg) -> nu.Nu:
+def trace_of(disp_cell_id: nu.StrArg) -> nu.Nu:
     """One turn's trace, ``{cycle, kind, text}`` each, oldest first.
 
     Rebuilt key by key rather than handed over as it lies, for the reason
@@ -793,7 +806,7 @@ def trace_of(disp_plane_id: nu.StrArg, disp_cell_id: nu.StrArg) -> nu.Nu:
     """
     return nu.Collect(
         nu.Map(
-            nu.List(_traced(disp_plane_id, disp_cell_id)),
+            nu.List(_traced(disp_cell_id)),
             lambda row: nu.Dict.of(
                 cycle=nu.ToStr(nu.Dict(row).get_item("cycle", CYCLE_WORK)),
                 kind=nu.ToStr(nu.Dict(row).get_item("kind", KIND_THINKING)),
@@ -803,7 +816,7 @@ def trace_of(disp_plane_id: nu.StrArg, disp_cell_id: nu.StrArg) -> nu.Nu:
     )
 
 
-def latest_display(plane_id: nu.StrArg, cell_id: nu.StrArg) -> nu.Nu:
+def latest_display(cell_id: nu.StrArg) -> nu.Nu:
     """The display Cell the running turn should be writing into.
 
     The id only, because the Plane it is on is the one the chat draws to, and
@@ -819,13 +832,12 @@ def latest_display(plane_id: nu.StrArg, cell_id: nu.StrArg) -> nu.Nu:
     nowhere instead of raising.
 
     Args:
-        plane_id: the Plane that runs the chat.
-        cell_id: the Cell on it that holds the conversation.
+        cell_id: the Cell that talks and holds the conversation.
     """
-    return nu.ToStr(_own(plane_id, cell_id).get_item(DISPLAY, ""))
+    return nu.ToStr(_own(cell_id).get_item(DISPLAY, ""))
 
 
-def budget_of(plane_id: nu.StrArg, cell_id: nu.StrArg) -> nu.Nu:
+def budget_of(cell_id: nu.StrArg) -> nu.Nu:
     """How many passes a work cycle on this chat may take.
 
     :data:`DEFAULT_BUDGET` where nobody has said otherwise, which is almost
@@ -835,20 +847,20 @@ def budget_of(plane_id: nu.StrArg, cell_id: nu.StrArg) -> nu.Nu:
     Read fresh on every pass rather than settled when the turn started, which
     is the whole of why it is a key and not an argument.
     """
-    return nu.Int(_own(plane_id, cell_id).get_item(BUDGET, DEFAULT_BUDGET))
+    return nu.Int(_own(cell_id).get_item(BUDGET, DEFAULT_BUDGET))
 
 
-def patience_of(plane_id: nu.StrArg, cell_id: nu.StrArg) -> nu.Nu:
+def patience_of(cell_id: nu.StrArg) -> nu.Nu:
     """How many passes in a row may fail the same way before a cycle gives up.
 
     :data:`DEFAULT_PATIENCE` where nobody has said otherwise. Raising it is
     for a model working against something that genuinely reports one error for
     several different mistakes; lowering it is for an expensive endpoint.
     """
-    return nu.Int(_own(plane_id, cell_id).get_item(PATIENCE, DEFAULT_PATIENCE))
+    return nu.Int(_own(cell_id).get_item(PATIENCE, DEFAULT_PATIENCE))
 
 
-def unanswered(plane_id: nu.StrArg, cell_id: nu.StrArg) -> nu.Nu:
+def unanswered(cell_id: nu.StrArg) -> nu.Nu:
     """Whether the last word was the person's, so the chat owes a reply.
 
     The whole of when a chat works. A Cell that came up because somebody
@@ -860,15 +872,15 @@ def unanswered(plane_id: nu.StrArg, cell_id: nu.StrArg) -> nu.Nu:
 
     False on an empty conversation, which is a chat nobody has started.
     """
-    said = nu.List(_said(plane_id, cell_id))
-    last = nu.Dict(nu.List(_said(plane_id, cell_id))[nu.Len(said) - nu.Int(1)])
+    said = nu.List(_said(cell_id))
+    last = nu.Dict(nu.List(_said(cell_id))[nu.Len(said) - nu.Int(1)])
     return nu.And(
         nu.Gt(nu.Len(said), nu.Int(0)),
         nu.Eq(nu.ToStr(last.get_item("role", ROLE_SYSTEM)), nu.Str(ROLE_USER)),
     )
 
 
-def changed(plane_id: nu.StrArg, cell_id: nu.StrArg) -> nu.Nu:
+def changed(cell_id: nu.StrArg) -> nu.Nu:
     """A fresh subscription that fires on every message.
 
     A read rather than a write, and the address is here for the same reason
@@ -889,10 +901,10 @@ def changed(plane_id: nu.StrArg, cell_id: nu.StrArg) -> nu.Nu:
     loop is not woken once a pass by a write it does not read. Nor the trace,
     which a turn narrates into the panel's state, on the Plane that draws.
     """
-    return _own(plane_id, cell_id).on_change()
+    return _own(cell_id).on_change()
 
 
-def trace_changed(disp_plane_id: nu.StrArg, disp_cell_id: nu.StrArg) -> nu.Nu:
+def trace_changed(disp_cell_id: nu.StrArg) -> nu.Nu:
     """A fresh subscription that fires on every row of one turn's trace.
 
     The display Cell's own ``state``, which is the container the trace is a
@@ -904,7 +916,7 @@ def trace_changed(disp_plane_id: nu.StrArg, disp_cell_id: nu.StrArg) -> nu.Nu:
     sharing one node share one handle, and the first of them to end closes it
     under the other.
 
-    Called with the panel's own two ids, so there is no empty id to guard
+    Called with the panel's own id, so there is no empty id to guard
     against here the way the writes guard against one.
     """
-    return _own(disp_plane_id, disp_cell_id).on_change()
+    return _own(disp_cell_id).on_change()

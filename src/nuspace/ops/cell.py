@@ -1,12 +1,16 @@
-"""Cell ops: write one, edit it, place it, move it, drop it.
+"""Cell ops: write one, edit it, place it, drop it.
 
-The only writer of the two facts that must agree about a plane's cells:
-which ids are in ``cells`` and where they sit in ``order``. Every op here
-fixes both in one commit.
+The only writer of the two facts that must agree about a cell's place: the
+plane's ``cells`` list and the cell's ``plane``. Every op here that changes
+one writes the other in the same commit. A cell stays on the plane it was
+made on: nothing here moves one to another.
 
-A cell's state is in the other store (States). Dropping or moving a cell
-touches it too, as commits of its own around the structure one, in the
-order :func:`~.utils.atomic_state` gives.
+A cell is addressed by its id alone. An op that needs its plane reads
+``plane`` off it, inside its own bracket.
+
+A cell's state is in the other store (States). Dropping a cell drops it
+too, as a commit of its own after the structure one, in the order
+:func:`~.utils.atomic_state` gives.
 """
 
 from __future__ import annotations
@@ -17,13 +21,13 @@ import nu
 import nu.prog
 import nu.tree
 from nu.lang import ScalarQuery
-from nuspace.shapes import Space, States
+from nuspace.shapes import Space
 from nustd.ui.core import Ref as UiRef
 
 from .kernel import interrupt_cell
-from .read import cell_exists, plane_exists
+from .read import cell_exists, cell_plane, plane_exists
 from .state import drop_cell_state
-from .utils import MintId, atomic, atomic_state, keep_order
+from .utils import MintId, atomic, atomic_state, keep_order, snapshot
 
 
 if TYPE_CHECKING:
@@ -35,7 +39,6 @@ if TYPE_CHECKING:
 __all__ = [
     "HasUi",
     "add_cell",
-    "move_cell",
     "remove_cell",
     "rename_cell",
     "reorder_cells",
@@ -113,10 +116,16 @@ def _knowing_ui(
     return nu.let(HasUi(prog, plane_id, cell_id), lambda has_ui: build(nu.Bool(has_ui)))
 
 
-def _place(order: nu.ListRef, cell_id: nu.StrArg, index: nu.IntArg | None) -> nu.Nu:
-    """Put ``cell_id`` in ``order`` at ``index``, the end when None, once."""
-    put = order.append(cell_id) if index is None else order.insert(index, cell_id)
-    return nu.IfDo(order.contains(cell_id).not_(), put)
+def _place(cells: nu.ListRef, cell_id: nu.StrArg, index: nu.IntArg | None) -> nu.Nu:
+    """Put ``cell_id`` in a plane's ``cells`` at ``index``, the end when None, once."""
+    put = cells.append(cell_id) if index is None else cells.insert(index, cell_id)
+    return nu.IfDo(cells.contains(cell_id).not_(), put)
+
+
+def _placeable(plane_id: nu.StrArg, cell_id: nu.StrArg) -> nu.Bool:
+    """Whether ``cell_id`` may be written onto the plane: it is there, and the cell is new or its own."""
+    on = cell_plane(cell_id)
+    return plane_exists(plane_id).and_((on == "").or_(on == plane_id))
 
 
 def add_cell(
@@ -135,13 +144,15 @@ def add_cell(
     Args:
         plane_id: The plane. Nothing is written when it is missing.
         prog: The cell's source.
-        cell_id: Its id. Minted when the term is evaluated when absent.
+        cell_id: Its id, unique across the space. Minted when the term is
+            evaluated when absent. Nothing is written when a cell of this id
+            is on another plane.
         name: What to call it.
-        index: Where in the plane's order. The end when absent.
+        index: Where in the plane's cells. The end when absent.
         made_by: Prop, the snippet it was made from, ``""`` for none.
         meta: Fields to merge into its meta.
-        into: Set to the cell id in the commit, ``""`` when the plane is
-            missing, for a caller that needs a minted one: the record does
+        into: Set to the cell id in the commit, ``""`` when nothing was
+            written, for a caller that needs a minted one: the record does
             not say which cell this call made.
 
     ``has_ui`` is worked out from ``prog`` (:class:`HasUi`). The props are
@@ -158,7 +169,7 @@ def add_cell(
             )
             if into is None:
                 return atomic(placed)
-            return atomic(placed >> into.set(nu.If(plane_exists(plane_id), cid, "")))
+            return atomic(placed >> into.set(nu.If(cell_plane(cid) == plane_id, cid, "")))
 
         return _knowing_ui(prog, plane_id, cid, commit)
 
@@ -180,63 +191,70 @@ def cell_writes(
 ) -> nu.Nu:
     """:func:`add_cell`'s writes for a cell id and ``has_ui`` already known. No bracket.
 
-    Nothing is written when the plane is missing.
+    The cell's row, its ``plane`` and its place in the plane's ``cells``,
+    together. Nothing is written when the plane is missing or the cell is
+    on another one.
     """
-    plane = Space.planes[plane_id]
-    row = plane.cells[cell_id]
-    writes = row.name.set(name) >> _write_prog(row, prog, has_ui) >> row.props.made_by.set(made_by)
+    row = Space.cells[cell_id]
+    writes = (
+        row.plane.set(plane_id)
+        >> row.name.set(name)
+        >> _write_prog(row, prog, has_ui)
+        >> row.props.made_by.set(made_by)
+    )
     if meta is not None:
         writes = writes >> row.meta.update(meta)
-    return nu.IfDo(plane_exists(plane_id), writes >> _place(plane.order, cell_id, index))
+    placed = writes >> _place(Space.planes[plane_id].cells, cell_id, index)
+    return nu.IfDo(_placeable(plane_id, cell_id), placed)
 
 
-def remove_cell(plane_id: nu.StrArg, cell_id: nu.StrArg) -> nu.Nu:
-    """Drop a cell: its live cell runs interrupted, out of order, row deleted, then its state.
+def remove_cell(cell_id: nu.StrArg) -> nu.Nu:
+    """Drop a cell: its live cell runs interrupted, off its plane, row deleted, then its state.
 
     Two commits, the row first. The other way round, a cell still on the
     plane (and its runs, still live until the interrupt lands) would read
     its state gone. This way the worst a crash between them leaves is state
     no cell points at.
     """
-    plane = Space.planes[plane_id]
     row = atomic(
         nu.IfDo(
-            cell_exists(plane_id, cell_id),
-            interrupt_cell(plane_id, cell_id)
-            >> plane.order.remove(cell_id, missing_ok=True)
-            >> plane.cells.del_item(cell_id),
+            cell_exists(cell_id),
+            interrupt_cell(cell_id)
+            >> Space.planes[cell_plane(cell_id)].cells.remove(cell_id, missing_ok=True)
+            >> Space.cells.del_item(cell_id),
         )
     )
-    return row >> atomic_state(drop_cell_state(plane_id, cell_id))
+    return row >> atomic_state(drop_cell_state(cell_id))
 
 
-def rename_cell(plane_id: nu.StrArg, cell_id: nu.StrArg, name: nu.StrArg) -> nu.Nu:
+def rename_cell(cell_id: nu.StrArg, name: nu.StrArg) -> nu.Nu:
     """Set a cell's name. A no-op when it is missing."""
-    row = Space.planes[plane_id].cells[cell_id]
-    return atomic(nu.IfDo(cell_exists(plane_id, cell_id), row.name.set(name)))
+    return atomic(nu.IfDo(cell_exists(cell_id), Space.cells[cell_id].name.set(name)))
 
 
-def set_prog(plane_id: nu.StrArg, cell_id: nu.StrArg, prog: nu.StrArg) -> nu.Nu:
+def set_prog(cell_id: nu.StrArg, prog: nu.StrArg) -> nu.Nu:
     """Replace a cell's source, and its ``has_ui`` with it. Bumps its ``version``.
 
     Live cell runs keep running the prog they loaded: rerunning them is the
     reload service's. Nothing validates: a broken prog stores fine, and reads as not drawing.
     """
-    row = Space.planes[plane_id].cells[cell_id]
-    return _knowing_ui(
-        prog,
-        plane_id,
-        cell_id,
-        lambda has_ui: atomic(
-            nu.IfDo(cell_exists(plane_id, cell_id), _write_prog(row, prog, has_ui))
-        ),
-    )
+    row = Space.cells[cell_id]
+
+    def knowing(plane: nu.ObjectRef) -> nu.Nu:
+        return _knowing_ui(
+            prog,
+            nu.Str(plane),
+            cell_id,
+            lambda has_ui: atomic(nu.IfDo(cell_exists(cell_id), _write_prog(row, prog, has_ui))),
+        )
+
+    # Its plane is offered to the construction, as a run offers it.
+    return nu.let(snapshot(cell_plane(cell_id)), knowing)
 
 
-def set_cell_meta(plane_id: nu.StrArg, cell_id: nu.StrArg, fields: dict[str, Any] | nu.Nu) -> nu.Nu:
+def set_cell_meta(cell_id: nu.StrArg, fields: dict[str, Any] | nu.Nu) -> nu.Nu:
     """Merge ``fields`` into a cell's meta. A no-op when it is missing."""
-    row = Space.planes[plane_id].cells[cell_id]
-    return atomic(nu.IfDo(cell_exists(plane_id, cell_id), row.meta.update(fields)))
+    return atomic(nu.IfDo(cell_exists(cell_id), Space.cells[cell_id].meta.update(fields)))
 
 
 def reorder_cells(plane_id: nu.StrArg, cell_ids: Sequence[nu.StrArg] | nu.Nu) -> nu.Nu:
@@ -245,56 +263,5 @@ def reorder_cells(plane_id: nu.StrArg, cell_ids: Sequence[nu.StrArg] | nu.Nu) ->
     Ids not on the plane are skipped, and cells left out keep their place
     after the named ones, so a partial order is a move, not a truncation.
     """
-    plane = Space.planes[plane_id]
-    return atomic(
-        nu.IfDo(plane_exists(plane_id), keep_order(plane.order, cell_ids, member=plane.cells))
-    )
-
-
-def move_cell(
-    plane_id: nu.StrArg,
-    cell_id: nu.StrArg,
-    to_plane_id: nu.StrArg,
-    index: nu.IntArg | None = None,
-) -> nu.Nu:
-    """Move a cell to another plane, keeping its id, prog, props, meta and state.
-
-    Its live cell runs are interrupted: they were loaded against the old plane.
-    A no-op when either plane or the cell is missing, or the planes are the
-    same (rearranging within a plane is :func:`reorder_cells`).
-
-    Three commits: the state copied to the new plane, the row moved, the
-    old state dropped. Copied first, so the cell never sits on the new plane
-    without its state, and dropped last, from whichever plane the cell is
-    not on: the old one once moved, the new one when the move was refused.
-    """
-    src, dst = Space.planes[plane_id], Space.planes[to_plane_id]
-    movable = nu.And(
-        nu.Str(plane_id) != to_plane_id,
-        cell_exists(plane_id, cell_id),
-        plane_exists(to_plane_id),
-    )
-    row = atomic(
-        nu.IfDo(
-            movable,
-            interrupt_cell(plane_id, cell_id)
-            >> dst.cells.set_item(cell_id, src.cells[cell_id].extract())
-            >> _place(dst.order, cell_id, index)
-            >> src.order.remove(cell_id, missing_ok=True)
-            >> src.cells.del_item(cell_id),
-        )
-    )
-    return (
-        atomic_state(nu.IfDo(movable, _copy_state(plane_id, cell_id, to_plane_id)))
-        >> row
-        >> atomic_state(drop_cell_state(plane_id, cell_id) >> drop_cell_state(to_plane_id, cell_id))
-    )
-
-
-def _copy_state(plane_id: nu.StrArg, cell_id: nu.StrArg, to_plane_id: nu.StrArg) -> nu.Nu:
-    """The cell's state written whole under ``to_plane_id``, when it has any. No bracket."""
-    src = States.planes[plane_id].cells
-    return nu.IfDo(
-        States.planes.contains(plane_id).and_(src.contains(cell_id)),
-        States.planes[to_plane_id].cells.set_item(cell_id, src[cell_id].extract()),
-    )
+    cells = Space.planes[plane_id].cells
+    return atomic(nu.IfDo(plane_exists(plane_id), keep_order(cells, cell_ids, member=cells)))

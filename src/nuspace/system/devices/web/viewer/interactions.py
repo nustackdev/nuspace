@@ -35,7 +35,6 @@ __all__ = [
     "STATE_STOPPED",
     "on_create_cell",
     "on_delete_cell",
-    "on_move_cell",
     "on_open",
     "on_reorder_cells",
     "on_set_meta",
@@ -129,18 +128,13 @@ def on_create_cell(viewer: Ref) -> Changed:
 
 
 def on_update_cell(viewer: Ref) -> Changed:
-    """``{plane_id, cell_id, source}``. Replaces the prog, nothing else."""
+    """``{cell_id, source}``. Replaces the prog, nothing else."""
     return event(viewer, "cell.update")
 
 
 def on_delete_cell(viewer: Ref) -> Changed:
-    """``{plane_id, cell_id}``."""
+    """``{cell_id}``."""
     return event(viewer, "cell.delete")
-
-
-def on_move_cell(viewer: Ref) -> Changed:
-    """``{plane_id, cell_id, to_plane_id, index}``. Keeps the cell's id."""
-    return event(viewer, "cell.move")
 
 
 def on_reorder_cells(viewer: Ref) -> Changed:

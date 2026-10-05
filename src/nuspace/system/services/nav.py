@@ -34,7 +34,7 @@ from __future__ import annotations
 
 import nu
 import nustd.kv
-from nuspace.ops import cell_exists, cell_run, cells, plane_exists, plane_run, plane_stop
+from nuspace.ops import cell_plane, cell_run, cells, plane_exists, plane_run, plane_stop
 from nuspace.ops.utils import atomic, atomic_state
 from nuspace.shapes import CellState, Space, reroot
 
@@ -61,7 +61,7 @@ __all__ = [
 PLANE = "nav"
 
 #: The one cell on the plane.
-CELL = "main"
+CELL = "nav_main"
 
 #: What plane and cell runs nav starts are recorded as ``by``.
 BY = "nav"
@@ -135,24 +135,21 @@ def _cell_arm(route: nu.Str, run_id: nu.Str, cell: nu.Str) -> nu.Nu:
 
     Whether it ever was is a point read of the run's ``latest``.
     """
-    new = cell_exists(route, cell).and_(_kernel.runs[run_id].latest.contains(cell).not_())
+    new = (cell_plane(cell) == route).and_(_kernel.runs[run_id].latest.contains(cell).not_())
     return nu.IfDo(snap(new), cell_run(run_id, cell, by=BY)) >> park()
 
 
 def _cells_fold(route: nu.Str, run_id: nu.Str) -> nu.Nu:
     """:func:`_cell_arm` per cell of the routed plane, births included. Never returns.
 
-    The subscription is length exact: an edited cell is not a birth. The cell
-    container is made real first, a subscription over one that is not there
-    never fires. A plane gone parks: nothing to follow until the route moves.
+    The subscription is on the plane's list of cells: an edited cell is not
+    a birth. A plane gone parks: nothing to follow until the route moves.
     """
-    plane_cells = Space.planes[route].cells
-    ids = nu.If(plane_exists(route), nu.list(plane_cells.keys()), [])
-    return atomic(nu.IfDo(plane_exists(route), plane_cells.init(nu.Dict.create()))) >> nu.IfDo(
+    return nu.IfDo(
         snap(plane_exists(route)),
         nu.ForEachParReactive(
-            snap(ids),
-            Ticking(snap(plane_cells.on_children_change())),
+            snap(cells(route)),
+            Ticking(snap(Space.planes[route].cells.on_children_change())),
             lambda cell: _cell_arm(route, run_id, nu.Str(cell)),
         ),
         park(),
@@ -164,14 +161,18 @@ def _cells_seen(route: nu.Str) -> nu.Str:
 
     def seen(at: nu.Attr) -> nu.Str:
         cell = nu.Str(at)
-        return cell + ":" + nu.str(Space.planes[route].cells[cell].version.fallback(0))
+        return cell + ":" + nu.str(Space.cells[cell].version.fallback(0))
 
     return nu.Str(",").join(cells(route).iter().map(seen).to_list())
 
 
 def _changed(route: nu.Str) -> nu.Nu:
-    """Wait until a cell of the plane is added, removed or rewritten."""
-    edits = Space.planes[route].cells.on_descendants_change("*", "version")
+    """Wait until a cell of the plane is added, removed or rewritten.
+
+    Cells are flat, so the subscription hears every cell's rewrite and the
+    plane's own are told apart by reading them again.
+    """
+    edits = Space.cells.on_descendants_change("*", "version")
     return nu.let(
         snap(_cells_seen(route)),
         lambda seen: nu.WhileDo(seen == snap(_cells_seen(route)), wake(edits)),

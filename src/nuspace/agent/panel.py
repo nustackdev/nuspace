@@ -11,10 +11,10 @@ you asked showed you the last thing the agent did. A turn's trace lives in
 that turn's display Cell's own state, because a Cell's state is where a Cell's
 state goes, so turn one still shows turn one's work a week later.
 
-**It reads its own two ids and knows nothing else.** There is no subject to
+**It reads its own id and knows nothing else.** There is no subject to
 bake into it: the Cell is about itself. :func:`nuspace.agent.chat.submit` appends
 one of these per turn, handing it no more than the Plane it is on, and a Cell's
-entry point is given its own ids by the runtime.
+entry point is given its own id by the runtime.
 """
 
 from __future__ import annotations
@@ -38,7 +38,7 @@ COLUMNS = ("cycle", "state", "what")
 TRACE_REF = "trace"
 
 
-def rows(plane_id: nu.StrArg, cell_id: nu.StrArg) -> nu.Nu:
+def rows(cell_id: nu.StrArg) -> nu.Nu:
     """The trace as a table, as a write. Built fresh at each call site.
 
     One ref holding a list rather than a ref per row: what a turn is doing is
@@ -56,7 +56,7 @@ def rows(plane_id: nu.StrArg, cell_id: nu.StrArg) -> nu.Nu:
             columns=nu.List.of(*[nu.Str(name) for name in COLUMNS]),
             rows=nu.Collect(
                 nu.Map(
-                    chat.trace_of(plane_id, cell_id),
+                    chat.trace_of(cell_id),
                     lambda row: nu.List.of(
                         nu.ToStr(nu.Dict(row).get_item("cycle", "")),
                         nu.ToStr(nu.Dict(row).get_item("kind", "")),
@@ -68,12 +68,10 @@ def rows(plane_id: nu.StrArg, cell_id: nu.StrArg) -> nu.Nu:
     )
 
 
-def display(plane_id: nu.StrArg, cell_id: nu.StrArg) -> nu.Nu:
+def display(cell_id: nu.StrArg) -> nu.Nu:
     """One turn's trace, now and as it grows. The whole term a panel Cell runs.
 
     Args:
-        plane_id: the Plane the panel is on, which is the Plane the chat draws
-            to. The Cell's own ``plane``.
         cell_id: the panel itself, whose state holds the trace. The Cell's own
             ``cell``.
 
@@ -93,7 +91,7 @@ def display(plane_id: nu.StrArg, cell_id: nu.StrArg) -> nu.Nu:
           subscription is bracketed apart, so nothing is held open between
           rows.
     """
-    return ops.snapshot(rows(plane_id, cell_id)) >> nu.ReactForever(
-        ops.snapshot(chat.trace_changed(plane_id, cell_id)),
-        ops.snapshot(rows(plane_id, cell_id)),
+    return ops.snapshot(rows(cell_id)) >> nu.ReactForever(
+        ops.snapshot(chat.trace_changed(cell_id)),
+        ops.snapshot(rows(cell_id)),
     )

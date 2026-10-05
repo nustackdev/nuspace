@@ -216,7 +216,7 @@ describe("a text cell's keys", () => {
 
 		editor.textContent = "";
 		press(editor, "Backspace");
-		expect(notify).toHaveBeenCalledWith("cell.delete", { plane_id: "p1", cell_id: "b" });
+		expect(notify).toHaveBeenCalledWith("cell.delete", { cell_id: "b" });
 		expect(document.activeElement).toBe(above);
 	});
 });

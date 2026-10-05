@@ -21,15 +21,15 @@ async def test_settings_is_seeded_once_with_home_header(store):
     assert row["name"] == "Settings"
     assert row["props"] == {"system": True, "ui": True, "made_by": "", "backend": "async"}
     cells = await store.read(ops.cell_rows(settings.PLANE))
-    assert [(c["id"], c["prog"]) for c in cells] == [
+    assert [(c["name"], c["prog"]) for c in cells] == [
         ("header", home.HEADER),
         ("telemetry", settings.TELEMETRY),
     ]
 
-    await store.run(ops.remove_cell(settings.PLANE, "header"))
+    await store.run(ops.remove_cell(home.seeded_id(settings.PLANE, "header")))
     await store.run(settings.ensure_settings())
     cells = await store.read(ops.cell_rows(settings.PLANE))
-    assert [c["id"] for c in cells] == ["telemetry"]
+    assert [c["name"] for c in cells] == ["telemetry"]
     await store.run(ops.remove_plane(settings.PLANE))
     assert await store.read(ops.plane_exists(settings.PLANE))
 
@@ -61,7 +61,7 @@ async def test_each_cell_loads_through_the_kernel_rewrites(store, cell):
     await store.run(ops.add_plane("p", backend="async") >> ops.add_cell("p", source, cell_id="c"))
     env = session_env("127.0.0.1:9")("s1")
     rewrite = Rewrites(Reroot("p", "c"), env.rewrite)
-    prog = Space.planes["p"].cells["c"].prog
+    prog = Space.cells["c"].prog
     term = await store.run(
         nustd.kv.Snapshot(
             prog.load(scope={"plane": "p", "cell": "c"}, rewrite=rewrite), scope=Space

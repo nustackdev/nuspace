@@ -25,7 +25,7 @@ __all__ = ["CellState", "PlaneState"]
 
 
 class CellState(nu.Shape):
-    """Base for state owned by one cell. Lands at ``States.planes[p].cells[c]``.
+    """Base for state owned by one cell. Lands at ``States.cells[c]``.
 
     Only the cell's own program writes it. Persistent and shared by every run
     of the cell, so a restart picks up where the last run left off.

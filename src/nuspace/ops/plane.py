@@ -23,7 +23,7 @@ from nuspace.shapes import ROOT, Space
 from .kernel import kill, live_runs_of
 from .pin import unpin
 from .read import plane_exists
-from .state import drop_plane_state
+from .state import drop_cell_state, drop_plane_state
 from .tree import link, subtree, unlink
 from .utils import MintId, atomic, atomic_state
 
@@ -133,7 +133,7 @@ def plane_writes(
     row = Space.planes[plane_id]
     writes = (
         _refuse_empty(backend)
-        >> nu.IfDo(plane_exists(plane_id).not_(), row.order.set([]))
+        >> nu.IfDo(plane_exists(plane_id).not_(), row.cells.set([]))
         >> row.name.set(name)
         >> row.props.system.set(system)
         >> row.props.ui.set(ui)
@@ -155,25 +155,30 @@ def remove_plane(plane_id: nu.StrArg) -> nu.Nu:
     :func:`~nuspace.ops.read.plane_exists`.
 
     Two commits: the rows, then their state, one subtree delete per plane
-    (its cells' state inside it). The first writes which planes went into a
-    slot of the op's own, where the second reads them. Rows first, as
-    :func:`~nuspace.ops.cell.remove_cell` does, so no plane still there
-    reads its state gone.
+    and per cell. The first writes which planes and cells went into slots
+    of the op's own, where the second reads them. Rows first, as
+    :func:`~nuspace.ops.cell.remove_cell` does, so no plane or cell still
+    there reads its state gone.
     """
+
+    def dropped(gone: nu.Ref, cells: nu.Ref) -> nu.Nu:
+        planes = nu.ForEachDo(nu.List(gone), lambda p: drop_plane_state(nu.Str(p)))
+        return planes >> nu.ForEachDo(nu.List(cells), lambda c: drop_cell_state(nu.Str(c)))
+
     return nu.let(
         [],
-        lambda gone: (
-            _remove_rows(plane_id, gone)
-            >> atomic_state(nu.ForEachDo(nu.List(gone), lambda p: drop_plane_state(nu.Str(p))))
+        lambda gone: nu.let(
+            [],
+            lambda cells: _remove_rows(plane_id, gone, cells) >> atomic_state(dropped(gone, cells)),
         ),
     )
 
 
-def _remove_rows(plane_id: nu.StrArg, gone: nu.Ref) -> nu.Nu:
-    """:func:`remove_plane`'s Space commit. ``gone`` set to the ids removed, ``[]`` when refused.
+def _remove_rows(plane_id: nu.StrArg, gone: nu.Ref, cells: nu.Ref) -> nu.Nu:
+    """:func:`remove_plane`'s Space commit. ``gone`` and ``cells`` set to the ids removed.
 
-    Every try sets it, so after a retried commit it holds what the try that
-    landed removed.
+    Both ``[]`` when refused. Every try sets them, so after a retried commit
+    they hold what the try that landed removed.
     """
 
     def delete(at: nu.Attr) -> nu.Nu:
@@ -188,13 +193,18 @@ def _remove_rows(plane_id: nu.StrArg, gone: nu.Ref) -> nu.Nu:
     def drop(ids: nu.Nu) -> nu.Nu:
         going = nu.List(ids)
         system = going.iter().filter(lambda p: Space.planes[nu.Str(p)].props.system.fallback(False))
+        owned = nu.Flatten(nu.Map(going, lambda p: nu.list(Space.planes[nu.Str(p)].cells)))
         removed = (
-            live_runs_of(going.contains, kill) >> nu.ForEachDo(going, delete) >> gone.set(going)
+            live_runs_of(going.contains, kill)
+            >> cells.set(nu.List(nu.Collect(owned)))
+            >> nu.ForEachDo(nu.List(cells), lambda c: Space.cells.del_item(nu.Str(c)))
+            >> nu.ForEachDo(going, delete)
+            >> gone.set(going)
         )
         return nu.IfDo(
             plane_exists(plane_id).and_(system.to_list().len() == 0),
             removed,
-            gone.set([]),
+            gone.set([]) >> cells.set([]),
         )
 
     return atomic(subtree(plane_id, drop))

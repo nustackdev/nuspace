@@ -32,7 +32,7 @@ fails the call with its diagnostic, and no cell is made.
 What a change can watch: what its source can name. ``Space`` and ``States``
 are in scope, with ``nu``, ``nustd``, ``nuspace`` and ``ops``, so any plane's
 state (``States.planes[p].state[key]``) and any cell's
-(``States.planes[p].cells.on_descendants_change(c, key)``) can be watched,
+(``States.cells.on_descendants_change(c, key)``) can be watched,
 and anything in Space. A shape from an importable module is brought in with
 ``imports``; a ``CellState`` or ``PlaneState`` one must be placed with
 ``ops.cell_state`` or ``ops.plane_state``, or it lands under the reaction's
@@ -184,7 +184,7 @@ def react_run(plane_id: nu.StrArg, by: nu.StrArg = BY) -> nu.Str:
 def _known(key: nu.Nu) -> nu.Str:
     """The reaction cell under ``key``, ``""`` when none or when it is gone. Unrerooted."""
     cid = Registry.cells.get_item(key, "")
-    return nu.Str(nu.If((cid != "").and_(cell_exists(PLANE, cid)), cid, ""))
+    return nu.Str(nu.If((cid != "").and_(cell_exists(cid)), cid, ""))
 
 
 def reaction_of(change: nu.StrArg, plane_id: nu.StrArg) -> nu.Str:
@@ -293,7 +293,7 @@ def enable_react(change: nu.StrArg, plane_id: nu.StrArg, *, imports: str = "") -
     loads = nu.prog.LoadNu(src, scope={"plane": nu.Str(PLANE), "cell": cid})
     claim = atomic_state(_here(nu.IfDo(_known(key) == "", Registry.cells.set_item(key, cid))))
     won = snap(_here(Registry.cells.get_item(key, "") == cid))
-    lost = remove_cell(PLANE, cid)
+    lost = remove_cell(cid)
     made = (
         add_cell(PLANE, src, cell_id=cid, name=plane_id) >> claim >> nu.IfDo(won, _start(cid), lost)
     )
@@ -329,7 +329,7 @@ def disable_react(change: nu.StrArg, plane_id: nu.StrArg) -> nu.Nu:
     forget = atomic_state(
         _here(nu.IfDo(Registry.cells.get_item(k, "") == c, Registry.cells.del_item(k)))
     )
-    gone = interrupt >> remove_cell(PLANE, c) >> forget
+    gone = interrupt >> remove_cell(c) >> forget
     return nu.Frame(
         _Disabling,
         nu.IfDo(c != "", gone),

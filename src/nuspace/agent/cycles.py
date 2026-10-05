@@ -109,8 +109,8 @@ STUCK_LINE = " times in a row, so trying again was not going to help. "
 #: saying in its own words rather than as a kind of being stuck.
 SPENT = " cycle ran out of passes before it finished. "
 
-#: What the Cell an answer lands in is called, before the turn number. The
-#: number is the panel's, so every Cell a turn leaves carries one number
+#: What stands in the id of the Cell an answer lands in where the panel's stem
+#: stands, before the turn number. The number is the panel's, so every Cell a turn leaves carries one number
 #: between them and a reader scrolling back can see which answer goes with
 #: which trace.
 TURN_ID = "c_turn_"
@@ -325,7 +325,7 @@ def hatch(*, panel: Panel, ui_plane_id: nu.StrArg) -> nu.Nu:
         lambda disp: ops.add_cell(
             ui_plane_id,
             chat.OTHER_SOURCE,
-            cell_id=_numbered(chat.CHAT_OTHER_ID, disp),
+            cell_id=_beside(chat.CHAT_OTHER_ID, disp),
             name=_numbered(chat.CHAT_OTHER_NAME, disp),
         ),
     )
@@ -343,7 +343,7 @@ def hosted(panel: Panel) -> Reroot:
 
 
 def _numbered(stem: str, disp: nu.StrArg) -> nu.Nu:
-    """``stem`` with this turn's number after it: an id, or a name.
+    """``stem`` with this turn's number after it: what a Cell of this turn is called.
 
     Derived off the panel's id rather than minted, and that is not a shortcut.
     The term a chat runs is built once and runs for the life of the chat, so
@@ -353,10 +353,23 @@ def _numbered(stem: str, disp: nu.StrArg) -> nu.Nu:
     there to be read.
 
     Args:
-        stem: what the id or the name starts with.
+        stem: what the name starts with.
         disp: the turn's panel Cell, already read.
     """
-    return nu.Str(stem) + nu.Str(disp).removeprefix(chat.CHAT_DISPLAY_ID)
+    return nu.Str(stem) + nu.Str(nu.Str(disp).rpartition(chat.CHAT_DISPLAY_ID)[2])
+
+
+def _beside(stem: str, disp: nu.StrArg) -> nu.Nu:
+    """The id of a Cell of this turn: the panel's, its stem swapped for ``stem``.
+
+    Numbered as :func:`_numbered` is, and scoped as the panel is
+    (:func:`~nuspace.agent.chat.scoped`), so it is unique across the space.
+
+    Args:
+        stem: what stands where the panel's stem stood.
+        disp: the turn's panel Cell, already read.
+    """
+    return nu.Str(disp).replace(chat.CHAT_DISPLAY_ID, stem)
 
 
 def _allowed(panel: Panel, given: nu.IntArg | None, asked: Callable[..., nu.Nu]) -> nu.Nu:
@@ -371,7 +384,7 @@ def _allowed(panel: Panel, given: nu.IntArg | None, asked: Callable[..., nu.Nu])
     """
     if given is not None:
         return nu.Int(given)
-    return asked(panel.plane_id, panel.cell_id)
+    return asked(panel.cell_id)
 
 
 def _opened(session: nu.Nu) -> nu.Nu:
@@ -504,7 +517,7 @@ def _checked(*, session: nu.Nu, panel: Panel, ui_plane_id: nu.StrArg) -> nu.Nu:
 
     def turn_id() -> nu.Nu:
         """What the Cell this answer lands in is called. Fresh at each site."""
-        return _numbered(TURN_ID, _Answer.disp)
+        return _beside(TURN_ID, _Answer.disp)
 
     def told(why: nu.Nu) -> nu.Nu:
         """The Cell did not build, and why, as the next thing the model reads."""
@@ -514,7 +527,7 @@ def _checked(*, session: nu.Nu, panel: Panel, ui_plane_id: nu.StrArg) -> nu.Nu:
 
     def spoken() -> nu.Nu:
         """The line said, and the answer marked landed. Fresh at each site."""
-        return chat.say(panel.plane_id, panel.cell_id, chat.ROLE_AGENT, _Answer.said) >> (
+        return chat.say(panel.cell_id, chat.ROLE_AGENT, _Answer.said) >> (
             ops.atomic_state(
                 session.drawn.set(nu.Bool(True)) >> session.outcome.set(nu.Str(LANDED))
             )
@@ -554,7 +567,7 @@ def _checked(*, session: nu.Nu, panel: Panel, ui_plane_id: nu.StrArg) -> nu.Nu:
             nu.IfDo(nu.Gt(nu.Len(_Answer.cell), nu.Int(0)), checked, spoken()),
             ops.atomic_state(session.outcome.set(nu.Str(INCOMPLETE))),
         ),
-        cell=ops.snapshot(memory.drawn_cell_of(panel.plane_id, panel.cell_id)),
-        said=ops.snapshot(memory.said_line_of(panel.plane_id, panel.cell_id)),
+        cell=ops.snapshot(memory.drawn_cell_of(panel.cell_id)),
+        said=ops.snapshot(memory.said_line_of(panel.cell_id)),
         disp=ops.snapshot(panel.cell()),
     )

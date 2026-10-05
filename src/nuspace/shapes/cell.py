@@ -1,4 +1,4 @@
-"""Cell: a program, the irreducible thing a space holds."""
+"""Cell: a program, the irreducible thing a space holds, on exactly one plane."""
 
 from __future__ import annotations
 
@@ -17,7 +17,6 @@ class CellProps(nu.Shape):
 
     ``has_ui`` says whether the cell's program draws: its constructed tree
     holds a ui ref. Worked out whenever the prog is written, never by hand.
-    Unwritten on cells older than it, which read as maybe drawing.
     """
 
     made_by = nustd.kv.StrRef.slot()
@@ -33,8 +32,13 @@ class Cell(nu.Shape):
     carries no run info: runs, their output and their errors live under
     ``Space.kernel``.
 
+    ``plane`` is the id of the one plane it is on, the back pointer of that
+    plane's ``cells``. The two are written together, in one commit, and never
+    disagree. A cell is addressed by its own id alone: ids are unique across
+    the space.
+
     Its state is not here: it lives in the state store, at
-    ``States.planes[p].cells[c]`` (:mod:`nuspace.shapes.states`).
+    ``States.cells[c]`` (:mod:`nuspace.shapes.states`).
 
     ``props`` is what nuspace reads to work (:class:`CellProps`). ``meta``
     is free, for anything else.
@@ -45,3 +49,4 @@ class Cell(nu.Shape):
     version = nustd.kv.IntRef.slot()
     props = nustd.kv.ShapeRef.slot(CellProps)
     meta = nustd.kv.DictRef.slot(object)
+    plane = nustd.kv.StrRef.slot()

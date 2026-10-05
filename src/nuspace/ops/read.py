@@ -17,6 +17,7 @@ from nuspace.shapes import ROOT, Space
 
 __all__ = [
     "cell_exists",
+    "cell_plane",
     "cell_rows",
     "cells",
     "children",
@@ -50,21 +51,18 @@ def plane_title(plane_id: nu.StrArg) -> nu.Str:
 
 
 def cells(plane_id: nu.StrArg) -> nu.List:
-    """A plane's cell ids, in order.
-
-    ``order`` filtered to cells that exist, then any cell missing from
-    ``order`` appended, so a cell that reached the store some other way is
-    listed last rather than not at all.
-    """
-    plane = Space.planes[plane_id]
-    placed = nu.list(plane.order).iter().filter(lambda c: plane.cells.contains(c))
-    unplaced = nu.list(plane.cells.keys()).iter().filter(lambda c: plane.order.contains(c).not_())
-    return placed.to_list() + unplaced.to_list()
+    """A plane's cell ids, in order. ``[]`` for a plane never written."""
+    return nu.list(Space.planes[plane_id].cells)
 
 
-def cell_exists(plane_id: nu.StrArg, cell_id: nu.StrArg) -> nu.Bool:
-    """Whether the plane holds a cell under this id."""
-    return Space.planes[plane_id].cells.contains(cell_id)
+def cell_exists(cell_id: nu.StrArg) -> nu.Bool:
+    """Whether a cell is stored under this id."""
+    return Space.cells.contains(cell_id)
+
+
+def cell_plane(cell_id: nu.StrArg) -> nu.Str:
+    """The id of the plane a cell is on, ``""`` for no such cell."""
+    return Space.cells[cell_id].plane.fallback("")
 
 
 def children(node_id: nu.StrArg = ROOT) -> nu.List:
@@ -82,9 +80,9 @@ def parent(plane_id: nu.StrArg) -> nu.Str:
     return nu.Str(under.first()).fallback("")
 
 
-def prog(plane_id: nu.StrArg, cell_id: nu.StrArg) -> nu.Str:
+def prog(cell_id: nu.StrArg) -> nu.Str:
     """A cell's source, ``""`` where there is none."""
-    return nu.str(Space.planes[plane_id].cells[cell_id].prog).fallback("")
+    return nu.str(Space.cells[cell_id].prog).fallback("")
 
 
 def plane_rows() -> nu.List:
@@ -120,7 +118,7 @@ def cell_rows(plane_id: nu.StrArg) -> nu.List:
     """
 
     def row(at: nu.Attr) -> nu.Dict:
-        cell = Space.planes[plane_id].cells[nu.Str(at)]
+        cell = Space.cells[nu.Str(at)]
         return nu.Dict.of(
             id=at,
             name=cell.name.fallback(""),

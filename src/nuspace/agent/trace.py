@@ -130,14 +130,12 @@ def head(text: nu.Nu) -> nu.Nu:
 class Panel:
     """Where one turn's trace goes, and every row the host writes into it.
 
-    Three ids, because a row is addressed by the Plane that draws the chat and
-    the display Cell on it, and which display Cell that is comes off the chat.
-    Carried together rather than threaded through a dozen signatures: every
-    one of the rows below wants all three and nothing wants a subset.
+    The talking Cell and its Plane, because a row is addressed by the display
+    Cell, which comes off the talking Cell, and the model's programs run in
+    that Cell, their plane state landing on its Plane. Carried together
+    rather than threaded through a dozen signatures.
 
     Attributes:
-        ui_plane_id: the Plane the chat draws onto, which is the Plane every
-            panel is on.
         plane_id: the Plane that runs the chat.
         cell_id: the Cell on it that talks.
         disp_cell_id: which Cell to write into, for a caller that already
@@ -145,7 +143,6 @@ class Panel:
             asked for; a job agent's is its own Cell and is known outright.
     """
 
-    ui_plane_id: nu.StrArg
     plane_id: nu.StrArg
     cell_id: nu.StrArg
     disp_cell_id: nu.StrArg | None = None
@@ -159,7 +156,7 @@ class Panel:
         """
         if self.disp_cell_id is not None:
             return nu.Str(self.disp_cell_id)
-        return chat.latest_display(self.plane_id, self.cell_id)
+        return chat.latest_display(self.cell_id)
 
     def state(self, cycle: nu.StrArg, kind: nu.StrArg, text: nu.StrArg) -> nu.Nu:
         """One host row. The fixed machine, and the only thing that writes it.
@@ -167,7 +164,7 @@ class Panel:
         One commit, with every argument read inside it, so a row is safe to
         compose out of reads of the session.
         """
-        return chat.state(self.ui_plane_id, self.cell(), cycle, kind, text)
+        return chat.state(self.cell(), cycle, kind, text)
 
     def heard(self, what: nu.StrArg) -> nu.Nu:
         """What started this turn, before anything runs.
@@ -210,7 +207,7 @@ class Panel:
         """
         counted = (
             nu.Str(PASS)
-            + nu.ToStr(memory.passes_of(self.plane_id, self.cell_id))
+            + nu.ToStr(memory.passes_of(self.cell_id))
             + nu.Str(OF)
             + nu.ToStr(nu.Int(budget))
         )
@@ -268,14 +265,14 @@ class Panel:
 
     def _said(self) -> nu.Nu:
         """The model's prose from the pass before this one."""
-        return memory.reply_of(self.plane_id, self.cell_id)
+        return memory.reply_of(self.cell_id)
 
     def _outcome(self) -> nu.Nu:
         """What the pass that just ran came to."""
-        return memory.outcome_of(self.plane_id, self.cell_id)
+        return memory.outcome_of(self.cell_id)
 
 
-def asked(plane_id: nu.StrArg, cell_id: nu.StrArg) -> nu.Nu:
+def asked(cell_id: nu.StrArg) -> nu.Nu:
     """The last thing said in a chat, which is what started the turn running.
 
     A turn only runs while the last word was the person's, so the last message
@@ -284,8 +281,8 @@ def asked(plane_id: nu.StrArg, cell_id: nu.StrArg) -> nu.Nu:
     Empty where nothing has been said, because reading past the end of an
     empty list yields EMPTY, which flows through everything composed with it.
     """
-    said = nu.List(chat.messages_of(plane_id, cell_id))
-    last = nu.Dict(nu.List(chat.messages_of(plane_id, cell_id))[nu.Len(said) - nu.Int(1)])
+    said = nu.List(chat.messages_of(cell_id))
+    last = nu.Dict(nu.List(chat.messages_of(cell_id))[nu.Len(said) - nu.Int(1)])
     return nu.Str(
         nu.If(
             nu.Gt(nu.Len(said), nu.Int(0)),
@@ -302,4 +299,4 @@ def session_slots(panel: Panel) -> nu.Nu:
     and the two cycles agree about where a turn's working memory is. Fresh at
     each call site, like every other address here.
     """
-    return memory.session_of(panel.plane_id, panel.cell_id)
+    return memory.session_of(panel.cell_id)

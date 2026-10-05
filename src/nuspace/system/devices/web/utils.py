@@ -158,8 +158,8 @@ def park() -> nu.Nu:
     return nu.ForeverDo(nu.Delay(nu.Float(PARK_SECONDS)))
 
 
-def watch(changes: Sequence[nu.Nu], ship: nu.Nu) -> nu.Nu:
-    """Ship now, and again after any of ``changes`` fires. Forever.
+def watch(changes: Sequence[nu.Nu], ship: nu.Nu, waits: Sequence[nu.Nu] = ()) -> nu.Nu:
+    """Ship now, and again after any of ``changes`` fires or any of ``waits`` ends. Forever.
 
     Each turn opens fresh subscriptions beside the ship and races them: the
     first notification cancels the turn and the next one reads the store
@@ -178,8 +178,13 @@ def watch(changes: Sequence[nu.Nu], ship: nu.Nu) -> nu.Nu:
             node hold one handle). Opened before the ship reads.
         ship: Reads the store and writes the browser. Should be guarded: a
             raise ends the race.
+        waits: Reactive terms that end on a change worth a ship, for a
+            filter wider than what it watches: it hears more, and waits out
+            what is not this ship's. Built fresh, opened before the ship
+            reads, as ``changes`` are.
     """
-    return nu.ForeverDo(nu.Race(*[nu.React(change) for change in changes], ship >> park()))
+    heard = [nu.React(change) for change in changes]
+    return nu.ForeverDo(nu.Race(*heard, *waits, ship >> park()))
 
 
 class Arms:
@@ -223,9 +228,11 @@ class Arms:
 
         return self.event(name, change, body)
 
-    def state(self, name: str, changes: Sequence[nu.Nu], ship: nu.Nu) -> nu.Nu:
+    def state(
+        self, name: str, changes: Sequence[nu.Nu], ship: nu.Nu, waits: Sequence[nu.Nu] = ()
+    ) -> nu.Nu:
         """:func:`watch`, guarded: ship now and on every change."""
-        return self.guard(watch(changes, self.guard(ship, name)), name)
+        return self.guard(watch(changes, self.guard(ship, name), waits), name)
 
 
 # --- Reading one event's fields ---------------------------------------------

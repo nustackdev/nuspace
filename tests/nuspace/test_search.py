@@ -30,9 +30,7 @@ def _drawn(plane_id: str, name: str) -> nu.Nu:
 
 
 def _note(plane_id: str, cell_id: str, body: str, snippet: Snippet = notes.NOTE) -> nu.Nu:
-    return ops.insert_snippet(plane_id, snippet, cell_id=cell_id) >> notes.write(
-        plane_id, cell_id, body
-    )
+    return ops.insert_snippet(plane_id, snippet, cell_id=cell_id) >> notes.write(cell_id, body)
 
 
 def _state(plane_id: str, term: nu.Nu) -> nu.Nu:
@@ -57,7 +55,7 @@ async def _searched(store, *args: object, **kwargs: object) -> str:
 def _loaded(plane: str, cell: str) -> nu.Nu:
     """A cell's prog loaded as the kernel loads it: read in a snapshot, rerooted under it."""
     rewrite = Rewrites(Reroot(plane, cell))
-    prog = Space.planes[plane].cells[cell].prog
+    prog = Space.cells[cell].prog
     return nustd.kv.Snapshot(
         prog.load(scope={"plane": plane, "cell": cell}, rewrite=rewrite), scope=Space
     )
@@ -65,7 +63,8 @@ def _loaded(plane: str, cell: str) -> nu.Nu:
 
 async def _run_search(store, plane_id: str) -> None:
     """The search's own cell, run to its end on this store."""
-    term = await store.run(_loaded(plane_id, search.CELL))
+    (cell,) = await store.read(ops.cells(plane_id))
+    term = await store.run(_loaded(plane_id, cell))
     await store.run(term)
 
 
@@ -99,7 +98,7 @@ async def test_search_makes_a_plane_under_searches_and_starts_its_run(store):
     assert await store.read(ops.children(search.SEARCHES)) == [pid]
 
     (cell,) = await store.read(ops.cell_rows(pid))
-    assert cell["id"] == search.CELL
+    assert cell["name"] == search.CELL
     assert cell["prog"] == search.source(SEARCHERS)
     assert cell["props"] == {"made_by": "", "has_ui": False}
 
@@ -125,7 +124,7 @@ def test_the_prog_names_only_snippets_with_a_search():
 
 def test_a_search_that_is_not_module_level_is_refused():
     with pytest.raises(ValueError, match="module level"):
-        Snippet("x", "X", "", search=lambda q, p, c: nu.List.of())
+        Snippet("x", "X", "", search=lambda q, c: nu.List.of())
 
 
 async def test_insert_snippet_records_its_snippet_as_a_prop(store):
@@ -144,18 +143,18 @@ async def test_the_cell_finds_notes_and_titles_in_drawn_planes(store):
     hits = await _hits(store, pid)
     assert hits == [
         {
-            "plane": "p1",
-            "cell": "c1",
-            "title": "Garden",
-            "excerpt": "Tomatoes need sun and water",
-            "by": "note",
-        },
-        {
             "plane": "p2",
             "cell": "",
             "title": "Tomato plan",
             "excerpt": "Tomato plan",
             "by": "title",
+        },
+        {
+            "plane": "p1",
+            "cell": "c1",
+            "title": "Garden",
+            "excerpt": "Tomatoes need sun and water",
+            "by": "note",
         },
         {
             "plane": "p2",
@@ -255,7 +254,7 @@ async def test_the_viewer_is_seeded_once_unpinned(store):
     assert row["name"] == "Search"
     assert row["props"]["system"] is True and row["props"]["ui"] is True
     assert row["props"]["backend"] == "async"
-    assert [c["id"] for c in await store.read(ops.cell_rows(search.PLANE))] == ["pick", "results"]
+    assert [c["name"] for c in await store.read(ops.cell_rows(search.PLANE))] == ["pick", "results"]
     assert search.PLANE not in await store.read(ops.pinned())
 
 
@@ -265,7 +264,7 @@ async def test_each_viewer_cell_loads_through_the_kernel_rewrites(store, cell):
     await store.run(ops.add_plane("v", backend="async") >> ops.add_cell("v", source, cell_id=name))
     env = session_env("127.0.0.1:9")("s1")
     rewrite = Rewrites(Reroot("v", name), env.rewrite)
-    prog = Space.planes["v"].cells[name].prog
+    prog = Space.cells[name].prog
     term = await store.run(
         nustd.kv.Snapshot(
             prog.load(scope={"plane": "v", "cell": name}, rewrite=rewrite), scope=Space
@@ -316,11 +315,12 @@ async def test_results_draw_the_shown_search(store):
     got = await _draw(store, search.RESULTS, "results", lambda ns: ns["shown"](nu.Str(pid)))
     assert got[("title",)]["label"] == "Results for “tomato”"
     assert got[("status",)] == "Done: 3 hits"
-    assert got[("hits", "h0", "head", "link")] == {"href": "/p1", "label": "Garden"}
-    assert got[("hits", "h0", "head", "by")]["label"] == "note"
-    assert got[("hits", "h0", "excerpt")] == "Tomatoes need sun and water"
-    assert got[("hits", "h1", "head", "by")]["label"] == "title"
-    assert ("hits", "h1", "excerpt") not in got
+    assert got[("hits", "h0", "head", "link")] == {"href": "/p2", "label": "Tomato plan"}
+    assert got[("hits", "h0", "head", "by")]["label"] == "title"
+    assert ("hits", "h0", "excerpt") not in got
+    assert got[("hits", "h1", "head", "link")] == {"href": "/p1", "label": "Garden"}
+    assert got[("hits", "h1", "head", "by")]["label"] == "note"
+    assert got[("hits", "h1", "excerpt")] == "Tomatoes need sun and water"
     assert got[("hits", "h2", "head", "link")] == {"href": "/p2", "label": "Tomato plan"}
     assert got[("empty",)] is None
 

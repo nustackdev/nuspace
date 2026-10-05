@@ -249,12 +249,7 @@ def out(plane, cell):
     name = nustd.ui.InputRef("name")
     group = nustd.ui.SelectRef("group")
     make = nustd.ui.ButtonRef("make")
-    said = (
-        nu.Str("make a ")
-        + nu.Str(group)
-        + nu.Str(" plane called ")
-        + nu.Str(name)
-    )
+    said = nu.Str("make a ") + nu.Str(group) + nu.Str(" plane called ") + nu.Str(name)
     return (
         nustd.ui.MarkdownRef("answer").set(nu.Str("Tell me what to make and I will make it."))
         >> name.set(nu.Str(""))

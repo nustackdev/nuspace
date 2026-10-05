@@ -100,7 +100,7 @@ async def test_enable_writes_the_change_as_source_and_is_idempotent(store):
     assert cid.startswith("react_")
     assert await enabled(store, on("chat"), "chat") == cid
     assert await store.read(ops.cells(reactions.PLANE)) == [cid]
-    source = await store.read(ops.prog(reactions.PLANE, cid))
+    source = await store.read(ops.prog(cid))
     assert "PLANE = 'chat'" in source
     assert on("chat") in source
     assert "up_plane(PLANE)" in source
@@ -132,7 +132,7 @@ async def test_enable_refuses_source_that_does_not_load(store, change, imports):
 async def test_enable_takes_imports(store):
     await store.run(ensure_system() >> ops.add_plane("chat", backend="async"))
     cid = await enabled(store, on("chat"), "chat", imports="import json")
-    assert "\nimport json\n" in await store.read(ops.prog(reactions.PLANE, cid))
+    assert "\nimport json\n" in await store.read(ops.prog(cid))
 
 
 async def test_disable_removes_the_reaction_and_its_key(store):
@@ -210,7 +210,7 @@ async def test_a_change_runs_the_plane_once(space):
     rows = await fired(space, p, lambda rs: len(rs) == 2 and all_ended(rs))
     assert rows[1]["exit"] == EXIT_OK
     assert rows[0]["id"] == first["id"]
-    assert (await space.read(States.planes[p].cells[c].extract()))["n"] == 1
+    assert (await space.read(States.cells[c].extract()))["n"] == 1
     await asyncio.sleep(1.5)
     assert len(await space.read(history(p))) == 2
 
@@ -265,10 +265,10 @@ async def test_never_two_runs_at_once(space):
 
 @module_loop
 async def test_a_cell_state_change_fires(space):
-    q, (c,) = await space.plane(prog("return ops.atomic_state(Tick.n.set(0))"))
+    _, (c,) = await space.plane(prog("return ops.atomic_state(Tick.n.set(0))"))
     p, _ = await space.plane(WORKS)
-    await reacting(space, f'States.planes["{q}"].cells.on_descendants_change("{c}", "n")', p)
-    await space.run(atomic_state(ops.cell_state(q, c, Tick.n.set(5))))
+    await reacting(space, f'States.cells.on_descendants_change("{c}", "n")', p)
+    await space.run(atomic_state(ops.cell_state(c, Tick.n.set(5))))
     await fired(space, p, lambda rs: len(rs) == 2 and all_ended(rs))
 
 

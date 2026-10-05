@@ -76,13 +76,13 @@ round: its yield is the answer, and that is the pass whose outcome carries
 something you can say out loud. The two do not mix in one program: a read pass
 that also writes yields `None` and loses the answer it went for.
 
-**Three ops belong to the chat rather than to the space**, and the panel ones
-take the panel's two ids off the first message of the turn:
+**Three ops belong to the chat rather than to the space**, and they take
+their ids off the first message of the turn:
 
 ```python
 from nuspace.agent import chat
 
-chat.note("<the ui plane>", "<the panel cell>", "work", "renamed the Notes plane")
+chat.note("<the panel cell>", "work", "renamed the Notes plane")
 chat.submit("<the ui plane>", "text")
 ```
 

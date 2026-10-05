@@ -102,7 +102,7 @@ async def _load(ctx: nu.Context, plane: str, cell: str) -> nu.Nu:
     """The cell's program, loaded through the kernel's rewrites."""
     env = session_env("127.0.0.1:9")("s1")
     rewrite = Rewrites(Reroot(plane, cell), env.rewrite)
-    prog = Space.planes[plane].cells[cell].prog
+    prog = Space.cells[cell].prog
     load = prog.load(scope={"plane": plane, "cell": cell}, rewrite=rewrite)
     term, _ = await nu.arun(nustd.kv.Snapshot(load, scope=Space), ctx)
     return term
@@ -131,7 +131,7 @@ async def test_plane_lens_browses_its_own_plane(ctx):
         await _until(lambda: any(f.ref[-1] == "lens" for f in browser.frames))
         shown = _keys(browser.last("lens"))
         assert shown["name"] == "Home"
-        assert {"props", "meta", "cells", "order"} <= set(shown)
+        assert {"props", "meta", "cells"} <= set(shown)
         # State is in the other store: a lens on the plane does not see it.
         assert "state" not in shown
     finally:
@@ -144,7 +144,7 @@ async def test_cell_lens_follows_the_select(ctx):
         >> ops.add_cell("p", cell_lens.SNIPPET.source, cell_id="me", name="lens")
         >> ops.add_cell("p", "one", cell_id="c1")
         >> ops.add_cell("p", "two", cell_id="c2", name="second")
-        >> ops.set_cell_meta("p", "c2", {"marker": 1}),
+        >> ops.set_cell_meta("c2", {"marker": 1}),
         ctx,
     )
     browser = _Browser()
@@ -206,7 +206,7 @@ async def test_every_snippet_runs_from_its_shim(ctx, snippet):
         ops.add_plane("p", backend="async") >> ops.insert_snippet("p", snippet, cell_id="c"),
         ctx,
     )
-    stored, _ = await nu.arun(ops.snapshot(ops.prog("p", "c")), ctx)
+    stored, _ = await nu.arun(ops.snapshot(ops.prog("c")), ctx)
     assert stored == snippet.source
     nu.validate(nu.compile(await _load(ctx, "p", "c")))
 
@@ -230,17 +230,17 @@ async def test_set_text_reaches_a_running_editor(ctx):
     task = await _running(ctx, "p", "c", browser)
     try:
         await _until(_shown(browser, ""))
-        await nu.arun(prose.set_text("p", "c", "Water the basil"), ctx)
+        await nu.arun(prose.set_text("c", "Water the basil"), ctx)
         await _until(_shown(browser, "Water the basil"))
-        assert await _read(ctx, prose.text_of("p", "c")) == "Water the basil"
+        assert await _read(ctx, prose.text_of("c")) == "Water the basil"
     finally:
         task.cancel()
 
 
 async def test_set_text_on_a_missing_cell_writes_nothing(ctx):
-    await nu.arun(ops.add_plane("p", backend="async") >> prose.set_text("p", "gone", "x"), ctx)
-    assert await _read(ctx, prose.text_of("p", "gone")) == ""
-    assert await _read(ctx, ops.cell_exists("p", "gone")) is False
+    await nu.arun(ops.add_plane("p", backend="async") >> prose.set_text("gone", "x"), ctx)
+    assert await _read(ctx, prose.text_of("gone")) == ""
+    assert await _read(ctx, ops.cell_exists("gone")) is False
 
 
 async def test_insert_snippet_hands_the_new_cell_to_its_ops(ctx):
@@ -249,7 +249,7 @@ async def test_insert_snippet_hands_the_new_cell_to_its_ops(ctx):
         "",
         lambda cell: (
             ops.insert_snippet("p", prose.SNIPPET, into=cell)
-            >> prose.set_text("p", cell, "Basil likes sun")
+            >> prose.set_text(cell, "Basil likes sun")
         ),
     )
     await nu.arun(ops.add_plane("p", backend="async") >> made >> made, ctx)
@@ -257,5 +257,5 @@ async def test_insert_snippet_hands_the_new_cell_to_its_ops(ctx):
     assert [row["props"]["made_by"] for row in rows] == ["text", "text"]
     first, second = (row["id"] for row in rows)
     assert first != second
-    assert await _read(ctx, prose.text_of("p", first)) == "Basil likes sun"
-    assert await _read(ctx, prose.text_of("p", second)) == "Basil likes sun"
+    assert await _read(ctx, prose.text_of(first)) == "Basil likes sun"
+    assert await _read(ctx, prose.text_of(second)) == "Basil likes sun"

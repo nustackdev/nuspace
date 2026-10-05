@@ -4,7 +4,7 @@ A program names its state bare and the kernel lands it in the States
 store, under the cell running it. :func:`sibling` lands it under another
 cell of the same plane instead, so two cells meet without either knowing
 the store's layout. :func:`cell_state` and :func:`plane_state` land it under
-any plane's, for a reader that is not on that plane (eg a search).
+any cell's or plane's, for a reader that is not on that plane (eg a search).
 :func:`bracketed` lands a whole term under the running cell and brackets it,
 for an author who wants the brackets placed for them.
 """
@@ -25,7 +25,8 @@ __all__ = [
     "PlaneState",
     "bracketed",
     "cell_state",
-    "clear_state",
+    "clear_cell_state",
+    "clear_plane_state",
     "drop_cell_state",
     "drop_plane_state",
     "plane_state",
@@ -36,11 +37,12 @@ __all__ = [
 def sibling(cell_id: nu.StrArg, term: nu.Nu) -> nu.Nu:
     """``term`` with its ``CellState`` chains landing under a sibling cell.
 
-    The sibling is ``cell_id`` in the plane of the run evaluating this: the
-    plane is read from :attr:`~nuspace.ops.kernel.Here.plane`, which the
-    kernel holds in a frame around every run. Rerooted here, the chains no longer root
-    at ``CellState``, so the kernel's own reroot leaves them alone.
-    ``PlaneState`` chains are untouched and land at the shared plane state.
+    The sibling is ``cell_id``, a cell of the same plane as the run
+    evaluating this, by convention: a cell's state is keyed by its id alone,
+    so this is :func:`cell_state` under the name a program reads it by.
+    Rerooted here, the chains no longer root at ``CellState``, so the
+    kernel's own reroot leaves them alone. ``PlaneState`` chains are
+    untouched and land at the shared plane state.
 
     Bare, like any state read: it routes to the States store, so the
     bracket its caller puts around it names :class:`~nuspace.shapes.States`
@@ -50,21 +52,20 @@ def sibling(cell_id: nu.StrArg, term: nu.Nu) -> nu.Nu:
         cell_id: The sibling's id. Ids, not names: names are not unique.
         term: What to read or write there, eg ``Tick.n``.
     """
-    return cell_state(Here.plane, cell_id, term)
+    return cell_state(cell_id, term)
 
 
-def cell_state(plane_id: nu.StrArg, cell_id: nu.StrArg, term: nu.Nu) -> nu.Nu:
-    """``term`` with its ``CellState`` chains landing under any plane's cell.
+def cell_state(cell_id: nu.StrArg, term: nu.Nu) -> nu.Nu:
+    """``term`` with its ``CellState`` chains landing under any cell.
 
     :func:`sibling` for a cell on another plane. Bare, and routed to the
     States store, as :func:`sibling` is: its caller brackets it.
 
     Args:
-        plane_id: The cell's plane.
         cell_id: The cell.
         term: What to read or write there, eg ``Doc.text``.
     """
-    return reroot_base(term, CellState, States.planes[plane_id].cells[cell_id])
+    return reroot_base(term, CellState, States.cells[cell_id])
 
 
 def plane_state(plane_id: nu.StrArg, term: nu.Nu) -> nu.Nu:
@@ -113,44 +114,50 @@ def bracketed(term: nu.Nu) -> nu.Nu:
     return nustd.kv.auto_flow_atomic(nustd.kv.auto_flow_atomic(landed, scope=Space), scope=States)
 
 
-def clear_state(plane_id: nu.StrArg, cell_id: nu.StrArg | None = None) -> nu.Nu:
-    """Wipe a cell's state, or the plane's shared state when ``cell_id`` is None.
+def clear_cell_state(cell_id: nu.StrArg) -> nu.Nu:
+    """Wipe a cell's state.
 
     A person's op, not a step in a restart: a cell coming back is meant to
-    find what it left. A no-op when the plane or cell is missing. One commit
-    on the States store: whether the plane or cell is there is read from a
-    Space snapshot.
+    find what it left. A no-op when the cell is missing. One commit on the
+    States store: whether the cell is there is read from a Space snapshot.
+    """
+    cells = States.cells
+    return atomic_state(
+        nu.IfDo(cell_exists(cell_id).and_(cells.contains(cell_id)), cells.del_item(cell_id))
+    )
+
+
+def clear_plane_state(plane_id: nu.StrArg) -> nu.Nu:
+    """Wipe a plane's shared state. Its cells' own is left alone: :func:`clear_cell_state`.
+
+    A no-op when the plane is missing. One commit on the States store, as
+    :func:`clear_cell_state`.
     """
     plane = States.planes[plane_id]
-    if cell_id is None:
-        wipe = nu.IfDo(plane.contains("state"), plane.state.clear())
-        there = plane_exists(plane_id)
-    else:
-        wipe = nu.IfDo(plane.cells.contains(cell_id), plane.cells.del_item(cell_id))
-        there = cell_exists(plane_id, cell_id)
     # Asked first: a write under a plane the store holds nothing for makes its row, empty.
-    return atomic_state(nu.IfDo(there, nu.IfDo(States.planes.contains(plane_id), wipe)))
+    held = States.planes.contains(plane_id).and_(plane.contains("state"))
+    return atomic_state(nu.IfDo(plane_exists(plane_id).and_(held), plane.state.clear()))
 
 
-def drop_cell_state(plane_id: nu.StrArg, cell_id: nu.StrArg) -> nu.Nu:
+def drop_cell_state(cell_id: nu.StrArg) -> nu.Nu:
     """A cell gone from Space, its state deleted. No bracket: run it in :func:`atomic_state`.
 
     Asks Space first and leaves the state of a cell that is there, so run
     after the commit that removed it, a cell given the same id again in
     between keeps what it has. One delete of the cell's subtree.
     """
-    cells = States.planes[plane_id].cells
+    cells = States.cells
     return nu.IfDo(
-        cell_exists(plane_id, cell_id).not_().and_(States.planes.contains(plane_id)),
-        nu.IfDo(cells.contains(cell_id), cells.del_item(cell_id)),
+        cell_exists(cell_id).not_().and_(cells.contains(cell_id)), cells.del_item(cell_id)
     )
 
 
 def drop_plane_state(plane_id: nu.StrArg) -> nu.Nu:
-    """A plane gone from Space, its state and all its cells' deleted. No bracket.
+    """A plane gone from Space, its shared state deleted. No bracket.
 
     Leaves a plane that is there alone, as :func:`drop_cell_state` does a
-    cell. One delete of the plane's subtree.
+    cell. One delete of the plane's subtree. Its cells' state is theirs:
+    :func:`drop_cell_state`, per cell.
     """
     planes = States.planes
     return nu.IfDo(

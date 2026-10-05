@@ -157,7 +157,7 @@ async def test_boot_before_the_first_open_keeps_the_services(store):
     await store.run(boot(USER) >> ensure_system())
     assert await store.read(ops.cell_rows(init.PLANE)) == [
         {
-            "id": "main",
+            "id": init.CELL,
             "name": "main",
             "prog": init.SHIM,
             "props": {"made_by": "", "has_ui": False},
@@ -176,7 +176,7 @@ async def test_open_space_headless_runs_a_booted_plane(tmp_path, monkeypatch):
     path = str(tmp_path / "space")
     seed = (
         ops.add_plane(USER, backend="async")
-        >> ops.add_cell(USER, SET_42, cell_id="c")
+        >> ops.add_cell(USER, SET_42, cell_id="u")
         >> boot(USER)
     )
     # A tab the previous run never closed, routed to a plane of its own.
@@ -184,11 +184,11 @@ async def test_open_space_headless_runs_a_booted_plane(tmp_path, monkeypatch):
     seed = (
         seed
         >> ops.add_plane(TAB, ui=True, backend="async")
-        >> ops.add_cell(TAB, SET_42, cell_id="c")
+        >> ops.add_cell(TAB, SET_42, cell_id="t")
         >> atomic(stale.opened.set(nu.Float(0.0)) >> stale.routes.set(nu.Literal([TAB])))
         # nuverse's starter program runs headless too.
         >> ops.add_plane(STARTER, backend="async")
-        >> ops.add_cell(STARTER, nuverse_program.SNIPPET.source, cell_id="c")
+        >> ops.add_cell(STARTER, nuverse_program.SNIPPET.source, cell_id="s")
         >> boot(STARTER)
     )
     await nu.arun(nu.With(store(path), body=seed))
@@ -200,14 +200,14 @@ async def test_open_space_headless_runs_a_booted_plane(tmp_path, monkeypatch):
     task = asyncio.create_task(nu.arun(term))
     space = Kernel(await asyncio.wait_for(asyncio.shield(ready), 20), done, task)
     try:
-        state = States.planes[USER].cells["c"].extract()
+        state = States.cells["u"].extract()
         assert await space.until(state, lambda s: s == {"n": 42}) == {"n": 42}
-        starter = States.planes[STARTER].cells["c"].extract()
+        starter = States.cells["s"].extract()
         assert await space.until(starter, lambda s: s == {"hello": "world"}) == {"hello": "world"}
         # The services are made and init brought up its boot list beside the user plane.
         assert {r["id"] for r in await space.read(ops.plane_rows())} >= {
             USER,
-            *(plane for plane, _ in SERVICES),
+            *(plane for plane, _, _ in SERVICES),
         }
         for plane in BOOTED:
             await space.until(history(plane), lambda rs: any(r["started_at"] for r in rs))
@@ -215,7 +215,9 @@ async def test_open_space_headless_runs_a_booted_plane(tmp_path, monkeypatch):
         assert await space.read(nu.list(Space.connections.keys())) == []
         assert await space.read(ops.runs(plane=TAB)) == []
         # Home seeded, and this open's info written by the host.
-        assert await space.read(ops.cells(home.PLANE)) == [cell for cell, _ in home.CELLS]
+        assert await space.read(ops.cells(home.PLANE)) == [
+            home.seeded_id(home.PLANE, name) for name, _ in home.CELLS
+        ]
         info = await space.read(Space.state.info.extract())
         assert info["path"] == str(tmp_path / "space")
         assert info["opened"] > 0
@@ -238,7 +240,7 @@ async def test_nuverse_prose_loads_through_the_kernel_rewrites(store):
     )
     env = session_env("127.0.0.1:9")("s1")
     rewrite = Rewrites(Reroot("p", "c"), env.rewrite)
-    source = Space.planes["p"].cells["c"].prog
+    source = Space.cells["c"].prog
     term = await store.run(
         nustd.kv.Snapshot(
             source.load(scope={"plane": "p", "cell": "c"}, rewrite=rewrite), scope=Space

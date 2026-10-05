@@ -35,7 +35,6 @@ agent and the shell compose these and nothing narrower.
 
 from .cell import (
     add_cell,
-    move_cell,
     remove_cell,
     rename_cell,
     reorder_cells,
@@ -63,6 +62,7 @@ from .pin import move_pin, pin_plane, pinned, unpin_plane
 from .plane import add_plane, remove_plane, rename_plane, set_plane_icon, set_plane_meta
 from .read import (
     cell_exists,
+    cell_plane,
     cell_rows,
     cells,
     children,
@@ -79,7 +79,8 @@ from .state import (
     PlaneState,
     bracketed,
     cell_state,
-    clear_state,
+    clear_cell_state,
+    clear_plane_state,
     plane_state,
     sibling,
 )
@@ -102,19 +103,20 @@ __all__ = [
     "bracketed",
     "cell_exists",
     "cell_interrupt",
+    "cell_plane",
     "cell_rows",
     "cell_run",
     "cell_runs",
     "cell_state",
     "cells",
     "children",
-    "clear_state",
+    "clear_cell_state",
+    "clear_plane_state",
     "create_plane",
     "env",
     "insert_snippet",
     "latest",
     "mint_ordered_id",
-    "move_cell",
     "move_pin",
     "move_plane",
     "parent",

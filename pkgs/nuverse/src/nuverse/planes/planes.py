@@ -27,7 +27,7 @@ def made(p):
 
 
 def cell_count(pid):
-    return nu.list(nuspace.Space.planes[pid].cells.keys()).len()
+    return ops.cells(pid).len()
 
 
 def members(planes, m):
@@ -73,7 +73,7 @@ def prop(p, name):
 
 
 def cell_count(pid):
-    return nu.list(nuspace.Space.planes[pid].cells.keys()).len()
+    return ops.cells(pid).len()
 
 
 def draw():

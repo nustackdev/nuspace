@@ -43,7 +43,7 @@ async def _loaded(store, source: str, *, drawn: bool) -> nu.Nu:
     if drawn:
         steps.append(session_env("127.0.0.1:9")("s1").rewrite)
     rewrite = Rewrites(*steps)
-    prog = Space.planes["p"].cells["c"].prog
+    prog = Space.cells["c"].prog
     return await store.run(
         nustd.kv.Snapshot(
             prog.load(scope={"plane": "p", "cell": "c"}, rewrite=rewrite), scope=Space
@@ -94,7 +94,7 @@ async def test_the_first_message_from_the_box_makes_the_plane_that_talks(store):
     await store.run(chat.submit("p1", nu.Str("hello"), talk=talk))
     talker = await store.read(chat.talker_of("p1"))
     assert await store.read(ops.children("p1")) == [talker]
-    assert await store.read(ops.prog(talker, chat.CHAT_TALK)) == cc_chat.TALK
+    assert await store.read(ops.prog(chat.talk_of(talker))) == cc_chat.TALK
     (row,) = [r for r in await store.read(ops.plane_rows()) if r["id"] == talker]
     assert row["props"]["made_by"] == "cc_chat"
 

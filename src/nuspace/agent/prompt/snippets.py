@@ -55,7 +55,7 @@ can search or edit.
 `ops.insert_snippet(plane, <snippet>.SNIPPET, into=cell)` adds one at the end
 of `plane`, or at `index=`. `into` is a slot it sets to the new cell's id,
 `""` when the plane is missing: hold it in `nu.let` and hand it to the ops.
-Each op takes the plane and cell ids first, and each write op is a commit of
+Each op takes the cell id first, and each write op is a commit of
 its own, so a program made of them needs no bracket. A read op is bare: wrap
 it in `ops.snapshot(...)`.\
 """
@@ -127,7 +127,7 @@ def _example(snippet: Snippet) -> str:
     home = _home(snippet)
     name = home.rpartition(".")[2]
     op = snippet.ops[0]
-    rest = list(inspect.signature(op).parameters)[2:]
+    rest = list(inspect.signature(op).parameters)[1:]
     args = "".join(f', "<{arg}>"' for arg in rest)
     return f"""\
 ```python
@@ -141,7 +141,7 @@ def out():
         "",
         lambda cell: (
             ops.insert_snippet("<plane>", {name}.SNIPPET, into=cell)
-            >> {name}.{op.__name__}("<plane>", cell{args})
+            >> {name}.{op.__name__}(cell{args})
         ),
     )
 ```"""

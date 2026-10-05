@@ -93,13 +93,13 @@ def answering(
 
     def owed() -> nu.Nu:
         """Whether the chat is waiting on a reply, read in a snapshot. Fresh at each site."""
-        return ops.snapshot(chat.unanswered(plane_id, cell_id))
+        return ops.snapshot(chat.unanswered(cell_id))
 
     return nu.ForeverDo(
         nu.IfDo(owed(), _turn(plane_id, cell_id, ui_plane_id=ui_plane_id, ask=ask))
         >> nu.IfDo(
             nu.Not(owed()),
-            nu.ReactWhile(ops.snapshot(chat.changed(plane_id, cell_id)), nu.Not(owed()), nu.Noop()),
+            nu.ReactWhile(ops.snapshot(chat.changed(cell_id)), nu.Not(owed()), nu.Noop()),
         )
     )
 
@@ -131,11 +131,11 @@ def performing(
         A Flow that runs the work cycle once and ends. It never draws and
         never appends a message; a job agent's result is what it changed.
     """
-    panel = trace.Panel(plane_id, plane_id, cell_id, disp_cell_id=cell_id)
+    panel = trace.Panel(plane_id, cell_id, disp_cell_id=cell_id)
     session = trace.session_slots(panel)
     body = (
         panel.heard(nu.Str(task))
-        >> memory.cleared(plane_id, cell_id)
+        >> memory.cleared(cell_id)
         >> ops.atomic_state(_opened(session, nu.Dict.of(role="user", content=nu.Str(task))))
         >> cycles.work(session=session, panel=panel, ask=ask, state=_world(plane_id))
     )
@@ -169,17 +169,17 @@ def _turn(
 
     def owed() -> nu.Nu:
         """Whether the chat is still waiting, read in a snapshot. Fresh at each site."""
-        return ops.snapshot(chat.unanswered(plane_id, cell_id))
+        return ops.snapshot(chat.unanswered(cell_id))
 
-    panel = trace.Panel(ui_plane_id, plane_id, cell_id)
+    panel = trace.Panel(plane_id, cell_id)
     session = trace.session_slots(panel)
-    world = _world(ui_plane_id, plane_id=plane_id, cell_id=cell_id)
+    world = _world(ui_plane_id, cell_id=cell_id)
     body = (
         # The first row of the turn, and the only one that needs no model call
         # to write. Before the clear, because a person watching wants the
         # panel to move the instant the turn starts.
-        panel.heard(trace.asked(plane_id, cell_id))
-        >> memory.cleared(plane_id, cell_id)
+        panel.heard(trace.asked(cell_id))
+        >> memory.cleared(cell_id)
         >> ops.atomic_state(_opened(session, _opening(plane_id, cell_id, ui_plane_id, panel)))
         >> cycles.work(session=session, panel=panel, ask=ask, state=world)
         >> ops.atomic_state(
@@ -195,12 +195,7 @@ def _turn(
         # straight back round the same question.
         >> nu.IfDo(
             owed(),
-            chat.say(
-                plane_id,
-                cell_id,
-                chat.ROLE_SYSTEM,
-                _stopped(plane_id, cell_id),
-            ),
+            chat.say(cell_id, chat.ROLE_SYSTEM, _stopped(cell_id)),
         )
     )
     return nu.With(
@@ -208,7 +203,6 @@ def _turn(
         body=nu.TryCatch(
             body,
             catch=chat.say(
-                plane_id,
                 cell_id,
                 chat.ROLE_SYSTEM,
                 nu.Str(CRASHED) + nu.ToStr(nu.Attr("error")),
@@ -218,7 +212,7 @@ def _turn(
     )
 
 
-def _stopped(plane_id: nu.StrArg, cell_id: nu.StrArg) -> nu.Nu:
+def _stopped(cell_id: nu.StrArg) -> nu.Nu:
     """What to tell a person whose turn ended without an answer.
 
     Whichever cycle stopped wrote the account, so this reads it back rather
@@ -230,7 +224,7 @@ def _stopped(plane_id: nu.StrArg, cell_id: nu.StrArg) -> nu.Nu:
     either cycle having given up: an answer that landed and then a person
     talking again inside the same turn would be one.
     """
-    stalled = memory.stalled_of(plane_id, cell_id)
+    stalled = memory.stalled_of(cell_id)
     said = nu.Str(nu.If(nu.Gt(nu.Len(stalled), nu.Int(0)), nu.Str(stalled), nu.Str(SILENT)))
     return said + nu.Str(ASK_AGAIN)
 
@@ -253,12 +247,7 @@ def _opened(session: nu.Nu, first: nu.Nu) -> nu.Nu:
     return session.messages.set(nu.List.of()) >> session.messages.append(first)
 
 
-def _world(
-    ui_plane_id: nu.StrArg,
-    *,
-    plane_id: nu.StrArg | None = None,
-    cell_id: nu.StrArg | None = None,
-) -> nu.Nu:
+def _world(ui_plane_id: nu.StrArg, *, cell_id: nu.StrArg | None = None) -> nu.Nu:
     """What the model is shown after each of its programs ran.
 
     The Cells already on the Plane that draws are in it deliberately: a model
@@ -273,8 +262,8 @@ def _world(
         "planes": ops.planes(),
         "drawn": ops.cells(ui_plane_id),
     }
-    if plane_id is not None and cell_id is not None:
-        shown["said"] = chat.messages_of(plane_id, cell_id)
+    if cell_id is not None:
+        shown["said"] = chat.messages_of(cell_id)
     return nu.Dict.of(**shown)
 
 
@@ -312,5 +301,5 @@ def _opening(
         + nu.Str("\npanel cell: ")
         + nu.ToStr(panel.cell())
         + nu.Str("\n\nWhat has been said, oldest first:\n\n")
-        + nu.ToStr(nu.Repr(chat.messages_of(plane_id, cell_id))),
+        + nu.ToStr(nu.Repr(chat.messages_of(cell_id))),
     )

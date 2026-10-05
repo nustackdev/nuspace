@@ -7,14 +7,15 @@ tree, runs); States holds what the programs remember::
       planes          id -> PlaneStates
         <p>
           state       PlaneState shapes, rerooted here
-          cells       id -> CellStates
-            <c>       CellState shapes, rerooted here
+      cells           id -> CellStates
+        <c>           CellState shapes, rerooted here
 
-Keyed by the same plane and cell ids as ``Space.planes``, and nothing else:
-no names, no progs, no run info. A plane's own state sits in ``state``
-beside ``cells`` rather than next to the cell ids, so a state field and a
-cell id never share a key. Dropping a plane's states or a cell's is one
-delete of its subtree.
+Keyed by the same ids as ``Space.planes`` and ``Space.cells``, and nothing
+else: no names, no progs, no run info. Flat as Space is, so a cell's state
+is one lookup away by its id, wherever the cell sits. A plane's own state
+sits in ``state`` rather than at the plane's row, so the row can grow
+without a state field ever sharing a key. Dropping a plane's state or a
+cell's is one delete of its subtree.
 
 ``States`` is also this store's tag, as ``Space`` is the other's: a
 rerooted chain picks it up and routes to this store's navigator, and a
@@ -35,18 +36,18 @@ class CellStates(nu.Shape):
 
 
 class PlaneStates(nu.Shape):
-    """One plane's state: shared by its cells in ``state``, each cell's own under ``cells``."""
+    """One plane's state, shared by its cells in ``state``."""
 
     state = nustd.kv.DictRef.slot(object)
-    cells = nustd.kv.DictRef.slot(CellStates)
 
 
 class States(nu.Shape):
-    """The state store's root: every plane's state, by plane id.
+    """The state store's root: every plane's state and every cell's, by id.
 
     Written by programs, through their rerooted ``CellState`` and
-    ``PlaneState`` slots, and by the ops that drop or move a plane or cell
-    after its structure.
+    ``PlaneState`` slots, and by the ops that drop a plane or cell after its
+    structure.
     """
 
     planes = nustd.kv.DictRef.slot(PlaneStates)
+    cells = nustd.kv.DictRef.slot(CellStates)

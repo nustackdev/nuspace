@@ -156,7 +156,7 @@ def build_body(
     rewrite = Rewrites(
         Reroot(plane, cell), *(env.rewrite for env in envs if env.rewrite is not None)
     )
-    source = Space.planes[plane].cells[cell].prog
+    source = Space.cells[cell].prog
     # The prog is read in a snapshot of its own, closed before the program runs.
     load = nustd.kv.Snapshot(
         source.load(scope={"plane": plane, "cell": cell}, rewrite=rewrite), scope=Space

@@ -1,19 +1,24 @@
-"""reload: a live cell run whose cell's prog changed is replaced by one of the new prog (D13).
+"""reload: a cell rewritten during a live plane run runs again in it, on the new prog (D13).
 
-One arm per live plane run. The arm wakes when a cell of its plane is
-rewritten, and replaces every live cell run whose ``version`` is behind its
-cell's: ``cell_interrupt >> cell_run`` in one commit, so the plane run never
-reads empty in between and never ends for it. The new cell run is ``by``
-reload; the plane run keeps its own ``by``.
+One arm per live plane run. The arm wakes when a cell is rewritten, and
+runs again every cell of the run's plane whose newest cell run in it has a
+``version`` behind its cell's: ``cell_interrupt >> cell_run`` in one
+commit, so the plane run never reads empty in between and never ends for
+it. The new cell run is ``by`` reload; the plane run keeps its own ``by``.
 
-Only live cell runs are replaced: a cell whose run is over stays over.
-Every read walks the run's ``cells_running``, never its history.
+Live or over makes no difference: a save reruns its cell. A cell that drew
+once and returned is over while the plane run goes on, and an edit to it
+has to draw again. The interrupt is a no-op on a cell run that is over.
+
+Every read is a point read of the run's ``latest`` per cell of its plane,
+never a walk of its history.
 """
 
 from __future__ import annotations
 
 import nu
-from nuspace.ops.kernel import add_cell_run, interrupt
+from nuspace.ops.kernel import add_cell_run, interrupt, latest
+from nuspace.ops.read import cells
 from nuspace.ops.utils import MintId, atomic
 from nuspace.shapes import Space
 
@@ -27,7 +32,7 @@ __all__ = ["BY", "CELL", "PLANE", "SHIM", "behind", "program"]
 PLANE = "reload"
 
 #: The one cell on the plane.
-CELL = "main"
+CELL = "reload_main"
 
 #: What cell runs reload starts are recorded as ``by``.
 BY = "reload"
@@ -44,50 +49,49 @@ def out():
 _kernel = Space.kernel
 
 
-def behind(run_id: nu.StrArg, plane: nu.StrArg) -> nu.List:
-    """The live cell runs of a plane run whose cell was rewritten since. Bare read.
+def _stale(run_id: nu.StrArg, cell: nu.Str) -> nu.Bool:
+    """Whether a cell ran in the plane run and was rewritten since its newest cell run there.
 
-    A cell gone is not behind: removing it interrupted its runs already.
-    An unwritten version reads 0.
+    A cell that never ran in it is not stale: a birth is nav's. A cell gone
+    is not stale: removing it interrupted its runs already. An unwritten
+    version reads 0.
     """
-    row = _kernel.runs[run_id]
-    cells = Space.planes[plane].cells
-
-    def stale(at: nu.Attr) -> nu.Bool:
-        cr = row.cells[nu.Str(at)]
-        cell = cr.cell.fallback("")
-        newer = cr.version.fallback(0) < cells[cell].version.fallback(0)
-        return cells.contains(cell).and_(newer)
-
-    return nu.list(row.cells_running).iter().filter(stale).to_list()
+    cr = latest(run_id, cell)
+    ran = _kernel.runs[run_id].cells[cr].version.fallback(0)
+    newer = ran < Space.cells[cell].version.fallback(0)
+    return (cr != "").and_(Space.cells.contains(cell)).and_(newer)
 
 
-def _replace(run_id: nu.StrArg, plane: nu.StrArg) -> nu.Nu:
-    """Every stale live cell run interrupted and run anew, one commit each.
+def behind(run_id: nu.StrArg) -> nu.List:
+    """The cells of a plane run's plane rewritten since their newest cell run in it. Bare read."""
+    plane = _kernel.runs[run_id].plane.fallback("")
+    return cells(plane).iter().filter(lambda at: _stale(run_id, nu.Str(at))).to_list()
 
-    Read again inside the commit, so a cell run another reload already
-    replaced is left alone.
+
+def _replace(run_id: nu.StrArg) -> nu.Nu:
+    """Every stale cell run again and its newest cell run interrupted, one commit each.
+
+    Read again inside the commit, so a cell another reload already ran
+    again is left alone.
     """
-    row = _kernel.runs[run_id]
 
     def one(at: nu.Attr) -> nu.Nu:
-        cr = nu.Str(at)
-        cell = row.cells[cr].cell.fallback("")
+        cell = nu.Str(at)
         again = nu.let(MintId("cr"), lambda new: add_cell_run(run_id, cell, nu.Str(new), by=BY))
-        return atomic(nu.IfDo(behind(run_id, plane).contains(cr), interrupt(run_id, cr) >> again))
+        rerun = interrupt(run_id, latest(run_id, cell)) >> again
+        return atomic(nu.IfDo(_stale(run_id, cell), rerun))
 
-    return nu.ForEachDo(snap(behind(run_id, plane)), one)
+    return nu.ForEachDo(snap(behind(run_id)), one)
 
 
 def _arm(run_id: nu.Str) -> nu.Nu:
-    """One live plane run: replace what is stale, then again on every rewrite of its plane's cells."""
+    """One live plane run: rerun what is stale, then again on every rewrite of a cell.
 
-    def watch(held: nu.ObjectRef) -> nu.Nu:
-        plane = nu.Str(held)
-        edits = Space.planes[plane].cells.on_descendants_change("*", "version")
-        return nu.ForeverDo(_replace(run_id, plane) >> wake(edits))
-
-    return nu.let(snap(_kernel.runs[run_id].plane.fallback("")), watch)
+    Cells are flat, so the subscription hears every cell's rewrite, and
+    :func:`behind` tells the run's own apart.
+    """
+    edits = Space.cells.on_descendants_change("*", "version")
+    return nu.ForeverDo(_replace(run_id) >> wake(edits))
 
 
 def program() -> nu.Nu:

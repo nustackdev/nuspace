@@ -7,7 +7,7 @@ splices every such chain under its owner's ``state``:
 ========================  ==========================================
 chain rooted at           lands at
 ========================  ==========================================
-a ``CellState`` subclass  ``States.planes[plane].cells[cell]``
+a ``CellState`` subclass  ``States.cells[cell]``
 a ``PlaneState`` subclass ``States.planes[plane].state``
 anything else             left alone: another store, Space, ui refs
 ========================  ==========================================
@@ -66,7 +66,10 @@ def reroot_base(term: nu.Nu, base: type[nu.Shape], at: nu.Nu) -> nu.Nu:
 
 
 def reroot(term: nu.Nu, plane: nu.StrArg, cell: nu.StrArg) -> nu.Nu:
-    """``term`` with its state chains spliced under ``plane`` and ``cell``.
+    """``term`` with its cell state under ``cell`` and its plane state under ``plane``.
+
+    Both ids, since the two land apart: a cell's state is keyed by the cell
+    alone, the state it shares by its plane.
 
     Args:
         term: Any Nu term, typically a loaded program.
@@ -78,9 +81,8 @@ def reroot(term: nu.Nu, plane: nu.StrArg, cell: nu.StrArg) -> nu.Nu:
         The rewritten term. ``term`` itself is untouched, and a term with no
         state chains comes back as the same object.
     """
-    row = States.planes[plane]
-    term = reroot_base(term, CellState, row.cells[cell])
-    return reroot_base(term, PlaneState, row.state)
+    term = reroot_base(term, CellState, States.cells[cell])
+    return reroot_base(term, PlaneState, States.planes[plane].state)
 
 
 class Reroot:

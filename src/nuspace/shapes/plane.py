@@ -1,11 +1,9 @@
-"""Plane: a named group of cells and their order."""
+"""Plane: a named, ordered group of cells."""
 
 from __future__ import annotations
 
 import nu
 import nustd.kv
-
-from .cell import Cell
 
 
 __all__ = ["Plane", "PlaneProps"]
@@ -33,9 +31,11 @@ class PlaneProps(nu.Shape):
 class Plane(nu.Shape):
     """A group of cells, the runnable thing. How it runs is its ``backend`` prop only.
 
-    ``order`` sits beside ``cells`` rather than inside a cell, so rearranging
-    them is one write that touches no cell. Nesting is not here either: it is
-    a relation between planes and lives in ``Space.tree``.
+    ``cells`` is its cell ids, in order: membership and order in one list,
+    so rearranging them is one write that touches no cell. The cells
+    themselves are in ``Space.cells``, each pointing back here through its
+    ``plane``. Nesting is not here either: it is a relation between planes
+    and lives in ``Space.tree``.
 
     ``props`` is what nuspace reads to work (:class:`PlaneProps`). ``meta``
     is free, for anything else, eg a ui plane's ``editable`` and
@@ -48,5 +48,4 @@ class Plane(nu.Shape):
     name = nustd.kv.StrRef.slot()
     props = nustd.kv.ShapeRef.slot(PlaneProps)
     meta = nustd.kv.DictRef.slot(object)
-    cells = nustd.kv.DictRef.slot(Cell)
-    order = nustd.kv.ListRef.slot(str)
+    cells = nustd.kv.ListRef.slot(str)

@@ -1,7 +1,7 @@
 """Bootstrap: the service planes made real in a store, once.
 
-Each service is a system plane with a fixed id and one cell ``main`` whose
-prog is the service's shim (D20, D31). init's boot list is seeded with the
+Each service is a system plane with a fixed id and one cell ``main``, its
+id fixed too, whose prog is the service's shim (D20, D31). init's boot list is seeded with the
 others the first time, and left alone after: it is data somebody may have
 edited since.
 """
@@ -18,22 +18,25 @@ from ..utils import snap
 from . import init, nav, reactions, reload, supervisor
 
 
-__all__ = ["BOOTED", "SERVICES", "ensure_system"]
+__all__ = ["BOOTED", "MAIN", "SERVICES", "ensure_system"]
 
 
-#: Every service, as ``(plane id, shim)``. init first: the kernel starts it.
+#: Every service, as ``(plane id, cell id, shim)``. init first: the kernel starts it.
 SERVICES = (
-    (init.PLANE, init.SHIM),
-    (nav.PLANE, nav.SHIM),
-    (supervisor.PLANE, supervisor.SHIM),
-    (reload.PLANE, reload.SHIM),
+    (init.PLANE, init.CELL, init.SHIM),
+    (nav.PLANE, nav.CELL, nav.SHIM),
+    (supervisor.PLANE, supervisor.CELL, supervisor.SHIM),
+    (reload.PLANE, reload.CELL, reload.SHIM),
 )
+
+#: What a service's one cell is called.
+MAIN = "main"
 
 #: What init's boot list starts as: every service but init itself.
 BOOTED = init.BOOTED
 
 
-def _service(plane_id: str, shim: str) -> nu.Nu:
+def _service(plane_id: str, cell_id: str, shim: str) -> nu.Nu:
     """A service plane and its cell, each made only when missing, in one commit. On ``mp``.
 
     Only when missing, because ``add_plane`` on an existing id rewrites its
@@ -42,16 +45,15 @@ def _service(plane_id: str, shim: str) -> nu.Nu:
     prog (eg written by hand). The cell's ``has_ui`` is worked out first,
     outside the bracket, and only when the cell is missing.
     """
-    row = Space.planes[plane_id]
-    no_plane = row.contains("name").not_()
-    no_cell = row.cells[init.CELL].contains("prog").not_()
+    no_plane = Space.planes[plane_id].contains("name").not_()
+    no_cell = Space.cells[cell_id].contains("prog").not_()
     made = nu.IfDo(no_plane, plane_writes(plane_id, backend="mp", name=plane_id, system=True))
 
     def both(ui: nu.ObjectRef) -> nu.Nu:
-        cell = cell_writes(plane_id, init.CELL, shim, nu.Bool(ui), name=init.CELL)
+        cell = cell_writes(plane_id, cell_id, shim, nu.Bool(ui), name=MAIN)
         return atomic(made >> nu.IfDo(no_cell, cell))
 
-    return nu.IfDo(snap(no_plane.or_(no_cell)), nu.let(HasUi(shim, plane_id, init.CELL), both))
+    return nu.IfDo(snap(no_plane.or_(no_cell)), nu.let(HasUi(shim, plane_id, cell_id), both))
 
 
 def ensure_system() -> nu.Nu:
@@ -61,6 +63,6 @@ def ensure_system() -> nu.Nu:
     starts init (``open_kernel(init="init")``).
     """
     term = _service(*SERVICES[0])
-    for plane_id, shim in SERVICES[1:]:
-        term = term >> _service(plane_id, shim)
+    for service in SERVICES[1:]:
+        term = term >> _service(*service)
     return term >> reactions.ensure_reactions() >> atomic_state(init.seed(list(BOOTED)))

@@ -9,11 +9,12 @@ Space, what the space is::
         <p>
           name, meta
           props     system, ui, made_by, backend
-          cells     id -> Cell
-            <c>
-              name, prog, version, meta
-              props made_by
-          order     [cell id]
+          cells     [cell id], in order
+      cells         id -> Cell
+        <c>
+          name, prog, version, meta
+          props     made_by, has_ui
+          plane     the plane it is on
       tree          id -> Node (children), ROOT at the top
       kernel
         runs        id -> Run, every plane run ever, its cell runs inside
@@ -34,8 +35,8 @@ States, what the programs remember, by the same ids::
       planes        id -> PlaneStates
         <p>
           state     PlaneState shapes, rerooted here
-          cells     id -> CellStates
-            <c>     CellState shapes, rerooted here
+      cells         id -> CellStates
+        <c>         CellState shapes, rerooted here
 
 Plane and cell hold structure only, but for the plane's ``backend``. What
 ran and how it ended is a run. What a program remembers is a state.

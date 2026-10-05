@@ -80,7 +80,7 @@ async def test_a_plane_runs_and_ends_when_its_cells_are_done(space, backend):
     assert row["started_at"] <= row["terminated_at"]
     assert row["cells_running"] == []
     for cell in (a, b):
-        assert await space.read(States.planes[p].cells[cell].extract()) == {"n": 42}
+        assert await space.read(States.cells[cell].extract()) == {"n": 42}
     assert r not in [x["id"] for x in await space.read(ops.runs())]
     # Its workers are records too, ended once the run was.
     assert len(row["workers"]) == (1 if backend == "async" else 2)
@@ -155,10 +155,10 @@ async def test_envs_wrap_and_rewrite_the_program(space):
     q, (c,) = await space.plane(READS_TAG)
     r2 = await space.made(ops.plane_run(q, into=MADE))
     assert (await space.run_row(r2, ended, SLOW))["exit"] == EXIT_OK
-    cells = States.planes[p].cells
+    cells = States.cells
     assert await space.read(cells[a].extract()) == {"s": "inner"}
     assert await space.read(cells[b].extract()) == {"s": "inner"}
-    assert await space.read(States.planes[q].cells[c].extract()) == {"s": "outer"}
+    assert await space.read(States.cells[c].extract()) == {"s": "outer"}
     assert await space.read(States.planes[p].state["stamped"]) is True
 
 
@@ -187,7 +187,7 @@ async def test_cell_run_reruns_a_cell_in_the_live_plane_run(space):
     r = await space.made(ops.plane_run(p, into=MADE))
     old = cell_of(await live_cell(space, r, c), c)
     assert old["version"] == 1
-    await space.run(ops.set_prog(p, c, FOREVER.replace("tick", "tock")))
+    await space.run(ops.set_prog(c, FOREVER.replace("tick", "tock")))
     await space.run(
         atomic(
             ops.kernel.interrupt(r, old["id"])
@@ -223,7 +223,7 @@ async def test_a_plane_runs_exit_counts_each_cells_newest_cell_run_only(space):
     p, (keep, c) = await space.plane(FOREVER, RAISES)
     r = await space.made(ops.plane_run(p, into=MADE))
     await space.run_row(r, lambda x: cell_of(x, c).get("exit") == EXIT_FAILED, SLOW)
-    await space.run(ops.set_prog(p, c, SET_42))
+    await space.run(ops.set_prog(c, SET_42))
     await space.run(ops.cell_run(r, c))
     again = await space.read(ops.latest(r, c))
     await space.run_row(r, lambda x: ended(cell_of(x, c)) and cell_of(x, c)["id"] == again, SLOW)

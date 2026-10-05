@@ -44,16 +44,10 @@ export type Ops = {
 		name: string;
 		index: number;
 	};
-	/** Replaces the stored program. Nothing else about the cell moves. */
-	"cell.update": { plane_id: string; cell_id: string; source: string };
-	"cell.delete": { plane_id: string; cell_id: string };
-	/** Keeps the cell's id, and so its kv namespace, on the new Plane. */
-	"cell.move": {
-		plane_id: string;
-		cell_id: string;
-		to_plane_id: string;
-		index: number;
-	};
+	/** Replaces the stored program. Nothing else about the cell moves. A cell
+	 *  id is unique across the space, so it is the whole address. */
+	"cell.update": { cell_id: string; source: string };
+	"cell.delete": { cell_id: string };
 	"cell.reorder": { plane_id: string; cell_ids: string[] };
 };
 

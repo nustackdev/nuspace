@@ -72,7 +72,7 @@ __all__ = [
 PLANE = "supervisor"
 
 #: The one cell on the plane.
-CELL = "main"
+CELL = "supervisor_main"
 
 #: What plane runs the supervisor starts are recorded as ``by``.
 BY = "supervisor"
@@ -136,7 +136,7 @@ def _made() -> nu.Nu:
 
     Asks the cell's state for the keys: a dict never written reads as there.
     """
-    state = States.planes[PLANE].cells[CELL]
+    state = States.cells[CELL]
     writes = [
         nu.IfDo(state.contains(name).not_(), _here(ref.set({})))
         for name, ref in (

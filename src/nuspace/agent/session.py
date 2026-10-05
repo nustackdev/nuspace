@@ -59,7 +59,7 @@ CELL = "cell"
 SAID = "said"
 
 
-def session_of(plane_id: nu.StrArg, cell_id: nu.StrArg) -> nu.Nu:
+def session_of(cell_id: nu.StrArg) -> nu.Nu:
     """This chat's session, as the ref its slots hang off.
 
     A ref rather than the Shape class: the slots descend off either the same
@@ -72,23 +72,21 @@ def session_of(plane_id: nu.StrArg, cell_id: nu.StrArg) -> nu.Nu:
     other.
 
     Args:
-        plane_id: the Plane that runs the chat.
-        cell_id: the Cell on it that talks.
+        cell_id: the Cell that talks.
     """
-    return ops.cell_state(plane_id, cell_id, Turn.session)
+    return ops.cell_state(cell_id, Turn.session)
 
 
-def sid_of(plane_id: nu.StrArg, cell_id: nu.StrArg) -> nu.Nu:
+def sid_of(cell_id: nu.StrArg) -> nu.Nu:
     """The id of the conversation the endpoint holds for this chat, as its leaf.
 
     A ref, fresh per call for the reason :func:`session_of` gives, so one
     caller can ask whether it is there and another write it.
 
     Args:
-        plane_id: the Plane that runs the chat.
-        cell_id: the Cell on it that talks.
+        cell_id: the Cell that talks.
     """
-    return ops.cell_state(plane_id, cell_id, Turn.sid)
+    return ops.cell_state(cell_id, Turn.sid)
 
 
 def _floored(leaf: nu.Nu) -> nu.Nu:
@@ -102,7 +100,7 @@ def _floored(leaf: nu.Nu) -> nu.Nu:
     return nu.Str(nu.If(leaf.exists(), nu.Str(leaf), nu.Str("")))
 
 
-def reply_of(plane_id: nu.StrArg, cell_id: nu.StrArg) -> nu.Nu:
+def reply_of(cell_id: nu.StrArg) -> nu.Nu:
     """What the model said this pass, in sentences. Not the program it wrote.
 
     A reply is prose and then a fenced block, and the block is the action. This
@@ -113,11 +111,11 @@ def reply_of(plane_id: nu.StrArg, cell_id: nu.StrArg) -> nu.Nu:
     Uncut. How much of it fits belongs to whoever draws it, and a reader that
     clipped would leave nowhere to ask for the whole thing.
     """
-    reply = _floored(session_of(plane_id, cell_id).reply)
+    reply = _floored(session_of(cell_id).reply)
     return nu.Str(nu.List(reply.split(nu.Str(FENCE)))[nu.Int(0)]).strip()
 
 
-def stalled_of(plane_id: nu.StrArg, cell_id: nu.StrArg) -> nu.Nu:
+def stalled_of(cell_id: nu.StrArg) -> nu.Nu:
     """Why a cycle gave up this turn, in a sentence. ``""`` where none did.
 
     What the host says into the conversation when a turn ended owing a reply.
@@ -125,10 +123,10 @@ def stalled_of(plane_id: nu.StrArg, cell_id: nu.StrArg) -> nu.Nu:
     that knows whether it was stuck or out of passes and what it was stuck on,
     and a host that composed it from here would be guessing.
     """
-    return _floored(session_of(plane_id, cell_id).stalled)
+    return _floored(session_of(cell_id).stalled)
 
 
-def outcome_of(plane_id: nu.StrArg, cell_id: nu.StrArg) -> nu.Nu:
+def outcome_of(cell_id: nu.StrArg) -> nu.Nu:
     """What running the model's program came to, this pass.
 
     Five things wear this one slot, because to the model they are one thing:
@@ -138,42 +136,42 @@ def outcome_of(plane_id: nu.StrArg, cell_id: nu.StrArg) -> nu.Nu:
     not stand up. Every one of them is the next pass's input, which is the
     whole of how a model fixes itself.
     """
-    return _floored(session_of(plane_id, cell_id).outcome)
+    return _floored(session_of(cell_id).outcome)
 
 
-def passes_of(plane_id: nu.StrArg, cell_id: nu.StrArg) -> nu.Nu:
+def passes_of(cell_id: nu.StrArg) -> nu.Nu:
     """How many passes the cycle running now has taken. Zero before the first.
 
     The loop's own counter, read rather than kept twice. It is incremented at
     the head of a pass, so anything reading it inside one is reading the pass
     it is in and can say so without adding one.
     """
-    passes = session_of(plane_id, cell_id).passes
+    passes = session_of(cell_id).passes
     return nu.Int(nu.If(passes.exists(), nu.Int(passes), nu.Int(0)))
 
 
-def answer_of(plane_id: nu.StrArg, cell_id: nu.StrArg) -> nu.Nu:
+def answer_of(cell_id: nu.StrArg) -> nu.Nu:
     """What the answer cycle's last pass handed back, empty before there is one.
 
     Floored the same way a string slot is, and for the same reason: an
     unwritten dict leaf reads EMPTY, and every ``get_item`` over EMPTY yields
     EMPTY, so the whole answer would read missing rather than empty.
     """
-    held = session_of(plane_id, cell_id).answer
+    held = session_of(cell_id).answer
     return nu.Dict(nu.If(held.exists(), nu.Dict(held), nu.Dict.of()))
 
 
-def drawn_cell_of(plane_id: nu.StrArg, cell_id: nu.StrArg) -> nu.Nu:
+def drawn_cell_of(cell_id: nu.StrArg) -> nu.Nu:
     """The source of the Cell the answer cycle wants drawn. ``""`` for none."""
-    return nu.ToStr(answer_of(plane_id, cell_id).get_item(nu.Str(CELL), nu.Str("")))
+    return nu.ToStr(answer_of(cell_id).get_item(nu.Str(CELL), nu.Str("")))
 
 
-def said_line_of(plane_id: nu.StrArg, cell_id: nu.StrArg) -> nu.Nu:
+def said_line_of(cell_id: nu.StrArg) -> nu.Nu:
     """The line the conversation keeps for that answer. ``""`` for none."""
-    return nu.ToStr(answer_of(plane_id, cell_id).get_item(nu.Str(SAID), nu.Str("")))
+    return nu.ToStr(answer_of(cell_id).get_item(nu.Str(SAID), nu.Str("")))
 
 
-def changed(plane_id: nu.StrArg, cell_id: nu.StrArg) -> nu.Nu:
+def changed(cell_id: nu.StrArg) -> nu.Nu:
     """A fresh subscription that fires on everything a turn writes about itself.
 
     The session's own container and not a slot in it. A child scoped watch
@@ -190,10 +188,10 @@ def changed(plane_id: nu.StrArg, cell_id: nu.StrArg) -> nu.Nu:
     wants the raw working memory, and it is the one correct spelling of that
     address.
     """
-    return session_of(plane_id, cell_id).on_change()
+    return session_of(cell_id).on_change()
 
 
-def cleared(plane_id: nu.StrArg, cell_id: nu.StrArg) -> nu.Nu:
+def cleared(cell_id: nu.StrArg) -> nu.Nu:
     """Empty the slots one turn leaves behind, so the next starts on its own.
 
     A turn that skipped this would be a turn showing the last one's sentences
@@ -213,10 +211,10 @@ def cleared(plane_id: nu.StrArg, cell_id: nu.StrArg) -> nu.Nu:
     writes in :mod:`nuspace.agent.chat` are: a write under a key nobody made
     makes one, and six commits is six notifications for one fact.
     """
-    session = session_of(plane_id, cell_id)
+    session = session_of(cell_id)
     return atomic_state(
         nu.IfDo(
-            ops.cell_exists(plane_id, cell_id),
+            ops.cell_exists(cell_id),
             session.reply.set(nu.Str(""))
             >> session.draft.set(nu.Str(""))
             >> session.outcome.set(nu.Str(""))

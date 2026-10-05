@@ -21,7 +21,7 @@ import nu
 import nustd.kv
 from nuspace.shapes import Space
 
-from .read import cell_exists, cells, plane_exists
+from .read import cell_plane, cells, plane_exists
 from .utils import MintId, atomic
 
 
@@ -100,18 +100,14 @@ def _envs(envs: Sequence[Sequence[str]] | nu.Nu) -> object:
 
 
 def _add_cell_run(
-    run_id: nu.StrArg,
-    plane_id: nu.StrArg,
-    cell_id: nu.StrArg,
-    cell_run_id: nu.StrArg,
-    by: nu.StrArg,
+    run_id: nu.StrArg, cell_id: nu.StrArg, cell_run_id: nu.StrArg, by: nu.StrArg
 ) -> nu.Nu:
     """One cell run written into a plane run, its ``cells_running`` and ``latest``. No bracket."""
     row = _kernel.runs[run_id]
     cr = row.cells[cell_run_id]
     return (
         cr.cell.set(cell_id)
-        >> cr.version.set(Space.planes[plane_id].cells[cell_id].version.fallback(0))
+        >> cr.version.set(Space.cells[cell_id].version.fallback(0))
         >> cr.by.set(by)
         >> cr.interrupt_requested.set(False)
         >> row.cells_running.add(cell_run_id)
@@ -146,7 +142,7 @@ def add_plane_run(
             cells(plane_id),
             lambda cell: nu.let(
                 MintId("cr"),
-                lambda cr: _add_cell_run(run_id, plane_id, nu.Str(cell), nu.Str(cr), by),
+                lambda cr: _add_cell_run(run_id, nu.Str(cell), nu.Str(cr), by),
             ),
         )
         >> _kernel.running.add(run_id)
@@ -192,20 +188,20 @@ def add_cell_run(
 ) -> nu.Nu:
     """A cell run written into a live plane run, under ``cell_run_id``. No bracket.
 
-    Nothing is written when the plane run is not live or its plane has no
-    such cell.
+    Nothing is written when the plane run is not live or the cell is not on
+    its plane.
     """
-    plane = _kernel.runs[run_id].plane.fallback("")
-    live = _kernel.running.contains(run_id).and_(cell_exists(plane, cell_id))
-    return nu.IfDo(live, _add_cell_run(run_id, plane, cell_id, cell_run_id, by))
+    on = cell_plane(cell_id) == _kernel.runs[run_id].plane.fallback("")
+    live = _kernel.running.contains(run_id).and_(on)
+    return nu.IfDo(live, _add_cell_run(run_id, cell_id, cell_run_id, by))
 
 
 def cell_run(run_id: nu.StrArg, cell_id: nu.StrArg, *, by: nu.StrArg = "") -> nu.Nu:
     """Run a cell inside a live plane run: a new cell run, beside any other of it. One commit.
 
     The new cell run is the cell's :func:`latest` in the run, where a caller
-    reads it. Nothing is written when the plane run is not live or its plane
-    has no such cell.
+    reads it. Nothing is written when the plane run is not live or the cell
+    is not on its plane.
     """
     return atomic(nu.let(MintId("cr"), lambda cr: add_cell_run(run_id, cell_id, nu.Str(cr), by)))
 
@@ -284,7 +280,7 @@ def live_runs_of(match: Callable[[nu.Nu], nu.Nu], body: Callable[[nu.Str], nu.Nu
     return nu.ForEachDo(nu.list(_kernel.running), each)
 
 
-def interrupt_cell(plane_id: nu.StrArg, cell_id: nu.StrArg) -> nu.Nu:
+def interrupt_cell(cell_id: nu.StrArg) -> nu.Nu:
     """Ask every live cell run of a cell, in any live run of its plane, to stop. No bracket."""
 
     def one(rid: nu.Str, cr: nu.Str) -> nu.Nu:
@@ -292,7 +288,7 @@ def interrupt_cell(plane_id: nu.StrArg, cell_id: nu.StrArg) -> nu.Nu:
         return nu.IfDo(same, interrupt(rid, cr))
 
     return live_runs_of(
-        lambda plane: plane == plane_id,
+        lambda plane: plane == cell_plane(cell_id),
         lambda rid: nu.ForEachDo(
             nu.list(_kernel.runs[rid].cells_running), lambda cr: one(rid, nu.Str(cr))
         ),

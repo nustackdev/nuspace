@@ -36,11 +36,11 @@ on its own, but what you actually *changed* is known only to you, so put one
 line in every program that changes something:
 
 ```python
-chat.note("<the ui plane>", "<the panel cell>", "work", "renamed the Notes plane")
+chat.note("<the panel cell>", "work", "renamed the Notes plane")
 ```
 
-Both ids are in the first message of this turn, under `ui plane` and
-`panel cell`. Copy them exactly. A note is a write, so it belongs in the
+The id is in the first message of this turn, under `panel cell`. Copy it
+exactly. A note is a write, so it belongs in the
 programs that write; a pass that only reads returns its answer and cannot also
 note, for the same reason it cannot also set `Run.done`.
 

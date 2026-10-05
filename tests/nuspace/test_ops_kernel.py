@@ -105,8 +105,8 @@ async def test_latest_is_each_cells_newest_cell_run(store):
 
 async def test_set_prog_bumps_the_version_a_cell_run_records(store):
     p, (a,) = await plane_with(store, 1)
-    await store.run(ops.set_prog(p, a, "v2") >> ops.set_prog(p, a, "v3"))
-    assert await store.read(Space.planes[p].cells[a].version) == 3
+    await store.run(ops.set_prog(a, "v2") >> ops.set_prog(a, "v3"))
+    assert await store.read(Space.cells[a].version) == 3
     r = await store.made(ops.plane_run(p, into=MADE))
     (cr,) = (await store.read(ops.run(r)))["cells"]
     assert cr["version"] == 3
@@ -133,7 +133,7 @@ async def test_interrupts_and_kill_write_intents_on_live_runs_only(store):
 async def test_remove_cell_interrupts_its_live_cell_runs(store):
     p, (a, b) = await plane_with(store, 2)
     r = await store.made(ops.plane_run(p, into=MADE))
-    await store.run(ops.remove_cell(p, a))
+    await store.run(ops.remove_cell(a))
     flags = {c["cell"]: c["interrupt_requested"] for c in (await store.read(ops.run(r)))["cells"]}
     assert flags == {a: True, b: False}
 
