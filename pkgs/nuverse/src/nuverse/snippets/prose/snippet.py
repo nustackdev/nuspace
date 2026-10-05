@@ -1,4 +1,4 @@
-"""A text cell: one prose surface over a string in its own state, synced both ways.
+"""A text cell: one editable markdown surface over a string in its own state, synced both ways.
 
 What the person wrote lives in the state, not in the prog, so ops reach it
 from anywhere and search finds it. The viewer draws it like any other cell.
@@ -24,10 +24,11 @@ class Doc(nuspace.CellState):
 
 def out() -> nu.Nu:
     """The editor over :attr:`Doc.text`, both ways, for as long as the cell runs."""
-    body = nustd.ui.ProseRef("text")
+    body = nustd.ui.MarkdownRef("text")
     # Brackets placed per step: each read and each keystroke's write is its own.
     return ops.bracketed(
         body.set(Doc.text.fallback(""))
+        >> body.set_editable(True)
         >> body.set_placeholder("Write, or press / for cells")
         >> nu.ParallelAsync(
             # This tab typed: keep it. Every other tab on the plane, and every

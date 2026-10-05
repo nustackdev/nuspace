@@ -79,7 +79,7 @@ Showing:
 MarkdownRef("id").set(text)                     markdown. the one you want most of the time
 TextRef("id").set(text)                         one line of plain copy
 HeadingRef("id").set(label, level=2)            level 1 to 6
-CodeBlockRef("id").set(code=src, language="python")
+CodeRef("id").set(src), .set_language("python")   code, highlighted
 TableRef("id").set(nu.Dict.of(columns=[...], rows=[[...], ...]))
 JsonViewerRef("id").set(value, expand_depth=2)  a structure, collapsible
 AlertRef("id").set(title, body=..., variant=...)   neutral | info | warn | ok | danger
@@ -107,8 +107,8 @@ SliderRef("id")        .set(value, min=0, max=10, step=1, label="...")
 NumberInputRef("id")   .set(value, min=..., max=..., step=..., label=...)
 TagInputRef("id")      .set([...]), read with nu.List(ref)
 DatePickerRef("id")    .set("2026-01-31")
-MonacoRef("id")        .set(source), .set_language("python")
-ProseRef("id")         .set(markdown)
+CodeRef("id")          as TextAreaRef, once .set_editable(True)
+MarkdownRef("id")      same, rich text
 ```
 
 ## Three answers, whole

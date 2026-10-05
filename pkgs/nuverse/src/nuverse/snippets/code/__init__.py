@@ -1,4 +1,4 @@
-"""The ``monaco`` snippet. Placeholder."""
+"""The ``code`` snippet. Placeholder."""
 
 from __future__ import annotations
 

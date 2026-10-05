@@ -6,8 +6,7 @@
 //
 // This module is the one place the class is written. It applies the stored
 // preference at import time -- before React mounts, so there is no flash --
-// and notifies subscribers on every change, which is how Monaco (the one
-// surface that cannot read CSS variables) restains itself.
+// and notifies subscribers on every change.
 //
 // Not part of the nustd.ui bridge. Purely browser-side, same as the router.
 
@@ -69,9 +68,4 @@ function subscribe(cb: () => void): () => void {
 
 export function useTheme(): Theme {
 	return useSyncExternalStore(subscribe, getTheme, getTheme);
-}
-
-/** For non-React consumers (Monaco) that need to restain on a flip. */
-export function onThemeChange(cb: (theme: Theme) => void): () => void {
-	return subscribe(() => cb(current));
 }

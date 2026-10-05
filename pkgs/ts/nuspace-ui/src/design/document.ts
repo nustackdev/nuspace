@@ -454,17 +454,6 @@ export const docSkeletonTitle = cn(docContentTrack, "h-9 w-1/2 self-center");
 /** One cell's worth: text lines in the content track, at the cell's pad. */
 export const docSkeletonCell = cn(docContentTrack, "flex flex-col gap-2 p-doc-cell");
 
-/**
- * The code box around Monaco. Bordered and sunken, so a source editor looks
- * like a source editor wherever it turns up. It sizes to its content rather
- * than filling: a cell is one of many on the Plane and there is something
- * below it to make room for.
- */
-export const docCodeBox = cn(
-	"w-full overflow-hidden rounded-md",
-	"border border-border-default bg-bg-sunken",
-);
-
 /* ============================== Status ================================== */
 
 /**

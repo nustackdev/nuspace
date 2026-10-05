@@ -1,59 +1,19 @@
-// The source editor in read-only mode, against a stand-in Monaco: the editor
-// is built read-only, and nothing it does is ever saved or run.
+// The source editor's boundary, against the kit's real code block: which keys
+// leave the cell and which stay in it, and that a read-only source never
+// saves or runs.
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { FocusReq } from "../state";
+import { SourceEditor } from "./Code";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+// jsdom lays nothing out, and the editor measures text ranges to move a caret.
+Range.prototype.getClientRects = () => [] as unknown as DOMRectList;
+Range.prototype.getBoundingClientRect = () => new DOMRect();
 
-type Handler = (e?: unknown) => void;
-const fake = vi.hoisted(() => ({
-	options: null as Record<string, unknown> | null,
-	value: "",
-	keyDown: null as ((e: unknown) => void) | null,
-	blur: null as (() => void) | null,
-}));
-
-vi.mock("./monaco", () => {
-	const sub = { dispose: () => {} };
-	const editor = {
-		getValue: () => fake.value,
-		setValue: (v: string) => {
-			fake.value = v;
-		},
-		getContentHeight: () => 42,
-		layout: () => {},
-		getPosition: () => ({ lineNumber: 1, column: 1 }),
-		getSelection: () => ({ isEmpty: () => true }),
-		getModel: () => ({ getLineCount: () => 1, dispose: () => {} }),
-		hasTextFocus: () => false,
-		onDidContentSizeChange: () => sub,
-		onDidChangeModelContent: () => sub,
-		onKeyDown: (h: Handler) => {
-			fake.keyDown = h;
-			return sub;
-		},
-		onDidBlurEditorText: (h: () => void) => {
-			fake.blur = h;
-			return sub;
-		},
-		dispose: () => {},
-	};
-	const monaco = {
-		KeyCode: { Escape: 9, Enter: 3, UpArrow: 16, DownArrow: 18 },
-		editor: {
-			create: (_host: unknown, options: Record<string, unknown>) => {
-				fake.options = options;
-				fake.value = String(options.value);
-				return editor;
-			},
-		},
-	};
-	return { NU_THEME: "nu", loadMonaco: () => Promise.resolve(monaco) };
-});
-
-import { SourceEditor } from "./Code";
+const SOURCE = "x = 1\ny = 2\nz = 3";
 
 let host: HTMLDivElement;
 let root: Root;
@@ -69,54 +29,96 @@ afterEach(() => {
 	host.remove();
 });
 
-async function mount(readOnly: boolean, onCommit = vi.fn()) {
-	const noop = () => {};
+async function mount(readOnly: boolean, focusReq: FocusReq | null = null) {
+	const calls = { onCommit: vi.fn(), onExit: vi.fn(), onEscape: vi.fn() };
 	await act(async () => {
 		root.render(
 			<SourceEditor
-				source="x = 1"
-				focusReq={null}
-				onFocusConsumed={noop}
-				onCommit={onCommit}
-				onExit={noop}
-				onEscape={noop}
+				source={SOURCE}
+				focusReq={focusReq}
+				onFocusConsumed={() => {}}
 				readOnly={readOnly}
+				{...calls}
 			/>,
 		);
 	});
-	return onCommit;
+	const content = host.querySelector<HTMLElement>(".cm-content");
+	if (!content) throw new Error("no code block mounted");
+	return { ...calls, content };
 }
 
-const key = (keyCode: number, mod = false) => ({
-	keyCode,
-	metaKey: mod,
-	ctrlKey: false,
-	altKey: false,
-	shiftKey: false,
-	preventDefault: () => {},
-	stopPropagation: () => {},
-});
+function press(el: HTMLElement, key: string, mod = false) {
+	act(() => {
+		el.dispatchEvent(
+			new KeyboardEvent("keydown", { key, metaKey: mod, bubbles: true, cancelable: true }),
+		);
+	});
+}
 
 describe("a read-only source", () => {
-	it("builds Monaco read-only", async () => {
-		await mount(true);
-		expect(fake.options?.readOnly).toBe(true);
+	it("is built read-only", async () => {
+		const { content } = await mount(true);
+		expect(content.getAttribute("contenteditable")).toBe("false");
 	});
 
-	it("never saves or runs, on blur, mod+enter or Escape", async () => {
-		const onCommit = await mount(true);
-		fake.value = "x = 2";
-		act(() => fake.blur?.());
-		act(() => fake.keyDown?.(key(3, true)));
-		act(() => fake.keyDown?.(key(9)));
+	it("still takes the caret, so the keyboard can pass through it", async () => {
+		const { content } = await mount(true);
+		expect(content.tabIndex).toBe(0);
+	});
+
+	it("never saves or runs, on mod+enter or Escape", async () => {
+		const { content, onCommit, onEscape } = await mount(true);
+		press(content, "Enter", true);
+		press(content, "Escape");
 		expect(onCommit).not.toHaveBeenCalled();
+		expect(onEscape).toHaveBeenCalledOnce();
 	});
 
-	it("an editable one does save on blur", async () => {
-		const onCommit = await mount(false);
-		expect(fake.options?.readOnly).toBe(false);
-		fake.value = "x = 2";
-		act(() => fake.blur?.());
-		expect(onCommit).toHaveBeenCalledWith("x = 2");
+	it("is one stop: either arrow leaves it from any line", async () => {
+		const { content, onExit } = await mount(true);
+		press(content, "ArrowDown");
+		press(content, "ArrowUp");
+		expect(onExit.mock.calls.map(([dir]) => dir)).toEqual(["down", "up"]);
+	});
+});
+
+describe("an editable source", () => {
+	it("is built editable", async () => {
+		const { content } = await mount(false);
+		expect(content.getAttribute("contenteditable")).toBe("true");
+	});
+
+	it("leaves from its last line downward, carrying the column", async () => {
+		const { content, onExit } = await mount(false, { cellId: "c", place: "end" });
+		press(content, "ArrowDown");
+		expect(onExit).toHaveBeenCalledWith("down", 5);
+	});
+
+	it("leaves from its first line upward, carrying the column", async () => {
+		const { content, onExit } = await mount(false, { cellId: "c", place: "start", column: 2 });
+		press(content, "ArrowUp");
+		expect(onExit).toHaveBeenCalledWith("up", 2);
+	});
+
+	it("stays put on an arrow toward its inside", async () => {
+		const top = await mount(false, { cellId: "c", place: "start" });
+		press(top.content, "ArrowDown");
+		expect(top.onExit).not.toHaveBeenCalled();
+		const bottom = await mount(false, { cellId: "c", place: "end" });
+		press(bottom.content, "ArrowUp");
+		expect(bottom.onExit).not.toHaveBeenCalled();
+	});
+
+	it("a modified arrow never leaves", async () => {
+		const { content, onExit } = await mount(false, { cellId: "c", place: "start" });
+		press(content, "ArrowUp", true);
+		expect(onExit).not.toHaveBeenCalled();
+	});
+
+	it("Escape hands back without a save when nothing changed", async () => {
+		const { content, onCommit, onEscape } = await mount(false);
+		press(content, "Escape");
+		expect(onEscape).toHaveBeenCalledOnce();
+		expect(onCommit).not.toHaveBeenCalled();
 	});
 });

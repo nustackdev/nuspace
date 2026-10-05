@@ -32,15 +32,15 @@ from nustd.ui.core import OP_NOTIFY, Frame, WsSession
 from nustd.ui.core.session import Session
 
 
-PROSE_SRC = "def out():\n    return prose()\n"
+TEXT_SRC = "def out():\n    return prose()\n"
 
 
 PLANES = [
     Plane("plain", "Plain", backend="async"),
-    Plane("jobs", "Jobs", icon="list", cells=(("list", PROSE_SRC),), backend="mp"),
+    Plane("jobs", "Jobs", icon="list", cells=(("list", TEXT_SRC),), backend="mp"),
 ]
 SNIPPETS = [
-    Snippet(TEXT, "Text", PROSE_SRC),
+    Snippet(TEXT, "Text", TEXT_SRC),
     Snippet("program", "Program", "def out():\n    return nu.Noop()\n"),
 ]
 
@@ -273,7 +273,7 @@ async def test_viewer_plane(store):
         "meta": {"editable": True, "full_width": False, "tone": "calm"},
         "cells": [
             {"id": "c0", "name": "first", "source": "y = 2", "made_by": "", "has_ui": False},
-            {"id": "c1", "name": "intro", "source": PROSE_SRC, "made_by": "text", "has_ui": False},
+            {"id": "c1", "name": "intro", "source": TEXT_SRC, "made_by": "text", "has_ui": False},
             {"id": "c2", "name": "code", "source": "x = 1", "made_by": "", "has_ui": False},
         ],
     }
@@ -511,7 +511,7 @@ async def test_connection_live(store):
         )
         await _until(lambda: session.writes("set_plane")[-1]["cells"][0]["id"] == "c3")
         made = session.writes("set_plane")[-1]["cells"][0]
-        assert made["name"] == "text" and made["source"] == PROSE_SRC
+        assert made["name"] == "text" and made["source"] == TEXT_SRC
         assert made["made_by"] == "text"
         session.notify(
             ("viewer", "ops", "cell.create"),
@@ -705,7 +705,7 @@ async def test_connection_new_plane_runs_on_the_real_store():
     """
     from nuspace.system.devices.web.device import connection
 
-    planes = [Plane("text", "Text", backend="async", cells=((TEXT, PROSE_SRC),))]
+    planes = [Plane("text", "Text", backend="async", cells=((TEXT, TEXT_SRC),))]
     loop = asyncio.get_running_loop()
     ready, done = loop.create_future(), asyncio.Event()
     held = asyncio.create_task(nu.arun(nu.With(space_store(), body=_Hold(ready, done))))

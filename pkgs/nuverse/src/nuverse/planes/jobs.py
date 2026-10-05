@@ -215,7 +215,9 @@ class Restart(nustd.ui.Row):
 
 class Detail(nustd.ui.Column):
     title = nustd.ui.HeadingRef.slot(level=3)
-    editor = nustd.ui.MonacoRef.slot(language="python", min_height=160)
+    editor = nustd.ui.CodeRef.slot(
+        language="python", editable=True, min_height=160, max_height=560
+    )
     save = nustd.ui.ButtonRef.slot(label="Save", variant="secondary")
     boot = nustd.ui.SwitchRef.slot(label="Start when the space opens")
     restart = Restart.slot(gap=4, align="end", wrap=True)

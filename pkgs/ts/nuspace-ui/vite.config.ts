@@ -49,7 +49,7 @@ export default defineConfig({
 		emptyOutDir: true,
 		rollupOptions: {
 			output: {
-				// The prose editor's engine. Unlike Monaco this cannot be lazy:
+				// The markdown editor's engine. It cannot be lazy:
 				// a text cell is live the moment the tab paints, and the
 				// whole point of dropping the old textarea is that there is no
 				// second rendering to show while something loads. So it stays a

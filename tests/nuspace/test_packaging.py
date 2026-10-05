@@ -100,8 +100,8 @@ def test_snippets_are_well_formed():
         snippets.plane_lens.SNIPPET,
         snippets.cell_lens.SNIPPET,
     )
-    assert snippets.monaco.SNIPPET is None
-    # The prose editor is the text snippet.
+    assert snippets.code.SNIPPET is None
+    # The prose package is the text snippet.
     assert snippets.prose.SNIPPET.name == TEXT
     for snippet in snippets.SNIPPETS:
         assert isinstance(snippet, Snippet)

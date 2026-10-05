@@ -12,6 +12,7 @@ separately here.
 
 ## Unreleased
 
+- Cell code and text use the kit's unified code and markdown editors
 - Cells live apart from planes, addressed by their own id everywhere
 - Editing a drawn cell's code redraws it on the open page
 - Snippets ship as packages with ops, and chats write content into them

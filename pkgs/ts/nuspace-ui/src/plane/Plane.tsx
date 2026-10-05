@@ -198,7 +198,7 @@ export function Plane({
 	// it, so it cannot answer "which cell is the caret in" -- which is what
 	// the gutter owner needs. Focus events bubble (focusin/focusout), so
 	// one listener on the plane root reports the standing fact for every editor
-	// inside it, including ones we do not own (Monaco, a cell's refs).
+	// inside it, including ones we do not own (the code block, a cell's refs).
 
 	// A mouse click on a gutter control leaves focus on the button, and that is
 	// not the caret: counting it would pin the gutter (see `gutterOwner`) after

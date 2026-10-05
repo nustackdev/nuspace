@@ -1,6 +1,6 @@
 // The plane's own keyboard: the cell-selection regime.
 //
-// Only live while at least one cell is selected. A focused editor (Monaco, a
+// Only live while at least one cell is selected. A focused editor (a source, a
 // ghost) owns its keys outright and stops them before they reach the plane.
 // On a read-only plane only Escape and copy do anything.
 

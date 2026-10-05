@@ -17,7 +17,7 @@
 @import "./design/tokens.css";
 
 /* ProseMirror's own base rules (selection, pre-wrap, caret plumbing), for
- * the kit's ProseRef editor when a cell mounts one. It ships no colors and
+ * the kit's MarkdownRef when a cell mounts one. It ships no colors and
  * no type; the kit's own look arrives with the kit stylesheet above. */
 @import "prosemirror-view/style/prosemirror.css";
 

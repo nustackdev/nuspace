@@ -55,7 +55,7 @@ export default defineConfig({
 			},
 		},
 		// jsdom, because the cell-boundary keyboard is a DOM ordering claim
-		// (see refs/viewer/ProseRef.tsx) and there is no other way to check it.
+		// (see plane/cell/Code.tsx) and there is no other way to check it.
 		// It lays nothing out, so anything that needs real geometry --
 		// `endOfTextblock`, `coordsAtPos` -- is out of reach here and is
 		// covered by hand in a browser instead.

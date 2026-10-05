@@ -1,4 +1,4 @@
-"""The ``monaco`` snippet. Placeholder.
+"""The ``code`` snippet. Placeholder.
 
 TODO: another agent fills this in. Until then ``SNIPPET`` is None and the
 snippet is left out of :data:`nuverse.snippets.SNIPPETS`.
