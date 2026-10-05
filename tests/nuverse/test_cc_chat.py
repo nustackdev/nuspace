@@ -14,7 +14,7 @@ from nuspace import ops
 from nuspace.agent import chat
 from nuspace.shapes import Reroot, Space, reroot
 from nuspace.system.devices.web.env import session_env
-from nuspace.system.kernel.body import Bracketed, Rewrites
+from nuspace.system.kernel.body import Rewrites
 from nustd.ui import Session
 from nuverse.planes import cc_chat, jobs
 
@@ -37,15 +37,15 @@ def _cell(source: str) -> dict:
 
 
 async def _loaded(store, source: str, *, drawn: bool) -> nu.Nu:
-    """``source`` loaded the way the kernel loads a Cell: rerooted, and bracketed per store."""
+    """``source`` loaded the way the kernel loads a Cell: rerooted, and nothing bracketed for it."""
     await store.run(ops.add_plane("p", backend="async") >> ops.add_cell("p", source, cell_id="c"))
     steps = [Reroot("p", "c")]
     if drawn:
         steps.append(session_env("127.0.0.1:9")("s1").rewrite)
-    rewrite = Rewrites(*steps, Bracketed())
+    rewrite = Rewrites(*steps)
     prog = Space.planes["p"].cells["c"].prog
     return await store.run(
-        nustd.kv.auto_flow_atomic(
+        nustd.kv.Snapshot(
             prog.load(scope={"plane": "p", "cell": "c"}, rewrite=rewrite), scope=Space
         )
     )

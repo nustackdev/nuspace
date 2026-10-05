@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import nu
 import nustd.ui
+from nuspace import ops
 from nuspace.agent import chat
 
 
@@ -47,6 +48,8 @@ def rows(plane_id: nu.StrArg, cell_id: nu.StrArg) -> nu.Nu:
     One node in two tree positions is one node, and this one is written on the
     way in and again on every row, so it is a function called at each of those
     two places rather than a term held in a variable.
+
+    Bare: it reads the trace, so its caller brackets it.
     """
     return nustd.ui.TableRef(TRACE_REF).set(
         nu.Dict.of(
@@ -86,9 +89,11 @@ def display(plane_id: nu.StrArg, cell_id: nu.StrArg) -> nu.Nu:
         - The subscription is the Cell's own state and not the leaf the trace
           is a key in. A child scoped watch never carries to a pool worker: it
           binds, it reports nothing, and nobody on either end is told.
-        - Nothing brackets it here: the host brackets a Cell's program on
-          the way in, one pass per store.
+        - Every draw reads the trace in a snapshot of its own, and the
+          subscription is bracketed apart, so nothing is held open between
+          rows.
     """
-    return rows(plane_id, cell_id) >> nu.ReactForever(
-        chat.trace_changed(plane_id, cell_id), rows(plane_id, cell_id)
+    return ops.snapshot(rows(plane_id, cell_id)) >> nu.ReactForever(
+        ops.snapshot(chat.trace_changed(plane_id, cell_id)),
+        ops.snapshot(rows(plane_id, cell_id)),
     )

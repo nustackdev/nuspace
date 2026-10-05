@@ -16,7 +16,7 @@ from nuspace.shapes import RECENTS_CAP, Reroot, Space
 from nuspace.system import home, settings
 from nuspace.system.devices.web.env import session_env
 from nuspace.system.devices.web.sidebar import rows
-from nuspace.system.kernel.body import Bracketed, Rewrites
+from nuspace.system.kernel.body import Rewrites
 from nustd.ui import Session
 from nustd.ui.core import OP_NOTIFY, Frame, WsSession
 
@@ -184,10 +184,10 @@ async def test_each_cell_loads_through_the_kernel_rewrites(store, cell):
     _, source = cell
     await store.run(ops.add_plane("p", backend="async") >> ops.add_cell("p", source, cell_id="c"))
     env = session_env("127.0.0.1:9")("s1")
-    rewrite = Rewrites(Reroot("p", "c"), env.rewrite, Bracketed())
+    rewrite = Rewrites(Reroot("p", "c"), env.rewrite)
     prog = Space.planes["p"].cells["c"].prog
     term = await store.run(
-        nustd.kv.auto_flow_atomic(
+        nustd.kv.Snapshot(
             prog.load(scope={"plane": "p", "cell": "c"}, rewrite=rewrite), scope=Space
         )
     )

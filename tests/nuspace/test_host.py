@@ -27,7 +27,7 @@ from nuspace.ops.utils import atomic
 from nuspace.shapes import Reroot, Space, States, reroot
 from nuspace.system import home
 from nuspace.system.kernel import Env, store
-from nuspace.system.kernel.body import Bracketed, Rewrites
+from nuspace.system.kernel.body import Rewrites
 from nuspace.system.services import BOOTED, SERVICES, ensure_system, init
 from nuverse.snippets import program as nuverse_program
 from nuverse.snippets import prose as nuverse_prose
@@ -236,10 +236,10 @@ async def test_nuverse_prose_loads_through_the_kernel_rewrites(store):
         ops.add_plane("p", backend="async") >> ops.add_cell("p", nuverse_prose.SOURCE, cell_id="c")
     )
     env = session_env("127.0.0.1:9")("s1")
-    rewrite = Rewrites(Reroot("p", "c"), env.rewrite, Bracketed())
+    rewrite = Rewrites(Reroot("p", "c"), env.rewrite)
     source = Space.planes["p"].cells["c"].prog
     term = await store.run(
-        nustd.kv.auto_flow_atomic(
+        nustd.kv.Snapshot(
             source.load(scope={"plane": "p", "cell": "c"}, rewrite=rewrite), scope=Space
         )
     )

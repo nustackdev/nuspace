@@ -13,7 +13,7 @@ from nu.lang import ScalarQuery
 from nuspace import ops
 from nuspace.shapes import Reroot, Space
 from nuspace.system.devices.web.env import session_env
-from nuspace.system.kernel.body import Bracketed, Rewrites
+from nuspace.system.kernel.body import Rewrites
 from nustd.ui.core import OP_NOTIFY, Frame, WsSession
 from nustd.ui.core.session import Session
 from nuverse.snippets import cell_lens, plane_lens
@@ -100,10 +100,10 @@ async def _until(check: Callable[[], bool], timeout: float = 3.0) -> None:
 async def _load(ctx: nu.Context, plane: str, cell: str) -> nu.Nu:
     """The cell's program, loaded through the kernel's rewrites."""
     env = session_env("127.0.0.1:9")("s1")
-    rewrite = Rewrites(Reroot(plane, cell), env.rewrite, Bracketed())
+    rewrite = Rewrites(Reroot(plane, cell), env.rewrite)
     prog = Space.planes[plane].cells[cell].prog
     load = prog.load(scope={"plane": plane, "cell": cell}, rewrite=rewrite)
-    term, _ = await nu.arun(nustd.kv.auto_flow_atomic(load, scope=Space), ctx)
+    term, _ = await nu.arun(nustd.kv.Snapshot(load, scope=Space), ctx)
     return term
 
 

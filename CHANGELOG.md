@@ -12,6 +12,7 @@ separately here.
 
 ## Unreleased
 
+- Programs commit their own changes, so chat turns no longer stall on locks
 - Claude Code chat returns as a plane, its agent part of nuspace
 - Sidebar tooltips keep their delay, and plane titles show no tooltip
 - The sidebar opens a little narrower and resizes within saner bounds

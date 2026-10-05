@@ -30,9 +30,12 @@ from nuspace import ops
 from nuspace.agent import chat, session
 from nuspace.shapes import CellState, Reroot, Space, States
 from nuspace.system.devices.web.env import session_env
-from nuspace.system.kernel.body import Bracketed, Rewrites
+from nuspace.system.kernel.body import Rewrites
 from nuspace.system.services import init
 
+
+#: Run on both backends: in memory, and the space's sqlite files.
+STORES = ("memory", "sqlite")
 
 #: The Plane a chat's ``+`` opens, in every test below.
 UI = "p_chat"
@@ -218,12 +221,12 @@ async def test_a_second_turn_gets_a_panel_of_its_own(store):
 async def test_the_cells_the_host_appends_load_the_way_the_kernel_loads_them(store, source):
     """Host owned, so nobody else is going to find out they do not build. Loaded
     with the rewrites a drawn Cell gets: rerooted, rooted under its browser
-    session, and bracketed per store."""
+    session. Nothing brackets them: they bracket themselves."""
     await store.run(ops.add_plane("p", backend="async") >> ops.add_cell("p", source, cell_id="c"))
-    rewrite = Rewrites(Reroot("p", "c"), session_env("127.0.0.1:9")("s1").rewrite, Bracketed())
+    rewrite = Rewrites(Reroot("p", "c"), session_env("127.0.0.1:9")("s1").rewrite)
     prog = Space.planes["p"].cells["c"].prog
     term = await store.run(
-        nustd.kv.auto_flow_atomic(
+        nustd.kv.Snapshot(
             prog.load(scope={"plane": "p", "cell": "c"}, rewrite=rewrite), scope=Space
         )
     )
@@ -438,7 +441,7 @@ def out():
     plane, cell = ops.Here.plane, ops.Here.cell
 
     def owed():
-        return chat.unanswered(plane, cell)
+        return ops.snapshot(chat.unanswered(plane, cell))
 
     def panel():
         return chat.latest_display(plane, cell)
@@ -446,9 +449,11 @@ def out():
     def ui():
         return chat.drawn_of(plane)
 
+    # Bracketed by hand, as the agent is: each op commits on its own and reads
+    # its arguments inside, the one bare write gets a commit of its own.
     ack = (
         session.cleared(plane, cell)
-        >> session.session_of(plane, cell).reply.set("acking")
+        >> ops.atomic_state(session.session_of(plane, cell).reply.set("acking"))
         >> chat.state(ui(), panel(), chat.CYCLE_WORK, chat.KIND_HEARD, "working")
         >> chat.say(plane, cell, chat.ROLE_AGENT, "ack")
         >> chat.note(ui(), panel(), chat.CYCLE_ANSWER, "said it")
@@ -457,7 +462,7 @@ def out():
         nu.IfDo(owed(), ack)
         >> nu.IfDo(
             nu.Not(owed()),
-            nu.ReactWhile(chat.changed(plane, cell), nu.Not(owed()), nu.Noop()),
+            nu.ReactWhile(ops.snapshot(chat.changed(plane, cell)), nu.Not(owed()), nu.Noop()),
         )
     )
 """
@@ -511,6 +516,7 @@ async def test_a_started_chat_answers_every_message(space):
 COUNTER = f'''import nu
 import nustd.kv
 import nuspace
+from nuspace import ops
 from nuspace.agent import chat
 
 
@@ -532,8 +538,8 @@ def out():
     # Written on the way in, before anything is subscribed: a reader that
     # only ever writes from inside a reaction cannot tell a watch that is
     # dead from a turn that has said nothing yet. The count of wakes starts
-    # at zero for the same reason.
-    return (
+    # at zero for the same reason. The helper brackets each step on its own.
+    return ops.bracketed(
         counted()
         >> Seen.woke.set(0)
         >> nu.ReactForever(chat.trace_changed(UI, PANEL), counted() >> Seen.woke.set(Seen.woke + 1))

@@ -4,8 +4,7 @@ Every service runs on a worker and hears the store through the host's feed.
 A subscription opened after a read can miss a write landing in between, so
 each wait here also reads again every :data:`~.kernel.utils.WATCH_SECONDS`:
 a change is late at worst, never lost. Every read and every subscription
-carries its own snapshot, so the kv pass a run gets finds nothing left to
-bracket and never holds a transaction open across a wait.
+carries its own snapshot, so nothing here holds a bracket open across a wait.
 """
 
 from __future__ import annotations

@@ -26,6 +26,12 @@ That one term is passed in as ``act``, and it is the only seam.
 same way the last one did. It sits right after ``act``, because ``act`` is
 what wrote the outcome it looks at, and before the row, so a panel and a loop
 are never a pass apart on the same question.
+
+**The model call holds nothing.** The conversation is read in a snapshot of
+its own on the way out, the call runs bare, and what came back is written in
+one short commit after it. Every other link is a short bracket of its own
+too, so nothing in a pass keeps the store's lock while the model thinks or
+its program runs.
 """
 
 from __future__ import annotations
@@ -33,6 +39,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import nu
+from nuspace import ops
 from nuspace.agent import source, trace
 
 
@@ -67,14 +74,16 @@ def one(
     Args:
         session: the turn's slots, as the ref they hang off.
         panel: where this turn's rows go.
-        ask: what reaches the model. Called with ``messages=`` and yields a
-            dict with ``text`` in it. Handed in rather than chosen here,
-            because which model a chat talks to is the endpoint's business and
-            a pass is the same either way.
+        ask: what reaches the model. Called with ``messages=``, the
+            conversation as a plain list already read, and yields a dict with
+            ``text`` in it. Handed in rather than chosen here, because which
+            model a chat talks to is the endpoint's business and a pass is the
+            same either way. Runs outside every bracket.
         cycle: which cycle this pass belongs to, written on every row it
             leaves. One of :data:`nuspace.agent.chat.CYCLES`.
         act: what to do with the source the model wrote. Sets ``outcome``,
             whatever happens, because ``outcome`` is what the model reads next.
+            Brackets its own store access.
         budget: how many passes the cycle gets, written after the count. A
             term rather than a number wherever it is a fact about the chat, so
             a ceiling raised mid run shows up on the next row.
@@ -108,16 +117,23 @@ def one(
         # inside, so this is the last moment anything can reach the panel
         # before the person starts waiting.
         panel.thinking(cycle)
-        >> reply.set(nu.Str(nu.dict(ask(messages=messages))["text"]))
-        >> messages.append(nu.Dict.of(role="assistant", content=reply))
-        >> draft.set(source.fenced(reply))
-        >> session.passes.inc()
+        >> nu.let(
+            nu.dict(ask(messages=ops.snapshot(messages.extract())))["text"],
+            lambda said: ops.atomic_state(
+                reply.set(nu.Str(said))
+                >> messages.append(nu.Dict.of(role="assistant", content=nu.Str(said)))
+                >> draft.set(source.fenced(said))
+                >> session.passes.inc()
+            ),
+        )
         >> panel.writing(cycle, budget=budget)
         >> act
         >> _repeated(session)
         >> panel.ran(cycle)
-        >> observation.set(nu.Str(observed))
-        >> messages.append(nu.Dict.of(role="user", content=observation))
+        >> ops.atomic_state(
+            observation.set(nu.Str(observed))
+            >> messages.append(nu.Dict.of(role="user", content=observation))
+        )
     )
 
 
@@ -135,18 +151,22 @@ def _repeated(session: nu.Nu) -> nu.Nu:
     of honest write passes all report the same thing and would look like a
     spin. What is compared is the first line, because that is where the label
     and the message are and everything under it is a traceback that moves.
+
+    One commit, the reads that decide it inside.
     """
 
     def line() -> nu.Nu:
         """The head of what the pass came to. Fresh at each call site."""
         return trace.head(nu.Str(session.outcome))
 
-    return nu.IfDo(
-        source.complaint(line()),
+    return ops.atomic_state(
         nu.IfDo(
-            nu.Eq(line(), nu.Str(session.failure)),
-            session.repeats.inc(),
-            session.repeats.set(nu.Int(1)) >> session.failure.set(line()),
-        ),
-        session.repeats.set(nu.Int(0)) >> session.failure.set(nu.Str("")),
+            source.complaint(line()),
+            nu.IfDo(
+                nu.Eq(line(), nu.Str(session.failure)),
+                session.repeats.inc(),
+                session.repeats.set(nu.Int(1)) >> session.failure.set(line()),
+            ),
+            session.repeats.set(nu.Int(0)) >> session.failure.set(nu.Str("")),
+        )
     )

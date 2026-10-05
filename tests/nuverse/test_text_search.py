@@ -8,7 +8,7 @@ from nuspace import ops
 from nuspace.ops.utils import atomic_state
 from nuspace.shapes import Reroot, Space
 from nuspace.system import search
-from nuspace.system.kernel.body import Bracketed, Rewrites
+from nuspace.system.kernel.body import Rewrites
 from nuverse.snippets import SNIPPETS, prose
 
 
@@ -57,8 +57,8 @@ async def test_a_search_over_text_cells(store):
 
 def _loaded(plane: str) -> nu.Nu:
     """The search's cell loaded as the kernel loads it."""
-    rewrite = Rewrites(Reroot(plane, search.CELL), Bracketed())
+    rewrite = Rewrites(Reroot(plane, search.CELL))
     prog = Space.planes[plane].cells[search.CELL].prog
-    return nustd.kv.auto_flow_atomic(
+    return nustd.kv.Snapshot(
         prog.load(scope={"plane": plane, "cell": search.CELL}, rewrite=rewrite), scope=Space
     )

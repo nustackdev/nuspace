@@ -37,10 +37,11 @@ from nuspace.agent.cc import claude_code
 
 
 def out():
-    # One chat, live: answer whatever is outstanding, then wait for more.
+    # One chat, live: answer whatever is outstanding, then wait for more. The
+    # Plane it draws on is read once, in a snapshot that closes before it starts.
     plane, cell = ops.Here.plane, ops.Here.cell
     return nu.let(
-        chat.drawn_of(plane),
+        ops.snapshot(chat.drawn_of(plane)),
         lambda drawn: nuspace.agent.converse(
             plane, cell, ui_plane_id=nu.Str(drawn), talk=claude_code()
         ),

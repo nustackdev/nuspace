@@ -12,6 +12,10 @@ from nuspace.ops.utils import atomic
 from nuspace.shapes import Space
 
 
+#: Run on both backends: in memory, and the space's sqlite files.
+STORES = ("memory", "sqlite")
+
+
 kernel = Space.kernel
 
 

@@ -28,7 +28,6 @@ from nuspace.shapes import (
     reroot,
 )
 from nuspace.system.kernel import KERNEL_FILE, STATE_FILE
-from nuspace.system.kernel.body import Bracketed
 
 
 class Tick(CellState):
@@ -77,10 +76,10 @@ def _stores(tmp_path) -> nu.With:
 
 
 def _store(tmp_path):
-    """A space on disk, and the two calls that write it, bracketed as a run is, and read it back."""
+    """A space on disk, and the two calls that write it, bracketed by :func:`ops.bracketed`, and read it back."""
 
     async def write(term):
-        await nu.arun(nu.With(_stores(tmp_path), body=Bracketed()(term)))
+        await nu.arun(nu.With(_stores(tmp_path), body=ops.bracketed(term)))
 
     async def read(term):
         value, _ = await nu.arun(nu.With(_stores(tmp_path), body=ops.snapshot(term)))

@@ -25,6 +25,9 @@ async def cell(store, plane_id, prog="def out(): pass", **kw):
     return await store.made(ops.add_cell(plane_id, prog, **kw, into=MADE))
 
 
+#: Run on both backends: in memory, and the space's sqlite files.
+STORES = ("memory", "sqlite")
+
 NO_PROPS = {"system": False, "ui": False, "made_by": "", "backend": "async"}
 
 

@@ -15,10 +15,39 @@ every write lands in a store nobody reads. Import, never redeclare. `Plane`
 and `Cell` are reached through `$ROOT`, so you rarely name them at all;
 inspect them when you need to.
 
-**Do not bracket your program.** The host already holds the atomic bracket
-over the store. No `nustd.kv.auto_flow_atomic`, no `nu.With`, no `nu.Provide`.
-A Cell you hand back is a program of its own, and the host brackets it the
-same way when it runs, so it holds no bracket either.
+**Bracket what you touch in the store.** Nothing brackets a program for
+you: a read or a write of the space with no bracket around it raises
+`LookupError`. The ops bracket themselves, so a program made only of ops
+needs nothing. For anything else, wrap what `out()` returns in
+`ops.bracketed(...)`: it gives each step its own short bracket, Space and a
+Cell's state alike, and leaves the ops' own alone.
+
+```python
+import nustd.kv
+import nuspace
+from nuspace import ops
+from $MODULE import $ROOT
+
+
+class Seen(nuspace.CellState):
+    name = nustd.kv.StrRef.slot()
+
+
+def out():
+    return ops.bracketed(
+        ops.rename_plane("p_1", "Notes") >> Seen.name.set($ROOT.planes["p_1"].name)
+    )
+```
+
+`ops.bracketed` places one bracket per step of a `>>` or a loop. A `nu.let`,
+`nu.Frame` or `nu.TryCatch` whose own arguments read the store gets one
+bracket around all of it, so when one of those holds a loop or a wait,
+bracket by hand instead: `ops.snapshot(read)` for a read, `ops.atomic(write)`
+for a write to the space, `ops.atomic_state(write)` for a write to a Cell's
+state. Keep each one short, and never hold one across a loop, a wait or an
+op. No `nustd.kv.auto_flow_atomic`, no `nu.With`, no `nu.Provide`: the stores
+are already bound. A Cell you hand back is a program of its own and brackets
+itself the same way.
 
 **Prefer `nuspace.ops` to hand-written ref chains.** Each function returns a
 Nu term and fixes every invariant the store has. Which Cells a Plane holds and
@@ -37,8 +66,8 @@ def out():
 
 **Read before you write.** `ops.plane_rows()`, `ops.cell_rows(plane)` and
 `ops.runs(plane)` each yield a list of dicts describing what is
-actually there. Returning one of those as your whole program is a good first
-pass.
+actually there. Returning one of those in `ops.snapshot(...)` as your whole
+program is a good first pass.
 
 **A write program yields nothing.** It is a Flow, so the observation for a
 pass that changed something reads `outcome: None`. That is correct, not a

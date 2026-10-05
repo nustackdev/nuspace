@@ -156,9 +156,10 @@ def converse(
         A Flow that never ends on its own.
 
     Notes:
-        - Nothing brackets the store here: the host brackets a Cell's program
-          on the way in, one pass per store, and the model's programs get the
-          same rewrite when they are loaded.
+        - Every store access inside is a short bracket of its own, and none
+          is held across a model call, a wait or the model's program. The
+          model's programs are rerooted under the talking Cell and bracket
+          themselves, as every Cell's program does.
         - The endpoint goes up once, outside the wait, so a session lasts as
           long as the chat rather than as long as a turn.
     """

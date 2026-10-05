@@ -1,6 +1,31 @@
 """Helpers the ops share: the bracket, run time ids, a total field read, a reorder.
 
 Nothing here knows what a plane or a cell is.
+
+The bracket rule. Nothing brackets a term for its author: a store read or
+write with no bracket around it raises, and nothing autocommits. So whoever
+touches a store brackets it, and every op, service and cell program keeps
+to the same rule:
+
+- **One short bracket per store, Space first.** A write is one commit to
+  one store (:func:`atomic` or :func:`atomic_state`); a term writing both is
+  a commit to each, Space then States. A read is one :func:`snapshot`.
+- **What decides a write is read inside its bracket.** A check and the
+  write it guards share one commit, so nothing lands between them.
+- **A term argument that reads a store is read inside the bracket too**, or
+  first, on its own, as ``nu.let(snapshot(...), ...)``, when the op uses it
+  before its bracket opens.
+- **No bracket is held across slow or open ended work:** another op (it
+  opens its own, and two write brackets on one store never join), a wait or
+  a subscription's body, a loaded program (``Eval``, ``LoadNu``), or a call
+  out of the process. The work runs bare, its result is kept in a
+  ``nu.let`` slot, and a short bracket after it writes what it came to.
+- **Bare reads stay bare.** A read helper composes into any expression, so
+  it brackets nothing and its caller wraps it.
+
+Brackets never join: one opened inside another on the same store is a
+second handle, and a second write one on SQLite is the same thread waiting
+on its own lock.
 """
 
 from __future__ import annotations
@@ -91,10 +116,10 @@ class MintId(ScalarQuery):
 def atomic(body: nu.Nu) -> nu.Nu:
     """``body`` as one commit against the Space store, retried on conflict.
 
-    Every write op goes through here. Without it the automatic pass brackets
-    each branch of a Sequential apart and one op lands as several commits.
-    Ops are called from many processes at once (services on workers, the
-    host), so a lost commit is re-run against fresh state.
+    Every write op goes through here, around its whole body, so the reads
+    that decide a write and the write land as one commit. Ops are called
+    from many processes at once (services on workers, the host), so a lost
+    commit is re-run against fresh state.
 
     Brackets do not merge: an op inside another op's bracket opens its own.
     Composite ops are built from unbracketed parts for that reason.

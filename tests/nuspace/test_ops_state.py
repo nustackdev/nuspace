@@ -16,6 +16,10 @@ from nuspace.ops.utils import atomic_state
 from nuspace.shapes import ROOT, CellState, PlaneState, Space, States, reroot
 
 
+#: Run on both backends: in memory, and the space's sqlite files.
+STORES = ("memory", "sqlite")
+
+
 class Tick(CellState):
     n = nustd.kv.IntRef.slot()
 
@@ -33,7 +37,7 @@ def plane_state(p):
 
 
 def in_run(plane_id, cell_id, term):
-    """``term`` as the kernel would run it: rerooted, its plane in a frame, bracketed."""
+    """``term`` as a program in a run: rerooted, its plane in a frame, one commit to States."""
     body = reroot(term, ops.Here.plane, cell_id)
     return nu.Frame(ops.Here, nustd.kv.Transaction(body, scope=States), plane=plane_id)
 
@@ -89,6 +93,52 @@ async def test_sibling_reads(store):
 def test_sibling_leaves_plane_state_and_foreign_chains_alone():
     term = Chat.title.set("x") >> Space.planes["p"].name.set("y")
     assert ops.sibling("b", term) is term
+
+
+# --- bracketed: the hands off brackets ---------------------------------------------
+
+
+def here(plane_id, cell_id, term):
+    """``term`` with the frame the kernel holds around a run, and nothing else."""
+    return nu.Frame(ops.Here, term, plane=plane_id, cell=cell_id)
+
+
+async def test_bracketed_lands_state_under_the_running_cell_and_commits_each_step(store):
+    p = await store.made(ops.add_plane(backend="async", into=MADE))
+    a = await store.made(ops.add_cell(p, "a", into=MADE))
+    steps = Tick.n.set(1) >> Tick.n.set(Tick.n + 1) >> Chat.title.set(nu.ToStr(Tick.n))
+    await store.run(here(p, a, ops.bracketed(steps)))
+    assert await store.read(cell_state(p, a).extract()) == {"n": 2}
+    assert await store.read(plane_state(p).extract()) == {"title": "2"}
+
+
+async def test_bracketed_reads_and_writes_both_stores(store):
+    """A step that reads Space and writes States gets a bracket of each."""
+    p = await store.made(ops.add_plane(backend="async", name="notes", into=MADE))
+    a = await store.made(ops.add_cell(p, "a", into=MADE))
+    term = ops.rename_plane(p, "ideas") >> Chat.title.set(Space.planes[p].name)
+    await store.run(here(p, a, ops.bracketed(term)))
+    assert await store.read(plane_state(p).extract()) == {"title": "ideas"}
+
+
+async def test_the_kernel_reroot_leaves_a_bracketed_term_where_it_landed(store):
+    """Rerooted through ``Here`` by the helper, the chains no longer root at
+    ``CellState``, so the kernel's own reroot, run after, moves nothing."""
+    p = await store.made(ops.add_plane(backend="async", into=MADE))
+    a = await store.made(ops.add_cell(p, "a", into=MADE))
+    b = await store.made(ops.add_cell(p, "b", into=MADE))
+    landed = ops.bracketed(Tick.n.set(3))
+    assert reroot(landed, p, b) is landed
+    await store.run(here(p, a, reroot(landed, p, b)))
+    assert await store.read(cell_state(p, a).extract()) == {"n": 3}
+    assert await store.read(nu.list(States.planes[p].cells.keys())) == [a]
+
+
+def test_bracketed_keeps_an_ops_own_bracket_and_brackets_a_loop_per_step():
+    op = ops.add_plane("p", backend="async")
+    assert ops.bracketed(op) is op
+    loop = nu.ForeverDo(nu.DelayedDo(1.0, Tick.n.set(Tick.n.fallback(0) + 1)))
+    assert isinstance(ops.bracketed(loop), nu.ForeverDo)
 
 
 async def test_clear_state(store):

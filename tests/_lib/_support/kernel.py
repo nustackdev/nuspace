@@ -30,6 +30,7 @@ _HEAD = """
 import nu
 import nustd.kv
 import nuspace
+from nuspace import ops
 
 class Tick(nuspace.CellState):
     n = nustd.kv.IntRef.slot()
@@ -44,10 +45,12 @@ def prog(*lines: str) -> str:
     return _HEAD + "".join(f"    {line}\n" for line in lines)
 
 
-SET_42 = prog("return Tick.n.set(42)")
+SET_42 = prog("return ops.atomic_state(Tick.n.set(42))")
 RAISES = prog('raise ValueError("boom")')
 FOREVER = prog('print("built")', 'return nu.print("tick") >> nu.ForeverDo(nu.Delay(0.05))')
-READS_TAG = prog("from _support.kernel_envs import Tag", "return Tick.s.set(Tag.value)")
+READS_TAG = prog(
+    "from _support.kernel_envs import Tag", "return ops.atomic_state(Tick.s.set(Tag.value))"
+)
 #: Holds its worker's loop, so it never hears an interrupt.
 BLOCKS = prog(
     "from _support.actions import Block",

@@ -48,7 +48,7 @@ NAME = "nuspace-reactions"
 SLOW = 20.0
 
 #: A target that runs to completion, long enough to land changes while it runs.
-WORKS = prog("return nu.Delay(1.0) >> Tick.n.set(1)")
+WORKS = prog("return nu.Delay(1.0) >> ops.atomic_state(Tick.n.set(1))")
 
 
 class Inbox(PlaneState):
@@ -265,7 +265,7 @@ async def test_never_two_runs_at_once(space):
 
 @module_loop
 async def test_a_cell_state_change_fires(space):
-    q, (c,) = await space.plane(prog("return Tick.n.set(0)"))
+    q, (c,) = await space.plane(prog("return ops.atomic_state(Tick.n.set(0))"))
     p, _ = await space.plane(WORKS)
     await reacting(space, f'States.planes["{q}"].cells.on_descendants_change("{c}", "n")', p)
     await space.run(atomic_state(ops.cell_state(q, c, Tick.n.set(5))))

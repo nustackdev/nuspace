@@ -40,6 +40,11 @@ without being restarted. :func:`~nuspace.agent.chat.budget_of` and
 **And the last thing the answer cycle does is not the answer.** The host
 appends the escape hatch under it, every turn, whether or not the model drew
 anything: see :func:`hatch`.
+
+**No bracket is held across a pass.** Each read of the session is a snapshot
+of its own and each write a short commit. The model's program and the Cell
+check load and run outside every bracket, and what they came to is written
+after them, so nothing the model wrote ever runs holding the store's lock.
 """
 
 from __future__ import annotations
@@ -53,7 +58,6 @@ from nuspace.agent import chat, passes, source
 from nuspace.agent import session as memory
 from nuspace.agent.shapes import Run
 from nuspace.shapes import Reroot
-from nuspace.system.kernel.body import Bracketed, Rewrites
 
 
 if TYPE_CHECKING:
@@ -193,19 +197,21 @@ def work(
         panel=panel,
         ask=ask,
         cycle=chat.CYCLE_WORK,
-        act=session.outcome.set(nu.Str(source.attempted(session.draft, rewrite=hosted(panel)))),
+        act=_attempted(session=session, panel=panel),
         budget=ceiling(),
         state=state,
     )
     return (
-        _opened(session)
+        ops.atomic_state(_opened(session))
         # False before the first pass and not left unset: an unset Bool reads
         # EMPTY and the loop condition would never be a Bool at all.
         >> Run.done.set(nu.Bool(False))
         >> nu.WhileDo(
-            nu.And(
-                nu.And(session.passes < nu.Int(ceiling()), Run.done.not_()),
-                session.repeats < nu.Int(limit()),
+            ops.snapshot(
+                nu.And(
+                    nu.And(session.passes < nu.Int(ceiling()), Run.done.not_()),
+                    session.repeats < nu.Int(limit()),
+                )
             ),
             body,
         )
@@ -262,24 +268,25 @@ def answer(
         cycle=chat.CYCLE_ANSWER,
         act=_handed_back(session=session, panel=panel)
         >> nu.IfDo(
-            nu.Eq(nu.Str(session.outcome), nu.Str("")),
+            ops.snapshot(nu.Eq(nu.Str(session.outcome), nu.Str(""))),
             _checked(session=session, panel=panel, ui_plane_id=ui_plane_id),
         ),
         budget=budget,
         state=state,
     )
     return (
-        _opened(session)
-        >> session.drawn.set(nu.Bool(False))
+        ops.atomic_state(_opened(session) >> session.drawn.set(nu.Bool(False)))
         >> nu.WhileDo(
-            nu.And(
-                nu.And(session.passes < nu.Int(budget), session.drawn.not_()),
-                session.repeats < nu.Int(limit()),
+            ops.snapshot(
+                nu.And(
+                    nu.And(session.passes < nu.Int(budget), session.drawn.not_()),
+                    session.repeats < nu.Int(limit()),
+                )
             ),
             body,
         )
         >> nu.IfDo(
-            session.drawn,
+            ops.snapshot(nu.Bool(session.drawn)),
             panel.finished(chat.CYCLE_ANSWER),
             _gave_up(session=session, panel=panel, cycle=chat.CYCLE_ANSWER, patience=limit()),
         )
@@ -310,26 +317,29 @@ def hatch(*, panel: Panel, ui_plane_id: nu.StrArg) -> nu.Nu:
         drawn Cell: a program that persists runs again whenever somebody opens
         the chat, a week later, with nobody asking.
     """
-    return ops.add_cell(
-        ui_plane_id,
-        chat.OTHER_SOURCE,
-        cell_id=_numbered(chat.CHAT_OTHER_ID, panel),
-        name=_numbered(chat.CHAT_OTHER_NAME, panel),
+    return nu.let(
+        ops.snapshot(panel.cell()),
+        lambda disp: ops.add_cell(
+            ui_plane_id,
+            chat.OTHER_SOURCE,
+            cell_id=_numbered(chat.CHAT_OTHER_ID, disp),
+            name=_numbered(chat.CHAT_OTHER_NAME, disp),
+        ),
     )
 
 
-def hosted(panel: Panel) -> Rewrites:
+def hosted(panel: Panel) -> Reroot:
     """What the host does to a Cell's program on the way in, done to the model's.
 
     A program the model writes runs inside the talking Cell, so it is loaded
     the way that Cell's own program was: its ``CellState`` lands under the
-    talking Cell, and its reads and writes are bracketed per store. That is
-    what lets the prompt say the host holds the bracket and mean it.
+    talking Cell. It brackets its own store access, as every Cell's program
+    does, so the prompt teaches it how.
     """
-    return Rewrites(Reroot(panel.plane_id, panel.cell_id), Bracketed())
+    return Reroot(panel.plane_id, panel.cell_id)
 
 
-def _numbered(stem: str, panel: Panel) -> nu.Nu:
+def _numbered(stem: str, disp: nu.StrArg) -> nu.Nu:
     """``stem`` with this turn's number after it: an id, or a name.
 
     Derived off the panel's id rather than minted, and that is not a shortcut.
@@ -339,9 +349,11 @@ def _numbered(stem: str, panel: Panel) -> nu.Nu:
     is already numbered per turn by the submit that made it, so the number is
     there to be read.
 
-    Fresh at each call site, because ``panel.cell()`` is a read.
+    Args:
+        stem: what the id or the name starts with.
+        disp: the turn's panel Cell, already read.
     """
-    return nu.Str(stem) + nu.Str(panel.cell()).removeprefix(chat.CHAT_DISPLAY_ID)
+    return nu.Str(stem) + nu.Str(disp).removeprefix(chat.CHAT_DISPLAY_ID)
 
 
 def _allowed(panel: Panel, given: nu.IntArg | None, asked: Callable[..., nu.Nu]) -> nu.Nu:
@@ -366,6 +378,8 @@ def _opened(session: nu.Nu) -> nu.Nu:
     last failure has nothing to do with the answer cycle's first, and carrying
     it across would spend the answer cycle's patience on somebody else's
     mistake.
+
+    No bracket: the caller commits it with whatever else opens its cycle.
     """
     return (
         session.passes.set(nu.Int(0))
@@ -394,9 +408,24 @@ def _gave_up(*, session: nu.Nu, panel: Panel, cycle: str, patience: nu.Nu) -> nu
     )
     spent = nu.Str(STUCK_HEAD) + nu.Str(cycle) + nu.Str(SPENT)
     return nu.IfDo(
-        stuck,
-        panel.stuck(cycle, session.repeats, session.failure) >> session.stalled.set(said),
-        panel.stalled(cycle) >> session.stalled.set(spent),
+        ops.snapshot(stuck),
+        panel.stuck(cycle, session.repeats, session.failure)
+        >> ops.atomic_state(session.stalled.set(said)),
+        panel.stalled(cycle) >> ops.atomic_state(session.stalled.set(spent)),
+    )
+
+
+def _attempted(*, session: nu.Nu, panel: Panel) -> nu.Nu:
+    """Run the work cycle's program and keep what it came to.
+
+    The draft is read in a snapshot of its own, the program loads and runs
+    outside every bracket, and only what it came to is written, in a short
+    commit after it. A program that runs for a minute holds no lock for that
+    minute, and its own writes are never inside a write bracket of ours.
+    """
+    return nu.let(
+        source.attempted(ops.snapshot(nu.Str(session.draft)), rewrite=hosted(panel)),
+        lambda came: ops.atomic_state(session.outcome.set(nu.Str(came))),
     )
 
 
@@ -412,21 +441,38 @@ def _handed_back(*, session: nu.Nu, panel: Panel) -> nu.Nu:
     ``outcome`` is written empty on the way through rather than left alone. It
     is what the caller reads to decide whether there is an answer to check, and
     an unwritten one still holds the last pass's complaint.
+
+    The program runs outside every bracket, as in the work cycle, and what it
+    handed back is written after it in a commit of its own.
     """
+
+    def missed(why: nu.Nu) -> nu.Nu:
+        """No answer this pass, and why. Fresh at each call site."""
+        return ops.atomic_state(session.answer.set(nu.Dict.of()) >> session.outcome.set(why))
+
+    handed = nu.Dict(nu.Eval(nu.LoadNu(ops.snapshot(nu.Str(session.draft)), rewrite=hosted(panel))))
     return nu.TryCatch(
         nu.TryCatch(
-            session.answer.set(nu.Dict(nu.Eval(nu.LoadNu(session.draft, rewrite=hosted(panel)))))
-            >> session.outcome.set(nu.Str("")),
-            catch=session.answer.set(nu.Dict.of())
-            >> session.outcome.set(source.failed(reply=session.reply)),
+            nu.let(
+                handed,
+                lambda answer: ops.atomic_state(
+                    session.answer.set(nu.Dict(answer)) >> session.outcome.set(nu.Str(""))
+                ),
+            ),
+            catch=missed(source.failed(reply=session.reply)),
             errors=nu.prog.ConstructionError,
         ),
-        catch=session.answer.set(nu.Dict.of())
-        >> session.outcome.set(
-            nu.Str(MISHANDED) + nu.ToStr(nu.Attr("error")) + nu.Str(MISHANDED_WHY)
-        ),
+        catch=missed(nu.Str(MISHANDED) + nu.ToStr(nu.Attr("error")) + nu.Str(MISHANDED_WHY)),
         errors=Exception,
     )
+
+
+class _Answer(nu.Shape):
+    """What one answer pass checks and lands, read once before anything is built."""
+
+    cell = nu.StrRef.slot()
+    said = nu.StrRef.slot()
+    disp = nu.StrRef.slot()
 
 
 def _checked(*, session: nu.Nu, panel: Panel, ui_plane_id: nu.StrArg) -> nu.Nu:
@@ -443,23 +489,21 @@ def _checked(*, session: nu.Nu, panel: Panel, ui_plane_id: nu.StrArg) -> nu.Nu:
     module that would not construct gets. There are two pieces of source in an
     answer pass, and a model told only "CONSTRUCTION FAILED" would go looking
     at the wrong one.
+
+    The answer and the panel's id are read once, in snapshots of their own,
+    before the check: the check builds the Cell outside every bracket, and
+    the append and the line said are each their own op's commit.
     """
-
-    def cell_source() -> nu.Nu:
-        """The Cell the model handed back. Fresh at each call site."""
-        return memory.drawn_cell_of(panel.plane_id, panel.cell_id)
-
-    def said() -> nu.Nu:
-        """The line the conversation keeps. Fresh at each call site."""
-        return memory.said_line_of(panel.plane_id, panel.cell_id)
 
     def turn_id() -> nu.Nu:
         """What the Cell this answer lands in is called. Fresh at each site."""
-        return _numbered(TURN_ID, panel)
+        return _numbered(TURN_ID, _Answer.disp)
 
-    def turn_name() -> nu.Nu:
-        """And what a person sees it called. Fresh at each call site."""
-        return _numbered(TURN_NAME, panel)
+    def told(why: nu.Nu) -> nu.Nu:
+        """The Cell did not build, and why, as the next thing the model reads."""
+        return ops.atomic_state(
+            session.outcome.set(nu.Str(f"{source.CELL_LABEL}: ") + nu.ToStr(why))
+        )
 
     landed = (
         # An ordinary Cell append rather than ``chat.draw``, for the id: this
@@ -468,30 +512,38 @@ def _checked(*, session: nu.Nu, panel: Panel, ui_plane_id: nu.StrArg) -> nu.Nu:
         # whole discipline of one: a Cell's program persists and runs again
         # whenever somebody opens the chat, so an answer that *did* something
         # would do it again, a week later, with nobody asking.
-        ops.add_cell(ui_plane_id, cell_source(), cell_id=turn_id(), name=turn_name())
-        >> chat.say(panel.plane_id, panel.cell_id, chat.ROLE_AGENT, said())
-        >> session.drawn.set(nu.Bool(True))
-        >> session.outcome.set(nu.Str(LANDED))
+        ops.add_cell(
+            ui_plane_id,
+            _Answer.cell,
+            cell_id=turn_id(),
+            name=_numbered(TURN_NAME, _Answer.disp),
+        )
+        >> chat.say(panel.plane_id, panel.cell_id, chat.ROLE_AGENT, _Answer.said)
+        >> ops.atomic_state(session.drawn.set(nu.Bool(True)) >> session.outcome.set(nu.Str(LANDED)))
     )
     checked = nu.TryCatch(
         nu.TryCatch(
             nu.IfDo(
-                source.stands(cell_source(), plane_id=ui_plane_id, cell_id=turn_id()),
+                source.stands(_Answer.cell, plane_id=ui_plane_id, cell_id=turn_id()),
                 landed,
             ),
-            catch=session.outcome.set(
-                nu.Str(f"{source.CELL_LABEL}: ") + nu.ToStr(source.diagnostic())
-            ),
+            catch=told(source.diagnostic()),
             errors=nu.prog.ConstructionError,
         ),
-        catch=session.outcome.set(nu.Str(f"{source.CELL_LABEL}: ") + nu.ToStr(nu.Attr("error"))),
+        catch=told(nu.Attr("error")),
         errors=Exception,
     )
-    return nu.IfDo(
-        nu.And(
-            nu.Gt(nu.Len(cell_source()), nu.Int(0)),
-            nu.Gt(nu.Len(said()), nu.Int(0)),
+    return nu.Frame(
+        _Answer,
+        nu.IfDo(
+            nu.And(
+                nu.Gt(nu.Len(_Answer.cell), nu.Int(0)),
+                nu.Gt(nu.Len(_Answer.said), nu.Int(0)),
+            ),
+            checked,
+            ops.atomic_state(session.outcome.set(nu.Str(INCOMPLETE))),
         ),
-        checked,
-        session.outcome.set(nu.Str(INCOMPLETE)),
+        cell=ops.snapshot(memory.drawn_cell_of(panel.plane_id, panel.cell_id)),
+        said=ops.snapshot(memory.said_line_of(panel.plane_id, panel.cell_id)),
+        disp=ops.snapshot(panel.cell()),
     )

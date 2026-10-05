@@ -48,7 +48,6 @@ from nuspace.agent import (
     trace,
 )
 from nuspace.shapes import CellState, Space, States
-from nuspace.system.kernel.body import Bracketed
 
 
 #: The Plane a chat draws on, in every test below. The Plane that talks is
@@ -65,6 +64,10 @@ TALK = "def out():\n    return None\n"
 
 #: Ids for the terms that are only built, never run.
 RUNS = "p_talker"
+
+#: Every test against a store runs on both: the in memory one, and sqlite,
+#: where a write bracket held across another is a lock the thread waits on.
+STORES = ("memory", "sqlite")
 
 
 # --- the terms a chat's Cells run ----------------------------------------------
@@ -306,8 +309,8 @@ def _panel(runs):
 
 
 async def _wrote(store, term):
-    """A write the host makes inside a running chat, bracketed the way the kernel brackets it."""
-    await store.run(Bracketed()(term))
+    """A session write a test sets up by hand, as one commit to the state store."""
+    await store.run(ops.atomic_state(term))
 
 
 # --- where a turn's working memory goes ------------------------------------------
@@ -409,7 +412,7 @@ async def test_the_host_writes_what_the_person_said_before_anything_runs(store):
     """The first row of every turn and the only one that needs no model call,
     so it is up while the endpoint is still being asked."""
     runs = await _asked(store)
-    await _wrote(store, _panel(runs).heard(trace.asked(runs, chat.CHAT_TALK)))
+    await store.run(_panel(runs).heard(trace.asked(runs, chat.CHAT_TALK)))
     assert await store.read(chat.trace_of(UI, DISP)) == [
         {
             "cycle": chat.CYCLE_WORK,
@@ -430,9 +433,9 @@ async def test_a_pass_says_which_one_it_is_against_the_ceiling(store):
     slots = session.session_of(runs, chat.CHAT_TALK)
     ceiling = chat.budget_of(runs, chat.CHAT_TALK)
     await _wrote(store, slots.passes.set(2))
-    await _wrote(store, _panel(runs).writing(chat.CYCLE_WORK, budget=ceiling))
+    await store.run(_panel(runs).writing(chat.CYCLE_WORK, budget=ceiling))
     await store.run(chat.allow(runs, chat.CHAT_TALK, budget=400))
-    await _wrote(store, _panel(runs).writing(chat.CYCLE_WORK, budget=ceiling))
+    await store.run(_panel(runs).writing(chat.CYCLE_WORK, budget=ceiling))
     assert [row["text"] for row in await store.read(chat.trace_of(UI, DISP))] == [
         f"{trace.PASS}2{trace.OF}{chat.DEFAULT_BUDGET}",
         f"{trace.PASS}2{trace.OF}400",
@@ -443,7 +446,7 @@ async def test_a_pass_that_worked_shows_what_it_came_to(store):
     runs = await _asked(store)
     slots = session.session_of(runs, chat.CHAT_TALK)
     await _wrote(store, slots.outcome.set("['p_chat', 'p_notes']"))
-    await _wrote(store, _panel(runs).ran(chat.CYCLE_WORK))
+    await store.run(_panel(runs).ran(chat.CYCLE_WORK))
     (row,) = await store.read(chat.trace_of(UI, DISP))
     assert row == {
         "cycle": chat.CYCLE_WORK,
@@ -458,7 +461,7 @@ async def test_a_pass_that_did_not_build_says_so_and_quotes_the_first_line(store
     runs = await _asked(store)
     slots = session.session_of(runs, chat.CHAT_TALK)
     await _wrote(store, slots.outcome.set(f"{source.FAILED_LABEL}: bad indent (line 3)\nand more"))
-    await _wrote(store, _panel(runs).ran(chat.CYCLE_WORK))
+    await store.run(_panel(runs).ran(chat.CYCLE_WORK))
     (row,) = await store.read(chat.trace_of(UI, DISP))
     assert row["kind"] == chat.KIND_FAILED
     assert row["text"] == f"{source.FAILED_LABEL}: bad indent (line 3)"
@@ -470,7 +473,7 @@ async def test_a_cell_that_did_not_build_is_a_failed_row_too(store):
     runs = await _asked(store)
     slots = session.session_of(runs, chat.CHAT_TALK)
     await _wrote(store, slots.outcome.set(f"{source.CELL_LABEL}: invalid syntax (line 9)"))
-    await _wrote(store, _panel(runs).ran(chat.CYCLE_ANSWER))
+    await store.run(_panel(runs).ran(chat.CYCLE_ANSWER))
     (row,) = await store.read(chat.trace_of(UI, DISP))
     assert row["cycle"] == chat.CYCLE_ANSWER
     assert row["kind"] == chat.KIND_FAILED
@@ -482,7 +485,7 @@ async def test_a_long_line_is_cut_where_a_panel_can_hold_it(store):
     runs = await _asked(store)
     slots = session.session_of(runs, chat.CHAT_TALK)
     await _wrote(store, slots.reply.set("x" * (trace.LINE * 2)))
-    await _wrote(store, _panel(runs).thinking(chat.CYCLE_WORK))
+    await store.run(_panel(runs).thinking(chat.CYCLE_WORK))
     (row,) = await store.read(chat.trace_of(UI, DISP))
     assert row["text"] == "x" * trace.LINE + trace.ELLIPSIS
 
@@ -492,7 +495,7 @@ async def test_a_reply_that_was_all_code_says_nothing(store):
     runs = await _asked(store)
     slots = session.session_of(runs, chat.CHAT_TALK)
     await _wrote(store, slots.reply.set("```python\ndef out():\n    ...\n```"))
-    await _wrote(store, _panel(runs).thinking(chat.CYCLE_WORK))
+    await store.run(_panel(runs).thinking(chat.CYCLE_WORK))
     assert await store.read(chat.trace_of(UI, DISP)) == []
 
 
@@ -622,12 +625,14 @@ def out():
     return nu.Dict.of(cell=nu.Str(CELL), said=nu.Str("there are two"))
 '''
 
-#: A program that writes the talking Cell's own state, bare, the way a Cell's
-#: program would. It lands under the talking Cell because the host loads the
-#: model's programs with the rewrite it loads a Cell's with.
+#: A program that writes the talking Cell's own state, named bare the way a
+#: Cell's program names it, and brackets itself with the helper the prompt
+#: teaches. It lands under the talking Cell because the helper reroots it
+#: there, and the host's own reroot leaves it alone.
 KEPT = """import nu
 import nustd.kv
 import nuspace
+from nuspace import ops
 
 
 class Notes(nuspace.CellState):
@@ -639,7 +644,32 @@ class Run(nu.Shape):
 
 
 def out():
-    return Notes.seen.set("kept") >> Run.done.set(True)
+    return ops.bracketed(Notes.seen.set("kept") >> Run.done.set(True))
+"""
+
+#: The same, writing the space too: an op of its own beside the state write,
+#: and a read of what it changed, all inside the one helper.
+KEPT_BOTH = f"""import nu
+import nustd.kv
+import nuspace
+from nuspace import ops
+from nuspace.shapes import Space
+
+
+class Notes(nuspace.CellState):
+    seen = nustd.kv.StrRef.slot()
+
+
+class Run(nu.Shape):
+    done = nu.BoolRef.slot()
+
+
+def out():
+    return ops.bracketed(
+        ops.rename_plane("{UI}", "renamed")
+        >> Notes.seen.set(Space.planes["{UI}"].name)
+        >> Run.done.set(True)
+    )
 """
 
 
@@ -669,7 +699,9 @@ def _scripted(plane_id, cell_id, script):
         def ask(*, messages):
             del messages
             replies = nu.List.of(*[nu.Str(one) for one in script])
-            at = session.passes_of(plane_id, cell_id) - nu.Int(1)
+            # An endpoint that reads the store brackets its own read, as anything
+            # a pass calls outside its brackets does.
+            at = nu.Int(ops.snapshot(session.passes_of(plane_id, cell_id))) - nu.Int(1)
             return nu.Dict.of(
                 text=nu.Str(
                     replies[
@@ -690,11 +722,13 @@ def _scripted(plane_id, cell_id, script):
 async def _ran(store, runs, script, ceiling=6.0):
     """One chat, raced against a ceiling, because the loop never ends itself.
 
-    Bracketed the way the kernel brackets a Cell's program on the way in.
+    Inside the frame the kernel holds around a Cell run, and bracketed by
+    nothing else: the chat brackets every store access itself.
     """
     endpoint = _scripted(runs, chat.CHAT_TALK, script)
     talking = converse(runs, chat.CHAT_TALK, ui_plane_id=UI, talk=endpoint)
-    await store.run(nu.Race(Bracketed()(talking), nu.DelayedDo(ceiling, nu.Noop())))
+    here = nu.Frame(ops.Here, talking, plane=runs, cell=chat.CHAT_TALK)
+    await store.run(nu.Race(here, nu.DelayedDo(ceiling, nu.Noop())))
 
 
 async def test_a_turn_works_then_answers_and_says_so_row_by_row(store):
@@ -731,13 +765,28 @@ async def test_a_turn_works_then_answers_and_says_so_row_by_row(store):
 
 
 async def test_a_program_the_model_wrote_keeps_its_state_where_the_cell_does(store):
-    """The host holds the bracket, and the reroot, for the model's programs
-    too. A ``CellState`` the model declares lands under the talking Cell, in
-    the state store, exactly where the Cell's own program would put it."""
+    """The host reroots the model's programs, and the model brackets its own
+    writes. A ``CellState`` the model declares lands under the talking Cell,
+    in the state store, exactly where the Cell's own program would put it."""
     runs = await _asked(store)
     await _ran(store, runs, _fenced(KEPT, ANSWERED))
     kept = ops.cell_state(runs, chat.CHAT_TALK, _Notes.seen)
     assert await store.read(kept) == "kept"
+
+
+async def test_a_program_writing_state_and_the_space_finishes_its_turn(store):
+    """The turn that used to hang on sqlite: the model's program writes the
+    Cell's state and the space while the chat runs. No bracket of the chat's
+    is open around it, so its writes and the chat's own land one after the
+    other and the turn answers."""
+    runs = await _asked(store)
+    await _ran(store, runs, _fenced(KEPT_BOTH, ANSWERED))
+    kept = ops.cell_state(runs, chat.CHAT_TALK, _Notes.seen)
+    assert await store.read(kept) == "renamed"
+    assert await store.read(ops.plane_title(UI)) == "renamed"
+    said = await store.read(chat.messages_of(runs, chat.CHAT_TALK))
+    assert [one["text"] for one in said] == ["how many planes are there", "there are two"]
+    assert await store.read(chat.unanswered(runs, chat.CHAT_TALK)) is False
 
 
 async def test_a_broken_cell_is_not_appended_and_the_model_is_told(store):

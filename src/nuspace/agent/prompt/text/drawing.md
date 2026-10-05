@@ -28,8 +28,10 @@ nobody can press; a `TableRef` you meant to fill on the next change is empty
 until that change comes. Write every ref once on the way in, with `""`, with
 its label, with whatever it will end up holding.
 
-**Do not bracket the term.** A drawn Cell is a program of its own, and the
-host brackets every Cell's program on the way in, one pass per store.
+**Bracket what it reads.** A drawn Cell is a program of its own and nothing
+brackets it for it: wrap what `out` returns in `ops.bracketed(...)`, as in
+"A live table" below, or wrap each read in `ops.snapshot(...)`. A Cell that
+only writes to the ui and submits needs neither.
 
 **Everything the person does comes back through `chat.submit`.** A box, a
 row of buttons, a form, a slider with a confirm: whatever you draw, what a
@@ -203,10 +205,13 @@ def table():
 
 
 def out(plane, cell):
-    """The Planes now, again whenever one moves, and a box under them."""
+    """The Planes now, again whenever one moves, and a box under them.
+
+    Bracketed per step: each draw of the table reads in a snapshot of its own.
+    """
     box = nustd.ui.InputRef("message")
     send = nustd.ui.ButtonRef("send")
-    return (
+    return ops.bracketed(
         table()
         >> box.set(nu.Str(""))
         >> send.set_label(nu.Str("send"))

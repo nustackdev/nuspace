@@ -26,6 +26,10 @@ that nothing came back has been told nothing they can do anything with.
 
 The endpoint is not here. It is brought up once, around this whole loop, so a
 Claude Code session lasts as long as the chat rather than as long as a turn.
+
+Every read here is a snapshot of its own and every write a short commit,
+the wait's subscription and its condition included, so a chat that sits
+waiting for a week holds nothing open on the store.
 """
 
 from __future__ import annotations
@@ -86,14 +90,14 @@ def answering(
     """
 
     def owed() -> nu.Nu:
-        """Whether the chat is waiting on a reply. Fresh at each call site."""
-        return chat.unanswered(plane_id, cell_id)
+        """Whether the chat is waiting on a reply, read in a snapshot. Fresh at each site."""
+        return ops.snapshot(chat.unanswered(plane_id, cell_id))
 
     return nu.ForeverDo(
         nu.IfDo(owed(), _turn(plane_id, cell_id, ui_plane_id=ui_plane_id, ask=ask))
         >> nu.IfDo(
             nu.Not(owed()),
-            nu.ReactWhile(chat.changed(plane_id, cell_id), nu.Not(owed()), nu.Noop()),
+            nu.ReactWhile(ops.snapshot(chat.changed(plane_id, cell_id)), nu.Not(owed()), nu.Noop()),
         )
     )
 
@@ -130,7 +134,7 @@ def performing(
     body = (
         panel.heard(nu.Str(task))
         >> memory.cleared(plane_id, cell_id)
-        >> _opened(session, nu.Dict.of(role="user", content=nu.Str(task)))
+        >> ops.atomic_state(_opened(session, nu.Dict.of(role="user", content=nu.Str(task))))
         >> cycles.work(session=session, panel=panel, ask=ask, state=_world(plane_id))
     )
     return nu.With(
@@ -162,8 +166,8 @@ def _turn(
     """
 
     def owed() -> nu.Nu:
-        """Whether the chat is still waiting. Fresh at each call site."""
-        return chat.unanswered(plane_id, cell_id)
+        """Whether the chat is still waiting, read in a snapshot. Fresh at each site."""
+        return ops.snapshot(chat.unanswered(plane_id, cell_id))
 
     panel = trace.Panel(ui_plane_id, plane_id, cell_id)
     session = trace.session_slots(panel)
@@ -174,10 +178,12 @@ def _turn(
         # panel to move the instant the turn starts.
         panel.heard(trace.asked(plane_id, cell_id))
         >> memory.cleared(plane_id, cell_id)
-        >> _opened(session, _opening(plane_id, cell_id, ui_plane_id, panel))
+        >> ops.atomic_state(_opened(session, _opening(plane_id, cell_id, ui_plane_id, panel)))
         >> cycles.work(session=session, panel=panel, ask=ask, state=world)
-        >> session.messages.append(
-            nu.Dict.of(role="user", content=nu.Str(prompt.read(prompt.ANSWER)))
+        >> ops.atomic_state(
+            session.messages.append(
+                nu.Dict.of(role="user", content=nu.Str(prompt.read(prompt.ANSWER)))
+            )
         )
         >> cycles.answer(
             session=session, panel=panel, ask=ask, ui_plane_id=ui_plane_id, state=world
@@ -239,6 +245,8 @@ def _opened(session: nu.Nu, first: nu.Nu) -> nu.Nu:
     anyway, so this is what they say to write and it is also the one that
     works. **The proxied ``set`` is a bug and it is reported, not dodged**:
     nothing else here is shaped around it.
+
+    No bracket: the caller commits it, ``first`` read inside the same commit.
     """
     return session.messages.set(nu.List.of()) >> session.messages.append(first)
 
@@ -255,6 +263,9 @@ def _world(
     that cannot see what it drew draws it again. So is the conversation, where
     there is one, because an answer composed out of what was actually said
     beats an answer composed out of what a model remembers saying.
+
+    A bare read of both stores: the pass reads it inside the commit that
+    writes the observation.
     """
     shown = {
         "planes": ops.planes(),

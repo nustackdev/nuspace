@@ -62,14 +62,14 @@ NAME = "nuspace-services"
 
 READS_SESSION = prog(
     "from _support.kernel_envs import Connection",
-    "return Tick.s.set(Connection.sid) >> nu.ForeverDo(nu.Delay(0.05))",
+    "return ops.atomic_state(Tick.s.set(Connection.sid)) >> nu.ForeverDo(nu.Delay(0.05))",
 )
 #: Fails, but only after long enough for the supervisor to have seen it live.
 FAILS_LATE = prog('return nu.Delay(0.6) >> nu.Raise(nu.Str("boom"))')
 
 
 def version(v: str) -> str:
-    return prog(f'return Tick.s.set("{v}") >> nu.ForeverDo(nu.Delay(0.05))')
+    return prog(f'return ops.atomic_state(Tick.s.set("{v}")) >> nu.ForeverDo(nu.Delay(0.05))')
 
 
 def boot_list() -> nu.Nu:
@@ -327,7 +327,7 @@ async def test_nav_runs_the_plane_again_once_its_run_ended_and_a_cell_changed(sp
     await open_tab(space, sid, p)
     first = await space.until(nav_service.pane_run(sid, p), bool, SLOW)
     assert (await space.run_row(first, ended, SLOW))["exit"] == EXIT_OK
-    await space.run(ops.set_prog(p, c, prog("return Tick.n.set(7)")))
+    await space.run(ops.set_prog(p, c, prog("return ops.atomic_state(Tick.n.set(7))")))
     again = await space.until(nav_service.pane_run(sid, p), lambda x: x not in ("", first), SLOW)
     assert (await space.run_row(again, ended, SLOW))["exit"] == EXIT_OK
     assert (await space.read(States.planes[p].cells[c].extract()))["n"] == 7
@@ -375,7 +375,7 @@ async def test_supervisor_restarts_a_failed_plane_with_backoff_until_unsupervise
 @module_loop
 async def test_supervisor_always_with_a_delay_is_periodic(space):
     delay = 0.6
-    p, _ = await space.plane(prog("return nu.Delay(0.5) >> Tick.n.set(42)"))
+    p, _ = await space.plane(prog("return nu.Delay(0.5) >> ops.atomic_state(Tick.n.set(42))"))
     await space.run(supervise(p, ALWAYS, delay=delay))
     rows = await supervised(space, p, lambda rs: len(rs) >= 3 and all(ended(r) for r in rs[:3]))
     await space.run(unsupervise(p))

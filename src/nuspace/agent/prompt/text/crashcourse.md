@@ -73,7 +73,7 @@ nustd.kv.memory_navigator()
 nustd.kv.rocksdb_navigator(".db")
 ```
 
-`nu.mem` ships no bind helper; use `Context.bind(dict, ...)` or `nu.Provide(dict, {}, body)`. `nustd.kv` writes need `nustd.kv.auto_flow_atomic(body)` around the flow.
+`nu.mem` ships no bind helper; use `Context.bind(dict, ...)` or `nu.Provide(dict, {}, body)`. `nustd.kv` reads and writes need a bracket around them (`nustd.kv.Snapshot`, `nustd.kv.Transaction`); in a space, use the space's own, as "Working the space" says.
 
 Nothing in the tree reaches a fabric that was not provided around it. `nu.run(Library.name.set("x"))` with no Context raises `LookupError: No binding for: dict[Library]`.
 

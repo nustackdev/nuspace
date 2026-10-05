@@ -32,6 +32,7 @@ import nu
 import nustd.kv
 import nustd.ui
 import nuspace
+from nuspace import ops
 
 
 class Doc(nuspace.CellState):
@@ -40,7 +41,8 @@ class Doc(nuspace.CellState):
 
 def out():
     body = nustd.ui.ProseRef("text")
-    return (
+    # Brackets placed per step: each read and each keystroke's write is its own.
+    return ops.bracketed(
         body.set(Doc.text.fallback(""))
         >> body.set_placeholder("Write, or press / for cells")
         >> nu.ParallelAsync(

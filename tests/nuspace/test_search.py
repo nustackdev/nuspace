@@ -14,7 +14,7 @@ from nuspace import Snippet, ops
 from nuspace.shapes import PlaneState, Reroot, Space, States
 from nuspace.system import search
 from nuspace.system.devices.web.env import session_env
-from nuspace.system.kernel.body import Bracketed, Rewrites
+from nuspace.system.kernel.body import Rewrites
 from nustd.ui import Session
 from nustd.ui.core import OP_NOTIFY, Frame, WsSession
 
@@ -55,10 +55,10 @@ async def _searched(store, *args: object, **kwargs: object) -> str:
 
 
 def _loaded(plane: str, cell: str) -> nu.Nu:
-    """A cell's prog loaded as the kernel loads it: rerooted under it, bracketed."""
-    rewrite = Rewrites(Reroot(plane, cell), Bracketed())
+    """A cell's prog loaded as the kernel loads it: read in a snapshot, rerooted under it."""
+    rewrite = Rewrites(Reroot(plane, cell))
     prog = Space.planes[plane].cells[cell].prog
-    return nustd.kv.auto_flow_atomic(
+    return nustd.kv.Snapshot(
         prog.load(scope={"plane": plane, "cell": cell}, rewrite=rewrite), scope=Space
     )
 
@@ -228,7 +228,7 @@ async def _frames(store, source: str, cell: str, build) -> list[tuple]:
     """
     namespace: dict = {}
     exec(compile(source, cell, "exec"), namespace)  # noqa: S102
-    term = Rewrites(Reroot(search.PLANE, cell), Bracketed())(build(namespace))
+    term = Rewrites(Reroot(search.PLANE, cell))(build(namespace))
     session = _Recording()
     await nu.arun(term, store.ctx.bind(Session, session))
     return [
@@ -264,10 +264,10 @@ async def test_each_viewer_cell_loads_through_the_kernel_rewrites(store, cell):
     name, source = cell
     await store.run(ops.add_plane("v", backend="async") >> ops.add_cell("v", source, cell_id=name))
     env = session_env("127.0.0.1:9")("s1")
-    rewrite = Rewrites(Reroot("v", name), env.rewrite, Bracketed())
+    rewrite = Rewrites(Reroot("v", name), env.rewrite)
     prog = Space.planes["v"].cells[name].prog
     term = await store.run(
-        nustd.kv.auto_flow_atomic(
+        nustd.kv.Snapshot(
             prog.load(scope={"plane": "v", "cell": name}, rewrite=rewrite), scope=Space
         )
     )

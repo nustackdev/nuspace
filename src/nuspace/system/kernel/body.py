@@ -13,10 +13,10 @@ Everything a cell run is, as one Nu term with its ids baked in as plain strs::
 
 The program is loaded on the worker from the store, so a cell run always
 runs the prog as it is now. Its term is rewritten on the way in: reroot
-first, then each env's rewrite, then the kv brackets, one pass per store
-(D23: a state ref only belongs to States once rerooted). The kernel's own
-record writes are short transactions of their own, never held open while
-the program runs.
+first, then each env's rewrite. Nothing brackets it: a program opens its own
+short bracket per store around each store access (D23), the way every op
+does. The kernel's own reads and record writes are short brackets of their
+own, never held open while the program runs.
 
 Interrupt is cooperative and backend agnostic: the body watches its own
 ``interrupt_requested`` and leaves when it reads true, so every backend gets
@@ -32,7 +32,7 @@ import nu.prog
 import nustd.kv
 from nuspace.ops import Here
 from nuspace.ops.utils import atomic
-from nuspace.shapes import EXIT_FAILED, EXIT_INTERRUPTED, EXIT_OK, Reroot, Space, States
+from nuspace.shapes import EXIT_FAILED, EXIT_INTERRUPTED, EXIT_OK, Reroot, Space
 
 from .out import Captured, ErrorText, HasOut, TakeOut
 from .utils import Now, until
@@ -46,7 +46,7 @@ if TYPE_CHECKING:
     from .envs import Env
 
 
-__all__ = ["FLUSH_SECONDS", "Bracketed", "Rewrites", "build_body", "end_cell_run"]
+__all__ = ["FLUSH_SECONDS", "Rewrites", "build_body", "end_cell_run"]
 
 
 #: How often a cell run's waiting output is written to its record.
@@ -75,22 +75,6 @@ class Rewrites:
         for step in self.steps:
             term = step(term)
         return term
-
-
-class Bracketed:
-    """The kv passes over both stores, as a transform: the last rewrite a program gets (D23).
-
-    One pass per store, each leaving the other's refs alone: Space, then
-    States, whose refs are the rerooted state ones. A branch touching both
-    gets a bracket of each, and a program's own bracket for one store is
-    looked into by the other's pass.
-    """
-
-    __slots__ = ()
-
-    def __call__(self, term: nu.Nu) -> nu.Nu:
-        """``term`` with its Space and States reads and writes bracketed."""
-        return nustd.kv.auto_flow_atomic(nustd.kv.auto_flow_atomic(term, scope=Space), scope=States)
 
 
 def end_cell_run(
@@ -170,12 +154,11 @@ def build_body(
         the program and its envs.
     """
     rewrite = Rewrites(
-        Reroot(plane, cell),
-        *(env.rewrite for env in envs if env.rewrite is not None),
-        Bracketed(),
+        Reroot(plane, cell), *(env.rewrite for env in envs if env.rewrite is not None)
     )
     source = Space.planes[plane].cells[cell].prog
-    load = nustd.kv.auto_flow_atomic(
+    # The prog is read in a snapshot of its own, closed before the program runs.
+    load = nustd.kv.Snapshot(
         source.load(scope={"plane": plane, "cell": cell}, rewrite=rewrite), scope=Space
     )
     # On the loop: a program that subscribes is async only.

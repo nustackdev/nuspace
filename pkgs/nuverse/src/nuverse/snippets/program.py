@@ -15,6 +15,7 @@ SOURCE = """\
 import nu
 import nustd.kv
 import nuspace
+from nuspace import ops
 
 
 class Note(nuspace.CellState):
@@ -23,7 +24,8 @@ class Note(nuspace.CellState):
 
 def out():
     # Bare state: the kernel lands it under this cell, whichever it is.
-    return Note.hello.set(nu.Str("world"))
+    # The write is one commit to the state store, bracketed here.
+    return ops.atomic_state(Note.hello.set(nu.Str("world")))
 """
 
 SNIPPET = Snippet("program", "Program", SOURCE)

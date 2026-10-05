@@ -419,13 +419,14 @@ _SHARED = """
 import nu
 import nustd.kv
 import nuspace
+from nuspace import ops
 
 class Shared(nuspace.PlaneState):
     ping = nustd.kv.IntRef.slot()
     pong = nustd.kv.IntRef.slot()
 
 def out():
-    return {}
+    return ops.bracketed({})
 """
 
 #: Wakes on the first ping it hears, and copies what it reads.

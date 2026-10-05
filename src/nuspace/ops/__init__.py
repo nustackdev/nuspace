@@ -6,7 +6,10 @@ agent and the shell compose these and nothing narrower.
 - **Writes are one commit each.** An op brackets itself in a kv transaction
   over :class:`~nuspace.shapes.Space`, retried on conflict, so nothing reads
   half of it and it is safe from any process holding the store, a proxied
-  navigator on a worker included.
+  navigator on a worker included. Nothing brackets a term for its author:
+  ops, services and cell programs all keep the one bracket rule in
+  :mod:`nuspace.ops.utils`, by hand with :func:`atomic`, :func:`atomic_state`
+  and :func:`snapshot`, or with :func:`bracketed` around a whole program.
 - **Queries yield, effects write.** A query, a pure read or computation,
   evaluates to its value. A flow or an op with effects never hands a
   result back: it writes what it made or decided into a ref, yields
@@ -71,9 +74,17 @@ from .read import (
     prog,
 )
 from .settings import set_telemetry, telemetry
-from .state import CellState, PlaneState, cell_state, clear_state, plane_state, sibling
+from .state import (
+    CellState,
+    PlaneState,
+    bracketed,
+    cell_state,
+    clear_state,
+    plane_state,
+    sibling,
+)
 from .tree import move_plane
-from .utils import mint_ordered_id, snapshot
+from .utils import atomic, atomic_state, mint_ordered_id, snapshot
 
 
 __all__ = [
@@ -86,6 +97,9 @@ __all__ = [
     "Snippet",
     "add_cell",
     "add_plane",
+    "atomic",
+    "atomic_state",
+    "bracketed",
     "cell_exists",
     "cell_interrupt",
     "cell_rows",

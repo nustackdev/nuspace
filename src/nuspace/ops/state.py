@@ -5,12 +5,15 @@ store, under the cell running it. :func:`sibling` lands it under another
 cell of the same plane instead, so two cells meet without either knowing
 the store's layout. :func:`cell_state` and :func:`plane_state` land it under
 any plane's, for a reader that is not on that plane (eg a search).
+:func:`bracketed` lands a whole term under the running cell and brackets it,
+for an author who wants the brackets placed for them.
 """
 
 from __future__ import annotations
 
 import nu
-from nuspace.shapes import CellState, PlaneState, States, reroot_base
+import nustd.kv
+from nuspace.shapes import CellState, PlaneState, Space, States, reroot, reroot_base
 
 from .kernel import Here
 from .read import cell_exists, plane_exists
@@ -20,6 +23,7 @@ from .utils import atomic_state
 __all__ = [
     "CellState",
     "PlaneState",
+    "bracketed",
     "cell_state",
     "clear_state",
     "drop_cell_state",
@@ -39,8 +43,8 @@ def sibling(cell_id: nu.StrArg, term: nu.Nu) -> nu.Nu:
     ``PlaneState`` chains are untouched and land at the shared plane state.
 
     Bare, like any state read: it routes to the States store, so the
-    bracket around it names :class:`~nuspace.shapes.States` (the kernel's
-    own pass does, inside a run).
+    bracket its caller puts around it names :class:`~nuspace.shapes.States`
+    (eg :func:`~.utils.atomic_state`, :func:`~.utils.snapshot`).
 
     Args:
         cell_id: The sibling's id. Ids, not names: names are not unique.
@@ -53,7 +57,7 @@ def cell_state(plane_id: nu.StrArg, cell_id: nu.StrArg, term: nu.Nu) -> nu.Nu:
     """``term`` with its ``CellState`` chains landing under any plane's cell.
 
     :func:`sibling` for a cell on another plane. Bare, and routed to the
-    States store, as :func:`sibling` is.
+    States store, as :func:`sibling` is: its caller brackets it.
 
     Args:
         plane_id: The cell's plane.
@@ -69,13 +73,44 @@ def plane_state(plane_id: nu.StrArg, term: nu.Nu) -> nu.Nu:
     What a plane's own cells reach bare, reached from outside it: by an op
     that seeds a plane's state, or a cell showing another plane's. Rerooted
     here, the chains no longer root at ``PlaneState``, so the kernel's own
-    reroot leaves them alone. Bare, and routed to the States store.
+    reroot leaves them alone. Bare, and routed to the States store: its
+    caller brackets it.
 
     Args:
         plane_id: The plane.
         term: What to read or write there, eg ``Search.hits``.
     """
     return reroot_base(term, PlaneState, States.planes[plane_id].state)
+
+
+def bracketed(term: nu.Nu) -> nu.Nu:
+    """``term`` landed under the running cell, with a bracket placed around each store access.
+
+    The hands-off way to follow the bracket rule (see :mod:`nuspace.ops.utils`):
+    an author wraps a cell's whole ``out()`` in it and writes the rest bare.
+    Its state chains are rerooted under the running cell first, through
+    :class:`~nuspace.ops.kernel.Here` as :func:`sibling` does, so they belong to
+    States before the brackets are placed; the kernel's own reroot then leaves
+    them alone. Then one pass per store, Space and then States, puts a
+    snapshot around each Flow branch that reads and a transaction around each
+    one that writes. Brackets already in the term, an op's own included, are
+    kept and looked into, never doubled.
+
+    Each branch of a Flow is bracketed on its own, so a loop, a wait or a
+    subscription gets a bracket per step and never one around itself. A
+    wrapper that is not a Flow (eg ``Frame``, ``let``, ``With``, ``TryCatch``,
+    ``Timeout``) and reads a store outside its Flow branches gets one bracket
+    around all of it, so one that holds a loop, a wait or an ``Eval`` holds
+    that bracket for as long as they run. Code shaped like that brackets by
+    hand, with :func:`~.utils.atomic_state` and :func:`~.utils.snapshot`.
+
+    Only inside a cell run, where :class:`~nuspace.ops.kernel.Here` is held.
+
+    Args:
+        term: What the cell runs, eg the body of ``out()``.
+    """
+    landed = reroot(term, Here.plane, Here.cell)
+    return nustd.kv.auto_flow_atomic(nustd.kv.auto_flow_atomic(landed, scope=Space), scope=States)
 
 
 def clear_state(plane_id: nu.StrArg, cell_id: nu.StrArg | None = None) -> nu.Nu:

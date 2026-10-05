@@ -79,11 +79,11 @@ still have work to do, do it in the next turn; say so in `said` and draw the
 question.
 
 **Reads are fine and are what make an answer true.** The dict is a value, so
-anything that yields composes straight into it:
+anything that yields composes straight into it, each read in a snapshot:
 
 ```python
 nu.Dict.of(
     cell=nu.Str(ANSWER),
-    said=nu.Str("there are ") + nu.ToStr(nu.Len(ops.planes())) + nu.Str(" planes"),
+    said=nu.Str("there are ") + nu.ToStr(ops.snapshot(nu.Len(ops.planes()))) + nu.Str(" planes"),
 )
 ```

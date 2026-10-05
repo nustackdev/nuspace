@@ -30,6 +30,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import nu
+from nuspace import ops
 from nuspace.agent import chat
 from nuspace.agent import session as memory
 from nuspace.agent.source import complaint
@@ -161,7 +162,11 @@ class Panel:
         return chat.latest_display(self.plane_id, self.cell_id)
 
     def state(self, cycle: nu.StrArg, kind: nu.StrArg, text: nu.StrArg) -> nu.Nu:
-        """One host row. The fixed machine, and the only thing that writes it."""
+        """One host row. The fixed machine, and the only thing that writes it.
+
+        One commit, with every argument read inside it, so a row is safe to
+        compose out of reads of the session.
+        """
         return chat.state(self.ui_plane_id, self.cell(), cycle, kind, text)
 
     def heard(self, what: nu.StrArg) -> nu.Nu:
@@ -187,7 +192,7 @@ class Panel:
         wrong.
         """
         return nu.IfDo(
-            nu.Gt(nu.Len(self._said()), nu.Int(0)),
+            ops.snapshot(nu.Gt(nu.Len(self._said()), nu.Int(0))),
             self.state(cycle, chat.KIND_THINKING, clipped(self._said())),
         )
 
@@ -226,7 +231,7 @@ class Panel:
             return complaint(head(self._outcome()))
 
         return nu.IfDo(
-            wrong(),
+            ops.snapshot(wrong()),
             self.state(cycle, chat.KIND_FAILED, clipped(head(self._outcome()))),
             self.state(cycle, chat.KIND_RUNNING, clipped(self._outcome())),
         )
