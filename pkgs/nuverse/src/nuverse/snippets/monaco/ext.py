@@ -1,8 +1,7 @@
 """The ``monaco`` snippet. Placeholder.
 
-TODO: another agent fills this in. Until then ``SOURCE`` is empty,
-``SNIPPET`` is None and the snippet is left out of
-:data:`nuverse.snippets.SNIPPETS`.
+TODO: another agent fills this in. Until then ``SNIPPET`` is None and the
+snippet is left out of :data:`nuverse.snippets.SNIPPETS`.
 """
 
 from __future__ import annotations
@@ -14,9 +13,7 @@ if TYPE_CHECKING:
     from nuspace import Snippet
 
 
-__all__ = ["SNIPPET", "SOURCE"]
+__all__ = ["SNIPPET"]
 
-
-SOURCE = ""
 
 SNIPPET: Snippet | None = None

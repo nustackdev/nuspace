@@ -2,8 +2,8 @@
 
 - :mod:`.planes`: what ``+`` creates: ``plain``, ``jobs``, ``runs``,
   ``workers``, ``planes``, ``cc_chat``.
-- :mod:`.snippets`: what ``/`` inserts: ``text``, ``program``, ``ticker``,
-  ``lens``, ``plane_lens``, ``cell_lens``, and later ``heading``, ``monaco``.
+- :mod:`.snippets`: what ``/`` inserts, one package each, and the ops on
+  the cells made from them.
 
 nuspace finds this package through the ``nuspace.extensions`` entry point,
 which names :func:`extension`. Nothing is imported here at module scope:

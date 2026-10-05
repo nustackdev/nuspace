@@ -119,7 +119,7 @@ def out():
 
 
 NEW = (
-    '''\
+    """\
 import nu
 import nustd.kv
 import nustd.ui
@@ -127,10 +127,9 @@ import nuspace
 from nuspace import ops
 
 #: What a new job's main cell starts as.
-STARTER = """\\
-'''
-    + program.SOURCE
-    + '''"""
+STARTER = """
+    + repr(program.SNIPPET.source)
+    + """
 
 
 class Jobs(nuspace.PlaneState):
@@ -168,7 +167,7 @@ def out():
         >> Form.create.set("Create job")
         >> nu.ReactForever(Form.create.on_click(), make)
     )
-'''
+"""
 )
 
 

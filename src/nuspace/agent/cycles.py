@@ -3,7 +3,9 @@
 A turn has exactly two phases and they are not two halves of one loop. The
 **work** cycle changes the space, pass after pass, until the model says it is
 done. The **answer** cycle draws what the person sees: the response and the
-next input form, in one Cell.
+next input form, in one Cell, or no Cell at all when what they should see is
+already on a plane, put there in the work cycle (snippets set by their ops).
+Either way it says the one line the conversation keeps.
 
 **The answer cycle is a loop of its own, and that is the point of it.** A
 chat's answer is itself the source of a Cell, and a Cell is only ever built
@@ -125,9 +127,10 @@ LANDED = "the answer is on the screen and in the record"
 #: What a model is told when it handed back something that is not an answer.
 INCOMPLETE = (
     f"{source.ANSWER_LABEL}: an answer is a dict with two keys in it, "
-    "`cell` holding the whole source of one Cell and `said` holding the one "
-    "line the conversation keeps. One of them was missing or empty, so "
-    "nothing was drawn and nothing was said. Hand back both."
+    "`said` holding the one line the conversation keeps and `cell` holding "
+    'the whole source of one Cell, or "" when what they should see is '
+    "already on a plane. `said` was missing or empty, so nothing was drawn "
+    "and nothing was said. Hand it back."
 )
 
 #: What a model is told when its program ran and what came back was not an
@@ -478,6 +481,10 @@ class _Answer(nu.Shape):
 def _checked(*, session: nu.Nu, panel: Panel, ui_plane_id: nu.StrArg) -> nu.Nu:
     """Build the Cell the model handed back, and append it only if it stands up.
 
+    An answer with no Cell is the line said and nothing drawn: what the
+    person should see is already on a plane, put there in the work cycle.
+    An answer with no line is not one.
+
     The whole of what the answer cycle is for. :func:`nuspace.agent.source.stands`
     goes in the ``cond`` slot because that is the one place a Flow takes a
     Query, and because what it does there is exactly what a condition is: the
@@ -505,6 +512,14 @@ def _checked(*, session: nu.Nu, panel: Panel, ui_plane_id: nu.StrArg) -> nu.Nu:
             session.outcome.set(nu.Str(f"{source.CELL_LABEL}: ") + nu.ToStr(why))
         )
 
+    def spoken() -> nu.Nu:
+        """The line said, and the answer marked landed. Fresh at each site."""
+        return chat.say(panel.plane_id, panel.cell_id, chat.ROLE_AGENT, _Answer.said) >> (
+            ops.atomic_state(
+                session.drawn.set(nu.Bool(True)) >> session.outcome.set(nu.Str(LANDED))
+            )
+        )
+
     landed = (
         # An ordinary Cell append rather than ``chat.draw``, for the id: this
         # one is numbered off the panel, which is what ties an answer to its
@@ -518,8 +533,7 @@ def _checked(*, session: nu.Nu, panel: Panel, ui_plane_id: nu.StrArg) -> nu.Nu:
             cell_id=turn_id(),
             name=_numbered(TURN_NAME, _Answer.disp),
         )
-        >> chat.say(panel.plane_id, panel.cell_id, chat.ROLE_AGENT, _Answer.said)
-        >> ops.atomic_state(session.drawn.set(nu.Bool(True)) >> session.outcome.set(nu.Str(LANDED)))
+        >> spoken()
     )
     checked = nu.TryCatch(
         nu.TryCatch(
@@ -536,11 +550,8 @@ def _checked(*, session: nu.Nu, panel: Panel, ui_plane_id: nu.StrArg) -> nu.Nu:
     return nu.Frame(
         _Answer,
         nu.IfDo(
-            nu.And(
-                nu.Gt(nu.Len(_Answer.cell), nu.Int(0)),
-                nu.Gt(nu.Len(_Answer.said), nu.Int(0)),
-            ),
-            checked,
+            nu.Gt(nu.Len(_Answer.said), nu.Int(0)),
+            nu.IfDo(nu.Gt(nu.Len(_Answer.cell), nu.Int(0)), checked, spoken()),
             ops.atomic_state(session.outcome.set(nu.Str(INCOMPLETE))),
         ),
         cell=ops.snapshot(memory.drawn_cell_of(panel.plane_id, panel.cell_id)),

@@ -224,7 +224,7 @@ async def test_creating_a_job_makes_a_headless_plane_with_a_main_cell(store):
         {
             "id": "main",
             "name": "main",
-            "prog": program.SOURCE,
+            "prog": program.SNIPPET.source,
             "props": {"made_by": "", "has_ui": False},
             "meta": {},
         }
@@ -266,7 +266,7 @@ async def test_boot_and_restart_settings_round_trip(store):
     await nu.arun(draw, store.ctx.bind(Session, session))
     shown = {frame.ref[-1]: frame.payload for frame in session.frames}
     assert (shown["boot"], shown["choice"], shown["delay"]) == (True, "always", 2.5)
-    assert shown["editor"] == program.SOURCE
+    assert shown["editor"] == program.SNIPPET.source
     # No delay backs off, and off takes the job off the supervisor.
     await _restart(store, job, supervisor.ON_FAILURE, 0.0)
     assert await store.read(supervisor.policy_of(job)) == supervisor.ON_FAILURE

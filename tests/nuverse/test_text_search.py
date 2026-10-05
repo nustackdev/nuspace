@@ -5,7 +5,6 @@ from __future__ import annotations
 import nu
 import nustd.kv
 from nuspace import ops
-from nuspace.ops.utils import atomic_state
 from nuspace.shapes import Reroot, Space
 from nuspace.system import search
 from nuspace.system.kernel.body import Rewrites
@@ -13,9 +12,10 @@ from nuverse.snippets import SNIPPETS, prose
 
 
 def _text(plane: str, cell: str, body: str) -> nu.Nu:
-    """A text cell holding ``body``, as its program would keep it."""
-    kept = atomic_state(ops.cell_state(plane, cell, prose.Doc.text.set(body)))
-    return ops.insert_snippet(plane, prose.SNIPPET, cell_id=cell) >> kept
+    """A text cell holding ``body``, set the way any program sets it."""
+    return ops.insert_snippet(plane, prose.SNIPPET, cell_id=cell) >> prose.set_text(
+        plane, cell, body
+    )
 
 
 async def _searched(store, *args: object, **kwargs: object) -> str:
@@ -24,10 +24,8 @@ async def _searched(store, *args: object, **kwargs: object) -> str:
     return (await store.read(ops.children(search.SEARCHES)))[-1]
 
 
-def test_only_text_is_searchable_and_by_its_module_function():
-    assert search.searchable(SNIPPETS) == {"text": "nuverse.snippets.prose:search"}
-    # The state the search reads is the state the prog keeps.
-    assert "class Doc(nuspace.CellState):\n    text = nustd.kv.StrRef.slot()" in prose.SOURCE
+def test_text_is_searchable_by_a_module_function():
+    assert search.searchable(SNIPPETS) == {"text": "nuverse.snippets.prose.ops:search"}
 
 
 async def test_text_search_hits_a_cell_holding_the_query(store):

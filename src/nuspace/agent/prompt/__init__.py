@@ -1,10 +1,10 @@
 """What the model reads before it says anything.
 
-Named sections, in order, with the prose on disk as markdown and the two
+Named sections, in order, with the prose on disk as markdown and the three
 generated ones built from ``nu.inspect``. The order is the argument: who you
 are, what Nu is, where values live, how to write it, what it looks like done,
 what a pass is, how a pass ends, how to look things up, what exists, what your
-world is, what a turn is, what an answer is, how to draw one, and only then
+world is, where content goes, what a turn is, what an answer is, how to draw one, and only then
 what to do. The task goes last because it is the only part that changes per
 caller and a model attends hardest to the end of what it is given.
 
@@ -14,6 +14,10 @@ is where this shape was worked out:
 ``space``
     The store is bound *tagged*, by the root Shape class object itself, which
     makes the stock "redeclare every Shape you touch" rule wrong for it.
+
+``snippets``
+    Generated from the registered snippets: content goes in a snippet's cell
+    state, set with its ops, and each snippet with its ops is listed.
 
 ``cycles``
     A turn is two cycles. One does the thing and one says what was done, and
@@ -42,11 +46,19 @@ the root Shape class and the module it is imported from, ride as
 from __future__ import annotations
 
 from importlib import resources
+from typing import TYPE_CHECKING
 
 from nuspace.agent.prompt.catalogue import DEFAULT_MODULES, catalogue_section
 from nuspace.agent.prompt.sections import Section, inserted, replaced, without
+from nuspace.agent.prompt.snippets import snippets_section
 from nuspace.agent.prompt.surface import surface_section
 from nuspace.shapes import Space
+
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+    from nuspace.ops import Snippet
 
 
 __all__ = [
@@ -155,24 +167,30 @@ def section(name: str) -> Section:
     return Section(name, lambda: read(f"{name}.md"))
 
 
-def sections_for(*, drawing: bool = True) -> tuple[Section, ...]:
+def sections_for(
+    *, drawing: bool = True, snippets: Sequence[Snippet] | None = None
+) -> tuple[Section, ...]:
     """Every section this agent reads, in order.
 
     Args:
         drawing: whether this agent answers by drawing. ``False`` for a job
             agent, which does the work cycle and nothing after it.
+        snippets: the snippets the snippets section teaches. The ones a space
+            opened here registers when absent.
 
     Returns:
         The sections, language first, then the two generated from
-        ``nu.inspect``, then the ones about this world.
+        ``nu.inspect``, then the ones about this world, with the snippets
+        after the one on working the space.
     """
     world = WORLD if drawing else tuple(name for name in WORLD if name not in DRAWING)
-    return (
+    sections = (
         *(section(name) for name in LANGUAGE),
         catalogue_section(),
         surface_section((Space,)),
         *(section(name) for name in world),
     )
+    return inserted(sections, snippets_section(snippets), after="space")
 
 
 def system_prompt(
@@ -180,6 +198,7 @@ def system_prompt(
     task: str | None = None,
     sections: tuple[Section, ...] | None = None,
     drawing: bool = True,
+    snippets: Sequence[Snippet] | None = None,
 ) -> str:
     """The whole system prompt.
 
@@ -190,11 +209,13 @@ def system_prompt(
             :func:`sections_for` when absent, which is what every caller does.
         drawing: whether this agent answers by drawing. Ignored when
             ``sections`` is given.
+        snippets: the snippets it is taught, as for :func:`sections_for`.
+            Ignored when ``sections`` is given.
 
     Returns:
         The prompt text.
     """
-    chosen = sections_for(drawing=drawing) if sections is None else sections
+    chosen = sections_for(drawing=drawing, snippets=snippets) if sections is None else sections
     parts = [one.render() for one in chosen]
     parts.append("# Task\n\n" + (read(TASK) if task is None else task).strip())
     return "\n\n".join(parts) + "\n"

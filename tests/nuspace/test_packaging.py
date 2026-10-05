@@ -100,12 +100,15 @@ def test_snippets_are_well_formed():
         snippets.plane_lens.SNIPPET,
         snippets.cell_lens.SNIPPET,
     )
-    assert (snippets.heading.SNIPPET, snippets.monaco.SNIPPET) == (None, None)
+    assert snippets.monaco.SNIPPET is None
     # The prose editor is the text snippet.
     assert snippets.prose.SNIPPET.name == TEXT
     for snippet in snippets.SNIPPETS:
         assert isinstance(snippet, Snippet)
-        assert snippet.name and snippet.label
+        assert snippet.name and snippet.label and snippet.description
+        # A cell stores the shim: a few lines calling into the snippet's code.
+        assert len(snippet.source.splitlines()) < 30
+        assert "from nuverse.snippets." in snippet.source
         namespace: dict = {}
         exec(compile(snippet.source, snippet.name, "exec"), namespace)  # noqa: S102
         out = namespace["out"]

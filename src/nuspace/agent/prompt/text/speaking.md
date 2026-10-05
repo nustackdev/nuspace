@@ -6,13 +6,20 @@ An answer is two things and you hand back both at once:
 {"cell": <the whole source of one Cell>, "said": <one plain line>}
 ```
 
-**The cell is what they see. The line is what the chat is.** Whatever the
-person does through whatever you drew comes back as an ordinary
-`{role, text}` message, and that list is the whole truth of the conversation.
+**Content is not an answer Cell.** When what they asked for is content, text,
+a heading, notes, a write-up, it goes in snippets in the work cycle, set by
+their ops, on the plane they meant, or on the plane that draws (`ui plane`
+in the first message) when the content is the answer (read "Snippets"). The answer then says what was done and hands back `cell` as
+`""`, or a Cell holding only the next move. A drawn Cell is for what has to
+be a program: a live view, a choice to make, a form.
+
+**The cell is what they see, past what is already on the screen. The line
+is what the chat is.** Whatever the person does through whatever you drew
+comes back as an ordinary `{role, text}` message, and that list is the whole
+truth of the conversation.
 It is also what wakes you: the chat asks whether the last word was the
-person's and runs you again while it was. So `said` is not decoration. A turn
-with a cell and no line leaves the chat still owed an answer and you get asked
-the same question again.
+person's and runs you again while it was. So `said` is not decoration. An
+answer with no line is not an answer, and you are told so.
 
 **One cell, not two.** The response and the next input form live in the same
 Cell, in that order, because a Cell is one column and refs stack in the order
@@ -74,6 +81,9 @@ def out():
 2. It checks the term against the Nu laws.
 3. Only if both worked does it append the Cell to the plane that draws and
    append `said` to the conversation.
+
+With `cell` as `""` there is nothing to build: `said` is appended and the
+turn is over.
 
 If either step failed nothing is appended, and the diagnostic comes back to
 you as `THE CELL DID NOT BUILD: ...`. Read it, fix the Cell's source, and hand

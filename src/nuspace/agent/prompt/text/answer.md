@@ -5,9 +5,11 @@ Hand back one dict and write nothing:
     nu.Dict.of(cell=nu.Str(<the whole source of one Cell>), said=nu.Str(<one plain line>))
 
 `cell` is what they see: what happened, and how they answer next, in one Cell.
-`said` is the one line the conversation keeps. The host builds the Cell,
-checks it, and appends it; a Cell that will not build comes back to you as
-`THE CELL DID NOT BUILD` and you fix it and hand the dict back again.
+It is `""` when what they should see is already on a plane, put there in the
+work cycle as snippets. `said` is the one line the conversation keeps, always.
+The host builds the Cell, checks it, and appends it; a Cell that will not
+build comes back to you as `THE CELL DID NOT BUILD` and you fix it and hand
+the dict back again.
 
 `Run.done` does nothing here. The turn ends when the answer lands.
 

@@ -188,7 +188,7 @@ async def test_open_space_headless_runs_a_booted_plane(tmp_path, monkeypatch):
         >> atomic(stale.opened.set(nu.Float(0.0)) >> stale.routes.set(nu.Literal([TAB])))
         # nuverse's starter program runs headless too.
         >> ops.add_plane(STARTER, backend="async")
-        >> ops.add_cell(STARTER, nuverse_program.SOURCE, cell_id="c")
+        >> ops.add_cell(STARTER, nuverse_program.SNIPPET.source, cell_id="c")
         >> boot(STARTER)
     )
     await nu.arun(nu.With(store(path), body=seed))
@@ -233,7 +233,8 @@ async def test_nuverse_prose_loads_through_the_kernel_rewrites(store):
     from nuspace.system.devices.web.env import session_env
 
     await store.run(
-        ops.add_plane("p", backend="async") >> ops.add_cell("p", nuverse_prose.SOURCE, cell_id="c")
+        ops.add_plane("p", backend="async")
+        >> ops.add_cell("p", nuverse_prose.SNIPPET.source, cell_id="c")
     )
     env = session_env("127.0.0.1:9")("s1")
     rewrite = Rewrites(Reroot("p", "c"), env.rewrite)

@@ -12,6 +12,7 @@ separately here.
 
 ## Unreleased
 
+- Snippets ship as packages with ops, and chats write content into them
 - Chats keep one Claude Code conversation across turns and restarts
 - Programs commit their own changes, so chat turns no longer stall on locks
 - Claude Code chat returns as a plane, its agent part of nuspace

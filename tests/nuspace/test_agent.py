@@ -49,8 +49,10 @@ from nuspace.agent import (
     source,
     trace,
 )
+from nuspace.agent.prompt.snippets import render_snippets
 from nuspace.shapes import CellState, Space, States
 from nustd.cc import fabric
+from nuverse.snippets import SNIPPETS, prose
 
 
 #: The Plane a chat draws on, in every test below. The Plane that talks is
@@ -193,19 +195,20 @@ def test_the_prompt_names_the_space_it_is_about():
 
 def test_every_section_reaches_the_model():
     text = prompt.system_prompt()
-    for heading in (
+    for title in (
         "# Role",
         "# The pass protocol",
         "# Finishing the work",
         "# Catalogue",
         "# Your app surface",
         "# Working the space",
+        "# Snippets",
         "# A turn is two cycles",
         "# Answering",
         "# Drawing an answer",
         "# Task",
     ):
-        assert heading in text
+        assert title in text
 
 
 def test_a_job_agent_is_not_taught_a_move_it_cannot_make():
@@ -251,6 +254,35 @@ def test_the_two_cycles_are_spelled_the_way_the_rows_are():
     text = prompt.system_prompt()
     for cycle in chat.CYCLES:
         assert cycle in text
+
+
+def test_the_prompt_lists_every_snippet_and_its_ops():
+    """Generated from the snippets it is handed: a snippet registered, or an
+    op added, is in the next prompt with nothing written for it."""
+    text = prompt.system_prompt(snippets=SNIPPETS)
+    for snippet in SNIPPETS:
+        assert f"## {snippet.name}  ({snippet.label})" in text
+        assert snippet.description in text
+    assert "from nuverse.snippets import prose" in text
+    assert "prose.set_text(plane_id, cell_id, text)" in text
+    assert "Replace a text cell's text" in text
+    # Only what it was handed.
+    alone = prompt.system_prompt(snippets=[prose.SNIPPET])
+    assert "prose.set_text(plane_id, cell_id, text)" in alone
+    assert "## program" not in alone
+    # By default, what a space opened here registers.
+    assert "prose.set_text(plane_id, cell_id, text)" in prompt.system_prompt()
+
+
+def test_the_snippets_example_is_a_program():
+    """The one worked example is generated, so it is checked the way the prose's are."""
+    text = render_snippets(SNIPPETS)
+    (src,) = programs(text)
+    validated(src, "<snippets>")
+
+
+def test_a_job_agent_is_taught_snippets_too():
+    assert "# Snippets" in prompt.system_prompt(task="write the notes", drawing=False)
 
 
 # --- the programs written out in the prose -------------------------------------
@@ -636,6 +668,37 @@ def out():
     return nu.Dict.of(cell=nu.Str(CELL), said=nu.Str("there are two"))
 '''
 
+#: What the model writes when the answer is content: a text snippet on the
+#: plane that draws, its text set by the snippet's op, and the work done.
+NOTED = f"""import nu
+from nuspace import ops
+from nuverse.snippets import prose
+
+
+class Run(nu.Shape):
+    done = nu.BoolRef.slot()
+
+
+def out():
+    noted = nu.let(
+        "",
+        lambda cell: (
+            ops.insert_snippet("{UI}", prose.SNIPPET, into=cell)
+            >> prose.set_text("{UI}", cell, "Basil likes sun")
+        ),
+    )
+    return noted >> Run.done.set(True)
+"""
+
+#: And the answer after it: the line said, and no Cell, since the content is
+#: already on the plane.
+SAID_ONLY = """import nu
+
+
+def out():
+    return nu.Dict.of(cell=nu.Str(""), said=nu.Str("wrote it down"))
+"""
+
 #: A program that writes the talking Cell's own state, named bare the way a
 #: Cell's program names it, and brackets itself with the helper the prompt
 #: teaches. It lands under the talking Cell because the helper reroots it
@@ -730,13 +793,38 @@ def _scripted(plane_id, cell_id, script):
     return endpoint
 
 
+def _by_cycle(work, answer):
+    """An endpoint that hands back ``work`` in the work cycle and ``answer`` after it.
+
+    For a work program that writes: :func:`_scripted` would run it again on
+    the answer cycle's first pass. The cycle is read off the panel, whose
+    newest row the pass wrote just before asking.
+    """
+
+    def endpoint(loop, *, system, **cell):
+        del system, cell
+
+        def ask(*, messages):
+            del messages
+            rows = nu.List(ops.snapshot(chat.trace_of(UI, DISP)))
+            cycle = nu.Str(nu.Dict(rows[-1])["cycle"])
+            (said_work, said_answer) = _fenced(work, answer)
+            return nu.Dict.of(text=nu.If(cycle == chat.CYCLE_ANSWER, said_answer, said_work))
+
+        return loop(ask)
+
+    return endpoint
+
+
 async def _ran(store, runs, script, ceiling=6.0):
     """One chat, raced against a ceiling, because the loop never ends itself.
+
+    ``script`` is the replies :func:`_scripted` reads per pass, or an endpoint.
 
     Inside the frame the kernel holds around a Cell run, and bracketed by
     nothing else: the chat brackets every store access itself.
     """
-    endpoint = _scripted(runs, chat.CHAT_TALK, script)
+    endpoint = script if callable(script) else _scripted(runs, chat.CHAT_TALK, script)
     talking = converse(runs, chat.CHAT_TALK, ui_plane_id=UI, talk=endpoint)
     here = nu.Frame(ops.Here, talking, plane=runs, cell=chat.CHAT_TALK)
     await store.run(nu.Race(here, nu.DelayedDo(ceiling, nu.Noop())))
@@ -798,6 +886,63 @@ async def test_a_program_writing_state_and_the_space_finishes_its_turn(store):
     said = await store.read(chat.messages_of(runs, chat.CHAT_TALK))
     assert [one["text"] for one in said] == ["how many planes are there", "there are two"]
     assert await store.read(chat.unanswered(runs, chat.CHAT_TALK)) is False
+
+
+async def _noted(store, runs):
+    """The text cell the work cycle put on the plane that draws, and its text."""
+    rows = await store.read(ops.cell_rows(UI))
+    (cell,) = [row["id"] for row in rows if row["props"]["made_by"] == prose.SNIPPET.name]
+    return cell, await store.read(prose.text_of(UI, cell))
+
+
+async def test_content_goes_in_a_snippet_and_the_answer_only_says_so(store):
+    """The content is cell state, set by the snippet's op in the work cycle,
+    so the answer has nothing to draw: the line lands and the turn is over."""
+    runs = await _asked(store, said="note that basil likes sun")
+    await _ran(store, runs, _by_cycle(NOTED, SAID_ONLY))
+
+    cell, text = await _noted(store, runs)
+    assert text == "Basil likes sun"
+    # The panel, the note, the hatch: no answer Cell.
+    assert await store.read(ops.cells(UI)) == [DISP, cell, f"{chat.CHAT_OTHER_ID}1"]
+    said = await store.read(chat.messages_of(runs, chat.CHAT_TALK))
+    assert [one["text"] for one in said] == ["note that basil likes sun", "wrote it down"]
+    assert await store.read(chat.unanswered(runs, chat.CHAT_TALK)) is False
+    kinds = [(row["cycle"], row["kind"]) for row in await store.read(chat.trace_of(UI, DISP))]
+    assert kinds[-1] == (chat.CYCLE_ANSWER, chat.KIND_DONE)
+
+
+async def test_snippets_inserted_and_a_drawn_answer_land_together(store):
+    runs = await _asked(store, said="note that basil likes sun")
+    await _ran(store, runs, _by_cycle(NOTED, ANSWERED))
+
+    cell, text = await _noted(store, runs)
+    assert text == "Basil likes sun"
+    assert await store.read(ops.cells(UI)) == [
+        DISP,
+        cell,
+        f"{cycles.TURN_ID}1",
+        f"{chat.CHAT_OTHER_ID}1",
+    ]
+
+
+async def test_an_answer_with_no_line_is_not_one(store):
+    """The line is the record and what wakes the chat, so a Cell alone is refused."""
+    unsaid = """import nu
+
+
+def out():
+    return nu.Dict.of(cell=nu.Str(""), said=nu.Str(""))
+"""
+    runs = await _asked(store)
+    await _ran(store, runs, _fenced(WORKED, unsaid))
+    assert await store.read(ops.cells(UI)) == [DISP, f"{chat.CHAT_OTHER_ID}1"]
+    complained = [
+        row["text"]
+        for row in await store.read(chat.trace_of(UI, DISP))
+        if row["kind"] == chat.KIND_FAILED and row["cycle"] == chat.CYCLE_ANSWER
+    ]
+    assert any(one.startswith(cycles.INCOMPLETE[:40]) for one in complained)
 
 
 async def test_a_broken_cell_is_not_appended_and_the_model_is_told(store):

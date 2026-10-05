@@ -91,12 +91,19 @@ class Snippet:
             ``[]`` for none. It runs inside a search's run, on a worker, so it
             is named there by module and qualified name: a module level
             function, never a lambda or a closure.
+        description: One line on what a cell made from it is for.
+        ops: The ops on a cell made from it, each taking the plane and cell
+            ids first, for whoever writes a program against its cells: the
+            agent's prompt lists them, signatures and docstrings, under the
+            snippet.
     """
 
     name: str
     label: str
     source: str
     search: Callable[[nu.Nu, nu.Nu, nu.Nu], nu.Nu] | None = None
+    description: str = ""
+    ops: tuple[Callable[..., nu.Nu], ...] = ()
 
     def __post_init__(self) -> None:
         if self.search is not None and "<" in getattr(self.search, "__qualname__", "<"):
@@ -194,7 +201,15 @@ def insert_snippet(
 ) -> nu.Nu:
     """Add a cell from a snippet: its source as the prog, its name as the name and ``made_by``.
 
-    ``into`` is :func:`~nuspace.ops.cell.add_cell`'s.
+    ``into`` is :func:`~nuspace.ops.cell.add_cell`'s: set to the new cell's
+    id in the commit, ``""`` when the plane is missing. A program that goes
+    on to write the cell holds it in a ``nu.let`` slot and hands the slot to
+    the snippet's ops::
+
+        nu.let("", lambda cell: (
+            ops.insert_snippet(plane, prose.SNIPPET, into=cell)
+            >> prose.set_text(plane, cell, "Water the basil")
+        ))
     """
     return add_cell(
         plane_id,

@@ -5,7 +5,7 @@ A person says one thing. That is a **turn**, and it has exactly two phases:
 ```
 turn
  ├─ work      do what they asked, pass after pass, until you set Run.done
- └─ answer    draw what they see, pass after pass, until it stands up
+ └─ answer    say what was done, and draw what they see, until it stands up
 ```
 
 You are in the work cycle from the first message of the turn. When you set
@@ -56,12 +56,15 @@ nu.Dict.of(cell=nu.Str(ANSWER), said=nu.Str("there are 3 planes"))
 ```
 
 - `cell` is the whole source of one Cell: what happened, and how they answer
-  next, together. Read "Answering" and "Drawing an answer".
-- `said` is one plain line for the conversation. It is what somebody scrolling
-  back next week reads.
+  next, together. Read "Answering" and "Drawing an answer". It is `""` when
+  what they should see is already on a plane: content you put there in the
+  work cycle, as snippets set by their ops (read "Snippets").
+- `said` is one plain line for the conversation, always. It is what somebody
+  scrolling back next week reads.
 
 The host takes that dict, **builds the Cell before it appends it**, and only
-appends one that stood up. If it does not build you get the diagnostic back,
+appends one that stood up. With `cell` empty it says the line and draws
+nothing. If it does not build you get the diagnostic back,
 labelled `THE CELL DID NOT BUILD`, and you fix the source and hand it back
 again. That is the whole reason this is a cycle and not one last program: a
 Cell is only built when somebody opens the chat, so a broken one you appended

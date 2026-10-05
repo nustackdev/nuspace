@@ -1,10 +1,11 @@
-"""nuverse's lens snippets, loaded the way the kernel loads them and run on a real store."""
+"""nuverse's snippets, loaded the way the kernel loads them and run on a real store."""
 
 from __future__ import annotations
 
 import asyncio
 from typing import TYPE_CHECKING
 
+import pytest
 import pytest_asyncio
 
 import nu
@@ -16,7 +17,7 @@ from nuspace.system.devices.web.env import session_env
 from nuspace.system.kernel.body import Rewrites
 from nustd.ui.core import OP_NOTIFY, Frame, WsSession
 from nustd.ui.core.session import Session
-from nuverse.snippets import cell_lens, plane_lens
+from nuverse.snippets import SNIPPETS, cell_lens, plane_lens, prose
 
 
 if TYPE_CHECKING:
@@ -121,7 +122,7 @@ async def _running(ctx: nu.Context, plane: str, cell: str, browser: _Browser) ->
 async def test_plane_lens_browses_its_own_plane(ctx):
     await nu.arun(
         ops.add_plane("p", name="Home", backend="async")
-        >> ops.add_cell("p", plane_lens.SOURCE, cell_id="me"),
+        >> ops.add_cell("p", plane_lens.SNIPPET.source, cell_id="me"),
         ctx,
     )
     browser = _Browser()
@@ -140,7 +141,7 @@ async def test_plane_lens_browses_its_own_plane(ctx):
 async def test_cell_lens_follows_the_select(ctx):
     await nu.arun(
         ops.add_plane("p", backend="async")
-        >> ops.add_cell("p", cell_lens.SOURCE, cell_id="me", name="lens")
+        >> ops.add_cell("p", cell_lens.SNIPPET.source, cell_id="me", name="lens")
         >> ops.add_cell("p", "one", cell_id="c1")
         >> ops.add_cell("p", "two", cell_id="c2", name="second")
         >> ops.set_cell_meta("p", "c2", {"marker": 1}),
@@ -181,7 +182,8 @@ async def test_cell_lens_follows_the_select(ctx):
 
 async def test_cell_lens_alone_on_its_plane_browses_itself(ctx):
     await nu.arun(
-        ops.add_plane("p", backend="async") >> ops.add_cell("p", cell_lens.SOURCE, cell_id="me"),
+        ops.add_plane("p", backend="async")
+        >> ops.add_cell("p", cell_lens.SNIPPET.source, cell_id="me"),
         ctx,
     )
     browser = _Browser()
@@ -189,6 +191,71 @@ async def test_cell_lens_alone_on_its_plane_browses_itself(ctx):
     try:
         await _until(lambda: any(f.ref[-1] == "lens" for f in browser.frames))
         assert browser.selected == "me"
-        assert _keys(browser.last("lens"))["prog"].startswith("import nu")
+        assert cell_lens.SNIPPET.source.startswith(_keys(browser.last("lens"))["prog"][:20])
     finally:
         task.cancel()
+
+
+# --- every snippet: a shim in the cell, the code in the package ---------------------
+
+
+@pytest.mark.parametrize("snippet", SNIPPETS, ids=lambda s: s.name)
+async def test_every_snippet_runs_from_its_shim(ctx, snippet):
+    """The cell stores the shim and nothing else; loaded, it is the snippet's whole program."""
+    await nu.arun(
+        ops.add_plane("p", backend="async") >> ops.insert_snippet("p", snippet, cell_id="c"),
+        ctx,
+    )
+    stored, _ = await nu.arun(ops.snapshot(ops.prog("p", "c")), ctx)
+    assert stored == snippet.source
+    nu.validate(nu.compile(await _load(ctx, "p", "c")))
+
+
+async def _read(ctx: nu.Context, term: nu.Nu) -> object:
+    value, _ = await nu.arun(ops.snapshot(term), ctx)
+    return value
+
+
+def _shown(browser: _Browser, text: str) -> Callable[[], bool]:
+    """Whether the editor was handed ``text``."""
+    return lambda: any(f.ref[-1] == "text" and f.payload == text for f in browser.frames)
+
+
+async def test_set_text_reaches_a_running_editor(ctx):
+    await nu.arun(
+        ops.add_plane("p", backend="async") >> ops.insert_snippet("p", prose.SNIPPET, cell_id="c"),
+        ctx,
+    )
+    browser = _Browser()
+    task = await _running(ctx, "p", "c", browser)
+    try:
+        await _until(_shown(browser, ""))
+        await nu.arun(prose.set_text("p", "c", "Water the basil"), ctx)
+        await _until(_shown(browser, "Water the basil"))
+        assert await _read(ctx, prose.text_of("p", "c")) == "Water the basil"
+    finally:
+        task.cancel()
+
+
+async def test_set_text_on_a_missing_cell_writes_nothing(ctx):
+    await nu.arun(ops.add_plane("p", backend="async") >> prose.set_text("p", "gone", "x"), ctx)
+    assert await _read(ctx, prose.text_of("p", "gone")) == ""
+    assert await _read(ctx, ops.cell_exists("p", "gone")) is False
+
+
+async def test_insert_snippet_hands_the_new_cell_to_its_ops(ctx):
+    """The id is minted when the term runs; ``into`` holds it for the ops after."""
+    made = nu.let(
+        "",
+        lambda cell: (
+            ops.insert_snippet("p", prose.SNIPPET, into=cell)
+            >> prose.set_text("p", cell, "Basil likes sun")
+        ),
+    )
+    await nu.arun(ops.add_plane("p", backend="async") >> made >> made, ctx)
+    rows = await _read(ctx, ops.cell_rows("p"))
+    assert [row["props"]["made_by"] for row in rows] == ["text", "text"]
+    first, second = (row["id"] for row in rows)
+    assert first != second
+    assert await _read(ctx, prose.text_of("p", first)) == "Basil likes sun"
+    assert await _read(ctx, prose.text_of("p", second)) == "Basil likes sun"

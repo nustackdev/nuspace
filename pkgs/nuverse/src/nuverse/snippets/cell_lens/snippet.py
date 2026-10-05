@@ -1,43 +1,45 @@
-"""The ``cell_lens`` snippet: a lens on one cell of this plane, picked from a dropdown.
+"""A lens on one cell of its plane, picked from a dropdown.
 
 The dropdown lists the plane's cells in order and follows cells being added
-or removed. Picking one restarts the lens on it. Edit ``SHAPE`` and
-``PREFIX`` inside ``out`` to browse something else of the picked cell.
+or removed. Picking one restarts the lens on it.
 """
 
 from __future__ import annotations
 
-from nuspace import Snippet
+from typing import TYPE_CHECKING
 
-
-__all__ = ["SNIPPET", "SOURCE"]
-
-
-SOURCE = """\
 import nu
+import nuspace
 import nustd.kv
 import nustd.ui
 import nustd.ui.lens
-import nuspace
 from nuspace import ops
 
 
-def out(plane, cell):
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+
+__all__ = ["out"]
+
+
+def out(plane: nu.StrArg, cell: nu.StrArg, shape: type, at: Callable[[nu.Nu], nu.Ref]) -> nu.Nu:
+    """The dropdown and the lens on the picked cell, for as long as the cell runs.
+
+    Args:
+        plane: The plane whose cells it lists.
+        cell: The cell running it, picked first when it is alone.
+        shape: A shape class: what the lens expects to find.
+        at: The ref that shape lives at, given the picked cell's id.
+    """
     pick = nustd.ui.SelectRef("cell")
     lens = nustd.ui.lens.LensRef("lens")
 
-    def browse(picked):
-        # SHAPE is a shape class: what the lens expects to find.
-        # PREFIX is a ref: where in the store that shape lives. Here, the picked cell.
-        SHAPE = nuspace.shapes.Cell
-        PREFIX = nuspace.Space.planes[plane].cells[nu.Str(picked)]
-        return nustd.ui.lens.browse(lens, SHAPE, prefix=PREFIX)
-
-    def read(term):
+    def read(term: nu.Nu) -> nu.Nu:
         return nustd.kv.Snapshot(term, scope=nuspace.Space)
 
     # The plane's cells in order, labelled by name, or by id when unnamed.
-    def option(row):
+    def option(row: nu.Nu) -> nu.Nu:
         label = nu.If(row["name"] != "", row["name"], row["id"])
         return nu.Dict.of(value=row["id"], label=label)
 
@@ -47,17 +49,15 @@ def out(plane, cell):
     first = read(nu.Str(others).fallback(cell))
 
     # browse never finishes: each pick cancels it and starts it on the new cell.
-    lens_on_pick = nu.ReactLatest(pick.on_change(), nu.let(nu.Str(pick), browse), initial=True)
+    browse = nu.let(
+        nu.Str(pick), lambda picked: nustd.ui.lens.browse(lens, shape, prefix=at(nu.Str(picked)))
+    )
+    lens_on_pick = nu.ReactLatest(pick.on_change(), browse, initial=True)
     # Cells added or removed on the plane: list them again.
     cells_moved = nu.ReactForever(
         read(nuspace.Space.planes[plane].cells.on_children_change()),
         pick.set_options(options),
     )
     return (
-        pick.set_options(options)
-        >> pick.set(first)
-        >> nu.ParallelAsync(lens_on_pick, cells_moved)
+        pick.set_options(options) >> pick.set(first) >> nu.ParallelAsync(lens_on_pick, cells_moved)
     )
-"""
-
-SNIPPET = Snippet("cell_lens", "Cell lens", SOURCE)

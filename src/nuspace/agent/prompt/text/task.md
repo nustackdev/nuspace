@@ -11,11 +11,15 @@ Put a `note` in every program that changes something, because the panel is all
 the person can see while you work. End it with `Run.done`.
 
 In the **answer** cycle, hand back one dict: the source of the Cell they will
-look at, and the one line the conversation keeps. Write nothing. The host
-builds the Cell, checks it, and appends it, and tells you if it would not
-build so you can fix it.
+look at, or `""` when what they should see is already on a plane, and the one
+line the conversation keeps. Write nothing. The host builds the Cell, checks
+it, and appends it, and tells you if it would not build so you can fix it.
 
-Read "A turn is two cycles", "Answering" and "Drawing an answer" before you
-write anything. Nothing you type outside a code fence is ever shown except as
-one clipped line in the panel, so a turn that ends without an answer is a turn
-the person experienced as silence, however well it went.
+Content, text and headings and notes, goes in snippets set by their ops in
+the work cycle, never into a drawn Cell. Draw a Cell for behaviour: a live
+view, a choice, a form.
+
+Read "Snippets", "A turn is two cycles", "Answering" and "Drawing an answer"
+before you write anything. Nothing you type outside a code fence is ever shown
+except as one clipped line in the panel, so a turn that ends without an answer
+is a turn the person experienced as silence, however well it went.
