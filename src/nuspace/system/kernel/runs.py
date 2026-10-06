@@ -27,6 +27,7 @@ commit; the fold sees the run leave ``running`` and cancels the arm.
 from __future__ import annotations
 
 import nu
+from nuspace.ops.kernel import off_running
 from nuspace.ops.utils import atomic
 from nuspace.shapes import EXIT_FAILED, EXIT_INTERRUPTED, EXIT_KILLED, EXIT_OK, Space
 from nuspace.system import backends
@@ -71,7 +72,7 @@ def outcome(run_id: nu.StrArg) -> nu.Str:
 
 
 def end_run(run_id: nu.StrArg, exit_: nu.StrArg, error: nu.StrArg | None = None) -> nu.Nu:
-    """A plane run's end: its live cell runs ended ``exit_``, then its own, out of ``running``. No bracket.
+    """A plane run's end: its live cell runs ended ``exit_``, then its own, out of the live indexes. No bracket.
 
     Its live workers' records end in the same commit, ``killed`` with a
     killed run and ``ok`` otherwise (:func:`~nuspace.system.backends.released`).
@@ -89,7 +90,7 @@ def end_run(run_id: nu.StrArg, exit_: nu.StrArg, error: nu.StrArg | None = None)
         )
         >> nu.IfDo(row.terminated_at.missing(), own >> row.terminated_at.set(Now()))
         >> backends.released(run_id, workers)
-        >> _kernel.running.remove(run_id, missing_ok=True)
+        >> off_running(run_id)
     )
 
 

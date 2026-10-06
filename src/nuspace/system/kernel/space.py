@@ -3,7 +3,7 @@
 A space is a directory::
 
     <space dir>/
-      kernel.sqlite     the Space store: planes, cells, tree, runs, devices
+      kernel.sqlite     the Space store: planes, cells, nesting, runs, devices
       state.sqlite      the States store: what the programs remember
       valkey/           the notification server's data dir (pid, log)
 

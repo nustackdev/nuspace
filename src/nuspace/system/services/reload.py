@@ -1,7 +1,7 @@
 """reload: a cell rewritten during a live plane run runs again in it, on the new prog (D13).
 
-One arm per live plane run. The arm wakes when a cell is rewritten, and
-runs again every cell of the run's plane whose newest cell run in it has a
+One arm per live plane run. The arm wakes when a cell of its plane is
+written, and runs again every cell of the plane whose newest cell run in it has a
 ``version`` behind its cell's: ``cell_interrupt >> cell_run`` in one
 commit, so the plane run never reads empty in between and never ends for
 it. The new cell run is ``by`` reload; the plane run keeps its own ``by``.
@@ -85,12 +85,12 @@ def _replace(run_id: nu.StrArg) -> nu.Nu:
 
 
 def _arm(run_id: nu.Str) -> nu.Nu:
-    """One live plane run: rerun what is stale, then again on every rewrite of a cell.
+    """One live plane run: rerun what is stale, then again on every write to its plane's cells.
 
-    Cells are flat, so the subscription hears every cell's rewrite, and
-    :func:`behind` tells the run's own apart.
+    The plane's ``version`` counts those writes, so the arm hears its own
+    plane only, and :func:`behind` tells a rewritten prog apart.
     """
-    edits = Space.cells.on_descendants_change("*", "version")
+    edits = Space.planes[_kernel.runs[run_id].plane.fallback("")].version.on_change()
     return nu.ForeverDo(_replace(run_id) >> wake(edits))
 
 

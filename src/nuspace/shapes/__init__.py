@@ -10,17 +10,21 @@ Space, what the space is::
           name, meta
           props     system, ui, made_by, backend
           cells     [cell id], in order
+          children  [plane id], in order
+          parent    plane id, "" at the top level
+          version   +1 on every write to one of its cells
       cells         id -> Cell
         <c>
           name, prog, version, meta
           props     made_by, has_ui
           plane     the plane it is on
-      tree          id -> Node (children), ROOT at the top
+      top           [plane id], the top level planes, in order
       kernel
-        runs        id -> Run, every plane run ever, its cell runs inside
+        runs        id -> Run, every plane run ever, its cell runs and live workers inside
         running     {run id}, live
         workers     id -> Worker, every worker ever
         workers_running  {worker id}, live
+        planes_running   plane id -> {run id}, live, of planes with any
       connections   id -> Connection
       state         SpaceState
         recents     [plane id], newest first
@@ -52,6 +56,7 @@ from .kernel import (
     EXITS,
     CellRun,
     Kernel,
+    PlaneRuns,
     Run,
     Worker,
 )
@@ -60,7 +65,6 @@ from .reroot import Reroot, reroot, reroot_base
 from .space import RECENTS_CAP, Space, SpaceInfo, SpaceSettings, SpaceState
 from .state import CellState, PlaneState
 from .states import CellStates, PlaneStates, States
-from .tree import ROOT, Node
 
 
 __all__ = [
@@ -70,7 +74,6 @@ __all__ = [
     "EXIT_KILLED",
     "EXIT_OK",
     "RECENTS_CAP",
-    "ROOT",
     "Cell",
     "CellProps",
     "CellRun",
@@ -78,9 +81,9 @@ __all__ = [
     "CellStates",
     "Connection",
     "Kernel",
-    "Node",
     "Plane",
     "PlaneProps",
+    "PlaneRuns",
     "PlaneState",
     "PlaneStates",
     "Reroot",

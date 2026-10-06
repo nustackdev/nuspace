@@ -8,8 +8,11 @@ from _support.made import MADE
 import nu
 from nu.lang import wire
 from nuspace import ops
+from nuspace.ops.kernel import off_running
 from nuspace.ops.utils import atomic
 from nuspace.shapes import Space
+from nuspace.system import backends
+from nuspace.system.kernel.runs import end_run
 
 
 #: Run on both backends: in memory, and the space's sqlite files.
@@ -125,7 +128,7 @@ async def test_interrupts_and_kill_write_intents_on_live_runs_only(store):
     assert (await store.read(ops.run(r)))["termination_requested"] is True
     # A run out of running is not live: nothing more is asked of it.
     q = await store.made(ops.plane_run(p, into=MADE))
-    await store.run(atomic(kernel.running.discard(q)))
+    await store.run(atomic(off_running(q)))
     await store.run(ops.plane_kill(q))
     assert (await store.read(ops.run(q)))["termination_requested"] is False
 
@@ -147,6 +150,51 @@ async def test_remove_plane_kills_its_live_runs(store):
     assert not await store.read(ops.plane_exists(p))
     assert (await store.read(ops.run(rp)))["termination_requested"] is True
     assert (await store.read(ops.run(rq)))["termination_requested"] is False
+
+
+async def planes_running(store) -> dict:
+    """``planes_running`` read whole: plane id to its live run ids, sorted."""
+    keys = await store.read(nu.list(kernel.planes_running.keys()))
+    return {p: await store.read(nu.sorted(kernel.planes_running[p].runs)) for p in keys}
+
+
+async def test_a_planes_live_runs_are_written_with_running(store):
+    p, _ = await plane_with(store, 1)
+    q, _ = await plane_with(store, 1)
+    r1, r2 = [await store.made(ops.plane_run(p, into=MADE)) for _ in range(2)]
+    rq = await store.made(ops.plane_run(q, into=MADE))
+    assert await planes_running(store) == {p: sorted([r1, r2]), q: [rq]}
+    assert [x["id"] for x in await store.read(ops.runs(plane=p))] == sorted([r1, r2])
+    # A run that ends leaves both; the plane's last one takes the plane out.
+    await store.run(atomic(end_run(r1, "ok")))
+    assert await planes_running(store) == {p: [r2], q: [rq]}
+    await store.run(atomic(end_run(r2, "ok")) >> atomic(end_run(r2, "ok")))
+    assert await planes_running(store) == {q: [rq]}
+    assert await store.read(nu.sorted(kernel.running)) == [rq]
+    assert await store.read(ops.runs(plane=p)) == []
+    # Nothing is written for a missing plane.
+    await store.run(ops.plane_run("nope"))
+    assert await planes_running(store) == {q: [rq]}
+
+
+async def test_a_runs_live_workers_are_written_with_workers_running(store):
+    p, _ = await plane_with(store, 2)
+    r = await store.made(ops.plane_run(p, into=MADE))
+    ca, cb = (await store.read(ops.run(r)))["cells_running"]
+    made = nu.List.of(nu.List.of("w1", "h1"), nu.List.of("w2", "h2"))
+    await store.run(backends.placed("async", r, ca, nu.List.of("w1", made)))
+    await store.run(backends.placed("async", r, cb, nu.List.of("w2", nu.List.of())))
+    assert await store.read(nu.sorted(kernel.runs[r].workers_running)) == ["w1", "w2"]
+    assert (await store.read(ops.runs()))[0]["workers"] == ["w1", "w2"]
+    # One lost: out of both, the run's and the kernel's.
+    await store.run(atomic(backends.lost("w1", "gone")))
+    assert await store.read(nu.list(kernel.runs[r].workers_running)) == ["w2"]
+    assert [w["id"] for w in await store.read(ops.workers())] == ["w2"]
+    # The run ends: what it still had is released with it.
+    await store.run(atomic(end_run(r, "ok")))
+    assert await store.read(nu.list(kernel.runs[r].workers_running)) == []
+    assert await store.read(ops.workers()) == []
+    assert (await store.read(ops.run(r)))["workers"] == ["w1", "w2"]
 
 
 def test_env_is_plain_data():

@@ -1,7 +1,7 @@
 """Pins: the planes pinned to the top of the sidebar, in order.
 
 ``Space.pinned`` is the one place a pin lives, a list of plane ids. A pin is
-a shortcut: the plane stays where it is in the tree. Only a plane the shell
+a shortcut: the plane stays where it hangs. Only a plane the shell
 draws (``props.ui``) is pinned; removing a plane unpins it and every plane
 below it (:func:`~nuspace.ops.plane.remove_plane`).
 

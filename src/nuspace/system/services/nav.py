@@ -169,10 +169,11 @@ def _cells_seen(route: nu.Str) -> nu.Str:
 def _changed(route: nu.Str) -> nu.Nu:
     """Wait until a cell of the plane is added, removed or rewritten.
 
-    Cells are flat, so the subscription hears every cell's rewrite and the
-    plane's own are told apart by reading them again.
+    The plane's ``version`` counts every write to its cells, so the
+    subscription hears this plane only; reading them again tells a change
+    that matters here from a rename.
     """
-    edits = Space.cells.on_descendants_change("*", "version")
+    edits = Space.planes[route].version.on_change()
     return nu.let(
         snap(_cells_seen(route)),
         lambda seen: nu.WhileDo(seen == snap(_cells_seen(route)), wake(edits)),

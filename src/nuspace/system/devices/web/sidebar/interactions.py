@@ -50,7 +50,7 @@ KINDS = (KIND_SPACE, KIND_PLANE)
 
 #: The space row's id, and its own parent: the browser takes the first self
 #: parenting row as the root. Top level planes hang under it. A word, never a
-#: minted id, and the browser's name for the store's ``ROOT``.
+#: minted id, and the browser's name for the store's top level.
 ROOT_ID = "space"
 
 

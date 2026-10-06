@@ -37,6 +37,7 @@ from _support.probe import PROBE_INIT, Probe
 
 import nu
 from nuspace import ops
+from nuspace.ops.kernel import off_running
 from nuspace.ops.utils import atomic
 from nuspace.shapes import EXIT_FAILED, EXIT_INTERRUPTED, EXIT_KILLED, EXIT_OK, Space, States
 from nuspace.system.backends import AsyncBackend, Backend, MpBackend
@@ -512,10 +513,14 @@ async def test_reconcile_ends_what_was_live(store):
     c = await store.made(ops.add_cell(p, SET_42, into=MADE))
     r_live = await store.made(ops.plane_run(p, into=MADE))
     r_done = await store.made(ops.plane_run(p, into=MADE))
-    await store.run(atomic(kernel.running.discard(r_done) >> kernel.runs[r_done].exit.set("ok")))
+    await store.run(atomic(off_running(r_done) >> kernel.runs[r_done].exit.set("ok")))
     w = "w_test"
-    await store.run(atomic(kernel.workers[w].run.set(r_live) >> kernel.workers_running.add(w)))
+    up = kernel.workers_running.add(w) >> kernel.runs[r_live].workers_running.add(w)
+    await store.run(atomic(kernel.workers[w].run.set(r_live) >> up))
+    assert await store.read(nu.list(kernel.planes_running[p].runs)) == [r_live]
     await store.run(reconcile())
+    assert await store.read(nu.list(kernel.planes_running.keys())) == []
+    assert await store.read(nu.list(kernel.runs[r_live].workers_running)) == []
     live_row = await store.read(ops.run(r_live))
     assert (live_row["exit"], only_cell(live_row)["exit"]) == (EXIT_KILLED, EXIT_KILLED)
     assert live_row["cells_running"] == []

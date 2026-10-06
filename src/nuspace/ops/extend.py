@@ -10,7 +10,6 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 import nu
-from nuspace.shapes import ROOT
 
 from .cell import HasUi, add_cell, cell_writes
 from .plane import plane_icon, plane_writes
@@ -127,7 +126,7 @@ class _Seeding(nu.Shape):
 def create_plane(
     spec: Plane,
     *,
-    parent: nu.StrArg = ROOT,
+    parent: nu.StrArg = "",
     name: nu.StrArg | None = None,
     plane_id: nu.StrArg | None = None,
     into: nu.Ref | None = None,
@@ -142,7 +141,7 @@ def create_plane(
     Args:
         spec: The registered Plane. It runs on ``spec.backend``, and each
             child on its own spec's.
-        parent: The tree node to hang it under, ``ROOT`` or a plane id.
+        parent: The plane to hang it under, ``""`` for the top level.
         name: What to call it. ``spec.label`` when absent.
         plane_id: Its id. Minted when absent. Children always mint theirs.
         into: Set to the new plane's id once the commit landed, for a caller

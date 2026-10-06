@@ -5,11 +5,11 @@ Two families:
 - **browser to store.** A sidebar event runs one op over its own fields.
 - **store to browser.** The tree changed; the arm ships it again.
 
-**One tree.** Every plane with ``props.ui`` is listed, under its parent in
-``Space.tree`` and in that node's sibling order, top level planes under the
+**One tree.** Every plane with ``props.ui`` is listed, under its parent and
+in its parent's sibling order, top level planes (``Space.top``) under the
 space row. ``made_by`` and ``system`` group nothing. A drawn plane whose
-parent is not drawn (a service's child, or one no node lists) is shown at the
-top level, after the rest, so nothing drawn goes missing.
+parent is not drawn (a service's child) is shown at the top level, after the
+rest, so nothing drawn goes missing.
 
 **Icons.** A row carries its plane's ``meta.icon`` and no other meta key.
 The browser falls back to the registered Plane's icon when it is empty.
@@ -25,7 +25,7 @@ over the snippets the space registered with a ``search``; the browser opens
 the search plane itself.
 
 **Narrow watch.** The tree is shipped again when the set of planes, a
-plane's name, props or icon, a tree node, or the pins change, and nothing
+plane's name, props or icon, the nesting, or the pins change, and nothing
 else: a cell writing its state or the kernel writing a run never wakes it.
 """
 
@@ -36,7 +36,7 @@ from typing import TYPE_CHECKING
 import nu
 from nuspace import ops
 from nuspace.ops.utils import field_str
-from nuspace.shapes import ROOT, Space
+from nuspace.shapes import Space
 from nuspace.system import search
 from nuspace.system.devices.web.sidebar import interactions
 from nuspace.system.devices.web.sidebar.interactions import KIND_PLANE, KIND_SPACE, ROOT_ID
@@ -63,8 +63,8 @@ def _prop(row: nu.Nu, field: str) -> nu.Object:
 
 
 def node(parent_id: nu.Nu) -> nu.Str:
-    """The store's tree node for a browser parent id: :data:`ROOT_ID` and ``""`` are ``ROOT``."""
-    return nu.Str(nu.Switch(parent_id, {ROOT_ID: ROOT, "": ROOT}, default=parent_id))
+    """The store's parent for a browser parent id: :data:`ROOT_ID` is the top level, ``""``."""
+    return nu.Str(nu.Switch(parent_id, {ROOT_ID: ""}, default=parent_id))
 
 
 class _Listing(nu.Shape):
@@ -75,7 +75,7 @@ class _Listing(nu.Shape):
 
 
 class _Moving(nu.Shape):
-    """What :func:`move` reads before it moves: the node, its other children, those drawn."""
+    """What :func:`move` reads before it moves: the parent, its other children, those drawn."""
 
     under = nu.StrRef.slot()
     others = nu.ObjectRef.slot()
@@ -96,8 +96,8 @@ def rows() -> nu.Nu:
     """
     held, ids = _Listing.rows, _Listing.ids
 
-    def kids(node_id: nu.Nu) -> nu.List:
-        return ops.children(node_id).iter().filter(lambda kid: ids.contains(kid)).to_list()
+    def kids(plane_id: nu.StrArg) -> nu.List:
+        return ops.children(plane_id).iter().filter(lambda kid: ids.contains(kid)).to_list()
 
     def listed_under(row: nu.Nu) -> nu.Bool:
         """Whether the row's parent is drawn too, so the row hangs under it."""
@@ -115,10 +115,10 @@ def rows() -> nu.Nu:
             system=nu.bool(_prop(row, "system")),
         )
 
-    # Drawn planes whose parent is neither drawn nor the root: shown at the top.
+    # Drawn planes whose parent is neither drawn nor the top: shown at the top.
     stray = nu.Filter(
         held,
-        lambda row: (field_str(row, "parent") != ROOT).and_(listed_under(row).not_()),
+        lambda row: (field_str(row, "parent") != "").and_(listed_under(row).not_()),
     )
     space = nu.Dict.of(
         id=ROOT_ID,
@@ -126,7 +126,7 @@ def rows() -> nu.Nu:
         # Empty: the browser draws its own word for the space here.
         title="",
         parent=ROOT_ID,
-        children=kids(ROOT) + nu.List(nu.Collect(nu.Map(stray, lambda row: field_str(row, "id")))),
+        children=kids("") + nu.List(nu.Collect(nu.Map(stray, lambda row: field_str(row, "id")))),
     )
     return nu.Frame(
         _Listing,
@@ -173,7 +173,7 @@ def create(
 def move(plane_id: nu.Nu, parent_id: nu.Nu, index: nu.Nu) -> nu.Nu:
     """Move a plane to ``index`` among the drawn children of ``parent_id``.
 
-    The browser counts only what it draws, the store's node holds planes it
+    The browser counts only what it draws, the store's parent lists planes it
     does not (services, for one). The position goes in before the drawn
     sibling the browser named, or at the end when it named none.
     """
@@ -192,8 +192,8 @@ def move(plane_id: nu.Nu, parent_id: nu.Nu, index: nu.Nu) -> nu.Nu:
 
 
 def _changes() -> list[nu.Nu]:
-    """What reships the tree: the planes, their names, props and icons, the tree, the pins."""
-    planes, tree = Space.planes, Space.tree
+    """What reships the tree: the planes, their names, props and icons, the nesting, the pins."""
+    planes = Space.planes
     return [
         snap(planes.on_children_change()),
         snap(planes.on_descendants_change("*", "name")),
@@ -201,9 +201,10 @@ def _changes() -> list[nu.Nu]:
         snap(planes.on_descendants_change("*", "props", "*")),
         snap(planes.on_descendants_change("*", "meta")),
         snap(planes.on_descendants_change("*", "meta", "icon")),
-        snap(tree.on_children_change()),
-        snap(tree.on_descendants_change("*", "children")),
-        snap(tree.on_descendants_change("*", "children", "*")),
+        snap(planes.on_descendants_change("*", "children")),
+        snap(planes.on_descendants_change("*", "children", "*")),
+        snap(Space.top.on_change()),
+        snap(Space.top.on_children_change()),
         snap(Space.pinned.on_change()),
         snap(Space.pinned.on_children_change()),
     ]

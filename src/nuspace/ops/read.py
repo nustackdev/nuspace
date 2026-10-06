@@ -12,7 +12,7 @@ with the bracket that opened it.
 from __future__ import annotations
 
 import nu
-from nuspace.shapes import ROOT, Space
+from nuspace.shapes import Space
 
 
 __all__ = [
@@ -65,19 +65,18 @@ def cell_plane(cell_id: nu.StrArg) -> nu.Str:
     return Space.cells[cell_id].plane.fallback("")
 
 
-def children(node_id: nu.StrArg = ROOT) -> nu.List:
-    """A tree node's child plane ids, in order. ``[]`` for a node never written."""
-    return nu.list(Space.tree[node_id].children)
+def children(plane_id: nu.StrArg = "") -> nu.List:
+    """A plane's child plane ids, in order, the top level ones for ``""``.
+
+    ``[]`` for a plane never written.
+    """
+    under = nu.list(Space.planes[plane_id].children)
+    return nu.List(nu.If(nu.Str(plane_id) == "", nu.list(Space.top), under))
 
 
 def parent(plane_id: nu.StrArg) -> nu.Str:
-    """The tree node listing this plane: a plane id, or ``ROOT``.
-
-    ``""`` for a plane no node lists, eg one written by hand or removed.
-    """
-    nodes = nu.list(Space.tree.keys()).iter()
-    under = nodes.filter(lambda node: Space.tree[nu.Str(node)].children.contains(plane_id))
-    return nu.Str(under.first()).fallback("")
+    """The plane listing this one, ``""`` at the top level and for no such plane. One read."""
+    return Space.planes[plane_id].parent.fallback("")
 
 
 def prog(cell_id: nu.StrArg) -> nu.Str:
@@ -87,6 +86,8 @@ def prog(cell_id: nu.StrArg) -> nu.Str:
 
 def plane_rows() -> nu.List:
     """Every plane as ``id, name, props, meta, parent``. One read fills a sidebar.
+
+    A few reads per plane, ``parent`` included: ``""`` for a top level one.
 
     ``props`` is always whole, ``{system, ui, made_by, backend}``, defaults
     filled in. ``backend`` is ``""`` for a plane that names none.
@@ -104,7 +105,7 @@ def plane_rows() -> nu.List:
                 backend=plane.props.backend.fallback(""),
             ),
             meta=plane.meta.extract(),
-            parent=parent(nu.Str(at)),
+            parent=plane.parent.fallback(""),
         )
 
     return planes().iter().map(row).to_list()

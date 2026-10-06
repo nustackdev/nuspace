@@ -18,7 +18,7 @@ from __future__ import annotations
 from typing import Any
 
 import nu
-from nuspace.shapes import ROOT, Space
+from nuspace.shapes import Space
 
 from .kernel import kill, live_runs_of
 from .pin import unpin
@@ -62,7 +62,7 @@ def add_plane(
     *,
     backend: nu.StrArg,
     name: nu.StrArg = "",
-    parent: nu.StrArg = ROOT,
+    parent: nu.StrArg = "",
     system: nu.BoolArg = False,
     ui: nu.BoolArg = False,
     made_by: nu.StrArg = "",
@@ -81,8 +81,8 @@ def add_plane(
             work its cells do: many awaiting tasks run well on ``async``,
             sync code on ``mp``.
         name: What to call it.
-        parent: The tree node to hang it under, ``ROOT`` or a plane id. A
-            parent that does not exist falls back to ``ROOT``.
+        parent: The plane to hang it under, ``""`` for the top level. A
+            parent that does not exist falls back to the top level.
         system: Prop, a protected plane, eg a service or home.
             ``remove_plane`` refuses it.
         ui: Prop, the shell draws it and nav brings it up when routed.
@@ -123,7 +123,7 @@ def plane_writes(
     *,
     backend: nu.StrArg,
     name: nu.StrArg = "",
-    parent: nu.StrArg = ROOT,
+    parent: nu.StrArg = "",
     system: nu.BoolArg = False,
     ui: nu.BoolArg = False,
     made_by: nu.StrArg = "",
@@ -133,7 +133,7 @@ def plane_writes(
     row = Space.planes[plane_id]
     writes = (
         _refuse_empty(backend)
-        >> nu.IfDo(plane_exists(plane_id).not_(), row.cells.set([]))
+        >> nu.IfDo(plane_exists(plane_id).not_(), row.cells.set([]) >> row.children.set([]))
         >> row.name.set(name)
         >> row.props.system.set(system)
         >> row.props.ui.set(ui)
@@ -142,7 +142,7 @@ def plane_writes(
     )
     if meta is not None:
         writes = writes >> row.meta.update(meta)
-    under = nu.If((nu.Str(parent) == ROOT).or_(plane_exists(parent)), parent, ROOT)
+    under = nu.If((nu.Str(parent) == "").or_(plane_exists(parent)), parent, "")
     return writes >> unlink(plane_id) >> link(plane_id, under)
 
 
@@ -184,18 +184,19 @@ def _remove_rows(plane_id: nu.StrArg, gone: nu.Ref, cells: nu.Ref) -> nu.Nu:
     def delete(at: nu.Attr) -> nu.Nu:
         p = nu.Str(at)
         return (
-            unlink(p)
+            live_runs_of(p, kill)
             >> unpin(p)
             >> nu.IfDo(Space.planes.contains(p), Space.planes.del_item(p))
-            >> nu.IfDo(Space.tree.contains(p), Space.tree.del_item(p))
         )
 
     def drop(ids: nu.Nu) -> nu.Nu:
         going = nu.List(ids)
         system = going.iter().filter(lambda p: Space.planes[nu.Str(p)].props.system.fallback(False))
         owned = nu.Flatten(nu.Map(going, lambda p: nu.list(Space.planes[nu.Str(p)].cells)))
+        # Only the top of what goes is listed anywhere that stays: the rest
+        # are listed in rows deleted with it.
         removed = (
-            live_runs_of(going.contains, kill)
+            unlink(plane_id)
             >> cells.set(nu.List(nu.Collect(owned)))
             >> nu.ForEachDo(nu.List(cells), lambda c: Space.cells.del_item(nu.Str(c)))
             >> nu.ForEachDo(going, delete)

@@ -7,6 +7,11 @@ is in an index: ``running`` for plane runs, ``cells_running`` for a plane
 run's cell runs, ``workers_running`` for workers. Ending is a write of
 ``terminated_at`` plus a delete from the index. Nothing moves, nothing is
 pruned, and nothing iterates ``runs`` or ``workers`` whole.
+
+An index has narrower copies, one per owner, written in the same commit as
+the index itself: a plane's live runs (``planes_running``), a run's live
+workers (``Run.workers_running``). What is live of one plane or one run is
+read in the time of that, never of everything live.
 """
 
 from __future__ import annotations
@@ -23,6 +28,7 @@ __all__ = [
     "EXIT_OK",
     "CellRun",
     "Kernel",
+    "PlaneRuns",
     "Run",
     "Worker",
 ]
@@ -83,7 +89,7 @@ class Run(nu.Shape):
     cell's current run is a point read and never a walk of ``cells``, which
     grows with every reload. The run ends once ``cells_running`` is empty,
     or on kill, its exit read off ``latest``. ``workers`` is every worker
-    its backend ever gave it.
+    its backend ever gave it, ``workers_running`` the live ones.
     """
 
     plane = nustd.kv.StrRef.slot()
@@ -99,6 +105,7 @@ class Run(nu.Shape):
     cells_running = nustd.kv.SetRef.slot(str)
     latest = nustd.kv.DictRef.slot(str)
     workers = nustd.kv.SetRef.slot(str)
+    workers_running = nustd.kv.SetRef.slot(str)
 
 
 class Worker(nu.Shape):
@@ -120,15 +127,23 @@ class Worker(nu.Shape):
     error = nustd.kv.StrRef.slot()
 
 
+class PlaneRuns(nu.Shape):
+    """One plane's live plane runs: the ids in ``running`` whose run is of it."""
+
+    runs = nustd.kv.SetRef.slot(str)
+
+
 class Kernel(nu.Shape):
     """Everything the kernel and the backends record.
 
     ``runs`` and ``workers`` are the source of truth, every one ever.
     ``running`` and ``workers_running`` are the live ids, so what is live is
-    read in the time of what is live.
+    read in the time of what is live. ``planes_running`` is ``running`` by
+    plane: a plane is listed while it has a live run, and only then.
     """
 
     runs = nustd.kv.DictRef.slot(Run)
     running = nustd.kv.SetRef.slot(str)
     workers = nustd.kv.DictRef.slot(Worker)
     workers_running = nustd.kv.SetRef.slot(str)
+    planes_running = nustd.kv.DictRef.slot(PlaneRuns)

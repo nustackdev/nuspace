@@ -1,7 +1,7 @@
 """States: the state store, where program declared state lives. Apart from Space.
 
 A space keeps two stores. Space holds what the space is (planes, cells,
-tree, runs); States holds what the programs remember::
+nesting, runs); States holds what the programs remember::
 
     States
       planes          id -> PlaneStates

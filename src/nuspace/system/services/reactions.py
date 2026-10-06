@@ -39,8 +39,8 @@ and anything in Space. A shape from an importable module is brought in with
 own cell. A shape declared in another cell's prog cannot be imported.
 
 Dedupe is :func:`up_plane`'s. It starts a run of the plane ``by``
-:data:`BY` in a commit that finds none live (a filter of ``running`` by
-plane, O(k)), so two never run at once, even from two reactions on one
+:data:`BY` in a commit that finds none live (a filter of the plane's live
+runs, O(k)), so two never run at once, even from two reactions on one
 plane. One live already may or may not have seen the change, so it waits for
 that run's ``terminated_at`` (a point read) and fires once more after it.
 ``ReactForever`` lets every body finish, and queues the notifications landing
@@ -157,14 +157,11 @@ def source(change: nu.StrArg, plane_id: nu.StrArg, imports: str = "") -> nu.Nu:
 
 
 def _live_of(plane_id: nu.StrArg, by: nu.StrArg | None = None) -> nu.Str:
-    """A live plane run of the plane, ``by`` when given, ``""`` when none. A filter of ``running``, O(k)."""
-
-    def mine(rid: nu.Attr) -> nu.Bool:
-        row = _kernel.runs[nu.Str(rid)]
-        same = row.plane == plane_id
-        return same if by is None else same.and_(row.by == by)
-
-    return nu.Str(nu.list(_kernel.running).iter().filter(mine).first()).fallback("")
+    """A live plane run of the plane, ``by`` when given, ``""`` when none. O(k), k its live runs."""
+    live = nu.list(_kernel.planes_running[plane_id].runs).iter()
+    if by is not None:
+        live = live.filter(lambda rid: _kernel.runs[nu.Str(rid)].by == by)
+    return nu.Str(live.first()).fallback("")
 
 
 def live_run() -> nu.Str:

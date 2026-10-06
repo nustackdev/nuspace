@@ -5,6 +5,10 @@ plane's ``cells`` list and the cell's ``plane``. Every op here that changes
 one writes the other in the same commit. A cell stays on the plane it was
 made on: nothing here moves one to another.
 
+Every op here that writes a cell, or the plane's ``cells``, counts it on
+the plane's ``version`` in the same commit, so following a plane's cells is
+one key to watch.
+
 A cell is addressed by its id alone. An op that needs its plane reads
 ``plane`` off it, inside its own bracket.
 
@@ -99,6 +103,12 @@ def _write_prog(row: nu.Nu, prog: nu.StrArg, has_ui: nu.Nu) -> nu.Nu:
         >> row.props.has_ui.set(has_ui)
         >> row.version.set(row.version.fallback(0) + 1)
     )
+
+
+def _touch(plane_id: nu.StrArg) -> nu.Nu:
+    """Count a write to one of the plane's cells on its ``version``. No bracket."""
+    version = Space.planes[plane_id].version
+    return version.set(version.fallback(0) + 1)
 
 
 def _knowing_ui(
@@ -204,7 +214,7 @@ def cell_writes(
     )
     if meta is not None:
         writes = writes >> row.meta.update(meta)
-    placed = writes >> _place(Space.planes[plane_id].cells, cell_id, index)
+    placed = writes >> _place(Space.planes[plane_id].cells, cell_id, index) >> _touch(plane_id)
     return nu.IfDo(_placeable(plane_id, cell_id), placed)
 
 
@@ -221,6 +231,7 @@ def remove_cell(cell_id: nu.StrArg) -> nu.Nu:
             cell_exists(cell_id),
             interrupt_cell(cell_id)
             >> Space.planes[cell_plane(cell_id)].cells.remove(cell_id, missing_ok=True)
+            >> _touch(cell_plane(cell_id))
             >> Space.cells.del_item(cell_id),
         )
     )
@@ -229,7 +240,8 @@ def remove_cell(cell_id: nu.StrArg) -> nu.Nu:
 
 def rename_cell(cell_id: nu.StrArg, name: nu.StrArg) -> nu.Nu:
     """Set a cell's name. A no-op when it is missing."""
-    return atomic(nu.IfDo(cell_exists(cell_id), Space.cells[cell_id].name.set(name)))
+    named = Space.cells[cell_id].name.set(name) >> _touch(cell_plane(cell_id))
+    return atomic(nu.IfDo(cell_exists(cell_id), named))
 
 
 def set_prog(cell_id: nu.StrArg, prog: nu.StrArg) -> nu.Nu:
@@ -241,12 +253,11 @@ def set_prog(cell_id: nu.StrArg, prog: nu.StrArg) -> nu.Nu:
     row = Space.cells[cell_id]
 
     def knowing(plane: nu.ObjectRef) -> nu.Nu:
-        return _knowing_ui(
-            prog,
-            nu.Str(plane),
-            cell_id,
-            lambda has_ui: atomic(nu.IfDo(cell_exists(cell_id), _write_prog(row, prog, has_ui))),
-        )
+        def write(has_ui: nu.Nu) -> nu.Nu:
+            written = _write_prog(row, prog, has_ui) >> _touch(cell_plane(cell_id))
+            return atomic(nu.IfDo(cell_exists(cell_id), written))
+
+        return _knowing_ui(prog, nu.Str(plane), cell_id, write)
 
     # Its plane is offered to the construction, as a run offers it.
     return nu.let(snapshot(cell_plane(cell_id)), knowing)
@@ -254,7 +265,8 @@ def set_prog(cell_id: nu.StrArg, prog: nu.StrArg) -> nu.Nu:
 
 def set_cell_meta(cell_id: nu.StrArg, fields: dict[str, Any] | nu.Nu) -> nu.Nu:
     """Merge ``fields`` into a cell's meta. A no-op when it is missing."""
-    return atomic(nu.IfDo(cell_exists(cell_id), Space.cells[cell_id].meta.update(fields)))
+    merged = Space.cells[cell_id].meta.update(fields) >> _touch(cell_plane(cell_id))
+    return atomic(nu.IfDo(cell_exists(cell_id), merged))
 
 
 def reorder_cells(plane_id: nu.StrArg, cell_ids: Sequence[nu.StrArg] | nu.Nu) -> nu.Nu:
@@ -264,4 +276,5 @@ def reorder_cells(plane_id: nu.StrArg, cell_ids: Sequence[nu.StrArg] | nu.Nu) ->
     after the named ones, so a partial order is a move, not a truncation.
     """
     cells = Space.planes[plane_id].cells
-    return atomic(nu.IfDo(plane_exists(plane_id), keep_order(cells, cell_ids, member=cells)))
+    ordered = keep_order(cells, cell_ids, member=cells) >> _touch(plane_id)
+    return atomic(nu.IfDo(plane_exists(plane_id), ordered))

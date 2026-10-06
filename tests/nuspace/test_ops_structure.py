@@ -1,4 +1,4 @@
-"""Structure ops: planes, cells, the tree, and the reads over them.
+"""Structure ops: planes, cells, nesting, and the reads over them.
 
 Each op is evaluated on its own against one held store, the way a caller
 in any process would, then read back.
@@ -14,7 +14,7 @@ import nustd.kv
 from nu.lang import wire
 from nuspace import ops
 from nuspace.ops.utils import atomic
-from nuspace.shapes import ROOT, Space, States
+from nuspace.shapes import Space, States
 
 
 async def plane(store, name="", backend="async", **kw):
@@ -34,21 +34,21 @@ NO_PROPS = {"system": False, "ui": False, "made_by": "", "backend": "async"}
 # --- Planes --------------------------------------------------------------------
 
 
-async def test_add_plane_writes_the_row_and_links_under_root(store):
+async def test_add_plane_writes_the_row_and_links_at_the_top(store):
     p = await plane(store, "notes", ui=True, made_by="plain", meta={"editable": True})
     assert p.startswith("p_")
     assert await store.read(ops.planes()) == [p]
     assert await store.read(ops.plane_exists(p)) is True
     assert await store.read(ops.cells(p)) == []
     assert await store.read(ops.children()) == [p]
-    assert await store.read(ops.parent(p)) == ROOT
+    assert await store.read(ops.parent(p)) == ""
     assert await store.read(ops.plane_rows()) == [
         {
             "id": p,
             "name": "notes",
             "props": {"system": False, "ui": True, "made_by": "plain", "backend": "async"},
             "meta": {"editable": True},
-            "parent": ROOT,
+            "parent": "",
         }
     ]
 
@@ -81,7 +81,7 @@ async def test_add_plane_given_id_and_parent(store):
     assert await store.read(ops.children()) == [top]
     assert await store.read(ops.parent("kid")) == top
     orphan = await store.made(ops.add_plane(parent="nope", backend="async", into=MADE))
-    assert await store.read(ops.parent(orphan)) == ROOT
+    assert await store.read(ops.parent(orphan)) == ""
 
 
 async def test_ops_chain_and_write_what_they_made_into_a_ref(store):
@@ -139,7 +139,7 @@ async def test_remove_plane_drops_it_and_its_subtree(store):
     await store.run(ops.remove_plane(top))
     assert await store.read(ops.planes()) == [keep]
     assert await store.read(ops.children()) == [keep]
-    assert await store.read(nu.list(Space.tree.keys())) == [ROOT]
+    assert not any([await store.read(ops.plane_exists(x)) for x in (mid, leaf)])
     assert await store.read(ops.cells(leaf)) == []
     assert await store.read(nu.list(Space.cells.keys())) == [kept]
     assert not any([await store.read(ops.cell_exists(c)) for c in gone])
@@ -302,7 +302,33 @@ async def test_reorder_cells(store):
     assert await store.read(ops.cells(p)) == [b, c, a]
 
 
-# --- Tree ----------------------------------------------------------------------
+async def version(store, plane_id):
+    return await store.read(Space.planes[plane_id].version.fallback(0))
+
+
+async def test_every_cell_write_counts_on_its_plane(store):
+    p, q = await plane(store), await plane(store)
+    a = await cell(store, p)
+    b = await cell(store, p)
+    assert await version(store, p) == 2
+    writes = [
+        ops.set_prog(a, "x"),
+        ops.rename_cell(a, "n"),
+        ops.set_cell_meta(a, {"k": 1}),
+        ops.reorder_cells(p, [b, a]),
+        ops.add_cell(p, "y", cell_id=a),
+        ops.remove_cell(b),
+    ]
+    for n, write in enumerate(writes, start=3):
+        await store.run(write)
+        assert await version(store, p) == n
+    # Nothing on another plane, and nothing for what was not written.
+    assert await version(store, q) == 0
+    await store.run(ops.rename_cell("nope", "n") >> ops.add_cell(q, "z", cell_id=a))
+    assert (await version(store, p), await version(store, q)) == (8, 0)
+
+
+# --- Nesting -------------------------------------------------------------------
 
 
 async def test_move_plane_reparents_and_reorders(store):
@@ -315,7 +341,7 @@ async def test_move_plane_reparents_and_reorders(store):
     assert await store.read(ops.children(a)) == [c]
     assert await store.read(ops.parent(c)) == a
     # Within one parent: the index is taken with the plane out of the list.
-    await store.run(ops.move_plane(b, parent=ROOT, index=0))
+    await store.run(ops.move_plane(b, parent="", index=0))
     assert await store.read(ops.children()) == [b, a]
 
 
@@ -325,7 +351,7 @@ async def test_move_plane_refuses_cycles(store):
     c = await store.made(ops.add_plane(parent=b, backend="async", into=MADE))
     for to in (c, b, a, "nope"):
         await store.run(ops.move_plane(a, parent=to))
-        assert await store.read(ops.parent(a)) == ROOT
+        assert await store.read(ops.parent(a)) == ""
     await store.run(ops.move_plane("nope"))
     assert await store.read(ops.parent("nope")) == ""
     assert await store.read(ops.children()) == [a]
@@ -359,6 +385,63 @@ async def test_sibling_order_after_add_remove_and_move(store):
     assert await store.read(ops.children()) == [a, d]
 
 
+async def nested(store) -> None:
+    """Nesting agrees both ways: each plane is listed once, by the parent it names."""
+    rows = await store.read(ops.plane_rows())
+    listed = await store.read(ops.children())
+    assert sorted(listed) == sorted(r["id"] for r in rows if r["parent"] == "")
+    for row in rows:
+        assert row["id"] in await store.read(ops.children(row["parent"]))
+        kids = await store.read(ops.children(row["id"]))
+        assert [await store.read(ops.parent(k)) for k in kids] == [row["id"]] * len(kids)
+        listed += kids
+    assert sorted(listed) == sorted(r["id"] for r in rows)
+
+
+async def test_nesting_is_written_both_ways(store):
+    a, b = await plane(store, "a"), await plane(store, "b")
+    kid = await store.made(ops.add_plane(name="kid", parent=a, backend="async", into=MADE))
+    await nested(store)
+    # Given again with another parent, it moves: out of the old list, into the new.
+    await store.run(ops.add_plane(kid, name="kid", parent=b, backend="async"))
+    assert (await store.read(ops.children(a)), await store.read(ops.children(b))) == ([], [kid])
+    await nested(store)
+    await store.run(ops.move_plane(kid) >> ops.move_plane(a, parent=b, index=0))
+    assert await store.read(ops.children()) == [b, kid]
+    assert await store.read(ops.children(b)) == [a]
+    assert await store.read(ops.parent(kid)) == ""
+    await nested(store)
+
+
+async def test_remove_plane_with_children_leaves_no_listing(store):
+    top, keep = await plane(store, "top"), await plane(store, "keep")
+    mid = await store.made(ops.add_plane(parent=top, backend="async", into=MADE))
+    leaf = await store.made(ops.add_plane(parent=mid, backend="async", into=MADE))
+    side = await store.made(ops.add_plane(parent=top, backend="async", into=MADE))
+    await store.run(ops.remove_plane(mid))
+    assert await store.read(ops.children(top)) == [side]
+    assert await store.read(nu.List.of(ops.parent(mid), ops.parent(leaf))) == ["", ""]
+    assert await store.read(ops.planes()) == [top, keep, side]
+    await nested(store)
+    await store.run(ops.remove_plane(top))
+    assert await store.read(ops.children()) == [keep]
+    await nested(store)
+
+
+async def test_move_plane_under_a_deep_plane(store):
+    a = await plane(store, "a")
+    deep = a
+    for _ in range(4):
+        deep = await store.made(ops.add_plane(parent=deep, backend="async", into=MADE))
+    other = await plane(store, "other")
+    await store.run(ops.move_plane(other, parent=deep))
+    assert await store.read(ops.parent(other)) == deep
+    # The top of that chain cannot go under its own bottom.
+    await store.run(ops.move_plane(a, parent=other))
+    assert await store.read(ops.parent(a)) == ""
+    await nested(store)
+
+
 # --- Pins ----------------------------------------------------------------------
 
 
@@ -375,7 +458,7 @@ async def test_pin_places_and_moves(store):
     # Out of range, negative included, is the end.
     await store.run(ops.pin_plane(a, index=-1))
     assert await store.read(ops.pinned()) == [c, b, a]
-    # A pin is a shortcut: the tree is untouched.
+    # A pin is a shortcut: the nesting is untouched.
     assert await store.read(ops.children()) == [a, b, c]
 
 
@@ -411,7 +494,7 @@ async def test_parent_of_an_unlinked_plane(store):
 
 
 async def test_structure_round_trips_through_sqlite(disk):
-    """The codec path: nested meta, a cell's props and nested state, order, the tree."""
+    """The codec path: nested meta, a cell's props and nested state, order, nesting."""
     p, q, c = "p", "q", "c"
     await disk.run(ops.add_plane(p, name="p", meta={"a": {"b": 1}}, backend="async"))
     await disk.run(ops.add_plane(q, name="q", parent=p, backend="async"))
@@ -419,7 +502,7 @@ async def test_structure_round_trips_through_sqlite(disk):
     cells = States.cells
     await disk.run(nustd.kv.Transaction(cells.set_item(c, {"n": {"deep": [3]}}), scope=States))
     assert await disk.read(ops.plane_rows()) == [
-        {"id": p, "name": "p", "props": NO_PROPS, "meta": {"a": {"b": 1}}, "parent": ROOT},
+        {"id": p, "name": "p", "props": NO_PROPS, "meta": {"a": {"b": 1}}, "parent": ""},
         {"id": q, "name": "q", "props": NO_PROPS, "meta": {}, "parent": p},
     ]
     assert await disk.read(ops.cell_rows(q)) == [

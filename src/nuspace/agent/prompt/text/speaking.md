@@ -41,7 +41,7 @@ from nuspace.agent import chat
 
 
 SAID = """\\
-There are **3** planes: root, Notes and Ideas. Notes is the only one with
+There are **3** planes: Home, Notes and Ideas. Notes is the only one with
 anything on it.
 """
 
@@ -70,7 +70,7 @@ def out():
     """The answer, as the value the host builds a Cell out of."""
     return nu.Dict.of(
         cell=nu.Str(ANSWER),
-        said=nu.Str("there are 3 planes: root, Notes and Ideas"),
+        said=nu.Str("there are 3 planes: Home, Notes and Ideas"),
     )
 ```
 

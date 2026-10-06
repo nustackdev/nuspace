@@ -13,7 +13,7 @@ from nuspace import ops
 from nuspace.ops.plane import plane_icon
 from nuspace.ops.state import drop_cell_state, drop_plane_state
 from nuspace.ops.utils import atomic_state
-from nuspace.shapes import ROOT, CellState, PlaneState, Space, States, reroot
+from nuspace.shapes import CellState, PlaneState, Space, States, reroot
 
 
 #: Run on both backends: in memory, and the space's sqlite files.
@@ -300,7 +300,7 @@ async def test_create_plane_name_and_id(store):
     plain = ops.Plane("plain", "Plain", backend="async")
     assert await store.made(ops.create_plane(plain, name="Notes", plane_id="p1", into=MADE)) == "p1"
     (row,) = await store.read(ops.plane_rows())
-    assert (row["name"], row["parent"]) == ("Notes", ROOT)
+    assert (row["name"], row["parent"]) == ("Notes", "")
     assert await store.read(ops.cells("p1")) == []
     # A term built once creates a new plane each time it runs.
     term = ops.create_plane(plain, into=MADE)

@@ -20,7 +20,8 @@ Workers are records the backends write and everybody reads (:func:`start`,
 :func:`placed`, :func:`lost`, :func:`end_cell`, :func:`kill`): the terms here
 pair each interaction with its record writes, so no backend is ever half
 recorded. The kernel only composes :func:`released` into the commit that
-ends a plane run, so its workers end with it.
+ends a plane run, so its workers end with it, and :func:`ended` into
+reconcile's, for what a gone host left up.
 """
 
 from __future__ import annotations
@@ -53,6 +54,7 @@ __all__ = [
     "StartRun",
     "UnknownBackendError",
     "end_cell",
+    "ended",
     "kill",
     "lost",
     "placed",
@@ -251,32 +253,42 @@ def _made(backend: nu.StrArg, run_id: nu.StrArg, made: nu.Nu) -> nu.Nu:
     """Worker records for ``[[worker, handle], ...]``, live. No bracket.
 
     A worker whose end landed first (it died before this commit) keeps its
-    end and stays out of ``workers_running``.
+    end and stays out of ``workers_running``, the run's and the kernel's.
     """
 
     def record(at: nu.Attr) -> nu.Nu:
         pair = nu.List(at)
         wid = nu.str(pair[0])
         row = _kernel.workers[wid]
+        run = _kernel.runs[run_id]
+        live = _kernel.workers_running.add(wid) >> run.workers_running.add(wid)
         return (
             row.backend.set(backend)
             >> row.run.set(run_id)
             >> row.handle.set(nu.str(pair[1]))
             >> row.started_at.set(Now())
-            >> _kernel.runs[run_id].workers.add(wid)
-            >> nu.IfDo(row.terminated_at.missing(), _kernel.workers_running.add(wid))
+            >> run.workers.add(wid)
+            >> nu.IfDo(row.terminated_at.missing(), live)
         )
 
     return nu.ForEachDo(nu.List(made), record)
 
 
-def _ended(worker_id: nu.StrArg, exit_: nu.StrArg, error: nu.StrArg = "") -> nu.Nu:
-    """A worker's end, written once, and out of ``workers_running``. No bracket."""
+def ended(worker_id: nu.StrArg, exit_: nu.StrArg, error: nu.StrArg = "") -> nu.Nu:
+    """A worker's end, written once, and out of ``workers_running``. No bracket.
+
+    Out of both: its run's and the kernel's, in the same commit.
+    """
     row = _kernel.workers[worker_id]
-    return nu.IfDo(
-        row.terminated_at.missing(),
-        row.terminated_at.set(Now()) >> row.exit.set(exit_) >> row.error.set(error),
-    ) >> _kernel.workers_running.remove(worker_id, missing_ok=True)
+    run = _kernel.runs[row.run.fallback("")]
+    return (
+        nu.IfDo(
+            row.terminated_at.missing(),
+            row.terminated_at.set(Now()) >> row.exit.set(exit_) >> row.error.set(error),
+        )
+        >> run.workers_running.remove(worker_id, missing_ok=True)
+        >> _kernel.workers_running.remove(worker_id, missing_ok=True)
+    )
 
 
 def released(run_id: nu.StrArg, exit_: nu.StrArg) -> nu.Nu:
@@ -286,20 +298,16 @@ def released(run_id: nu.StrArg, exit_: nu.StrArg) -> nu.Nu:
     nothing is left to write once the kernel lets go of the run, however it
     is cancelled. The backend's own kill follows, and finds them ended.
 
-    Walks ``workers_running``, the live workers, never the run's own
+    Walks the run's ``workers_running``, its live workers, never its
     ``workers``: with ``mp`` that is a worker per cell run ever.
     """
-
-    def release(at: nu.Attr) -> nu.Nu:
-        wid = nu.Str(at)
-        return nu.IfDo(_kernel.workers[wid].run == run_id, _ended(wid, exit_))
-
-    return nu.ForEachDo(nu.list(_kernel.workers_running), release)
+    live = nu.list(_kernel.runs[run_id].workers_running)
+    return nu.ForEachDo(live, lambda wid: ended(nu.Str(wid), exit_))
 
 
 def _let_go(ids: nu.Nu, exit_: nu.StrArg) -> nu.Nu:
     """Every worker id in ``ids`` ended ``exit_``. One commit."""
-    return atomic(nu.ForEachDo(nu.List(ids), lambda wid: _ended(nu.Str(wid), exit_)))
+    return atomic(nu.ForEachDo(nu.List(ids), lambda wid: ended(nu.Str(wid), exit_)))
 
 
 def start(backend: nu.StrArg, run_id: nu.StrArg) -> nu.Nu:
@@ -330,7 +338,7 @@ def lost(worker_id: nu.StrArg, why: nu.StrArg) -> nu.Nu:
     yielded ``why``). Written once: with ``async``, every cell run on the
     worker reports the same death, and the first one writes it.
     """
-    return _ended(worker_id, EXIT_FAILED, why)
+    return ended(worker_id, EXIT_FAILED, why)
 
 
 def end_cell(

@@ -7,10 +7,12 @@ The kernel, in the host where the backends live, sees the records and makes
 them true, and it and the backends write every effect. So every op here is
 safe from any process holding the store, a service on a worker included.
 
-Every op is O(1) or O(k), k being what is live: they walk ``running`` and a
-run's ``cells_running``, never ``runs``. A cell's newest cell run in a plane
-run is a point read of the run's ``latest`` (:func:`latest`), never a walk of
-its ``cells``, which grows with every reload.
+Every op is O(1) or O(k), k being what is live of what it asks about: a
+plane's live runs are its ``planes_running``, a run's live cell runs its
+``cells_running``, its live workers its ``workers_running``, never ``runs``
+nor all of ``running``. A cell's newest cell run in a plane run is a point
+read of the run's ``latest`` (:func:`latest`), never a walk of its
+``cells``, which grows with every reload.
 """
 
 from __future__ import annotations
@@ -43,6 +45,7 @@ __all__ = [
     "kill",
     "latest",
     "live_runs_of",
+    "off_running",
     "plane_interrupt",
     "plane_kill",
     "plane_run",
@@ -122,7 +125,7 @@ def add_plane_run(
     by: nu.StrArg = "",
     envs: Sequence[Sequence[str]] | nu.Nu = (),
 ) -> nu.Nu:
-    """A plane run written under ``run_id``, a cell run per cell, into ``running``. No bracket.
+    """A plane run written under ``run_id``, a cell run per cell, into the live indexes. No bracket.
 
     For ops and services that write a run and their own record of it in one
     commit. Nothing is written when the plane is missing.
@@ -146,6 +149,7 @@ def add_plane_run(
             ),
         )
         >> _kernel.running.add(run_id)
+        >> _kernel.planes_running[plane_id].runs.add(run_id)
     )
     return nu.IfDo(plane_exists(plane_id), writes)
 
@@ -270,14 +274,25 @@ def plane_stop(run_id: nu.StrArg, grace: nu.FloatArg = STOP_GRACE) -> nu.Nu:
 # --- Unbracketed parts, for ops that take away what runs belong to ----------------------
 
 
-def live_runs_of(match: Callable[[nu.Nu], nu.Nu], body: Callable[[nu.Str], nu.Nu]) -> nu.Nu:
-    """``body(run_id)`` for every live plane run whose plane ``match(plane)`` holds for. No bracket."""
+def off_running(run_id: nu.StrArg) -> nu.Nu:
+    """A plane run out of ``running`` and out of its plane's live runs. No bracket.
 
-    def each(at: nu.Attr) -> nu.Nu:
-        rid = nu.Str(at)
-        return nu.IfDo(match(_kernel.runs[rid].plane.fallback("")), body(rid))
+    The one way out of both, so they never disagree. A plane whose last
+    live run this was leaves ``planes_running``.
+    """
+    plane = _kernel.runs[run_id].plane.fallback("")
+    live = _kernel.planes_running[plane].runs
+    last = nu.IfDo(live.len() == 0, _kernel.planes_running.del_item(plane))
+    mine = nu.IfDo(
+        _kernel.planes_running.contains(plane), live.remove(run_id, missing_ok=True) >> last
+    )
+    return mine >> _kernel.running.remove(run_id, missing_ok=True)
 
-    return nu.ForEachDo(nu.list(_kernel.running), each)
+
+def live_runs_of(plane_id: nu.StrArg, body: Callable[[nu.Str], nu.Nu]) -> nu.Nu:
+    """``body(run_id)`` for every live plane run of the plane. No bracket."""
+    live = nu.list(_kernel.planes_running[plane_id].runs)
+    return nu.ForEachDo(live, lambda rid: body(nu.Str(rid)))
 
 
 def interrupt_cell(cell_id: nu.StrArg) -> nu.Nu:
@@ -288,7 +303,7 @@ def interrupt_cell(cell_id: nu.StrArg) -> nu.Nu:
         return nu.IfDo(same, interrupt(rid, cr))
 
     return live_runs_of(
-        lambda plane: plane == cell_plane(cell_id),
+        cell_plane(cell_id),
         lambda rid: nu.ForEachDo(
             nu.list(_kernel.runs[rid].cells_running), lambda cr: one(rid, nu.Str(cr))
         ),
@@ -335,12 +350,6 @@ def cell_runs(run_id: nu.StrArg, *, live: bool = False) -> nu.List:
     return ids.iter().map(row).to_list()
 
 
-def _live_workers(rid: nu.StrArg) -> nu.List:
-    """The plane run's live workers, oldest first. A walk of ``workers_running``, never its history."""
-    ids = nu.sorted(_kernel.workers_running).iter()
-    return ids.filter(lambda wid: _kernel.workers[nu.Str(wid)].run.fallback("") == rid).to_list()
-
-
 def _run_row(rid: nu.StrArg, *, whole: bool = False) -> nu.Dict:
     """A plane run as a dict. ``workers`` is every worker it had when ``whole``, else its live ones."""
     row = _kernel.runs[rid]
@@ -357,7 +366,7 @@ def _run_row(rid: nu.StrArg, *, whole: bool = False) -> nu.Dict:
         error=row.error.fallback(""),
         cells_running=nu.sorted(row.cells_running),
         latest=row.latest.extract(),
-        workers=nu.sorted(row.workers) if whole else _live_workers(rid),
+        workers=nu.sorted(row.workers if whole else row.workers_running),
     )
 
 
@@ -369,10 +378,8 @@ def runs(plane: nu.StrArg | None = None) -> nu.List:
     A run's cell runs are :func:`cell_runs`; an ended run is read by id with
     :func:`run`.
     """
-    ids = nu.sorted(_kernel.running).iter()
-    if plane is not None:
-        ids = ids.filter(lambda rid: _kernel.runs[nu.Str(rid)].plane.fallback("") == plane)
-    return ids.map(lambda rid: _run_row(nu.Str(rid))).to_list()
+    live = _kernel.running if plane is None else _kernel.planes_running[plane].runs
+    return nu.sorted(live).iter().map(lambda rid: _run_row(nu.Str(rid))).to_list()
 
 
 def run(run_id: nu.StrArg) -> nu.Dict:

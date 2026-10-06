@@ -9,7 +9,6 @@ from .cell import Cell
 from .connection import Connection
 from .kernel import Kernel
 from .plane import Plane
-from .tree import Node
 
 
 __all__ = ["RECENTS_CAP", "Space", "SpaceInfo", "SpaceSettings", "SpaceState"]
@@ -59,22 +58,22 @@ class SpaceSettings(nu.Shape):
 
 
 class Space(nu.Shape):
-    """Planes, their cells, the tree between them, the kernel's records, device and space state.
+    """Planes, their cells, the top level, the kernel's records, device and space state.
 
     ``planes`` and ``cells`` are flat, so a plane or a cell is one lookup
     away by its id alone. A plane lists its cell ids in order, a cell names
-    its plane. Nesting is ``tree``, keyed by plane id plus
-    :data:`~nuspace.shapes.tree.ROOT`.
+    its plane. Nesting is on the planes too: a plane lists its children and
+    names its parent. ``top`` lists the planes with no parent, in order.
 
     One writer per subtree: people, cells and services write ``planes``,
-    ``cells`` and ``tree`` through ops, the ops write intents into ``kernel`` and the
+    ``cells`` and ``top`` through ops, the ops write intents into ``kernel`` and the
     kernel and the backends its effects, the web device writes
     ``connections`` and ``state.recents``, the host writes ``state.info``,
     the settings plane writes ``settings``.
 
     ``pinned`` is the plane ids pinned to the top of the sidebar, in order,
     written through the pin ops. A pin is a shortcut: the plane stays where
-    it is in ``tree``.
+    it hangs.
 
     ``Space`` is also the store's tag. kv refs find their navigator by root
     shape class, so the store is bound under this class. Program state is
@@ -84,7 +83,7 @@ class Space(nu.Shape):
 
     planes = nustd.kv.DictRef.slot(Plane)
     cells = nustd.kv.DictRef.slot(Cell)
-    tree = nustd.kv.DictRef.slot(Node)
+    top = nustd.kv.ListRef.slot(str)
     kernel = nustd.kv.ShapeRef.slot(Kernel)
     connections = nustd.kv.DictRef.slot(Connection)
     state = nustd.kv.ShapeRef.slot(SpaceState)

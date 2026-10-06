@@ -227,8 +227,8 @@ async def test_create_makes_the_named_plane(store):
         "backend": "mp",
     }
     assert [c["name"] for c in await store.read(ops.cell_rows("pj"))] == ["list"]
-    # An unknown name creates the first registered Plane, at the root.
-    assert (by_id["px"]["name"], by_id["px"]["parent"]) == ("X", "root")
+    # An unknown name creates the first registered Plane, at the top level.
+    assert (by_id["px"]["name"], by_id["px"]["parent"]) == ("X", "")
     assert by_id["px"]["props"]["made_by"] == "plain"
     # Each runs on its registered Plane's own backend.
     assert by_id["px"]["props"]["backend"] == "async"
