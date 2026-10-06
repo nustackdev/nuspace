@@ -1,6 +1,7 @@
-// A pane's menu: the same items off the `...` on its bar (a kit dropdown) and
-// off a right-click on its dock chip (a kit context menu, ../main/Dock.tsx).
-// The items are written once against the menu parts (../shell/menu.ts).
+// A pane's menu off the `...` on its bar, a kit dropdown. Its desk items also
+// make the whole of a dock chip's right-click menu (a kit context menu,
+// ../main/Dock.tsx), so they are written once against the menu parts
+// (../shell/menu.ts).
 //
 // On top, the desk: "Close" takes this pane off it, "Close others" leaves
 // only this one, "Close to the right" takes off every pane after it, and
@@ -80,6 +81,25 @@ export function PaneMenu({
 	);
 }
 
+/** The desk items: close this pane, the others, the ones to its right. */
+export function DeskMenuItems({ parts, planeId }: { parts: MenuParts; planeId: string }) {
+	const { Item } = parts;
+	const routes = useRoutes();
+	const at = routes.indexOf(planeId);
+	const others = routes.filter((id) => id !== planeId);
+	const right = at < 0 ? [] : routes.slice(at + 1);
+	if (others.length === 0) return null;
+	return (
+		<>
+			<Item onSelect={() => closePane(planeId)}>Close</Item>
+			<Item onSelect={() => closePanes(others)}>Close others</Item>
+			<Item disabled={right.length === 0} onSelect={() => closePanes(right)}>
+				Close to the right
+			</Item>
+		</>
+	);
+}
+
 /** The menu's items, rendered with whichever parts the trigger needs. */
 export function PaneMenuItems({
 	parts,
@@ -89,25 +109,14 @@ export function PaneMenuItems({
 	onDelete,
 }: PaneMenuProps & { parts: MenuParts }) {
 	const { Item, Separator, Shortcut } = parts;
-	const routes = useRoutes();
+	const many = useRoutes().length > 1;
 	const pin = usePlanePin(planeId);
-	const at = routes.indexOf(planeId);
-	const others = routes.filter((id) => id !== planeId);
-	const right = at < 0 ? [] : routes.slice(at + 1);
 	return (
 		<>
-			{others.length > 0 ? (
-				<>
-					<Item onSelect={() => closePane(planeId)}>Close</Item>
-					<Item onSelect={() => closePanes(others)}>Close others</Item>
-					<Item disabled={right.length === 0} onSelect={() => closePanes(right)}>
-						Close to the right
-					</Item>
-				</>
-			) : null}
+			<DeskMenuItems parts={parts} planeId={planeId} />
 			{meta ? (
 				<>
-					{others.length > 0 ? <Separator /> : null}
+					{many ? <Separator /> : null}
 					<Item onSelect={() => openInNewTab(planeId)}>Open in new tab</Item>
 					<Item onSelect={() => openAddPlane({ parent: planeId, pane: planeId })}>
 						Add plane inside

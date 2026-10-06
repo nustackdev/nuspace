@@ -31,14 +31,18 @@ export const dockTrack = "relative min-w-0 flex-1 select-none overflow-hidden";
 /**
  * One pane's chip, placed and sized inline as its share of the desk, a
  * hairline between chips. On screen: primary; off it: muted, and hover brings
- * it up a tier. Dimmed while it is being dragged.
+ * it up a tier. Every chip washes on hover, on screen or not. A chip under the
+ * window never gets the pointer (the window does), so the dock passes
+ * `hovered` for it instead. Dimmed while it is being dragged.
  */
-export function dockChip(onScreen: boolean, dragging: boolean): string {
+export function dockChip(onScreen: boolean, dragging: boolean, hovered: boolean): string {
 	return cn(
 		"absolute inset-y-0 flex min-w-0 items-center overflow-hidden",
 		"border-l border-border-default first:border-l-0",
-		"transition-colors duration-fast ease-out",
-		onScreen ? "text-text-primary" : "text-text-muted hover:bg-doc-hover hover:text-text-secondary",
+		"transition-colors duration-fast ease-out hover:bg-doc-hover",
+		onScreen ? "text-text-primary" : "text-text-muted hover:text-text-secondary",
+		hovered && "bg-doc-hover",
+		hovered && !onScreen && "text-text-secondary",
 		dragging && "opacity-50",
 	);
 }

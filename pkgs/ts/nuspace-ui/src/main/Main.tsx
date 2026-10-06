@@ -210,16 +210,7 @@ export function Main({ path }: NodeProps) {
 					</Fragment>
 				))}
 			</div>
-			{many ? (
-				<Dock
-					routes={routes}
-					planes={planes}
-					absent={absent}
-					stripRef={stripRef}
-					onMeta={onMeta}
-					deleteOf={deleteOf}
-				/>
-			) : null}
+			{many ? <Dock routes={routes} planes={planes} absent={absent} stripRef={stripRef} /> : null}
 		</div>
 	);
 }

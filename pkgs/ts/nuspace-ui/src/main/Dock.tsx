@@ -17,8 +17,9 @@
 // A chip carries no buttons, so it works the same at any width:
 //   click                 focus its pane and scroll it into view
 //   drag along the dock   move the pane; drop on a pane's bar works too
-//   right-click           the pane's menu at the pointer, the same items as
-//                         the `...` on its bar (../pane/PaneMenu.tsx)
+//   right-click           close it, the others, or the ones to its right, at
+//                         the pointer; the plane's own settings stay on the
+//                         `...` on its bar (../pane/PaneMenu.tsx)
 //
 // The window's bottom third is the thumb, an 8px fill along its edge: it drags the desk, the way a
 // scrollbar's thumb does, and a wheel or a trackpad swipe anywhere over the
@@ -52,7 +53,7 @@ import {
 import { PlaneIcon } from "../icon/PlaneIcon";
 import { parseIcon } from "../icon/parse";
 import { paneTitle } from "../pane/Pane";
-import { PaneMenuItems } from "../pane/PaneMenu";
+import { DeskMenuItems } from "../pane/PaneMenu";
 import type { AbsentReason, ActivePlane } from "../plane/types";
 import { contextParts } from "../shell/menu";
 import { pinDropIndex } from "../sidebar/pin";
@@ -174,8 +175,6 @@ export function Dock({
 	planes,
 	absent,
 	stripRef,
-	onMeta,
-	deleteOf,
 }: {
 	routes: string[];
 	planes: Record<string, ActivePlane>;
@@ -183,12 +182,11 @@ export function Dock({
 	absent: Record<string, AbsentReason>;
 	/** The desk, to measure and to scroll. */
 	stripRef: React.RefObject<HTMLDivElement | null>;
-	onMeta: (planeId: string, patch: Record<string, unknown>) => void;
-	/** A plane's delete, undefined for one that cannot be deleted. */
-	deleteOf: (planeId: string) => (() => void) | undefined;
 }) {
 	const geometry = useDeskGeometry(stripRef, routes.join("+"));
 	const [dragId, setDragId] = useState<string | null>(null);
+	// The chip under the pointer while it is over the window, which covers it.
+	const [hoverId, setHoverId] = useState<string | null>(null);
 	const [target, setTarget] = useState<{ id: string; edge: PaneEdge } | null>(null);
 
 	const navRef = useRef<HTMLElement | null>(null);
@@ -295,7 +293,7 @@ export function Dock({
 								{/* biome-ignore lint/a11y/noStaticElementInteractions: dragging is a mouse shortcut; the chip's button carries the keyboard */}
 								<div
 									data-chip={id}
-									className={dockChip(chip.onScreen, dragId === id)}
+									className={dockChip(chip.onScreen, dragId === id, hoverId === id)}
 									style={{ left: `${chip.left}%`, width: `${chip.width}%` }}
 									draggable
 									onDragStart={(e) => {
@@ -338,13 +336,7 @@ export function Dock({
 								</div>
 							</ContextMenuTrigger>
 							<ContextMenuContent className={paneMenu}>
-								<PaneMenuItems
-									parts={contextParts}
-									planeId={id}
-									meta={plane?.meta ?? null}
-									onChange={(patch) => onMeta(id, patch)}
-									onDelete={deleteOf(id)}
-								/>
+								<DeskMenuItems parts={contextParts} planeId={id} />
 							</ContextMenuContent>
 						</ContextMenu>
 					);
@@ -353,6 +345,11 @@ export function Dock({
 					aria-hidden="true"
 					className={dockWindow}
 					onPointerDown={onWindowDown}
+					onPointerMove={(e) => {
+						const id = chipAt(e.clientX, e.clientY)?.dataset.chip ?? null;
+						if (id !== hoverId) setHoverId(id);
+					}}
+					onPointerLeave={() => setHoverId(null)}
 					onContextMenu={onWindowMenu}
 					style={{
 						left: `calc(${layout.window.left}% + ${DOCK_WINDOW_GAP}px)`,
