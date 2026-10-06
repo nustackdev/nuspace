@@ -60,6 +60,8 @@ export type TreeRow = {
 export type Registered = {
 	name: string;
 	label: string;
+	/** The picker heading it sits under, "" for none. */
+	group: string;
 	/** A lucide icon name, "" for the default. Any spelling ../icon/parse.ts reads. */
 	icon: string;
 	description: string;
@@ -177,6 +179,7 @@ export function coerceRegistered(raw: unknown): Registered[] {
 		out.push({
 			name,
 			label: String(r.label ?? name),
+			group: String(r.group ?? ""),
 			icon: String(r.icon ?? ""),
 			description: String(r.description ?? ""),
 		});

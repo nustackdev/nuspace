@@ -12,6 +12,7 @@ separately here.
 
 ## Unreleased
 
+- The Add plane popup is grouped and searchable, like the / menu
 - Cell controls sit in thin gutters either side, showing per row
 - Tab from a selected cell moves on to what comes after it
 - New cells hand the keyboard to what they draw, like a text editor or a lens

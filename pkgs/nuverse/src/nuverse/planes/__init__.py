@@ -15,9 +15,9 @@ __all__ = ["PLANES"]
 #: Every Plane to register, in picker order. Plain first.
 PLANES = (
     plain.PLANE,
+    cc_chat.PLANE,
     jobs.PLANE,
     runs.PLANE,
     workers.PLANE,
     planes.PLANE,
-    cc_chat.PLANE,
 )

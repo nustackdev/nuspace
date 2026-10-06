@@ -92,5 +92,6 @@ PLANE = Plane(
     description="The workers the backends hold, redrawn every second.",
     meta={"editable": True, "full_width": False},
     cells=(("counts", COUNTS), ("workers", TABLE)),
+    group="System",
     backend="async",
 )

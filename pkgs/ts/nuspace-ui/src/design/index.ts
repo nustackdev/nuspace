@@ -17,6 +17,7 @@
 //   document.ts        class recipes for the document surface, title included
 //   rail.ts            the sidebar rail
 //   icon.ts            plane icons: the glyph at each size, and the picker
+//   menu.ts            the registry menus' rows: the / menu, Add plane
 //   resize.ts          the drag handle every resizable edge shares
 //   cell-status.ts  the six-state vocabulary
 //
@@ -33,6 +34,7 @@
 export * from "./cell-status";
 export * from "./document";
 export * from "./icon";
+export * from "./menu";
 export * from "./pane";
 export * from "./rail";
 export * from "./resize";

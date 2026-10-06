@@ -208,8 +208,8 @@ async def test_sidebar_pins_are_drawn_planes_in_order(store):
 
 def test_registered_entries():
     assert registered_entries(PLANES) == [
-        {"name": "plain", "label": "Plain", "icon": "", "description": ""},
-        {"name": "jobs", "label": "Jobs", "icon": "list", "description": ""},
+        {"name": "plain", "label": "Plain", "group": "", "icon": "", "description": ""},
+        {"name": "jobs", "label": "Jobs", "group": "", "icon": "list", "description": ""},
     ]
 
 

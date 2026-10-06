@@ -21,8 +21,9 @@ globalThis.ResizeObserver ??= class {
 Element.prototype.scrollIntoView ??= () => {};
 
 const registered = [
-	{ name: "plain", label: "Plain", icon: "", description: "" },
-	{ name: "jobs", label: "Jobs", icon: "", description: "" },
+	{ name: "plain", label: "Plain", group: "Basics", icon: "", description: "" },
+	{ name: "jobs", label: "Jobs", group: "System", icon: "", description: "" },
+	{ name: "runs", label: "Runs", group: "System", icon: "", description: "Live plane runs" },
 ];
 
 let host: HTMLDivElement;
@@ -73,5 +74,28 @@ describe("AddPlane", () => {
 			"plane.create",
 			expect.objectContaining({ made_by: "plain", title: "Untitled" }),
 		);
+	});
+
+	it("groups the Planes under their headings, in registry order", () => {
+		act(() => openAddPlane({ parent: ROOT_ID }));
+		const headings = [...document.querySelectorAll("[cmdk-group-heading]")].map(
+			(h) => h.textContent,
+		);
+		expect(headings).toEqual(["Basics", "System"]);
+	});
+
+	it("keeps what the query matches, best first", () => {
+		act(() => openAddPlane({ parent: ROOT_ID }));
+		const input = document.querySelector<HTMLInputElement>("[cmdk-input]");
+		if (!input) throw new Error("no input");
+		act(() => {
+			const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+			set?.call(input, "run");
+			input.dispatchEvent(new Event("input", { bubbles: true }));
+		});
+		const items = [...document.querySelectorAll('[cmdk-item=""]')].map((i) =>
+			i.getAttribute("data-value"),
+		);
+		expect(items).toEqual(["runs"]);
 	});
 });

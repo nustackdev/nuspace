@@ -339,5 +339,6 @@ PLANE = Plane(
     description="Headless planes that run code: make them, boot them, restart them.",
     meta={"editable": True, "full_width": False},
     cells=(("jobs", TABLE), ("new", NEW), ("job", DETAIL)),
+    group="System",
     backend="async",
 )

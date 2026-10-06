@@ -9,25 +9,11 @@
 // and reports clicks, and the ghost forwards arrow/enter/escape. It wears
 // the kit's command palette recipes, so it reads as one without being one.
 
-import { EmptyState, Popover, PopoverAnchor, PopoverContent, Shortcut } from "@nustackdev/ui-kit";
+import { EmptyState, Popover, PopoverAnchor, PopoverContent } from "@nustackdev/ui-kit";
 import { useEffect, useRef } from "react";
-import {
-	docSlashDescription,
-	docSlashEnter,
-	docSlashFooter,
-	docSlashHeading,
-	docSlashHit,
-	docSlashItem,
-	docSlashKey,
-	docSlashLabel,
-	docSlashList,
-	docSlashMenu,
-	docSlashText,
-	docSlashTile,
-} from "../design";
-import { PlaneIcon } from "../icon/PlaneIcon";
-import { parseIcon } from "../icon/parse";
-import { slashMatch, slashSections } from "./slash";
+import { docSlashList, docSlashMenu, menuHeading, menuItem } from "../design";
+import { MenuEntry, MenuKeys } from "../menu/Entry";
+import { menuSections } from "../menu/rank";
 import type { SlashAnchor } from "./state";
 import type { SlashSnippet } from "./types";
 
@@ -58,7 +44,7 @@ export function SlashMenu({
 	onClose: () => void;
 }) {
 	const ref = useRef<HTMLDivElement | null>(null);
-	const sections = slashSections(query, snippets);
+	const sections = menuSections(query, snippets);
 
 	// Keep the highlighted row visible while filtering narrows the list.
 	useEffect(() => {
@@ -99,7 +85,7 @@ export function SlashMenu({
 					) : null}
 					{sections.map((section) => (
 						<div key={section.heading ?? ""}>
-							{section.heading ? <div className={docSlashHeading}>{section.heading}</div> : null}
+							{section.heading ? <div className={menuHeading}>{section.heading}</div> : null}
 							{section.items.map((item) => {
 								const i = at++;
 								const lit = i === index;
@@ -116,22 +102,14 @@ export function SlashMenu({
 										onMouseMove={() => {
 											if (!lit) onMove(i - index);
 										}}
-										className={`group ${docSlashItem}`}
+										className={menuItem}
 									>
-										<span className={docSlashTile}>
-											<PlaneIcon icon={parseIcon(item.icon) ?? SNIPPET_ICON} />
-										</span>
-										<span className={docSlashText}>
-											<Label label={item.label} query={query} />
-											{item.description ? (
-												<span className={docSlashDescription}>{item.description}</span>
-											) : null}
-										</span>
-										<Shortcut
-											keys={["enter"]}
-											variant="ghost"
-											size="sm"
-											className={docSlashEnter}
+										<MenuEntry
+											icon={item.icon}
+											fallback={SNIPPET_ICON}
+											label={item.label}
+											description={item.description}
+											query={query}
 										/>
 									</button>
 								);
@@ -139,38 +117,8 @@ export function SlashMenu({
 						</div>
 					))}
 				</div>
-				{sections.length === 0 ? null : (
-					<div className={docSlashFooter}>
-						<span className={docSlashKey}>
-							<Shortcut keys={["up"]} size="sm" />
-							<Shortcut keys={["down"]} size="sm" />
-							Navigate
-						</span>
-						<span className={docSlashKey}>
-							<Shortcut keys={["enter"]} size="sm" />
-							Insert
-						</span>
-						<span className={docSlashKey}>
-							<Shortcut keys={["esc"]} size="sm" />
-							Close
-						</span>
-					</div>
-				)}
+				{sections.length === 0 ? null : <MenuKeys action="Insert" />}
 			</PopoverContent>
 		</Popover>
-	);
-}
-
-/** The label, the part the query matched lit. */
-function Label({ label, query }: { label: string; query: string }) {
-	const hit = slashMatch(query, label);
-	if (!hit) return <span className={docSlashLabel}>{label}</span>;
-	const [from, to] = hit;
-	return (
-		<span className={docSlashLabel}>
-			{label.slice(0, from)}
-			<mark className={docSlashHit}>{label.slice(from, to)}</mark>
-			{label.slice(to)}
-		</span>
 	);
 }

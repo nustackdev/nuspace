@@ -88,5 +88,6 @@ PLANE = Plane(
     description="Talk to Claude Code. It answers by writing Nu and drawing Cells.",
     meta={"editable": False, "full_width": False},
     cells=(("input", INPUT),),
+    group="Agents",
     backend="async",
 )

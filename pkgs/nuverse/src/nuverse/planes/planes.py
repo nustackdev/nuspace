@@ -102,5 +102,6 @@ PLANE = Plane(
     description="Every plane by what made it, redrawn every second.",
     meta={"editable": True, "full_width": False},
     cells=(("made_by", MADE_BY), ("planes", TABLE)),
+    group="System",
     backend="async",
 )

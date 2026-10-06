@@ -1,8 +1,8 @@
-// The Add plane popup: every registered Plane, Plain first, and picking one
-// makes it.
+// The Add plane popup: every registered Plane, grouped and searchable like the
+// / menu (../menu/), and picking one makes it.
 //
-// A kit `CommandPalette`, which brings the dialog, the filter, the arrows,
-// Enter and Escape. Where the new Plane hangs and which pane it opens in is
+// A kit `CommandPalette`, which brings the dialog, the arrows, Enter and
+// Escape; what it lists and in what order is ../menu/rank.ts. Where the new Plane hangs and which pane it opens in is
 // the request (./add.ts); what it is made from is the row picked.
 //
 // The id is minted here, so the new Plane is routed to at once and the pane
@@ -11,16 +11,19 @@
 
 import {
 	CommandEmpty,
+	CommandGroup,
 	CommandInput,
 	CommandItem,
 	CommandList,
 	CommandPalette,
 } from "@nustackdev/ui-kit";
+import { useState } from "react";
 import { mintId } from "../core/ids";
 import { focusPane, replacePane } from "../core/router";
-import { addPlaneDescription, addPlaneItem, addPlaneLabel, addPlaneText } from "../design";
-import { PlaneIcon } from "../icon/PlaneIcon";
-import { planeIcon } from "../icon/parse";
+import { menuItem } from "../design";
+import { DEFAULT_ICON } from "../icon/parse";
+import { MenuEntry, MenuKeys } from "../menu/Entry";
+import { menuSections } from "../menu/rank";
 import { closeAddPlane, useAddRequest } from "./add";
 import type { Notify } from "./ops";
 import { type Registered, ROOT_ID } from "./types";
@@ -39,10 +42,13 @@ export function AddPlane({
 	reveal: (key: string) => void;
 }) {
 	const request = useAddRequest();
+	const [query, setQuery] = useState("");
+	const sections = menuSections(query, registered);
 
 	const pick = (entry: Registered) => {
 		const req = request;
 		closeAddPlane();
+		setQuery("");
 		if (!req) return;
 		const planeId = mintId("p");
 		notify("plane.create", {
@@ -60,32 +66,39 @@ export function AddPlane({
 		<CommandPalette
 			open={request !== null}
 			onOpenChange={(open) => {
-				if (!open) closeAddPlane();
+				if (open) return;
+				closeAddPlane();
+				setQuery("");
 			}}
 			label="Add plane"
+			// Ranked and grouped here (../menu/rank.ts), like the / menu.
+			shouldFilter={false}
 		>
-			<CommandInput placeholder="Add plane" />
-			<CommandList>
-				<CommandEmpty>Nothing matches</CommandEmpty>
-				{registered.map((entry) => {
-					return (
-						<CommandItem
-							key={entry.name}
-							value={`${entry.label} ${entry.name}`}
-							onSelect={() => pick(entry)}
-							className={addPlaneItem}
-						>
-							<PlaneIcon icon={planeIcon(entry.icon)} />
-							<span className={addPlaneText}>
-								<span className={addPlaneLabel}>{entry.label}</span>
-								{entry.description ? (
-									<span className={addPlaneDescription}>{entry.description}</span>
-								) : null}
-							</span>
-						</CommandItem>
-					);
-				})}
+			<CommandInput placeholder="Add plane" value={query} onValueChange={setQuery} />
+			<CommandList className="max-h-[26rem]">
+				<CommandEmpty>Nothing matches “{query.trim()}”</CommandEmpty>
+				{sections.map((section) => (
+					<CommandGroup key={section.heading ?? ""} heading={section.heading ?? undefined}>
+						{section.items.map((entry) => (
+							<CommandItem
+								key={entry.name}
+								value={entry.name}
+								onSelect={() => pick(entry)}
+								className={menuItem}
+							>
+								<MenuEntry
+									icon={entry.icon}
+									fallback={DEFAULT_ICON}
+									label={entry.label}
+									description={entry.description}
+									query={query}
+								/>
+							</CommandItem>
+						))}
+					</CommandGroup>
+				))}
 			</CommandList>
+			{sections.length === 0 ? null : <MenuKeys action="Create" />}
 		</CommandPalette>
 	);
 }

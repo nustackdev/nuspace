@@ -45,11 +45,11 @@ def test_discovery_finds_nuverse():
     assert ext == replace(nuverse.extension(), name="nuverse")
     assert [p.name for p in ext.planes] == [
         "plain",
+        "cc_chat",
         "jobs",
         "runs",
         "workers",
         "planes",
-        "cc_chat",
     ]
     assert [s.name for s in ext.snippets] == [
         "text",
@@ -72,11 +72,11 @@ def test_open_space_registers_nuverse_by_default():
 def test_planes_are_well_formed():
     assert planes.PLANES == (
         planes.plain.PLANE,
+        planes.cc_chat.PLANE,
         planes.jobs.PLANE,
         planes.runs.PLANE,
         planes.workers.PLANE,
         planes.planes.PLANE,
-        planes.cc_chat.PLANE,
     )
     plain = planes.plain.PLANE
     assert (plain.label, plain.cells, plain.children) == ("Plain", (), ())

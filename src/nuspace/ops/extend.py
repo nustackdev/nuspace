@@ -45,6 +45,9 @@ class Plane:
         meta: What a new plane's meta starts as.
         cells: ``(name, source)`` per cell, in order.
         children: Planes seeded under it, the same shape, in order.
+        group: The picker heading it sits under, ``""`` for none. Groups show
+            in the order their first Plane registers; the ungrouped come
+            last.
         backend: Keyword, required. The backend a plane created from it
             runs on, by registered name. Picked by the kind of work its cells
             do: many awaiting tasks run well on ``async``, sync code on ``mp``.
@@ -60,6 +63,7 @@ class Plane:
     meta: dict[str, Any] = field(default_factory=dict)
     cells: tuple[tuple[str, str], ...] = ()
     children: tuple[Plane, ...] = ()
+    group: str = ""
     backend: str = field(kw_only=True)
 
     def __post_init__(self) -> None:

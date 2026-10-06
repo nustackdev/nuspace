@@ -3,8 +3,8 @@
 // opened it forwards the keys here.
 
 import { useCallback, useMemo } from "react";
+import { menuItems as listed } from "../menu/rank";
 import type { PlaneModel } from "./model";
-import { slashItems as listed } from "./slash";
 import type { SlashSnippet } from "./types";
 
 export function useSlash(

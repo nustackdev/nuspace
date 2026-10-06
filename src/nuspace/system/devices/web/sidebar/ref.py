@@ -32,9 +32,15 @@ __all__ = ["SidebarRef", "registered_entries", "searchable_entries"]
 
 
 def registered_entries(planes: Iterable[Plane]) -> list[dict]:
-    """The popup's entries, ``{name, label, icon, description}`` in registry order."""
+    """The popup's entries, ``{name, label, group, icon, description}`` in registry order."""
     return [
-        {"name": p.name, "label": p.label, "icon": p.icon, "description": p.description}
+        {
+            "name": p.name,
+            "label": p.label,
+            "group": p.group,
+            "icon": p.icon,
+            "description": p.description,
+        }
         for p in planes
     ]
 

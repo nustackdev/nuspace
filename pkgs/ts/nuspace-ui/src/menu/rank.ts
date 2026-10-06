@@ -1,23 +1,25 @@
-// What the slash menu lists for a query, and in what order.
+// What a registry menu lists for a query, and in what order: the `/` menu's
+// snippets (../plane/SlashMenu.tsx) and the Add plane popup's Planes
+// (../sidebar/AddPlane.tsx) alike.
 //
-// Pure: the menu (./SlashMenu.tsx) draws what this returns and the keys
-// (./useSlash.ts) step through the same flat list, so a heading is never a
-// stop for the arrows.
+// Pure: a menu draws what this returns and steps its keys through the same
+// flat list, so a heading is never a stop for the arrows.
 //
 // With nothing typed, the rows are the registry: grouped, the groups in the
-// order their first snippet registered, the ungrouped last. With a query,
+// order their first entry registered, the ungrouped last. With a query,
 // only the matches stay, best first: a group ranks by its best row, and rows
 // rank by where the query hit, the label's start beating a word's start
 // beating anywhere in it, then the name, then a word's start in the group or
 // the description.
 
-import type { SlashSnippet } from "./types";
+/** What a registry menu ranks: a registered snippet or Plane, as shipped. */
+export type MenuEntry = { name: string; label: string; group?: string; description?: string };
 
 /** The heading over the ungrouped rows, when any other row has a group. */
 export const OTHER = "Other";
 
 /** Where the query hit, lower is better. Null: it missed. */
-export function slashScore(query: string, item: SlashSnippet): number | null {
+export function menuScore(query: string, item: MenuEntry): number | null {
 	const q = query.trim().toLowerCase();
 	if (!q) return 0;
 	const label = item.label.toLowerCase();
@@ -39,17 +41,17 @@ function startsWord(text: string, q: string): boolean {
 }
 
 /** One heading and its rows. `heading` is null when nothing is grouped. */
-export type SlashSection = { heading: string | null; items: SlashSnippet[] };
+export type MenuSection<T extends MenuEntry = MenuEntry> = { heading: string | null; items: T[] };
 
 /** The menu's sections for `query`, in order. Empty when nothing matches. */
-export function slashSections(query: string, items: SlashSnippet[]): SlashSection[] {
+export function menuSections<T extends MenuEntry>(query: string, items: T[]): MenuSection<T>[] {
 	const grouped = items.some((i) => i.group);
 	const sections = new Map<
 		string,
-		{ at: number; best: number; rows: { item: SlashSnippet; score: number; at: number }[] }
+		{ at: number; best: number; rows: { item: T; score: number; at: number }[] }
 	>();
 	items.forEach((item, at) => {
-		const score = slashScore(query, item);
+		const score = menuScore(query, item);
 		if (score === null) return;
 		const key = item.group ?? "";
 		let s = sections.get(key);
@@ -70,12 +72,12 @@ export function slashSections(query: string, items: SlashSnippet[]): SlashSectio
 }
 
 /** The rows in menu order, flat: what the arrows step through. */
-export function slashItems(query: string, items: SlashSnippet[]): SlashSnippet[] {
-	return slashSections(query, items).flatMap((s) => s.items);
+export function menuItems<T extends MenuEntry>(query: string, items: T[]): T[] {
+	return menuSections(query, items).flatMap((s) => s.items);
 }
 
 /** Where `query` sits in `label`, to light it: a word's start first, else the first hit. */
-export function slashMatch(query: string, label: string): [number, number] | null {
+export function menuMatch(query: string, label: string): [number, number] | null {
 	const q = query.trim().toLowerCase();
 	if (!q) return null;
 	const l = label.toLowerCase();

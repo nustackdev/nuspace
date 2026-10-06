@@ -1,8 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { OTHER, slashItems, slashMatch, slashSections } from "./slash";
-import type { SlashSnippet } from "./types";
+import { type MenuEntry, menuItems, menuMatch, menuSections, OTHER } from "./rank";
 
-const SNIPPETS: SlashSnippet[] = [
+const SNIPPETS: MenuEntry[] = [
 	{ name: "text", label: "Text", group: "Content", description: "Markdown a person edits." },
 	{ name: "program", label: "Program", group: "Code" },
 	{ name: "ticker", label: "Ticker", group: "Examples" },
@@ -11,17 +10,17 @@ const SNIPPETS: SlashSnippet[] = [
 	{ name: "loose", label: "Loose" },
 ];
 
-const names = (items: SlashSnippet[]) => items.map((i) => i.name);
+const names = (items: MenuEntry[]) => items.map((i) => i.name);
 
-describe("slashSections", () => {
+describe("menuSections", () => {
 	it("keeps registry order, groups by first appearance, ungrouped last", () => {
-		const got = slashSections("", SNIPPETS);
+		const got = menuSections("", SNIPPETS);
 		expect(got.map((s) => s.heading)).toEqual(["Content", "Code", "Examples", "Debugging", OTHER]);
 		expect(names(got[3].items)).toEqual(["lens", "plane_lens"]);
 	});
 
 	it("draws no headings when nothing is grouped", () => {
-		const got = slashSections("", [
+		const got = menuSections("", [
 			{ name: "a", label: "A" },
 			{ name: "b", label: "B" },
 		]);
@@ -37,31 +36,31 @@ describe("slashSections", () => {
 	});
 
 	it("puts the best match first, its group with it", () => {
-		expect(names(slashItems("lens", SNIPPETS))).toEqual(["lens", "plane_lens"]);
-		expect(names(slashItems("pl", SNIPPETS))).toEqual(["plane_lens"]);
+		expect(names(menuItems("lens", SNIPPETS))).toEqual(["lens", "plane_lens"]);
+		expect(names(menuItems("pl", SNIPPETS))).toEqual(["plane_lens"]);
 		// A tie keeps the registry's order; a description's word comes last.
-		expect(names(slashItems("p", SNIPPETS))).toEqual(["program", "plane_lens", "text"]);
+		expect(names(menuItems("p", SNIPPETS))).toEqual(["program", "plane_lens", "text"]);
 		// A word's start beats a hit inside a word.
-		expect(names(slashItems("le", SNIPPETS))).toEqual(["lens", "plane_lens"]);
+		expect(names(menuItems("le", SNIPPETS))).toEqual(["lens", "plane_lens"]);
 	});
 
 	it("matches the group and the description, after the label", () => {
-		expect(names(slashItems("debug", SNIPPETS))).toEqual(["lens", "plane_lens"]);
-		expect(names(slashItems("markdown", SNIPPETS))).toEqual(["text"]);
-		expect(names(slashItems("t", SNIPPETS))[0]).toBe("text");
+		expect(names(menuItems("debug", SNIPPETS))).toEqual(["lens", "plane_lens"]);
+		expect(names(menuItems("markdown", SNIPPETS))).toEqual(["text"]);
+		expect(names(menuItems("t", SNIPPETS))[0]).toBe("text");
 	});
 
 	it("drops what misses", () => {
-		expect(slashSections("zzz", SNIPPETS)).toEqual([]);
+		expect(menuSections("zzz", SNIPPETS)).toEqual([]);
 	});
 });
 
-describe("slashMatch", () => {
+describe("menuMatch", () => {
 	it("lights a word's start before an earlier hit inside a word", () => {
-		expect(slashMatch("le", "Plane lens")).toEqual([6, 8]);
-		expect(slashMatch("pla", "Plane lens")).toEqual([0, 3]);
-		expect(slashMatch("ane", "Plane lens")).toEqual([2, 5]);
-		expect(slashMatch("x", "Plane lens")).toBeNull();
-		expect(slashMatch("", "Plane lens")).toBeNull();
+		expect(menuMatch("le", "Plane lens")).toEqual([6, 8]);
+		expect(menuMatch("pla", "Plane lens")).toEqual([0, 3]);
+		expect(menuMatch("ane", "Plane lens")).toEqual([2, 5]);
+		expect(menuMatch("x", "Plane lens")).toBeNull();
+		expect(menuMatch("", "Plane lens")).toBeNull();
 	});
 });
