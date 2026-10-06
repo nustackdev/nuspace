@@ -17,7 +17,7 @@ from nuspace.system.devices.web.env import session_env
 from nuspace.system.kernel.body import Rewrites
 from nustd.ui.core import OP_NOTIFY, Frame, WsSession
 from nustd.ui.core.session import Session
-from nuverse.snippets import SNIPPETS, cell_lens, plane_lens, prose
+from nuverse.snippets import SNIPPETS, cell_lens, plane_lens, prose, table
 
 
 if TYPE_CHECKING:
@@ -259,3 +259,56 @@ async def test_insert_snippet_hands_the_new_cell_to_its_ops(ctx):
     assert first != second
     assert await _read(ctx, prose.text_of(first)) == "Basil likes sun"
     assert await _read(ctx, prose.text_of(second)) == "Basil likes sun"
+
+
+async def _settles(ctx: nu.Context, term: nu.Nu, check: Callable[[object], bool]) -> object:
+    """``term`` read until ``check`` holds for it, then that value."""
+    deadline = asyncio.get_running_loop().time() + 3.0
+    while not check(value := await _read(ctx, term)):
+        assert asyncio.get_running_loop().time() < deadline, f"timed out on {value!r}"
+        await asyncio.sleep(0.01)
+    return value
+
+
+async def test_table_seeds_once_and_stores_what_the_browser_asks(ctx):
+    await nu.arun(
+        ops.add_plane("p", backend="async") >> ops.insert_snippet("p", table.SNIPPET, cell_id="c"),
+        ctx,
+    )
+    sheet = table.snippet.Sheet
+    order = ops.cell_state("c", nu.ToList(sheet.order))
+    name = ops.cell_state("c", sheet.rows["r2"].cells["name"])
+    browser = _Browser()
+    task = await _running(ctx, "p", "c", browser)
+    try:
+        await _until(lambda: any(f.ref[-1] == "table" for f in browser.frames))
+        assert await _read(ctx, order) == ["r1", "r2", "r3"]
+
+        # An edit is stored as asked and shipped back.
+        browser.notify(
+            browser.path("table"),
+            {"event": "edit", "key": "r2", "row_index": 1, "column": "name", "value": "Basil"},
+        )
+        await _settles(ctx, name, lambda v: v == "Basil")
+        await _until(lambda: "Basil" in str(browser.last("table")))
+
+        # A row added lands where asked under a fresh key; a delete takes it out again.
+        browser.notify(browser.path("table"), {"event": "add", "index": 0})
+        added = (await _settles(ctx, order, lambda v: len(v) == 4))[0]
+        assert added not in ("r1", "r2", "r3")
+        browser.notify(
+            browser.path("table"), {"event": "delete", "keys": [added], "row_indexes": [0]}
+        )
+        await _settles(ctx, order, lambda v: v == ["r1", "r2", "r3"])
+    finally:
+        task.cancel()
+
+    # A second run finds it seeded and leaves the rows alone.
+    browser = _Browser()
+    task = await _running(ctx, "p", "c", browser)
+    try:
+        await _until(lambda: any(f.ref[-1] == "table" for f in browser.frames))
+        assert await _read(ctx, name) == "Basil"
+        assert await _read(ctx, order) == ["r1", "r2", "r3"]
+    finally:
+        task.cancel()

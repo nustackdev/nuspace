@@ -12,6 +12,7 @@ separately here.
 
 ## Unreleased
 
+- New Table snippet: an editable data table kept in the cell, live across tabs
 - Dock chips highlight on hover, and their menu only closes panes
 - Open planes sit side by side on a scrolling desk, navigated by a minimap dock
 - New plane is the tree's first row, pinned while the tree scrolls

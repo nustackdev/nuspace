@@ -15,7 +15,7 @@ Each package re-exports its ``SNIPPET`` and its ops. A placeholder's
 
 from __future__ import annotations
 
-from . import cell_lens, code, lens, plane_lens, program, prose, ticker
+from . import cell_lens, code, lens, plane_lens, program, prose, table, ticker
 
 
 __all__ = ["SNIPPETS"]
@@ -24,6 +24,6 @@ __all__ = ["SNIPPETS"]
 #: Every snippet ready to register, in menu order.
 SNIPPETS = tuple(
     module.SNIPPET
-    for module in (prose, program, code, lens, plane_lens, cell_lens, ticker)
+    for module in (prose, table, program, code, lens, plane_lens, cell_lens, ticker)
     if module.SNIPPET is not None
 )

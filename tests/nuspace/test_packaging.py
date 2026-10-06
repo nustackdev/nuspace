@@ -53,6 +53,7 @@ def test_discovery_finds_nuverse():
     ]
     assert [s.name for s in ext.snippets] == [
         "text",
+        "table",
         "program",
         "lens",
         "plane_lens",
@@ -94,6 +95,7 @@ def test_planes_are_well_formed():
 def test_snippets_are_well_formed():
     assert snippets.SNIPPETS == (
         snippets.prose.SNIPPET,
+        snippets.table.SNIPPET,
         snippets.program.SNIPPET,
         snippets.lens.SNIPPET,
         snippets.plane_lens.SNIPPET,
