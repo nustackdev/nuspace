@@ -1,5 +1,5 @@
-// The rail's top bar: collapse and the wordmark. A new plane is the `+` on
-// the tree's own heading (./PlanesHeader.tsx), next to what it makes.
+// The rail's top bar: collapse and the wordmark. A new plane is the tree's
+// first row (./NewPlaneRow.tsx), next to what it makes.
 //
 // No way home up here: home is an ordinary row in the tree.
 

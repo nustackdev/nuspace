@@ -1,6 +1,5 @@
 // The sidebar rail: a header group (top bar, search, the pinned planes), a
-// divider shown only while the body is scrolled, a body (the scrolling tree),
-// a bottom bar.
+// body (the scrolling tree, its sticky New plane row first), a bottom bar.
 //
 // Planes only. Cells are parts of a Plane, not navigable entities, so they
 // never appear here.
@@ -21,9 +20,9 @@
 //
 // ## Where the parts are
 //
-//   Rail.tsx          this: the aside, its strips, the divider, the resize edge
+//   Rail.tsx          this: the aside, its strips, the resize edge
 //   RailHeader.tsx    the top bar: collapse, the wordmark
-//   PlanesHeader.tsx  the tree's sticky heading, and the top-level new plane
+//   NewPlaneRow.tsx   the tree's sticky first row, which makes a top-level plane
 //   SearchTrigger.tsx the search entry under it
 //   SearchPalette.tsx the search popup
 //   PinnedRow.tsx     the pinned planes, the header group's last strip
@@ -44,12 +43,11 @@
 // Every class string and the geometry are in design/rail.ts.
 
 import { Skeleton } from "@nustackdev/ui-kit";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { useSkeleton } from "../core/delay";
 import { useFocusedRoute, useRoutes } from "../core/router";
 import {
 	railAside,
-	railDivider,
 	railIndent,
 	railPinShelf,
 	railResizeHandle,
@@ -59,9 +57,9 @@ import {
 } from "../design";
 import { AddPlane } from "./AddPlane";
 import { useRailCollapsed } from "./collapse";
+import { NewPlaneRow } from "./NewPlaneRow";
 import type { Notify } from "./ops";
 import { PinnedRow } from "./PinnedRow";
-import { PlanesHeader } from "./PlanesHeader";
 import type { Pins } from "./pin";
 import { RailFooter } from "./RailFooter";
 import { RailHeader } from "./RailHeader";
@@ -108,8 +106,6 @@ export function Rail({
 	);
 
 	const reveal = useReveal({ tree, root, routes, selKey, expanded, onToggle });
-	// Whether the tree has scrolled under the header, which shows the divider.
-	const [scrolled, setScrolled] = useState(false);
 
 	return (
 		// Collapsed is hidden, not unmounted: the Add plane popup lives here and
@@ -129,13 +125,8 @@ export function Rail({
 					className={railPinShelf}
 				/>
 			)}
-			{loading ? null : <PlanesHeader />}
-			<hr className={railDivider(scrolled)} />
-			<nav
-				aria-label="Planes"
-				className={railScroll}
-				onScroll={(e) => setScrolled(e.currentTarget.scrollTop > 0)}
-			>
+			<nav aria-label="Planes" className={railScroll}>
+				{loading ? null : <NewPlaneRow />}
 				{loading ? (
 					<RailSkeleton />
 				) : (

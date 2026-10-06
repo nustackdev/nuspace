@@ -86,7 +86,7 @@ export const railResizeHandle = resizeHandle("right");
 /**
  * Top bar. `h-chrome`, like the pane bar and the tab bar, so the tops line up.
  * No rule under it: the search entry and the pins sit right under it, and
- * the header group ends at the divider (`railDivider`). `rail-bar-pad` puts a button's
+ * the header group ends where the body starts (`railScroll`). `rail-bar-pad` puts a button's
  * glyph on the rows' icon edge.
  */
 export const railHeader = "flex h-chrome shrink-0 items-center gap-0.5 px-rail-bar-pad";
@@ -128,44 +128,44 @@ export const railStatus = cn(
 );
 
 /**
- * The hairline between the header group and the body: the rail's own edge
- * token, edge to edge, like the one over the footer. Only while the body is
- * scrolled, when there is tree under the header for it to mark; at the top
- * the spacing alone separates the two, and the line is held transparent so
- * nothing moves when it shows. `rail-top-gap` above it and again below it,
- * as the body's top pad, so it sits centred between the header and the tree,
- * with pins or without.
- */
-export function railDivider(scrolled: boolean): string {
-	return cn(
-		"mt-rail-top-gap shrink-0 border-t transition-colors duration-fast ease-out",
-		scrolled ? "border-rail-edge" : "border-transparent",
-	);
-}
-
-/**
- * The body under the divider, the rail's one scroller: the tree. `rail-inset` keeps a row's fill off both rail edges, and
- * `rail-top-gap` is the step under the divider. It is pad, not a margin, so
- * a focus ring at the top is not clipped.
+ * The body under the header group, the rail's one scroller: the tree, its
+ * sticky New plane row first, which is what marks the edge rows pass under.
+ * `rail-inset` keeps a row's fill off both rail edges. `rail-top-gap` above
+ * and again inside, as pad rather than margin, so a focus ring at the top
+ * is not clipped.
  */
 export const railScroll = cn(
-	"flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden",
+	"mt-rail-top-gap flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden",
 	"px-rail-inset pt-rail-top-gap pb-1",
 );
 
 /**
- * The heading over the tree, with the top-level `+` on its right. Outside
- * the body, so it stays put however far the tree scrolls, and the divider
- * under it marks where the rows go under. Inset like the rows, its label on
- * their text and its button on their `...` column.
+ * New plane, at the top level: the tree's first row, shaped and spaced like
+ * the rows under it, so it reads as the place the next plane goes. Sticky at
+ * the top of the body, on the rail's own fill, so it stays at hand however
+ * far the tree scrolls. The body pads its top (`railScroll`), and the strip
+ * above the row covers that pad, so no row shows over it while they pass
+ * under. Its own text one tier back, the `+` in the icon lane, the shortcut
+ * on the actions' edge while it is hovered.
  */
-export const railSection = cn(
-	"mx-rail-inset mt-rail-top-gap flex h-rail-row shrink-0 items-center",
-	"pl-rail-row-pad pr-rail-row-pad-end",
+export const railNewPlaneBar = cn(
+	"sticky top-0 z-10 shrink-0 bg-bg-surface pb-rail-row-gap",
+	"before:absolute before:inset-x-0 before:bottom-full before:h-rail-top-gap before:bg-bg-surface",
 );
 
-export const railSectionLabel =
-	"min-w-0 flex-1 select-none truncate text-xs font-medium text-text-muted";
+export const railNewPlane = cn(railRow(false, true), "w-full cursor-pointer text-left");
+
+export const railNewPlaneIcon = "size-4 shrink-0 text-text-muted group-hover/row:text-text-primary";
+
+export const railNewPlaneLabel = cn(
+	"min-w-0 flex-1 truncate text-lg text-text-muted",
+	"transition-colors duration-fast ease-out group-hover/row:text-text-primary",
+);
+
+export const railNewPlaneKeys = cn(
+	"shrink-0 opacity-0 transition-opacity duration-fast ease-out",
+	"group-hover/row:opacity-100 group-focus-visible/row:opacity-100",
+);
 
 /** The tree itself: rows a hairline apart, so two fills never merge. */
 export const railTreeList = "flex flex-col gap-rail-row-gap";
@@ -451,7 +451,7 @@ export function railPinDropLine(edge: "before" | "after"): string {
 
 /*
  * The search entry, under the top bar: the two and the pins read as one
- * header group, closed by the divider (`railDivider`).
+ * header group, which the body (`railScroll`) closes.
  *
  * It is a row, not an input. Same inset, height, radius and lanes as a flat
  * plane row, so its glyph sits on the rail's one left edge and its label on
