@@ -1,18 +1,18 @@
 # nuspace
 
-A live computing space for people and agents.
+nuspace is a live computing space for your notes, data, tools and agents.
+
+Everything in it is built from **cells**. A cell can be anything, a note, a table, a chart, a job, an agent at work, and every cell is a running program: it keeps its state, talks to the rest of the space and draws itself on screen.
 
 > Early. Things move fast and the store format is not frozen yet.
 
-## About
-
-A space is made of **planes**, and planes are made of **cells**: a note, a table, a job, a lens into your data, a conversation with an agent. They live side by side, talk to each other, and grow together into one coherent system.
+## Alive, all the way down
 
 - **It reacts.** Live isn't a websocket someone wired up for one screen. Every value in the space can be reacted to by anything else, so all of it is live.
 - **It remembers.** Every write is persisted, in a transaction, as it happens. Storage is sharded by design, so a cell holds a billion rows the same way it holds a counter.
 - **It draws.** A cell puts text, tables, charts and forms on screen the same way it saves a value, and every open tab stays in sync.
 - **It scales.** The same program runs in a worker, across processes or on a cluster, without changing shape.
-- **It grows.** The kernel only runs things. Everything else is a plane, even the system. Nothing you can't extend or replace.
+- **It grows.** The kernel only runs things. Everything else is built from cells, even the system. Nothing you can't extend or replace.
 - **It is programmable.** It doesn't offer an API, it is one. People and agents write programs with the same reach. Not a menu of calls: a language.
 - **It is made of itself.** There is no outside. The services that keep your space running, the operations that change it, the screens you use it through: all written in the same language your cells speak. So a cell can do anything nuspace can. Build a plane. Start a job. Rewrite a service. So can an agent. nuspace is a complete computer that can reprogram itself while it runs.
 
