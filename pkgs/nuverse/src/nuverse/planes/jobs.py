@@ -111,11 +111,10 @@ def select(click):
     )
 
 
-def out():
-    return draw() >> nu.ParallelAsync(
-        nu.ForeverDo(nu.DelayedDo(1.0, draw())),
-        nu.ReactForever(Listing.table.on_row_click(), select),
-    )
+out = draw() >> nu.ParallelAsync(
+    nu.ForeverDo(nu.DelayedDo(1.0, draw())),
+    nu.ReactForever(Listing.table.on_row_click(), select),
+)
 """
 
 
@@ -164,15 +163,15 @@ def create(name):
     return nu.let("", make)
 
 
-def out():
-    typed = nu.Str(Form.name)
-    name = nu.If(typed == "", "New job", typed)
-    make = nu.let(name, lambda held: create(nu.Str(held)) >> Form.name.set(""))
-    return (
-        Form.name.set("")
-        >> Form.create.set("Create job")
-        >> nu.ReactForever(Form.create.on_click(), make)
-    )
+typed = nu.Str(Form.name)
+name = nu.If(typed == "", "New job", typed)
+make = nu.let(name, lambda held: create(nu.Str(held)) >> Form.name.set(""))
+
+out = (
+    Form.name.set("")
+    >> Form.create.set("Create job")
+    >> nu.ReactForever(Form.create.on_click(), make)
+)
 """
 )
 
@@ -327,8 +326,7 @@ def showing(job):
     return nu.IfDo(there, shown(job), hint())
 
 
-def out():
-    return follows(Jobs.selected, showing)
+out = follows(Jobs.selected, showing)
 """
 
 

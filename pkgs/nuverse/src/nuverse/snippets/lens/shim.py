@@ -1,6 +1,5 @@
 """A lens: browses a shape as cascading columns. Point SHAPE and PREFIX elsewhere to browse something else."""
 
-import nu
 import nuspace
 from nuverse.snippets.lens import snippet
 
@@ -15,6 +14,4 @@ SHAPE = nuspace.Space
 PREFIX = None
 
 
-def out() -> nu.Nu:
-    """The lens snippet's browser, on SHAPE at PREFIX."""
-    return snippet.out(SHAPE, PREFIX)
+out = snippet.out(SHAPE, PREFIX)

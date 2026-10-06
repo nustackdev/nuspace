@@ -36,16 +36,13 @@ from nuspace.agent import chat
 from nuspace.agent.cc import claude_code
 
 
-def out():
-    # One chat, live: answer whatever is outstanding, then wait for more. The
-    # Plane it draws on is read once, in a snapshot that closes before it starts.
-    plane, cell = ops.Here.plane, ops.Here.cell
-    return nu.let(
-        ops.snapshot(chat.drawn_of(plane)),
-        lambda drawn: nuspace.agent.converse(
-            plane, cell, ui_plane_id=nu.Str(drawn), talk=claude_code()
-        ),
-    )
+# One chat, live: answer whatever is outstanding, then wait for more. The
+# Plane it draws on is read once, in a snapshot that closes before it starts.
+plane, cell = ops.Here.plane, ops.Here.cell
+out = nu.let(
+    ops.snapshot(chat.drawn_of(plane)),
+    lambda drawn: nuspace.agent.converse(plane, cell, ui_plane_id=nu.Str(drawn), talk=claude_code()),
+)
 """
 
 
@@ -68,15 +65,14 @@ class Box(nustd.ui.Column):
     send = nustd.ui.ButtonRef.slot(label="send")
 
 
-def out():
-    # The box is emptied after the submit and not before, because the submit
-    # is what reads it.
-    sent = chat.submit(ops.Here.plane, nu.Str(Box.message), talk=TALK) >> Box.message.set("")
-    return (
-        Box.message.set("")
-        >> Box.send.set_label("send")
-        >> nu.ReactForever(Box.send.on_click(), sent)
-    )
+# The box is emptied after the submit and not before, because the submit
+# is what reads it.
+sent = chat.submit(ops.Here.plane, nu.Str(Box.message), talk=TALK) >> Box.message.set("")
+out = (
+    Box.message.set("")
+    >> Box.send.set_label("send")
+    >> nu.ReactForever(Box.send.on_click(), sent)
+)
 '''
 )
 

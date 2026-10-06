@@ -12,6 +12,7 @@ separately here.
 
 ## Unreleased
 
+- Snippet and plane cells hold their program as a term, with no wrapping function
 - Search finds input cells whose value equals the query
 - Gray dark theme for the window frame, with sidebar fills you can actually see
 - New password generator and unit converter example snippets

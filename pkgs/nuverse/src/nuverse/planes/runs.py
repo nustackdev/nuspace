@@ -44,8 +44,7 @@ def draw():
     return nustd.kv.Snapshot(nu.let(ops.runs(), tiles), scope=nuspace.Space)
 
 
-def out():
-    return draw() >> nu.ForeverDo(nu.DelayedDo(1.0, draw()))
+out = draw() >> nu.ForeverDo(nu.DelayedDo(1.0, draw()))
 """
 
 
@@ -82,8 +81,7 @@ def draw():
     return nustd.kv.Snapshot(nu.let(nustd.time.time(), table), scope=nuspace.Space)
 
 
-def out():
-    return draw() >> nu.ForeverDo(nu.DelayedDo(1.0, draw()))
+out = draw() >> nu.ForeverDo(nu.DelayedDo(1.0, draw()))
 """
 
 
@@ -127,8 +125,7 @@ def draw():
     return nustd.kv.Snapshot(nu.let(nustd.time.time(), table), scope=nuspace.Space)
 
 
-def out():
-    return draw() >> nu.ForeverDo(nu.DelayedDo(1.0, draw()))
+out = draw() >> nu.ForeverDo(nu.DelayedDo(1.0, draw()))
 """
 
 

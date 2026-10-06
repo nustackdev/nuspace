@@ -6,7 +6,6 @@ registers is well formed, and importing it keeps a worker light.
 
 from __future__ import annotations
 
-import inspect
 import subprocess
 import sys
 import textwrap
@@ -96,7 +95,8 @@ def test_planes_are_well_formed():
         editable = plane is not planes.cc_chat.PLANE
         assert plane.meta == {"editable": editable, "full_width": False}
         for name, source in plane.cells:
-            assert name and "def out():" in source
+            # Each cell's program is its term: ``out = ...``, no scope taken.
+            assert name and "\nout = " in source
     assert len({p.name for p in planes.PLANES}) == len(planes.PLANES)
 
 
@@ -129,12 +129,8 @@ def test_snippets_are_well_formed():
         assert "from nuverse.snippets." in snippet.source
         namespace: dict = {}
         exec(compile(snippet.source, snippet.name, "exec"), namespace)  # noqa: S102
-        out = namespace["out"]
-        assert callable(out)
-        # The kernel offers plane and cell by name; out takes the ones it names.
-        offered = {"plane": "p", "cell": "c"}
-        wanted = {k: v for k, v in offered.items() if k in inspect.signature(out).parameters}
-        assert isinstance(out(**wanted), nu.Nu)
+        # The shim's program is its term: where it runs it reads from Here.
+        assert isinstance(namespace["out"], nu.Nu)
     assert len({s.name for s in snippets.SNIPPETS}) == len(snippets.SNIPPETS)
 
 

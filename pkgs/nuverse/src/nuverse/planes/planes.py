@@ -55,8 +55,7 @@ def draw():
     return nustd.kv.Snapshot(nu.let(tagged, table), scope=nuspace.Space)
 
 
-def out():
-    return draw() >> nu.ForeverDo(nu.DelayedDo(1.0, draw()))
+out = draw() >> nu.ForeverDo(nu.DelayedDo(1.0, draw()))
 """
 
 
@@ -90,8 +89,7 @@ def draw():
     return nustd.kv.Snapshot(table, scope=nuspace.Space)
 
 
-def out():
-    return draw() >> nu.ForeverDo(nu.DelayedDo(1.0, draw()))
+out = draw() >> nu.ForeverDo(nu.DelayedDo(1.0, draw()))
 """
 
 
