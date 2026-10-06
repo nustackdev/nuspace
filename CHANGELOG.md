@@ -12,6 +12,7 @@ separately here.
 
 ## Unreleased
 
+- New cells hand the keyboard to what they draw, like a text editor or a lens
 - The / menu is a command box: grouped, searchable, icons and descriptions
 - Cell code and text use the kit's unified code and markdown editors
 - Cells live apart from planes, addressed by their own id everywhere

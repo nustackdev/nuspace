@@ -35,7 +35,7 @@ import type { PlaneModel } from "./model";
 import { hasText, type SlashSnippet, TEXT } from "./types";
 
 /** What counts as a cell's editable text surface. The first one wins. */
-const EDITABLE = '[contenteditable="true"], textarea, input';
+export const EDITABLE = '[contenteditable="true"], textarea, input';
 
 /**
  * A cell's editable text surface: the first one its program drew. Only the

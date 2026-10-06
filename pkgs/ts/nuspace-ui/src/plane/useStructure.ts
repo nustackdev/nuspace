@@ -3,10 +3,27 @@
 // A create round-trips through the server. The id does not: the browser mints
 // it and sends it, so focus is aimed at a known id rather than guessed at from
 // a position once `set_plane` comes back.
+//
+// A snippet's cell is landed on selected, and then handed what it draws: the
+// first focusable thing its program puts up takes the keyboard, a text
+// surface with the caret at its end. Drawing takes a run, so the cell is
+// watched until something arrives. The watch ends when the hand off happens,
+// the moment the person does anything else (another cell selected, the caret
+// somewhere, focus gone from the plane), or after HAND_WAIT. A cell that draws
+// nothing to focus by then stays selected, which it already is.
 
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { mintId } from "../core/ids";
+import { EDITABLE, placeCaret } from "./Draft";
 import type { PlaneModel } from "./model";
+
+/** How long a landed cell is watched for something to focus, in ms. */
+const HAND_WAIT = 1500;
+
+/** What a drawn cell can hand the keyboard to. */
+const FOCUSABLE = [EDITABLE, "select", "button", "a[href]", '[tabindex]:not([tabindex="-1"])']
+	.map((s) => `${s}:not([disabled])`)
+	.join(", ");
 
 export function useStructure({
 	planeId,
@@ -22,6 +39,10 @@ export function useStructure({
 	 *  prunes focus pointing at a cell it does not carry, so the intent is
 	 *  parked here until the cell actually arrives. */
 	const pendingFocus = useRef<{ id: string; open: boolean } | null>(null);
+	/** A landed cell waiting to hand the keyboard to what it draws. */
+	const [handing, setHanding] = useState<string | null>(null);
+	/** When the watch on `handing` gives up, fixed at landing so a re-run keeps it. */
+	const handUntil = useRef(0);
 
 	// Land on a newly created cell once the server confirms it. A snippet's
 	// cell is selected with its source closed: what it draws is the point. A
@@ -43,7 +64,55 @@ export function useStructure({
 		patch({ focus: null, selected: [id], anchor: id, column: null });
 		rootRef.current?.focus({ preventScroll: true });
 		elRefs.current.get(id)?.scrollIntoView({ block: "nearest" });
+		handUntil.current = performance.now() + HAND_WAIT;
+		setHanding(id);
 	}, [cells, patch, rootRef, elRefs]);
+
+	// Hand a landed cell's keyboard to what it draws, once it draws it.
+	useEffect(() => {
+		if (!handing) return;
+		const id = handing;
+		const root = rootRef.current;
+		const still =
+			editor.selected.length === 1 && editor.selected[0] === id && editor.focus === null;
+		if (!root || !still) {
+			setHanding(null);
+			return;
+		}
+		const handoff = (): boolean => {
+			if (document.activeElement !== root) {
+				setHanding(null);
+				return true;
+			}
+			const el = root.querySelector<HTMLElement>(
+				`[data-cell="${id}"] [data-cell-ui] :is(${FOCUSABLE})`,
+			);
+			if (!el) return false;
+			if (el.matches(EDITABLE)) placeCaret(el, "end");
+			else el.focus();
+			patch({ selected: [], anchor: null });
+			setHanding(null);
+			return true;
+		};
+		if (handoff()) return;
+		const seen = new MutationObserver(() => {
+			if (handoff()) seen.disconnect();
+		});
+		const done = window.setTimeout(() => {
+			seen.disconnect();
+			setHanding(null);
+		}, handUntil.current - performance.now());
+		seen.observe(root, {
+			childList: true,
+			subtree: true,
+			attributes: true,
+			attributeFilter: ["tabindex", "contenteditable", "disabled"],
+		});
+		return () => {
+			seen.disconnect();
+			window.clearTimeout(done);
+		};
+	}, [handing, editor.selected, editor.focus, patch, rootRef]);
 
 	const commitSource = useCallback(
 		(id: string, source: string) => {
