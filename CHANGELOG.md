@@ -12,6 +12,7 @@ separately here.
 
 ## Unreleased
 
+- New plane moves from the top bar to a heading over the tree
 - The Add plane popup is grouped and searchable, like the / menu
 - Cell controls sit in thin gutters either side, showing per row
 - Tab from a selected cell moves on to what comes after it

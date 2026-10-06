@@ -100,12 +100,6 @@ export const railWordmark =
 export const railWordmarkNu = "text-accent";
 
 /**
- * The free middle of the top bar, between the collapse button and the create
- * one. Search has its own strip under the bar, see `railSearch`.
- */
-export const railHeaderSpace = "min-w-0 flex-1";
-
-/**
  * Bottom bar: links on the left, the window's own state on the right. An edge
  * to edge rule over it, mirroring the divider under the header group.
  */
@@ -158,6 +152,20 @@ export const railScroll = cn(
 	"flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden",
 	"px-rail-inset pt-rail-top-gap pb-1",
 );
+
+/**
+ * The heading over the tree, with the top-level `+` on its right. Outside
+ * the body, so it stays put however far the tree scrolls, and the divider
+ * under it marks where the rows go under. Inset like the rows, its label on
+ * their text and its button on their `...` column.
+ */
+export const railSection = cn(
+	"mx-rail-inset mt-rail-top-gap flex h-rail-row shrink-0 items-center",
+	"pl-rail-row-pad pr-rail-row-pad-end",
+);
+
+export const railSectionLabel =
+	"min-w-0 flex-1 select-none truncate text-xs font-medium text-text-muted";
 
 /** The tree itself: rows a hairline apart, so two fills never merge. */
 export const railTreeList = "flex flex-col gap-rail-row-gap";
@@ -438,17 +446,6 @@ export function railPinDropLine(edge: "before" | "after"): string {
 		edge === "before" ? "-left-0.5" : "-right-0.5",
 	);
 }
-
-/* ============================== Add plane =============================== */
-
-/** One registered Plane in the Add plane popup: icon, label, description. */
-export const addPlaneItem = "items-start [&_svg]:mt-0.5";
-
-export const addPlaneText = "flex min-w-0 flex-col";
-
-export const addPlaneLabel = "truncate text-sm text-text-primary uppercase tracking-wider";
-
-export const addPlaneDescription = "truncate text-xs text-text-muted";
 
 /* ================================ Search ================================= */
 

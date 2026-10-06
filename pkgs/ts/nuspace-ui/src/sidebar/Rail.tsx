@@ -22,7 +22,8 @@
 // ## Where the parts are
 //
 //   Rail.tsx          this: the aside, its strips, the divider, the resize edge
-//   RailHeader.tsx    the top bar: collapse, new plane
+//   RailHeader.tsx    the top bar: collapse, the wordmark
+//   PlanesHeader.tsx  the tree's sticky heading, and the top-level new plane
 //   SearchTrigger.tsx the search entry under it
 //   SearchPalette.tsx the search popup
 //   PinnedRow.tsx     the pinned planes, the header group's last strip
@@ -60,6 +61,7 @@ import { AddPlane } from "./AddPlane";
 import { useRailCollapsed } from "./collapse";
 import type { Notify } from "./ops";
 import { PinnedRow } from "./PinnedRow";
+import { PlanesHeader } from "./PlanesHeader";
 import type { Pins } from "./pin";
 import { RailFooter } from "./RailFooter";
 import { RailHeader } from "./RailHeader";
@@ -127,6 +129,7 @@ export function Rail({
 					className={railPinShelf}
 				/>
 			)}
+			{loading ? null : <PlanesHeader />}
 			<hr className={railDivider(scrolled)} />
 			<nav
 				aria-label="Planes"
