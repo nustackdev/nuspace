@@ -2,16 +2,17 @@
 
 ## Packages shipped from this repo
 
-- **nuspace** (the runtime, the `nuspace` command) — 0.4.1
-- **nuspace-ui** (the compiled web bundle) — 0.4.0
-- **nuverse** (the Planes and snippets a space ships with) — 0.2.0
+- **nuspace** (the runtime, the `nuspace` command) — 0.5.0
+- **nuspace-ui** (the compiled web bundle) — 0.5.0
+- **nuverse** (the Planes and snippets a space ships with) — 0.3.0
 
 Below is the changelog for **nuspace** - the full commit stream. Newest first.
 The `nuspace-ui` wheel is the same source tree's vite output and is not tracked
 separately here.
 
-## Unreleased
+## 0.5.0 — 2026-10-06
 
+- Release nuspace 0.5.0, built on nu 0.6.0 and UI kit 0.3.0
 - Snippet and plane cells hold their program as a term, with no wrapping function
 - Search finds input cells whose value equals the query
 - Gray dark theme for the window frame, with sidebar fills you can actually see
