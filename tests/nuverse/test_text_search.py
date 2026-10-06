@@ -23,7 +23,7 @@ async def _searched(store, *args: object, **kwargs: object) -> str:
 
 
 def test_text_is_searchable_by_a_module_function():
-    assert search.searchable(SNIPPETS) == {"text": "nuverse.snippets.prose.ops:search"}
+    assert search.searchable(SNIPPETS)["text"] == "nuverse.snippets.prose.ops:search"
 
 
 async def test_text_search_hits_a_cell_holding_the_query(store):

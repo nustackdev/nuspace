@@ -12,6 +12,7 @@ separately here.
 
 ## Unreleased
 
+- Search finds input cells whose value equals the query
 - Gray dark theme for the window frame, with sidebar fills you can actually see
 - New password generator and unit converter example snippets
 - New input snippets: text, number, slider, switch, select and date, configurable and live
