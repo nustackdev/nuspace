@@ -47,15 +47,6 @@ export type DragState = {
 
 export type EditorState = {
 	focus: FocusReq | null;
-	/**
-	 * The cell that currently holds DOM focus, reported by the plane.
-	 *
-	 * Distinct from `focus`, which is an *intent* ("put the caret here") and
-	 * is consumed and cleared the moment the target editor honours it. The
-	 * gutter owner (`gutterOwner`) wants the opposite: the standing fact of
-	 * where the caret lives, for as long as it lives there.
-	 */
-	focused: string | null;
 	selected: string[];
 	/** Anchor for shift-extended cell selection. */
 	anchor: string | null;
@@ -87,7 +78,6 @@ export type EditorState = {
 
 export const EMPTY_EDITOR: EditorState = {
 	focus: null,
-	focused: null,
 	selected: [],
 	anchor: null,
 	editing: [],
@@ -108,7 +98,6 @@ export function pruneEditor(local: EditorState, live: Set<string>): EditorState 
 	return {
 		...local,
 		focus: local.focus && live.has(local.focus.cellId) ? local.focus : null,
-		focused: local.focused && live.has(local.focused) ? local.focused : null,
 		selected: local.selected.filter((id) => live.has(id)),
 		anchor: local.anchor && live.has(local.anchor) ? local.anchor : null,
 		editing: local.editing.filter((id) => live.has(id)),
@@ -153,31 +142,4 @@ export function patchEditor(path: Path, planeId: string, patch: EditorPatch): vo
 		const next = typeof patch === "function" ? patch(current) : patch;
 		return { [planeId]: { ...current, ...next } };
 	});
-}
-
-/**
- * The one cell on a plane that shows its gutter, or null for none. At most
- * one gutter is visible at a time, and this is where that is decided:
- *
- *   1. more than one cell selected: none. The selection is what the keys act
- *      on, and one cell's controls would offer to act on a part of it.
- *   2. a cell whose gutter menu is open keeps it until the menu closes.
- *   3. exactly one cell selected: that cell.
- *   4. the cell holding focus (the caret, its source editor, or one of its
- *      gutter's own controls reached by keyboard).
- *   5. the hovered cell.
- *
- * So a pinned cell (selected or focused) keeps its gutter while the pointer
- * crosses other cells, and an open source pins nothing on its own: several
- * cells can be open at once and only the owner shows controls.
- */
-export function gutterOwner(
-	editor: Pick<EditorState, "selected" | "focused">,
-	hovered: string | null,
-	menu: string | null,
-): string | null {
-	if (editor.selected.length > 1) return null;
-	if (menu) return menu;
-	if (editor.selected.length === 1) return editor.selected[0];
-	return editor.focused ?? hovered;
 }

@@ -1,21 +1,20 @@
-// One cell on a plane: its row, its gutter, and the program inside. The row
-// is a plane grid row (see ../../design/document.ts): the gutter in the left
-// track, the cell's box in the content track.
+// One cell on a plane: its row, its controls, and the program inside. The row
+// is a plane grid row (see ../../design/document.ts): the cell's box in the
+// content track, its controls in the gutters either side (./Gutter.tsx).
 //
 // There is no cell kind to branch on. Each cell renders the subtree at its
 // own address -- the ui refs its program mounted, which arrive as ordinary
 // nodes -- through `NodeView`, inside the same `docCell`, with the same
-// gutter: add and drag, copy the cell id, open the source. Every cell
+// controls: add and drag with the cell's menu, and the source. Every cell
 // compiles, runs, is supervised and reports status identically. See
 // ./address.ts for where that address is.
 //
-// `editable` is the plane's setting. Off, the cell is read-only: its gutter
-// keeps only copy-id and the source toggle, and the source opens in a
+// `editable` is the plane's setting. Off, the cell is read-only: its menu
+// cannot delete, there is nothing to add or drag, and the source opens in a
 // read-only editor that never saves.
 //
-// The gutter is always mounted but shows only on the plane's one gutter
-// owner (`gutterOwner`, ../state.ts). The cell does not
-// decide that; it is told, and reports the pointer entering and leaving.
+// The controls are always mounted. Whether they show is the row's own CSS
+// (`docGutterLane`): `data-selected` marks it as the one selected cell.
 //
 // A text cell's keys (../useTextCells.ts) are caught on the row, before the
 // editor inside it sees them.
@@ -25,7 +24,7 @@ import type * as React from "react";
 import { docCell, docCellRow, docDropIndicator } from "../../design";
 import type { FocusReq } from "../state";
 import type { Cell as CellValue, ExitDir } from "../types";
-import { Gutter } from "./Gutter";
+import { LeftGutter, RightGutter } from "./Gutter";
 import { ProgramCell } from "./Program";
 
 export function Cell({
@@ -35,11 +34,6 @@ export function Cell({
 	hidden,
 	selected,
 	selectedStrong,
-	owner = false,
-	menu = false,
-	onMenu,
-	onHover,
-	focused,
 	editing,
 	focusReq,
 	dragging,
@@ -65,15 +59,6 @@ export function Cell({
 	selected: boolean;
 	/** Part of a multi-cell selection. */
 	selectedStrong: boolean;
-	/** This cell is the plane's gutter owner: its gutter shows. */
-	owner?: boolean;
-	/** Its gutter menu is open. Plane state, since it holds ownership. */
-	menu?: boolean;
-	onMenu?: (open: boolean) => void;
-	/** The pointer entered (true) or left (false) the row. */
-	onHover?: (on: boolean) => void;
-	/** The caret lives in here. */
-	focused: boolean;
 	/** Source open. */
 	editing: boolean;
 	focusReq: FocusReq | null;
@@ -101,29 +86,28 @@ export function Cell({
 			ref={setEl}
 			data-cell={cell.id}
 			hidden={hidden}
-			className={docCellRow({ focused, dragging, owner })}
+			data-selected={selected && !selectedStrong ? "" : undefined}
+			className={docCellRow({ dragging })}
 			onKeyDownCapture={onTextKey}
-			onPointerEnter={() => onHover?.(true)}
-			onPointerLeave={() => onHover?.(false)}
 			onMouseDown={(e) => {
 				// A plain click inside a cell leaves cell-selection mode;
 				// the cell's own editor takes over from here.
 				if (e.button === 0) onPointerIn();
 			}}
 		>
-			<Gutter
+			<LeftGutter
 				editable={editable}
 				cellId={cell.id}
-				state={cell.status.state}
-				shown={owner}
-				menu={menu}
-				onMenu={onMenu ?? (() => {})}
 				editing={editing}
 				onSetEditing={onSetEditing}
 				onDrag={onDrag}
 				onPlus={onPlus}
 				onDelete={onDelete}
 			/>
+			{/* Before the body in the DOM, though the grid puts it on the right: the
+			    row's controls come first in the tab order, so Tab out of what the
+			    cell draws goes on to the next row, not back to its own toggle. */}
+			<RightGutter state={cell.status.state} editing={editing} onSetEditing={onSetEditing} />
 			<div className={docCell({ selected, selectedStrong })} data-cell-body="">
 				{dropAbove ? <span className={`${docDropIndicator} top-0`} /> : null}
 				<ProgramCell

@@ -21,7 +21,8 @@ function render(
 	state: CellState = "idle",
 	error = "",
 	has_ui: boolean | null = false,
-	selection: { selected?: boolean; multi?: boolean; owner?: boolean } = {},
+	selection: { selected?: boolean; multi?: boolean } = {},
+	editing = false,
 ) {
 	const noop = () => {};
 	act(() => {
@@ -40,9 +41,7 @@ function render(
 					editable={editable}
 					selected={selection.selected ?? false}
 					selectedStrong={(selection.selected ?? false) && (selection.multi ?? false)}
-					owner={selection.owner ?? false}
-					focused={false}
-					editing={false}
+					editing={editing}
 					focusReq={null}
 					dragging={false}
 					dropAbove={false}
@@ -119,31 +118,54 @@ describe("the cell's status, on the source toggle", () => {
 	});
 });
 
-describe("a read-only plane's gutter", () => {
-	it("keeps exactly copy-id and the source toggle", () => {
-		render(false, "running");
-		const labels = [...host.querySelectorAll("[data-cell-gutter] button")].map((b) =>
+describe("the controls", () => {
+	const labels = () =>
+		[...host.querySelectorAll("[data-cell-gutter] button")].map((b) =>
 			b.getAttribute("aria-label"),
 		);
-		expect(labels).toEqual(["Copy this cell's cell id", "Show source · running"]);
-		expect(host.querySelector("[data-cell-grip]")).toBeNull();
-	});
-});
 
-describe("the gutter shows on its owner only", () => {
-	const stack = () => host.querySelector("[data-cell-gutter] > div");
-	const shown = () => stack()?.classList.contains("opacity-100") ?? false;
-
-	it("shows on the owner", () => {
-		render(true, "idle", "", false, { owner: true });
-		expect(shown()).toBe(true);
+	it("puts add and the grip left of the cell, the source toggle right", () => {
+		render(true, "running");
+		expect(labels()).toEqual([
+			"Add a line below",
+			"Drag to reorder, click for options",
+			"Show source · running",
+		]);
+		// The right gutter comes before the body, so the body is last in the tab order.
+		const [left, right, body] = host.querySelectorAll("[data-cell] > *");
+		expect(body.hasAttribute("data-cell-body")).toBe(true);
+		expect(left.hasAttribute("data-cell-gutter")).toBe(true);
+		expect(right.hasAttribute("data-cell-gutter")).toBe(true);
 	});
 
-	it.each([true, false])("stays hidden off the owner, selected=%s", (selected) => {
-		render(true, "idle", "", false, { selected, owner: false });
-		expect(stack()).not.toBeNull();
-		expect(shown()).toBe(false);
+	it("keeps only the menu and the source toggle on a read-only plane", () => {
+		render(false, "running");
+		expect(labels()).toEqual(["Cell options", "Show source · running"]);
+		expect(host.querySelector("[data-cell-grip]")?.classList.contains("cursor-grab")).toBe(false);
 	});
+
+	it("marks the one selected cell, not a cell in a wider selection", () => {
+		const marked = () => host.querySelector("[data-cell]")?.hasAttribute("data-selected");
+		render(true, "idle", "", false, { selected: true });
+		expect(marked()).toBe(true);
+		render(true, "idle", "", false, { selected: true, multi: true });
+		expect(marked()).toBe(false);
+	});
+
+	it.each([
+		["failed", false, true],
+		["invalid", false, true],
+		["running", true, true],
+		["running", false, false],
+		["idle", false, false],
+	] as [CellState, boolean, boolean][])(
+		"pins the source toggle out, %s editing=%s",
+		(state, editing, pinned) => {
+			render(true, state, "", false, {}, editing);
+			const lane = host.querySelector("[data-cell-status]")?.closest("[data-cell-gutter]");
+			expect(lane?.hasAttribute("data-pinned")).toBe(pinned);
+		},
+	);
 });
 
 describe("a cell whose view is on the way", () => {

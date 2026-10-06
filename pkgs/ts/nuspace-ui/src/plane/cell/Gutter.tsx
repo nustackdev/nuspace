@@ -1,4 +1,20 @@
-// A cell's gutter: every affordance it has, in the left track of its row.
+// A cell's controls, one thin row in each gutter of its row.
+//
+// Left, what you do to the cell's place on the plane: add a line below, and
+// the grip, which drags and, clicked, opens the cell's menu. Right, what the
+// cell is: the source toggle, its glyph tinted by the cell's status. A
+// read-only plane has no place to change, so its left gutter keeps only the
+// menu.
+//
+// Each row is one control tall, never taller than the shortest cell
+// (`docCellRow` holds every row to it), so a row's controls never reach into
+// its neighbour's and each row shows its own on its own: hovered, its
+// controls reached by keyboard, it is the one selected cell, or its menu is
+// open (`docGutterLane`). The source toggle also stays out while the source
+// is open or the cell is broken, so either reads at a glance down the edge.
+//
+// Every glyph carries a tooltip and a label. A bare glyph in a margin is not
+// self-explanatory, and `title` is not an affordance, it is a delay.
 
 import {
 	DropdownMenu,
@@ -12,38 +28,24 @@ import {
 	TooltipContent,
 	TooltipTrigger,
 } from "@nustackdev/ui-kit";
-import { Check, Code, GripVertical, Hash, Plus, Trash2 } from "lucide-react";
+import { Code, Ellipsis, GripVertical, Hash, Plus, Trash2 } from "lucide-react";
 import type * as React from "react";
-import { useCallback, useState } from "react";
+import { useState } from "react";
 import {
 	CELL_STATUS,
 	docDragHandle,
-	docGutter,
-	docGutterAffordances,
-	docGutterRow,
+	docGutterControls,
+	docGutterLane,
 	docGutterStatus,
 	docGutterToggle,
 } from "../../design";
 import type { CellState } from "../types";
 
-/**
- * Every affordance a cell has, in the gutter beside the reading column.
- *
- * Two stacked rows of kit primitives, so they share a box, a hover tier, a
- * focus ring and one reveal. Top to bottom they read as what you do to the
- * cell and what it is: add and drag, then copy its id and open its source.
- * A read-only plane drops the first row, so the second takes its place on
- * the cell's first line and the source opens read-only. The source toggle's glyph is tinted by the cell's status, and
- * its label and tooltip say the state in words.
- *
- * Every glyph carries a tooltip and a label. A bare glyph in a margin is not
- * self-explanatory, and `title` is not an affordance, it is a delay.
- *
- * The grip drags, and a click on it opens the cell's controls in a menu
- * anchored to it: the source toggle, the id, delete. The menu is controlled,
- * so a press that turns into a drag never opens it (../useCellDrag.ts).
- */
-export function Gutter({
+/** States the source toggle stays out for, rather than waiting for a hover. */
+const LOUD: ReadonlySet<CellState> = new Set(["invalid", "failed"]);
+
+/** The left gutter: add, and the grip with the cell's menu. */
+export function LeftGutter({
 	editable,
 	cellId,
 	editing,
@@ -51,21 +53,10 @@ export function Gutter({
 	onDrag,
 	onPlus,
 	onDelete,
-	state,
-	shown,
-	menu,
-	onMenu,
 }: {
-	/** The plane's setting. Off, only copy-id and the source toggle remain. */
+	/** The plane's setting. Off, only the menu remains, and it cannot delete. */
 	editable: boolean;
 	cellId: string;
-	/** The cell's state, painted on the source toggle's glyph. */
-	state: CellState;
-	/** This cell owns the plane's one visible gutter (`gutterOwner`). */
-	shown: boolean;
-	/** The grip's menu is open. Held by the plane, see `gutterOwner`. */
-	menu: boolean;
-	onMenu: (open: boolean) => void;
 	editing: boolean;
 	onSetEditing: (on: boolean) => void;
 	/** A press on the grip. `onClick` runs when it never becomes a drag. */
@@ -74,112 +65,112 @@ export function Gutter({
 	onPlus: () => void;
 	onDelete: () => void;
 }) {
-	const [copied, setCopied] = useState(false);
-	const status = CELL_STATUS[state].label.toLowerCase();
-	const sourceLabel = `${editing ? "Hide source" : "Show source"} · ${status}`;
+	// Controlled, so a press that turns into a drag never opens it
+	// (../useCellDrag.ts).
+	const [menu, setMenu] = useState(false);
 
-	// The bare cell id, not the `cells.<id>` mount prefix: the id is what
-	// every op on the wire is keyed by, so it is the string worth having on the
-	// clipboard. See ./address.ts for the prefix and where it comes from.
-	const copyId = useCallback(() => {
-		navigator.clipboard
-			?.writeText(cellId)
-			.then(() => {
-				setCopied(true);
-				window.setTimeout(() => setCopied(false), 1200);
-			})
-			.catch(() => {});
-	}, [cellId]);
+	// The bare cell id, not the `cells.<id>` mount prefix: the id is what every
+	// op on the wire is keyed by. See ./address.ts for the prefix.
+	const copyId = () => {
+		navigator.clipboard?.writeText(cellId).catch(() => {});
+	};
 
+	const label = editable ? "Drag to reorder, click for options" : "Cell options";
 	return (
-		<div className={docGutter} data-cell-gutter="">
-			<div className={docGutterAffordances(shown)}>
+		<div className={docGutterLane("left")} data-cell-gutter="">
+			<div className={docGutterControls}>
 				{editable ? (
-					<div className={docGutterRow}>
-						<Tooltip>
-							<TooltipTrigger asChild>
+					<Tooltip>
+						<TooltipTrigger asChild>
+							<IconButton variant="ghost" size="sm" aria-label="Add a line below" onClick={onPlus}>
+								<Plus />
+							</IconButton>
+						</TooltipTrigger>
+						<TooltipContent side="top">Add a line below</TooltipContent>
+					</Tooltip>
+				) : null}
+				<DropdownMenu open={menu} onOpenChange={setMenu}>
+					<Tooltip>
+						<TooltipTrigger asChild>
+							<DropdownMenuTrigger asChild>
 								<IconButton
 									variant="ghost"
 									size="sm"
-									aria-label="Add a line below"
-									onClick={onPlus}
+									aria-label={label}
+									data-cell-grip=""
+									// Prevented here, so the menu's own press never opens it.
+									onPointerDown={editable ? (e) => onDrag(e, () => setMenu(true)) : undefined}
+									className={editable ? docDragHandle : undefined}
 								>
-									<Plus />
+									{editable ? <GripVertical /> : <Ellipsis />}
 								</IconButton>
-							</TooltipTrigger>
-							<TooltipContent side="top">Add a line below</TooltipContent>
-						</Tooltip>
-						<DropdownMenu open={menu} onOpenChange={onMenu}>
-							<Tooltip>
-								<TooltipTrigger asChild>
-									<DropdownMenuTrigger asChild>
-										<IconButton
-											variant="ghost"
-											size="sm"
-											aria-label="Drag to reorder, click for options"
-											// Prevented here, so the menu's own press never opens it.
-											onPointerDown={(e) => onDrag(e, () => onMenu(true))}
-											data-cell-grip=""
-											className={docDragHandle}
-										>
-											<GripVertical />
-										</IconButton>
-									</DropdownMenuTrigger>
-								</TooltipTrigger>
-								<TooltipContent side="top">Drag to reorder, click for options</TooltipContent>
-							</Tooltip>
-							<DropdownMenuContent
-								align="start"
-								// The caret goes where the action sends it, not back to the grip.
-								onCloseAutoFocus={(e) => e.preventDefault()}
-							>
-								<DropdownMenuItem onSelect={() => onSetEditing(!editing)}>
-									<Code />
-									{editing ? "Hide source" : "Show source"}
-								</DropdownMenuItem>
-								<DropdownMenuItem onSelect={copyId}>
-									<Hash />
-									Copy cell id
-								</DropdownMenuItem>
+							</DropdownMenuTrigger>
+						</TooltipTrigger>
+						<TooltipContent side="top">{label}</TooltipContent>
+					</Tooltip>
+					<DropdownMenuContent
+						align="start"
+						// The caret goes where the action sends it, not back to the grip.
+						onCloseAutoFocus={(e) => e.preventDefault()}
+					>
+						<DropdownMenuItem onSelect={() => onSetEditing(!editing)}>
+							<Code />
+							{editing ? "Hide source" : "Show source"}
+						</DropdownMenuItem>
+						<DropdownMenuItem onSelect={copyId}>
+							<Hash />
+							Copy cell id
+						</DropdownMenuItem>
+						{editable ? (
+							<>
 								<DropdownMenuSeparator />
 								<DropdownMenuItem variant="danger" onSelect={onDelete}>
 									<Trash2 />
 									Delete
 								</DropdownMenuItem>
-							</DropdownMenuContent>
-						</DropdownMenu>
-					</div>
-				) : null}
-				<div className={docGutterRow}>
-					<Tooltip>
-						<TooltipTrigger asChild>
-							<IconButton
-								variant="ghost"
-								size="sm"
-								aria-label="Copy this cell's cell id"
-								onClick={copyId}
-							>
-								{copied ? <Check className="text-status-ok" /> : <Hash />}
-							</IconButton>
-						</TooltipTrigger>
-						<TooltipContent side="top">{copied ? "Copied" : "Copy cell id"}</TooltipContent>
-					</Tooltip>
-					<Tooltip>
-						<TooltipTrigger asChild>
-							<Toggle
-								size="sm"
-								pressed={editing}
-								onPressedChange={onSetEditing}
-								aria-label={sourceLabel}
-								data-cell-status={state}
-								className={docGutterToggle}
-							>
-								<Code className={docGutterStatus(state)} />
-							</Toggle>
-						</TooltipTrigger>
-						<TooltipContent side="top">{sourceLabel}</TooltipContent>
-					</Tooltip>
-				</div>
+							</>
+						) : null}
+					</DropdownMenuContent>
+				</DropdownMenu>
+			</div>
+		</div>
+	);
+}
+
+/** The right gutter: the source toggle, which says the cell's state. */
+export function RightGutter({
+	state,
+	editing,
+	onSetEditing,
+}: {
+	state: CellState;
+	editing: boolean;
+	onSetEditing: (on: boolean) => void;
+}) {
+	const status = CELL_STATUS[state].label.toLowerCase();
+	const label = `${editing ? "Hide source" : "Show source"} · ${status}`;
+	return (
+		<div
+			className={docGutterLane("right")}
+			data-cell-gutter=""
+			data-pinned={editing || LOUD.has(state) ? "" : undefined}
+		>
+			<div className={docGutterControls}>
+				<Tooltip>
+					<TooltipTrigger asChild>
+						<Toggle
+							size="sm"
+							pressed={editing}
+							onPressedChange={onSetEditing}
+							aria-label={label}
+							data-cell-status={state}
+							className={docGutterToggle}
+						>
+							<Code className={docGutterStatus(state)} />
+						</Toggle>
+					</TooltipTrigger>
+					<TooltipContent side="top">{label}</TooltipContent>
+				</Tooltip>
 			</div>
 		</div>
 	);

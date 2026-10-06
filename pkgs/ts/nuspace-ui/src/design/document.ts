@@ -240,29 +240,19 @@ export interface CellStateFlags {
 	selectedStrong?: boolean;
 	/** This cell is the one being dragged. Ghosted while it travels. */
 	dragging?: boolean;
-	/** This cell owns the plane's one visible gutter (`gutterOwner`). */
-	owner?: boolean;
 }
 
 /**
- * A cell's row: its gutter in the left track, its box (`docCell`) in the
- * content track. Standing anywhere on the row, the controls included, counts
- * as being on the cell: the row reports pointer enter and leave to the plane,
- * which picks the one gutter owner (`gutterOwner`, plane/state.ts).
+ * A cell's row: its controls in the two gutters (`docGutterLane`), its box
+ * (`docCell`) in the content track between them. Never shorter than a row of
+ * controls (`--spacing-doc-row`), so a row's controls always fit inside it
+ * and never reach into the next one. A dragged cell fades whole, controls and
+ * all, while it travels.
  *
- * The owner's row rides above its neighbours, so a gutter stack taller than
- * a short cell stays on top of the next row where it overhangs it, and wins
- * the pointer there (see `docGutter`). The caret's row rides one step lower.
- * A dragged cell fades whole, controls and all, while it travels.
+ * `data-selected` marks the one selected cell, which shows its controls.
  */
 export function docCellRow(state: CellStateFlags = {}): string {
-	return cn(
-		docRow,
-		"group/cell relative",
-		state.owner && "z-20",
-		state.focused && !state.owner && "z-10",
-		state.dragging && "opacity-40",
-	);
+	return cn(docRow, "group/cell relative min-h-doc-row", state.dragging && "opacity-40");
 }
 
 /**
@@ -304,70 +294,40 @@ export function docCell(state: CellStateFlags = {}): string {
 }
 
 /**
- * The gutter: the left track of a cell's row. It holds every affordance the
- * cell has: add and drag, copy the cell id, open the source. Hidden unless
- * the cell is the plane's one gutter owner (`gutterOwner`, plane/state.ts) -
- * a document at rest shows text, not controls, and never more than one
- * cell's worth of them.
+ * One gutter of a cell's row, left or right, holding one row of controls.
+ * A document at rest shows text, not controls, so they show only when this
+ * row is the one in question: hovered, one of its controls reached by
+ * keyboard, it is the one selected cell, or its menu is open. `data-pinned`
+ * on the lane keeps it out regardless (the source toggle of a broken cell, or
+ * of one whose source is open). All of it is read off the row in CSS, so no
+ * row knows about any other and the plane does not arbitrate.
  *
- * The track is sized to hold the widest row of the stack - two `sm`
- * IconButtons side by side (24px each + a 2px gap) - and the rows
- * right-align into it, so their right edge is the content edge. The top pad
- * (`--spacing-doc-gutter-top`) centres the first row's 24px box on a text
- * cell's first line, which starts `--spacing-doc-line` down and is about
- * 20px tall.
- *
- * The lane is as tall as the cell and no taller. The stack is 56px (6 of pad,
- * two 24px rows and a 2px gap), taller than a short cell, and if the lane
- * took its height a one-line cell would grow to fit its own controls. Size
- * containment keeps the stack out of the row's height, so it overhangs the
- * next row instead, and `z-20` on the owner's row (`docCellRow`) lifts it
- * over that row so the overhang takes the pointer.
- *
- * The lane itself is a live hover target: it is part of the row, so
- * standing anywhere on it keeps the row hovered. The 4px that
- * holds the controls off the text is padding INSIDE the stack, not on the
- * lane, so the stack's hit rect meets the content edge and the walk from the
- * text out to the controls never crosses a dead strip.
+ * The top pad (`--spacing-doc-gutter-top`) centres the 24px controls on a
+ * text cell's first line. Each sits against the content edge, 4px off it.
  */
-export const docGutter = cn(
-	docGutterTrack,
-	"pt-doc-gutter-top [contain:size]",
-	"flex flex-col items-end gap-0.5 select-none",
-);
-
-/**
- * Wrapper for the affordances inside the gutter. One reveal for all rows, so
- * the cell's chrome arrives and leaves as a single object rather than as
- * loose glyphs fading independently. Whether it shows is decided once for the
- * whole plane (`gutterOwner`, plane/state.ts); this only draws the answer.
- *
- * Revealed and live are the same state, always. Hidden means `pointer-events:
- * none`, which is what keeps a neighbour's invisible stack from stealing the
- * pointer where it overhangs (see `docGutter`). Pointer enter and leave
- * follow the DOM, not the box: the stack is a descendant of the row, so
- * standing on it keeps the row hovered even where it is painted past the
- * row's bottom. And the wrapper is one rect covering both rows, so sliding
- * between rows never crosses a dead strip even where a row is narrower than
- * the lane.
- */
-export function docGutterAffordances(shown = false): string {
+export function docGutterLane(side: "left" | "right"): string {
 	return cn(
-		// Sticky: in a tall cell the stack rides the top of the viewport while
-		// the cell is on screen, and the cell-high lane is its track.
-		"sticky top-2 flex flex-col items-end gap-0.5 pr-1",
-		"transition-opacity duration-fast ease-out",
-		shown ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0",
+		side === "left" ? "col-[gutter-l] justify-end pr-1" : "col-[gutter-r] justify-start pl-1",
+		"row-start-1 flex items-start pt-doc-gutter-top select-none",
+		"opacity-0 transition-opacity duration-fast ease-out",
+		"group-hover/cell:opacity-100",
+		"group-has-[[data-cell-gutter]_:focus-visible]/cell:opacity-100",
+		"group-data-[selected]/cell:opacity-100",
+		"group-has-[[data-cell-grip][data-state=open]]/cell:opacity-100",
+		"data-[pinned]:opacity-100",
 	);
 }
 
-/** One row of the gutter stack. Right-aligned, so the lane has a clean edge. */
-export const docGutterRow = "flex items-center justify-end gap-0.5";
+/**
+ * The controls in a lane, side by side. Sticky: in a tall cell they ride the
+ * top of the viewport while the cell is on screen, the lane as their track.
+ */
+export const docGutterControls = "sticky top-2 flex items-center gap-0.5";
 
 /**
  * The code toggle, on top of a kit `Toggle sm`. Trims the horizontal padding
- * so its box is the 24px square an `IconButton sm` is: the gutter is a column
- * of one-glyph controls and a 26px one in the stack reads as a wobble.
+ * so its box is the 24px square an `IconButton sm` is, like every other
+ * control in the gutters.
  */
 export const docGutterToggle = "px-1";
 
@@ -467,8 +427,8 @@ export const docSkeletonCell = cn(docContentTrack, "flex flex-col gap-2 p-doc-ce
  * one, idle included (muted gray). The glyph carries its own colour class,
  * which beats the colour the kit `Toggle` sets on itself, so the hue holds
  * on hover and while pressed. Colour is never the only cue: the toggle's
- * label and tooltip name the state. It shows only when its gutter does, on
- * the plane's one gutter owner.
+ * label and tooltip name the state. It shows when its gutter does, and stays
+ * out on a broken cell (`docGutterLane`).
  */
 export function docGutterStatus(status: CellStatus): string {
 	return CELL_STATUS[status].fg;

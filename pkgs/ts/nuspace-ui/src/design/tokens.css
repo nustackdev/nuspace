@@ -113,9 +113,9 @@
 	 *
 	 *   | gutter-l 56 | content, up to 592  | gutter-r 56 |
 	 *
-	 * The left gutter holds the plane's icon on the title row and a cell's
-	 * controls on its row. The right one is empty for now; it keeps the page
-	 * symmetric and is where per-row things go later. The gutters are fixed
+	 * The left gutter holds the plane's icon on the title row, and a cell's
+	 * place controls (add, grip) on its row. The right one holds what the
+	 * cell is (its source toggle). The gutters are fixed
 	 * and the content track takes the rest (`minmax(0, 1fr)`), so one template
 	 * serves every width: the plane caps its own width at `--doc-grid-width`
 	 * and the content stops at the measure, full width drops the cap and it
@@ -281,14 +281,10 @@
 	/* p-doc-*, w-doc-*, gap-doc-* */
 	--spacing-doc-pad-y: 4rem; /* 64, spacing 16  air under the last cell   */
 	--spacing-doc-gutter: var(--doc-gutter); /* 56  a gutter track's WIDTH.
-	                               * The widest row of a cell's stack, two kit
+	                               * The widest row of controls, two kit
 	                               * `sm` IconButtons (24 + 2 gap + 24), plus
 	                               * the 4px that holds it off the cell's edge.
-	                               * The narrower rows right-align into it, so
-	                               * the gutter stays one lane, not two that
-	                               * overlap. Height is the row's, not a token:
-	                               * see `docGutter` for the stack that is
-	                               * taller than a short cell. */
+	                               * Height is one row (`--spacing-doc-row`). */
 	--spacing-doc-cell: 0.25rem; /* 4    a cell's pad, every side, every
 	                               * kind. Content brings its own air, so
 	                               * the box only keeps it off the wash edge
@@ -300,6 +296,10 @@
 	                               * starts: the cell's 4 plus the prose
 	                               * box's own 4. A ghost and a draft pad to it so
 	                               * their line is the cell's line.         */
+	--spacing-doc-row: 1.875rem; /* 30  the shortest a cell's row gets: the
+	                               * gutter's top pad and one 24px row of
+	                               * controls, so a row's controls always fit
+	                               * inside it.                              */
 	--spacing-doc-gutter-top: 0.375rem; /* 6  the gutter's top pad: the
 	                               * first line's 8 less half of what the
 	                               * 24px control row is taller than the
