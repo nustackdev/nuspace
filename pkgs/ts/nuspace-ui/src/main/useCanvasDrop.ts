@@ -1,29 +1,34 @@
-// A plane dragged from the rail (a tree row or a pin) and dropped on the
-// panes opens there as a split: the left half of a pane puts it before that
-// pane, the right half after. A plane already open just takes focus, as
-// "Open in split" does.
+// A plane dragged onto the desk lands beside the pane it is dropped on: the
+// left half of a pane puts it before that pane, the right half after.
 //
-// Native drag and drop, the rail's own drags and their own data types. A tab
-// dragged along the tab bar carries neither, so it never lands here.
+// Two drags land here. A plane off the rail (a tree row or a pin) opens on
+// the desk there; one already open just takes focus, as "Open on desk" does.
+// A pane dragged by its own bar (../pane/PaneBar.tsx) moves there.
+//
+// Native drag and drop, each drag with its own data type.
 //
 // Capture phase, and a drop is stopped here: a cell's editor would otherwise
 // take the drag's text (a pin is an anchor, and carries its URL) as a paste.
 
 import type * as React from "react";
 import { useEffect, useState } from "react";
-import { openPaneAt } from "../core/router";
+import { movePane, openPaneAt } from "../core/router";
 import { PIN_MIME } from "../sidebar/PinnedRow";
+import { pinDropIndex } from "../sidebar/pin";
 import { PLANE_MIME } from "../sidebar/useRailDrag";
+
+/** What a pane's drag by its bar carries: its plane id. */
+export const PANE_MIME = "application/x-nuspace-pane";
 
 export type PaneEdge = "before" | "after";
 
 /** Where a drop would land: beside the pane showing `id`. */
 export type PaneTarget = { id: string; edge: PaneEdge };
 
-/** Whether a drag is a plane off the rail. */
+/** Whether a drag is a plane off the rail or a pane by its bar. */
 function isPlaneDrag(e: React.DragEvent): boolean {
 	const types = Array.from(e.dataTransfer.types);
-	return types.includes(PLANE_MIME) || types.includes(PIN_MIME);
+	return types.includes(PLANE_MIME) || types.includes(PIN_MIME) || types.includes(PANE_MIME);
 }
 
 /** The half of `el` a pointer at `clientX` is over. */
@@ -75,9 +80,14 @@ export function useCanvasDrop(routes: string[]) {
 			e.preventDefault();
 			e.stopPropagation();
 			const to = aim(e);
+			const moving = e.dataTransfer.getData(PANE_MIME);
 			const id = e.dataTransfer.getData(PLANE_MIME) || e.dataTransfer.getData(PIN_MIME);
 			setTarget(null);
-			if (id && to) openPaneAt(id, paneSlot(routes, to));
+			if (!to) return;
+			if (moving) {
+				const index = pinDropIndex(routes, moving, paneSlot(routes, to));
+				if (index !== null) movePane(moving, index);
+			} else if (id) openPaneAt(id, paneSlot(routes, to));
 		},
 		onDragLeave: (e: React.DragEvent) => {
 			if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setTarget(null);

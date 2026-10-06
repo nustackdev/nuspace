@@ -17,6 +17,7 @@ import type * as React from "react";
 type ItemProps = {
 	onSelect?: (e: Event) => void;
 	variant?: "default" | "danger";
+	disabled?: boolean;
 	className?: string;
 	role?: string;
 	"aria-checked"?: boolean;

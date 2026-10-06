@@ -12,6 +12,7 @@ separately here.
 
 ## Unreleased
 
+- Open planes sit side by side on a scrolling desk, navigated by a minimap dock
 - New plane is the tree's first row, pinned while the tree scrolls
 - New plane moves from the top bar to a heading over the tree
 - The Add plane popup is grouped and searchable, like the / menu

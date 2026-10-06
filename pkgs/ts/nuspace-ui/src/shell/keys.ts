@@ -14,7 +14,7 @@
 import { useEffect, useSyncExternalStore } from "react";
 import { NEW_INSIDE_KEYS, NEW_PLANE_KEYS } from "../sidebar/add";
 import { RAIL_KEYS } from "../sidebar/collapse";
-import { OPEN_KEYS, SPLIT_CLICK, SPLIT_KEYS } from "../sidebar/keys";
+import { DESK_CLICK, DESK_KEYS, OPEN_KEYS } from "../sidebar/keys";
 import { SEARCH_KEYS } from "../sidebar/search";
 
 /** The shortcut by key name; the kit `Shortcut` spells it. */
@@ -86,15 +86,8 @@ export const BINDINGS: BindingGroup[] = [
 			{ does: "Unfold, or step in", keys: [["right"]] },
 			{ does: "Fold, or step out", keys: [["left"]] },
 			{ does: "Open", keys: [OPEN_KEYS, ["space"]] },
-			{ does: "Open in split", keys: [SPLIT_KEYS, SPLIT_CLICK] },
+			{ does: "Open on desk", keys: [DESK_KEYS, DESK_CLICK] },
 			{ does: "Open in a browser tab", keys: [["mod", "Click"]] },
-		],
-	},
-	{
-		title: "Tabs",
-		bindings: [
-			{ does: "Next or previous tab", keys: [["right"], ["left"]] },
-			{ does: "Close", keys: [["backspace"]] },
 		],
 	},
 	{

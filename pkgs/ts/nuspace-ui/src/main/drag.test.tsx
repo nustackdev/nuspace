@@ -1,11 +1,11 @@
-// Moving panes around, rendered in jsdom: a plane dropped from the rail onto
-// the panes, a tab dragged along the bar, and the widths that go with a pane.
+// Moving panes around the desk, rendered in jsdom: a plane dropped from the
+// rail onto the panes, a pane dragged by its bar, the widths that go with a
+// pane, and the dock's map of it all.
 //
-// jsdom lays nothing out, so a pane's or a tab's box is stubbed where the
-// pointer's half of it matters, and drops are faked with a plain event
-// carrying the bits of dataTransfer the handlers read.
+// jsdom lays nothing out, so a pane's box is stubbed where the pointer's half
+// of it matters, and drops are faked with a plain event carrying the bits of
+// dataTransfer the handlers read.
 
-import { TooltipProvider } from "@nustackdev/ui-kit";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -14,8 +14,8 @@ import { PaneMenu } from "../pane/PaneMenu";
 import { coerceMeta } from "../plane/types";
 import { PIN_MIME } from "../sidebar/PinnedRow";
 import { PLANE_MIME } from "../sidebar/useRailDrag";
-import { TAB_MIME, TabBar, tabDropIndex } from "./TabBar";
-import { paneSlot, useCanvasDrop } from "./useCanvasDrop";
+import { dockLayout } from "./Dock";
+import { PANE_MIME, paneSlot, useCanvasDrop } from "./useCanvasDrop";
 import { widthsOf } from "./usePaneWidths";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -25,11 +25,6 @@ globalThis.ResizeObserver ??= class {
 	unobserve() {}
 	disconnect() {}
 } as unknown as typeof ResizeObserver;
-
-// The tab bar scrolls the focused tab into view, which jsdom has no part of.
-globalThis.CSS ??= { escape: (s: string) => s } as unknown as typeof CSS;
-Element.prototype.scrollIntoView ??= () => {};
-window.matchMedia ??= (() => ({ matches: false })) as unknown as typeof window.matchMedia;
 
 let host: HTMLDivElement;
 let root: Root;
@@ -131,7 +126,7 @@ describe("drop on the panes", () => {
 		expect(currentRoutes()).toEqual(["a", "p"]);
 	});
 
-	it("only focuses a plane already open, as Open in split does", () => {
+	it("only focuses a plane already open, as Open on desk does", () => {
 		at("/a+b");
 		act(() => root.render(<Strip routes={["a", "b"]} />));
 		box(paneOf("b"));
@@ -139,11 +134,29 @@ describe("drop on the panes", () => {
 		expect(currentRoutes()).toEqual(["a", "b"]);
 	});
 
-	it("ignores a tab's drag and anything else", () => {
+	it("moves a pane dragged by its bar to the half it is dropped on", () => {
+		at("/a+b+c");
+		act(() => root.render(<Strip routes={["a", "b", "c"]} />));
+		box(paneOf("c"));
+		const data = { [PANE_MIME]: "a" };
+		expect(drag(paneOf("c"), "dragover", { clientX: 90, data }).defaultPrevented).toBe(true);
+		drag(paneOf("c"), "drop", { clientX: 90, data });
+		expect(currentRoutes()).toEqual(["b", "c", "a"]);
+	});
+
+	it("leaves a pane dropped beside itself where it is", () => {
+		at("/a+b");
+		act(() => root.render(<Strip routes={["a", "b"]} />));
+		box(paneOf("b"));
+		drag(paneOf("b"), "drop", { clientX: 10, data: { [PANE_MIME]: "a" } });
+		expect(currentRoutes()).toEqual(["a", "b"]);
+	});
+
+	it("ignores anything else", () => {
 		at("/a+b");
 		act(() => root.render(<Strip routes={["a", "b"]} />));
 		box(paneOf("a"));
-		for (const data of [{ [TAB_MIME]: "b" }, { "text/plain": "x" }] as Record<string, string>[]) {
+		for (const data of [{ "text/plain": "x" }] as Record<string, string>[]) {
 			expect(drag(paneOf("a"), "dragover", { data }).defaultPrevented).toBe(false);
 			drag(paneOf("a"), "drop", { data });
 		}
@@ -152,57 +165,52 @@ describe("drop on the panes", () => {
 	});
 });
 
-describe("tab drag", () => {
-	const routes = ["a", "b", "c"];
-	const tabOf = (id: string) => host.querySelector(`[data-tab="${id}"]`);
+describe("dock", () => {
+	const panes = [
+		{ id: "a", x: 0, w: 600 },
+		{ id: "b", x: 600, w: 600 },
+		{ id: "c", x: 1200, w: 800 },
+	];
 
-	function render() {
-		const stripRef = { current: null };
-		act(() => {
-			root.render(
-				<TooltipProvider>
-					<TabBar
-						routes={routes}
-						planes={{}}
-						focused="a"
-						stripRef={stripRef}
-						onMeta={() => {}}
-						onRename={() => {}}
-						deleteOf={() => undefined}
-					/>
-				</TooltipProvider>,
-			);
-		});
-	}
-
-	it("counts the drop index without the dragged tab", () => {
-		expect(tabDropIndex(routes, "a", { index: 2, edge: "after" })).toBe(2);
-		expect(tabDropIndex(routes, "a", { index: 1, edge: "before" })).toBeNull();
-		expect(tabDropIndex(routes, "a", { index: 0, edge: "after" })).toBeNull();
-		expect(tabDropIndex(routes, "c", { index: 0, edge: "before" })).toBe(0);
-		expect(tabDropIndex(routes, "c", { index: 1, edge: "after" })).toBeNull();
+	it("draws only when some scroll leaves a pane fully out of view", () => {
+		// c starts at 1200: past a 1000 window with the desk at its start.
+		expect(dockLayout({ left: 0, view: 1000, total: 2000, panes })).not.toBeNull();
+		// Wide enough that c starts inside it, and a still shows with the desk
+		// at its end: a piece of every pane at every scroll.
+		expect(dockLayout({ left: 0, view: 1500, total: 2000, panes })).toBeNull();
+		const two = [
+			{ id: "a", x: 0, w: 900 },
+			{ id: "b", x: 900, w: 900 },
+		];
+		expect(dockLayout({ left: 0, view: 1200, total: 1800, panes: two })).toBeNull();
+		// The first pane ends before the desk's last window starts.
+		const wide = [
+			{ id: "a", x: 0, w: 400 },
+			{ id: "b", x: 400, w: 1400 },
+		];
+		expect(dockLayout({ left: 0, view: 1300, total: 1800, panes: wide })).not.toBeNull();
 	});
 
-	it("moves a pane to where its tab is dropped, with an accent line on the way", () => {
-		at("/a+b+c");
-		render();
-		box(tabOf("c"));
-		drag(tabOf("a"), "dragstart");
-		drag(tabOf("c"), "dragover", { clientX: 90 });
-		expect(tabOf("c")?.querySelector('[aria-hidden="true"].bg-accent')).not.toBeNull();
-		drag(tabOf("c"), "drop", { clientX: 90 });
-		expect(currentRoutes()).toEqual(["b", "c", "a"]);
-		expect(host.querySelector(".bg-accent")).toBeNull();
+	it("sizes each chip as its share of the desk, and the window as the view's", () => {
+		const layout = dockLayout({ left: 500, view: 500, total: 2000, panes });
+		expect(layout?.chips.map((c) => [c.id, c.left, c.width])).toEqual([
+			["a", 0, 30],
+			["b", 30, 30],
+			["c", 60, 40],
+		]);
+		expect(layout?.window).toEqual({ left: 25, width: 25 });
 	});
 
-	it("takes no drag but its own tabs'", () => {
-		at("/a+b+c");
-		render();
-		box(tabOf("a"));
-		const over = drag(tabOf("a"), "dragover", { data: { [PLANE_MIME]: "x" } });
-		expect(over.defaultPrevented).toBe(false);
-		drag(tabOf("a"), "drop", { data: { [PLANE_MIME]: "x" } });
-		expect(currentRoutes()).toEqual(["a", "b", "c"]);
+	it("marks the chips whose panes are on screen", () => {
+		const on = (left: number) =>
+			dockLayout({ left, view: 500, total: 2000, panes })
+				?.chips.filter((c) => c.onScreen)
+				.map((c) => c.id);
+		expect(on(0)).toEqual(["a"]);
+		expect(on(500)).toEqual(["a", "b"]);
+		expect(on(1000)).toEqual(["b", "c"]);
+		// A sliver of a pane at the edge does not count.
+		expect(on(580)).toEqual(["b"]);
 	});
 });
 
@@ -218,5 +226,44 @@ describe("pane menu", () => {
 		act(() => item?.click());
 		expect(open).toHaveBeenCalledWith("/a", "_blank", "noopener");
 		open.mockRestore();
+	});
+
+	function item(label: string) {
+		return [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
+			(b) => b.textContent === label,
+		);
+	}
+
+	it("closes the panes to the right, and the others", () => {
+		at("/a+b+c");
+		act(() => {
+			root.render(<PaneMenu planeId="b" meta={coerceMeta({})} onChange={() => {}} open />);
+		});
+		act(() => item("Close to the right")?.click());
+		expect(currentRoutes()).toEqual(["a", "b"]);
+		at("/a+b+c");
+		act(() => root.render(<PaneMenu planeId="b" meta={null} onChange={() => {}} open />));
+		expect(item("Open in new tab")).toBeUndefined();
+		act(() => item("Close others")?.click());
+		expect(currentRoutes()).toEqual(["b"]);
+	});
+
+	it("keeps the desk items it cannot use, disabled", () => {
+		at("/a+b");
+		act(() => {
+			root.render(<PaneMenu planeId="b" meta={null} onChange={() => {}} open />);
+		});
+		expect(item("Close to the right")?.hasAttribute("data-disabled")).toBe(true);
+		expect(item("Close others")?.hasAttribute("data-disabled")).toBe(false);
+	});
+
+	it("has no desk items on a lone pane", () => {
+		at("/a");
+		act(() => {
+			root.render(<PaneMenu planeId="a" meta={coerceMeta({})} onChange={() => {}} open />);
+		});
+		expect(item("Close")).toBeUndefined();
+		expect(item("Close others")).toBeUndefined();
+		expect(item("Open in new tab")).toBeDefined();
 	});
 });

@@ -163,7 +163,7 @@ describe("rail icon and chevron slot", () => {
 		});
 		const items = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')];
 		const labels = items.map(itemLabel);
-		expect(labels.indexOf("Open in new tab")).toBe(labels.indexOf("Open in split") + 1);
+		expect(labels.indexOf("Open in new tab")).toBe(labels.indexOf("Open on desk") + 1);
 		act(() => items.find((i) => itemLabel(i) === "Open in new tab")?.click());
 		expect(open).toHaveBeenLastCalledWith("/b", "_blank", "noopener");
 
@@ -257,13 +257,13 @@ describe("rail icon and chevron slot", () => {
 });
 
 describe("rail actions", () => {
-	it("hangs split, add and more, in that order, in a lane sized only when shown", () => {
+	it("hangs open-on-desk, add and more, in that order, in a lane sized only when shown", () => {
 		render([]);
 		const lane = moreOf("b")?.parentElement;
 		const labels = [...(lane?.querySelectorAll("button") ?? [])].map((b) =>
 			b.getAttribute("aria-label"),
 		);
-		expect(labels).toEqual(["Open B in split", "Add plane in B", "Actions for B"]);
+		expect(labels).toEqual(["Open B on desk", "Add plane in B", "Actions for B"]);
 		// Zero wide at rest, so a title runs to the row's edge; sized for all
 		// three once revealed. Still in the DOM either way, for the keyboard.
 		const cls = lane?.className.split(" ") ?? [];
@@ -273,12 +273,12 @@ describe("rail actions", () => {
 		expect(cls).toContain("has-focus-visible:w-rail-actions");
 	});
 
-	it("gives split and add a tooltip", () => {
+	it("gives open-on-desk and add a tooltip", () => {
 		render([]);
 		const lane = moreOf("b")?.parentElement;
-		const [split, add] = lane?.querySelectorAll("button") ?? [];
-		act(() => (split as HTMLElement).focus());
-		expect(tooltip()).toMatch(/^Open in split.+/);
+		const [desk, add] = lane?.querySelectorAll("button") ?? [];
+		act(() => (desk as HTMLElement).focus());
+		expect(tooltip()).toMatch(/^Open on desk.+/);
 		act(() => (add as HTMLElement).focus());
 		// The label, then its shortcut's caps.
 		expect(tooltip()).toMatch(/^Add plane inside.+N/);

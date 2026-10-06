@@ -1,4 +1,5 @@
-// Main: whichever Planes the URL names, drawn side by side as a strip of panes.
+// Main: the desk. Whichever Planes the URL names, drawn side by side as one
+// strip of panes that scrolls sideways.
 //
 // One Viewer, and it never asks what kind of thing it is drawing. Each pane
 // renders one Plane's Cells and roots their refs, every Cell the same way.
@@ -8,22 +9,23 @@
 // with the full list whenever it changes. The bare "/" lands on home, the
 // Plane the host seeds, so there is always at least one pane.
 //
-// A single pane is the plane as it always was: the whole strip, centred, no
-// borders. With a split every pane keeps at least the plane's measure, the
-// strip scrolls sideways when they do not fit, and the borders between panes
-// drag. We never remount a pane that stays open.
+// Every pane is open at once, so this is a scrolling desk (niri, PaperWM,
+// stacked notes), not a set of tabs: each pane carries its own bar, and its
+// title scrolls with it. A single pane is the plane as it always was: the
+// whole strip, centred, no borders. With more, every pane keeps at least the
+// plane's measure, the desk scrolls sideways when they do not fit, and the
+// borders between panes drag. We never remount a pane that stays open.
 //
-// With a split a tab bar runs across the top (./TabBar.tsx), one tab per
-// pane, and the panes drop their own bars. Renaming from a tab or from a
-// plane's title sends the sidebar's own `plane.rename`, so the server has one
-// way in for a rename.
+// Under the desk sits the dock (./Dock.tsx), its scrollbar: a scaled map of
+// the panes with a window over what is on screen. Only while the desk is wider
+// than the window.
 //
-// A plane dragged off the rail onto a pane opens beside it
-// (./useCanvasDrop.ts), and a tab dragged along the bar moves its pane.
+// A plane dragged off the rail onto a pane opens beside it, and a pane dragged
+// by its bar moves there (./useCanvasDrop.ts).
 
 import { EmptyState, type NodeProps, pathKey } from "@nustackdev/ui-kit";
 import { Fragment, useCallback, useEffect, useRef } from "react";
-import { useFocusedRoute, useRoutes } from "../core/router";
+import { onReveal, useFocusedRoute, useRoutes } from "../core/router";
 import { useTypePath } from "../core/surfaces";
 import { notifyOp } from "../core/wire";
 import {
@@ -39,6 +41,7 @@ import type { Ops } from "../plane/ops";
 import type { Notify as SidebarNotify, Ops as SidebarOps } from "../sidebar/ops";
 import { canDelete, deletePlane } from "../sidebar/remove";
 import { usePlaneTree } from "../sidebar/state";
+import { Dock } from "./Dock";
 import {
 	patchPlaneMeta,
 	patchPlaneTitle,
@@ -47,7 +50,6 @@ import {
 	usePlanes,
 	useSnippets,
 } from "./state";
-import { TabBar } from "./TabBar";
 import { useCanvasDrop } from "./useCanvasDrop";
 import { usePaneWidths } from "./usePaneWidths";
 
@@ -95,6 +97,23 @@ export function Main({ path }: NodeProps) {
 			?.querySelector<HTMLElement>(`:scope > [data-pane="${CSS.escape(focused)}"]`)
 			?.scrollIntoView({ inline: "nearest", block: "nearest" });
 	}, [routesKey]);
+
+	// A plane already on the desk, asked for again (a sidebar click on it):
+	// its pane has taken focus, so bring it on screen, only as far as needed.
+	useEffect(
+		() =>
+			onReveal((id) => {
+				const smooth = !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+				stripRef.current
+					?.querySelector<HTMLElement>(`:scope > [data-pane="${CSS.escape(id)}"]`)
+					?.scrollIntoView({
+						inline: "nearest",
+						block: "nearest",
+						behavior: smooth ? "smooth" : "auto",
+					});
+			}),
+		[],
+	);
 
 	// Optimistic: the switch moves now, the next `set_plane` confirms it.
 	// biome-ignore lint/correctness/useExhaustiveDependencies: path is compared by value.
@@ -153,23 +172,11 @@ export function Main({ path }: NodeProps) {
 		);
 	}
 
-	const split = routes.length > 1;
-	// Always the same wrapper, so a pane is never remounted when the tab bar
+	const many = routes.length > 1;
+	// Always the same wrapper, so a pane is never remounted when the dock
 	// comes or goes.
 	return (
 		<div className={shellStrip}>
-			{split ? (
-				<TabBar
-					routes={routes}
-					planes={planes}
-					absent={absent}
-					focused={focused}
-					stripRef={stripRef}
-					onMeta={onMeta}
-					onRename={onRename}
-					deleteOf={deleteOf}
-				/>
-			) : null}
 			<div ref={stripRef} className={shellPanes} {...dropProps}>
 				{routes.map((id, i) => (
 					<Fragment key={id}>
@@ -194,7 +201,7 @@ export function Main({ path }: NodeProps) {
 							onRename={onRename}
 							onIcon={onIcon}
 							onDelete={deleteOf(id)}
-							split={split}
+							many={many}
 							divided={i > 0}
 							focused={id === focused}
 							drop={dropTarget?.id === id ? dropTarget.edge : null}
@@ -203,6 +210,16 @@ export function Main({ path }: NodeProps) {
 					</Fragment>
 				))}
 			</div>
+			{many ? (
+				<Dock
+					routes={routes}
+					planes={planes}
+					absent={absent}
+					stripRef={stripRef}
+					onMeta={onMeta}
+					deleteOf={deleteOf}
+				/>
+			) : null}
 		</div>
 	);
 }

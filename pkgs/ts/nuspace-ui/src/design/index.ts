@@ -13,7 +13,7 @@
 //   tokens.css         document + cell-status tokens, both themes
 //   shell.ts           the window frame: sidebar beside the strip of panes
 //   pane.ts            one pane's top bar and its settings menu
-//   tabs.ts            the tab bar over a split, one tab per pane
+//   dock.ts            the dock under the desk: a scaled map of the panes
 //   document.ts        class recipes for the document surface, title included
 //   rail.ts            the sidebar rail
 //   icon.ts            plane icons: the glyph at each size, and the picker
@@ -32,6 +32,7 @@
 // Anything in here that turns out to be generic graduates to ui-kit.
 
 export * from "./cell-status";
+export * from "./dock";
 export * from "./document";
 export * from "./icon";
 export * from "./menu";
@@ -39,4 +40,3 @@ export * from "./pane";
 export * from "./rail";
 export * from "./resize";
 export * from "./shell";
-export * from "./tabs";

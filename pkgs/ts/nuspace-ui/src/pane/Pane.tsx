@@ -1,14 +1,13 @@
-// One pane: a plane's frame. The bar on top, the plane under it in its own
-// scroll host. With a split the bar goes: the tab bar over the strip carries
-// every pane's title, settings and close instead.
+// One pane: a plane's frame on the desk. Its bar on top (title, settings,
+// remove), the plane under it in its own scroll host.
 //
 // The pane last clicked (or tabbed into) is the focused one: that is the pane
-// a plain sidebar click replaces. With more than one pane open the others
-// sit on a dimmed surface and the focused one keeps the canvas.
+// a plain sidebar click replaces. With more than one pane on the desk the
+// others sit on a dimmed surface and the focused one keeps the canvas.
 //
 // A pane whose Plane is absent (none by that id, or one that runs without a
 // view) says so in place of the cells, with a way to close it, and offers no
-// title or icon to edit. Its bar and tab carry the plane id.
+// title or icon to edit. Its bar and its dock chip carry the plane id.
 //
 // A pane whose Plane has not landed yet draws the viewer skeleton, the same
 // one the boot draws, so a switch and a first load look alike.
@@ -67,7 +66,7 @@ export function Pane({
 	onRename,
 	onIcon,
 	onDelete,
-	split,
+	many,
 	divided,
 	focused,
 	drop = null,
@@ -89,8 +88,8 @@ export function Pane({
 	onIcon: (planeId: string, icon: string) => void;
 	/** Delete this plane. Left out for one that cannot be deleted. */
 	onDelete?: () => void;
-	/** More than one pane is open: no bar, the tab bar stands in for it. */
-	split: boolean;
+	/** More than one pane on the desk: dim the unfocused, drag by the bar. */
+	many: boolean;
 	/** Draws the divider on its left edge. */
 	divided: boolean;
 	focused: boolean;
@@ -118,22 +117,24 @@ export function Pane({
 	return (
 		<section
 			data-pane={planeId}
-			className={shellPane(divided, split && !focused)}
+			className={shellPane(divided, many && !focused)}
 			style={style}
 			aria-label={title}
 			onPointerDownCapture={claim}
 			onFocusCapture={claim}
 		>
-			{split ? null : (
-				<PaneBar
-					planeId={planeId}
-					title={title}
-					meta={plane?.meta ?? null}
-					onMeta={(patch) => onMeta(planeId, patch)}
-					onDelete={onDelete}
-					onClose={() => closePane(planeId)}
-				/>
-			)}
+			<PaneBar
+				planeId={planeId}
+				title={title}
+				meta={plane?.meta ?? null}
+				onMeta={(patch) => onMeta(planeId, patch)}
+				onDelete={onDelete}
+				onClose={() => closePane(planeId)}
+				first={!divided}
+				movable={many}
+				closable={many}
+				lit={many && focused}
+			/>
 			{/* A press off the cells starts a box selection over them. */}
 			<div className={shellPanePlane} onPointerDown={(e) => selectBox.current?.(e)}>
 				{absent ? (

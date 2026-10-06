@@ -66,6 +66,14 @@
 	--rail-selected: color-mix(in oklab, var(--text-primary) 7%, transparent);
 	--rail-edge: var(--border-default);
 
+	/* --- Dock window ------------------------------------------------------
+	 * The on-screen window over the dock's chips, and the grip that drags the
+	 * desk. A neutral wash off --text-primary like the tiers above, but
+	 * stronger: it sits on bg-sunken, where the hover tier all but vanishes.
+	 * --------------------------------------------------------------------- */
+	--dock-window: color-mix(in oklab, var(--text-primary) 12%, transparent);
+	--dock-window-hover: color-mix(in oklab, var(--text-primary) 17%, transparent);
+
 	/* --- Sidebar rail geometry --------------------------------------------
 	 * Every length the rail is laid out by, in one place so it can be tuned
 	 * without touching a recipe. Not theme dependent; here in :root and not
@@ -188,6 +196,9 @@
 
 	--rail-open: color-mix(in oklab, var(--text-primary) 4%, transparent);
 	--rail-selected: color-mix(in oklab, var(--text-primary) 9%, transparent);
+
+	--dock-window: color-mix(in oklab, var(--text-primary) 11%, transparent);
+	--dock-window-hover: color-mix(in oklab, var(--text-primary) 16%, transparent);
 }
 
 /* ============================== L3: Tailwind v4 ===========================*/
@@ -206,6 +217,10 @@
 	--color-rail-open: var(--rail-open);
 	--color-rail-selected: var(--rail-selected);
 	--color-rail-edge: var(--rail-edge);
+
+	/* --- Dock --> bg-dock-window, hover:bg-dock-window-hover ------------- */
+	--color-dock-window: var(--dock-window);
+	--color-dock-window-hover: var(--dock-window-hover);
 
 	/* --- Sidebar rail geometry --> h-rail-row, px-rail-inset, ... -------- */
 	--spacing-rail-inset: var(--rail-inset);
@@ -260,14 +275,10 @@
 	 * --------------------------------------------------------------------- */
 
 	/* h-chrome: the one height every strip of window chrome shares - the
-	 * rail's header and footer, a lone pane's bar, the tab bar over a split.
+	 * rail's header and footer, every pane's bar, the dock under the desk.
 	 * One token so the rules across the top of the window line up by
 	 * construction, not by two files happening to say h-9. 36 = spacing 9. */
 	--spacing-chrome: 2.25rem;
-
-	/* w-tab: one tab in the tab bar. Fixed, so tabs do not shuffle as titles
-	 * change; a title cuts off with an ellipsis. 192 = spacing 48. */
-	--spacing-tab: 12rem;
 
 	/* max-w-doc / max-w-doc-wide */
 	--container-doc: 40rem; /* 640, == kit container-prose  */

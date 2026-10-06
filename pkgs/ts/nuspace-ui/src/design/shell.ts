@@ -29,7 +29,7 @@ export const shellRoot = "flex h-screen bg-bg-canvas text-text-primary";
 /**
  * Everything beside the sidebar. `group/main` with `data-rail="collapsed"`
  * while the rail is hidden, so the bars along the top can make room for the
- * reopen button (see `paneBar`, `tabBar`).
+ * reopen button (see `paneBar`).
  */
 export const shellMain = "group/main relative flex min-h-0 min-w-0 flex-1";
 
@@ -50,21 +50,21 @@ export const shellSurface = "flex min-h-0 min-w-0 flex-1";
 
 /**
  * A pane's narrowest, px: the plane's reading measure (`max-w-doc`, 40rem in
- * tokens.css), so a split never squeezes a plane under the width it is written
+ * tokens.css), so the desk never squeezes a plane under the width it is written
  * for. A number and not a class because the strip's resize math needs it too.
  */
 export const PANE_MIN_WIDTH = 640;
 
 /**
- * The Viewer: the tab bar (only with a split, see ./tabs.ts) over the strip
- * of panes.
+ * The Viewer: the desk, a strip of panes, over the dock (only while the desk
+ * scrolls, see ./dock.ts).
  */
 export const shellStrip = "flex min-h-0 min-w-0 flex-1 flex-col";
 
 /**
- * The Viewer's strip of panes. When the panes' minimums add up to more than
- * the window has, it scrolls sideways (trackpad, shift-wheel) with no
- * scrollbar drawn: the panes' own borders already say there is more.
+ * The desk: the Viewer's strip of panes. When the panes' minimums add up to
+ * more than the window has, it scrolls sideways (trackpad, shift-wheel) with
+ * no scrollbar drawn: the dock under it is its scrollbar.
  */
 export const shellPanes = cn(
 	"flex min-h-0 min-w-0 flex-1",
@@ -74,14 +74,13 @@ export const shellPanes = cn(
 /**
  * One pane: its top bar over its own scroll host. `min-w-0` lets a wide cell
  * scroll inside the pane instead of pushing the neighbour out; the share and
- * the split minimum are inline (see main/usePaneWidths.ts). Every pane after
+ * the desk minimum are inline (see main/usePaneWidths.ts). Every pane after
  * the first draws the divider on its left edge, which is where the resize
  * handle sits.
  *
- * The pane paints its own background, and that is the focus mark: with a
- * split, every pane but the focused one sits a step down on `bg-sunken`, and
- * the focused one keeps the canvas, the same surface as its tab above it
- * (./tabs.ts). Only the surface dims, never the content, so text keeps its
+ * The pane paints its own background, and that is the focus mark: with more
+ * than one pane, every pane but the focused one sits a step down on `bg-sunken`, and
+ * the focused one keeps the canvas. Only the surface dims, never the content, so text keeps its
  * contrast. A single pane is never dimmed and looks as it always did.
  * `duration-fast`; the kit's reduced-motion rule flattens it to instant.
  */

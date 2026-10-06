@@ -18,8 +18,8 @@
 // the pointer: "Change icon" in both menus opens the picker, anchored on it.
 // "Pin" / "Unpin" in both menus puts it in the pinned row or takes it out.
 //
-// The hover split opens the plane in a new pane beside the others, the same as
-// "Open in split", Option+Enter, an Option-click and a drag of the row onto
+// The hover desk button opens the plane in a new pane beside the others, the same as
+// "Open on desk", Option+Enter, an Option-click and a drag of the row onto
 // the panes. The `...` and a right-click open the same menu (`PlaneMenuItems`). "Open in new
 // tab" in both menus is the browser's tab, the same as a cmd-click. The hover `+` adds a Plane under this one,
 // through the one Add plane popup. All three actions carry a kit tooltip; the
@@ -66,7 +66,7 @@ import { PlaneIcon } from "../icon/PlaneIcon";
 import type { Icon as PlaneIconValue } from "../icon/parse";
 import { contextParts, dropdownParts, type MenuParts } from "../shell/menu";
 import { NEW_INSIDE_KEYS, openAddPlane } from "./add";
-import { OPEN_KEYS, SPLIT_KEYS } from "./keys";
+import { DESK_KEYS, OPEN_KEYS } from "./keys";
 import type { Notify } from "./ops";
 import type { Pins } from "./pin";
 import { RailRow, RailRowLink } from "./RailRow";
@@ -131,7 +131,7 @@ export function PlaneRow({
 	);
 	const removable = canDelete(tree, id);
 
-	const split = useCallback(() => {
+	const openOnDesk = useCallback(() => {
 		if (hasKids) reveal(key);
 		openPane(id);
 	}, [hasKids, id, key, reveal]);
@@ -171,7 +171,7 @@ export function PlaneRow({
 
 	const menu: PlaneMenuProps = {
 		open: openHere,
-		split,
+		openOnDesk,
 		newTab,
 		add,
 		rename: () => onRename(row),
@@ -265,7 +265,7 @@ export function PlaneRow({
 							// link is a download.
 							if (e.altKey && e.button === 0) {
 								e.preventDefault();
-								split();
+								openOnDesk();
 								return;
 							}
 							// Opening a Plane reveals what is inside it. It never folds
@@ -286,16 +286,16 @@ export function PlaneRow({
 								size="sm"
 								ring="inset"
 								tabIndex={-1}
-								aria-label={`Open ${title} in split`}
-								onClick={split}
+								aria-label={`Open ${title} on desk`}
+								onClick={openOnDesk}
 								className={railAction}
 							>
 								<Columns2 />
 							</IconButton>
 						</TooltipTrigger>
 						<TooltipContent side="bottom">
-							Open in split
-							<Shortcut keys={SPLIT_KEYS} size="sm" className={railTooltipHint} />
+							Open on desk
+							<Shortcut keys={DESK_KEYS} size="sm" className={railTooltipHint} />
 						</TooltipContent>
 					</Tooltip>
 					<Tooltip>
@@ -403,7 +403,7 @@ function MoreMenu({
 
 type PlaneMenuProps = {
 	open: () => void;
-	split: () => void;
+	openOnDesk: () => void;
 	newTab: () => void;
 	add: () => void;
 	rename: () => void;
@@ -429,10 +429,10 @@ function PlaneMenuItems({ parts, ...a }: PlaneMenuProps & { parts: MenuParts }) 
 				Open
 				<Shortcut keys={OPEN_KEYS} />
 			</Item>
-			<Item onSelect={a.split}>
+			<Item onSelect={a.openOnDesk}>
 				<Columns2 />
-				Open in split
-				<Shortcut keys={SPLIT_KEYS} />
+				Open on desk
+				<Shortcut keys={DESK_KEYS} />
 			</Item>
 			<Item onSelect={a.newTab}>
 				<ExternalLink />

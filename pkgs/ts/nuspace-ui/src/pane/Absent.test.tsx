@@ -33,7 +33,7 @@ function render(planeId: string, absent: AbsentReason) {
 					onMeta={() => {}}
 					onRename={() => {}}
 					onIcon={() => {}}
-					split={false}
+					many={false}
 					divided={false}
 					focused
 					style={{}}

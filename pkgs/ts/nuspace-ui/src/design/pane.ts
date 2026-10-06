@@ -3,8 +3,8 @@
 //
 // The bar is window chrome, not document: it stays put while the plane under it
 // scrolls, and it is quiet enough that a single pane still reads as a plane
-// with nothing around it. No border, a muted title, the kit's ghost buttons. It only
-// draws over a lone pane: a split gets the tab bar (./tabs.ts) instead.
+// with nothing around it. No border, a muted title, the kit's ghost buttons.
+// Every pane on the desk has one, so a title always scrolls with its pane.
 //
 // Source docs (do not paraphrase without re-reading):
 //   go/projects/nustackdev/design/space-radius.md   §4 row heights
@@ -14,19 +14,29 @@ import { cn } from "@nustackdev/ui-kit";
 
 /**
  * The bar. `h-chrome`, like the rail's header strip, so the two tops line up.
- * With the rail collapsed the reopen button sits over its left end, so the
- * title steps right past it.
+ * Transparent, so the pane's own surface (canvas, or sunken when dimmed)
+ * shows through. With the rail collapsed the reopen button sits over the
+ * desk's left end, so the first pane's title steps right past it. With more
+ * than one pane the bar is the handle a pane is dragged along the desk by.
  */
-export const paneBar = cn(
-	"flex h-chrome shrink-0 items-center gap-0.5",
-	"bg-bg-canvas pl-4 pr-1.5 group-data-[rail=collapsed]/main:pl-12",
-);
+export function paneBar(first: boolean, movable: boolean): string {
+	return cn(
+		"flex h-chrome shrink-0 items-center gap-0.5 bg-transparent pl-4 pr-1.5",
+		first && "group-data-[rail=collapsed]/main:pl-12",
+		movable && "cursor-grab active:cursor-grabbing",
+	);
+}
 
 /**
- * The bar's title, muted. The bar only draws over a lone pane (a split gets
- * the tab bar instead), so there is no focused title to bring up a tier.
+ * The bar's title. Muted, and a tier up on the focused pane when the desk
+ * holds more than one, so the focus reads in the title as well as the surface.
  */
-export const paneBarTitle = cn("min-w-0 flex-1 select-none truncate text-sm", "text-text-muted");
+export function paneBarTitle(lit: boolean): string {
+	return cn(
+		"min-w-0 flex-1 select-none truncate text-sm",
+		lit ? "text-text-primary" : "text-text-muted",
+	);
+}
 
 /** The settings menu. Narrow, so a setting's hint wraps under its label. */
 export const paneMenu = "w-64";

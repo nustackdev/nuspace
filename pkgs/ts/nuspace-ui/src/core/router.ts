@@ -158,6 +158,21 @@ function go(ids: string[], replace = false): void {
 	emit();
 }
 
+// A pane asked for by a plane that is already open (a sidebar click, "Open
+// on desk", a drop) takes focus and should come on screen. The routes do not
+// change, so nothing re-renders to notice: the desk listens here instead.
+const revealers = new Set<(planeId: string) => void>();
+
+/** Listen for an open pane being asked for again. Returns the unsubscribe. */
+export function onReveal(fn: (planeId: string) => void): () => void {
+	revealers.add(fn);
+	return () => revealers.delete(fn);
+}
+
+function reveal(planeId: string): void {
+	for (const fn of revealers) fn(planeId);
+}
+
 /** Mark a pane focused. No history entry: focus is not a place. */
 export function focusPane(planeId: string): void {
 	if (focusedRaw === planeId) return;
@@ -174,6 +189,7 @@ export function replacePane(planeId: string): void {
 	const routes = currentRoutes();
 	if (routes.includes(planeId)) {
 		focusPane(planeId);
+		reveal(planeId);
 		return;
 	}
 	const at = routes.indexOf(resolveFocus(routes));
@@ -189,6 +205,7 @@ export function openPane(planeId: string): void {
 	focusedRaw = planeId;
 	if (routes.includes(planeId)) {
 		emit();
+		reveal(planeId);
 		return;
 	}
 	go([...routes, planeId]);
@@ -232,6 +249,7 @@ export function openPaneAt(planeId: string, index: number): void {
 	focusedRaw = planeId;
 	if (routes.includes(planeId)) {
 		emit();
+		reveal(planeId);
 		return;
 	}
 	const next = [...routes];
