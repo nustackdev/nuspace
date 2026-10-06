@@ -17,6 +17,7 @@ from nuspace.shapes import Space
 
 __all__ = [
     "cell_exists",
+    "cell_named",
     "cell_plane",
     "cell_rows",
     "cells",
@@ -58,6 +59,14 @@ def cells(plane_id: nu.StrArg) -> nu.List:
 def cell_exists(cell_id: nu.StrArg) -> nu.Bool:
     """Whether a cell is stored under this id."""
     return Space.cells.contains(cell_id)
+
+
+def cell_named(plane_id: nu.StrArg, name: nu.StrArg) -> nu.Str:
+    """The id of the first cell on a plane called ``name``, ``""`` for none. Names are not unique."""
+    named = (
+        cells(plane_id).iter().filter(lambda c: Space.cells[nu.Str(c)].name.fallback("") == name)
+    )
+    return nu.str(nu.First(named)).fallback("")
 
 
 def cell_plane(cell_id: nu.StrArg) -> nu.Str:

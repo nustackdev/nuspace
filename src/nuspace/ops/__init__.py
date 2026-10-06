@@ -62,6 +62,7 @@ from .pin import move_pin, pin_plane, pinned, unpin_plane
 from .plane import add_plane, remove_plane, rename_plane, set_plane_icon, set_plane_meta
 from .read import (
     cell_exists,
+    cell_named,
     cell_plane,
     cell_rows,
     cells,
@@ -103,6 +104,7 @@ __all__ = [
     "bracketed",
     "cell_exists",
     "cell_interrupt",
+    "cell_named",
     "cell_plane",
     "cell_rows",
     "cell_run",

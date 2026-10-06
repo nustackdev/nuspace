@@ -54,11 +54,19 @@ def test_discovery_finds_nuverse():
     assert [s.name for s in ext.snippets] == [
         "text",
         "table",
+        "text_input",
+        "number",
+        "slider",
+        "switch",
+        "select",
+        "date",
         "program",
         "lens",
         "plane_lens",
         "cell_lens",
         "ticker",
+        "password",
+        "converter",
     ]
     assert dict(ext.envs) == {}
 
@@ -96,11 +104,19 @@ def test_snippets_are_well_formed():
     assert snippets.SNIPPETS == (
         snippets.prose.SNIPPET,
         snippets.table.SNIPPET,
+        snippets.text_input.SNIPPET,
+        snippets.number.SNIPPET,
+        snippets.slider.SNIPPET,
+        snippets.switch.SNIPPET,
+        snippets.select.SNIPPET,
+        snippets.date.SNIPPET,
         snippets.program.SNIPPET,
         snippets.lens.SNIPPET,
         snippets.plane_lens.SNIPPET,
         snippets.cell_lens.SNIPPET,
         snippets.ticker.SNIPPET,
+        snippets.password.SNIPPET,
+        snippets.converter.SNIPPET,
     )
     assert snippets.code.SNIPPET is None
     # The prose package is the text snippet.

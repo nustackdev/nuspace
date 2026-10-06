@@ -13,6 +13,8 @@ separately here.
 ## Unreleased
 
 - Gray dark theme for the window frame, with sidebar fills you can actually see
+- New password generator and unit converter example snippets
+- New input snippets: text, number, slider, switch, select and date, configurable and live
 - Search matches whole words only, so a query no longer hits inside longer words
 - New Table snippet: an editable data table kept in the cell, live across tabs
 - Dock chips highlight on hover, and their menu only closes panes
