@@ -65,8 +65,8 @@ export function railIndent(depth: number): { paddingLeft: string } {
 export const RAIL_WIDTH = { MIN: 200, DEFAULT: 260, MAX: 540 } as const;
 
 /**
- * The rail itself. Its own surface, a hairline edge on `rail-edge` so it holds
- * in light too. The width is inline (the user drags it, see
+ * The rail itself. Its own surface, a hairline edge on `nuspace-edge` so it
+ * holds in light too. The width is inline (the user drags it, see
  * sidebar/useRailWidth.ts), so none is set here.
  *
  * Collapsed, it is `hidden` rather than unmounted: the Add plane popup lives
@@ -75,7 +75,7 @@ export const RAIL_WIDTH = { MIN: 200, DEFAULT: 260, MAX: 540 } as const;
 export function railAside(collapsed: boolean): string {
 	return cn(
 		"relative flex shrink-0 flex-col",
-		"border-r border-rail-edge bg-bg-surface",
+		"border-r border-nuspace-edge bg-nuspace-rail",
 		collapsed && "hidden",
 	);
 }
@@ -104,7 +104,7 @@ export const railWordmarkNu = "text-accent";
  * to edge rule over it, mirroring the divider under the header group.
  */
 export const railFooter =
-	"flex h-chrome shrink-0 items-center gap-0.5 border-t border-rail-edge px-rail-bar-pad";
+	"flex h-chrome shrink-0 items-center gap-0.5 border-t border-nuspace-edge px-rail-bar-pad";
 
 /** The free middle of the bottom bar, between the links and the window's state. */
 export const railFooterSpace = "min-w-0 flex-1";
@@ -149,8 +149,8 @@ export const railScroll = cn(
  * on the actions' edge while it is hovered.
  */
 export const railNewPlaneBar = cn(
-	"sticky top-0 z-10 shrink-0 bg-bg-surface pb-rail-row-gap",
-	"before:absolute before:inset-x-0 before:bottom-full before:h-rail-top-gap before:bg-bg-surface",
+	"sticky top-0 z-10 shrink-0 bg-nuspace-rail pb-rail-row-gap",
+	"before:absolute before:inset-x-0 before:bottom-full before:h-rail-top-gap before:bg-nuspace-rail",
 );
 
 export const railNewPlane = cn(railRow(false, true), "w-full cursor-pointer text-left");
@@ -194,10 +194,10 @@ export function railRow(selected: boolean, inset = false, open = false): string 
 		// the kit's 2px offset gets clipped by the rail's own overflow.
 		"focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0",
 		selected
-			? "bg-rail-selected"
+			? "bg-nuspace-rail-selected"
 			: open
-				? "bg-rail-open hover:bg-rail-hover"
-				: "hover:bg-rail-hover active:bg-doc-active",
+				? "bg-nuspace-rail-open hover:bg-nuspace-rail-hover"
+				: "hover:bg-nuspace-rail-hover active:bg-doc-active",
 	);
 }
 
@@ -432,10 +432,10 @@ export function railPin(selected: boolean, open: boolean): string {
 		"relative size-rail-pin shrink-0 [&_svg]:size-4",
 		"focus-visible:ring-offset-0",
 		selected
-			? "bg-rail-selected text-text-primary hover:bg-rail-selected"
+			? "bg-nuspace-rail-selected text-text-primary hover:bg-nuspace-rail-selected"
 			: open
-				? "bg-rail-open hover:bg-rail-hover hover:text-text-primary"
-				: "hover:bg-rail-hover hover:text-text-primary active:bg-doc-active",
+				? "bg-nuspace-rail-open hover:bg-nuspace-rail-hover hover:text-text-primary"
+				: "hover:bg-nuspace-rail-hover hover:text-text-primary active:bg-doc-active",
 	);
 }
 
@@ -455,8 +455,8 @@ export function railPinDropLine(edge: "before" | "after"): string {
  *
  * It is a row, not an input. Same inset, height, radius and lanes as a flat
  * plane row, so its glyph sits on the rail's one left edge and its label on
- * the titles' edge. At rest it carries the hover tier as a quiet fill, so it
- * reads as a place to type without a box around it; hover steps it up one
+ * the titles' edge. At rest it carries its own quiet fill (`nuspace-rail-search`), so it
+ * reads as a place to type without a box around it; hover steps it up to the selected
  * tier and the label up to the secondary text tier. No border in any state.
  */
 
@@ -466,9 +466,9 @@ export const railSearch = "shrink-0 px-rail-inset";
 export const railSearchTrigger = cn(
 	"group/search flex h-rail-row w-full cursor-pointer items-center rounded-md",
 	"pl-rail-row-pad pr-rail-row-pad-end",
-	"bg-rail-hover text-base text-text-muted",
+	"bg-nuspace-rail-search text-base text-text-muted",
 	"transition-colors duration-fast ease-out",
-	"hover:bg-doc-active hover:text-text-secondary active:bg-doc-active",
+	"hover:bg-nuspace-rail-selected hover:text-text-secondary active:bg-nuspace-rail-selected",
 	"focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0",
 );
 

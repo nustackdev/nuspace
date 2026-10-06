@@ -3,17 +3,17 @@
  * Order matters. The kit lands first, ahead of Tailwind: its bundle carries
  * L1 hexes, L2 semantic roles for both themes, every class kit components
  * use, and the L3 Tailwind theme with the `dark` variant, so nuspace's own
- * classes resolve the kit names. Then ./design/tokens.css adds the L2.5
- * document-surface roles on top, which are aliases onto the kit's roles and
- * contain no colors of their own.
+ * classes resolve the kit names. Then ./design/theme.css colors the frame
+ * nuspace draws itself (page, sidebar, panes, dock), and ./design/tokens.css
+ * adds the L2.5 document-surface roles, aliases onto the kit's roles.
  *
- * nuspace does not get its own palette, type scale, spacing scale, radius
- * scale or motion scale. All of that comes from the kit. If something is
- * missing, it gets fixed in the design system and the kit, not here.
+ * Kit components keep the kit's look: the theme never reassigns a kit role.
+ * nuspace does not get its own type, spacing, radius or motion scale either.
  * See go/projects/nustackdev/design/index.md. */
 
 @import "@nustackdev/ui-kit/styles";
 @import "tailwindcss";
+@import "./design/theme.css";
 @import "./design/tokens.css";
 
 /* ProseMirror's own base rules (selection, pre-wrap, caret plumbing), for

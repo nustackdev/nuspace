@@ -1,0 +1,76 @@
+/* =============================================================================
+ * nuspace theme: the colors of the frame nuspace draws itself.
+ *
+ * Two layers, kept apart on purpose:
+ *
+ *   kit components   cards, inputs, buttons, menus, tables, dialogs. They
+ *                    keep the kit's own L2 roles, untouched. Nothing here
+ *                    reassigns a kit role.
+ *   nuspace frame    the shell around them: the page, the sidebar, the
+ *                    unfocused panes, the dock, the hairlines between them,
+ *                    and the sidebar's quiet fills (search, hover, open,
+ *                    selected). Only these read the roles below.
+ *
+ * The look is "graphite": a gray dark theme rather than a black one, the
+ * sidebar and the unfocused panes a step under the page. Light keeps the page
+ * a hair off white with a tinted sidebar.
+ *
+ * The sidebar fills are alpha off --text-primary so they track the theme, and
+ * they are firmer than the document's own hover tier (--doc-hover in
+ * tokens.css): on a tinted sidebar a 4% wash all but disappears.
+ *
+ * Every name carries the nuspace- prefix, so a frame role can never be read
+ * as, or collide with, a kit role.
+ *
+ * Layers:
+ *   :root / .dark    frame roles, per theme
+ *   @theme inline    exposed as Tailwind utility names (bg-nuspace-page, ...)
+ * ==========================================================================*/
+
+/* ============================== light ====================================*/
+:root {
+	/* --- Grounds --------------------------------------------------------- */
+	--nuspace-page: #fcfcfd; /* the focused pane, the plane's own background  */
+	--nuspace-pane-dim: #f5f5f8; /* every pane but the focused one            */
+	--nuspace-rail: #f3f3f6; /* the sidebar                                  */
+	--nuspace-dock: #efeff3; /* the dock under the desk                      */
+
+	/* --- Hairlines ------------------------------------------------------- */
+	--nuspace-edge: #e3e3ea; /* sidebar edge, pane dividers, the dock's rules  */
+
+	/* --- Sidebar fills --------------------------------------------------- */
+	--nuspace-rail-search: color-mix(in oklab, var(--text-primary) 7%, transparent);
+	--nuspace-rail-hover: color-mix(in oklab, var(--text-primary) 5%, transparent);
+	--nuspace-rail-open: color-mix(in oklab, var(--text-primary) 4.5%, transparent);
+	--nuspace-rail-selected: color-mix(in oklab, var(--text-primary) 10%, transparent);
+}
+
+/* ============================== dark =====================================*/
+.dark {
+	--nuspace-page: #1b1b1f;
+	--nuspace-pane-dim: #17171a;
+	--nuspace-rail: #161619;
+	--nuspace-dock: #141417;
+
+	--nuspace-edge: rgba(255, 255, 255, 0.075);
+
+	--nuspace-rail-search: color-mix(in oklab, var(--text-primary) 8%, transparent);
+	--nuspace-rail-hover: color-mix(in oklab, var(--text-primary) 6.5%, transparent);
+	--nuspace-rail-open: color-mix(in oklab, var(--text-primary) 5%, transparent);
+	--nuspace-rail-selected: color-mix(in oklab, var(--text-primary) 11%, transparent);
+}
+
+/* ============================== Tailwind v4 ==============================*/
+@theme inline {
+	--color-nuspace-page: var(--nuspace-page);
+	--color-nuspace-pane-dim: var(--nuspace-pane-dim);
+	--color-nuspace-edge: var(--nuspace-edge);
+
+	--color-nuspace-rail: var(--nuspace-rail);
+	--color-nuspace-rail-search: var(--nuspace-rail-search);
+	--color-nuspace-rail-hover: var(--nuspace-rail-hover);
+	--color-nuspace-rail-open: var(--nuspace-rail-open);
+	--color-nuspace-rail-selected: var(--nuspace-rail-selected);
+
+	--color-nuspace-dock: var(--nuspace-dock);
+}

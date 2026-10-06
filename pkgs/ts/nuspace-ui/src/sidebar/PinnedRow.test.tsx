@@ -121,8 +121,8 @@ describe("pinned row", () => {
 	it("washes the focused pane's plane like the selected row", () => {
 		render(["a", "b", "c"], "a", ["a", "b"]);
 		expect(pinOf("a")?.getAttribute("aria-current")).toBe("page");
-		expect(pinOf("a")?.className).toContain("bg-rail-selected");
-		expect(pinOf("b")?.className).toContain("bg-rail-open");
+		expect(pinOf("a")?.className).toContain("bg-nuspace-rail-selected");
+		expect(pinOf("b")?.className).toContain("bg-nuspace-rail-open");
 		expect(pinOf("c")?.getAttribute("aria-current")).toBeNull();
 	});
 

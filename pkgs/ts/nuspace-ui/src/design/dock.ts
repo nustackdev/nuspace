@@ -6,11 +6,11 @@
 // grip that drags the desk. Chips on screen read in the primary tier, the rest
 // stay muted. The window is neutral, not accent: the chips are the subject.
 //
-// `h-chrome` tall like every other strip of window chrome, on `bg-sunken`
+// `h-chrome` tall like every other strip of window chrome, on `nuspace-dock`
 // with a rule along its top, so it reads as chrome and not as a pane.
 //
-// Everything resolves to kit L2/L4 semantic names or the doc-* names in
-// ./tokens.css. No raw hex, nothing off the 4px grid.
+// Everything resolves to kit L2/L4 semantic names, the doc-* names in
+// ./tokens.css or the nuspace-* frame roles in ./theme.css. No raw hex, nothing off the 4px grid.
 //
 // Source docs (do not paraphrase without re-reading):
 //   go/projects/nustackdev/design/space-radius.md   §1 grid, §2 radius
@@ -21,8 +21,8 @@ import { cn } from "@nustackdev/ui-kit";
 
 /** The bar: a strip of chrome holding the track. */
 export const dock = cn(
-	"flex h-chrome shrink-0 items-stretch bg-bg-sunken",
-	"border-t border-border-default",
+	"flex h-chrome shrink-0 items-stretch bg-nuspace-dock",
+	"border-t border-nuspace-edge",
 );
 
 /** The track: the whole desk, scaled to the bar, edge to edge, no padding. */
@@ -38,7 +38,7 @@ export const dockTrack = "relative min-w-0 flex-1 select-none overflow-hidden";
 export function dockChip(onScreen: boolean, dragging: boolean, hovered: boolean): string {
 	return cn(
 		"absolute inset-y-0 flex min-w-0 items-center overflow-hidden",
-		"border-l border-border-default first:border-l-0",
+		"border-l border-nuspace-edge first:border-l-0",
 		"transition-colors duration-fast ease-out hover:bg-doc-hover",
 		onScreen ? "text-text-primary" : "text-text-muted hover:text-text-secondary",
 		hovered && "bg-doc-hover",
