@@ -72,8 +72,8 @@ async def _garden(store) -> None:
     """Two drawn planes of notes, one plain cell, one plane nobody draws."""
     await store.run(
         _drawn("p1", "Garden")
-        >> _note("p1", "c1", "Tomatoes need\nsun and water")
-        >> _note("p1", "c2", "Nothing to see")
+        >> _note("p1", "c1", "Tomato needs\nsun and water")
+        >> _note("p1", "c2", "Tomatoes are not the word")
         >> ops.insert_snippet("p1", notes.PLAIN, cell_id="c3")
         >> _drawn("p2", "Tomato plan")
         >> _note("p2", "c4", "Buy TOMATO seeds")
@@ -153,7 +153,7 @@ async def test_the_cell_finds_notes_and_titles_in_drawn_planes(store):
             "plane": "p1",
             "cell": "c1",
             "title": "Garden",
-            "excerpt": "Tomatoes need sun and water",
+            "excerpt": "Tomato needs sun and water",
             "by": "note",
         },
         {
@@ -203,8 +203,30 @@ def test_excerpt_cuts_around_the_match():
     assert len(got) <= 2 * search.EXCERPT_WIDTH + len("needle") + 2
     short, _ = nu.run(search.excerpt(nu.Str("a needle"), nu.Str("NEEDLE")))
     assert short == "a needle"
-    assert nu.run(search.matches(nu.Str("Haystack"), nu.Str("STACK")))[0] is True
     assert nu.run(search.matches(nu.Str("Haystack"), nu.Str("")))[0] is False
+
+
+@pytest.mark.parametrize(
+    ("value", "query", "at"),
+    [
+        ("Haystack", "STACK", -1),
+        ("Haystack hay", "hay", 9),
+        ("stack haystack stack.", "stack", 0),
+        ("water the basil's pot", "BASIL", 10),
+        ("water the basil", "the basil", 6),
+        ("", "a", -1),
+        ("anything", "", -1),
+    ],
+)
+def test_matches_whole_words_only(value, query, at):
+    assert nu.run(search.WordAt(nu.Str(value), nu.Str(query)))[0] == at
+    assert nu.run(search.matches(nu.Str(value), nu.Str(query)))[0] is (at >= 0)
+
+
+def test_excerpt_skips_a_match_inside_a_word():
+    long = "haystack " + "x" * 60 + " a stack here"
+    got, _ = nu.run(search.excerpt(nu.Str(long), nu.Str("stack")))
+    assert "a stack here" in got and "haystack" not in got
 
 
 # --- The viewer ------------------------------------------------------------------------------
@@ -320,7 +342,7 @@ async def test_results_draw_the_shown_search(store):
     assert ("hits", "h0", "excerpt") not in got
     assert got[("hits", "h1", "head", "link")] == {"href": "/p1", "label": "Garden"}
     assert got[("hits", "h1", "head", "by")]["label"] == "note"
-    assert got[("hits", "h1", "excerpt")] == "Tomatoes need sun and water"
+    assert got[("hits", "h1", "excerpt")] == "Tomato needs sun and water"
     assert got[("hits", "h2", "head", "link")] == {"href": "/p2", "label": "Tomato plan"}
     assert got[("empty",)] is None
 

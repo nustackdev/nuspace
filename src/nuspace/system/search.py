@@ -30,6 +30,7 @@ Workers import this module: nothing here may pull in a server.
 from __future__ import annotations
 
 import importlib
+import re
 from typing import TYPE_CHECKING
 
 import nu
@@ -65,6 +66,7 @@ __all__ = [
     "TITLES",
     "Hit",
     "Search",
+    "WordAt",
     "ensure_search",
     "excerpt",
     "load_searcher",
@@ -139,20 +141,33 @@ class Search(PlaneState):
 # --- Matching, for any snippet's search ------------------------------------------------
 
 
+def _word_at(value: object, query: object) -> int:
+    q = str(query).lower()
+    if not q:
+        return -1
+    found = re.search(rf"(?<!\w){re.escape(q)}(?!\w)", str(value).lower())
+    return found.start() if found else -1
+
+
+#: Where ``query`` first stands in ``value`` as whole words, ignoring case; ``-1`` when nowhere.
+#: Whole means no letter, digit or ``_`` right before or after it: ``stack`` is
+#: not in ``Haystack``, ``basil`` is in ``basil's``. An empty query is nowhere.
+WordAt = nu.host(_word_at, name="SearchWordAt")
+
+
 def matches(value: nu.StrArg, query: nu.StrArg) -> nu.Bool:
-    """Whether ``query`` is in ``value``, ignoring case. An empty query matches nothing."""
-    q = nu.Str(query).lower()
-    return (q != "").and_(nu.Str(value).lower().find(q) >= 0)
+    """Whether ``query`` is in ``value`` as whole words, ignoring case (see :data:`WordAt`)."""
+    return nu.Int(WordAt(value, query)) >= 0
 
 
 def excerpt(value: nu.StrArg, query: nu.StrArg, width: int = EXCERPT_WIDTH) -> nu.Str:
-    """The text around the first match of ``query`` in ``value``, on one line.
+    """The text around the first whole-word match of ``query`` in ``value``, on one line.
 
     ``width`` characters each side, an ellipsis where it was cut. ``value``
     from its start when there is no match.
     """
     body = nu.Str(value)
-    at = body.lower().find(nu.Str(query).lower())
+    at = nu.Int(WordAt(body, query))
     begin = nu.Int(nu.If(at > width, at - width, 0))
     end = nu.Int(nu.If(at >= 0, at, 0)) + nu.Str(query).len() + width
     cut = body[begin:end].replace("\n", " ").strip()

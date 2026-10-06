@@ -12,6 +12,7 @@ separately here.
 
 ## Unreleased
 
+- Search matches whole words only, so a query no longer hits inside longer words
 - New Table snippet: an editable data table kept in the cell, live across tabs
 - Dock chips highlight on hover, and their menu only closes panes
 - Open planes sit side by side on a scrolling desk, navigated by a minimap dock
