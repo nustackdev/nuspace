@@ -15,4 +15,6 @@ SNIPPET = Snippet(
     "Program",
     resources.files(__package__).joinpath("shim.py").read_text("utf-8"),
     description="A code cell that writes one key in its own state and ends.",
+    group="Code",
+    icon="square-terminal",
 )

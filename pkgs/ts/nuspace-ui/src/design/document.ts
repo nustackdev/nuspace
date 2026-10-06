@@ -14,7 +14,12 @@
 // looser, but the air comes from the 14px/1.45 prose line box, not from
 // padding: a cell is a near-plain box. See tokens.css for the full rule.
 
-import { cn, menuContentClasses } from "@nustackdev/ui-kit";
+import {
+	cn,
+	commandHeadingClasses,
+	commandItemClasses,
+	commandSurfaceClasses,
+} from "@nustackdev/ui-kit";
 
 import { CELL_STATUS, type CellStatus } from "./cell-status";
 
@@ -484,11 +489,50 @@ export const docStatusTrace = cn(
 /* ============================== Slash menu =============================== */
 
 /**
- * Slash menu surface: the kit's menu recipe, since focus stays in the ghost
- * and a Radix menu would take it. Its rows are the kit's too, lit by
- * `data-highlighted` like a real menu's. Placed in viewport coordinates.
+ * The slash menu: a command box, not a dropdown. A kit popover wearing the
+ * command palette's surface, rows and headings, since focus stays in the
+ * ghost and the palette would take it. Its height is the room it opened
+ * into, up to a cap.
  */
-export const docSlashMenu = cn(menuContentClasses, "fixed min-w-56 max-h-80 overflow-y-auto");
+export const docSlashMenu = cn(
+	commandSurfaceClasses,
+	"flex w-[26rem] max-w-[calc(100vw-2rem)] flex-col p-0",
+	"max-h-[min(27.5rem,var(--radix-popover-content-available-height))]",
+);
+
+/** The scrolling rows, between the edge and the footer. */
+export const docSlashList = "min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-1.5";
+
+/** A section heading. */
+export const docSlashHeading = cn(commandHeadingClasses, "pt-2 first:pt-1");
+
+/** A row: icon tile, label over description, and the Enter hint when lit. */
+export const docSlashItem = cn(commandItemClasses, "w-full gap-3 rounded-md px-2 py-1.5 text-left");
+
+/** The icon's tile, so a glyph and an emoji read as the same kind of thing. */
+export const docSlashTile = cn(
+	"flex size-9 shrink-0 items-center justify-center rounded-md",
+	"border border-border-subtle bg-bg-surface",
+	"group-data-[selected=true]:border-border-default group-data-[selected=true]:bg-bg-elevated",
+);
+
+export const docSlashText = "flex min-w-0 flex-1 flex-col";
 
 /** The row's label. Owns the line: it truncates, the hint never does. */
-export const docSlashMenuItemLabel = "flex-1 truncate text-left";
+export const docSlashLabel = "truncate font-medium text-text-primary";
+
+/** The part of the label the query matched. */
+export const docSlashHit = "bg-transparent font-semibold text-accent";
+
+export const docSlashDescription = "truncate text-xs text-text-muted";
+
+/** The Enter hint on the lit row. */
+export const docSlashEnter = "shrink-0 opacity-0 group-data-[selected=true]:opacity-100";
+
+/** The keys, along the bottom edge. */
+export const docSlashFooter = cn(
+	"flex items-center gap-4 border-t border-border-subtle bg-bg-surface px-3 py-2",
+	"text-xs text-text-muted",
+);
+
+export const docSlashKey = "flex items-center gap-1.5";

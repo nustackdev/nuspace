@@ -18,6 +18,7 @@
 import type * as React from "react";
 import { useEffect } from "react";
 import { docGhost } from "../design";
+import type { SlashAnchor } from "./state";
 import type { ExitDir } from "./types";
 
 /** What a ghost offers before anything has happened in it. */
@@ -35,7 +36,7 @@ export type GhostProps = {
 	onWake: () => void;
 	/** Enter on an empty ghost: a blank program. */
 	onBlank: () => void;
-	onOpenSlash: (anchor: { x: number; y: number }, query: string) => void;
+	onOpenSlash: (anchor: SlashAnchor, query: string) => void;
 	/** Typing with the menu closed starts a draft. Null: it opens the menu. */
 	onType: ((text: string) => void) | null;
 	onQuery: (query: string) => void;
@@ -84,11 +85,6 @@ export function Ghost({
 		if (autoFocus) hostRef.current?.focus();
 	}, [autoFocus]);
 
-	const anchorOf = (el: HTMLElement) => {
-		const r = el.getBoundingClientRect();
-		return { x: r.left, y: r.bottom };
-	};
-
 	return (
 		<input
 			ref={hostRef}
@@ -105,7 +101,7 @@ export function Ghost({
 					return;
 				}
 				if (next && onType) onType(next);
-				else if (next) onOpenSlash(anchorOf(e.currentTarget), next);
+				else if (next) onOpenSlash(e.currentTarget, next);
 			}}
 			onKeyDown={(e) => {
 				// The ghost owns its keyboard outright, for the reason a focused
@@ -131,7 +127,7 @@ export function Ghost({
 				if (e.key === "/" && !e.metaKey && !e.ctrlKey && !e.altKey) {
 					// Consumed: the `/` is the gesture, not the query.
 					e.preventDefault();
-					onOpenSlash(anchorOf(e.currentTarget), "");
+					onOpenSlash(e.currentTarget, "");
 					return;
 				}
 				if (e.key === "Enter") {

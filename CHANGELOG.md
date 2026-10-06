@@ -12,6 +12,7 @@ separately here.
 
 ## Unreleased
 
+- The / menu is a command box: grouped, searchable, icons and descriptions
 - Cell code and text use the kit's unified code and markdown editors
 - Cells live apart from planes, addressed by their own id everywhere
 - Editing a drawn cell's code redraws it on the open page

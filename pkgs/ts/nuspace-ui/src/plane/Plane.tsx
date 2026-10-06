@@ -142,7 +142,7 @@ export function Plane({
 	});
 	const startDrag = useCellDrag(model);
 	const { box, startBox } = useBoxSelect(model);
-	const { slash, slashItems, pickSlash, slashKey, moveSlash } = useSlash(
+	const { slash, pickSlash, slashKey, moveSlash, closeSlash } = useSlash(
 		model,
 		snippets,
 		createAfter,
@@ -372,11 +372,13 @@ export function Plane({
 
 			{editable && slash ? (
 				<SlashMenu
-					items={slashItems}
+					query={slash.query}
+					snippets={snippets}
 					index={slash.index}
 					anchor={slash.anchor}
 					onPick={pickSlash}
 					onMove={moveSlash}
+					onClose={closeSlash}
 				/>
 			) : null}
 		</div>

@@ -24,7 +24,7 @@ from nuspace.ops.utils import atomic, atomic_state
 from nuspace.shapes import EXIT_FAILED, EXIT_INTERRUPTED, EXIT_KILLED, EXIT_OK, Space, States
 from nuspace.system.devices.web import CellRoot, SessionWrap, Shell, session_env
 from nuspace.system.devices.web.sidebar import create, move, pins, registered_entries, rows
-from nuspace.system.devices.web.viewer import plane_view, statuses
+from nuspace.system.devices.web.viewer import plane_view, slash_entries, statuses
 from nuspace.system.kernel import build_body
 from nuspace.system.kernel import store as space_store
 from nuspace.system.services import nav
@@ -437,10 +437,14 @@ async def test_connection_live(store):
         await _until(lambda: session.writes("set_tree"))
         assert session.frames[0].op == "remove"
         viewer_init = next(f for f in session.frames if f.ref == ("viewer",))
-        assert viewer_init.chain[0][2]["snippets"] == [
-            {"name": "text", "label": "Text"},
-            {"name": "program", "label": "Program"},
-        ]
+        assert viewer_init.chain[0][2]["snippets"] == slash_entries(SNIPPETS)
+        assert viewer_init.chain[0][2]["snippets"][0] == {
+            "name": "text",
+            "label": "Text",
+            "group": "",
+            "icon": "",
+            "description": "",
+        }
         sidebar_init = next(f for f in session.frames if f.ref == ("sidebar",))
         assert sidebar_init.chain[0][2]["registered"] == registered_entries(PLANES)
         assert [row["id"] for row in session.writes("set_tree")[-1]["planes"]] == ["space", "p1"]

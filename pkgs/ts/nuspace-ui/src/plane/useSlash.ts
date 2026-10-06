@@ -4,7 +4,7 @@
 
 import { useCallback, useMemo } from "react";
 import type { PlaneModel } from "./model";
-import { filterSlash } from "./SlashMenu";
+import { slashItems as listed } from "./slash";
 import type { SlashSnippet } from "./types";
 
 export function useSlash(
@@ -13,10 +13,7 @@ export function useSlash(
 	createAfter: (afterId: string | null, name: string) => void,
 ) {
 	const slash = editor.slash;
-	const slashItems = useMemo(
-		() => (slash ? filterSlash(slash.query, snippets) : []),
-		[slash, snippets],
-	);
+	const slashItems = useMemo(() => (slash ? listed(slash.query, snippets) : []), [slash, snippets]);
 
 	const pickSlash = useCallback(
 		(item: SlashSnippet) => {
@@ -33,7 +30,7 @@ export function useSlash(
 		(key: string): boolean => {
 			const s = editor.slash;
 			if (!s) return false;
-			const items = filterSlash(s.query, snippets);
+			const items = listed(s.query, snippets);
 			if (key === "ArrowDown" || key === "ArrowUp") {
 				const d = key === "ArrowDown" ? 1 : -1;
 				const n = Math.max(1, items.length);
@@ -65,5 +62,8 @@ export function useSlash(
 		[patch, slashItems.length],
 	);
 
-	return { slash, slashItems, pickSlash, slashKey, moveSlash };
+	/** Put the menu away, the ghost left standing. */
+	const closeSlash = useCallback(() => patch((e) => (e.slash ? { slash: null } : {})), [patch]);
+
+	return { slash, slashItems, pickSlash, slashKey, moveSlash, closeSlash };
 }

@@ -15,4 +15,6 @@ SNIPPET = Snippet(
     "Lens",
     resources.files(__package__).joinpath("shim.py").read_text("utf-8"),
     description="Browses the whole space, or any shape in it, as cascading columns.",
+    group="Debugging",
+    icon="scan-search",
 )

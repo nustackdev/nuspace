@@ -19,4 +19,6 @@ SNIPPET = Snippet(
     search=search,
     description="Text a person reads and edits, markdown kept in the cell's state.",
     ops=(set_text, text_of),
+    group="Content",
+    icon="type",
 )

@@ -33,8 +33,17 @@ __all__ = ["ViewerRef", "slash_entries"]
 
 
 def slash_entries(snippets: Iterable[Snippet]) -> list[dict]:
-    """The ``/`` menu's entries, ``{name, label}`` in registry order."""
-    return [{"name": s.name, "label": s.label} for s in snippets]
+    """The ``/`` menu's entries, ``{name, label, group, icon, description}`` in registry order."""
+    return [
+        {
+            "name": s.name,
+            "label": s.label,
+            "group": s.group,
+            "icon": s.icon,
+            "description": s.description,
+        }
+        for s in snippets
+    ]
 
 
 class ViewerRef(SpaceRef):

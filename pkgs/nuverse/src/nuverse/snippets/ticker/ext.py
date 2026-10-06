@@ -15,4 +15,6 @@ SNIPPET = Snippet(
     "Ticker",
     resources.files(__package__).joinpath("shim.py").read_text("utf-8"),
     description="A stat tile counting the seconds its plane was open.",
+    group="Examples",
+    icon="timer",
 )

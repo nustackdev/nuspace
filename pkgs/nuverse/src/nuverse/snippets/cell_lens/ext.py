@@ -15,4 +15,6 @@ SNIPPET = Snippet(
     "Cell lens",
     resources.files(__package__).joinpath("shim.py").read_text("utf-8"),
     description="Browses one cell of this plane, picked from a dropdown.",
+    group="Debugging",
+    icon="box",
 )

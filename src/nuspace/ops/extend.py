@@ -95,6 +95,11 @@ class Snippet:
         ops: The ops on a cell made from it, each taking the cell id first, for whoever writes a program against its cells: the
             agent's prompt lists them, signatures and docstrings, under the
             snippet.
+        group: The ``/`` menu heading it sits under, ``""`` for none. Groups
+            show in the order their first snippet registers; the ungrouped
+            come last, under no heading.
+        icon: What the menu draws beside it, spelled as :class:`Plane`'s
+            ``icon``. ``""`` for the default.
     """
 
     name: str
@@ -103,6 +108,8 @@ class Snippet:
     search: Callable[[nu.Nu, nu.Nu, nu.Nu], nu.Nu] | None = None
     description: str = ""
     ops: tuple[Callable[..., nu.Nu], ...] = ()
+    group: str = ""
+    icon: str = ""
 
     def __post_init__(self) -> None:
         if self.search is not None and "<" in getattr(self.search, "__qualname__", "<"):

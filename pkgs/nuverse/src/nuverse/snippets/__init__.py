@@ -24,6 +24,6 @@ __all__ = ["SNIPPETS"]
 #: Every snippet ready to register, in menu order.
 SNIPPETS = tuple(
     module.SNIPPET
-    for module in (prose, program, ticker, lens, plane_lens, cell_lens, code)
+    for module in (prose, program, code, lens, plane_lens, cell_lens, ticker)
     if module.SNIPPET is not None
 )

@@ -30,9 +30,13 @@ export type SlashState = {
 	 *  with no cells at all. */
 	cellId: string | null;
 	query: string;
-	anchor: { x: number; y: number };
+	anchor: SlashAnchor;
 	index: number;
 };
+
+/** The line the menu opened from: the ghost's input, which the menu stays
+ *  pinned to while the page scrolls. */
+export type SlashAnchor = HTMLElement;
 
 export type DragState = {
 	id: string;

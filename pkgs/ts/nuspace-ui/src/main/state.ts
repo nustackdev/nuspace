@@ -221,7 +221,14 @@ export function useSnippets(path: Path): SlashSnippet[] {
 			const name = typeof o.name === "string" ? o.name : "";
 			if (!name) continue;
 			const label = typeof o.label === "string" && o.label ? o.label : name;
-			out.push({ name, label });
+			const text = (k: string) => (typeof o[k] === "string" ? (o[k] as string) : "");
+			out.push({
+				name,
+				label,
+				group: text("group"),
+				icon: text("icon"),
+				description: text("description"),
+			});
 		}
 		return out.length ? out : EMPTY_SNIPPETS;
 	}, [raw]);

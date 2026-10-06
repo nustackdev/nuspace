@@ -15,4 +15,6 @@ SNIPPET = Snippet(
     "Plane lens",
     resources.files(__package__).joinpath("shim.py").read_text("utf-8"),
     description="Browses the plane the cell sits on as cascading columns.",
+    group="Debugging",
+    icon="layers",
 )

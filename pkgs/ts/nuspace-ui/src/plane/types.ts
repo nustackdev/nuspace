@@ -72,8 +72,15 @@ export function coerceAbsent(raw: unknown): AbsentReason | null {
 	return raw === "missing" || raw === "headless" ? raw : null;
 }
 
-/** One registered snippet, as the `/` menu offers it. */
-export type SlashSnippet = { name: string; label: string };
+/** One registered snippet, as the `/` menu offers it. `group` heads its
+ *  section, `icon` is spelled as a plane's (../icon/parse.ts). */
+export type SlashSnippet = {
+	name: string;
+	label: string;
+	group?: string;
+	icon?: string;
+	description?: string;
+};
 
 /** The name reserved for the text snippet, as `nuspace.TEXT`. Its cells are
  *  the text cells (see ./Draft.tsx and ./useTextCells.ts). */
