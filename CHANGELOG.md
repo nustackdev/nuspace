@@ -12,6 +12,7 @@ separately here.
 
 ## Unreleased
 
+- Tab from a selected cell moves on to what comes after it
 - New cells hand the keyboard to what they draw, like a text editor or a lens
 - Plane listings, run lookups and plane moves stay fast as a space grows
 - The / menu is a command box: grouped, searchable, icons and descriptions

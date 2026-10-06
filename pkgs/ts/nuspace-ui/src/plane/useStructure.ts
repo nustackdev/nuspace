@@ -15,15 +15,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { mintId } from "../core/ids";
 import { EDITABLE, placeCaret } from "./Draft";
+import { FOCUSABLE } from "./focusable";
 import type { PlaneModel } from "./model";
 
 /** How long a landed cell is watched for something to focus, in ms. */
 const HAND_WAIT = 1500;
-
-/** What a drawn cell can hand the keyboard to. */
-const FOCUSABLE = [EDITABLE, "select", "button", "a[href]", '[tabindex]:not([tabindex="-1"])']
-	.map((s) => `${s}:not([disabled])`)
-	.join(", ");
 
 export function useStructure({
 	planeId,

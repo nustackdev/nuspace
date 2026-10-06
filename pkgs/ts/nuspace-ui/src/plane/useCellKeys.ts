@@ -2,10 +2,11 @@
 //
 // Only live while at least one cell is selected. A focused editor (a source, a
 // ghost) owns its keys outright and stops them before they reach the plane.
-// On a read-only plane only Escape and copy do anything.
+// On a read-only plane only Escape, Tab and copy do anything.
 
 import type * as React from "react";
 import { useCallback } from "react";
+import { tabStop } from "./focusable";
 import type { PlaneModel } from "./model";
 import type { FocusReq } from "./state";
 import type { Cell } from "./types";
@@ -59,6 +60,17 @@ export function useCellKeys(
 
 			if (e.key === "Escape") {
 				e.preventDefault();
+				patch({ selected: [], anchor: null });
+				return;
+			}
+			// Tab carries on from the selection: down to what comes after it,
+			// the empty line at the end included, or up with Shift.
+			if (e.key === "Tab" && e.target === e.currentTarget) {
+				const edge = elRefs.current.get(e.shiftKey ? sel[0] : sel[sel.length - 1]);
+				const stop = edge ? tabStop(e.currentTarget as HTMLElement, edge, e.shiftKey) : null;
+				if (!stop) return;
+				e.preventDefault();
+				stop.focus();
 				patch({ selected: [], anchor: null });
 				return;
 			}
