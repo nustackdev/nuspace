@@ -11,53 +11,49 @@ no ``snippet.py``, one with nothing to write or read has no ``ops.py``.
 
 Each package re-exports its ``SNIPPET`` and its ops. A placeholder's
 ``SNIPPET`` is None, and it is left out of :data:`SNIPPETS`.
+
+Nothing here imports a snippet up front. A cell's prog imports only its own
+snippet, and importing this package pulled in every other one with it, on
+whichever thread loaded first. :data:`SNIPPETS` imports them all on first
+read instead.
 """
 
 from __future__ import annotations
 
-from . import (
-    cell_lens,
-    code,
-    converter,
-    date,
-    lens,
-    number,
-    password,
-    plane_lens,
-    program,
-    prose,
-    select,
-    slider,
-    switch,
-    table,
-    text_input,
-    ticker,
-)
+import importlib
+from typing import Any
 
 
 __all__ = ["SNIPPETS"]
 
 
-#: Every snippet ready to register, in menu order.
-SNIPPETS = tuple(
-    module.SNIPPET
-    for module in (
-        prose,
-        table,
-        text_input,
-        number,
-        slider,
-        switch,
-        select,
-        date,
-        program,
-        code,
-        lens,
-        plane_lens,
-        cell_lens,
-        ticker,
-        password,
-        converter,
-    )
-    if module.SNIPPET is not None
+#: The snippet packages, in menu order.
+_ORDER = (
+    "prose",
+    "table",
+    "text_input",
+    "number",
+    "slider",
+    "switch",
+    "select",
+    "date",
+    "program",
+    "code",
+    "lens",
+    "plane_lens",
+    "cell_lens",
+    "ticker",
+    "password",
+    "converter",
 )
+
+
+def __getattr__(name: str) -> Any:  # noqa: ANN401
+    """:data:`SNIPPETS`, every snippet ready to register, built on first read."""
+    if name != "SNIPPETS":
+        msg = f"module {__name__!r} has no attribute {name!r}"
+        raise AttributeError(msg)
+    modules = (importlib.import_module(f"{__name__}.{mod}") for mod in _ORDER)
+    snippets = tuple(module.SNIPPET for module in modules if module.SNIPPET is not None)
+    globals()["SNIPPETS"] = snippets
+    return snippets
