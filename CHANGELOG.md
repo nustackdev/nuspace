@@ -10,6 +10,10 @@ Below is the changelog for **nuspace** - the full commit stream. Newest first.
 The `nuspace-ui` wheel is the same source tree's vite output and is not tracked
 separately here.
 
+## Unreleased
+
+- Cells reach browser tabs over a frame pipe, so fast edits no longer hang the server
+
 ## 0.5.0 — 2026-10-06
 
 - Release nuspace 0.5.0, built on nu 0.6.0 and UI kit 0.3.0

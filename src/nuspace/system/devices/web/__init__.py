@@ -18,11 +18,9 @@ from typing import Any
 from nuspace.system.devices.web.env import SESSION_ENV, SessionWrap, session_env
 from nuspace.system.devices.web.session import (
     ConnectedSession,
-    Connections,
-    FrameCodec,
-    HostedSession,
-    Sessions,
-    proxied_session,
+    PipeSession,
+    SessionPipe,
+    piped_session,
     served_sessions,
 )
 from nuspace.system.devices.web.shell import Boot, Shell
@@ -38,11 +36,9 @@ __all__ = [
     "Boot",
     "CellRoot",
     "ConnectedSession",
-    "Connections",
-    "FrameCodec",
-    "HostedSession",
+    "PipeSession",
+    "SessionPipe",
     "SessionWrap",
-    "Sessions",
     "Shell",
     "SidebarRef",
     "SpaceRef",
@@ -50,7 +46,7 @@ __all__ = [
     "cell_ui",
     "cells_ui",
     "connection",
-    "proxied_session",
+    "piped_session",
     "serve_web",
     "served_sessions",
     "session_env",

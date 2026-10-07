@@ -3,7 +3,7 @@
 Registered as :data:`SESSION_ENV`, a run asks for it with
 ``ops.env("session", sid)``. The kernel resolves it in the host:
 
-- **wrap**: opens :func:`proxied_session` on the connection around the
+- **wrap**: opens :func:`piped_session` on the connection around the
   run, and erases the cell's own ui node first, so what its last run
   drew goes before this one draws.
 - **rewrite**: :class:`CellRoot`, landing the program's bare ui refs under
@@ -18,7 +18,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from nuspace.ops import Here
-from nuspace.system.devices.web.session import proxied_session
+from nuspace.system.devices.web.session import piped_session
 from nuspace.system.devices.web.shell import Shell
 from nuspace.system.devices.web.utils import CellRoot, cell_ui
 from nuspace.system.kernel import Env, EnvFactory
@@ -52,7 +52,7 @@ class SessionWrap:
     def __call__(self, body: nu.Nu) -> nu.Nu:
         """``body``, drawing on the connection."""
         erase = cell_ui(Shell.viewer, Here.cell).erase()
-        return proxied_session(self.address, self.sid, erase >> body)
+        return piped_session(self.address, self.sid, erase >> body)
 
 
 def session_env(address: str) -> EnvFactory:
