@@ -283,6 +283,10 @@ class PipeSession(Session):
     async def send(self, frame: Frame) -> None:
         """Ship one frame. Lands on the socket in the order it was sent."""
         await self._pipe.apost([_SEND, self._sid, encode(frame)])
+        # A drain with room in the buffer returns without suspending, so a run
+        # drawing in a loop would hold the worker's loop until the buffer
+        # fills. Yield once per frame: runs on one worker take turns.
+        await asyncio.sleep(0)
 
     async def aread(self, path: tuple[str, ...]) -> Any:  # noqa: ANN401 -- the browser's blob
         """Round trip read through the host to the browser."""

@@ -12,6 +12,7 @@ separately here.
 
 ## Unreleased
 
+- Cells drawing at once on one worker take turns sending their frames
 - Cells reach browser tabs over a frame pipe, so fast edits no longer hang the server
 
 ## 0.5.0 — 2026-10-06
