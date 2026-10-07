@@ -153,7 +153,7 @@ export const railNewPlaneBar = cn(
 	"before:absolute before:inset-x-0 before:bottom-full before:h-rail-top-gap before:bg-nuspace-rail",
 );
 
-export const railNewPlane = cn(railRow(false, true), "w-full cursor-pointer text-left");
+export const railNewPlane = cn(railRow(false, true), "w-full cursor-default text-left");
 
 export const railNewPlaneIcon = "size-4 shrink-0 text-text-muted group-hover/row:text-text-primary";
 
@@ -464,7 +464,7 @@ export function railPinDropLine(edge: "before" | "after"): string {
 export const railSearch = "shrink-0 px-rail-inset";
 
 export const railSearchTrigger = cn(
-	"group/search flex h-rail-row w-full cursor-pointer items-center rounded-md",
+	"group/search flex h-rail-row w-full cursor-default items-center rounded-md",
 	"pl-rail-row-pad pr-rail-row-pad-end",
 	"bg-nuspace-rail-search text-base text-text-muted",
 	"transition-colors duration-fast ease-out",

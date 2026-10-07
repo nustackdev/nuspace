@@ -12,6 +12,7 @@ separately here.
 
 ## Unreleased
 
+- The sidebar shows the arrow cursor on its rows, like a native app
 - nuverse snippets and planes load only when used, so cells loading together cannot deadlock
 - Cells drawing at once on one worker take turns sending their frames
 - Cells reach browser tabs over a frame pipe, so fast edits no longer hang the server
