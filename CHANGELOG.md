@@ -2,16 +2,17 @@
 
 ## Packages shipped from this repo
 
-- **nuspace** (the runtime, the `nuspace` command) — 0.5.0
-- **nuspace-ui** (the compiled web bundle) — 0.5.0
-- **nuverse** (the Planes and snippets a space ships with) — 0.3.0
+- **nuspace** (the runtime, the `nuspace` command) — 0.5.1
+- **nuspace-ui** (the compiled web bundle) — 0.5.1
+- **nuverse** (the Planes and snippets a space ships with) — 0.3.1
 
 Below is the changelog for **nuspace** - the full commit stream. Newest first.
 The `nuspace-ui` wheel is the same source tree's vite output and is not tracked
 separately here.
 
-## Unreleased
+## 0.5.1 — 2026-10-08
 
+- Release nuspace 0.5.1, built on nu 0.6.1 and UI kit 0.3.1
 - Background loops and open pages react to changes instead of checking every second
 - The sidebar shows the arrow cursor on its rows, like a native app
 - nuverse snippets and planes load only when used, so cells loading together cannot deadlock

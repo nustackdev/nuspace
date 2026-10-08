@@ -2,7 +2,7 @@
 	"name": "nuspace-ui",
 	"private": true,
 	"description": "The nuspace web shell for the nuspace runtime. Bundled by vite; served by the nuspace core.",
-	"version": "0.5.0",
+	"version": "0.5.1",
 	"type": "module",
 	"scripts": {
 		"dev": "vite",
@@ -18,7 +18,7 @@
 	},
 	"dependencies": {
 		"@nustackdev/ui-core": "^0.2.0",
-		"@nustackdev/ui-kit": "^0.3.0",
+		"@nustackdev/ui-kit": "^0.3.1",
 		"lucide-react": "^0.564.0",
 		"prosemirror-commands": "^1.7.2",
 		"prosemirror-history": "^1.5.0",
