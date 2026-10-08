@@ -27,6 +27,7 @@ commit; the fold sees the run leave ``running`` and cancels the arm.
 from __future__ import annotations
 
 import nu
+import nustd.time
 from nuspace.ops.kernel import off_running
 from nuspace.ops.utils import atomic
 from nuspace.shapes import EXIT_FAILED, EXIT_INTERRUPTED, EXIT_KILLED, EXIT_OK, Space
@@ -36,7 +37,7 @@ from nuspace.system.backends import BackendRef, PlaceCell
 from .body import end_cell_run
 from .dispatch import RunCell
 from .out import ErrorText
-from .utils import Now, Ticking, park, snap, until
+from .utils import park, snap
 
 
 __all__ = ["end_run", "outcome", "run_arm", "run_fold"]
@@ -88,7 +89,7 @@ def end_run(run_id: nu.StrArg, exit_: nu.StrArg, error: nu.StrArg | None = None)
             nu.list(row.cells_running),
             lambda cr: end_cell_run(run_id, nu.Str(cr), exit_, error),
         )
-        >> nu.IfDo(row.terminated_at.missing(), own >> row.terminated_at.set(Now()))
+        >> nu.IfDo(row.terminated_at.missing(), own >> row.terminated_at.set(nustd.time.time()))
         >> backends.released(run_id, workers)
         >> off_running(run_id)
     )
@@ -150,7 +151,7 @@ def _killed(run_id: nu.StrArg, backend: nu.StrArg) -> nu.Nu:
     """
     asked = _kernel.runs[run_id].termination_requested
     return (
-        until(asked.fallback(False), asked.on_change())
+        nu.WaitReactive(snap(asked.on_change()), snap(asked.fallback(False)))
         >> atomic(end_run(run_id, EXIT_KILLED))
         >> backends.kill(backend, run_id, EXIT_KILLED)
     )
@@ -161,7 +162,7 @@ def _cells(run_id: nu.StrArg, backend: nu.StrArg) -> nu.Nu:
     live = _kernel.runs[run_id].cells_running
     return nu.ForEachParReactive(
         snap(nu.list(live)),
-        Ticking(snap(live.on_children_change())),
+        snap(live.on_children_change()),
         lambda cr: _cell_arm(run_id, nu.Str(cr), backend),
     )
 
@@ -171,7 +172,8 @@ def _done(run_id: nu.StrArg) -> nu.Nu:
     live = _kernel.runs[run_id].cells_running
     return nu.WhileDo(
         snap(_kernel.running.contains(run_id)),
-        until(live.len() == 0, live.on_children_change()) >> _end_if_done(run_id),
+        nu.WaitReactive(snap(live.on_children_change()), snap(live.len() == 0))
+        >> _end_if_done(run_id),
     )
 
 
@@ -182,7 +184,7 @@ def run_arm(run_id: nu.StrArg) -> nu.Nu:
     def life(held: nu.ObjectRef) -> nu.Nu:
         backend = nu.Str(held)
         started = nu.TryCatch(
-            backends.start(backend, run_id) >> atomic(row.started_at.init(Now())),
+            backends.start(backend, run_id) >> atomic(row.started_at.init(nustd.time.time())),
             catch=lambda err: nu.let(
                 nu.Str("Backend failed to start: ") + ErrorText(err),
                 lambda why: atomic(end_run(run_id, EXIT_FAILED, why)),
@@ -206,6 +208,6 @@ def run_fold() -> nu.Nu:
     running = _kernel.running
     return nu.ForEachParReactive(
         snap(nu.list(running)),
-        Ticking(snap(running.on_children_change())),
+        snap(running.on_children_change()),
         lambda rid: run_arm(nu.Str(rid)),
     )

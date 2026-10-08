@@ -9,14 +9,16 @@ import pytest
 
 import nu
 import nustd.kv
+import nustd.ui
 from nuspace import ops
 from nuspace.ops import Plane
-from nuspace.ops.utils import atomic
-from nuspace.shapes import RECENTS_CAP, Reroot, Space
+from nuspace.ops.utils import atomic, atomic_state
+from nuspace.shapes import RECENTS_CAP, CellState, Reroot, Space, reroot
 from nuspace.system import home, settings
 from nuspace.system.devices.web.env import session_env
 from nuspace.system.devices.web.sidebar import rows
 from nuspace.system.kernel.body import Rewrites
+from nuspace.system.utils import redraws
 from nustd.ui import Session
 from nustd.ui.core import OP_NOTIFY, Frame, WsSession
 
@@ -313,3 +315,128 @@ async def test_start_draws_its_text(store):
     (text,) = (await _frames(store, home.START)).values()
     for bit in ("`+`", "`/`", "Cmd/Ctrl-click", "`⋯`", "code button"):
         assert bit in text
+
+
+# --- Kept live -------------------------------------------------------------------
+
+
+class Tick(CellState):
+    """Two refs a test writes, so a watch can be on one while the view reads the other."""
+
+    heard = nustd.kv.IntRef.slot()
+    shown = nustd.kv.IntRef.slot()
+
+
+def _at(term: nu.Nu) -> nu.Nu:
+    return reroot(term, "p", "c")
+
+
+def _bump(ref: nu.Nu) -> nu.Nu:
+    return atomic_state(_at(ref.set(ref.fallback(0) + 1)))
+
+
+def _out(source: str) -> nu.Nu:
+    """A cell's ``out``, called if it is a function, as the kernel loads it."""
+    namespace: dict = {}
+    exec(compile(source, "cell", "exec"), namespace)  # noqa: S102
+    out = namespace["out"]
+    return out() if callable(out) else out
+
+
+async def _live(store, term: nu.Nu) -> tuple[_Recording, asyncio.Task]:
+    """``term`` running against the store, drawing into a recording session."""
+    session = _Recording()
+    task = asyncio.create_task(nu.arun(term, store.ctx.bind(Session, session)))
+    await asyncio.sleep(0)
+    return session, task
+
+
+async def _stop(task: asyncio.Task) -> None:
+    task.cancel()
+    await asyncio.gather(task, return_exceptions=True)
+
+
+async def _quiet(session: _Recording, seconds: float = 1.5) -> int:
+    """Frames after ``seconds``: long enough for the re-checks right after subscribing."""
+    await asyncio.sleep(seconds)
+    return len(session.frames)
+
+
+def _shows(n: nu.Nu) -> nu.Nu:
+    return nustd.ui.TextRef("n").set(nu.str(n))
+
+
+async def test_a_redraw_catches_a_change_it_was_not_told_about(store):
+    """Watching one ref and showing another: only a re-check can see the write."""
+    term = redraws([_at(Tick.heard.on_change())], _at(Tick.shown.fallback(0)), _shows, every=0.3)
+    session, task = await _live(store, term)
+    try:
+        await _quiet(session, 0.5)
+        assert [f.payload for f in session.frames] == ["0"]
+        await store.run(_bump(Tick.shown))
+        await asyncio.sleep(0.8)
+        assert [f.payload for f in session.frames] == ["0", "1"]
+    finally:
+        await _stop(task)
+
+
+async def test_a_redraw_draws_on_a_change_and_never_while_idle(store):
+    term = redraws(
+        [_at(Tick.shown.on_change()), _at(Tick.heard.on_change())],
+        _at(Tick.shown.fallback(0)),
+        _shows,
+    )
+    session, task = await _live(store, term)
+    try:
+        assert await _quiet(session) == 1
+        await store.run(_bump(Tick.shown))
+        await asyncio.sleep(0.3)
+        assert [f.payload for f in session.frames] == ["0", "1"]
+        # Heard, but nothing it shows moved: no frame.
+        await store.run(_bump(Tick.heard))
+        assert await _quiet(session) == 2
+    finally:
+        await _stop(task)
+
+
+async def test_recent_redraws_on_an_open_and_not_while_idle(store):
+    await store.run(_drawn("a", "Alpha") >> _drawn("b", "Beta"))
+    session, task = await _live(store, _out(home.RECENT))
+    try:
+        idle = await _quiet(session)
+        assert idle > 0
+        assert await _quiet(session) == idle
+        await store.run(atomic(Space.state.recents.set(nu.Literal(["a"]))))
+        await asyncio.sleep(0.3)
+        drawn = {f.ref: f.payload for f in session.frames[idle:] if f.op != "remove"}
+        assert drawn[("r0",)] == {"href": "/a", "label": "Alpha"}
+        # A plane renamed that it does not show: woken, nothing drawn.
+        seen = len(session.frames)
+        await store.run(ops.rename_plane("b", "Bee"))
+        assert await _quiet(session, 0.5) == seen
+        await store.run(ops.rename_plane("a", "Ay"))
+        await asyncio.sleep(0.3)
+        assert {"href": "/a", "label": "Ay"} in [f.payload for f in session.frames[seen:]]
+    finally:
+        await _stop(task)
+
+
+async def test_glance_redraws_live_counts_on_a_change_only(store):
+    await store.run(home.ensure_home() >> _drawn("a"))
+    session, task = await _live(store, _out(home.GLANCE))
+    try:
+        idle = await _quiet(session)
+        assert _tiles({f.ref: f.payload for f in session.frames})["live"] == "0"
+        await store.run(_seed_kernel())
+        await asyncio.sleep(0.3)
+        assert _tiles({f.ref: f.payload for f in session.frames[idle:]}) == {
+            "live": "2",
+            "cells": "3",
+            "workers": "1",
+        }
+        seen = await _quiet(session)
+        # Output and state writes are not what it shows.
+        await store.run(atomic(Space.kernel.runs["r1"].cells["c1"].out.set(nu.Literal([]))))
+        assert await _quiet(session, 0.5) == seen
+    finally:
+        await _stop(task)

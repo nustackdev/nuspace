@@ -76,14 +76,14 @@ def display(cell_id: nu.StrArg) -> nu.Nu:
             ``cell``.
 
     Returns:
-        A Flow that draws the trace and then redraws it forever.
+        A Flow that draws the trace and keeps it in step, forever.
 
     Notes:
-        - The table is written on the way in even when there is nothing in it
-          yet. Writing a ref is what ships its chain to the browser and what
-          makes the node there, so a table nothing writes has nothing to
-          render and would first come into being on the row that was meant to
-          fill it.
+        - The table is written as the watch starts, even when there is
+          nothing in it yet. Writing a ref is what ships its chain to the
+          browser and what makes the node there, so a table nothing writes
+          has nothing to render and would first come into being on the row
+          that was meant to fill it.
         - The subscription is the Cell's own state and not the leaf the trace
           is a key in. A child scoped watch never carries to a pool worker: it
           binds, it reports nothing, and nobody on either end is told.
@@ -91,7 +91,6 @@ def display(cell_id: nu.StrArg) -> nu.Nu:
           subscription is bracketed apart, so nothing is held open between
           rows.
     """
-    return ops.snapshot(rows(cell_id)) >> nu.ReactForever(
-        ops.snapshot(chat.trace_changed(cell_id)),
-        ops.snapshot(rows(cell_id)),
+    return nu.ReconcileReactive(
+        ops.snapshot(chat.trace_changed(cell_id)), ops.snapshot(rows(cell_id))
     )

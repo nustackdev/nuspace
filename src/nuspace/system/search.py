@@ -35,6 +35,7 @@ from typing import TYPE_CHECKING
 
 import nu
 import nustd.kv
+import nustd.time
 from nuspace import ops
 from nuspace.ops.cell import HasUi, cell_writes
 from nuspace.ops.plane import plane_writes
@@ -42,7 +43,7 @@ from nuspace.ops.utils import MintId, atomic, atomic_state, field_str
 from nuspace.shapes import PlaneState, Space
 
 from .home import seed
-from .kernel.utils import Now, snap
+from .kernel.utils import snap
 
 
 if TYPE_CHECKING:
@@ -335,7 +336,9 @@ def run(searchers: Mapping[str, str]) -> nu.Nu:
             snippets=nu.List(got.get_item("snippets", [])),
         )
 
-    return nu.TryCatch(nu.let(asked, looking), finally_=atomic_state(Search.finished_at.set(Now())))
+    return nu.TryCatch(
+        nu.let(asked, looking), finally_=atomic_state(Search.finished_at.set(nustd.time.time()))
+    )
 
 
 _SOURCE = """\
@@ -398,7 +401,7 @@ def search(
             Search.query.set(query)
             >> Search.snippets.set(picked)
             >> Search.titles.set(titles)
-            >> Search.started_at.set(Now())
+            >> Search.started_at.set(nustd.time.time())
         )
 
         def made(ui: nu.ObjectRef) -> nu.Nu:
@@ -490,11 +493,12 @@ def pick():
 
 
 def out():
-    # Searches are made anywhere: read the list again every second, redraw on a change.
+    # Searches are made anywhere: redraw when the list of them changed.
+    made = nuspace.Space.planes[search.SEARCHES].children.on_change()
     changed = Seen.ids != ops.snapshot(newest_first())
     body = draw() >> nu.ParallelAsync(
         nu.ReactForever(View.pick.search.on_change(), pick()),
-        nu.ForeverDo(nu.DelayedDo(1.0, nu.IfDo(changed, draw()))),
+        nu.ReconcileReactive(ops.snapshot(made), nu.IfDo(changed, draw())),
     )
     return nu.Frame(Seen, body, ids=[])
 """

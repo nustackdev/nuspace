@@ -8,7 +8,8 @@ that Plane's, eg the one a chat talks through, and not a job.
 
 Three cells, meeting in the plane's shared state (``Jobs.selected``):
 
-- ``jobs``: every job, redrawn once a second. A row click selects it.
+- ``jobs``: every job, drawn again when a job, its boot, restart or run
+  changes. A row click selects it.
 - ``new``: a name and a button that makes a job, starting as the ``program``
   snippet, and selects it.
 - ``job``: the selected job's code, boot switch, restart setting and delete.
@@ -32,6 +33,7 @@ import nustd.ui
 import nuspace
 from nuspace import ops
 from nuspace.system.services import init, supervisor
+from nuspace.system.utils import redraws
 
 
 class Jobs(nuspace.PlaneState):
@@ -55,8 +57,8 @@ def jobs():
 
 
 def running():
-    # Live runs are few: their planes, not every run ever recorded.
-    return nu.List(nu.Collect(nu.Unique(nu.Map(nu.Iter(ops.runs()), lambda run: run["plane"]))))
+    # The planes with a live run, off the live index.
+    return nu.list(nuspace.Space.kernel.planes_running.keys())
 
 
 def restart(pid):
@@ -69,30 +71,30 @@ def restart(pid):
     return nu.If(timed, label + ", " + nu.format(delay, "g") + "s", label)
 
 
-def table(booted, live):
-    def row(at):
-        j = nu.Str(at)
-        return nu.List.of(
-            nuspace.Space.planes[j].name.fallback(j),
-            j,
-            nu.If(nu.List(booted).contains(j), "yes", "no"),
-            restart(j),
-            nu.If(nu.List(live).contains(j), "yes", "no"),
-        )
+def rows():
+    def listed(booted, live):
+        def row(at):
+            j = nu.Str(at)
+            return nu.List.of(
+                nuspace.Space.planes[j].name.fallback(j),
+                j,
+                nu.If(nu.List(booted).contains(j), "yes", "no"),
+                restart(j),
+                nu.If(nu.List(live).contains(j), "yes", "no"),
+            )
 
-    return Listing.table.set(
-        nu.Dict.of(
-            columns=["Name", "ID", "Boot", "Restart", "Running"],
-            rows=jobs().iter().map(row).to_list(),
-        )
-    )
+        return jobs().iter().map(row).to_list()
+
+    return nu.let(init.booted(), lambda booted: nu.let(running(), lambda live: listed(booted, live)))
+
+
+def table(shown):
+    columns = ["Name", "ID", "Boot", "Restart", "Running"]
+    return Listing.table.set(nu.Dict.of(columns=columns, rows=shown))
 
 
 def draw():
-    body = nu.let(
-        init.booted(), lambda booted: nu.let(running(), lambda live: table(booted, live))
-    )
-    return ops.snapshot(body)
+    return nu.let(ops.snapshot(rows()), table)
 
 
 def select(click):
@@ -111,9 +113,15 @@ def select(click):
     )
 
 
-out = draw() >> nu.ParallelAsync(
-    nu.ForeverDo(nu.DelayedDo(1.0, draw())),
-    nu.ReactForever(Listing.table.on_row_click(), select),
+# A job made, removed or renamed, booted, supervised, or up or down.
+changes = [
+    nuspace.Space.planes.on_descendants_change("*", "*"),
+    nuspace.States.cells[init.CELL].on_change(),
+    nuspace.States.cells[supervisor.CELL].on_change(),
+    nuspace.Space.kernel.planes_running.on_children_change(),
+]
+out = nu.ParallelAsync(
+    redraws(changes, rows(), table), nu.ReactForever(Listing.table.on_row_click(), select)
 )
 """
 

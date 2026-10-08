@@ -45,7 +45,7 @@ from nuspace.ops.kernel import add_plane_run
 from nuspace.ops.utils import MintId, atomic, atomic_state
 from nuspace.shapes import EXIT_FAILED, EXIT_OK, CellState, Space, States, reroot
 
-from ..utils import Ticking, moved, park, snap, until, wake
+from ..utils import moved, snap
 
 
 __all__ = [
@@ -261,7 +261,7 @@ def _start(plane: nu.Str, mine: nu.Str) -> nu.Nu:
     return nu.IfDo(
         snap(plane_exists(plane)),
         nu.let(MintId("r"), write),
-        wake(Space.planes.on_children_change()),
+        nu.WaitReactive(snap(Space.planes[plane].on_change()), snap(plane_exists(plane))),
     )
 
 
@@ -300,23 +300,28 @@ def _ended(plane: nu.Str, mine: nu.Str) -> nu.Nu:
 def _turn(plane: nu.Str) -> nu.Nu:
     """One look at the plane's own run: start one, wait for it to end, or act on how it ended.
 
-    A plane no longer supervised parks until the fold cancels the arm, so
-    the loop never spins on a start its commit refuses.
+    A plane no longer supervised waits to be supervised again, or for the
+    fold to cancel the arm, so the loop never spins on a start its commit
+    refuses.
     """
     running = _kernel.running
+    policy = Policy.planes.get_item(plane, "")
 
     def look(held: nu.ObjectRef) -> nu.Nu:
         mine = nu.Str(held)
-        ending = until(running.contains(mine).not_(), running.on_children_change())
+        # Its run leaves the plane's live runs in the commit that ends it.
+        live = _kernel.planes_running[plane].runs.on_children_change()
+        ending = nu.WaitReactive(snap(live), snap(running.contains(mine).not_()))
         return nu.IfDo(
             mine == "",
             _start(plane, mine),
             nu.IfDo(snap(running.contains(mine)), ending, _ended(plane, mine)),
         )
 
+    supervised = nu.WaitReactive(snap(Policy.planes.on_child_change(plane)), snap(policy != ""))
     return nu.IfDo(
-        snap(Policy.planes.get_item(plane, "") == ""),
-        park(),
+        snap(policy == ""),
+        supervised,
         nu.let(snap(Policy.runs.get_item(plane, "")), look),
     )
 
@@ -350,6 +355,6 @@ def program() -> nu.Nu:
     planes = Policy.planes
     return atomic_state(_made() >> _forget_ended()) >> nu.ForEachParReactive(
         snap(nu.list(planes.keys())),
-        Ticking(snap(planes.on_children_change())),
+        snap(planes.on_children_change()),
         lambda plane: _arm(nu.Str(plane)),
     )

@@ -463,7 +463,12 @@ async def test_reload_replaces_a_cell_run_when_its_prog_changes(space):
     r = await space.made(ops.plane_run(p, envs=envs, by="test", into=MADE))
     old = first_cell(await space.run_row(r, lambda x: live(first_cell(x)), SLOW))
     await space.run(ops.set_prog(c, version("v2")))
-    row = await space.run_row(r, lambda x: len(x["cells"]) == 2 and live(x["cells"][1]), SLOW)
+
+    def replaced(x: dict) -> bool:
+        # The old body sees its interrupt on its own time: wait for its end too.
+        return len(x["cells"]) == 2 and ended(x["cells"][0]) and live(x["cells"][1])
+
+    row = await space.run_row(r, replaced, SLOW)
     gone, new = row["cells"]
     assert (gone["id"], gone["exit"]) == (old["id"], EXIT_INTERRUPTED)
     assert (new["by"], new["version"], new["worker"]) == (reload_service.BY, 2, old["worker"])

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 from _support.made import MADE
 
@@ -149,7 +151,7 @@ async def test_runs_draws_counts_and_tables(store):
     assert live["columns"] == ["Plane", "Backend", "By", "Cells", "Workers", "Age"]
     ((plane, backend, by, cells, workers_, age),) = live["rows"]
     assert (plane, backend, by, cells, workers_) == ("P", "async", "nav", 2, 1)
-    assert age.endswith("s")
+    assert age.endswith("m")
     (table,) = (await _frames(store, runs.CELLS)).values()
     assert table["columns"] == ["Plane", "Cell", "By", "Version", "Worker", "Age"]
     assert [r[:5] for r in table["rows"]] == [
@@ -157,6 +159,31 @@ async def test_runs_draws_counts_and_tables(store):
         ["P", "C", "reload", 2, "w1"],
     ]
     assert table["rows"][1][5] == "starting"
+
+
+async def test_runs_counts_redraw_on_a_change_and_never_while_idle(store):
+    namespace: dict = {}
+    exec(compile(runs.COUNTS, "cell", "exec"), namespace)  # noqa: S102
+    session = _Recording()
+    task = asyncio.create_task(nu.arun(namespace["out"], store.ctx.bind(Session, session)))
+    try:
+        # Drawn once, then past the re-checks right after subscribing: idle.
+        await asyncio.sleep(1.5)
+        idle = len(session.frames)
+        assert {f.ref[-1]: f.payload["value"] for f in session.frames} == {
+            "runs": "0",
+            "cells": "0",
+            "workers": "0",
+        }
+        await asyncio.sleep(1.0)
+        assert len(session.frames) == idle
+        await store.run(_seed())
+        await asyncio.sleep(0.3)
+        drawn = {f.ref[-1]: f.payload["value"] for f in session.frames[idle:]}
+        assert drawn == {"runs": "1", "cells": "2", "workers": "1"}
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
 
 
 async def test_workers_draws_counts_and_a_table(store):

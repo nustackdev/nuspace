@@ -30,13 +30,13 @@ import asyncio
 from typing import TYPE_CHECKING
 
 import nu
+import nustd.time
 from nu.context import FabricRef
 from nu.engine.structure import Declared
 from nu.lang import ScalarAction
 from nu.lang.sentinels import EMPTY
 from nuspace.ops.utils import atomic
 from nuspace.shapes import EXIT_FAILED, Space
-from nuspace.system.kernel.utils import Now
 
 
 if TYPE_CHECKING:
@@ -266,7 +266,7 @@ def _made(backend: nu.StrArg, run_id: nu.StrArg, made: nu.Nu) -> nu.Nu:
             row.backend.set(backend)
             >> row.run.set(run_id)
             >> row.handle.set(nu.str(pair[1]))
-            >> row.started_at.set(Now())
+            >> row.started_at.set(nustd.time.time())
             >> run.workers.add(wid)
             >> nu.IfDo(row.terminated_at.missing(), live)
         )
@@ -284,7 +284,7 @@ def ended(worker_id: nu.StrArg, exit_: nu.StrArg, error: nu.StrArg = "") -> nu.N
     return (
         nu.IfDo(
             row.terminated_at.missing(),
-            row.terminated_at.set(Now()) >> row.exit.set(exit_) >> row.error.set(error),
+            row.terminated_at.set(nustd.time.time()) >> row.exit.set(exit_) >> row.error.set(error),
         )
         >> run.workers_running.remove(worker_id, missing_ok=True)
         >> _kernel.workers_running.remove(worker_id, missing_ok=True)

@@ -455,11 +455,7 @@ def out():
         >> chat.note(panel(), chat.CYCLE_ANSWER, "said it")
     )
     return nu.ForeverDo(
-        nu.IfDo(owed(), ack)
-        >> nu.IfDo(
-            nu.Not(owed()),
-            nu.ReactWhile(ops.snapshot(chat.changed(cell)), nu.Not(owed()), nu.Noop()),
-        )
+        nu.IfDo(owed(), ack) >> nu.WaitReactive(ops.snapshot(chat.changed(cell)), owed())
     )
 """
 

@@ -162,10 +162,14 @@ buttons written out. There is no loop in the program.
 ### A live table
 
 A drawn Cell is bound to the store, so a table of what is there stays true
-without you drawing it again. Write it on the way in, and write it again on
-every change: the term is built fresh at each of the two places, because one
-node in two tree positions is one node and a subscription is a handle the
-first holder to finish closes under the other.
+without you drawing it again. Keep it in step with
+`nu.ReconcileReactive(change, body)`: it draws right after it subscribes,
+again on every change, and again on a re-check now and then, so a change it
+was never told about is drawn late, never missed. Its body gets no changed key: it reads what is there now
+and draws it, and drawing twice with nothing changed shows the same. To wait
+until the store reaches a point, `nu.WaitReactive(change, cond)` returns once
+`cond` reads true. Never poll with a `Delay` loop. `nu.ReactForever` is for
+clicks and other ui events, which are things that happened, not state.
 
 ```python
 import nu
@@ -180,11 +184,7 @@ ITEM = "_answer_plane"
 
 
 def table():
-    """Every Plane in the Space, as rows, as a write.
-
-    Built fresh at each call site. One node in two tree positions is one
-    node, and this one is written on the way in and again on every change.
-    """
+    """Every Plane in the Space, as rows, as a write."""
     row = nu.Dict(nu.Attr(ITEM))
     return nustd.ui.TableRef("planes").set(
         nu.Dict.of(
@@ -205,18 +205,17 @@ def table():
 
 
 def out(plane, cell):
-    """The Planes now, again whenever one moves, and a box under them.
+    """The Planes, kept in step with the store, and a box under them.
 
     Bracketed per step: each draw of the table reads in a snapshot of its own.
     """
     box = nustd.ui.InputRef("message")
     send = nustd.ui.ButtonRef("send")
     return ops.bracketed(
-        table()
-        >> box.set(nu.Str(""))
+        box.set(nu.Str(""))
         >> send.set_label(nu.Str("send"))
         >> nu.ParallelAsync(
-            nu.ReactForever($ROOT.planes.on_change(), table()),
+            nu.ReconcileReactive($ROOT.planes.on_change(), table()),
             nu.ReactForever(
                 send.on_click(),
                 chat.submit(plane, nu.Str(box)) >> box.set(nu.Str("")),

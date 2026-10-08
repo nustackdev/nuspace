@@ -97,10 +97,7 @@ def answering(
 
     return nu.ForeverDo(
         nu.IfDo(owed(), _turn(plane_id, cell_id, ui_plane_id=ui_plane_id, ask=ask))
-        >> nu.IfDo(
-            nu.Not(owed()),
-            nu.ReactWhile(ops.snapshot(chat.changed(cell_id)), nu.Not(owed()), nu.Noop()),
-        )
+        >> nu.WaitReactive(ops.snapshot(chat.changed(cell_id)), owed())
     )
 
 

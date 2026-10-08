@@ -237,7 +237,7 @@ def sidebar_feed(sidebar: Ref, planes: Sequence[Plane], snippets: Sequence[Snipp
         planes: The registered Planes, what ``plane.create`` can create.
         snippets: The registered snippets, what ``search.run`` can search.
     """
-    arms = [_arms.state("tree", _changes(), _ship(sidebar))]
+    arms = [_arms.states("tree", _changes(), _ship(sidebar))]
     if planes:
 
         def made(plane_id: nu.Str, event: nu.Attr) -> nu.Nu:

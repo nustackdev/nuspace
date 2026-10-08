@@ -22,7 +22,7 @@ from nuspace.ops.read import cells
 from nuspace.ops.utils import MintId, atomic
 from nuspace.shapes import Space
 
-from ..utils import Ticking, snap, wake
+from ..utils import snap
 
 
 __all__ = ["BY", "CELL", "PLANE", "SHIM", "behind", "program"]
@@ -85,13 +85,13 @@ def _replace(run_id: nu.StrArg) -> nu.Nu:
 
 
 def _arm(run_id: nu.Str) -> nu.Nu:
-    """One live plane run: rerun what is stale, then again on every write to its plane's cells.
+    """One live plane run: rerun what is stale, now and on every write to its plane's cells.
 
     The plane's ``version`` counts those writes, so the arm hears its own
     plane only, and :func:`behind` tells a rewritten prog apart.
     """
     edits = Space.planes[_kernel.runs[run_id].plane.fallback("")].version.on_change()
-    return nu.ForeverDo(_replace(run_id) >> wake(edits))
+    return nu.ReconcileReactive(snap(edits), _replace(run_id))
 
 
 def program() -> nu.Nu:
@@ -99,6 +99,6 @@ def program() -> nu.Nu:
     running = _kernel.running
     return nu.ForEachParReactive(
         snap(nu.list(running)),
-        Ticking(snap(running.on_children_change())),
+        snap(running.on_children_change()),
         lambda rid: _arm(nu.Str(rid)),
     )

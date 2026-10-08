@@ -28,6 +28,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import nu
+import nustd.time
 from nuspace import ops
 from nuspace.ops.utils import atomic
 from nuspace.shapes import RECENTS_CAP, Space
@@ -43,7 +44,7 @@ from nuspace.system.devices.web.utils import Arms, cell_ui, field_ids
 from nuspace.system.devices.web.viewer import on_open, slash_entries, viewer_feed
 from nuspace.system.home import PLANE as HOME
 from nuspace.system.kernel.space import free_port
-from nuspace.system.kernel.utils import Now, snap
+from nuspace.system.kernel.utils import snap
 from nuspace.system.search import PLANE as SEARCH
 from nuspace.system.services.nav import clear_connections
 from nuspace.system.settings import PLANE as SETTINGS
@@ -81,7 +82,7 @@ _connections = Space.connections
 def open_connection(sid: nu.StrArg) -> nu.Nu:
     """Publish connection ``sid``: opened now, no plane open. One commit."""
     row = _connections[sid]
-    return atomic(row.opened.set(Now()) >> row.routes.set([]))
+    return atomic(row.opened.set(nustd.time.time()) >> row.routes.set([]))
 
 
 def close_connection(sid: nu.StrArg) -> nu.Nu:

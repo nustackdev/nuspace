@@ -52,9 +52,10 @@ __all__ = [
 
 #: The nucore modules an agent composes against. Verified pairwise disjoint
 #: apart from ``Hex``, which ``nu.core`` and ``nu.forms.primitives`` both
-#: export. ``nu.core.reactive`` is absent because ``nu.core`` re-exports all
-#: five of its atoms; ``nu.domains.shape`` is absent because it holds the
-#: abstract Ref bases a fabric specialises, not anything a model writes.
+#: export. ``nu.core.reactive`` is absent because ``nu.core`` re-exports its
+#: atoms and its flows, event and level; ``nu.domains.shape`` is absent because
+#: it holds the abstract Ref bases a fabric specialises, not anything a model
+#: writes.
 DEFAULT_MODULES: tuple[ModuleType, ...] = (
     nu.core,  # the atom bulk: arithmetic, comparison, iteration, casts
     nu.core.flows,  # the *Do mutators, including ForEachDo / ForRangeDo

@@ -7,8 +7,8 @@ first for the same reason. Its cells are ordinary
 cells, seeded once: after that they are the owner's to edit, and a store
 that has a home keeps it as it is.
 
-Four cells, read only. All but ``start`` redraw once a second from one
-snapshot of the store, like the nuverse live planes:
+Four cells, read only. All but ``start`` are drawn again when what they
+show changes, and only then, like the nuverse live planes:
 
 - ``header``: the space, its directory, versions and uptime, off
   ``Space.state.info``;
@@ -30,13 +30,14 @@ import importlib.metadata
 from pathlib import Path
 
 import nu
+import nustd.time
 from nuspace.ops.cell import HasUi, cell_writes
 from nuspace.ops.pin import pin as pin_last
 from nuspace.ops.plane import plane_writes
 from nuspace.ops.utils import atomic
 from nuspace.shapes import Space
 
-from .kernel.utils import Now, snap
+from .kernel.utils import snap
 
 
 __all__ = [
@@ -79,19 +80,19 @@ RECENT_SHOWN = 8
 
 HEADER = """\
 import nu
-import nustd.kv
 import nustd.time
 import nustd.ui
 import nuspace
+from nuspace import ops
+from nuspace.system.utils import redraws
 
 
 def uptime(seconds):
-    s = nu.int(seconds)
-    m = s // 60
+    m = nu.int(seconds) // 60
     h = m // 60
     return nu.If(
-        s < 60,
-        nu.str(s) + "s",
+        m < 1,
+        "under a minute",
         nu.If(m < 60, nu.str(m) + "m", nu.str(h) + "h " + nu.str(m % 60) + "m"),
     )
 
@@ -101,65 +102,82 @@ def versions(v):
     return nu.If(v.exists(), nu.Str(", ").join(each.to_list()), "")
 
 
-def draw():
+def line():
     info = nuspace.Space.state.info
     path = info.path.fallback("")
     where = nu.If(path == "", "Throwaway store", path)
     up = nu.If(info.opened.exists(), nu.Str("Up ") + uptime(nustd.time.time() - info.opened), "")
     parts = nu.List.of("nuspace", where, versions(info.versions), up)
-    line = nu.Str("  ·  ").join(parts.iter().filter(lambda x: x != "").to_list())
-    return nustd.kv.Snapshot(nustd.ui.TextRef("info").set(line), scope=nuspace.Space)
+    return nu.Str("  ·  ").join(parts.iter().filter(lambda x: x != "").to_list())
+
+
+def show(now):
+    return nustd.ui.TextRef("info").set(nu.Str(now))
+
+
+def draw():
+    return nu.let(ops.snapshot(line()), show)
 
 
 def out():
-    return draw() >> nu.ForeverDo(nu.DelayedDo(1.0, draw()))
+    # Uptime moves with the clock, in minutes: read again every minute.
+    return redraws([nuspace.Space.state.info.on_change()], line(), show, every=60.0)
 """
 
 
 RECENT = f"""\
 import nu
-import nustd.kv
 import nustd.ui
 import nuspace
 from nuspace import ops
+from nuspace.system.utils import redraws
 
 SHOWN = {RECENT_SHOWN}
 
 
-def link(ids, i):
+def link(shown, i):
     ref = nustd.ui.LinkRef("r" + str(i))
-    pid = nu.str(ids[i])
+    one = nu.Dict(shown[i])
     return nu.IfDo(
-        nu.List(ids).len() > i,
-        ref.set(href=nu.Str("/") + pid, label=ops.plane_title(pid)),
+        nu.List(shown).len() > i,
+        ref.set(href=nu.Str("/") + nu.str(one["id"]), label=nu.str(one["title"])),
         ref.erase(),
     )
 
 
-def show(ids):
+def show(shown):
     none = nustd.ui.TextRef("none")
-    empty = nu.IfDo(nu.List(ids).len() == 0, none.set("Nothing opened yet."), none.erase())
-    links = nu.Sequential(*[link(ids, i) for i in range(SHOWN)])
+    empty = nu.IfDo(nu.List(shown).len() == 0, none.set("Nothing opened yet."), none.erase())
+    links = nu.Sequential(*[link(shown, i) for i in range(SHOWN)])
     return nustd.ui.HeadingRef("title").set("Recent", level=3) >> links >> empty
 
 
-def draw():
+def recent():
     listed = nuspace.Space.state.recents.fallback([])
     ids = listed.iter().filter(lambda p: ops.plane_exists(p)).to_list()[0:SHOWN]
-    return nustd.kv.Snapshot(nu.let(ids, show), scope=nuspace.Space)
+    return ids.iter().map(lambda p: nu.Dict.of(id=p, title=ops.plane_title(p))).to_list()
+
+
+def draw():
+    return nu.let(ops.snapshot(recent()), show)
 
 
 def out():
-    return draw() >> nu.ForeverDo(nu.DelayedDo(1.0, draw()))
+    # Opened, or a plane made, removed or renamed.
+    changes = [
+        nuspace.Space.state.recents.on_change(),
+        nuspace.Space.planes.on_descendants_change("*", "name"),
+    ]
+    return redraws(changes, recent(), show)
 """
 
 
 GLANCE = """\
 import nu
-import nustd.kv
 import nustd.ui
 import nuspace
 from nuspace import ops
+from nuspace.system.utils import redraws
 
 
 class Tiles(nustd.ui.Row):
@@ -191,10 +209,6 @@ def drawn(planes):
     return nu.Count(nu.Filter(nu.Iter(planes), counted))
 
 
-def live_cells(runs):
-    return nu.Sum(nu.Map(nu.Iter(runs), lambda r: nu.List(r["cells_running"]).len()))
-
-
 def first(planes, made_by):
     def made(p):
         return (nu.str(prop(p, "made_by")) == made_by).and_(nu.bool(prop(p, "ui")))
@@ -208,30 +222,48 @@ def link(ref, planes, made_by, label):
     return nu.IfDo(pid != "", ref.set(href=nu.Str("/") + pid, label=label), ref.erase())
 
 
-def show(runs, planes):
-    tiles = (
+def show_planes(planes):
+    return (
         Glance.tiles.planes.set(nu.str(drawn(planes)))
-        >> Glance.tiles.live.set(nu.str(nu.List(runs).len()))
-        >> Glance.tiles.cells.set(nu.str(live_cells(runs)))
-        >> Glance.tiles.workers.set(nu.str(ops.workers().len()))
-    )
-    links = (
-        link(Glance.links.runs, planes, "runs", "Runs")
+        >> link(Glance.links.runs, planes, "runs", "Runs")
         >> link(Glance.links.workers, planes, "workers", "Workers")
         >> link(Glance.links.planes, planes, "planes", "Planes")
     )
-    return tiles >> links
+
+
+def live():
+    kernel = nuspace.Space.kernel
+    running = nu.list(kernel.running)
+    cells = nu.Sum(nu.Map(nu.Iter(running), lambda r: kernel.runs[nu.Str(r)].cells_running.len()))
+    return nu.List.of(running.len(), cells, kernel.workers_running.len())
+
+
+def show_live(counts):
+    return (
+        Glance.tiles.live.set(nu.str(counts[0]))
+        >> Glance.tiles.cells.set(nu.str(counts[1]))
+        >> Glance.tiles.workers.set(nu.str(counts[2]))
+    )
 
 
 def draw():
-    body = nu.let(
-        ops.runs(), lambda runs: nu.let(ops.plane_rows(), lambda planes: show(runs, planes))
-    )
-    return nustd.kv.Snapshot(body, scope=nuspace.Space)
+    planes = nu.let(ops.snapshot(ops.plane_rows()), show_planes)
+    return planes >> nu.let(ops.snapshot(live()), show_live)
 
 
 def out():
-    return draw() >> nu.ForeverDo(nu.DelayedDo(1.0, draw()))
+    kernel = nuspace.Space.kernel
+    # Planes come and go with their names; live runs, their cell runs and
+    # workers with the live indexes.
+    named = [nuspace.Space.planes.on_descendants_change("*", "name")]
+    lives = [
+        kernel.running.on_children_change(),
+        kernel.runs.on_descendants_change("*", "cells_running", "*"),
+        kernel.workers_running.on_children_change(),
+    ]
+    return nu.ParallelAsync(
+        redraws(named, ops.plane_rows(), show_planes), redraws(lives, live(), show_live)
+    )
 """
 
 
@@ -349,4 +381,6 @@ def write_info(path: str | None) -> nu.Nu:
     """
     info = Space.state.info
     where = "" if path is None else str(Path(path).resolve())
-    return atomic(info.path.set(where) >> info.opened.set(Now()) >> info.versions.set(versions()))
+    return atomic(
+        info.path.set(where) >> info.opened.set(nustd.time.time()) >> info.versions.set(versions())
+    )

@@ -73,9 +73,6 @@ class Here(nu.Shape):
 #: How long ``plane_stop`` waits after interrupting before it kills, in seconds.
 STOP_GRACE = 10.0
 
-#: How long a wait trusts its subscription before reading again.
-_WATCH = 1.0
-
 _kernel = Space.kernel
 
 
@@ -253,11 +250,14 @@ def plane_kill(run_id: nu.StrArg) -> nu.Nu:
 
 
 def _until_ended(run_id: nu.StrArg) -> nu.Nu:
-    """Wait until a plane run is out of ``running``. Returns at once if it is."""
-    wake = nu.Timeout(
-        _WATCH, nu.React(_snap(_kernel.running.on_children_change())), on_timeout=nu.Delay(0.0)
+    """Wait until a plane run is out of ``running``. Returns at once if it is.
+
+    Woken by its plane's live runs, which it leaves in the same commit.
+    """
+    live = _kernel.planes_running[_kernel.runs[run_id].plane.fallback("")].runs
+    return nu.WaitReactive(
+        _snap(live.on_children_change()), _snap(_kernel.running.contains(run_id).not_())
     )
-    return nu.WhileDo(_snap(_kernel.running.contains(run_id)), wake)
 
 
 def plane_stop(run_id: nu.StrArg, grace: nu.FloatArg = STOP_GRACE) -> nu.Nu:

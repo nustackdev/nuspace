@@ -30,12 +30,13 @@ from typing import TYPE_CHECKING
 import nu
 import nu.prog
 import nustd.kv
+import nustd.time
 from nuspace.ops import Here
 from nuspace.ops.utils import atomic
 from nuspace.shapes import EXIT_FAILED, EXIT_INTERRUPTED, EXIT_OK, Reroot, Space
 
 from .out import Captured, ErrorText, HasOut, TakeOut
-from .utils import Now, until
+from .utils import snap
 
 
 if TYPE_CHECKING:
@@ -104,7 +105,7 @@ def end_cell_run(
         writes = writes >> cr.error.set(error)
     if out is not None:
         writes = cr.out.set(out) >> writes
-    writes = writes >> cr.terminated_at.set(Now())
+    writes = writes >> cr.terminated_at.set(nustd.time.time())
     return nu.IfDo(cr.terminated_at.missing(), writes) >> row.cells_running.remove(
         cell_run_id, missing_ok=True
     )
@@ -165,12 +166,12 @@ def build_body(
     program = nu.ParallelAsync(nu.prog.Eval(load))
     cr = _kernel.runs[run_id].cells[cell_run_id]
     asked = cr.interrupt_requested.fallback(False)
-    interrupted = until(asked, cr.interrupt_requested.on_change())
+    interrupted = nu.WaitReactive(snap(cr.interrupt_requested.on_change()), snap(asked))
     flusher = nu.ForeverDo(nu.Delay(FLUSH_SECONDS) >> _flush(run_id, cell_run_id))
     # The record says why the race ended: an asked interrupt, or the program
     # finishing. The flusher never wins.
     run = (
-        atomic(cr.started_at.init(Now()))
+        atomic(cr.started_at.init(nustd.time.time()))
         >> nu.Race(program, interrupted, flusher)
         >> _finish(run_id, cell_run_id, nu.If(asked, EXIT_INTERRUPTED, EXIT_OK))
     )

@@ -22,9 +22,8 @@ closed, a connection going and nav itself stopping all leave nothing
 behind. The run ids live in nav's own cell state so the viewer shows each
 pane the run nav made for it (:func:`pane_run`).
 
-Every fold subscribes through :class:`~..utils.Ticking`: a connection, a
-route or a cell whose write the subscription missed is picked up on the
-next tick.
+Every fold and wait is a level one: a connection, a route or a cell whose
+write its subscription missed is picked up on the next re-check.
 
 A connection outlives no open: :func:`clear_connections` runs before init
 starts nav (D34), so a tab from a previous run never brings a plane up.
@@ -38,7 +37,7 @@ from nuspace.ops import cell_plane, cell_run, cells, plane_exists, plane_run, pl
 from nuspace.ops.utils import atomic, atomic_state
 from nuspace.shapes import CellState, Space, reroot
 
-from ..utils import Ticking, park, snap, until, wake
+from ..utils import park, snap
 
 
 __all__ = [
@@ -149,7 +148,7 @@ def _cells_fold(route: nu.Str, run_id: nu.Str) -> nu.Nu:
         snap(plane_exists(route)),
         nu.ForEachParReactive(
             snap(cells(route)),
-            Ticking(snap(Space.planes[route].cells.on_children_change())),
+            snap(Space.planes[route].cells.on_children_change()),
             lambda cell: _cell_arm(route, run_id, nu.Str(cell)),
         ),
         park(),
@@ -176,7 +175,7 @@ def _changed(route: nu.Str) -> nu.Nu:
     edits = Space.planes[route].version.on_change()
     return nu.let(
         snap(_cells_seen(route)),
-        lambda seen: nu.WhileDo(seen == snap(_cells_seen(route)), wake(edits)),
+        lambda seen: nu.WaitReactive(snap(edits), nu.Not(seen == snap(_cells_seen(route)))),
     )
 
 
@@ -192,7 +191,9 @@ def _turn(sid: nu.Str, route: nu.Str) -> nu.Nu:
     def follow(made: nu.ObjectRef) -> nu.Nu:
         run_id = nu.Str(made)
         running = _kernel.running
-        ended = until(running.contains(run_id).not_(), running.on_children_change())
+        # The run leaves the plane's live runs in the commit that ends it.
+        live = _kernel.planes_running[route].runs.on_children_change()
+        ended = nu.WaitReactive(snap(live), snap(running.contains(run_id).not_()))
         followed = nu.TryCatch(
             nu.Race(_cells_fold(route, run_id), ended),
             finally_=nu.IfDo(snap(running.contains(run_id)), plane_stop(run_id)),
@@ -205,7 +206,7 @@ def _turn(sid: nu.Str, route: nu.Str) -> nu.Nu:
     # a new plane's id and opens it while its create is still in flight. So
     # wait for the plane rather than giving up on the route; the routes will
     # not change again to retry.
-    shown = nu.WhileDo(nu.Not(snap(routable(route))), wake(Space.planes.on_children_change()))
+    shown = nu.WaitReactive(snap(Space.planes[route].on_change()), snap(routable(route)))
     return shown >> nu.let("", follow)
 
 
@@ -230,7 +231,7 @@ def _arm(sid: nu.Str) -> nu.Nu:
         snap(Space.connections.contains(sid)),
         nu.ForEachParReactive(
             snap(routes.fallback([])),
-            Ticking(snap(routes.on_change())),
+            snap(routes.on_change()),
             lambda route: _open(sid, nu.Str(route)),
         ),
         park(),
@@ -249,6 +250,6 @@ def program() -> nu.Nu:
     )
     return fresh_state >> nu.ForEachParReactive(
         snap(nu.list(connections.keys())),
-        Ticking(snap(connections.on_children_change())),
+        snap(connections.on_children_change()),
         lambda sid: _arm(nu.Str(sid)),
     )

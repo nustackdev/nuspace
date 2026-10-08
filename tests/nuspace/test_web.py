@@ -315,7 +315,8 @@ def _run(rid, plane, *cell_runs, live=True):
         else:
             writes = writes >> row.cells_running.add(crid)
     if live:
-        writes = writes >> Space.kernel.running.add(rid)
+        kernel = Space.kernel
+        writes = writes >> kernel.running.add(rid) >> kernel.planes_running[plane].runs.add(rid)
     return atomic(writes)
 
 
@@ -644,6 +645,51 @@ async def test_connection_panes(store):
             )
         )
         assert await store.read(conns["s1"].routes) == []
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+
+
+async def test_connection_status_hears_its_own_pane_run_only(store):
+    """A pane's statuses ship on its own run: another plane's runs, or another
+    run of its plane, ship nothing for it."""
+    from nuspace.system.devices.web.device import connection
+
+    await _plane(store, "p1", "One", ui=True, made_by="plain")
+    await _plane(store, "p2", "Two", ui=True, made_by="plain")
+    await store.run(ops.add_cell("p1", "x = 1", cell_id="a1"))
+    await store.run(ops.add_cell("p2", "y = 2", cell_id="b1"))
+    session = FakeSession()
+    ctx = store.ctx.bind(Session, session)
+    task = asyncio.create_task(
+        nu.arun(connection(nu.Str("s1"), planes=PLANES, snippets=SNIPPETS), ctx)
+    )
+
+    def status(plane_id: str) -> list[dict]:
+        return [w for w in session.writes("set_status") if w["plane_id"] == plane_id]
+
+    try:
+        await _until(lambda: session.writes("set_tree"))
+        session.notify(("viewer", "ops", "planes.open"), {"plane_ids": ["p1", "p2"]})
+        await _until(lambda: status("p1") and status("p2"))
+        await store.run(_run("r_1", "p1", ("cr_1", "a1", False, "", "")))
+        await store.run(atomic_state(nav.panes().set_item("s1/p1", nu.Str("r_1"))))
+        await _until(lambda: status("p1")[-1]["statuses"][0]["state"] == "starting")
+        # Past the re-checks right after subscribing: the pane is idle.
+        await asyncio.sleep(1.5)
+        mine, theirs = len(status("p1")), len(status("p2"))
+
+        # p2's run comes up, starts, and ends: p2's pane hears it, p1's does not.
+        await store.run(_run("r_2", "p2", ("cr_2", "b1", False, "", "")))
+        await store.run(atomic_state(nav.panes().set_item("s1/p2", nu.Str("r_2"))))
+        cr = Space.kernel.runs["r_2"].cells["cr_2"]
+        await store.run(atomic(cr.started_at.set(STARTED)))
+        await _until(lambda: status("p2")[-1]["statuses"][0]["state"] == "running")
+        # Another run of p1, not the pane's, starting a cell run of its own.
+        await store.run(_run("r_3", "p1", ("cr_3", "a1", True, "", "")))
+        await asyncio.sleep(0.5)
+        assert len(status("p1")) == mine
+        assert len(status("p2")) > theirs
     finally:
         task.cancel()
         await asyncio.gather(task, return_exceptions=True)

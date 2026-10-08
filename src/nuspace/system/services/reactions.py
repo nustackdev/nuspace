@@ -13,17 +13,17 @@ A reaction is an ordinary cell. Its prog is Python source like any other,
 so the change it waits on is written into it as source, nothing serialized::
 
     def out():
-        return nu.ParallelAsync(
-            nu.ReactForever(
-                ops.snapshot(States.planes["chat"].state["messages"].on_change()),
-                up_plane("chat"),
-            ),
+        return nu.ReconcileReactive(
+            ops.snapshot(States.planes["chat"].state["messages"].on_change()),
             up_plane("chat"),
+            after=(),
+            every=None,
         )
 
-Every notification fires, and the reaction fires once as it starts, which
-covers changes made while the space was closed. The subscription is the
-first branch, so it binds before that first fire reads anything.
+The reaction fires once as it starts, after its subscription is bound,
+which covers changes made while the space was closed, and then on every
+notification. A fire is a plane run, so it has no re-checks: it runs on
+changes only.
 
 :func:`enable_react` loads the source before it writes the cell, the way
 the kernel will: source that does not construct, a bad import included,
@@ -43,10 +43,8 @@ Dedupe is :func:`up_plane`'s. It starts a run of the plane ``by``
 runs, O(k)), so two never run at once, even from two reactions on one
 plane. One live already may or may not have seen the change, so it waits for
 that run's ``terminated_at`` (a point read) and fires once more after it.
-``ReactForever`` lets every body finish, and queues the notifications landing
-while one waits: those are a few more runs, one after the other, never two at
-once. A reaction that drops notifications landing mid body would make them
-one; nu has none yet.
+Notifications landing while one fire waits merge into one more fire, so a
+burst of changes is one run after the one live, never two at once.
 
 Contract for the planes run. A plane a reaction runs runs to completion: it
 keeps a cursor in its plane state (the last item it handled), handles
@@ -70,7 +68,7 @@ from nuspace.ops.state import plane_state
 from nuspace.ops.utils import MintId, atomic, atomic_state
 from nuspace.shapes import PlaneState, Space
 
-from ..utils import snap, until
+from ..utils import snap
 
 
 __all__ = [
@@ -145,11 +143,9 @@ def source(change: nu.StrArg, plane_id: nu.StrArg, imports: str = "") -> nu.Nu:
     return (
         nu.Str(head + "\n#: The plane this reaction runs.\nPLANE = ")
         + nu.Repr(plane_id)
-        + nu.Str(
-            "\n\n\ndef out():\n    return nu.ParallelAsync(\n        nu.ReactForever(ops.snapshot("
-        )
+        + nu.Str("\n\n\ndef out():\n    return nu.ReconcileReactive(\n        ops.snapshot(")
         + nu.Str(change)
-        + nu.Str("), up_plane(PLANE)),\n        up_plane(PLANE),\n    )\n")
+        + nu.Str("),\n        up_plane(PLANE),\n        after=(),\n        every=None,\n    )\n")
     )
 
 
@@ -211,8 +207,8 @@ def up_plane(plane_id: nu.StrArg, by: nu.StrArg = BY) -> nu.Nu:
     def settle(live: nu.ObjectRef) -> nu.Nu:
         rid = nu.Str(live)
         over = _kernel.runs[rid].terminated_at
-        ended = until(over.exists(), over.on_change()) >> live.set(snap(react_run(plane_id, by)))
-        return nu.WhileDo(rid != "", ended)
+        ended = nu.WaitReactive(snap(over.on_change()), snap(over.exists()))
+        return nu.WhileDo(rid != "", ended >> live.set(snap(react_run(plane_id, by))))
 
     none = react_run(plane_id, by) == ""
 

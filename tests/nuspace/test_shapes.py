@@ -15,7 +15,7 @@ import pytest
 import nu
 import nustd.kv
 import nustd.ui
-from nu.core.flows.react import React
+from nu.core.reactive import React
 from nuspace import ops
 from nuspace.shapes import (
     EXITS,

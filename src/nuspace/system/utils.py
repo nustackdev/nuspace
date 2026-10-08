@@ -1,10 +1,9 @@
-"""Small things services share: waiting on the store, re-entering on a change.
+"""Small things services and system cells share: waiting on the store, following it.
 
-Every service runs on a worker and hears the store through the host's feed.
-A subscription opened after a read can miss a write landing in between, so
-each wait here also reads again every :data:`~.kernel.utils.WATCH_SECONDS`:
-a change is late at worst, never lost. Every read and every subscription
-carries its own snapshot, so nothing here holds a bracket open across a wait.
+Every wait here is a level one: it reads the store after subscribing, again
+on every change and on re-checks, so a change its subscription did not
+hear is late, never lost. Every read and every subscription carries its own
+snapshot, so nothing here holds a bracket open across a wait.
 """
 
 from __future__ import annotations
@@ -13,14 +12,14 @@ from typing import TYPE_CHECKING
 
 import nu
 
-from .kernel.utils import Ticking, park, snap, until, wake
+from .kernel.utils import park, snap
 
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Sequence
 
 
-__all__ = ["Ticking", "follows", "moved", "park", "snap", "until", "wake"]
+__all__ = ["drawing", "follows", "moved", "park", "redraw", "redraws", "snap"]
 
 
 def moved(ref: nu.Nu, seen: nu.StrArg) -> nu.Nu:
@@ -28,7 +27,7 @@ def moved(ref: nu.Nu, seen: nu.StrArg) -> nu.Nu:
 
     An unwritten ref reads ``""``, so a deleted row counts as a move.
     """
-    return nu.WhileDo(nu.Eq(snap(nu.str(ref).fallback("")), seen), wake(ref.on_change()))
+    return nu.WaitReactive(snap(ref.on_change()), snap(nu.str(ref).fallback("") != seen))
 
 
 def follows(ref: nu.Nu, body: Callable[[nu.Str], nu.Nu], *, alive: nu.Nu | None = None) -> nu.Nu:
@@ -54,3 +53,54 @@ def follows(ref: nu.Nu, body: Callable[[nu.Str], nu.Nu], *, alive: nu.Nu | None 
         return raced if alive is None else nu.IfDo(snap(alive), raced, park())
 
     return nu.ForeverDo(nu.let(snap(nu.str(ref).fallback("")), turn))
+
+
+class _Drawn(nu.Shape):
+    """What a view last drew, to tell a change that shows from one that does not."""
+
+    view = nu.ObjectRef.slot()
+
+
+def drawing(body: nu.Nu) -> nu.Nu:
+    """``body`` with a place to keep what it last drew, for every :func:`redraw` inside it."""
+    return nu.Frame(_Drawn, body, view=None)
+
+
+def redraw(read: nu.Nu, draw: Callable[[nu.ObjectRef], nu.Nu]) -> nu.Nu:
+    """``draw(view)`` of what ``read`` reads now, only when it reads otherwise than last drawn.
+
+    A level pass: run it as often as anything might have moved, and an idle
+    store draws nothing. Inside :func:`drawing`.
+
+    Args:
+        read: The view, one value. Unbracketed: read in a snapshot here.
+        draw: Builds the drawing from the view read.
+    """
+
+    def look(now: nu.ObjectRef) -> nu.Nu:
+        return nu.IfDo(_Drawn.view != now, draw(now) >> _Drawn.view.set(now))
+
+    return nu.let(snap(read), look)
+
+
+def redraws(
+    changes: Sequence[nu.Nu],
+    read: nu.Nu,
+    draw: Callable[[nu.ObjectRef], nu.Nu],
+    *,
+    every: float = 30.0,
+) -> nu.Nu:
+    """:func:`redraw` after subscribing, on every change of any of ``changes``, and on re-checks. Never returns.
+
+    Args:
+        changes: Subscriptions that say ``read`` may have moved. Unbracketed:
+            each is snapshotted here.
+        read: The view, as :func:`redraw` reads it.
+        draw: Builds the drawing from the view read.
+        every: Seconds between re-checks. A view that moves with the clock
+            sets how often it is read again.
+    """
+    kept = [
+        nu.ReconcileReactive(snap(change), redraw(read, draw), every=every) for change in changes
+    ]
+    return drawing(nu.ParallelAsync(*kept))

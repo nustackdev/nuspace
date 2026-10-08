@@ -1,7 +1,8 @@
 """The ``planes`` Plane: every plane in the space, live.
 
-Two cells, each redrawing once a second from one snapshot of the store: the
-planes and cells per registered Plane that made them, and every plane.
+Two cells, each drawn again when a plane comes, goes, is renamed or has its
+cells written, and only when what it shows changed: the planes and cells per
+registered Plane that made them, and every plane.
 """
 
 from __future__ import annotations
@@ -14,10 +15,10 @@ __all__ = ["MADE_BY", "PLANE", "TABLE"]
 
 MADE_BY = """\
 import nu
-import nustd.kv
 import nustd.ui
 import nuspace
 from nuspace import ops
+from nuspace.system.utils import redraws
 
 
 def made(p):
@@ -49,22 +50,26 @@ def table(planes):
     )
 
 
-def draw():
+def tagged():
     rows = ops.plane_rows().iter()
-    tagged = rows.map(lambda p: nu.Dict.of(made=made(p), cells=cell_count(p["id"]))).to_list()
-    return nustd.kv.Snapshot(nu.let(tagged, table), scope=nuspace.Space)
+    return rows.map(lambda p: nu.Dict.of(made=made(p), cells=cell_count(p["id"]))).to_list()
 
 
-out = draw() >> nu.ForeverDo(nu.DelayedDo(1.0, draw()))
+def draw():
+    return nu.let(ops.snapshot(tagged()), table)
+
+
+# A plane's own fields: made, removed, renamed, its cells written (version).
+out = redraws([nuspace.Space.planes.on_descendants_change("*", "*")], tagged(), table)
 """
 
 
 TABLE = """\
 import nu
-import nustd.kv
 import nustd.ui
 import nuspace
 from nuspace import ops
+from nuspace.system.utils import redraws
 
 
 def prop(p, name):
@@ -75,21 +80,25 @@ def cell_count(pid):
     return ops.cells(pid).len()
 
 
-def draw():
+def rows():
     def row(p):
         system = nu.If(prop(p, "system"), "yes", "no")
         return nu.List.of(p["name"], prop(p, "made_by"), system, cell_count(p["id"]))
 
-    table = nustd.ui.TableRef("planes").set(
-        nu.Dict.of(
-            columns=["Name", "Made by", "System", "Cells"],
-            rows=ops.plane_rows().iter().map(row).to_list(),
-        )
-    )
-    return nustd.kv.Snapshot(table, scope=nuspace.Space)
+    return ops.plane_rows().iter().map(row).to_list()
 
 
-out = draw() >> nu.ForeverDo(nu.DelayedDo(1.0, draw()))
+def table(shown):
+    columns = ["Name", "Made by", "System", "Cells"]
+    return nustd.ui.TableRef("planes").set(nu.Dict.of(columns=columns, rows=shown))
+
+
+def draw():
+    return nu.let(ops.snapshot(rows()), table)
+
+
+# A plane's own fields: made, removed, renamed, its cells written (version).
+out = redraws([nuspace.Space.planes.on_descendants_change("*", "*")], rows(), table)
 """
 
 
@@ -97,7 +106,7 @@ PLANE = Plane(
     "planes",
     "Planes",
     icon="layers",
-    description="Every plane by what made it, redrawn every second.",
+    description="Every plane by what made it, kept live.",
     meta={"editable": True, "full_width": False},
     cells=(("made_by", MADE_BY), ("planes", TABLE)),
     group="System",

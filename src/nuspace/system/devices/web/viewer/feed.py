@@ -18,11 +18,13 @@ device's route arm (D15), never read off the browser. One arm per plane in
 it: its subscriptions die with it when the plane leaves ``routes``.
 
 **Narrow watch.** A plane is shipped again when anything under its row
-changes, or the name or prog of a cell on it; the statuses when any pane's
-plane run changes or any cell run starts, begins or ends. The cell and
-status filters are space wide on purpose, see :func:`_plane_waits` and
-:func:`_status_changes`. A cell
-writing its state or a cell run writing its output wakes neither.
+changes, its ``version`` counting every write to its cells included; the
+statuses when the pane's plane run or the plane's cells change, or a cell
+run of the pane's run starts, begins or ends. Nothing of another plane or
+run wakes either, and neither does a cell writing its state or a cell run
+writing its output. Both are level: each ship reads the store as it is, so
+a change a fresh subscription missed ships on the next re-check, and only
+what reads otherwise than it last shipped is sent.
 
 **Meta goes both ways.** A shipped plane carries its whole meta, and a
 ``plane.meta`` event merges keys into it. A plane's props never reach the
@@ -57,7 +59,8 @@ from nuspace.system.devices.web.viewer.interactions import (
     STATE_STOPPED,
 )
 from nuspace.system.kernel.utils import snap
-from nuspace.system.services.nav import pane_run, panes, routable
+from nuspace.system.services.nav import pane_key, panes, routable
+from nuspace.system.utils import drawing, follows, redraw
 
 
 if TYPE_CHECKING:
@@ -179,80 +182,60 @@ def statuses(plane_id: nu.StrArg, run_id: nu.StrArg) -> nu.Nu:
 # --- Shipping ------------------------------------------------------------------
 
 
-def _ship_plane(viewer: Ref, plane: nu.Nu) -> nu.Nu:
-    def show(held: nu.ObjectRef) -> nu.Nu:
-        got = nu.Dict(held)
-        return interactions.set_plane(
-            viewer,
-            plane,
-            title=field_str(got, "title"),
-            meta=nu.Dict(got.get_item("meta", nu.Dict.of())),
-            cells=nu.List(got.get_item("cells", nu.List.of())),
-        )
+def _plane(viewer: Ref, plane: nu.Nu) -> nu.Nu:
+    """The plane, shipped again when anything under its row changes, its cells included.
 
-    def ship(absent: nu.ObjectRef) -> nu.Nu:
-        why = nu.Str(absent)
-        shown = nu.let(snap(plane_view(plane)), show)
-        return nu.IfDo(why == "", shown, interactions.set_absent(viewer, plane, why))
-
+    Its ``version`` counts every write to its cells, so one watch on the row
+    hears them. Shipped as ``set_absent`` when nav does not bring it up.
+    """
     # Why a pane has no plane to draw, "" when it has one.
     absence = nu.If(
         routable(plane), "", nu.If(ops.plane_exists(plane), ABSENT_HEADLESS, ABSENT_MISSING)
     )
-    return nu.let(snap(absence), ship)
+
+    def show(held: nu.ObjectRef) -> nu.Nu:
+        got = nu.Dict(held)
+        why, view = field_str(got, "absent"), nu.Dict(got.get_item("view", nu.Dict.of()))
+        shown = interactions.set_plane(
+            viewer,
+            plane,
+            title=field_str(view, "title"),
+            meta=nu.Dict(view.get_item("meta", nu.Dict.of())),
+            cells=nu.List(view.get_item("cells", nu.List.of())),
+        )
+        return nu.IfDo(why == "", shown, interactions.set_absent(viewer, plane, why))
+
+    read = nu.Dict.of(absent=absence, view=plane_view(plane))
+    ship = redraw(read, show)
+    return drawing(_arms.state("plane", snap(Space.planes[plane].on_change()), ship))
 
 
-def _ship_status(viewer: Ref, sid: nu.StrArg, plane: nu.Nu) -> nu.Nu:
-    def ship(run: nu.ObjectRef) -> nu.Nu:
-        read = nu.If(ops.plane_exists(plane), statuses(plane, nu.Str(run)), [])
-        return nu.let(snap(read), lambda held: interactions.set_status(viewer, plane, held))
+def _status(viewer: Ref, sid: nu.StrArg, plane: nu.Nu) -> nu.Nu:
+    """The statuses, following the pane's run, shipped again on what changes them.
 
-    return nu.let(snap(pane_run(sid, plane)), ship)
-
-
-def _plane_waits(plane: nu.Nu) -> list[nu.Nu]:
-    """What reships the plane: anything under its row, or a name or prog of a cell on it.
-
-    The plane's row holds structure only, so every write under it is one the
-    browser draws. Cells are flat, so their names and progs are heard across
-    the space and each change waits out the cells on other planes, ending on
-    the first one listed in this plane's ``cells``. Never named by the
-    plane's own cell ids, though that would be narrower: those are read off
-    the store, and a filter named by something just read is not heard at
-    once (see :func:`~nuspace.system.devices.web.utils.watch`).
+    The pane's run changes when nav makes a new one, and the watch moves to
+    it. The plane's cells, on its ``version``. One of the run's cell runs
+    added or ended (``cells_running``), one starting (``started_at``); exit
+    and error land with the end. Nothing of another run or plane is heard.
     """
-    row = Space.planes[plane]
 
-    def elsewhere(key: nu.Attr) -> nu.Nu:
-        # A cell field's key ends ``..., cell id, field``.
-        return snap(nu.list(row.cells.fallback([])).contains(nu.GetItem(key, -2)).not_())
+    def watch(run: nu.Str) -> nu.Nu:
+        row = _runs[run]
+        read = nu.If(ops.plane_exists(plane), statuses(plane, run), [])
 
-    cells = [
-        nu.ReactWhile(snap(Space.cells.on_descendants_change("*", leaf)), elsewhere, nu.Noop())
-        for leaf in ("name", "prog")
-    ]
-    return [nu.React(snap(row.on_change())), *cells]
+        def on(change: nu.Nu) -> nu.Nu:
+            ship = redraw(read, lambda held: interactions.set_status(viewer, plane, held))
+            return _arms.state("status", snap(change), ship)
 
+        return drawing(
+            nu.ParallelAsync(
+                on(Space.planes[plane].version.on_change()),
+                on(row.cells_running.on_children_change()),
+                on(row.cells.on_descendants_change("*", "started_at")),
+            )
+        )
 
-def _status_changes() -> list[nu.Nu]:
-    """What reships the statuses: any pane's run, and any run's cell runs.
-
-    A pane's run changing (nav makes a new one), a cell run added or ended
-    (``cells_running``), one starting (``started_at``). Exit and error land
-    with the end.
-
-    Never named by the pane's run, though that would be narrower. A filter
-    the space has not seen reaches the store's publishers a moment after it
-    is opened, and a new run's cell starts within that moment: the start
-    would go unheard and the pane would say starting forever. These filters
-    are the same for every pane and every run, so they are live long
-    before any run they wake for.
-    """
-    return [
-        snap(panes().on_children_change()),
-        snap(_runs.on_descendants_change("*", "cells_running", "*")),
-        snap(_runs.on_descendants_change("*", "cells", "*", "started_at")),
-    ]
+    return follows(panes()[pane_key(sid, plane)], watch)
 
 
 # --- The composition -------------------------------------------------------------
@@ -324,15 +307,7 @@ def viewer_feed(viewer: Ref, sid: nu.StrArg, snippets: Iterable[Snippet] = ()) -
 
     def shown(at: nu.Attr) -> nu.Nu:
         plane = nu.Str(at)
-        return nu.ParallelAsync(
-            _arms.state(
-                "plane",
-                [],
-                _ship_plane(viewer, plane) >> _ship_status(viewer, sid, plane),
-                waits=_plane_waits(plane),
-            ),
-            _arms.state("status", _status_changes(), _ship_status(viewer, sid, plane)),
-        )
+        return nu.ParallelAsync(_plane(viewer, plane), _status(viewer, sid, plane))
 
     # One arm per open plane: a plane opened gets itself and its statuses
     # shipped, a plane closed has its subscriptions torn down, and the other
