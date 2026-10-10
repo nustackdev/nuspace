@@ -187,24 +187,25 @@ def supervise(
 def unsupervise(plane_id: nu.StrArg) -> nu.Nu:
     """Take a plane off the supervisor, delay and all, and stop the run it started.
 
-    Forgotten in one commit, so the supervisor starts nothing for it after;
-    then its run, if live, is stopped: interrupted, killed after the grace.
-    Returns once it has ended, or once the kill is asked for. A no-op when
-    the plane is not supervised.
-
-    The remembered run id stays: the commit that cancels the plane's arm
-    must not also wake it, or on Python 3.11 the cancel can be lost (a
-    ``Timeout`` whose body completes as it is cancelled swallows it) and
-    the fold waits on the arm forever. :func:`supervise` and the next open
-    drop it.
+    Forgotten in one commit, its remembered run read and dropped there too,
+    so the supervisor starts nothing for it after; then that run, if live,
+    is stopped: interrupted, killed after the grace. Returns once it has
+    ended, or once the kill is asked for. A no-op when the plane is not
+    supervised.
     """
-    forget = _here(_drop(Policy.planes, plane_id) >> _drop(Policy.delays, plane_id))
 
-    def stop(held: nu.ObjectRef) -> nu.Nu:
+    def forget(held: nu.ObjectRef) -> nu.Nu:
         run = nu.Str(held)
-        return nu.IfDo(snap((run != "").and_(_kernel.running.contains(run))), plane_stop(run))
+        drop = _here(
+            held.set(Policy.runs.get_item(plane_id, ""))
+            >> _drop(Policy.planes, plane_id)
+            >> _drop(Policy.delays, plane_id)
+            >> _drop(Policy.runs, plane_id)
+        )
+        live = (run != "").and_(_kernel.running.contains(run))
+        return atomic_state(drop) >> nu.IfDo(snap(live), plane_stop(run))
 
-    return atomic_state(forget) >> nu.let(snap(_here(Policy.runs.get_item(plane_id, ""))), stop)
+    return nu.let("", forget)
 
 
 def policy_of(plane_id: nu.StrArg) -> nu.Str:

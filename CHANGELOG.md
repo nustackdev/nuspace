@@ -10,6 +10,10 @@ Below is the changelog for **nuspace** - the full commit stream. Newest first.
 The `nuspace-ui` wheel is the same source tree's vite output and is not tracked
 separately here.
 
+## Unreleased
+
+- Unsupervising a plane forgets its last run in the same step it stops
+
 ## 0.5.1 — 2026-10-08
 
 - Release nuspace 0.5.1, built on nu 0.6.1 and UI kit 0.3.1
