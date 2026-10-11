@@ -2,16 +2,17 @@
 
 ## Packages shipped from this repo
 
-- **nuspace** (the runtime, the `nuspace` command) — 0.5.1
-- **nuspace-ui** (the compiled web bundle) — 0.5.1
+- **nuspace** (the runtime, the `nuspace` command) — 0.5.2
+- **nuspace-ui** (the compiled web bundle) — 0.5.2
 - **nuverse** (the Planes and snippets a space ships with) — 0.3.1
 
 Below is the changelog for **nuspace** - the full commit stream. Newest first.
 The `nuspace-ui` wheel is the same source tree's vite output and is not tracked
 separately here.
 
-## Unreleased
+## 0.5.2 — 2026-10-12
 
+- Release nuspace 0.5.2, built on nu 0.6.2 and UI kit 0.3.2
 - Plane order tests follow the picker: plain, then chat, then jobs
 - Web device comments and tests name Starlette, no longer FastAPI
 - Install pulls only the fabrics a space runs on; nuspace[all] brings the rest

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "nuspace"
-version = "0.5.1"
+version = "0.5.2"
 description = "Nu runtime built on Nu. A self-hosted programmable space that runs Nu programs as a tree of planes and cells."
 readme = "README.md"
 license = "AGPL-3.0-or-later"
@@ -14,14 +14,14 @@ dependencies = [
     # The fabrics a space runs on, nothing more: kv for the store, valkey for
     # its change notifications, ui for the browser, mp_pool for the workers,
     # proxy (invisibles) for the worker's session.
-    "nucore>=0.6.1",
-    "nustd[kv,ui,valkey,mp_pool,proxy]>=0.6.1",
+    "nucore>=0.6.2",
+    "nustd[kv,ui,valkey,mp_pool,proxy]>=0.6.2",
     # The store's change notifications run over virtuals' redis backend.
-    "virtuals-py[redis]>=0.1.9",
+    "virtuals-py[redis]>=0.1.10",
     # The compiled web bundle. A separate distribution only because PyPI caps
     # project size and a SPA rebuilt on every UI tweak would eat the quota --
     # not optional. `pip install nuspace` gives you the browser.
-    "nuspace-ui>=0.5.1",
+    "nuspace-ui>=0.5.2",
     # The extensions a space offers out of the box: Planes, snippets. Always
     # pulled, split into extras when its deps grow. nuspace never imports it:
     # it is found through the `nuspace.extensions` entry point, like any
@@ -55,7 +55,7 @@ classifiers = [
 [project.optional-dependencies]
 # Every nustd fabric and kv backend, for cells that reach past the defaults.
 all = [
-    "nustd[all]>=0.6.1",
+    "nustd[all]>=0.6.2",
 ]
 
 [project.urls]
