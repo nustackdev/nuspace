@@ -69,9 +69,13 @@ def _opened(path: str | None, **kwargs: object) -> nu.Nu:
 
 
 def _hold(term: nu.Nu) -> None:
-    """Run a space until interrupted, then let the brackets reap the fleet."""
+    """Run a space until interrupted, then let the brackets reap the fleet.
+
+    Compiled and evaluated without law validation: the space program is
+    ours and tested, and validating its whole tree costs seconds per start.
+    """
     try:
-        nu.run_in_loop(term, nu.Context())
+        nu.eval_in_loop(nu.compile(term), nu.Context())
     except KeyboardInterrupt:
         console.print("[dim]Stopped[/dim]")
 
