@@ -4,7 +4,7 @@
 
 - **nuspace** (the runtime, the `nuspace` command) — 0.5.2
 - **nuspace-ui** (the compiled web bundle) — 0.5.2
-- **nuverse** (the Planes and snippets a space ships with) — 0.3.1
+- **nuverse** (the Planes and snippets a space ships with) — 0.3.2
 
 Below is the changelog for **nuspace** - the full commit stream. Newest first.
 The `nuspace-ui` wheel is the same source tree's vite output and is not tracked
