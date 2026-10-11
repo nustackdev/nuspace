@@ -176,7 +176,7 @@
 
 /* ============================== L2.5: document roles (dark) ===============
  * Only the neutral interaction tiers need a per-theme value: the same alpha
- * that reads on Paper is invisible on Dusk. Everything else is an alias
+ * that reads on Dawn is invisible on Dusk. Everything else is an alias
  * onto a kit role that already flipped.
  * ==========================================================================*/
 .dark {
