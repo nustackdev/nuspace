@@ -54,6 +54,16 @@ import { resizeHandle } from "./resize";
  * first letter of the title again.
  */
 
+/**
+ * A control inside a row (chevron, split, +, ...): over the kit's ghost wash,
+ * it paints only the rail's control step (`cd`, theme.css), one on hover,
+ * two on press and while its menu is open. The step lands on the row's own fill, so the
+ * control always climbs from whatever the row shows: at rest, hovered, open
+ * elsewhere or selected.
+ */
+const railControlWash =
+	"hover:bg-rail-cd1 active:bg-rail-cd2 data-[state=open]:bg-rail-cd2";
+
 /** Left pad for a row at `depth`, as an inline style (depth is data). */
 export function railIndent(depth: number): { paddingLeft: string } {
 	return { paddingLeft: `calc(var(--rail-row-pad) + ${depth} * var(--rail-indent))` };
@@ -177,9 +187,11 @@ export const railTreeList = "flex flex-col gap-rail-row-gap";
  * it, so the wash spans the whole line including the icon and the action lane.
  * A wash that stops short of the controls sitting on it reads as two elements.
  *
- * Every tier is a step of the ground (`nuspace-rail-*` in theme.css): hover, a plane open
- * in some other pane, and the focused pane's plane, strongest. The text never
- * changes hue, only steps up to the primary tier.
+ * Fills are the rail's anchors (theme.css): a row rests on nothing, hovers
+ * to a2 and presses one step past it. The focused pane's plane rests on a2,
+ * a plane open in some other pane on a1, the quieter one, and both climb a
+ * step on hover and two on press. The text never changes hue, only steps up
+ * to the primary tier.
  *
  * `inset` pads the row's own left edge. A tree row leaves it off because
  * `railIndent(depth)` already supplies the offset; a flat row turns it on.
@@ -194,10 +206,10 @@ export function railRow(selected: boolean, inset = false, open = false): string 
 		// the kit's 2px offset gets clipped by the rail's own overflow.
 		"focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0",
 		selected
-			? "bg-nuspace-rail-selected"
+			? "bg-rail-a2-fill hover:bg-rail-a2-hover active:bg-rail-a2-press"
 			: open
-				? "bg-nuspace-rail-open hover:bg-nuspace-rail-hover"
-				: "hover:bg-nuspace-rail-hover active:bg-bg-press",
+				? "bg-rail-a1-fill hover:bg-rail-a1-hover active:bg-rail-a1-press"
+				: "hover:bg-rail-a2-fill active:bg-rail-a2-hover",
 	);
 }
 
@@ -249,6 +261,7 @@ export function railIcon(swap: boolean): string {
  */
 export function railTwisty(swap: boolean): string {
 	return cn(
+		railControlWash,
 		"opacity-0 transition-[opacity,background-color,color] duration-fast ease-out",
 		swap && CHEVRON_IN,
 	);
@@ -269,9 +282,9 @@ export const railNoPlanes = "h-rail-row items-start py-0";
 /**
  * The label, on top of a kit `NavLink`. NavLink stays because it is a real
  * anchor (cmd-click, middle-click, `aria-current="page"` for free). What it
- * does not own here is the look: the row shell paints the background, so both
- * of NavLink's washes are zeroed, and the open row's text steps up to the
- * primary tier instead of turning accent. 14px, regular weight.
+ * does not own here is the look: the row shell paints the background, so all
+ * of NavLink's washes (hover, press, current) are zeroed, and the open row's
+ * text steps up to the primary tier instead of turning accent. 14px, regular weight.
  *
  * `ring-offset-0` because the kit's 2px focus offset gets clipped by the
  * rail's own overflow.
@@ -279,7 +292,7 @@ export const railNoPlanes = "h-rail-row items-start py-0";
 export const railLabel = cn(
 	"h-full min-w-0 flex-1 gap-0 px-0",
 	"text-lg font-normal text-text-secondary",
-	"bg-transparent hover:bg-transparent hover:text-text-primary group-hover/row:text-text-primary",
+	"bg-transparent hover:bg-transparent active:bg-transparent hover:text-text-primary group-hover/row:text-text-primary",
 	"aria-[current=page]:bg-transparent aria-[current=page]:font-normal aria-[current=page]:text-text-primary",
 	"data-[active=true]:bg-transparent data-[active=true]:font-normal data-[active=true]:text-text-primary",
 	"focus-visible:ring-offset-0",
@@ -328,7 +341,7 @@ export const railActions = cn(
  * ring: a 16px glyph in its 24px box, the `...` glyph on the rail's right
  * edge (tokens.css).
  */
-export const railAction = "rounded-sm [&_svg]:size-4";
+export const railAction = cn(railControlWash, "rounded-sm [&_svg]:size-4");
 
 /** Wrapper around a row, which the drop line positions against. */
 export const railRowWrap = "relative";
@@ -424,18 +437,20 @@ export function railPinsFade(start: boolean, end: boolean): { maskImage?: string
 /**
  * One pinned plane: its icon on a kit `IconButton soft sm` with the inset
  * ring, a filled tile with no border like the rail's rows, sized to
- * `rail-pin` (36px square, tokens.css) with a 16px glyph. Washed like a tree row: the focused pane's plane strongest, one
- * open elsewhere lighter, the rest on the kit's resting wash.
+ * `rail-pin` (36px square, tokens.css) with a 16px glyph. On the rail's
+ * anchors (theme.css): a pin rests on a1, the header's surface, one open in
+ * some other pane on a1 too, the focused pane's on a2, and each climbs a step on
+ * hover and two on press.
  */
 export function railPin(selected: boolean, open: boolean): string {
 	return cn(
 		"relative size-rail-pin shrink-0 [&_svg]:size-4",
 		"focus-visible:ring-offset-0",
 		selected
-			? "bg-nuspace-rail-selected text-text-primary hover:bg-nuspace-rail-selected"
+			? "bg-rail-a2-fill text-text-primary hover:bg-rail-a2-hover active:bg-rail-a2-press"
 			: open
-				? "bg-nuspace-rail-open hover:bg-nuspace-rail-hover hover:text-text-primary"
-				: "hover:bg-nuspace-rail-hover hover:text-text-primary active:bg-bg-press",
+				? "bg-rail-a1-fill text-text-primary hover:bg-rail-a1-hover active:bg-rail-a1-press"
+				: "bg-rail-a1-fill hover:bg-rail-a1-hover hover:text-text-primary active:bg-rail-a1-press",
 	);
 }
 
@@ -468,7 +483,7 @@ export const railSearchTrigger = cn(
 	"pl-rail-row-pad pr-rail-row-pad-end",
 	"bg-nuspace-rail-search text-base text-text-muted",
 	"transition-colors duration-fast ease-out",
-	"hover:bg-bg-press hover:text-text-secondary active:bg-bg-press",
+	"hover:bg-rail-a1-hover hover:text-text-secondary active:bg-rail-a1-press",
 	"focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0",
 );
 

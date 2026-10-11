@@ -43,13 +43,32 @@
 	--nuspace-edge: var(--border-subtle); /* line-subtle: sidebar edge, pane
 	                                       * dividers, the dock's rules       */
 
-	/* --- Sidebar fills: soft boxes, no outlines --------------------------- */
-	/* The kit's tree ladder, so rail and tree rows read the same: hover wash,
-	 * open elsewhere half of it, selected the press wash. */
-	--nuspace-rail-search: var(--bg-hover);
-	--nuspace-rail-selected: var(--tree-selected);
-	--nuspace-rail-open: var(--tree-highlight);
-	--nuspace-rail-hover: var(--tree-hover);
+	/* --- Sidebar fills: two anchors and a step --------------------------- */
+	/* Every fill is ink over the rail, computed from three numbers (ink %), so
+	 * the rail tunes as a whole:
+	 *   a1  the rail's quiet fill: search and pins at rest, and a plane open
+	 *       in some other pane
+	 *   a2  the plane in hand: the focused pane's plane, and a row under the
+	 *       pointer
+	 *   d   one interaction step: hover is +d on whatever the thing rests on,
+	 *       press +2d. A tree row resting on nothing hovers straight to a2.
+	 *   cd  a control's step: a control inside a row (chevron, split, +, ...)
+	 *       paints only cd on hover and 2cd on press, so it climbs from
+	 *       whatever the row shows under it.
+	 * See rail.ts. */
+	--rail-a1: 8;
+	--rail-a2: 12;
+	--rail-d: 3.5;
+	--rail-cd: 5;
+	--rail-a1-fill: color-mix(in oklab, var(--ink-1) calc(var(--rail-a1) * 1%), transparent);
+	--rail-a1-hover: color-mix(in oklab, var(--ink-1) calc((var(--rail-a1) + var(--rail-d)) * 1%), transparent);
+	--rail-a1-press: color-mix(in oklab, var(--ink-1) calc((var(--rail-a1) + 2 * var(--rail-d)) * 1%), transparent);
+	--rail-a2-fill: color-mix(in oklab, var(--ink-1) calc(var(--rail-a2) * 1%), transparent);
+	--rail-a2-hover: color-mix(in oklab, var(--ink-1) calc((var(--rail-a2) + var(--rail-d)) * 1%), transparent);
+	--rail-a2-press: color-mix(in oklab, var(--ink-1) calc((var(--rail-a2) + 2 * var(--rail-d)) * 1%), transparent);
+	--rail-cd1: color-mix(in oklab, var(--ink-1) calc(var(--rail-cd) * 1%), transparent);
+	--rail-cd2: color-mix(in oklab, var(--ink-1) calc(2 * var(--rail-cd) * 1%), transparent);
+	--nuspace-rail-search: var(--rail-a1-fill);
 }
 
 /* ============================== Tailwind v4 ==============================*/
@@ -60,9 +79,14 @@
 
 	--color-nuspace-rail: var(--nuspace-rail);
 	--color-nuspace-rail-search: var(--nuspace-rail-search);
-	--color-nuspace-rail-hover: var(--nuspace-rail-hover);
-	--color-nuspace-rail-open: var(--nuspace-rail-open);
-	--color-nuspace-rail-selected: var(--nuspace-rail-selected);
+	--color-rail-a1-fill: var(--rail-a1-fill);
+	--color-rail-a1-hover: var(--rail-a1-hover);
+	--color-rail-a1-press: var(--rail-a1-press);
+	--color-rail-a2-fill: var(--rail-a2-fill);
+	--color-rail-a2-hover: var(--rail-a2-hover);
+	--color-rail-a2-press: var(--rail-a2-press);
+	--color-rail-cd1: var(--rail-cd1);
+	--color-rail-cd2: var(--rail-cd2);
 
 	--color-nuspace-dock: var(--nuspace-dock);
 }

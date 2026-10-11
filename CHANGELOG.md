@@ -12,6 +12,7 @@ separately here.
 
 ## Unreleased
 
+- Sidebar fills follow one ladder, and clicking a row lights the whole row
 - The shell moves to calmer Dusk and Paper grounds with neutral hover and selection
 - Unsupervising a plane forgets its last run in the same step it stops
 
