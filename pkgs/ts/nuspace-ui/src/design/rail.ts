@@ -92,12 +92,12 @@ export const railResizeHandle = resizeHandle("right");
 export const railHeader = "flex h-chrome shrink-0 items-center gap-0.5 px-rail-bar-pad";
 
 /**
- * The wordmark beside the collapse button: NUSPACE, the "nu" in accent and
+ * The wordmark beside the collapse button: NUSPACE, the "nu" in accent-text and
  * the rest in the primary text color, so it reads white in dark theme.
  */
 export const railWordmark =
 	"ml-1.5 select-none font-semibold text-sm text-text-primary uppercase tracking-wider";
-export const railWordmarkNu = "text-accent";
+export const railWordmarkNu = "text-accent-text";
 
 /**
  * Bottom bar: links on the left, the window's own state on the right. An edge
@@ -177,7 +177,7 @@ export const railTreeList = "flex flex-col gap-rail-row-gap";
  * it, so the wash spans the whole line including the icon and the action lane.
  * A wash that stops short of the controls sitting on it reads as two elements.
  *
- * Every tier is a neutral gray (`rail-*` in tokens.css): hover, a plane open
+ * Every tier is a step of the ground (`nuspace-rail-*` in theme.css): hover, a plane open
  * in some other pane, and the focused pane's plane, strongest. The text never
  * changes hue, only steps up to the primary tier.
  *
@@ -197,7 +197,7 @@ export function railRow(selected: boolean, inset = false, open = false): string 
 			? "bg-nuspace-rail-selected"
 			: open
 				? "bg-nuspace-rail-open hover:bg-nuspace-rail-hover"
-				: "hover:bg-nuspace-rail-hover active:bg-doc-active",
+				: "hover:bg-nuspace-rail-hover active:bg-bg-press",
 	);
 }
 
@@ -435,7 +435,7 @@ export function railPin(selected: boolean, open: boolean): string {
 			? "bg-nuspace-rail-selected text-text-primary hover:bg-nuspace-rail-selected"
 			: open
 				? "bg-nuspace-rail-open hover:bg-nuspace-rail-hover hover:text-text-primary"
-				: "hover:bg-nuspace-rail-hover hover:text-text-primary active:bg-doc-active",
+				: "hover:bg-nuspace-rail-hover hover:text-text-primary active:bg-bg-press",
 	);
 }
 
@@ -456,8 +456,8 @@ export function railPinDropLine(edge: "before" | "after"): string {
  * It is a row, not an input. Same inset, height, radius and lanes as a flat
  * plane row, so its glyph sits on the rail's one left edge and its label on
  * the titles' edge. At rest it carries its own quiet fill (`nuspace-rail-search`), so it
- * reads as a place to type without a box around it; hover steps it up to the selected
- * tier and the label up to the secondary text tier. No border in any state.
+ * reads as a place to type without a box around it; hover moves it to the hover
+ * fill and the label up to the secondary text tier. No border in any state.
  */
 
 /** The strip holding the entry, on the rows' edges. */
@@ -468,7 +468,7 @@ export const railSearchTrigger = cn(
 	"pl-rail-row-pad pr-rail-row-pad-end",
 	"bg-nuspace-rail-search text-base text-text-muted",
 	"transition-colors duration-fast ease-out",
-	"hover:bg-nuspace-rail-selected hover:text-text-secondary active:bg-nuspace-rail-selected",
+	"hover:bg-bg-press hover:text-text-secondary active:bg-bg-press",
 	"focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0",
 );
 

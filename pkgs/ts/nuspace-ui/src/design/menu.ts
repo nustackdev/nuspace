@@ -31,7 +31,7 @@ export const menuText = "flex min-w-0 flex-1 flex-col";
 export const menuLabel = "truncate font-medium text-text-primary";
 
 /** The part of the label the query matched. */
-export const menuHit = "bg-transparent font-semibold text-accent";
+export const menuHit = "bg-transparent font-semibold text-accent-text";
 
 export const menuDescription = "truncate text-xs text-text-muted";
 

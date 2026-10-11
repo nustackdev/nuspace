@@ -11,53 +11,45 @@
  *                    and the sidebar's quiet fills (search, hover, open,
  *                    selected). Only these read the roles below.
  *
- * The look is "graphite": a gray dark theme rather than a black one, the
- * sidebar and the unfocused panes a step under the page. Light keeps the page
- * a hair off white with a tinted sidebar.
+ * The look is the nustack color language: Dusk in dark, Paper in
+ * light (go/projects/nustackdev/design/language/color.md), laid out as
+ * products/nuspace.md describes. The sidebar sits on `ground-deep`, the
+ * document on `ground-raised`, split by one `line-subtle` hairline. The
+ * sidebar uses soft filled boxes, not outlines: search, hover, open and
+ * selected are the kit's tree washes, the same ladder every tree row uses.
+ * Unfocused panes sit on `ground`, the dock on `ground-deep`.
  *
- * The sidebar fills are alpha off --text-primary so they track the theme, and
- * they are firmer than the document's own hover tier (--doc-hover in
- * tokens.css): on a tinted sidebar a 4% wash all but disappears.
+ * Every role points at a kit role, so the values flip with the kit's theme.
+ * `ground-raised` has no kit role yet (kit palette.md), so it reads the
+ * kit's language token.
  *
  * Every name carries the nuspace- prefix, so a frame role can never be read
  * as, or collide with, a kit role.
  *
  * Layers:
- *   :root / .dark    frame roles, per theme
+ *   :root            frame roles, both themes
  *   @theme inline    exposed as Tailwind utility names (bg-nuspace-page, ...)
  * ==========================================================================*/
 
 /* ============================== light ====================================*/
 :root {
 	/* --- Grounds --------------------------------------------------------- */
-	--nuspace-page: #fcfcfd; /* the focused pane, the plane's own background  */
-	--nuspace-pane-dim: #f5f5f8; /* every pane but the focused one            */
-	--nuspace-rail: #f3f3f6; /* the sidebar                                  */
-	--nuspace-dock: #efeff3; /* the dock under the desk                      */
+	--nuspace-page: var(--ground-raised); /* ground-raised: the focused pane     */
+	--nuspace-rail: var(--bg-sunken); /* ground-deep: the sidebar, a step down  */
+	--nuspace-pane-dim: var(--bg-canvas); /* ground: every other pane          */
+	--nuspace-dock: var(--bg-sunken); /* ground-deep: the dock under the desk   */
 
 	/* --- Hairlines ------------------------------------------------------- */
-	--nuspace-edge: #e3e3ea; /* sidebar edge, pane dividers, the dock's rules  */
+	--nuspace-edge: var(--border-subtle); /* line-subtle: sidebar edge, pane
+	                                       * dividers, the dock's rules       */
 
-	/* --- Sidebar fills --------------------------------------------------- */
-	--nuspace-rail-search: color-mix(in oklab, var(--text-primary) 7%, transparent);
-	--nuspace-rail-hover: color-mix(in oklab, var(--text-primary) 5%, transparent);
-	--nuspace-rail-open: color-mix(in oklab, var(--text-primary) 4.5%, transparent);
-	--nuspace-rail-selected: color-mix(in oklab, var(--text-primary) 10%, transparent);
-}
-
-/* ============================== dark =====================================*/
-.dark {
-	--nuspace-page: #1b1b1f;
-	--nuspace-pane-dim: #17171a;
-	--nuspace-rail: #161619;
-	--nuspace-dock: #141417;
-
-	--nuspace-edge: rgba(255, 255, 255, 0.075);
-
-	--nuspace-rail-search: color-mix(in oklab, var(--text-primary) 8%, transparent);
-	--nuspace-rail-hover: color-mix(in oklab, var(--text-primary) 6.5%, transparent);
-	--nuspace-rail-open: color-mix(in oklab, var(--text-primary) 5%, transparent);
-	--nuspace-rail-selected: color-mix(in oklab, var(--text-primary) 11%, transparent);
+	/* --- Sidebar fills: soft boxes, no outlines --------------------------- */
+	/* The kit's tree ladder, so rail and tree rows read the same: hover wash,
+	 * open elsewhere half of it, selected the press wash. */
+	--nuspace-rail-search: var(--bg-hover);
+	--nuspace-rail-selected: var(--tree-selected);
+	--nuspace-rail-open: var(--tree-highlight);
+	--nuspace-rail-hover: var(--tree-hover);
 }
 
 /* ============================== Tailwind v4 ==============================*/

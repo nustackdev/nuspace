@@ -18,17 +18,18 @@
  *   L3    @theme inline   exposed as Tailwind utility names (doc-*, cell-*)
  *
  * Source docs (do not paraphrase without re-reading):
- *   go/projects/nustackdev/design/palette.md
- *   go/projects/nustackdev/design/space-radius.md
- *   go/projects/nustackdev/design/typography.md
- *   go/projects/nustackdev/design/motion.md
- *   go/projects/nustackdev/design/a11y.md
+ *   go/projects/nustackdev/design/language/color.md
+ *   go/projects/nustackdev/design/systems/kit/palette.md
+ *   go/projects/nustackdev/design/language/space-radius.md
+ *   go/projects/nustackdev/design/language/typography.md
+ *   go/projects/nustackdev/design/language/motion.md
+ *   go/projects/nustackdev/design/language/a11y.md
  * ==========================================================================*/
 
 /* ============================== L2.5: document roles (light) ===============*/
 :root {
 	/* --- Interaction tiers -------------------------------------------------
-	 * The kit has an accent interaction tier (accent-wash / accent-soft) but
+	 * The kit's interaction tier is neutral (bg-hover / bg-press) but
 	 * no NEUTRAL one. On tool chrome that is fine: a list row hovers in accent
 	 * and there is nothing else competing. On a document it is not - every
 	 * paragraph would flash purple on mouse-over, and hover would then be
@@ -41,9 +42,9 @@
 	--doc-hover: color-mix(in oklab, var(--text-primary) 4%, transparent);
 	--doc-active: color-mix(in oklab, var(--text-primary) 7%, transparent);
 
-	/* Whole-cell selection is the accent tier, straight off the kit */
-	--doc-selected: var(--accent-wash);
-	--doc-selected-strong: var(--accent-soft);
+	/* Whole-cell selection: the kit's press step, a ground tone, never violet */
+	--doc-selected: var(--bg-press);
+	--doc-selected-strong: var(--bg-selection);
 	--doc-selected-line: var(--accent-line);
 
 	/* Drag + drop. The handles themselves are kit IconButtons and bring their
@@ -175,7 +176,7 @@
 
 /* ============================== L2.5: document roles (dark) ===============
  * Only the neutral interaction tiers need a per-theme value: the same alpha
- * that reads on white is invisible on #0a0a0d. Everything else is an alias
+ * that reads on Paper is invisible on Dusk. Everything else is an alias
  * onto a kit role that already flipped.
  * ==========================================================================*/
 .dark {

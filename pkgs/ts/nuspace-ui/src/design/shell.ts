@@ -116,7 +116,7 @@ export const shellPaneResize = resizeHandle("left");
  */
 export function shellPaneDrop(edge: "before" | "after"): string {
 	return cn(
-		"pointer-events-none absolute inset-y-0 z-30 w-1/2 bg-accent-wash border-accent",
+		"pointer-events-none absolute inset-y-0 z-30 w-1/2 bg-bg-press border-accent",
 		edge === "before" ? "left-0 border-l-2" : "right-0 border-r-2",
 	);
 }
