@@ -10,6 +10,10 @@ Below is the changelog for **nuspace** - the full commit stream. Newest first.
 The `nuspace-ui` wheel is the same source tree's vite output and is not tracked
 separately here.
 
+## Unreleased
+
+- nuverse Config sections open again, paired with their body by id
+
 ## 0.5.2 — 2026-10-12
 
 - Release nuspace 0.5.2, built on nu 0.6.2 and UI kit 0.3.2

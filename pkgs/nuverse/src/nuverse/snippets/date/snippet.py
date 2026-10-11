@@ -36,7 +36,7 @@ class Config(nustd.ui.Accordion):
 
 class Box(nustd.ui.Column):
     entry = Entry.slot()
-    config = Config.slot(sections=[{"id": "config", "label": "Config"}])
+    config = Config.slot(sections=[{"id": "settings", "label": "Config"}])
 
 
 def _iso() -> nu.Nu:
