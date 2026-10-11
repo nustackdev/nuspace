@@ -11,14 +11,13 @@ license = "AGPL-3.0-or-later"
 authors = [{ name = "Gor Arakelyan", email = "gorarkln@gmail.com" }]
 requires-python = ">=3.10"
 dependencies = [
-    # The whole stack, every extra. A space runs arbitrary Nu programs and its own
-    # services in pool workers, so it reaches most fabrics: kv for the store,
-    # valkey for its change notifications, ui for the browser, proxy
-    # (invisibles) for the worker's session, mp_pool for the workers
-    # themselves. Picking extras just means discovering the missing one at
-    # import time.
+    # The fabrics a space runs on, nothing more: kv for the store, valkey for
+    # its change notifications, ui for the browser, mp_pool for the workers,
+    # proxy (invisibles) for the worker's session.
     "nucore>=0.6.1",
-    "nustd[all]>=0.6.1",
+    "nustd[kv,ui,valkey,mp_pool,proxy]>=0.6.1",
+    # The store's change notifications run over virtuals' redis backend.
+    "virtuals-py[redis]>=0.1.9",
     # The compiled web bundle. A separate distribution only because PyPI caps
     # project size and a SPA rebuilt on every UI tweak would eat the quota --
     # not optional. `pip install nuspace` gives you the browser.
@@ -51,6 +50,12 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+]
+
+[project.optional-dependencies]
+# Every nustd fabric and kv backend, for cells that reach past the defaults.
+all = [
+    "nustd[all]>=0.6.1",
 ]
 
 [project.urls]

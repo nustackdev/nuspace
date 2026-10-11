@@ -12,6 +12,7 @@ separately here.
 
 ## Unreleased
 
+- Install pulls only the fabrics a space runs on; nuspace[all] brings the rest
 - A space starts seconds faster, skipping a full check of its own system program
 - Chat's other box keeps its body under the section id the accordion now pairs by
 - Sidebar fills follow one ladder, and clicking a row lights the whole row
