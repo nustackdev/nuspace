@@ -303,9 +303,8 @@ from nuspace.agent import chat
 OTHER = "other"
 
 #: The section's body. An Accordion's body is a tree child rather than a
-#: prop, and child ``i`` is the body of section ``i`` in the order the
-#: children were first written, so one section wants exactly one of these.
-BODY = "body"
+#: prop, and it is the child at the section's id, so it sits under ``OTHER``.
+BODY = OTHER
 
 
 def out():

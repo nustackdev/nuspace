@@ -12,6 +12,7 @@ separately here.
 
 ## Unreleased
 
+- Chat's other box keeps its body under the section id the accordion now pairs by
 - Sidebar fills follow one ladder, and clicking a row lights the whole row
 - The shell moves to calmer Dusk and Paper grounds with neutral hover and selection
 - Unsupervising a plane forgets its last run in the same step it stops
