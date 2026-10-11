@@ -81,7 +81,7 @@ def test_worker_unpickling_imports_no_web_server(tmp_path):
     code = (
         "import pickle, sys\n"
         f"pickle.loads(open({str(path)!r}, 'rb').read())\n"
-        "bad = [m for m in ('fastapi', 'uvicorn', 'starlette') if m in sys.modules]\n"
+        "bad = [m for m in ('uvicorn', 'starlette') if m in sys.modules]\n"
         "print(bad)\n"
         "sys.exit(1 if bad else 0)\n"
     )
@@ -96,7 +96,7 @@ def test_warm_imports_cover_drawing_runs_and_no_web_server():
         "import sys\n"
         "from nuspace.system.kernel.space import Warmed\n"
         "Warmed().setup(None)\n"
-        "light = ('fastapi', 'uvicorn', 'starlette', 'nustd.ws_server')\n"
+        "light = ('uvicorn', 'starlette', 'nustd.ws_server')\n"
         "warm = ('nustd.ui', 'nuspace.system.devices.web.env')\n"
         "bad = [m for m in light if m in sys.modules]\n"
         "bad += [m for m in warm if m not in sys.modules]\n"

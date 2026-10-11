@@ -269,7 +269,7 @@ def test_cli_help(args):
 def test_importing_nuspace_pulls_in_no_server_and_no_cli():
     code = (
         "import sys, nuspace\n"
-        "print(sorted(m for m in ('fastapi', 'uvicorn', 'click', 'nustd.ws_server')"
+        "print(sorted(m for m in ('starlette', 'uvicorn', 'click', 'nustd.ws_server')"
         " if m in sys.modules))"
     )
     out = subprocess.run(  # noqa: S603 -- our own interpreter, a fixed script

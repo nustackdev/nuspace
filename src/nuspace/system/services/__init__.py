@@ -12,7 +12,7 @@ and the store holds a program like any other. They act only through ops.
 - :mod:`.bootstrap`: the service planes made real in a store.
 
 Modules here are imported into workers: nothing at module scope may pull in
-a server (fastapi, uvicorn).
+a server (starlette, uvicorn).
 """
 
 from . import init, nav, reactions, reload, supervisor

@@ -8,7 +8,7 @@ multiplexed over it by sid.
 - **worker side**: :func:`piped_session` binds a :class:`PipeSession` for
   connection ``sid``, a local :class:`Session` whose every call is a message
   on the worker's one pipe. This module imports no web server at module
-  scope: a worker unpickling a body would otherwise load uvicorn and fastapi
+  scope: a worker unpickling a body would otherwise load uvicorn and starlette
   for a server it never runs.
 - **host side**: :func:`served_sessions` puts :class:`SessionPipe` on one
   socket, a router on the host's loop between the pipe and the ws server's

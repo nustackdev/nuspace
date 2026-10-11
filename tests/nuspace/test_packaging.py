@@ -142,7 +142,7 @@ def test_importing_nuverse_loads_no_server():
         nuverse.extension()
         print(sorted(
             m for m in sys.modules
-            if m.split(".")[0] in ("fastapi", "uvicorn", "starlette") or m == "nustd.ws_server"
+            if m.split(".")[0] in ("uvicorn", "starlette") or m == "nustd.ws_server"
         ))
         """
     )

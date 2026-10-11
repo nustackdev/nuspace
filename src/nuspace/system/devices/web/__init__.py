@@ -10,7 +10,7 @@
 Everything here but :mod:`.device` is safe for a worker to import: a
 drawing run's body holds refs from this package, and unpickling it imports
 them. :mod:`.device` reaches the ws server, which imports uvicorn and
-fastapi, so it is loaded only when :func:`serve_web` is asked for.
+starlette, so it is loaded only when :func:`serve_web` is asked for.
 """
 
 from typing import Any

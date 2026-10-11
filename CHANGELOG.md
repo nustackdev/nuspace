@@ -12,6 +12,7 @@ separately here.
 
 ## Unreleased
 
+- Web device comments and tests name Starlette, no longer FastAPI
 - Install pulls only the fabrics a space runs on; nuspace[all] brings the rest
 - A space starts seconds faster, skipping a full check of its own system program
 - Chat's other box keeps its body under the section id the accordion now pairs by
