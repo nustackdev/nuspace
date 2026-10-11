@@ -236,10 +236,10 @@ async def _job(store, name: str = "Nightly") -> str:
     return await store.read(SELECTED)
 
 
-async def test_the_jobs_plane_registers_after_plain():
+async def test_the_jobs_plane_registers_after_plain_and_chat():
     from nuverse.planes import PLANES
 
-    assert [p.name for p in PLANES[:2]] == ["plain", "jobs"]
+    assert [p.name for p in PLANES[:3]] == ["plain", "cc_chat", "jobs"]
     assert (jobs.PLANE.label, jobs.PLANE.icon) == ("Jobs", "briefcase")
 
 

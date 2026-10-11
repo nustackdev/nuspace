@@ -51,10 +51,10 @@ async def _loaded(store, source: str, *, drawn: bool) -> nu.Nu:
     )
 
 
-def test_the_plane_registers_last_and_is_named_after_its_backend():
+def test_the_plane_registers_second_and_is_named_after_its_backend():
     from nuverse.planes import PLANES
 
-    assert PLANES[-1] is cc_chat.PLANE
+    assert PLANES[1] is cc_chat.PLANE
     assert (cc_chat.PLANE.name, cc_chat.PLANE.label) == ("cc_chat", "CC chat")
 
 

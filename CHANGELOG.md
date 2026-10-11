@@ -12,6 +12,7 @@ separately here.
 
 ## Unreleased
 
+- Plane order tests follow the picker: plain, then chat, then jobs
 - Web device comments and tests name Starlette, no longer FastAPI
 - Install pulls only the fabrics a space runs on; nuspace[all] brings the rest
 - A space starts seconds faster, skipping a full check of its own system program
