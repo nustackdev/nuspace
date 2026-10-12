@@ -29,8 +29,6 @@ Space, what the space is::
       state         SpaceState
         recents     [plane id], newest first
         info        path, opened, versions
-      settings      SpaceSettings
-        telemetry   bool, off when unset
       pinned        [plane id], in order
 
 States, what the programs remember, by the same ids::
@@ -62,7 +60,7 @@ from .kernel import (
 )
 from .plane import Plane, PlaneProps
 from .reroot import Reroot, reroot, reroot_base
-from .space import RECENTS_CAP, Space, SpaceInfo, SpaceSettings, SpaceState
+from .space import RECENTS_CAP, Space, SpaceInfo, SpaceState
 from .state import CellState, PlaneState
 from .states import CellStates, PlaneStates, States
 
@@ -90,7 +88,6 @@ __all__ = [
     "Run",
     "Space",
     "SpaceInfo",
-    "SpaceSettings",
     "SpaceState",
     "States",
     "Worker",

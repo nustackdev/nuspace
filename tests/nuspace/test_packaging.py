@@ -1,6 +1,6 @@
 """Packaging: nuspace stands alone, every Plane and snippet comes from an extension.
 
-nuspace ships none of its own. These check a bare install registers nothing,
+nuspace ships none of its own. These check nuspace registers nothing itself,
 and the example leaves it all to what is installed.
 """
 
@@ -9,9 +9,10 @@ from __future__ import annotations
 import subprocess
 import sys
 import textwrap
+from importlib.metadata import entry_points
 from pathlib import Path
 
-from nuspace.ext import discover, space_registry
+from nuspace.ext import GROUP, space_registry
 
 
 ROOT = Path(__file__).parents[2]
@@ -30,8 +31,9 @@ def _run(code: str) -> str:
 
 
 def test_a_bare_install_registers_nothing():
-    assert discover() == []
-    reg = space_registry()
+    """Whatever is discovered comes from another distribution, eg the demos extra."""
+    assert not [p for p in entry_points(group=GROUP) if p.dist and p.dist.name == "nuspace"]
+    reg = space_registry(discover=False)
     assert (reg.planes, reg.snippets) == ({}, {})
 
 

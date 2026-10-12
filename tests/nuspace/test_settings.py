@@ -1,4 +1,4 @@
-"""Settings: the seed, the telemetry ops, and the telemetry cell drawn once."""
+"""Settings: the seed, and its cells loading through the kernel."""
 
 from __future__ import annotations
 
@@ -12,7 +12,6 @@ from nuspace.system import home, settings
 from nuspace.system.devices.web.env import session_env
 from nuspace.system.devices.web.sidebar import rows
 from nuspace.system.kernel.body import Rewrites
-from nustd.ui import Session
 
 
 async def test_settings_is_seeded_once_with_home_header(store):
@@ -21,15 +20,12 @@ async def test_settings_is_seeded_once_with_home_header(store):
     assert row["name"] == "Settings"
     assert row["props"] == {"system": True, "ui": True, "made_by": "", "backend": "async"}
     cells = await store.read(ops.cell_rows(settings.PLANE))
-    assert [(c["name"], c["prog"]) for c in cells] == [
-        ("header", home.HEADER),
-        ("telemetry", settings.TELEMETRY),
-    ]
+    assert [(c["name"], c["prog"]) for c in cells] == [("header", home.HEADER)]
 
     await store.run(ops.remove_cell(home.seeded_id(settings.PLANE, "header")))
     await store.run(settings.ensure_settings())
     cells = await store.read(ops.cell_rows(settings.PLANE))
-    assert [c["name"] for c in cells] == ["telemetry"]
+    assert cells == []
     await store.run(ops.remove_plane(settings.PLANE))
     assert await store.read(ops.plane_exists(settings.PLANE))
 
@@ -47,14 +43,6 @@ async def test_home_and_settings_are_pinned_on_first_seed_only(store):
     assert await store.read(ops.pinned()) == [home.PLANE]
 
 
-async def test_telemetry_is_off_until_set(store):
-    assert await store.read(nustd.kv.Snapshot(ops.telemetry(), scope=Space)) is False
-    await store.run(ops.set_telemetry(True))
-    assert await store.read(Space.settings.telemetry) is True
-    await store.run(ops.set_telemetry(False))
-    assert await store.read(nustd.kv.Snapshot(ops.telemetry(), scope=Space)) is False
-
-
 @pytest.mark.parametrize("cell", settings.CELLS, ids=lambda c: c[0])
 async def test_each_cell_loads_through_the_kernel_rewrites(store, cell):
     _, source = cell
@@ -69,27 +57,3 @@ async def test_each_cell_loads_through_the_kernel_rewrites(store, cell):
     )
     assert isinstance(term, nu.Nu)
     nu.validate(nu.compile(term))
-
-
-class _Recording:
-    """A session that keeps the frames it is sent instead of sending them."""
-
-    def __init__(self) -> None:
-        self.frames: list = []
-
-    async def send(self, frame: object) -> None:
-        self.frames.append(frame)
-
-
-async def _drawn(store) -> list:
-    namespace: dict = {}
-    exec(compile(settings.TELEMETRY, "cell", "exec"), namespace)  # noqa: S102
-    session = _Recording()
-    await nu.arun(namespace["draw"](), store.ctx.bind(Session, session))
-    return [(frame.ref, frame.payload) for frame in session.frames]
-
-
-async def test_telemetry_switch_draws_the_stored_setting(store):
-    assert await _drawn(store) == [(("telemetry", "on"), False)]
-    await store.run(ops.set_telemetry(True))
-    assert await _drawn(store) == [(("telemetry", "on"), True)]

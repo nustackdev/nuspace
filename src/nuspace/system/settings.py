@@ -3,13 +3,11 @@
 Like home (:mod:`nuspace.system.home`): a system ui plane with a fixed id,
 seeded once by the same :func:`~nuspace.system.home.seed`, its cells the
 owner's after that. Pinned when seeded, after home: the sidebar's pin is the
-way to it. Two cells:
-
-- ``header``: home's header, the same source;
-- ``telemetry``: a switch over ``Space.settings.telemetry``, both ways.
+way to it. One cell so far, ``header``: home's header, the same source.
 
 Only what belongs to the space lives here. What belongs to one device or
-browser, eg its theme, stays there.
+browser, eg its theme, stays there, and what belongs to the user, eg
+telemetry, lives in ``~/.nuspace`` (``nuspace telemetry``).
 """
 
 from __future__ import annotations
@@ -23,7 +21,7 @@ if TYPE_CHECKING:
     import nu
 
 
-__all__ = ["CELLS", "NAME", "PLANE", "TELEMETRY", "ensure_settings"]
+__all__ = ["CELLS", "NAME", "PLANE", "ensure_settings"]
 
 
 #: The plane id, fixed: routed at ``/settings``.
@@ -36,38 +34,8 @@ NAME = "Settings"
 ICON = "emoji:⚙️"
 
 
-TELEMETRY = """\
-import nu
-import nustd.kv
-import nustd.ui
-import nuspace
-from nuspace import ops
-
-
-class Telemetry(nustd.ui.Field):
-    on = nustd.ui.SwitchRef.slot(label="Telemetry")
-
-
-class Settings(nustd.ui.Column):
-    # Unwired: the switch records the choice, nothing reads it yet.
-    telemetry = Telemetry.slot(help="Share anonymous usage data")
-
-
-def draw():
-    return nustd.kv.Snapshot(Settings.telemetry.on.set(ops.telemetry()), scope=nuspace.Space)
-
-
-def out():
-    switch = Settings.telemetry.on
-    return draw() >> nu.ParallelAsync(
-        nu.ReactForever(switch.on_change(), ops.set_telemetry(nu.bool(switch))),
-        nu.ReactForever(ops.snapshot(nuspace.Space.settings.telemetry.on_change()), draw()),
-    )
-"""
-
-
 #: The cells settings is seeded with, in order, as ``(name, source)``.
-CELLS = (("header", HEADER), ("telemetry", TELEMETRY))
+CELLS = (("header", HEADER),)
 
 
 def ensure_settings() -> nu.Nu:

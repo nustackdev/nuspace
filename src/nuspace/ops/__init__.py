@@ -74,7 +74,6 @@ from .read import (
     planes,
     prog,
 )
-from .settings import set_telemetry, telemetry
 from .state import (
     CellState,
     PlaneState,
@@ -142,10 +141,8 @@ __all__ = [
     "set_plane_icon",
     "set_plane_meta",
     "set_prog",
-    "set_telemetry",
     "sibling",
     "snapshot",
-    "telemetry",
     "unpin_plane",
     "workers",
 ]

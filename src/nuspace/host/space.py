@@ -1,4 +1,4 @@
-"""open_space: the whole system in one term, as a host runs it.
+"""open_space: the whole system in one term, as a host runs it. init_space: one made.
 
 Layer three. It composes, nothing more: the registry (:mod:`nuspace.ext`), the kernel's
 brackets (the space directory's store and notification server, the pool),
@@ -24,6 +24,9 @@ The kernel's ``init=`` would start init beside the body, before the service
 planes are sure to exist on a first open, so the start is sequenced here
 instead (the same term, same ``by``).
 
+:func:`init_space` is steps 1 and 2 alone, in the store's brackets only: the
+space directory made and seeded, and closed again, nothing run.
+
 Workers import :mod:`nuspace`, and so this module: the web device, which
 pulls in the web server, is imported only when a space serves.
 """
@@ -36,7 +39,7 @@ from typing import TYPE_CHECKING
 import nu
 from nuspace.ext import RegistryWarning, space_registry
 from nuspace.system.home import ensure_home, write_info
-from nuspace.system.kernel import DEFAULT_SPARES, init_start, open_kernel
+from nuspace.system.kernel import DEFAULT_SPARES, init_start, open_kernel, store
 from nuspace.system.search import ensure_search
 from nuspace.system.services import ensure_system
 from nuspace.system.services import init as init_service
@@ -53,7 +56,7 @@ if TYPE_CHECKING:
     from nuspace.system.kernel import EnvFactory
 
 
-__all__ = ["open_space"]
+__all__ = ["init_space", "open_space", "seed_space"]
 
 
 def _with_session(envs: Mapping[str, EnvFactory], web: Mapping[str, EnvFactory]) -> dict:
@@ -68,6 +71,26 @@ def _with_session(envs: Mapping[str, EnvFactory], web: Mapping[str, EnvFactory])
             )
         merged[name] = factory
     return merged
+
+
+def seed_space() -> nu.Nu:
+    """The planes every space holds before anything runs: services, home, settings, search.
+
+    Each made where missing, so it is safe on every open.
+    """
+    return ensure_system() >> ensure_home() >> ensure_settings() >> ensure_search()
+
+
+def init_space(path: str) -> nu.With:
+    """The space at ``path`` made and seeded (:func:`seed_space`), then closed. Nothing runs.
+
+    The store's brackets alone: no pool, no kernel, no web device. A space
+    already there is left as it is, but for a system plane gone missing.
+
+    Raises:
+        NotASpace: ``path`` holds something other than a space.
+    """
+    return nu.With(store(path), body=seed_space())
 
 
 def open_space(
@@ -141,10 +164,7 @@ def open_space(
     beside = arms[0] if len(arms) == 1 else nu.Race(*arms)
     kwargs = {} if name is None else {"name": name}
     return open_kernel(
-        ensure_system()
-        >> ensure_home()
-        >> ensure_settings()
-        >> ensure_search()
+        seed_space()
         >> write_info(path)
         >> clear_connections()
         >> init_start(init_service.PLANE)

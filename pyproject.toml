@@ -51,6 +51,10 @@ classifiers = [
 all = [
     "nustd[all]>=0.6.2",
 ]
+# The Nu demos as Planes, for `nuspace demo` and the `+` picker.
+demos = [
+    "nuverse-demos",
+]
 
 [project.urls]
 Repository = "https://github.com/nustackdev/nuspace"
@@ -72,7 +76,7 @@ exclude = [
 nuspace-ui = { path = "./pkgs/ts/nuspace-ui", editable = true }
 nucore = { path = "../nu", editable = true }
 nustd = { path = "../nu/pkgs/nustd", editable = true }
-nucli = { path = "../nu/pkgs/nucli", editable = true }
+nuverse-demos = { path = "../nuverse/pkgs/nuverse-demos", editable = true }
 
 [tool.uv]
 default-groups = ["dev"]
@@ -181,7 +185,7 @@ known-first-party = [
     "nuspace",
     "nu",
     "nustd",
-    "nucli",
+    "nuverse_demos",
 ]
 force-single-line = false
 lines-after-imports = 2

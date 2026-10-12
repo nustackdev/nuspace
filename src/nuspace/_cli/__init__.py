@@ -1,9 +1,9 @@
-"""The ``nuspace`` command: open a space, served in a browser or headless.
+"""The ``nuspace`` command: run a space, try a demo, make one, check the install.
 
 Pure command line, not an API: nothing imports it, workers least of all.
 
-A space is a directory one process locks at a time, so either command holds
-it for as long as it is up.
+A space is a directory one process locks at a time, so a command that opens
+one holds it for as long as it is up.
 """
 
 from .main import cli, main

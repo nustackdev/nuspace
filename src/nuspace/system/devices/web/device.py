@@ -21,15 +21,22 @@ are pushed onto ``Space.state.recents`` in the same commit (:func:`remember`).
 
 What a run needs to draw on a tab is the session env, returned beside the
 term for the host to register with the kernel.
+
+Beside the socket the server answers one plain route,
+``/api/telemetry-config``: the user's telemetry choice and id (see
+:mod:`nuspace._telemetry`), so the browser's events follow the same opt out.
 """
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from starlette.responses import JSONResponse
+from starlette.routing import Route
+
 import nu
 import nustd.time
-from nuspace import ops
+from nuspace import _telemetry, ops
 from nuspace.ops.utils import atomic
 from nuspace.shapes import RECENTS_CAP, Space
 from nuspace.system.devices.web.env import SESSION_ENV, session_env
@@ -55,6 +62,8 @@ from nustd.ws_server import SID_ATTR, listen, run_once, session_for, sessions_fo
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
+    from starlette.requests import Request
+
     from nuspace.ext import Plane, Snippet
     from nuspace.system.kernel import EnvFactory
     from nustd.ui.core import Ref
@@ -62,6 +71,7 @@ if TYPE_CHECKING:
 
 __all__ = [
     "BANNER",
+    "ROUTES",
     "clear_connections",
     "close_connection",
     "connection",
@@ -69,6 +79,7 @@ __all__ = [
     "remember",
     "route_arm",
     "serve_web",
+    "telemetry_config",
 ]
 
 
@@ -182,6 +193,16 @@ def connection(
     )
 
 
+async def telemetry_config(request: Request) -> JSONResponse:
+    """``GET /api/telemetry-config``: what the browser needs to send, or not."""
+    del request
+    return JSONResponse(_telemetry.browser_config())
+
+
+#: The plain routes the server answers beside the socket.
+ROUTES = (Route("/api/telemetry-config", telemetry_config, methods=["GET"]),)
+
+
 def serve_web(
     *,
     planes: Sequence[Plane] = (),
@@ -229,6 +250,7 @@ def serve_web(
             log_level=log_level,
             banner=BANNER,
             open_browser=open_browser,
+            routes=ROUTES,
         ),
         served_sessions(session_address),
         body=sessions_fold(

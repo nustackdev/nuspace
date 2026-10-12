@@ -11,6 +11,10 @@ separately here.
 
 ## Unreleased
 
+- One run command opens a space in a browser, or headless with nothing drawn
+- Try a Nu demo in a throwaway space with one command
+- Make a directory a space without opening it to run
+- Doctor reports versions, missing pieces, extras and installed extensions
 - Empty cell pinned atop the / menu, starting from a program that runs
 - A dismissed cell menu leaves its cell selected, controls shown while open
 - Extensions get their own home; commands map one to one onto host presets

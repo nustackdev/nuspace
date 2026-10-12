@@ -24,10 +24,12 @@ nuspace is built on [Nu](https://github.com/nustackdev/nu) and runs Nu, where ev
 
 ```bash
 pip install nuspace
-nuspace serve my.nuspace
+nuspace run my.nuspace
 ```
 
-A browser opens on http://127.0.0.1:8080 and your space is alive. Press `/` on a plane to add a cell.
+A browser opens on http://127.0.0.1:8080 and your space is alive. Press `/` on a plane to add a cell. `--headless` runs it with nothing drawn.
+
+For something to look at first, `pip install "nuspace[demos]"` and `nuspace demo` lists what there is to open.
 
 Planes and snippets are extensions, found on install through the `nuspace.extensions` entry point. Bring your own and they live in the space like everything else.
 

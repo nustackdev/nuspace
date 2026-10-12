@@ -1,4 +1,4 @@
-"""The host: the registry, open_space headless with real workers, and the command line.
+"""The host: the registry, and open_space headless with real workers.
 
 The registry is plain python. open_space runs once, headless, on a store
 seeded the way a person would: a user plane added to init's boot list before
@@ -14,17 +14,17 @@ import warnings
 
 import pytest
 from _support.kernel import SET_42, Kernel, _Hold, history
-from click.testing import CliRunner
 
 import nu
 from nuspace import Extension, Plane, Snippet, boot, open_space, ops
-from nuspace._cli import cli
 from nuspace.ext import GROUP, Registry, RegistryWarning, discover, space_registry
 from nuspace.ext import registry as registry_module
+from nuspace.host import presets
 from nuspace.ops.utils import atomic
 from nuspace.shapes import Space, States, reroot
 from nuspace.system import home
 from nuspace.system.kernel import Env, store
+from nuspace.system.kernel.space import free_port
 from nuspace.system.services import BOOTED, SERVICES, ensure_system, init
 
 
@@ -221,20 +221,45 @@ def test_open_space_with_web_compiles(monkeypatch):
     nu.validate(nu.compile(term))
 
 
-# --- The command line ------------------------------------------------------------
+@pytest.mark.parametrize("open_browser", [True, False])
+def test_demo_compiles_and_names_its_plane(monkeypatch, open_browser):
+    _points(monkeypatch, [])
+    spec = _plane("counter", "Counter")
+    assert presets.demo_id(spec) == "demo-counter"
+    term = presets.demo(spec, open_browser=open_browser)
+    nu.validate(nu.compile(term))
 
 
-@pytest.mark.parametrize("args", [["--help"], ["serve", "--help"], ["run", "--help"]])
-def test_cli_help(args):
-    result = CliRunner().invoke(cli, args)
-    assert result.exit_code == 0, result.output
-    assert "Usage" in result.output
+async def test_browse_opens_once_the_port_answers(monkeypatch):
+    opened: list[str] = []
+    monkeypatch.setattr(presets.webbrowser, "open", opened.append)
+    server = await asyncio.start_server(lambda r, w: w.close(), "127.0.0.1", 0)
+    port = server.sockets[0].getsockname()[1]
+    try:
+        url = f"http://127.0.0.1:{port}/demo-x"
+        await presets.Browse(url, "0.0.0.0", port).asetup(nu.Context())  # noqa: S104
+    finally:
+        server.close()
+        await server.wait_closed()
+    assert opened == [url]
+
+
+async def test_browse_gives_up_quietly(monkeypatch):
+    opened: list[str] = []
+    monkeypatch.setattr(presets.webbrowser, "open", opened.append)
+    browse = presets.Browse("http://x", "127.0.0.1", free_port(), timeout=0.2)
+    await browse.asetup(nu.Context())
+    assert opened == []
+
+
+# --- Imports ---------------------------------------------------------------------
 
 
 def test_importing_nuspace_pulls_in_no_server_and_no_cli():
     code = (
         "import sys, nuspace\n"
-        "print(sorted(m for m in ('starlette', 'uvicorn', 'click', 'nustd.ws_server')"
+        "print(sorted(m for m in ('starlette', 'uvicorn', 'click', 'nustd.ws_server',"
+        " 'nuspace._telemetry')"
         " if m in sys.modules))"
     )
     out = subprocess.run(  # noqa: S603 -- our own interpreter, a fixed script
