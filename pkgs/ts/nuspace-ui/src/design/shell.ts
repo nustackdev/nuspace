@@ -20,12 +20,27 @@
 
 import { cn } from "@nustackdev/ui-kit";
 import { docPlaneSurface } from "./document";
-import { resizeHandle } from "./resize";
 
 /* ============================== The frame ================================ */
 
-/** The window. Owns the viewport height so every region inside can go flex. */
+/**
+ * The window. Owns the viewport height so every region inside can go flex.
+ * Its one child is the kit split that puts the rail beside the main strip
+ * (shell/Shell.tsx).
+ */
 export const shellRoot = "flex h-screen bg-nuspace-page text-text-primary";
+
+/**
+ * A kit split panel one region sits in: the rail, the main strip, a pane.
+ * The kit sizes it; the region fills it.
+ */
+export const shellSlot = "flex min-h-0";
+
+/**
+ * A kit split handle on the frame's edge line: between the rail and the
+ * strip, and between two panes. It is the divider and the drag strip both.
+ */
+export const shellSplitHandle = "bg-nuspace-edge";
 
 /**
  * Everything beside the sidebar. `group/main` with `data-rail="collapsed"`
@@ -52,7 +67,7 @@ export const shellSurface = "flex min-h-0 min-w-0 flex-1";
 /**
  * A pane's narrowest, px: the plane's reading measure (`max-w-doc`, 40rem in
  * tokens.css), so the desk never squeezes a plane under the width it is written
- * for. A number and not a class because the strip's resize math needs it too.
+ * for. A number and not a class because it is the split panel's `minSize`.
  */
 export const PANE_MIN_WIDTH = 640;
 
@@ -63,9 +78,10 @@ export const PANE_MIN_WIDTH = 640;
 export const shellStrip = "flex min-h-0 min-w-0 flex-1 flex-col";
 
 /**
- * The desk: the Viewer's strip of panes. When the panes' minimums add up to
- * more than the window has, it scrolls sideways (trackpad, shift-wheel) with
- * no scrollbar drawn: the dock under it is its scrollbar.
+ * The desk: the Viewer's strip of panes, the kit's split in its scrolling
+ * mode (main/Main.tsx). When the panes' minimums add up to more than the
+ * window has, it scrolls sideways (trackpad, shift-wheel) with no scrollbar
+ * drawn: the dock under it is its scrollbar.
  */
 export const shellPanes = cn(
 	"flex min-h-0 min-w-0 flex-1",
@@ -73,11 +89,9 @@ export const shellPanes = cn(
 );
 
 /**
- * One pane: its top bar over its own scroll host. `min-w-0` lets a wide cell
- * scroll inside the pane instead of pushing the neighbour out; the share and
- * the desk minimum are inline (see main/usePaneWidths.ts). Every pane after
- * the first draws the divider on its left edge, which is where the resize
- * handle sits.
+ * One pane: its top bar over its own scroll host, filling its split panel.
+ * `min-w-0` lets a wide cell scroll inside the pane instead of pushing the
+ * neighbour out.
  *
  * The pane paints its own background, and that is the focus mark: with more
  * than one pane, every pane but the focused one sits a step down on `nuspace-pane-dim`,
@@ -85,12 +99,11 @@ export const shellPanes = cn(
  * contrast. A single pane is never dimmed and looks as it always did.
  * `duration-fast`; the kit's reduced-motion rule flattens it to instant.
  */
-export function shellPane(divided: boolean, dimmed: boolean): string {
+export function shellPane(dimmed: boolean): string {
 	return cn(
-		"group/pane relative flex min-h-0 min-w-0 flex-col",
+		"group/pane relative flex min-h-0 min-w-0 flex-1 flex-col",
 		"transition-colors duration-fast ease-out",
 		dimmed ? "bg-nuspace-pane-dim" : "bg-nuspace-page",
-		divided && "border-l border-nuspace-edge",
 	);
 }
 
@@ -99,15 +112,6 @@ export function shellPane(divided: boolean, dimmed: boolean): string {
  * background (page, or pane-dim when dimmed) is the one that shows.
  */
 export const shellPanePlane = cn(docPlaneSurface, "bg-transparent");
-
-/**
- * The zero-width slot between two panes that holds their resize handle. In
- * flow so it sits exactly on the divider, zero-width so it takes no share.
- */
-export const shellPaneDivider = "relative w-0 shrink-0";
-
-/** The handle itself, centred on the divider. See ./resize.ts. */
-export const shellPaneResize = resizeHandle("left");
 
 /**
  * Where a plane dragged from the rail would open: the half of the pane it

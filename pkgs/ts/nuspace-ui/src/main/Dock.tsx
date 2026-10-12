@@ -30,6 +30,7 @@
 // without being told.
 
 import {
+	CLICK_SLOP,
 	ContextMenu,
 	ContextMenuContent,
 	ContextMenuTrigger,
@@ -154,9 +155,6 @@ function useDeskGeometry(
 function scrollBehavior(): ScrollBehavior {
 	return window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
 }
-
-/** A press that travels less than this, px, is a click. */
-const CLICK_SLOP = 3;
 
 /** The chip under a point, looking through the window over it. */
 function chipAt(x: number, y: number): HTMLElement | undefined {

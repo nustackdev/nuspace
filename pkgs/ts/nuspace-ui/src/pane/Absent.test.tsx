@@ -36,7 +36,6 @@ function render(planeId: string, absent: AbsentReason) {
 					many={false}
 					divided={false}
 					focused
-					style={{}}
 				/>
 			</TooltipProvider>,
 		);

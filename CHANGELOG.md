@@ -12,6 +12,7 @@ separately here.
 
 ## Unreleased
 
+- Sidebar and panes resize and fold on the kit's split panels
 - nuverse Config sections open again, paired with their body by id
 
 ## 0.5.2 — 2026-10-12

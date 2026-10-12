@@ -1,6 +1,6 @@
 // Moving panes around the desk, rendered in jsdom: a plane dropped from the
-// rail onto the panes, a pane dragged by its bar, the widths that go with a
-// pane, and the dock's map of it all.
+// rail onto the panes, a pane dragged by its bar, and the dock's map of it
+// all. The widths that go with a pane are the kit split's (its own tests).
 //
 // jsdom lays nothing out, so a pane's box is stubbed where the pointer's half
 // of it matters, and drops are faked with a plain event carrying the bits of
@@ -16,7 +16,6 @@ import { PIN_MIME } from "../sidebar/PinnedRow";
 import { PLANE_MIME } from "../sidebar/useRailDrag";
 import { dockLayout } from "./Dock";
 import { PANE_MIME, paneSlot, useCanvasDrop } from "./useCanvasDrop";
-import { widthsOf } from "./usePaneWidths";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -70,17 +69,6 @@ beforeEach(() => {
 afterEach(() => {
 	act(() => root.unmount());
 	host.remove();
-});
-
-describe("pane widths", () => {
-	it("travel with their panes, and reset when the set changes", () => {
-		const state = { key: "a+b+c", px: { a: 100, b: 200, c: 300 } };
-		expect(widthsOf(state, ["a", "b", "c"])).toEqual([100, 200, 300]);
-		expect(widthsOf(state, ["c", "a", "b"])).toEqual([300, 100, 200]);
-		expect(widthsOf(state, ["a", "b"])).toBeNull();
-		expect(widthsOf(state, ["a", "b", "d"])).toBeNull();
-		expect(widthsOf(null, ["a"])).toBeNull();
-	});
 });
 
 describe("drop on the panes", () => {

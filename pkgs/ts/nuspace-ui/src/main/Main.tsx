@@ -16,6 +16,13 @@
 // plane's measure, the desk scrolls sideways when they do not fit, and the
 // borders between panes drag. We never remount a pane that stays open.
 //
+// The strip is the kit's split in its scrolling mode (`ResizablePanelGroup`
+// with `overflow="scroll"`): the panes start as equal shares, a drag moves
+// one border and past a neighbour's minimum grows the desk instead of
+// stopping, and a pane keeps its width when it moves. Open or close a pane
+// and the widths go back to equal shares; so does a double-click on a border.
+// Held in memory only: the pane set changes too often for a stored layout.
+//
 // Under the desk sits the dock (./Dock.tsx), its scrollbar: a scaled map of
 // the panes with a window over what is on screen. Only while the desk is wider
 // than the window.
@@ -23,16 +30,24 @@
 // A plane dragged off the rail onto a pane opens beside it, and a pane dragged
 // by its bar moves there (./useCanvasDrop.ts).
 
-import { EmptyState, type NodeProps, pathKey } from "@nustackdev/ui-kit";
-import { Fragment, useCallback, useEffect, useRef } from "react";
+import {
+	EmptyState,
+	type NodeProps,
+	pathKey,
+	ResizableHandle,
+	ResizablePanel,
+	ResizablePanelGroup,
+} from "@nustackdev/ui-kit";
+import { useCallback, useEffect, useRef } from "react";
 import { onReveal, useFocusedRoute, useRoutes } from "../core/router";
 import { useTypePath } from "../core/surfaces";
 import { notifyOp } from "../core/wire";
 import {
 	docPlaneSurface,
-	shellPaneDivider,
-	shellPaneResize,
+	PANE_MIN_WIDTH,
 	shellPanes,
+	shellSlot,
+	shellSplitHandle,
 	shellStrip,
 	shellSurface,
 } from "../design";
@@ -51,7 +66,6 @@ import {
 	useSnippets,
 } from "./state";
 import { useCanvasDrop } from "./useCanvasDrop";
-import { usePaneWidths } from "./usePaneWidths";
 
 /** Nothing is open. Unreachable while "/" lands home, kept as the honest
  *  fallback should a route ever come back empty. */
@@ -68,7 +82,6 @@ export function Main({ path }: NodeProps) {
 	const key = pathKey(path);
 	const routesKey = routes.join("+");
 	const stripRef = useRef<HTMLDivElement | null>(null);
-	const { styleOf, onResizeStart, onResizeReset } = usePaneWidths(stripRef, routes);
 	const { target: dropTarget, dropProps } = useCanvasDrop(routes);
 
 	// One ref per op: the op name is the tail of the wire path, not a key in
@@ -177,19 +190,24 @@ export function Main({ path }: NodeProps) {
 	// comes or goes.
 	return (
 		<div className={shellStrip}>
-			<div ref={stripRef} className={shellPanes} {...dropProps}>
-				{routes.map((id, i) => (
-					<Fragment key={id}>
-						{i > 0 ? (
-							<div className={shellPaneDivider}>
-								<div
-									aria-hidden="true"
-									className={shellPaneResize}
-									onPointerDown={(e) => onResizeStart(e, i)}
-									onDoubleClick={onResizeReset}
-								/>
-							</div>
-						) : null}
+			<ResizablePanelGroup
+				overflow="scroll"
+				elementRef={stripRef}
+				className={shellPanes}
+				{...dropProps}
+			>
+				{/* Flat, not a fragment per pane: the split reads its panels
+				    and handles off its direct children. */}
+				{routes.flatMap((id, i) => [
+					i > 0 ? <ResizableHandle key={`border:${id}`} className={shellSplitHandle} /> : null,
+					// A lone pane is the plane as it always was: the whole strip, no floor.
+					<ResizablePanel
+						key={id}
+						id={`pane:${id}`}
+						data-pane={id}
+						minSize={many ? `${PANE_MIN_WIDTH}px` : undefined}
+						className={shellSlot}
+					>
 						<Pane
 							viewerPath={path}
 							planeId={id}
@@ -205,11 +223,10 @@ export function Main({ path }: NodeProps) {
 							divided={i > 0}
 							focused={id === focused}
 							drop={dropTarget?.id === id ? dropTarget.edge : null}
-							style={styleOf(i)}
 						/>
-					</Fragment>
-				))}
-			</div>
+					</ResizablePanel>,
+				])}
+			</ResizablePanelGroup>
 			{many ? <Dock routes={routes} planes={planes} absent={absent} stripRef={stripRef} /> : null}
 		</div>
 	);

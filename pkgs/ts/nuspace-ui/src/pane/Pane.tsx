@@ -70,7 +70,6 @@ export function Pane({
 	divided,
 	focused,
 	drop = null,
-	style,
 }: {
 	viewerPath: Path;
 	planeId: string;
@@ -90,13 +89,11 @@ export function Pane({
 	onDelete?: () => void;
 	/** More than one pane on the desk: dim the unfocused, drag by the bar. */
 	many: boolean;
-	/** Draws the divider on its left edge. */
+	/** Not the desk's first pane, so the rail's reopen button is not over its bar. */
 	divided: boolean;
 	focused: boolean;
 	/** A plane dragged off the rail would open on this side of it. */
 	drop?: "before" | "after" | null;
-	/** The pane's share of the strip. See ../main/usePaneWidths.ts. */
-	style: React.CSSProperties;
 }) {
 	// Capture, so a click that a cell handles and stops still moves focus,
 	// and a caret tabbed into the pane counts the same as a click.
@@ -116,9 +113,7 @@ export function Pane({
 
 	return (
 		<section
-			data-pane={planeId}
-			className={shellPane(divided, many && !focused)}
-			style={style}
+			className={shellPane(many && !focused)}
 			aria-label={title}
 			onPointerDownCapture={claim}
 			onFocusCapture={claim}

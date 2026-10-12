@@ -18,7 +18,6 @@
 //   rail.ts            the sidebar rail
 //   icon.ts            plane icons: the glyph at each size, and the picker
 //   menu.ts            the registry menus' rows: the / menu, Add plane
-//   resize.ts          the drag handle every resizable edge shares
 //   cell-status.ts  the six-state vocabulary
 //
 // Two rules hold this directory together:
@@ -38,5 +37,4 @@ export * from "./icon";
 export * from "./menu";
 export * from "./pane";
 export * from "./rail";
-export * from "./resize";
 export * from "./shell";

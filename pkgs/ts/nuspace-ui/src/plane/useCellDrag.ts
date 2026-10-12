@@ -1,12 +1,12 @@
 // Drag reorder, off a cell's grip. The drop index is found against the live
 // cell rows, and one `cell.reorder` goes out on release if it moved.
 //
-// The grip is a button too: a press that never travels past the slop (see
-// ../core/drag.ts) moves nothing and calls `onClick` instead.
+// The grip is a button too: a press that never travels past the kit's
+// `CLICK_SLOP` moves nothing and calls `onClick` instead.
 
+import { CLICK_SLOP } from "@nustackdev/ui-kit";
 import type * as React from "react";
 import { useCallback, useRef } from "react";
-import { CLICK_SLOP } from "../core/drag";
 import type { PlaneModel } from "./model";
 
 export function useCellDrag({ planeId, cells, patch, notify, index, elRefs }: PlaneModel) {

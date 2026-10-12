@@ -11,9 +11,9 @@
 // keyboard that acts on a selection (./useCellKeys.ts) acts on it too. It
 // works on read-only planes, where that keyboard only copies.
 
+import { CLICK_SLOP } from "@nustackdev/ui-kit";
 import type * as React from "react";
 import { useCallback, useState } from "react";
-import { CLICK_SLOP } from "../core/drag";
 import type { PlaneModel } from "./model";
 
 /** Where a press never starts a box: inside a cell's box, or on a control. */

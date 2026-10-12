@@ -31,7 +31,6 @@
 //   go/projects/nustackdev/design/a11y.md           §4 aria, §5 focus ring
 
 import { cn } from "@nustackdev/ui-kit";
-import { resizeHandle } from "./resize";
 
 /* ============================== Geometry ================================= */
 
@@ -61,8 +60,7 @@ import { resizeHandle } from "./resize";
  * control always climbs from whatever the row shows: at rest, hovered, open
  * elsewhere or selected.
  */
-const railControlWash =
-	"hover:bg-rail-cd1 active:bg-rail-cd2 data-[state=open]:bg-rail-cd2";
+const railControlWash = "hover:bg-rail-cd1 active:bg-rail-cd2 data-[state=open]:bg-rail-cd2";
 
 /** Left pad for a row at `depth`, as an inline style (depth is data). */
 export function railIndent(depth: number): { paddingLeft: string } {
@@ -71,27 +69,15 @@ export function railIndent(depth: number): { paddingLeft: string } {
 
 /* ============================== The aside =============================== */
 
-/** Rail width bounds, px. */
-export const RAIL_WIDTH = { MIN: 200, DEFAULT: 260, MAX: 540 } as const;
-
 /**
- * The rail itself. Its own surface, a hairline edge on `nuspace-edge` so it
- * holds in light too. The width is inline (the user drags it, see
- * sidebar/useRailWidth.ts), so none is set here.
+ * The rail itself, its own surface filling the split panel it sits in. The
+ * panel owns the width, the fold and the hairline edge (the split's handle,
+ * on `nuspace-edge`, see shell/Shell.tsx), so none of them is set here.
  *
- * Collapsed, it is `hidden` rather than unmounted: the Add plane popup lives
- * in the rail and a pane's `...` still has to open it.
+ * Folded, the panel is inert rather than the rail unmounted: the Add plane
+ * popup lives in the rail and a pane's `...` still has to open it.
  */
-export function railAside(collapsed: boolean): string {
-	return cn(
-		"relative flex shrink-0 flex-col",
-		"border-r border-nuspace-edge bg-nuspace-rail",
-		collapsed && "hidden",
-	);
-}
-
-/** The drag strip on the rail's right edge. See ./resize.ts. */
-export const railResizeHandle = resizeHandle("right");
+export const railAside = "relative flex min-w-0 flex-1 flex-col bg-nuspace-rail";
 
 /**
  * Top bar. `h-chrome`, like the pane bar and the tab bar, so the tops line up.

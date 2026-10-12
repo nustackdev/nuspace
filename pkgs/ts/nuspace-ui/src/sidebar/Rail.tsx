@@ -20,7 +20,7 @@
 //
 // ## Where the parts are
 //
-//   Rail.tsx          this: the aside, its strips, the resize edge
+//   Rail.tsx          this: the aside and its strips
 //   RailHeader.tsx    the top bar: collapse, the wordmark
 //   NewPlaneRow.tsx   the tree's sticky first row, which makes a top-level plane
 //   SearchTrigger.tsx the search entry under it
@@ -37,10 +37,10 @@
 //   useReveal.ts      revealed-then-sticky expansion
 //   useDraft.ts       inline rename
 //   useRailFocus.ts   the one tab stop
-//   useRailWidth.ts   the drag-resized width
-//   collapse.ts       hidden or not, and cmd/ctrl+\
+//   collapse.ts       folded or not, and cmd/ctrl+\
 //
-// Every class string and the geometry are in design/rail.ts.
+// Every class string and the geometry are in design/rail.ts. The width and
+// the fold are the shell's split panel the rail sits in (../shell/Shell.tsx).
 
 import { Skeleton } from "@nustackdev/ui-kit";
 import { useMemo } from "react";
@@ -50,13 +50,11 @@ import {
 	railAside,
 	railIndent,
 	railPinShelf,
-	railResizeHandle,
 	railScroll,
 	railSkeletonBar,
 	railSkeletonRow,
 } from "../design";
 import { AddPlane } from "./AddPlane";
-import { useRailCollapsed } from "./collapse";
 import { NewPlaneRow } from "./NewPlaneRow";
 import type { Notify } from "./ops";
 import { PinnedRow } from "./PinnedRow";
@@ -68,7 +66,6 @@ import { SearchPopup } from "./SearchPalette";
 import { SearchTrigger } from "./SearchTrigger";
 import { visibleRows } from "./tree";
 import { childrenOf, type PlaneTree, type Registered, rootId, type Searchable } from "./types";
-import { useRailWidth } from "./useRailWidth";
 import { useReveal } from "./useReveal";
 
 export function Rail({
@@ -93,8 +90,6 @@ export function Rail({
 	const routes = useRoutes();
 	// The focused pane's Plane is the cursor; the others are merely open.
 	const selKey = useFocusedRoute();
-	const { width, onResizeStart, onResizeReset } = useRailWidth();
-	const collapsed = useRailCollapsed();
 	const root = rootId(tree);
 	// The tree lands in one `set_tree`; until it does there is nothing to draw
 	// and the honest thing is row-shaped placeholders, not a fake empty tree.
@@ -108,10 +103,10 @@ export function Rail({
 	const reveal = useReveal({ tree, root, routes, selKey, expanded, onToggle });
 
 	return (
-		// Collapsed is hidden, not unmounted: the Add plane popup lives here and
-		// a pane's `...` still opens it, and so does the search popup, which
+		// Folded is inert, not unmounted: the Add plane popup lives here and a
+		// pane's `...` still opens it, and so does the search popup, which
 		// cmd/ctrl+K opens from anywhere.
-		<aside aria-label="Sidebar" className={railAside(collapsed)} style={{ width }}>
+		<aside aria-label="Sidebar" className={railAside}>
 			<RailHeader />
 			<SearchTrigger />
 			{loading ? null : (
@@ -146,12 +141,6 @@ export function Rail({
 			<RailFooter />
 			<AddPlane registered={registered} notify={notify} reveal={reveal} />
 			<SearchPopup searchable={searchable} notify={notify} />
-			<div
-				aria-hidden="true"
-				className={railResizeHandle}
-				onPointerDown={onResizeStart}
-				onDoubleClick={onResizeReset}
-			/>
 		</aside>
 	);
 }
@@ -162,11 +151,9 @@ export function Rail({
  * like the viewer skeleton does, so a fast boot never flashes them.
  */
 export function RailPlaceholder() {
-	const { width } = useRailWidth();
-	const collapsed = useRailCollapsed();
 	const shown = useSkeleton();
 	return (
-		<aside aria-label="Sidebar" className={railAside(collapsed)} style={{ width }}>
+		<aside aria-label="Sidebar" className={railAside}>
 			<RailHeader />
 			<nav aria-label="Planes" className={railScroll}>
 				{shown ? <RailSkeleton /> : null}

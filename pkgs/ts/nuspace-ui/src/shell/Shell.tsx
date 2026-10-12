@@ -21,21 +21,49 @@
 // renders without handlers of ours, and it runs before the browser follows
 // them.
 //
+// The two sit in the kit's split (`ResizablePanelGroup`): the rail is a
+// collapsible panel with the kit's sidebar bounds and a px default, so it
+// holds its width while the window resizes and the strip takes the change.
+// Drag its border to resize it, past its minimum to fold it; Enter on the
+// border, the rail's button, the reopen button and cmd/ctrl+\ fold and
+// unfold it too, all through the one split (../sidebar/collapse.ts), which
+// keeps the layout across reloads.
+//
 // Before the tree lands neither region is on it. The shell still draws: the
 // rail as its chrome with skeleton rows, the strip as the viewer skeleton, so
 // the boot and a plane switch look alike. Once anything has landed, a region
 // still missing is a real absence and says so.
 
-import { EmptyState, NodeView } from "@nustackdev/ui-kit";
-import { useEffect, useRef } from "react";
+import {
+	EmptyState,
+	NodeView,
+	ResizableHandle,
+	ResizablePanel,
+	ResizablePanelGroup,
+	type ResizablePanelGroupHandle,
+	SIDEBAR_WIDTH,
+} from "@nustackdev/ui-kit";
+import { useEffect, useLayoutEffect, useRef } from "react";
 import { routeAnchorClick } from "../core/router";
 import { useBooted, useTypePath } from "../core/surfaces";
 import { useTab } from "../core/tab";
-import { shellMain, shellMissing, shellPanePlane, shellRailOpen, shellRoot } from "../design";
+import {
+	shellMain,
+	shellMissing,
+	shellPanePlane,
+	shellRailOpen,
+	shellRoot,
+	shellSlot,
+	shellSplitHandle,
+} from "../design";
 import { ViewerSkeleton } from "../pane/ViewerSkeleton";
 import { useNewPlaneShortcut } from "../sidebar/add";
 import {
+	bindRail,
 	focusRailToggle,
+	migrateRail,
+	publishRail,
+	RAIL_LAYOUT_KEY,
 	setRailCollapsed,
 	useRailCollapsed,
 	useRailShortcut,
@@ -48,10 +76,21 @@ export function Shell() {
 	const viewer = useTypePath("ViewerRef");
 	const mainRef = useRef<HTMLElement | null>(null);
 	const booted = useBooted();
-	const collapsed = useRailCollapsed() && (sidebar !== null || !booted);
+	const split = useRef<ResizablePanelGroupHandle | null>(null);
+	const splitEl = useRef<HTMLDivElement | null>(null);
+	// The rail's panel: the real rail, or its placeholder until the tree lands.
+	const rail = sidebar !== null || !booted;
+	const collapsed = useRailCollapsed() && rail;
 	useRailShortcut();
 	useNewPlaneShortcut();
 	useTab(viewer, sidebar);
+
+	// Before the first paint, so the reopen button is right from the start.
+	useLayoutEffect(() => {
+		if (split.current) migrateRail(split.current, splitEl.current);
+		bindRail(split);
+		return () => bindRail(null);
+	}, []);
 
 	useEffect(() => {
 		const main = mainRef.current;
@@ -65,29 +104,59 @@ export function Shell() {
 
 	return (
 		<div className={shellRoot}>
-			{sidebar ? <NodeView path={sidebar} /> : booted ? null : <RailPlaceholder />}
-			<main ref={mainRef} className={shellMain} data-rail={collapsed ? "collapsed" : undefined}>
-				{collapsed ? (
-					<div className={shellRailOpen}>
-						<RailToggle
-							label="Show sidebar"
-							onClick={() => {
-								setRailCollapsed(false);
-								focusRailToggle();
-							}}
-						/>
-					</div>
-				) : null}
-				{viewer ? (
-					<NodeView path={viewer} />
-				) : booted ? (
-					<EmptyState className={shellMissing}>no Viewer on the tree</EmptyState>
-				) : (
-					<div className={shellPanePlane}>
-						<ViewerSkeleton />
-					</div>
-				)}
-			</main>
+			<ResizablePanelGroup
+				ref={split}
+				elementRef={splitEl}
+				storageKey={RAIL_LAYOUT_KEY}
+				onLayout={(sizes) => {
+					if (sizes.length > 1) publishRail(sizes[0] <= 0);
+				}}
+			>
+				{rail
+					? [
+							<ResizablePanel
+								key="rail"
+								id="shell-rail"
+								defaultSize={`${SIDEBAR_WIDTH.DEFAULT}px`}
+								minSize={`${SIDEBAR_WIDTH.MIN}px`}
+								maxSize={`${SIDEBAR_WIDTH.MAX}px`}
+								collapsible
+								className={shellSlot}
+							>
+								{sidebar ? <NodeView path={sidebar} /> : <RailPlaceholder />}
+							</ResizablePanel>,
+							<ResizableHandle
+								key="rail-edge"
+								aria-label="Resize sidebar"
+								className={shellSplitHandle}
+							/>,
+						]
+					: null}
+				<ResizablePanel key="main" id="shell-main" className={shellSlot}>
+					<main ref={mainRef} className={shellMain} data-rail={collapsed ? "collapsed" : undefined}>
+						{collapsed ? (
+							<div className={shellRailOpen}>
+								<RailToggle
+									label="Show sidebar"
+									onClick={() => {
+										setRailCollapsed(false);
+										focusRailToggle();
+									}}
+								/>
+							</div>
+						) : null}
+						{viewer ? (
+							<NodeView path={viewer} />
+						) : booted ? (
+							<EmptyState className={shellMissing}>no Viewer on the tree</EmptyState>
+						) : (
+							<div className={shellPanePlane}>
+								<ViewerSkeleton />
+							</div>
+						)}
+					</main>
+				</ResizablePanel>
+			</ResizablePanelGroup>
 		</div>
 	);
 }
