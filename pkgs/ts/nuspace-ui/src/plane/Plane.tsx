@@ -240,7 +240,11 @@ export function Plane({
 							}}
 							onSetEditing={(on) => setEditing(cell.id, on)}
 							onDrag={(e, onClick) => startDrag(e, cell.id, onClick)}
-							onDelete={() => deleteCells([cell.id])}
+							onDelete={() => {
+								// The cell above takes the selection, and the keyboard with it.
+								deleteCells([cell.id]);
+								rootRef.current?.focus({ preventScroll: true });
+							}}
 							onTextKey={editable && isText(cell) ? (e) => textKey(e, cell.id) : undefined}
 							// Make room, do not make a cell. What goes here is
 							// whatever gets picked next.

@@ -103,6 +103,7 @@ export function Cell({
 				onDrag={onDrag}
 				onPlus={onPlus}
 				onDelete={onDelete}
+				onSelect={onSelect}
 			/>
 			{/* Before the body in the DOM, though the grid puts it on the right: the
 			    row's controls come first in the tab order, so Tab out of what the

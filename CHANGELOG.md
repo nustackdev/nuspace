@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- A dismissed cell menu leaves its cell selected, controls shown while open
 - Extensions get their own home; commands map one to one onto host presets
 - nuspace stands alone: no nuverse dependency, extensions come only from install
 - Park the agent and its Claude Code chats in the archive for now

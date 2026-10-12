@@ -308,7 +308,7 @@ export function docGutterLane(side: "left" | "right"): string {
 		"group-hover/cell:opacity-100",
 		"group-has-[[data-cell-gutter]_:focus-visible]/cell:opacity-100",
 		"group-data-[selected]/cell:opacity-100",
-		"group-has-[[data-cell-grip][data-state=open]]/cell:opacity-100",
+		"group-has-[[data-cell-grip][data-menu=open]]/cell:opacity-100",
 		"data-[pinned]:opacity-100",
 	);
 }

@@ -30,7 +30,7 @@ import {
 } from "@nustackdev/ui-kit";
 import { Code, Ellipsis, GripVertical, Hash, Plus, Trash2 } from "lucide-react";
 import type * as React from "react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
 	CELL_STATUS,
 	docDragHandle,
@@ -53,6 +53,7 @@ export function LeftGutter({
 	onDrag,
 	onPlus,
 	onDelete,
+	onSelect,
 }: {
 	/** The plane's setting. Off, only the menu remains, and it cannot delete. */
 	editable: boolean;
@@ -64,10 +65,20 @@ export function LeftGutter({
 	/** Open a line below this cell. Not a cell: see ../Ghost.tsx. */
 	onPlus: () => void;
 	onDelete: () => void;
+	/** Select the cell and hand the plane the keyboard. */
+	onSelect: () => void;
 }) {
 	// Controlled, so a press that turns into a drag never opens it
 	// (../useCellDrag.ts).
 	const [menu, setMenu] = useState(false);
+	// Set by a pick that sends the caret somewhere of its own: the source, or
+	// away with the cell. Anything else, a dismiss included, leaves the cell
+	// selected, so its keys (Delete, arrows, Enter) work straight after.
+	const sent = useRef(false);
+	const openMenu = (open: boolean) => {
+		if (open) sent.current = false;
+		setMenu(open);
+	};
 
 	// The bare cell id, not the `cells.<id>` mount prefix: the id is what every
 	// op on the wire is keyed by. See ./address.ts for the prefix.
@@ -89,7 +100,7 @@ export function LeftGutter({
 						<TooltipContent side="top">Add a line below</TooltipContent>
 					</Tooltip>
 				) : null}
-				<DropdownMenu open={menu} onOpenChange={setMenu}>
+				<DropdownMenu open={menu} onOpenChange={openMenu}>
 					<Tooltip>
 						<TooltipTrigger asChild>
 							<DropdownMenuTrigger asChild>
@@ -98,8 +109,10 @@ export function LeftGutter({
 									size="sm"
 									aria-label={label}
 									data-cell-grip=""
+									// Its own mark: the tooltip's `data-state` wins the merge on this button.
+									data-menu={menu ? "open" : undefined}
 									// Prevented here, so the menu's own press never opens it.
-									onPointerDown={editable ? (e) => onDrag(e, () => setMenu(true)) : undefined}
+									onPointerDown={editable ? (e) => onDrag(e, () => openMenu(true)) : undefined}
 									className={editable ? docDragHandle : undefined}
 								>
 									{editable ? <GripVertical /> : <Ellipsis />}
@@ -111,9 +124,17 @@ export function LeftGutter({
 					<DropdownMenuContent
 						align="start"
 						// The caret goes where the action sends it, not back to the grip.
-						onCloseAutoFocus={(e) => e.preventDefault()}
+						onCloseAutoFocus={(e) => {
+							e.preventDefault();
+							if (!sent.current) onSelect();
+						}}
 					>
-						<DropdownMenuItem onSelect={() => onSetEditing(!editing)}>
+						<DropdownMenuItem
+							onSelect={() => {
+								sent.current = true;
+								onSetEditing(!editing);
+							}}
+						>
 							<Code />
 							{editing ? "Hide source" : "Show source"}
 						</DropdownMenuItem>
@@ -124,7 +145,13 @@ export function LeftGutter({
 						{editable ? (
 							<>
 								<DropdownMenuSeparator />
-								<DropdownMenuItem variant="danger" onSelect={onDelete}>
+								<DropdownMenuItem
+									variant="danger"
+									onSelect={() => {
+										sent.current = true;
+										onDelete();
+									}}
+								>
 									<Trash2 />
 									Delete
 								</DropdownMenuItem>
