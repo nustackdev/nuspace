@@ -12,6 +12,7 @@ separately here.
 
 ## Unreleased
 
+- Park the agent and its Claude Code chats in the archive for now
 - Sidebar and panes resize and fold on the kit's split panels
 - nuverse Config sections open again, paired with their body by id
 

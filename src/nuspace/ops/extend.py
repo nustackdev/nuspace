@@ -95,9 +95,7 @@ class Snippet:
             is named there by module and qualified name: a module level
             function, never a lambda or a closure.
         description: One line on what a cell made from it is for.
-        ops: The ops on a cell made from it, each taking the cell id first, for whoever writes a program against its cells: the
-            agent's prompt lists them, signatures and docstrings, under the
-            snippet.
+        ops: The ops on a cell made from it, each taking the cell id first, for whoever writes a program against its cells.
         group: The ``/`` menu heading it sits under, ``""`` for none. Groups
             show in the order their first snippet registers; the ungrouped
             come last, under no heading.

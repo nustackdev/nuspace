@@ -1,7 +1,7 @@
 """Layer one: the ops, nuspace's language.
 
-Every op is a function returning a Nu term. Planes' cells, services, the
-agent and the shell compose these and nothing narrower.
+Every op is a function returning a Nu term. Planes' cells, services and the
+shell compose these and nothing narrower.
 
 - **Writes are one commit each.** An op brackets itself in a kv transaction
   over :class:`~nuspace.shapes.Space`, retried on conflict, so nothing reads
