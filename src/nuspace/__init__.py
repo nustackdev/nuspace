@@ -15,8 +15,9 @@ Workers import this package: nothing here may pull in a server.
 """
 
 from nuspace import ops, shapes
-from nuspace.host import Extension, open_space
-from nuspace.ops import TEXT, Plane, Snippet, env
+from nuspace.ext import TEXT, Extension, Plane, Snippet
+from nuspace.host import open_space
+from nuspace.ops import env
 from nuspace.shapes import CellState, PlaneState, Space, States
 from nuspace.system.services import (
     boot,

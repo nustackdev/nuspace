@@ -12,7 +12,7 @@ Three parts, all planes and cells:
   through, then ends, and its run with it. The plane stays: it is the record.
 - **what is searched**: a cell is searched by the snippet that made it
   (``props.made_by``), when the snippet registered a ``search``
-  (:class:`~nuspace.ops.Snippet`). Plane titles are searched by the search
+  (:class:`~nuspace.ext.Snippet`). Plane titles are searched by the search
   itself, no snippet needed.
 - **the viewer**: :data:`PLANE`, a system ui plane like home, seeded by the
   host at open. Its ``pick`` cell lists the searches, newest first, and its
@@ -49,7 +49,7 @@ from .kernel.utils import snap
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping, Sequence
 
-    from nuspace.ops import Snippet
+    from nuspace.ext import Snippet
 
 
 __all__ = [

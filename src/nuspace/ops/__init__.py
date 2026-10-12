@@ -41,7 +41,7 @@ from .cell import (
     set_cell_meta,
     set_prog,
 )
-from .extend import TEXT, Plane, Snippet, create_plane, insert_snippet
+from .extend import create_plane, insert_snippet
 from .kernel import (
     STOP_GRACE,
     Here,
@@ -91,12 +91,9 @@ from .utils import atomic, atomic_state, mint_ordered_id, snapshot
 
 __all__ = [
     "STOP_GRACE",
-    "TEXT",
     "CellState",
     "Here",
-    "Plane",
     "PlaneState",
-    "Snippet",
     "add_cell",
     "add_plane",
     "atomic",

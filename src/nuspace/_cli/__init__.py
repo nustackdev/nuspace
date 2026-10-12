@@ -1,5 +1,7 @@
 """The ``nuspace`` command: open a space, served in a browser or headless.
 
+Pure command line, not an API: nothing imports it, workers least of all.
+
 A space is a directory one process locks at a time, so either command holds
 it for as long as it is up.
 """

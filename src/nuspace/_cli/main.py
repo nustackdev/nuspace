@@ -1,6 +1,7 @@
 """Root click group for the ``nuspace`` command, and its two commands.
 
-``serve`` opens a space with the browser shell, ``run`` opens it headless.
+Each command is one :mod:`nuspace.host` preset: ``serve`` opens a space with
+the browser shell, ``run`` opens it headless.
 Both run until interrupted, then the brackets reap the workers on the way
 out. PATH is the space directory, made if missing. With no path the space
 is a throwaway directory, gone at close.
@@ -9,6 +10,7 @@ is a throwaway directory, gone at close.
 from __future__ import annotations
 
 from importlib.metadata import PackageNotFoundError, version
+from typing import TYPE_CHECKING
 
 import rich_click as click
 from rich.console import Console
@@ -16,8 +18,13 @@ from rich.text import Text
 
 import nu
 from nu._config.branding import BLUE, PURPLE
-from nuspace.host.space import open_space
+from nuspace.host import headless
+from nuspace.host import serve as serve_space
 from nuspace.system.kernel import NotASpace
+
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 
 __all__ = ["STORE_ENV", "cli", "main"]
@@ -60,10 +67,10 @@ def _announce(path: str | None, how: str) -> None:
     console.print(f"[dim]{how}, Ctrl+C to stop[/dim]")
 
 
-def _opened(path: str | None, **kwargs: object) -> nu.Nu:
-    """The space at ``path``, or a short error when ``path`` is not one."""
+def _opened(preset: Callable[..., nu.Nu], path: str | None, **kwargs: object) -> nu.Nu:
+    """The space at ``path`` opened by ``preset``, or a short error when it is not one."""
     try:
-        return open_space(path, **kwargs)
+        return preset(path, **kwargs)
     except NotASpace as e:
         raise click.ClickException(str(e)) from None
 
@@ -100,7 +107,7 @@ def cli(ctx: click.Context) -> None:
 @click.option("--no-browser", is_flag=True, help="Do not open a browser tab on the way up.")
 def serve(path: str | None, host: str, port: int, no_browser: bool) -> None:
     """Serve until Ctrl+C."""
-    term = _opened(path, host=host, port=port, open_browser=not no_browser)
+    term = _opened(serve_space, path, host=host, port=port, open_browser=not no_browser)
     _announce(path, f"http://{host}:{port}")
     _hold(term)
 
@@ -109,7 +116,7 @@ def serve(path: str | None, host: str, port: int, no_browser: bool) -> None:
 @_path_argument
 def run(path: str | None) -> None:
     """Run until Ctrl+C."""
-    term = _opened(path, web=False)
+    term = _opened(headless, path)
     _announce(path, "Headless")
     _hold(term)
 

@@ -1,4 +1,4 @@
-"""Enables ``python -m nuspace.host.cli``.
+"""Enables ``python -m nuspace._cli``.
 
 The guard is load bearing: workers are spawned, and a child re-imports
 whatever ``__main__`` is. Without it, opening a space forks forever.

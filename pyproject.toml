@@ -56,7 +56,7 @@ all = [
 Repository = "https://github.com/nustackdev/nuspace"
 
 [project.scripts]
-nuspace = "nuspace.host.cli:main"
+nuspace = "nuspace._cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/nuspace"]

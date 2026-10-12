@@ -18,10 +18,9 @@ from click.testing import CliRunner
 
 import nu
 from nuspace import Extension, Plane, Snippet, boot, open_space, ops
-from nuspace.host import registry as registry_module
-from nuspace.host.cli import cli
-from nuspace.host.registry import GROUP, Registry, RegistryWarning, discover
-from nuspace.host.space import space_registry
+from nuspace._cli import cli
+from nuspace.ext import GROUP, Registry, RegistryWarning, discover, space_registry
+from nuspace.ext import registry as registry_module
 from nuspace.ops.utils import atomic
 from nuspace.shapes import Space, States, reroot
 from nuspace.system import home

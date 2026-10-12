@@ -1,6 +1,6 @@
 """open_space: the whole system in one term, as a host runs it.
 
-Layer three. It composes, nothing more: the registry, the kernel's
+Layer three. It composes, nothing more: the registry (:mod:`nuspace.ext`), the kernel's
 brackets (the space directory's store and notification server, the pool),
 the services, and the web device when asked for. The order, all
 inside :func:`~nuspace.system.kernel.open_kernel` after reconcile:
@@ -34,6 +34,7 @@ import warnings
 from typing import TYPE_CHECKING
 
 import nu
+from nuspace.ext import RegistryWarning, space_registry
 from nuspace.system.home import ensure_home, write_info
 from nuspace.system.kernel import DEFAULT_SPARES, init_start, open_kernel
 from nuspace.system.search import ensure_search
@@ -43,39 +44,16 @@ from nuspace.system.services.nav import clear_connections
 from nuspace.system.settings import ensure_settings
 from nuspace.system.utils import park
 
-from .registry import Extension, Registry, RegistryWarning
-
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
 
-    from nuspace.ops import Plane, Snippet
+    from nuspace.ext import Extension, Plane, Snippet
     from nuspace.system.backends import Backend
     from nuspace.system.kernel import EnvFactory
 
 
-__all__ = ["open_space", "space_registry"]
-
-
-def space_registry(
-    *,
-    planes: Sequence[Plane] = (),
-    snippets: Sequence[Snippet] = (),
-    envs: Mapping[str, EnvFactory] | None = None,
-    extensions: Sequence[Extension] | None = None,
-    discover: bool = True,
-) -> Registry:
-    """What a space registers: the loose arguments, then ``extensions``, then installed ones.
-
-    Args:
-        planes: Planes passed directly, ahead of everything.
-        snippets: Snippets passed directly.
-        envs: Env factories passed directly.
-        extensions: Explicit extensions, after the loose arguments.
-        discover: Also load the ``nuspace.extensions`` entry points.
-    """
-    loose = Extension(tuple(planes), tuple(snippets), dict(envs or {}), name="open_space")
-    return Registry.build([loose, *(extensions or ())], discovered=None if discover else [])
+__all__ = ["open_space"]
 
 
 def _with_session(envs: Mapping[str, EnvFactory], web: Mapping[str, EnvFactory]) -> dict:

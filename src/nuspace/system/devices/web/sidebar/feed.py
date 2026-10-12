@@ -47,7 +47,7 @@ from nuspace.system.kernel.utils import snap
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
-    from nuspace.ops import Plane, Snippet
+    from nuspace.ext import Plane, Snippet
     from nustd.ui.core import Ref
 
 

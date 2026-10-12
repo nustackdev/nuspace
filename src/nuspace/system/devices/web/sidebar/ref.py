@@ -24,7 +24,7 @@ if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping, Sequence
 
     from nu.lang import ListArg, Nu
-    from nuspace.ops import Plane, Snippet
+    from nuspace.ext import Plane, Snippet
     from nustd.ui.core import Changed
 
 

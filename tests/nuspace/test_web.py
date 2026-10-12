@@ -19,7 +19,7 @@ import nu
 import nustd.ui
 from nu.lang import wire
 from nuspace import ops
-from nuspace.ops import TEXT, Plane, Snippet
+from nuspace.ext import TEXT, Plane, Snippet
 from nuspace.ops.utils import atomic, atomic_state
 from nuspace.shapes import EXIT_FAILED, EXIT_INTERRUPTED, EXIT_KILLED, EXIT_OK, Space, States
 from nuspace.system.devices.web import CellRoot, SessionWrap, Shell, session_env

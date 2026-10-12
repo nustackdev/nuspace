@@ -1,8 +1,10 @@
 """The registry: what a space can make and what its runs can be plugged into.
 
 An :class:`Extension` is a bundle of Planes, snippets and env factories. A
-package ships one through the ``nuspace.extensions`` entry point group; the host passes its own
-straight to :func:`~nuspace.host.space.open_space`.
+package ships one through the ``nuspace.extensions`` entry point group; the
+host passes its own straight to :func:`~nuspace.host.open_space`.
+:func:`space_registry` is what a space opens with: the host's, then the
+installed.
 
 Names are unique per kind. On a clash the explicit entry wins, then the
 first discovered one, and every entry dropped is reported as a
@@ -18,13 +20,14 @@ from typing import TYPE_CHECKING
 
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Mapping
+    from collections.abc import Iterable, Mapping, Sequence
 
-    from nuspace.ops import Plane, Snippet
     from nuspace.system.kernel import EnvFactory
 
+    from .specs import Plane, Snippet
 
-__all__ = ["GROUP", "Extension", "Registry", "RegistryWarning", "discover"]
+
+__all__ = ["GROUP", "Extension", "Registry", "RegistryWarning", "discover", "space_registry"]
 
 
 #: The entry point group extensions register under.
@@ -138,3 +141,24 @@ class Registry:
         """
         found = discover() if discovered is None else list(discovered)
         return cls.merge([*explicit, *found])
+
+
+def space_registry(
+    *,
+    planes: Sequence[Plane] = (),
+    snippets: Sequence[Snippet] = (),
+    envs: Mapping[str, EnvFactory] | None = None,
+    extensions: Sequence[Extension] | None = None,
+    discover: bool = True,
+) -> Registry:
+    """What a space registers: the loose arguments, then ``extensions``, then installed ones.
+
+    Args:
+        planes: Planes passed directly, ahead of everything.
+        snippets: Snippets passed directly.
+        envs: Env factories passed directly.
+        extensions: Explicit extensions, after the loose arguments.
+        discover: Also load the ``nuspace.extensions`` entry points.
+    """
+    loose = Extension(tuple(planes), tuple(snippets), dict(envs or {}), name="open_space")
+    return Registry.build([loose, *(extensions or ())], discovered=None if discover else [])

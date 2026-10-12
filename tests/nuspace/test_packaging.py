@@ -11,7 +11,7 @@ import sys
 import textwrap
 from pathlib import Path
 
-from nuspace.host import discover, space_registry
+from nuspace.ext import discover, space_registry
 
 
 ROOT = Path(__file__).parents[2]

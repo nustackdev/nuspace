@@ -66,7 +66,7 @@ from nuspace.system.utils import drawing, follows, redraw
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable, Sequence
 
-    from nuspace.ops import Snippet
+    from nuspace.ext import Snippet
     from nustd.ui.core import Ref
 
 

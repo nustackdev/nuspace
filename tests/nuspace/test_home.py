@@ -11,7 +11,7 @@ import nu
 import nustd.kv
 import nustd.ui
 from nuspace import ops
-from nuspace.ops import Plane
+from nuspace.ext import Plane
 from nuspace.ops.utils import atomic, atomic_state
 from nuspace.shapes import RECENTS_CAP, CellState, Reroot, Space, reroot
 from nuspace.system import home, settings

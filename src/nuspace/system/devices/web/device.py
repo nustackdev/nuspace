@@ -55,7 +55,7 @@ from nustd.ws_server import SID_ATTR, listen, run_once, session_for, sessions_fo
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
-    from nuspace.ops import Plane, Snippet
+    from nuspace.ext import Plane, Snippet
     from nuspace.system.kernel import EnvFactory
     from nustd.ui.core import Ref
 
