@@ -1,10 +1,10 @@
 // The slash menu: a command box over the plane.
 //
 // Opened from a ghost input -- the not-yet-a-cell line at the end of the
-// plane, or the one a gutter `+` summons. The registered snippets, in
-// sections (./slash.ts says which and in what order), each row an icon,
-// a label and what a cell made from it is for. Picking a row makes a cell
-// from that snippet. Focus stays in the ghost's own input (moving it would
+// plane, or the one a gutter `+` summons. The empty program on top, then the
+// registered snippets in sections (./slash.ts says which and in what order),
+// each row an icon, a label and what a cell made from it is for. Picking a
+// row makes a cell from it. Focus stays in the ghost's own input (moving it would
 // lose the query), so this component has no keyboard of its own: it draws
 // and reports clicks, and the ghost forwards arrow/enter/escape. It wears
 // the kit's command palette recipes, so it reads as one without being one.
@@ -13,7 +13,7 @@ import { EmptyState, Popover, PopoverAnchor, PopoverContent } from "@nustackdev/
 import { useEffect, useRef } from "react";
 import { docSlashList, docSlashMenu, menuHeading, menuItem } from "../design";
 import { MenuEntry, MenuKeys } from "../menu/Entry";
-import { menuSections } from "../menu/rank";
+import { slashSections } from "./slash";
 import type { SlashAnchor } from "./state";
 import type { SlashSnippet } from "./types";
 
@@ -44,7 +44,7 @@ export function SlashMenu({
 	onClose: () => void;
 }) {
 	const ref = useRef<HTMLDivElement | null>(null);
-	const sections = menuSections(query, snippets);
+	const sections = slashSections(query, snippets);
 
 	// Keep the highlighted row visible while filtering narrows the list.
 	useEffect(() => {
@@ -84,7 +84,8 @@ export function SlashMenu({
 						<EmptyState size="sm">Nothing matches “{query.trim()}”</EmptyState>
 					) : null}
 					{sections.map((section) => (
-						<div key={section.heading ?? ""}>
+						// The pinned program and an ungrouped list are both headless.
+						<div key={section.heading ?? `_${section.items[0]?.name}`}>
 							{section.heading ? <div className={menuHeading}>{section.heading}</div> : null}
 							{section.items.map((item) => {
 								const i = at++;

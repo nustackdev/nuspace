@@ -40,7 +40,7 @@ export type Ops = {
 		plane_id: string;
 		cell_id: string;
 		/** The snippet it is made from. The server stores that snippet's
-		 *  program, or a blank one when no snippet has this name. */
+		 *  program, or the starter program when no snippet has this name. */
 		name: string;
 		index: number;
 	};

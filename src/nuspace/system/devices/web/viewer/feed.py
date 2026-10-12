@@ -70,7 +70,7 @@ if TYPE_CHECKING:
     from nustd.ui.core import Ref
 
 
-__all__ = ["PLANE_META", "plane_cells", "plane_view", "statuses", "viewer_feed"]
+__all__ = ["PLANE_META", "PROGRAM", "plane_cells", "plane_view", "statuses", "viewer_feed"]
 
 
 _arms = Arms("viewer")
@@ -78,6 +78,12 @@ _runs = Space.kernel.runs
 
 #: What a shipped plane's meta says where the stored one does not: the keys the browser reads.
 PLANE_META = {"editable": False, "full_width": False}
+
+#: What a cell made from no snippet starts as: a program that runs and draws, not an empty one that fails.
+PROGRAM = """\
+import nustd
+out = nustd.ui.TextRef("out").set("Hello, cell!")
+"""
 
 
 # --- What the browser is handed: bare reads ----------------------------------
@@ -255,14 +261,14 @@ def _events(viewer: Ref, snippets: Sequence[Snippet]) -> list[nu.Nu]:
     """Browser to store: one arm per viewer op.
 
     A created cell stores the prog and ``made_by`` of the snippet its
-    ``name`` names; an unknown or empty name stores a blank program and ``""``.
+    ``name`` names; an unknown or empty name stores :data:`PROGRAM` and ``""``.
     """
 
     def create(plane_id: nu.Str, event: nu.Attr) -> nu.Nu:
         name, cell_id = field_str(event, "name"), field_str(event, "cell_id")
         made = ops.add_cell(
             plane_id,
-            nu.Switch(name, {s.name: s.source for s in snippets}, default=""),
+            nu.Switch(name, {s.name: s.source for s in snippets}, default=PROGRAM),
             cell_id=cell_id,
             name=name,
             index=field_index(event, "index", ops.cells(plane_id).len()),

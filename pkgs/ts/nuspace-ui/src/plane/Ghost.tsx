@@ -6,7 +6,7 @@
 // becomes a cell made from that snippet. Start typing and it becomes a text
 // cell with the typing in it (./Draft.tsx), when a text snippet is
 // registered, or else the typing searches the snippets. Enter on an empty
-// ghost makes a blank program.
+// ghost makes a plain program.
 //
 // There is always one at the end of the plane, which is what makes an empty
 // plane writeable without hunting for a control, and a second one can be
@@ -34,7 +34,7 @@ export type GhostProps = {
 	query: string | null;
 	/** The caret arrived. */
 	onWake: () => void;
-	/** Enter on an empty ghost: a blank program. */
+	/** Enter on an empty ghost: a plain program. */
 	onBlank: () => void;
 	onOpenSlash: (anchor: SlashAnchor, query: string) => void;
 	/** Typing with the menu closed starts a draft. Null: it opens the menu. */
@@ -56,7 +56,7 @@ export type GhostProps = {
  *
  * A one-line text input that never holds anything but the slash query. `/`
  * opens the menu with an empty query; any other character starts a draft, or
- * with nothing to draft opens the menu with that character as the query. Enter with the menu closed makes a blank program.
+ * with nothing to draft opens the menu with that character as the query. Enter with the menu closed makes a plain program.
  *
  * An `<input>` and not a contenteditable on purpose: it is one line, it holds
  * no marks, it is in the tab order for free, and screen readers already know

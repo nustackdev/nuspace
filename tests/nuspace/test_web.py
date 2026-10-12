@@ -25,6 +25,7 @@ from nuspace.shapes import EXIT_FAILED, EXIT_INTERRUPTED, EXIT_KILLED, EXIT_OK, 
 from nuspace.system.devices.web import CellRoot, SessionWrap, Shell, session_env
 from nuspace.system.devices.web.sidebar import create, move, pins, registered_entries, rows
 from nuspace.system.devices.web.viewer import plane_view, slash_entries, statuses
+from nuspace.system.devices.web.viewer.feed import PROGRAM
 from nuspace.system.kernel import build_body
 from nuspace.system.kernel import store as space_store
 from nuspace.system.services import nav
@@ -509,7 +510,7 @@ async def test_connection_live(store):
         assert await store.read(ops.plane_exists("nope")) is False
 
         # Browser events run ops. A create stores the named snippet's prog, an
-        # unknown name a blank program.
+        # unknown name the starter program.
         session.notify(
             ("viewer", "ops", "cell.create"),
             {"plane_id": "p1", "cell_id": "c3", "name": "text", "index": 0},
@@ -524,7 +525,7 @@ async def test_connection_live(store):
         )
         await _until(lambda: session.writes("set_plane")[-1]["cells"][0]["id"] == "c4")
         blank = session.writes("set_plane")[-1]["cells"][0]
-        assert blank["source"] == "" and blank["made_by"] == ""
+        assert blank["source"] == PROGRAM and blank["made_by"] == ""
         session.notify(
             ("sidebar", "ops", "plane.create"),
             {"plane_id": "p2", "parent_id": "p1", "made_by": "jobs", "title": "Two"},

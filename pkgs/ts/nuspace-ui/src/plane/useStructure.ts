@@ -42,7 +42,7 @@ export function useStructure({
 
 	// Land on a newly created cell once the server confirms it. A snippet's
 	// cell is selected with its source closed: what it draws is the point. A
-	// blank cell has nothing to draw yet, so its source opens for typing.
+	// plain program is there to be written, so its source opens for typing.
 	useEffect(() => {
 		const want = pendingFocus.current;
 		if (!want) return;
@@ -121,7 +121,7 @@ export function useStructure({
 	 * Add a cell made from the snippet `name` after `afterId` (at the top when
 	 * null, or last when `afterId` is gone), and land on it unless `land` is
 	 * off. The server stores the snippet's program; a name no snippet has
-	 * makes a blank one. Returns the new id.
+	 * makes the starter program. Returns the new id.
 	 */
 	const createAfter = useCallback(
 		(afterId: string | null, name: string, land = true): string => {
