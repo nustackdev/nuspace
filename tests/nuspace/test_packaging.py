@@ -1,7 +1,7 @@
-"""Packaging: nuverse installed beside nuspace, found the way a third party is.
+"""Packaging: nuspace stands alone, every Plane and snippet comes from an extension.
 
-nuspace never imports nuverse. These check the entry point finds it, what it
-registers is well formed, and importing it keeps a worker light.
+nuspace ships none of its own. These check a bare install registers nothing,
+and the example leaves it all to what is installed.
 """
 
 from __future__ import annotations
@@ -9,14 +9,9 @@ from __future__ import annotations
 import subprocess
 import sys
 import textwrap
-from dataclasses import replace
 from pathlib import Path
 
-import nu
-import nuverse
-from nuspace import TEXT, Extension, Plane, Snippet
 from nuspace.host import discover, space_registry
-from nuverse import planes, snippets
 
 
 ROOT = Path(__file__).parents[2]
@@ -34,130 +29,19 @@ def _run(code: str) -> str:
     return out.stdout.strip()
 
 
-def _nuverse() -> Extension:
-    (ext,) = [e for e in discover() if e.name == "nuverse"]
-    return ext
-
-
-def test_discovery_finds_nuverse():
-    ext = _nuverse()
-    assert ext == replace(nuverse.extension(), name="nuverse")
-    assert [p.name for p in ext.planes] == [
-        "plain",
-        "cc_chat",
-        "jobs",
-        "runs",
-        "workers",
-        "planes",
-    ]
-    assert [s.name for s in ext.snippets] == [
-        "text",
-        "table",
-        "text_input",
-        "number",
-        "slider",
-        "switch",
-        "select",
-        "date",
-        "program",
-        "lens",
-        "plane_lens",
-        "cell_lens",
-        "ticker",
-        "password",
-        "converter",
-    ]
-    assert dict(ext.envs) == {}
-
-
-def test_open_space_registers_nuverse_by_default():
+def test_a_bare_install_registers_nothing():
+    assert discover() == []
     reg = space_registry()
-    assert next(iter(reg.planes)) == "plain"
-    assert {"text", "program", "ticker"} <= set(reg.snippets)
-    assert space_registry(discover=False).planes == {}
-
-
-def test_planes_are_well_formed():
-    assert planes.PLANES == (
-        planes.plain.PLANE,
-        planes.cc_chat.PLANE,
-        planes.jobs.PLANE,
-        planes.runs.PLANE,
-        planes.workers.PLANE,
-        planes.planes.PLANE,
-    )
-    plain = planes.plain.PLANE
-    assert (plain.label, plain.cells, plain.children) == ("Plain", (), ())
-    for plane in planes.PLANES:
-        assert isinstance(plane, Plane)
-        assert plane.name and plane.label and plane.description
-        # A chat is read only: what is on it is what was said and drawn.
-        editable = plane is not planes.cc_chat.PLANE
-        assert plane.meta == {"editable": editable, "full_width": False}
-        for name, source in plane.cells:
-            # Each cell's program is its term: ``out = ...``, no scope taken.
-            assert name and "\nout = " in source
-    assert len({p.name for p in planes.PLANES}) == len(planes.PLANES)
-
-
-def test_snippets_are_well_formed():
-    assert snippets.SNIPPETS == (
-        snippets.prose.SNIPPET,
-        snippets.table.SNIPPET,
-        snippets.text_input.SNIPPET,
-        snippets.number.SNIPPET,
-        snippets.slider.SNIPPET,
-        snippets.switch.SNIPPET,
-        snippets.select.SNIPPET,
-        snippets.date.SNIPPET,
-        snippets.program.SNIPPET,
-        snippets.lens.SNIPPET,
-        snippets.plane_lens.SNIPPET,
-        snippets.cell_lens.SNIPPET,
-        snippets.ticker.SNIPPET,
-        snippets.password.SNIPPET,
-        snippets.converter.SNIPPET,
-    )
-    assert snippets.code.SNIPPET is None
-    # The prose package is the text snippet.
-    assert snippets.prose.SNIPPET.name == TEXT
-    for snippet in snippets.SNIPPETS:
-        assert isinstance(snippet, Snippet)
-        assert snippet.name and snippet.label and snippet.description
-        # A cell stores the shim: a few lines calling into the snippet's code.
-        assert len(snippet.source.splitlines()) < 30
-        assert "from nuverse.snippets." in snippet.source
-        namespace: dict = {}
-        exec(compile(snippet.source, snippet.name, "exec"), namespace)  # noqa: S102
-        # The shim's program is its term: where it runs it reads from Here.
-        assert isinstance(namespace["out"], nu.Nu)
-    assert len({s.name for s in snippets.SNIPPETS}) == len(snippets.SNIPPETS)
-
-
-def test_importing_nuverse_loads_no_server():
-    heavy = _run(
-        """
-        import sys
-        import nuverse
-        nuverse.extension()
-        print(sorted(
-            m for m in sys.modules
-            if m.split(".")[0] in ("uvicorn", "starlette") or m == "nustd.ws_server"
-        ))
-        """
-    )
-    assert heavy == "[]"
+    assert (reg.planes, reg.snippets) == ({}, {})
 
 
 def test_example_defines_nothing_of_its_own():
-    """The example registers no Planes or snippets: nuverse is found on install."""
+    """The example registers no Planes or snippets: they come from extensions."""
     out = _run(
         """
         import runpy
         space = runpy.run_path("examples/space.py")
-        from nuspace.host import space_registry
-        reg = space_registry()
-        print("PLANES" in space, "SNIPPETS" in space, sorted(reg.planes), sorted(reg.snippets))
+        print("PLANES" in space, "SNIPPETS" in space)
         """
     )
-    assert out.startswith("False False ['cc_chat', 'jobs', 'plain', 'planes', 'runs', 'workers']")
+    assert out == "False False"

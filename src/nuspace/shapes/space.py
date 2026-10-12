@@ -23,8 +23,7 @@ class SpaceInfo(nu.Shape):
 
     ``path`` is the space directory, ``""`` for a throwaway one. ``opened``
     is when this open started, in seconds since the epoch. ``versions`` maps
-    a package name (``nuspace``, and ``nuverse`` when installed) to its
-    installed version.
+    a package name (``nuspace``) to its installed version.
     """
 
     path = nustd.kv.StrRef.slot()

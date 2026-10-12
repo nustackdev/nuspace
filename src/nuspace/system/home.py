@@ -8,7 +8,7 @@ cells, seeded once: after that they are the owner's to edit, and a store
 that has a home keeps it as it is.
 
 Four cells, read only. All but ``start`` are drawn again when what they
-show changes, and only then, like the nuverse live planes:
+show changes, and only then:
 
 - ``header``: the space, its directory, versions and uptime, off
   ``Space.state.info``;
@@ -19,8 +19,8 @@ show changes, and only then, like the nuverse live planes:
   there are;
 - ``start``: how the shell works, static.
 
-Core only: the cells import ``nu``, ``nustd`` and ``nuspace``, never nuverse,
-so home works without it. The versions are read here, in the host, when the
+Core only: the cells import ``nu``, ``nustd`` and ``nuspace``, never an
+extension, so home works with none installed. The versions are read here, in the host, when the
 open term is built: a cell cannot call python.
 """
 
@@ -68,11 +68,11 @@ NAME = "Home"
 #: Its icon, as :func:`~nuspace.ops.plane.plane_icon` spells it.
 ICON = "emoji:🏠"
 
-#: The plane's meta, as nuverse's live planes start.
+#: The plane's meta.
 META = {"editable": True, "full_width": False}
 
 #: The packages whose versions the header shows, when installed.
-PACKAGES = ("nuspace", "nuverse")
+PACKAGES = ("nuspace",)
 
 #: How many recent planes the ``recent`` cell links.
 RECENT_SHOWN = 8

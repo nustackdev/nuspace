@@ -17,20 +17,16 @@ from _support.kernel import SET_42, Kernel, _Hold, history
 from click.testing import CliRunner
 
 import nu
-import nustd.kv
 from nuspace import Extension, Plane, Snippet, boot, open_space, ops
 from nuspace.host import registry as registry_module
 from nuspace.host.cli import cli
 from nuspace.host.registry import GROUP, Registry, RegistryWarning, discover
 from nuspace.host.space import space_registry
 from nuspace.ops.utils import atomic
-from nuspace.shapes import Reroot, Space, States, reroot
+from nuspace.shapes import Space, States, reroot
 from nuspace.system import home
 from nuspace.system.kernel import Env, store
-from nuspace.system.kernel.body import Rewrites
 from nuspace.system.services import BOOTED, SERVICES, ensure_system, init
-from nuverse.snippets import program as nuverse_program
-from nuverse.snippets import prose as nuverse_prose
 
 
 def _plane(name: str, label: str = "") -> Plane:
@@ -121,15 +117,15 @@ def test_explicit_wins_over_discovered(monkeypatch):
     installed = Extension(
         (_plane("plain", "Installed"), _plane("jobs")), (), {"db": _env("installed")}
     )
-    _points(monkeypatch, [_Point("nuverse", lambda: installed)])
+    _points(monkeypatch, [_Point("installed", lambda: installed)])
     mine = Extension((_plane("chat"),), (), {}, name="mine")
     with pytest.warns(RegistryWarning) as caught:
         reg = space_registry(
             planes=[_plane("plain", "Loose")], envs={"db": _env("loose")}, extensions=[mine]
         )
     assert {str(w.message) for w in caught} == {
-        "Plane 'plain' from nuverse ignored: open_space registered it first",
-        "Env 'db' from nuverse ignored: open_space registered it first",
+        "Plane 'plain' from installed ignored: open_space registered it first",
+        "Env 'db' from installed ignored: open_space registered it first",
     }
     assert list(reg.planes) == ["plain", "chat", "jobs"]
     assert reg.planes["plain"].label == "Loose"
@@ -137,7 +133,7 @@ def test_explicit_wins_over_discovered(monkeypatch):
 
 
 def test_discovery_can_be_turned_off(monkeypatch):
-    asked = _points(monkeypatch, [_Point("nuverse", lambda: Extension((_plane("plain"),)))])
+    asked = _points(monkeypatch, [_Point("installed", lambda: Extension((_plane("plain"),)))])
     with warnings.catch_warnings():
         warnings.simplefilter("error")
         reg = space_registry(snippets=[_snippet("text")], discover=False)
@@ -150,7 +146,6 @@ def test_discovery_can_be_turned_off(monkeypatch):
 
 USER = "user"
 TAB = "tab"
-STARTER = "starter"
 
 
 async def test_boot_before_the_first_open_keeps_the_services(store):
@@ -186,10 +181,6 @@ async def test_open_space_headless_runs_a_booted_plane(tmp_path, monkeypatch):
         >> ops.add_plane(TAB, ui=True, backend="async")
         >> ops.add_cell(TAB, SET_42, cell_id="t")
         >> atomic(stale.opened.set(nu.Float(0.0)) >> stale.routes.set(nu.Literal([TAB])))
-        # nuverse's starter program runs headless too.
-        >> ops.add_plane(STARTER, backend="async")
-        >> ops.add_cell(STARTER, nuverse_program.SNIPPET.source, cell_id="s")
-        >> boot(STARTER)
     )
     await nu.arun(nu.With(store(path), body=seed))
 
@@ -202,8 +193,6 @@ async def test_open_space_headless_runs_a_booted_plane(tmp_path, monkeypatch):
     try:
         state = States.cells["u"].extract()
         assert await space.until(state, lambda s: s == {"n": 42}) == {"n": 42}
-        starter = States.cells["s"].extract()
-        assert await space.until(starter, lambda s: s == {"hello": "world"}) == {"hello": "world"}
         # The services are made and init brought up its boot list beside the user plane.
         assert {r["id"] for r in await space.read(ops.plane_rows())} >= {
             USER,
@@ -222,32 +211,9 @@ async def test_open_space_headless_runs_a_booted_plane(tmp_path, monkeypatch):
         assert info["path"] == str(tmp_path / "space")
         assert info["opened"] > 0
         assert info["versions"] == home.versions()
-        assert set(info["versions"]) == {"nuspace", "nuverse"}
+        assert set(info["versions"]) == {"nuspace"}
     finally:
         await space.close()
-
-
-# --- nuverse's snippets ---------------------------------------------------------
-
-
-async def test_nuverse_prose_loads_through_the_kernel_rewrites(store):
-    """Prose draws, so it runs only in a session: here it is loaded and compiled."""
-    from nuspace.system.devices.web.env import session_env
-
-    await store.run(
-        ops.add_plane("p", backend="async")
-        >> ops.add_cell("p", nuverse_prose.SNIPPET.source, cell_id="c")
-    )
-    env = session_env("127.0.0.1:9")("s1")
-    rewrite = Rewrites(Reroot("p", "c"), env.rewrite)
-    source = Space.cells["c"].prog
-    term = await store.run(
-        nustd.kv.Snapshot(
-            source.load(scope={"plane": "p", "cell": "c"}, rewrite=rewrite), scope=Space
-        )
-    )
-    assert isinstance(term, nu.Nu)
-    nu.validate(nu.compile(term))
 
 
 def test_open_space_with_web_compiles(monkeypatch):

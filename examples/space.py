@@ -1,7 +1,7 @@
-"""A space in the browser, with nuverse and nothing else.
+"""A space in the browser, with whatever extensions are installed.
 
-Every Plane and snippet comes from nuverse, found through its entry point. The
-space is the directory ``examples/example.nuspace``, kept between runs.
+Every Plane and snippet comes from an extension, found through its entry point.
+The space is the directory ``examples/example.nuspace``, kept between runs.
 
 Run it::
 

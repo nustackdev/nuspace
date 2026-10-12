@@ -4,7 +4,6 @@
 
 - **nuspace** (the runtime, the `nuspace` command) — 0.5.2
 - **nuspace-ui** (the compiled web bundle) — 0.5.2
-- **nuverse** (the Planes and snippets a space ships with) — 0.3.2
 
 Below is the changelog for **nuspace** - the full commit stream. Newest first.
 The `nuspace-ui` wheel is the same source tree's vite output and is not tracked
@@ -12,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- nuspace stands alone: no nuverse dependency, extensions come only from install
 - Park the agent and its Claude Code chats in the archive for now
 - Sidebar and panes resize and fold on the kit's split panels
 - nuverse Config sections open again, paired with their body by id

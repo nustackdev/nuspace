@@ -1,8 +1,7 @@
 """The registry: what a space can make and what its runs can be plugged into.
 
 An :class:`Extension` is a bundle of Planes, snippets and env factories. A
-package ships one through the ``nuspace.extensions`` entry point group, the
-same way nuverse does and a third party would; the host passes its own
+package ships one through the ``nuspace.extensions`` entry point group; the host passes its own
 straight to :func:`~nuspace.host.space.open_space`.
 
 Names are unique per kind. On a clash the explicit entry wins, then the

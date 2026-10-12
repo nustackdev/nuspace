@@ -29,7 +29,7 @@ nuspace serve my.nuspace
 
 A browser opens on http://127.0.0.1:8080 and your space is alive. Press `/` on a plane to add a cell.
 
-Planes and snippets are extensions that come from **nuverse**, installed alongside. Bring your own and they live in the space like everything else.
+Planes and snippets are extensions, found on install through the `nuspace.extensions` entry point. Bring your own and they live in the space like everything else.
 
 ## Yours
 
