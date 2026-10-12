@@ -487,11 +487,44 @@ export const railSearchText = "min-w-0 flex-1 truncate text-left";
 /** The shortcut at the far end: a kit `Shortcut` chip, apart from the label. */
 export const railSearchHint = "shrink-0";
 
-/** One kind to search in the popup: its box, then its label. */
-export const searchItem = "gap-3";
+/*
+ * The search popup: what to look in, as a short tree. The All row and Plane
+ * titles on top, then the snippets folded under their groups. Every row is
+ * a box first, so a column of boxes runs down the left; a group's chevron
+ * sits before its box, and its snippets indent to line their boxes up under
+ * the group's.
+ */
 
-/** Under the popup's rows: the Enter hint, then the button. */
-export const searchFooter =
-	"flex items-center justify-between gap-2 border-t border-border-subtle px-3 py-2";
+/** A row: its box, its glyph, its label, a count or description at the end. */
+export const searchItem = "gap-2.5 py-1.5";
 
-export const searchHint = "flex items-center gap-1.5 text-xs text-text-muted";
+/** A group's row: the chevron before the box. */
+export const searchGroupItem = "gap-2 py-1.5 font-medium";
+
+/** A snippet under a group: indented past the chevron, so the boxes line up. */
+export const searchChildItem = "gap-2.5 py-1.5 pl-8";
+
+/** The fold chevron, turned down while open. */
+export const searchChevron = cn(
+	"flex size-4 shrink-0 items-center justify-center rounded-sm",
+	"transition-transform duration-fast ease-out",
+	"data-[open=true]:rotate-90",
+);
+
+export const searchLabel = "truncate";
+
+/** Muted after the label: a snippet's description, which yields first. */
+export const searchDescription = "min-w-0 truncate text-xs text-text-muted";
+
+/** At the row's far end: how many are ticked, of how many. */
+export const searchCount = "ml-auto shrink-0 pl-2 text-xs tabular-nums text-text-muted";
+
+/** Under the popup's rows: the keys, then the button. */
+export const searchFooter = cn(
+	"flex items-center justify-between gap-3 border-t border-border-subtle bg-bg-surface px-3 py-2",
+	"text-xs text-text-muted",
+);
+
+export const searchKeys = "flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1";
+
+export const searchHint = "flex items-center gap-1.5";

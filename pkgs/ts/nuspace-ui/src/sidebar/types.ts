@@ -75,6 +75,11 @@ export type Registered = {
 export type Searchable = {
 	name: string;
 	label: string;
+	/** The heading it folds under, "" for none. */
+	group: string;
+	/** A lucide icon name, "" for the default. Any spelling ../icon/parse.ts reads. */
+	icon: string;
+	description: string;
 };
 
 /** Every Plane that draws, keyed by id. What the sidebar walks. */
@@ -195,7 +200,13 @@ export function coerceSearchable(raw: unknown): Searchable[] {
 		const r = e as Record<string, unknown>;
 		const name = String(r.name ?? "");
 		if (!name) continue;
-		out.push({ name, label: String(r.label ?? name) });
+		out.push({
+			name,
+			label: String(r.label ?? name),
+			group: String(r.group ?? ""),
+			icon: String(r.icon ?? ""),
+			description: String(r.description ?? ""),
+		});
 	}
 	return out;
 }

@@ -404,7 +404,9 @@ async def test_the_sidebar_offers_searchable_snippets_and_runs_a_search(store):
             assert asyncio.get_running_loop().time() < deadline, "never booted"
             await asyncio.sleep(0.01)
         sidebar = next(f for f in session.frames if f.ref == ("sidebar",))
-        assert sidebar.chain[0][2]["searchable"] == [{"name": "note", "label": "Note"}]
+        assert sidebar.chain[0][2]["searchable"] == [
+            {"name": "note", "label": "Note", "group": "", "icon": "", "description": ""}
+        ]
 
         run = ("sidebar", "ops", "search.run")
         session.notify(run, {"query": "  ", "snippets": ["note"], "titles": True})

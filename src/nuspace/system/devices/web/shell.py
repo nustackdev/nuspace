@@ -115,8 +115,8 @@ class Shell(nu.Shape):
                 mounted on the viewer.
             registered: The add plane popup's entries, ``{name, label, icon,
                 description}`` in order, mounted on the sidebar.
-            searchable: The search popup's snippets, ``{name, label}`` in
-                order, mounted on the sidebar.
+            searchable: The search popup's snippets, ``{name, label, group,
+                icon, description}`` in order, mounted on the sidebar.
         """
         viewer = {"snippets": [dict(s) for s in snippets or ()]}
         sidebar = {

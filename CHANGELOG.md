@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Search popup folds snippets into groups, ticks a group or everything at once
 - One run command opens a space in a browser, or headless with nothing drawn
 - Try a Nu demo in a throwaway space with one command
 - Make a directory a space without opening it to run

@@ -46,8 +46,18 @@ def registered_entries(planes: Iterable[Plane]) -> list[dict]:
 
 
 def searchable_entries(snippets: Iterable[Snippet]) -> list[dict]:
-    """The search popup's entries, ``{name, label}``: the snippets with a ``search``, in order."""
-    return [{"name": s.name, "label": s.label} for s in snippets if s.search is not None]
+    """The search popup's entries, ``{name, label, group, icon, description}``: the snippets with a ``search``, in order."""
+    return [
+        {
+            "name": s.name,
+            "label": s.label,
+            "group": s.group,
+            "icon": s.icon,
+            "description": s.description,
+        }
+        for s in snippets
+        if s.search is not None
+    ]
 
 
 class SidebarRef(SpaceRef):
