@@ -2,15 +2,16 @@
 
 ## Packages shipped from this repo
 
-- **nuspace** (the runtime, the `nuspace` command) — 0.5.2
-- **nuspace-ui** (the compiled web bundle) — 0.5.2
+- **nuspace** (the runtime, the `nuspace` command) — 0.5.3
+- **nuspace-ui** (the compiled web bundle) — 0.5.3
 
 Below is the changelog for **nuspace** - the full commit stream. Newest first.
 The `nuspace-ui` wheel is the same source tree's vite output and is not tracked
 separately here.
 
-## Unreleased
+## 0.5.3 — 2026-10-14
 
+- Release nuspace 0.5.3, built on nu 0.6.3 and UI kit 0.3.3
 - Search popup folds snippets into groups, ticks a group or everything at once
 - One run command opens a space in a browser, or headless with nothing drawn
 - Try a Nu demo in a throwaway space with one command
