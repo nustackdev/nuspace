@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "nuspace"
-version = "0.5.3"
+version = "0.5.4"
 description = "Nu runtime built on Nu. A self-hosted programmable space that runs Nu programs as a tree of planes and cells."
 readme = "README.md"
 license = "AGPL-3.0-or-later"

@@ -11,6 +11,8 @@ separately here.
 
 ## Unreleased
 
+## 0.5.4 — 2026-10-17
+
 - Point the demos extra at nudemos, the renamed home of the demo spaces
 - Add light and dark hero demo GIFs to the README
 - Trim the README header spacing above the navbar
