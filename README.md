@@ -1,4 +1,5 @@
 <div align="center">
+  <img width="128" alt="nuspace" src="https://nustack.dev/brand/logo-square-512@2x.png" />
   <h3>
     nuspace - your computational space
   </h3>
