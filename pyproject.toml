@@ -70,6 +70,7 @@ packages = ["src/nuspace"]
 # directory on its own tag.
 exclude = [
     "pkgs",
+    ".github",
 ]
 
 [tool.uv.sources]

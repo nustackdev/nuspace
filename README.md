@@ -8,6 +8,16 @@
 
 <br/>
 
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/nustackdev/nuspace/main/.github/media/hero-dark.gif">
+    <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/nustackdev/nuspace/main/.github/media/hero-light.gif">
+    <img alt="nuspace demo" src="https://raw.githubusercontent.com/nustackdev/nuspace/main/.github/media/hero-light.gif" />
+  </picture>
+</p>
+
+<br/>
+
 <div align="center">
 
   [![Discord](https://img.shields.io/badge/discord-join-5865F2?logo=discord&logoColor=white)](https://discord.gg/tCa8YE7XVr)

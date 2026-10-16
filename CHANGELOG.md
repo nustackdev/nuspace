@@ -11,6 +11,8 @@ separately here.
 
 ## Unreleased
 
+- Add light and dark hero demo GIFs to the README
+
 - Trim the README header spacing above the navbar
 - Add the square logo to the README header
 
