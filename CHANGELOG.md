@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Trim the README header spacing above the navbar
 - Add the square logo to the README header
 
 ## 0.5.3 — 2026-10-14

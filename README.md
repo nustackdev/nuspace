@@ -21,8 +21,6 @@
 
 </div>
 
-<br/>
-
 ---
 
 <h3 align="center">
