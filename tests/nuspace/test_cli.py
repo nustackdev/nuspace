@@ -138,7 +138,7 @@ def test_run_refuses_an_old_store(tmp_path, held):
 
 
 def test_demo_lists_the_demos():
-    pytest.importorskip("nuverse_demos")
+    pytest.importorskip("nudemos")
     result = _invoke("demo")
     assert result.exit_code == 0, result.output
     for name in demo_command.demos() or {}:
@@ -146,21 +146,21 @@ def test_demo_lists_the_demos():
 
 
 def test_demo_without_the_extra_says_how_to_install(monkeypatch):
-    monkeypatch.setitem(sys.modules, "nuverse_demos", None)
+    monkeypatch.setitem(sys.modules, "nudemos", None)
     result = _invoke("demo")
     assert result.exit_code == 1
     assert demo_command.INSTALL_HINT in result.output
 
 
 def test_demo_refuses_an_unknown_name():
-    pytest.importorskip("nuverse_demos")
+    pytest.importorskip("nudemos")
     result = _invoke("demo", "nope")
     assert result.exit_code == 2
     assert "Unknown demo" in result.output
 
 
 def test_demo_opens_the_named_plane(monkeypatch, held):
-    pytest.importorskip("nuverse_demos")
+    pytest.importorskip("nudemos")
     found = demo_command.demos() or {}
     name, spec = next(iter(found.items()))
     opened = _Recorder()

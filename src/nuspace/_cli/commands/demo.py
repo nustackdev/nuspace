@@ -1,6 +1,6 @@
 """``nuspace demo``: list the demos, or open one in a space.
 
-The demos are the Planes ``nuverse-demos`` registers, an optional extra
+The demos are the Planes ``nudemos`` registers, an optional extra
 (``nuspace[demos]``). Installed, it registers them for ``+`` in every space
 too; this command opens one straight away through the
 :func:`~nuspace.host.demo` preset. The space is a throwaway one unless PATH
@@ -37,7 +37,7 @@ INSTALL_HINT = 'pip install "nuspace[demos]"'
 def demos() -> dict[str, Plane] | None:
     """The demo Planes by name, in the order registered. None when the extra is missing."""
     try:
-        from nuverse_demos import extension
+        from nudemos import extension
     except ImportError:
         return None
     return {spec.name: spec for spec in extension().planes}

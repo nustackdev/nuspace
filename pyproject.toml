@@ -53,7 +53,7 @@ all = [
 ]
 # The Nu demos as Planes, for `nuspace demo` and the `+` picker.
 demos = [
-    "nuverse-demos",
+    "nudemos",
 ]
 
 [project.urls]
@@ -77,7 +77,7 @@ exclude = [
 nuspace-ui = { path = "./pkgs/ts/nuspace-ui", editable = true }
 nucore = { path = "../nu", editable = true }
 nustd = { path = "../nu/pkgs/nustd", editable = true }
-nuverse-demos = { path = "../nuverse/pkgs/nuverse-demos", editable = true }
+nudemos = { path = "../nuverse/pkgs/nudemos", editable = true }
 
 [tool.uv]
 default-groups = ["dev"]
@@ -186,7 +186,7 @@ known-first-party = [
     "nuspace",
     "nu",
     "nustd",
-    "nuverse_demos",
+    "nudemos",
 ]
 force-single-line = false
 lines-after-imports = 2

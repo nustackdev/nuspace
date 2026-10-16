@@ -45,7 +45,7 @@ _RUNTIME: tuple[tuple[str, str, tuple[str, ...]], ...] = (
 #: The extras, as ``(row, extra, modules)``: the demos, then what ``all``
 #: brings beyond the runtime, one row per nustd fabric.
 _EXTRAS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
-    ("demos", "demos", ("nuverse_demos",)),
+    ("demos", "demos", ("nudemos",)),
     ("cluster", "all", ("ray",)),
     ("http, llm", "all", ("httpx",)),
     ("queue", "all", ("janus",)),

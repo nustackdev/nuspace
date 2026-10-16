@@ -11,8 +11,8 @@ separately here.
 
 ## Unreleased
 
+- Point the demos extra at nudemos, the renamed home of the demo spaces
 - Add light and dark hero demo GIFs to the README
-
 - Trim the README header spacing above the navbar
 - Add the square logo to the README header
 
