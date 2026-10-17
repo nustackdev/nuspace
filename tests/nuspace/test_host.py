@@ -8,6 +8,7 @@ the space opens. The web variant is only compiled.
 from __future__ import annotations
 
 import asyncio
+import functools
 import subprocess
 import sys
 import warnings
@@ -17,7 +18,15 @@ from _support.kernel import SET_42, Kernel, _Hold, history
 
 import nu
 from nuspace import Extension, Plane, Snippet, boot, open_space, ops
-from nuspace.ext import GROUP, Registry, RegistryWarning, discover, space_registry
+from nuspace.ext import (
+    GROUP,
+    Registry,
+    RegistryWarning,
+    discover,
+    registered_name,
+    short_name,
+    space_registry,
+)
 from nuspace.ext import registry as registry_module
 from nuspace.host import presets
 from nuspace.ops.utils import atomic
@@ -59,6 +68,9 @@ def _points(monkeypatch, points: list[_Point]) -> list[str]:
         return points
 
     monkeypatch.setattr(registry_module, "entry_points", entry_points)
+    # registered_name's cache, fresh over the patched points and dropped after.
+    fresh = functools.cache(registry_module._registered.__wrapped__)
+    monkeypatch.setattr(registry_module, "_registered", fresh)
     return asked
 
 
@@ -105,8 +117,8 @@ def test_discover_loads_extensions_and_factories_and_skips_the_broken(monkeypatc
         found = discover()
     assert asked == [GROUP]
     assert [e.name for e in found] == ["plain", "factory"]
-    assert found[0].planes == ext.planes
-    assert [s.name for s in found[1].snippets] == ["text"]
+    assert [p.name for p in found[0].planes] == ["plain.plain"]
+    assert [s.name for s in found[1].snippets] == ["factory.text"]
     said = [str(w.message) for w in caught]
     assert any("'broken' failed to load" in s for s in said)
     assert any("'wrong' is not an Extension: int" in s for s in said)
@@ -120,15 +132,49 @@ def test_explicit_wins_over_discovered(monkeypatch):
     mine = Extension((_plane("chat"),), (), {}, name="mine")
     with pytest.warns(RegistryWarning) as caught:
         reg = space_registry(
-            planes=[_plane("plain", "Loose")], envs={"db": _env("loose")}, extensions=[mine]
+            planes=[_plane("installed.plain", "Loose"), _plane("plain")],
+            envs={"db": _env("loose")},
+            extensions=[mine],
         )
     assert {str(w.message) for w in caught} == {
-        "Plane 'plain' from installed ignored: open_space registered it first",
+        "Plane 'installed.plain' from installed ignored: open_space registered it first",
         "Env 'db' from installed ignored: open_space registered it first",
     }
-    assert list(reg.planes) == ["plain", "chat", "jobs"]
-    assert reg.planes["plain"].label == "Loose"
+    assert list(reg.planes) == ["installed.plain", "plain", "chat", "installed.jobs"]
+    assert reg.planes["installed.plain"].label == "Loose"
     assert reg.envs["db"]().label == "loose"
+
+
+def test_installed_planes_are_named_after_their_package(monkeypatch):
+    """Two packages may add a plane or a snippet of one short name."""
+    _points(
+        monkeypatch,
+        [
+            _Point("tools", lambda: Extension((_plane("chat", "Tools"),), (_snippet("text"),))),
+            _Point("agents", lambda: Extension((_plane("chat", "Agents"),), (_snippet("text"),))),
+        ],
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        reg = space_registry(planes=[_plane("chat", "Mine")])
+    assert {n: p.label for n, p in reg.planes.items()} == {
+        "chat": "Mine",
+        "tools.chat": "Tools",
+        "agents.chat": "Agents",
+    }
+    assert list(reg.snippets) == ["tools.text", "agents.text"]
+
+
+def test_a_package_spec_knows_the_name_it_registers_under(monkeypatch):
+    """What code holding the package's own spec writes as made_by."""
+    plane, snippet = _plane("chat"), _snippet("slider")
+    _points(monkeypatch, [_Point("tools", lambda: Extension((plane,), (snippet,)))])
+    assert registered_name(plane) == "tools.chat"
+    assert registered_name(snippet) == "tools.slider"
+    assert registered_name(_snippet("slider")) == "slider"
+    reg = space_registry()
+    assert registered_name(reg.snippets["tools.slider"]) == "tools.slider"
+    assert short_name("tools.slider") == short_name("slider") == "slider"
 
 
 def test_discovery_can_be_turned_off(monkeypatch):
@@ -221,12 +267,13 @@ def test_open_space_with_web_compiles(monkeypatch):
     nu.validate(nu.compile(term))
 
 
-@pytest.mark.parametrize("open_browser", [True, False])
-def test_demo_compiles_and_names_its_plane(monkeypatch, open_browser):
+@pytest.mark.parametrize(("web", "open_browser"), [(True, True), (True, False), (False, False)])
+def test_with_plane_compiles_and_names_its_plane(monkeypatch, web, open_browser):
     _points(monkeypatch, [])
-    spec = _plane("counter", "Counter")
-    assert presets.demo_id(spec) == "demo-counter"
-    term = presets.demo(spec, open_browser=open_browser)
+    spec = _plane("nudemos.counter", "Counter")
+    assert presets.plane_id(spec) == "nudemos-counter"
+    assert presets.plane_id(_plane("plain")) == "plain"
+    term = presets.with_plane(spec, web=web, open_browser=open_browser)
     nu.validate(nu.compile(term))
 
 
@@ -236,7 +283,7 @@ async def test_browse_opens_once_the_port_answers(monkeypatch):
     server = await asyncio.start_server(lambda r, w: w.close(), "127.0.0.1", 0)
     port = server.sockets[0].getsockname()[1]
     try:
-        url = f"http://127.0.0.1:{port}/demo-x"
+        url = f"http://127.0.0.1:{port}/nudemos-x"
         await presets.Browse(url, "0.0.0.0", port).asetup(nu.Context())  # noqa: S104
     finally:
         server.close()

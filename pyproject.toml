@@ -14,14 +14,17 @@ dependencies = [
     # The fabrics a space runs on, nothing more: kv for the store, valkey for
     # its change notifications, ui for the browser, mp_pool for the workers,
     # proxy (invisibles) for the worker's session.
-    "nucore>=0.6.3",
-    "nustd[kv,ui,valkey,mp_pool,proxy]>=0.6.3",
+    "nucore>=0.6.5",
+    "nustd[kv,ui,valkey,mp_pool,proxy]>=0.6.5",
     # The store's change notifications run over virtuals' redis backend.
     "virtuals-py[redis]>=0.1.10",
     # The compiled web bundle. A separate distribution only because PyPI caps
     # project size and a SPA rebuilt on every UI tweak would eat the quota --
     # not optional. `pip install nuspace` gives you the browser.
     "nuspace-ui>=0.5.3",
+    # The everyday Planes and snippets. A plugin like any other, found through
+    # its entry point, but every space ships with it.
+    "nuverse>=0.3.3",
     "typing-extensions>=4.7.0",
     "click>=8.0",
     "rich>=10.7",
@@ -49,11 +52,7 @@ classifiers = [
 [project.optional-dependencies]
 # Every nustd fabric and kv backend, for cells that reach past the defaults.
 all = [
-    "nustd[all]>=0.6.3",
-]
-# The Nu demos as Planes, for `nuspace demo` and the `+` picker.
-demos = [
-    "nudemos",
+    "nustd[all]>=0.6.5",
 ]
 
 [project.urls]
@@ -77,6 +76,7 @@ exclude = [
 nuspace-ui = { path = "./pkgs/ts/nuspace-ui", editable = true }
 nucore = { path = "../nu", editable = true }
 nustd = { path = "../nu/pkgs/nustd", editable = true }
+nuverse = { path = "../nuverse/pkgs/nuverse", editable = true }
 nudemos = { path = "../nuverse/pkgs/nudemos", editable = true }
 
 [tool.uv]
@@ -84,6 +84,8 @@ default-groups = ["dev"]
 
 [dependency-groups]
 dev = [
+    # The demos, for trying `nuspace run --with` by hand.
+    "nudemos",
     "ruff>=0.8.0",
     "pre-commit>=3.0.0",
     "pytest>=7.0.0",

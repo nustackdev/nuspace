@@ -81,7 +81,7 @@ pip install nuspace
 ### Run
 
 ```bash
-nuspace run my.nuspace
+nuspace run
 ```
 
 A browser opens on http://127.0.0.1:8080 and your space is live. Press `/` on a plane to add a cell. `--headless` runs it with nothing drawn.
@@ -91,15 +91,14 @@ A browser opens on http://127.0.0.1:8080 and your space is live. Press `/` on a 
 A throwaway space with a full app in it.
 
 ```bash
-pip install "nuspace[demos]"
-nuspace demo movies
+pip install nudemos
+nuspace run --with nudemos.movies
 ```
 
-`nuspace demo` lists them all.
+`nuspace verse` lists every installed package and the planes it adds. `--with` takes one as `pkg.plane`.
 
 ### Next
 
-- `nuspace doctor` checks the install: versions, extras, extensions.
 - Planes and snippets are extensions, found on install through the `nuspace.extensions` entry point. Bring your own and they live in the space like everything else.
 - Your space is a directory on your machine. All state lives in that one folder.
 

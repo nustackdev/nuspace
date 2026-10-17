@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import nu
+from nuspace.ext.registry import registered_name, short_name
 
 from .cell import HasUi, add_cell, cell_writes
 from .plane import plane_icon, plane_writes
@@ -87,7 +88,7 @@ def _seeded(
             name=name,
             parent=parent,
             ui=True,
-            made_by=spec.name,
+            made_by=registered_name(spec),
             meta=meta,
         )
     ]
@@ -111,7 +112,11 @@ def insert_snippet(
     cell_id: nu.StrArg | None = None,
     into: nu.Ref | None = None,
 ) -> nu.Nu:
-    """Add a cell from a snippet: its source as the prog, its name as the name and ``made_by``.
+    """Add a cell from a snippet: its source as the prog, its short name as the name.
+
+    ``made_by`` is the name it registers under (:func:`~nuspace.ext.registered_name`):
+    ``nuverse.slider`` for the slider nuverse adds, whether ``snippet`` is the
+    package's own spec or the registry's.
 
     ``into`` is :func:`~nuspace.ops.cell.add_cell`'s: set to the new cell's
     id in the commit, ``""`` when nothing was written. A program that goes
@@ -127,8 +132,8 @@ def insert_snippet(
         plane_id,
         snippet.source,
         cell_id=cell_id,
-        name=snippet.name,
+        name=short_name(snippet.name),
         index=index,
-        made_by=snippet.name,
+        made_by=registered_name(snippet),
         into=into,
     )

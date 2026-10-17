@@ -2,8 +2,8 @@
 
 - :func:`serve`: the browser shell, a tab opened on the way up.
 - :func:`headless`: kernel and services, nothing drawn.
-- :func:`demo`: the browser shell with one registered Plane made in the
-  space, the tab opened on it.
+- :func:`with_plane`: either of those with one registered Plane made in
+  the space, the tab opened on it.
 
 The command line maps one command or flag to one preset and adds nothing of
 its own. Anything else :func:`open_space` takes passes through.
@@ -27,7 +27,7 @@ if TYPE_CHECKING:
     from nuspace.ext import Plane
 
 
-__all__ = ["demo", "demo_id", "headless", "serve"]
+__all__ = ["headless", "plane_id", "serve", "with_plane"]
 
 
 def serve(
@@ -47,9 +47,12 @@ def headless(path: str | None = None, **kwargs: object) -> nu.Nu:
     return open_space(path, web=False, **kwargs)
 
 
-def demo_id(spec: Plane) -> str:
-    """The plane id :func:`demo` makes ``spec`` under: fixed, so a second open finds it."""
-    return f"demo-{spec.name}"
+def plane_id(spec: Plane) -> str:
+    """The plane id :func:`with_plane` makes ``spec`` under: fixed, so a second open finds it.
+
+    Its name with the dot a dash, ``nudemos.movies`` as ``nudemos-movies``.
+    """
+    return spec.name.replace(".", "-")
 
 
 class Browse:
@@ -84,24 +87,27 @@ class Browse:
         webbrowser.open(self.url)
 
 
-def demo(
+def with_plane(
     spec: Plane,
     path: str | None = None,
     *,
+    web: bool = True,
     host: str = "127.0.0.1",
     port: int = 8080,
     open_browser: bool = True,
     **kwargs: object,
 ) -> nu.Nu:
-    """The space at ``path`` served on ``host:port``, with ``spec`` made in it once.
+    """The space at ``path`` with ``spec`` made in it once, served on ``host:port`` or headless.
 
-    The plane goes in under :func:`demo_id`, made only where missing, so a
-    demo opened again in the same space keeps what was done to it. The tab
-    opens on the plane rather than on home.
+    The plane goes in under :func:`plane_id`, made only where missing, so a
+    plane opened again in the same space keeps what was done to it. Served,
+    the tab opens on the plane rather than on home.
     """
-    plane = demo_id(spec)
+    plane = plane_id(spec)
     made = nu.IfDo(snap(ops.plane_exists(plane)), nu.Noop(), ops.create_plane(spec, plane_id=plane))
     held = park()
+    if not web:
+        return open_space(path, web=False, body=made >> held, **kwargs)
     if open_browser:
         url = f"http://{host}:{port}/{plane}"
         held = nu.With(nu.Provide(Browse, {"url": url, "host": host, "port": port}), body=held)

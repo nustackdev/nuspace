@@ -19,8 +19,9 @@ if TYPE_CHECKING:
 __all__ = ["TEXT", "Plane", "Snippet"]
 
 
-#: The name reserved for the text snippet, see :class:`Snippet`.
-TEXT = "text"
+#: The ``nuverse.text`` snippet: nuspace's document editing works on its cells.
+#: See :class:`Snippet`.
+TEXT = "nuverse.text"
 
 
 @dataclass(frozen=True)
@@ -72,15 +73,16 @@ class Plane:
 class Snippet:
     """Source for one cell, offered from the ``/`` menu.
 
-    The name :data:`TEXT` is reserved for the text snippet. Its cells are
-    the text cells the plane writes like a document: typing on an empty line
+    nuspace's document editing works on the cells of the ``nuverse.text``
+    snippet (:data:`TEXT`), the plane's text cells, written like a document: typing on an empty line
     starts one, Enter in the title starts one at the top with the text after
     the caret, Cmd+Enter in one starts the next below, and Backspace in an
     empty one removes it. With no snippet under that name, typing opens the
     ``/`` menu and the rest is off.
 
     Args:
-        name: Registry key, the new cell's name, and what the cells made
+        name: The new cell's name. Installed by a package, it registers
+            as ``<package>.<name>``, the registry key and what the cells made
             from it record as ``props.made_by``.
         label: What the menu shows.
         source: The cell's prog.

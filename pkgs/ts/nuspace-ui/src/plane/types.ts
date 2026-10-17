@@ -82,9 +82,9 @@ export type SlashSnippet = {
 	description?: string;
 };
 
-/** The name reserved for the text snippet, as `nuspace.TEXT`. Its cells are
- *  the text cells (see ./Draft.tsx and ./useTextCells.ts). */
-export const TEXT = "text";
+/** The `nuverse.text` snippet, as `nuspace.TEXT`: document editing works on
+ *  its cells, the text cells (see ./Draft.tsx and ./useTextCells.ts). */
+export const TEXT = "nuverse.text";
 
 /** Whether the text snippet is registered: without it, the text sugar is off. */
 export function hasText(snippets: SlashSnippet[]): boolean {

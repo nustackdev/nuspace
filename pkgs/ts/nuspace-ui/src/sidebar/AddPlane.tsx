@@ -28,8 +28,8 @@ import { closeAddPlane, useAddRequest } from "./add";
 import type { Notify } from "./ops";
 import { type Registered, ROOT_ID } from "./types";
 
-/** The registered Plane with no cells: its new Planes start as "Untitled". */
-const PLAIN = "plain";
+/** The registered Plane with no cells, nuverse's: its new Planes start as "Untitled". */
+const PLAIN = "nuverse.plain";
 
 export function AddPlane({
 	registered,

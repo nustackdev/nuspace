@@ -4,7 +4,7 @@ What a host and a program need, without knowing the layers:
 
 - :func:`open_space`, and :class:`Extension`, :class:`Plane`, :class:`Snippet`
   to register (the store's own plane shape is ``shapes.Plane``), and
-  :data:`TEXT`, the name reserved for the text snippet;
+  :data:`TEXT`, ``nuverse.text``, the snippet document editing works on;
 - :class:`CellState`, :class:`PlaneState`, so a program says
   ``class Tick(nuspace.CellState)``, and :class:`States`, the tag of the
   store they land in, for a program bracketing its own state;

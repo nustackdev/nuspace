@@ -1,4 +1,4 @@
-"""The ``nuspace`` command: run a space, try a demo, make one, check the install.
+"""The ``nuspace`` command: make a space, run it, list what extends it.
 
 Pure command line, not an API: nothing imports it, workers least of all.
 

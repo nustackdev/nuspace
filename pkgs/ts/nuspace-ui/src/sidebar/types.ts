@@ -58,6 +58,7 @@ export type TreeRow = {
 
 /** One registered Plane, as the Add plane popup offers it. Seeded at boot. */
 export type Registered = {
+	/** `pkg.plane` for an installed package's, what a plane made from it records in `made_by`. */
 	name: string;
 	label: string;
 	/** The picker heading it sits under, "" for none. */

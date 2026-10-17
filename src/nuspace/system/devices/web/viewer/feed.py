@@ -45,6 +45,7 @@ from typing import TYPE_CHECKING
 
 import nu
 from nuspace import ops
+from nuspace.ext import short_name
 from nuspace.ops.utils import field_str
 from nuspace.shapes import EXIT_FAILED, EXIT_INTERRUPTED, EXIT_KILLED, Space
 from nuspace.system.devices.web.utils import Arms, field_ids, field_index
@@ -261,7 +262,8 @@ def _events(viewer: Ref, snippets: Sequence[Snippet]) -> list[nu.Nu]:
     """Browser to store: one arm per viewer op.
 
     A created cell stores the prog and ``made_by`` of the snippet its
-    ``name`` names; an unknown or empty name stores :data:`PROGRAM` and ``""``.
+    ``name`` names, the registered name, and is called by its short name; an
+    unknown or empty name stores :data:`PROGRAM` and ``""``.
     """
 
     def create(plane_id: nu.Str, event: nu.Attr) -> nu.Nu:
@@ -270,7 +272,7 @@ def _events(viewer: Ref, snippets: Sequence[Snippet]) -> list[nu.Nu]:
             plane_id,
             nu.Switch(name, {s.name: s.source for s in snippets}, default=PROGRAM),
             cell_id=cell_id,
-            name=name,
+            name=nu.Switch(name, {s.name: short_name(s.name) for s in snippets}, default=name),
             index=field_index(event, "index", ops.cells(plane_id).len()),
             made_by=nu.Switch(name, {s.name: s.name for s in snippets}, default=""),
         )

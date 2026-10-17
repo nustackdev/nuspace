@@ -13,7 +13,7 @@ import rich_click as click
 from rich.text import Text
 
 import nu
-from nu._branding import BLUE, PURPLE
+from nuspace._branding import BLUE, PURPLE
 from nuspace.host import init_space
 from nuspace.system.kernel import KERNEL_FILE
 

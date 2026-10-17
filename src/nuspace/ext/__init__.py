@@ -9,7 +9,17 @@
 An extension imports from here, and nothing here imports the rest of nuspace.
 """
 
-from .registry import GROUP, Extension, Registry, RegistryWarning, discover, space_registry
+from .registry import (
+    GROUP,
+    Extension,
+    Registry,
+    RegistryWarning,
+    discover,
+    qualified,
+    registered_name,
+    short_name,
+    space_registry,
+)
 from .specs import TEXT, Plane, Snippet
 
 
@@ -22,5 +32,8 @@ __all__ = [
     "RegistryWarning",
     "Snippet",
     "discover",
+    "qualified",
+    "registered_name",
+    "short_name",
     "space_registry",
 ]

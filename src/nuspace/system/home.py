@@ -225,9 +225,9 @@ def link(ref, planes, made_by, label):
 def show_planes(planes):
     return (
         Glance.tiles.planes.set(nu.str(drawn(planes)))
-        >> link(Glance.links.runs, planes, "runs", "Runs")
-        >> link(Glance.links.workers, planes, "workers", "Workers")
-        >> link(Glance.links.planes, planes, "planes", "Planes")
+        >> link(Glance.links.runs, planes, "nuverse.runs", "Runs")
+        >> link(Glance.links.workers, planes, "nuverse.workers", "Workers")
+        >> link(Glance.links.planes, planes, "nuverse.planes", "Planes")
     )
 
 

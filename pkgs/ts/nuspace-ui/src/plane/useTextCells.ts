@@ -1,7 +1,7 @@
 // Text cells: the cells made from the text snippet, written like a document.
 //
-// A cell is a text cell when its `made_by` is TEXT, the name reserved for the
-// text snippet, and a snippet by that name is registered. Nothing here
+// A cell is a text cell when its `made_by` is TEXT, `nuverse.text`, and that
+// snippet is registered. Nothing here
 // knows what editor the snippet draws. The keys are caught on the cell's row
 // in the capture phase, before the editor inside sees them, and only when
 // they come from the cell's own editable surface (./Draft.tsx `cellSurface`):

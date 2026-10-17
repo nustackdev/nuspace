@@ -12,7 +12,7 @@
 // beating anywhere in it, then the name, then a word's start in the group or
 // the description.
 
-/** What a registry menu ranks: a registered snippet or Plane, as shipped. */
+/** What a registry menu ranks: a registered snippet or Plane, as shipped, named `pkg.name`. */
 export type MenuEntry = { name: string; label: string; group?: string; description?: string };
 
 /** The heading over the ungrouped rows, when any other row has a group. */
@@ -26,7 +26,14 @@ export function menuScore(query: string, item: MenuEntry): number | null {
 	if (label.startsWith(q)) return 0;
 	if (label.split(/\s+/).some((w) => w.startsWith(q))) return 1;
 	if (label.includes(q)) return 2;
-	if (item.name.toLowerCase().includes(q)) return 3;
+	// The name past its package: `nuverse.slider` is found by "slid", not by "nu".
+	if (
+		item.name
+			.slice(item.name.lastIndexOf(".") + 1)
+			.toLowerCase()
+			.includes(q)
+	)
+		return 3;
 	if (startsWord(item.group ?? "", q)) return 4;
 	if (startsWord(item.description ?? "", q)) return 5;
 	return null;

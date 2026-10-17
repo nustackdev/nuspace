@@ -9,8 +9,8 @@ from __future__ import annotations
 import rich_click as click
 from rich.text import Text
 
-from nu._branding import BLUE
 from nuspace import _telemetry
+from nuspace._branding import BLUE
 
 from .._meta import console
 

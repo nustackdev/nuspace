@@ -6,6 +6,15 @@ host passes its own straight to :func:`~nuspace.host.open_space`.
 :func:`space_registry` is what a space opens with: the host's, then the
 installed.
 
+An installed extension's Planes and snippets are named ``<package>.<name>``,
+the package being its entry point's name: ``nudemos.movies``,
+``nuverse.slider``. That is what a plane or a cell made from one records as
+``made_by``, and what ``nuspace run --with`` takes; a cell keeps the short
+name as its own. Two packages may share a short name without a clash. What
+the host passes directly keeps its names as given.
+:func:`registered_name` is the name a spec object registers under, for code
+holding the package's own spec rather than the registry's.
+
 Names are unique per kind. On a clash the explicit entry wins, then the
 first discovered one, and every entry dropped is reported as a
 :class:`RegistryWarning`.
@@ -13,6 +22,7 @@ first discovered one, and every entry dropped is reported as a
 
 from __future__ import annotations
 
+import functools
 import warnings
 from dataclasses import dataclass, field, replace
 from importlib.metadata import entry_points
@@ -27,7 +37,17 @@ if TYPE_CHECKING:
     from .specs import Plane, Snippet
 
 
-__all__ = ["GROUP", "Extension", "Registry", "RegistryWarning", "discover", "space_registry"]
+__all__ = [
+    "GROUP",
+    "Extension",
+    "Registry",
+    "RegistryWarning",
+    "discover",
+    "qualified",
+    "registered_name",
+    "short_name",
+    "space_registry",
+]
 
 
 #: The entry point group extensions register under.
@@ -76,15 +96,53 @@ def _load(point: object) -> Extension | None:
     return ext if ext.name else replace(ext, name=point.name)
 
 
+def qualified(ext: Extension, package: str) -> Extension:
+    """``ext`` with its Planes and snippets named ``<package>.<name>``, as an installed one registers."""
+    return replace(
+        ext,
+        planes=tuple(replace(p, name=f"{package}.{p.name}") for p in ext.planes),
+        snippets=tuple(replace(s, name=f"{package}.{s.name}") for s in ext.snippets),
+    )
+
+
+def short_name(name: str) -> str:
+    """A registered name without its package: ``nuverse.slider`` as ``slider``."""
+    return name.rpartition(".")[2]
+
+
+@functools.cache
+def _registered(group: str = GROUP) -> dict[int, tuple[object, str]]:
+    """Every installed spec object by id, with the name it registers under. Loaded once."""
+    found: dict[int, tuple[object, str]] = {}
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", RegistryWarning)
+        for point in entry_points(group=group):
+            ext = _load(point)
+            for spec in (*ext.planes, *ext.snippets) if ext is not None else ():
+                found.setdefault(id(spec), (spec, f"{point.name}.{spec.name}"))
+    return found
+
+
+def registered_name(spec: Plane | Snippet) -> str:
+    """The name ``spec`` registers under: ``<package>.<name>`` when an installed package adds it.
+
+    Its own name otherwise: the host's, an unregistered child, or a spec the
+    registry already named.
+    """
+    hit = _registered().get(id(spec))
+    return hit[1] if hit is not None and hit[0] is spec else spec.name
+
+
 def discover(group: str = GROUP) -> list[Extension]:
-    """Every extension installed under ``group``, in entry point order.
+    """Every extension installed under ``group``, in entry point order, its Planes qualified.
 
     Each entry point loads to an :class:`Extension`, or to a callable
     returning one. One that fails to load, or is neither, is skipped with a
-    :class:`RegistryWarning`.
+    :class:`RegistryWarning`. Its Planes are named after the entry point,
+    see :func:`qualified`.
     """
-    found = [_load(point) for point in entry_points(group=group)]
-    return [ext for ext in found if ext is not None]
+    found = [(point.name, _load(point)) for point in entry_points(group=group)]
+    return [qualified(ext, package) for package, ext in found if ext is not None]
 
 
 def _merge(kind: str, entries: Iterable[tuple[str, str, object]]) -> dict[str, object]:

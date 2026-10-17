@@ -11,6 +11,13 @@ separately here.
 
 ## Unreleased
 
+- Open any installed plane straight from the command line, replacing the demo command
+- Name installed planes and snippets after their package, so two packages never clash
+- List installed packages and the planes each adds, replacing the install doctor
+- Print a compact nuspace header on open instead of the big Nu logo
+- Ship nuverse's everyday planes with every install, demos install on their own
+- Show nucore and nustd versions alongside nuspace's own in the version line
+
 ## 0.5.4 — 2026-10-17
 
 - Point the demos extra at nudemos, the renamed home of the demo spaces

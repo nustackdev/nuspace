@@ -21,9 +21,15 @@ globalThis.ResizeObserver ??= class {
 Element.prototype.scrollIntoView ??= () => {};
 
 const registered = [
-	{ name: "plain", label: "Plain", group: "Basics", icon: "", description: "" },
-	{ name: "jobs", label: "Jobs", group: "System", icon: "", description: "" },
-	{ name: "runs", label: "Runs", group: "System", icon: "", description: "Live plane runs" },
+	{ name: "nuverse.plain", label: "Plain", group: "Basics", icon: "", description: "" },
+	{ name: "nuverse.jobs", label: "Jobs", group: "System", icon: "", description: "" },
+	{
+		name: "nuverse.runs",
+		label: "Runs",
+		group: "System",
+		icon: "",
+		description: "Live plane runs",
+	},
 ];
 
 let host: HTMLDivElement;
@@ -60,7 +66,7 @@ describe("AddPlane", () => {
 		expect(args).toEqual({
 			plane_id: expect.any(String),
 			parent_id: ROOT_ID,
-			made_by: "jobs",
+			made_by: "nuverse.jobs",
 			title: "Jobs",
 		});
 		expect(replacePane).toHaveBeenCalledWith(args.plane_id);
@@ -72,7 +78,7 @@ describe("AddPlane", () => {
 		act(() => item("Plain")?.click());
 		expect(notify).toHaveBeenCalledWith(
 			"plane.create",
-			expect.objectContaining({ made_by: "plain", title: "Untitled" }),
+			expect.objectContaining({ made_by: "nuverse.plain", title: "Untitled" }),
 		);
 	});
 
@@ -96,6 +102,6 @@ describe("AddPlane", () => {
 		const items = [...document.querySelectorAll('[cmdk-item=""]')].map((i) =>
 			i.getAttribute("data-value"),
 		);
-		expect(items).toEqual(["runs"]);
+		expect(items).toEqual(["nuverse.runs"]);
 	});
 });

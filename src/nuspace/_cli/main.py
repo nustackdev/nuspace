@@ -7,14 +7,13 @@ from __future__ import annotations
 
 import rich_click as click
 
-from nu._branding import BLUE, PURPLE
+from nuspace._branding import BLUE, PURPLE, TAGLINE
 
 from ._meta import version_of
-from .commands.demo import demo
-from .commands.doctor import doctor
 from .commands.init import init
 from .commands.run import run
 from .commands.telemetry import telemetry
+from .commands.verse import verse
 
 
 __all__ = ["cli", "main"]
@@ -36,9 +35,18 @@ click.rich_click.MAX_WIDTH = 100
 @click.group(
     invoke_without_command=True,
     context_settings={"help_option_names": ["-h", "--help"]},
-    help="nuspace: a space of planes of cells, and the system that runs them.",
+    help=f"nuspace: {TAGLINE}.",
 )
-@click.version_option(version_of("nuspace"), "-V", "--version", prog_name="nuspace")
+@click.version_option(
+    version_of("nuspace"),
+    "-V",
+    "--version",
+    prog_name="nuspace",
+    message=(
+        f"nuspace {version_of('nuspace')} · nucore {version_of('nucore')}"
+        f" · nustd {version_of('nustd')}"
+    ),
+)
 @click.pass_context
 def cli(ctx: click.Context) -> None:
     """Root ``nuspace`` group. Help when no command is given."""
@@ -46,10 +54,9 @@ def cli(ctx: click.Context) -> None:
         click.echo(ctx.get_help())
 
 
-cli.add_command(run)
-cli.add_command(demo)
 cli.add_command(init)
-cli.add_command(doctor)
+cli.add_command(run)
+cli.add_command(verse)
 cli.add_command(telemetry)
 
 

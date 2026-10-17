@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from importlib.metadata import PackageNotFoundError, version
+from pathlib import Path
 from typing import Any, TypeVar
 
 import rich_click as click
@@ -11,8 +12,8 @@ from rich.console import Console
 from rich.text import Text
 
 import nu
-from nu._branding import PURPLE
 from nuspace import _telemetry
+from nuspace._branding import BLUE, header
 from nuspace.system.kernel import NotASpace
 
 
@@ -48,11 +49,34 @@ def path_argument(fn: _F) -> _F:
     return click.argument("path", required=False, envvar=STORE_ENV)(fn)
 
 
-def announce(path: str | None, how: str) -> None:
-    """Say which space this is and how it is open."""
-    where = path or "Throwaway space, gone at close"
-    console.print(Text.assemble(("nuspace", f"bold {PURPLE}"), ("  ", ""), (where, "dim")))
-    console.print(f"[dim]{how}, Ctrl+C to stop[/dim]")
+def _where(path: str | None) -> str:
+    """The space directory as a person reads it: absolute, home as ``~``."""
+    if path is None:
+        return "throwaway space, gone at close"
+    root = Path(path).expanduser().resolve()
+    try:
+        return str(Path("~") / root.relative_to(Path.home()))
+    except ValueError:
+        return str(root)
+
+
+def announce(path: str | None, *, headless: bool = False, plane: str | None = None) -> None:
+    """Say which space this is, and how to stop it when no server line will.
+
+    Served, the web server prints the URL and how to stop once it is up, so
+    the header leaves both to it.
+    """
+    console.print(
+        header("sm", version=version_of("nuspace"), where=_where(path)),
+        highlight=False,
+        soft_wrap=True,
+    )
+    if plane is not None:
+        console.print(
+            Text.assemble(("plane ", "dim"), (plane, BLUE)), highlight=False, soft_wrap=True
+        )
+    if headless:
+        console.print("[dim]headless, Ctrl+C to stop[/dim]")
 
 
 def opened(preset: Callable[..., nu.Nu], *args: object, **kwargs: object) -> nu.Nu:

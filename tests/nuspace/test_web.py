@@ -274,7 +274,7 @@ async def test_viewer_plane(store):
         "meta": {"editable": True, "full_width": False, "tone": "calm"},
         "cells": [
             {"id": "c0", "name": "first", "source": "y = 2", "made_by": "", "has_ui": False},
-            {"id": "c1", "name": "intro", "source": TEXT_SRC, "made_by": "text", "has_ui": False},
+            {"id": "c1", "name": "intro", "source": TEXT_SRC, "made_by": TEXT, "has_ui": False},
             {"id": "c2", "name": "code", "source": "x = 1", "made_by": "", "has_ui": False},
         ],
     }
@@ -441,7 +441,7 @@ async def test_connection_live(store):
         viewer_init = next(f for f in session.frames if f.ref == ("viewer",))
         assert viewer_init.chain[0][2]["snippets"] == slash_entries(SNIPPETS)
         assert viewer_init.chain[0][2]["snippets"][0] == {
-            "name": "text",
+            "name": TEXT,
             "label": "Text",
             "group": "",
             "icon": "",
@@ -513,12 +513,12 @@ async def test_connection_live(store):
         # unknown name the starter program.
         session.notify(
             ("viewer", "ops", "cell.create"),
-            {"plane_id": "p1", "cell_id": "c3", "name": "text", "index": 0},
+            {"plane_id": "p1", "cell_id": "c3", "name": TEXT, "index": 0},
         )
         await _until(lambda: session.writes("set_plane")[-1]["cells"][0]["id"] == "c3")
         made = session.writes("set_plane")[-1]["cells"][0]
         assert made["name"] == "text" and made["source"] == TEXT_SRC
-        assert made["made_by"] == "text"
+        assert made["made_by"] == TEXT
         session.notify(
             ("viewer", "ops", "cell.create"),
             {"plane_id": "p1", "cell_id": "c4", "name": "nope", "index": 0},

@@ -300,9 +300,9 @@ async def test_glance_draws_plain_tiles(store):
 
 async def test_glance_links_the_live_planes_there_are(store):
     await store.run(
-        ops.add_plane("r1", name="R", ui=True, made_by="runs", backend="async")
-        >> ops.add_plane("r2", name="R2", ui=True, made_by="runs", backend="async")
-        >> ops.add_plane("pl", name="P", ui=True, made_by="planes", backend="async")
+        ops.add_plane("r1", name="R", ui=True, made_by="nuverse.runs", backend="async")
+        >> ops.add_plane("r2", name="R2", ui=True, made_by="nuverse.runs", backend="async")
+        >> ops.add_plane("pl", name="P", ui=True, made_by="nuverse.planes", backend="async")
     )
     got = await _frames(store, home.GLANCE)
     assert got[("links", "runs")] == {"href": "/r1", "label": "Runs"}
