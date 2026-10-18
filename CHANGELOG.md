@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Show a friendly waking up note when the first boot runs long
 - Open any installed plane straight from the command line, replacing the demo command
 - Name installed planes and snippets after their package, so two packages never clash
 - List installed packages and the planes each adds, replacing the install doctor

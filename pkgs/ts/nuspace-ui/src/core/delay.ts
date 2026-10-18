@@ -13,6 +13,13 @@ import { useEffect, useState } from "react";
 /** How long a plane (or the boot) may take before its skeleton stands in. */
 export const SKELETON_DELAY_MS = 300;
 
+/**
+ * How long the boot may take before the shell says it is booting. A first
+ * start compiles python and can run ten seconds; past this a skeleton alone
+ * reads as stuck.
+ */
+export const BOOTING_DELAY_MS = 5000;
+
 /** How soon after one skeleton leaves the next one skips its wait. */
 const HANDOFF_MS = 150;
 

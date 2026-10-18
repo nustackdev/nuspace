@@ -32,7 +32,9 @@
 // Before the tree lands neither region is on it. The shell still draws: the
 // rail as its chrome with skeleton rows, the strip as the viewer skeleton, so
 // the boot and a plane switch look alike. Once anything has landed, a region
-// still missing is a real absence and says so.
+// still missing is a real absence and says so. A boot that runs past
+// `BOOTING_DELAY_MS` (a first start compiling python) swaps the strip's
+// skeleton for a note, so a long wait reads as booting and not as stuck.
 
 import {
 	EmptyState,
@@ -42,8 +44,10 @@ import {
 	ResizablePanelGroup,
 	type ResizablePanelGroupHandle,
 	SIDEBAR_WIDTH,
+	Spinner,
 } from "@nustackdev/ui-kit";
 import { useEffect, useLayoutEffect, useRef } from "react";
+import { BOOTING_DELAY_MS, useAfter } from "../core/delay";
 import { routeAnchorClick } from "../core/router";
 import { useBooted, useTypePath } from "../core/surfaces";
 import { useTab } from "../core/tab";
@@ -76,6 +80,7 @@ export function Shell() {
 	const viewer = useTypePath("ViewerRef");
 	const mainRef = useRef<HTMLElement | null>(null);
 	const booted = useBooted();
+	const slow = useAfter(!booted, BOOTING_DELAY_MS);
 	const split = useRef<ResizablePanelGroupHandle | null>(null);
 	const splitEl = useRef<HTMLDivElement | null>(null);
 	// The rail's panel: the real rail, or its placeholder until the tree lands.
@@ -149,6 +154,14 @@ export function Shell() {
 							<NodeView path={viewer} />
 						) : booted ? (
 							<EmptyState className={shellMissing}>no Viewer on the tree</EmptyState>
+						) : slow ? (
+							<EmptyState
+								className={shellMissing}
+								icon={<Spinner size="lg" tone="neutral" label="Waking up" />}
+								description="First boot takes a little longer while everything gets ready. Almost there!"
+							>
+								Waking up your space
+							</EmptyState>
 						) : (
 							<div className={shellPanePlane}>
 								<ViewerSkeleton />
