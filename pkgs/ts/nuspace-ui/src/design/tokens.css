@@ -36,16 +36,15 @@
 	 * indistinguishable from selection, which is the higher-signal state.
 	 *
 	 * So: hover / pressed are neutral, derived by alpha off --text-primary
-	 * (an existing L2 role, so it tracks the theme). Selection keeps accent.
+	 * (an existing L2 role, so it tracks the theme). A selected cell shares hover.
 	 * Flagged upstream as a missing kit tier, see the task report.
 	 * --------------------------------------------------------------------- */
 	--doc-hover: color-mix(in oklab, var(--text-primary) 4%, transparent);
 	--doc-active: color-mix(in oklab, var(--text-primary) 7%, transparent);
 
-	/* Whole-cell selection: the kit's press step, a ground tone, never violet */
-	--doc-selected: var(--bg-press);
-	--doc-selected-strong: var(--bg-selection);
-	--doc-selected-line: var(--accent-line);
+	/* The box a drag on the page draws: a light wash of the primary, Afterglow */
+	--doc-box: color-mix(in oklab, var(--accent) 8%, transparent);
+	--doc-box-line: var(--accent-line);
 
 	/* Drag + drop. The handles themselves are kit IconButtons and bring their
 	 * own text and hover tiers; only the drop line is ours. */
@@ -175,13 +174,14 @@
 }
 
 /* ============================== L2.5: document roles (dark) ===============
- * Only the neutral interaction tiers need a per-theme value: the same alpha
+ * Only the neutral interaction tiers and the drag box need a per-theme value: the same alpha
  * that reads on Dawn is invisible on Dusk. Everything else is an alias
  * onto a kit role that already flipped.
  * ==========================================================================*/
 .dark {
 	--doc-hover: color-mix(in oklab, var(--text-primary) 6%, transparent);
 	--doc-active: color-mix(in oklab, var(--text-primary) 10%, transparent);
+	--doc-box: color-mix(in oklab, var(--accent) 14%, transparent);
 
 	--dock-window: color-mix(in oklab, var(--text-primary) 11%, transparent);
 	--dock-window-hover: color-mix(in oklab, var(--text-primary) 16%, transparent);
@@ -189,12 +189,11 @@
 
 /* ============================== L3: Tailwind v4 ===========================*/
 @theme inline {
-	/* --- Document colors --> bg-doc-hover, bg-doc-selected, ... ---------- */
+	/* --- Document colors --> bg-doc-hover, bg-doc-box, ... ---------- */
 	--color-doc-hover: var(--doc-hover);
 	--color-doc-active: var(--doc-active);
-	--color-doc-selected: var(--doc-selected);
-	--color-doc-selected-strong: var(--doc-selected-strong);
-	--color-doc-selected-line: var(--doc-selected-line);
+	--color-doc-box: var(--doc-box);
+	--color-doc-box-line: var(--doc-box-line);
 	--color-doc-drop-line: var(--doc-drop-line);
 	--color-doc-focus-rail: var(--doc-focus-rail);
 

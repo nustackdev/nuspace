@@ -229,10 +229,8 @@ export const docCode = "font-mono text-lg text-text-primary";
 export interface CellStateFlags {
 	/** The caret lives in this cell. No fill: the caret marks it. */
 	focused?: boolean;
-	/** Whole-cell selection (across an island boundary). Accent fill. */
+	/** Whole-cell selection, one cell or many. The same fill as a hover. */
 	selected?: boolean;
-	/** Part of a multi-cell selection. Stronger accent fill. */
-	selectedStrong?: boolean;
 	/** This cell is the one being dragged. Ghosted while it travels. */
 	dragging?: boolean;
 }
@@ -260,9 +258,9 @@ export function docCellRow(state: CellStateFlags = {}): string {
  * has its chrome), so the cell adds only enough that its content never
  * touches the wash edge or the next cell.
  *
- * Hover and pressed are NEUTRAL (doc-hover / doc-active); selection is the
- * accent tier. That split is deliberate - on a document, hovering every
- * paragraph in purple would make hover indistinguishable from selection.
+ * A cell has one fill, neutral (doc-hover), for every state it tints in:
+ * the grip hovered, the cell selected, alone or with others. On a document
+ * a quiet single tint reads better than a ladder of them.
  *
  * The cell does NOT tint on its own hover. Reading is the primary act on
  * this surface and the pointer crosses every cell on the way to anywhere,
@@ -281,9 +279,8 @@ export function docCell(state: CellStateFlags = {}): string {
 		"transition-colors duration-fast ease-out",
 		// The grip is in the gutter, a sibling of this box, so its hover is
 		// read off the row.
-		!state.selected && "group-has-[[data-cell-grip]:hover]/cell:bg-doc-hover",
-		state.selected && "bg-doc-selected",
-		state.selectedStrong && "bg-doc-selected-strong",
+		"group-has-[[data-cell-grip]:hover]/cell:bg-doc-hover",
+		state.selected && "bg-doc-hover",
 		// The caret's cell gets no fill: it is already marked by the caret.
 	);
 }
@@ -345,12 +342,11 @@ export const docDropIndicator = cn(
 
 /**
  * The box a press off the cells drags out to select them. The selection's
- * own accent, translucent, over everything in the pane and in the way of
+ * Afterglow wash and line, sharp, over everything in the pane and in the way of
  * nothing. Placed in viewport coordinates by the plane.
  */
 export const docBoxSelect = cn(
-	"pointer-events-none fixed z-40 rounded-sm",
-	"border border-doc-selected-line bg-doc-selected",
+	"pointer-events-none fixed z-40 border border-doc-box-line bg-doc-box",
 );
 
 /* ============================== Cell interior =========================== */

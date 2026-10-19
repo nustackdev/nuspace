@@ -78,8 +78,13 @@ export function LeftGutter({
 	// away with the cell. Anything else, a dismiss included, leaves the cell
 	// selected, so its keys (Delete, arrows, Enter) work straight after.
 	const sent = useRef(false);
+	// Opening it selects this cell alone, so the menu reads as about this
+	// cell and nothing else stays selected under it.
 	const openMenu = (open: boolean) => {
-		if (open) sent.current = false;
+		if (open) {
+			sent.current = false;
+			onSelect();
+		}
 		setMenu(open);
 	};
 

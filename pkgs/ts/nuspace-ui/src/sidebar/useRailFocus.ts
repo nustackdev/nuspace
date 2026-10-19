@@ -22,7 +22,9 @@ export type RailFocus = {
 	/** Move focus to a row by position, clamped to the ends of the rail. */
 	focusIndex: (index: number) => void;
 	/**
-	 * The four moves every rail shares: down, up, first, last. Returns whether
+	 * The four moves every rail shares: down, up, first, last. Down off the
+	 * last row wraps round to the first, up off the first to the last, nested
+	 * rows included since `keys` is every visible row. Returns whether
 	 * it took the event, so a caller can handle the keys it adds on top.
 	 */
 	handleArrows: (e: React.KeyboardEvent, index: number) => boolean;
@@ -65,11 +67,11 @@ export function useRailFocus(keys: string[], selectedKey: string | null): RailFo
 			switch (e.key) {
 				case "ArrowDown":
 					e.preventDefault();
-					focusIndex(index + 1);
+					focusIndex((index + 1) % keys.length);
 					return true;
 				case "ArrowUp":
 					e.preventDefault();
-					focusIndex(index - 1);
+					focusIndex((index - 1 + keys.length) % keys.length);
 					return true;
 				case "Home":
 					e.preventDefault();

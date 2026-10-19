@@ -34,8 +34,7 @@ import {
 import { KEYS_KEYS, setKeysOpen } from "../shell/keys";
 
 const GITHUB_URL = "https://github.com/nustackdev/nuspace";
-/** The docs are not written yet; the site is the closest thing. */
-const DOCS_URL = "https://nustack.dev";
+const DOCS_URL = "https://nustack.dev/docs";
 
 /** Wire status -> the kit's status tones. */
 const CONNECTION_TONE: Record<string, "ok" | "info" | "warn" | "danger"> = {
@@ -158,7 +157,7 @@ export function RailFooter() {
 	return (
 		<div className={railFooter}>
 			<RailLink href={GITHUB_URL} label="GitHub" icon={Github} />
-			<RailLink href={DOCS_URL} label="Docs" hint="Docs are coming soon" icon={BookOpen} />
+			<RailLink href={DOCS_URL} label="Docs" icon={BookOpen} />
 			<KeysButton />
 			<div className={railFooterSpace} />
 			<ConnectionDot />

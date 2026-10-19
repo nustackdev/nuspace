@@ -113,7 +113,7 @@ export function Cell({
 			    row's controls come first in the tab order, so Tab out of what the
 			    cell draws goes on to the next row, not back to its own toggle. */}
 			<RightGutter state={cell.status.state} editing={editing} onSetEditing={onSetEditing} />
-			<div className={docCell({ selected, selectedStrong })} data-cell-body="">
+			<div className={docCell({ selected })} data-cell-body="">
 				{dropAbove ? <span className={`${docDropIndicator} top-0`} /> : null}
 				<ProgramCell
 					source={cell.source}

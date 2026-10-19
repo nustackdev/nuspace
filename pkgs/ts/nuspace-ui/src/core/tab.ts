@@ -9,8 +9,8 @@
 // With a split it is the focused pane's plane, the one a sidebar click
 // replaces.
 //
-// The emoji is an SVG data URL written onto the icon links index.html
-// declares, and each link keeps its original href on a data attribute so
+// The emoji is an SVG data URL written onto fresh copies of the icon links
+// index.html declares, and each link keeps its original href on a data attribute so
 // going back to the logo is a copy, not a guess. The DOM is only touched when
 // what the tab shows changes, so typing in a cell never repaints the favicon.
 
@@ -69,10 +69,17 @@ function iconLinks(): HTMLLinkElement[] {
 	return Array.from(document.head.querySelectorAll<HTMLLinkElement>('link[rel="icon"]'));
 }
 
-/** Point every icon link at the emoji, or back at the logo when null. */
+/**
+ * Point every icon link at the emoji, or back at the logo when null.
+ *
+ * Each link is replaced, not edited: Chrome does not always repaint the tab
+ * when a live link's href changes, most of all on the way back to the logo
+ * it already has cached.
+ */
 function paintFavicon(emoji: string | null): void {
 	const href = emoji ? emojiFavicon(emoji) : null;
-	for (const link of iconLinks()) {
+	for (const old of iconLinks()) {
+		const link = old.cloneNode() as HTMLLinkElement;
 		if (link.dataset.logo === undefined) {
 			link.dataset.logo = link.getAttribute("href") ?? "";
 			link.dataset.logoType = link.type;
@@ -88,6 +95,7 @@ function paintFavicon(emoji: string | null): void {
 			else link.removeAttribute("sizes");
 			link.setAttribute("href", link.dataset.logo);
 		}
+		old.replaceWith(link);
 	}
 }
 

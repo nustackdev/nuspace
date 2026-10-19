@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Keep cell menus in charge of the keyboard, wrap arrow travel, new favicons
 - Restart a plane or a single cell from their menus
 - Add an empty plane built into every space, pinned atop Add plane
 - Polish palette rows: whole text floats over the list, arrows wrap around

@@ -39,19 +39,22 @@ describe("tab", () => {
 		document.head.innerHTML =
 			'<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />' +
 			'<link rel="apple-touch-icon" href="/apple-icon.png" />';
-		const link = document.head.querySelector<HTMLLinkElement>('link[rel="icon"]');
+		// Painting replaces the links, so each check looks them up again.
+		const icon = () => document.head.querySelector<HTMLLinkElement>('link[rel="icon"]');
+		const first = icon();
 		const apple = document.head.querySelector<HTMLLinkElement>('link[rel="apple-touch-icon"]');
 
 		applyTab({ title: "Notes", emoji: "🚀" });
 		expect(document.title).toBe("Notes");
-		expect(link?.getAttribute("href")).toBe(emojiFavicon("🚀"));
-		expect(link?.type).toBe("image/svg+xml");
+		expect(icon()).not.toBe(first);
+		expect(icon()?.getAttribute("href")).toBe(emojiFavicon("🚀"));
+		expect(icon()?.type).toBe("image/svg+xml");
 		expect(apple?.getAttribute("href")).toBe("/apple-icon.png");
 
 		applyTab(DEFAULT_TAB);
 		expect(document.title).toBe("nuspace");
-		expect(link?.getAttribute("href")).toBe("/favicon-32.png");
-		expect(link?.type).toBe("image/png");
-		expect(link?.getAttribute("sizes")).toBe("32x32");
+		expect(icon()?.getAttribute("href")).toBe("/favicon-32.png");
+		expect(icon()?.type).toBe("image/png");
+		expect(icon()?.getAttribute("sizes")).toBe("32x32");
 	});
 });

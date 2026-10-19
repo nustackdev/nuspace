@@ -1,7 +1,9 @@
 // The plane's own keyboard: the cell-selection regime.
 //
 // Only live while at least one cell is selected. A focused editor (a source, a
-// ghost) owns its keys outright and stops them before they reach the plane.
+// ghost) owns its keys outright and stops them before they reach the plane. So
+// does a popup: a cell's menu is portaled out of the plane, but React still
+// bubbles its keys up here, and a popup always owns the keyboard.
 // On a read-only plane only Escape, Tab and copy do anything.
 
 import type * as React from "react";
@@ -54,6 +56,7 @@ export function useCellKeys(
 		(e: React.KeyboardEvent) => {
 			const sel = editor.selected;
 			if (sel.length === 0) return;
+			if (!e.currentTarget.contains(e.target as Node)) return;
 			const ids = cells.map((b) => b.id);
 			const first = ids.indexOf(sel[0]);
 			const last = ids.indexOf(sel[sel.length - 1]);
@@ -115,8 +118,9 @@ export function useCellKeys(
 					patch({ selected: ids.slice(lo, hi + 1), anchor });
 					return;
 				}
-				const j = dir < 0 ? first - 1 : last + 1;
-				if (j < 0 || j >= ids.length) return;
+				// Off either end it wraps round: down from the last cell is the
+				// first, up from the first is the last.
+				const j = (dir < 0 ? first - 1 + ids.length : last + 1) % ids.length;
 				// Land the caret when the neighbour can hold one; otherwise the
 				// selection just walks on, carrying the parked column with it.
 				focusCell(
