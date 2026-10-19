@@ -19,6 +19,7 @@ export function PaneBar({
 	meta,
 	onMeta,
 	onDelete,
+	onRestart,
 	onClose,
 	first = true,
 	movable = false,
@@ -32,6 +33,8 @@ export function PaneBar({
 	onMeta: (patch: Record<string, unknown>) => void;
 	/** Left out for a Plane that cannot be deleted. */
 	onDelete?: () => void;
+	/** Run the plane again. Left out for an absent pane: nothing runs there. */
+	onRestart?: () => void;
 	onClose: () => void;
 	/** The desk's first pane, the one the rail's reopen button sits over. */
 	first?: boolean;
@@ -55,7 +58,13 @@ export function PaneBar({
 			<OverflowTooltip label={title} side="right">
 				<span className={paneBarTitle(lit)}>{title}</span>
 			</OverflowTooltip>
-			<PaneMenu planeId={planeId} meta={meta} onChange={onMeta} onDelete={onDelete} />
+			<PaneMenu
+				planeId={planeId}
+				meta={meta}
+				onChange={onMeta}
+				onDelete={onDelete}
+				onRestart={onRestart}
+			/>
 			{closable ? (
 				<IconButton variant="ghost" size="sm" aria-label={`Close ${title}`} onClick={onClose}>
 					<X />

@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Restart a plane or a single cell from their menus
 - Add an empty plane built into every space, pinned atop Add plane
 - Polish palette rows: whole text floats over the list, arrows wrap around
 - Show a friendly waking up note when the first boot runs long

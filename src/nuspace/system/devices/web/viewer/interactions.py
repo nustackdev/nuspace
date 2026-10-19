@@ -37,6 +37,8 @@ __all__ = [
     "on_delete_cell",
     "on_open",
     "on_reorder_cells",
+    "on_restart_cell",
+    "on_restart_plane",
     "on_set_meta",
     "on_update_cell",
     "set_absent",
@@ -140,6 +142,16 @@ def on_delete_cell(viewer: Ref) -> Changed:
 def on_reorder_cells(viewer: Ref) -> Changed:
     """``{plane_id, cell_ids}``. One plane's cells, in the new order."""
     return event(viewer, "cell.reorder")
+
+
+def on_restart_cell(viewer: Ref) -> Changed:
+    """``{cell_id}``. Runs the cell again in this pane's run."""
+    return event(viewer, "cell.restart")
+
+
+def on_restart_plane(viewer: Ref) -> Changed:
+    """``{plane_id}``. Runs this pane's plane again, a new plane run."""
+    return event(viewer, "plane.restart")
 
 
 def on_set_meta(viewer: Ref) -> Changed:

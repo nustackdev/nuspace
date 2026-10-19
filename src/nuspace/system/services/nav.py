@@ -14,6 +14,9 @@ for as long as it stays in ``routes``:
     run ended      (every cell run over) waits for the plane's cells to
                      change, then runs the plane again
     plane closed   plane_stop(run): interrupt, killed after the grace
+    restart asked  plane_stop(run), then the plane runs again at once
+                     (:func:`restart`); a cell alone runs again in the
+                     live run (:func:`restart_cell`)
     connection     plane_stop for every open plane
       gone
 
@@ -34,16 +37,18 @@ from __future__ import annotations
 import nu
 import nustd.kv
 from nuspace.ops import cell_plane, cell_run, cells, plane_exists, plane_run, plane_stop
-from nuspace.ops.utils import atomic, atomic_state
+from nuspace.ops.kernel import add_cell_run, interrupt, latest
+from nuspace.ops.utils import MintId, atomic, atomic_state
 from nuspace.shapes import CellState, Space, reroot
 
-from ..utils import park, snap
+from ..utils import moved, park, snap
 
 
 __all__ = [
     "BY",
     "CELL",
     "PLANE",
+    "RESTART_BY",
     "SESSION",
     "SHIM",
     "Panes",
@@ -52,6 +57,8 @@ __all__ = [
     "pane_run",
     "panes",
     "program",
+    "restart",
+    "restart_cell",
     "routable",
 ]
 
@@ -64,6 +71,9 @@ CELL = "nav_main"
 
 #: What plane and cell runs nav starts are recorded as ``by``.
 BY = "nav"
+
+#: What cell runs a restart starts are recorded as ``by``.
+RESTART_BY = "restart"
 
 #: The env a connection's runs execute inside, registered by the host as
 #: ``session(connection_id)``.
@@ -82,9 +92,15 @@ _kernel = Space.kernel
 
 
 class Panes(CellState):
-    """nav's state: the plane run of each open pane, keyed ``"<connection>/<plane>"``."""
+    """nav's state per open pane, keyed ``"<connection>/<plane>"``.
+
+    ``runs`` is the pane's plane run. ``restarts`` is a fresh token each time
+    a restart is asked for: a turn that sees it move stops its run and the
+    next turn starts at once.
+    """
 
     runs = nustd.kv.DictRef.slot(str)
+    restarts = nustd.kv.DictRef.slot(str)
 
 
 def _here(term: nu.Nu) -> nu.Nu:
@@ -105,6 +121,43 @@ def panes() -> nu.Nu:
 def pane_run(sid: nu.StrArg, plane: nu.StrArg) -> nu.Str:
     """The plane run nav keeps for a connection's pane, ``""`` when none. Bare read, from anywhere."""
     return panes().get_item(pane_key(sid, plane), "")
+
+
+def _asked(sid: nu.StrArg, plane: nu.StrArg) -> nu.Nu:
+    """A pane's restart token in :class:`Panes`, from anywhere."""
+    return _here(Panes.restarts)[pane_key(sid, plane)]
+
+
+def restart(sid: nu.StrArg, plane: nu.StrArg) -> nu.Nu:
+    """Run a connection's pane again: nav stops its plane run and makes a new one. One commit.
+
+    A no-op for a plane the connection does not have open: no turn hears it.
+    """
+    key = pane_key(sid, plane)
+    return atomic_state(
+        nu.let(MintId("rs"), lambda token: _here(Panes.restarts.set_item(key, nu.Str(token))))
+    )
+
+
+def restart_cell(sid: nu.StrArg, cell: nu.StrArg) -> nu.Nu:
+    """Run one cell of a connection's pane again, in the pane's live run. One commit.
+
+    Its newest cell run interrupted and a new one made, the way a reload
+    does. A pane whose run is over has nothing to run it in, so the whole
+    pane runs again (:func:`restart`).
+    """
+    plane = cell_plane(cell)
+
+    def knowing(held: nu.ObjectRef) -> nu.Nu:
+        run_id = nu.Str(held)
+        again = nu.let(
+            MintId("cr"), lambda new: add_cell_run(run_id, cell, nu.Str(new), RESTART_BY)
+        )
+        rerun = atomic(interrupt(run_id, latest(run_id, cell)) >> again)
+        live = (run_id != "").and_(_kernel.running.contains(run_id))
+        return nu.IfDo(snap(live), rerun, restart(sid, plane))
+
+    return nu.let(snap(pane_run(sid, plane)), knowing)
 
 
 def clear_connections() -> nu.Nu:
@@ -184,37 +237,46 @@ def _turn(sid: nu.Str, route: nu.Str) -> nu.Nu:
 
     Waits for the plane first when the route names one not there yet. Once
     the run is over by itself, waits for the plane's cells to change, and
-    the next turn runs it again.
+    the next turn runs it again. A restart asked for (:func:`restart`) ends
+    either wait: the run is stopped and the next turn starts at once.
     """
     envs = nu.List.of(nu.List.of(SESSION, sid))
+    token = _asked(sid, route)
 
-    def follow(made: nu.ObjectRef) -> nu.Nu:
+    def follow(made: nu.ObjectRef, seen: nu.Str) -> nu.Nu:
         run_id = nu.Str(made)
         running = _kernel.running
         # The run leaves the plane's live runs in the commit that ends it.
         live = _kernel.planes_running[route].runs.on_children_change()
         ended = nu.WaitReactive(snap(live), snap(running.contains(run_id).not_()))
+        asked = moved(token, seen)
         followed = nu.TryCatch(
-            nu.Race(_cells_fold(route, run_id), ended),
+            nu.Race(_cells_fold(route, run_id), ended, asked),
             finally_=nu.IfDo(snap(running.contains(run_id)), plane_stop(run_id)),
         )
         remember = atomic_state(_here(Panes.runs.set_item(pane_key(sid, route), run_id)))
         start = plane_run(route, by=BY, envs=envs, into=made)
-        return start >> remember >> followed >> _changed(route)
+        return start >> remember >> followed >> nu.Race(_changed(route), asked)
+
+    def turn(held: nu.ObjectRef) -> nu.Nu:
+        return nu.let("", lambda made: follow(made, nu.Str(held)))
 
     # A route can name a plane before the plane is written: the browser mints
     # a new plane's id and opens it while its create is still in flight. So
     # wait for the plane rather than giving up on the route; the routes will
     # not change again to retry.
     shown = nu.WaitReactive(snap(Space.planes[route].on_change()), snap(routable(route)))
-    return shown >> nu.let("", follow)
+    return shown >> nu.let(snap(nu.str(token).fallback("")), turn)
 
 
 def _open(sid: nu.Str, route: nu.Str) -> nu.Nu:
     """One open plane, run and run again for as long as it is open. Forgotten on the way out."""
-    runs = panes()
+    runs, restarts = panes(), _here(Panes.restarts)
     key = pane_key(sid, route)
-    forget = atomic_state(nu.IfDo(runs.contains(key), runs.del_item(key)))
+    forget = atomic_state(
+        nu.IfDo(runs.contains(key), runs.del_item(key))
+        >> nu.IfDo(restarts.contains(key), restarts.del_item(key))
+    )
     return nu.TryCatch(nu.ForeverDo(_turn(sid, route)), finally_=forget)
 
 
@@ -246,7 +308,7 @@ def program() -> nu.Nu:
     """
     connections = Space.connections
     fresh_state = atomic(connections.init(nu.Dict.create())) >> atomic_state(
-        _here(Panes.runs.set({}))
+        _here(Panes.runs.set({}) >> Panes.restarts.set({}))
     )
     return fresh_state >> nu.ForEachParReactive(
         snap(nu.list(connections.keys())),

@@ -338,6 +338,49 @@ async def test_nav_runs_the_plane_again_once_its_run_ended_and_a_cell_changed(sp
     await close_tab(space, sid)
 
 
+@module_loop
+async def test_nav_restart_stops_the_panes_run_and_makes_a_new_one(space):
+    p, _ = await space.plane(READS_SESSION)
+    sid = "conn-restart"
+    await open_tab(space, sid, p)
+    first = (await pane(space, sid, p))["id"]
+    await space.run(nav_service.restart(sid, p))
+    assert (await space.run_row(first, ended, SLOW))["exit"] == EXIT_INTERRUPTED
+    again = await space.until(nav_service.pane_run(sid, p), lambda x: x not in ("", first), SLOW)
+    assert not ended(await space.read(ops.run(again)))
+    await close_tab(space, sid)
+    assert (await space.run_row(again, ended, SLOW))["exit"] == EXIT_INTERRUPTED
+
+
+@module_loop
+async def test_nav_restart_cell_runs_it_again_in_the_live_run(space):
+    p, (c1, c2) = await space.plane(READS_SESSION, READS_SESSION)
+    sid = "conn-restart-cell"
+    await open_tab(space, sid, p)
+    r = (await pane(space, sid, p))["id"]
+    old = cell_of(await space.run_row(r, lambda x: live(cell_of(x, c1)), SLOW), c1)
+    await space.run(nav_service.restart_cell(sid, c1))
+    row = await space.run_row(r, lambda x: cell_of(x, c1)["id"] != old["id"], SLOW)
+    assert cell_of(row, c1)["by"] == nav_service.RESTART_BY
+    assert live(cell_of(row, c2))
+    assert not ended(row)
+    assert await space.read(nav_service.pane_run(sid, p)) == r
+    await close_tab(space, sid)
+
+
+@module_loop
+async def test_nav_restart_cell_runs_the_plane_again_once_its_run_ended(space):
+    p, (c,) = await space.plane(SET_42)
+    sid = "conn-restart-over"
+    await open_tab(space, sid, p)
+    first = await space.until(nav_service.pane_run(sid, p), bool, SLOW)
+    assert (await space.run_row(first, ended, SLOW))["exit"] == EXIT_OK
+    await space.run(nav_service.restart_cell(sid, c))
+    again = await space.until(nav_service.pane_run(sid, p), lambda x: x not in ("", first), SLOW)
+    assert (await space.run_row(again, ended, SLOW))["exit"] == EXIT_OK
+    await close_tab(space, sid)
+
+
 async def supervised(space: Kernel, plane: str, pred, timeout: float = SLOW) -> list[dict]:
     """The plane's runs by the supervisor, oldest first, read until ``pred`` holds on them."""
 

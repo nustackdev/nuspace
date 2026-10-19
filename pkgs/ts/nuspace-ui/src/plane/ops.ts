@@ -49,6 +49,11 @@ export type Ops = {
 	"cell.update": { cell_id: string; source: string };
 	"cell.delete": { cell_id: string };
 	"cell.reorder": { plane_id: string; cell_ids: string[] };
+	/** Run the cell again in this pane's run. With the run over, the whole
+	 *  pane runs again. */
+	"cell.restart": { cell_id: string };
+	/** Run this pane's plane again: its run stopped, a new one made. */
+	"plane.restart": { plane_id: string };
 };
 
 /** Send one op. Threaded down from the strip (../main/Main.tsx) into each plane. */

@@ -44,6 +44,7 @@ export function Cell({
 	onDrag,
 	onPlus,
 	onDelete,
+	onRestart,
 	onTextKey,
 	onSelect,
 	onFocusConsumed,
@@ -73,6 +74,8 @@ export function Cell({
 	/** Open a line below this cell. Not a cell: see ../Ghost.tsx. */
 	onPlus: () => void;
 	onDelete: () => void;
+	/** Run the cell again. */
+	onRestart: () => void;
 	/** Set on a text cell of an editable plane. */
 	onTextKey?: (e: React.KeyboardEvent) => void;
 	onSelect: () => void;
@@ -103,6 +106,7 @@ export function Cell({
 				onDrag={onDrag}
 				onPlus={onPlus}
 				onDelete={onDelete}
+				onRestart={onRestart}
 				onSelect={onSelect}
 			/>
 			{/* Before the body in the DOM, though the grid puts it on the right: the

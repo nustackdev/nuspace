@@ -8,7 +8,8 @@
 // stays in the menu, disabled, on the last pane, so the menu keeps its shape
 // from pane to pane. A lone pane has nothing to close it to: no desk items.
 //
-// Under the separator, the plane: "Open in new tab" opens the Plane's URL in a
+// Under the separator, the plane: "Restart plane" runs it again, a fresh run
+// for this pane, "Open in new tab" opens the Plane's URL in a
 // browser tab, "Add plane inside" opens the Add plane popup for a child of
 // this pane's Plane, opened in this pane, and "Pin" / "Unpin" puts the Plane
 // in the sidebar's pinned row or takes it out (a Plane the sidebar draws
@@ -53,6 +54,8 @@ export type PaneMenuProps = {
 	onChange: (patch: Record<string, unknown>) => void;
 	/** Adds a Delete plane row. Left out for a Plane that cannot be deleted. */
 	onDelete?: () => void;
+	/** Adds a Restart plane row. */
+	onRestart?: () => void;
 };
 
 /** The `...` on a pane's bar. */
@@ -107,6 +110,7 @@ export function PaneMenuItems({
 	meta,
 	onChange,
 	onDelete,
+	onRestart,
 }: PaneMenuProps & { parts: MenuParts }) {
 	const { Item, Separator, Shortcut } = parts;
 	const many = useRoutes().length > 1;
@@ -117,6 +121,7 @@ export function PaneMenuItems({
 			{meta ? (
 				<>
 					{many ? <Separator /> : null}
+					{onRestart ? <Item onSelect={onRestart}>Restart plane</Item> : null}
 					<Item onSelect={() => openInNewTab(planeId)}>Open in new tab</Item>
 					<Item onSelect={() => openAddPlane({ parent: planeId, pane: planeId })}>
 						Add plane inside

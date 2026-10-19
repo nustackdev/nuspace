@@ -95,6 +95,14 @@ class ViewerRef(SpaceRef):
         """``{plane_id, cell_ids}``."""
         return interactions.on_reorder_cells(self)
 
+    def on_restart_cell(self) -> Changed:
+        """``{cell_id}``."""
+        return interactions.on_restart_cell(self)
+
+    def on_restart_plane(self) -> Changed:
+        """``{plane_id}``."""
+        return interactions.on_restart_plane(self)
+
     def on_set_meta(self) -> Changed:
         """``{plane_id, meta}``."""
         return interactions.on_set_meta(self)

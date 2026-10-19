@@ -245,6 +245,7 @@ export function Plane({
 								deleteCells([cell.id]);
 								rootRef.current?.focus({ preventScroll: true });
 							}}
+							onRestart={() => notify("cell.restart", { cell_id: cell.id })}
 							onTextKey={editable && isText(cell) ? (e) => textKey(e, cell.id) : undefined}
 							// Make room, do not make a cell. What goes here is
 							// whatever gets picked next.

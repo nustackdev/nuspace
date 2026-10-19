@@ -51,6 +51,7 @@ function render(
 					onDrag={noop}
 					onPlus={noop}
 					onDelete={noop}
+					onRestart={noop}
 					onSelect={noop}
 					onFocusConsumed={noop}
 					onCommit={noop}

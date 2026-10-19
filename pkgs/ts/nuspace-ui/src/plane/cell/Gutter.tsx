@@ -28,7 +28,7 @@ import {
 	TooltipContent,
 	TooltipTrigger,
 } from "@nustackdev/ui-kit";
-import { Code, Ellipsis, GripVertical, Hash, Plus, Trash2 } from "lucide-react";
+import { Code, Ellipsis, GripVertical, Hash, Plus, RotateCw, Trash2 } from "lucide-react";
 import type * as React from "react";
 import { useRef, useState } from "react";
 import {
@@ -53,6 +53,7 @@ export function LeftGutter({
 	onDrag,
 	onPlus,
 	onDelete,
+	onRestart,
 	onSelect,
 }: {
 	/** The plane's setting. Off, only the menu remains, and it cannot delete. */
@@ -65,6 +66,8 @@ export function LeftGutter({
 	/** Open a line below this cell. Not a cell: see ../Ghost.tsx. */
 	onPlus: () => void;
 	onDelete: () => void;
+	/** Run the cell again. */
+	onRestart: () => void;
 	/** Select the cell and hand the plane the keyboard. */
 	onSelect: () => void;
 }) {
@@ -137,6 +140,10 @@ export function LeftGutter({
 						>
 							<Code />
 							{editing ? "Hide source" : "Show source"}
+						</DropdownMenuItem>
+						<DropdownMenuItem onSelect={onRestart}>
+							<RotateCw />
+							Restart cell
 						</DropdownMenuItem>
 						<DropdownMenuItem onSelect={copyId}>
 							<Hash />

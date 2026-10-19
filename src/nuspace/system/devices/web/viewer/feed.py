@@ -60,6 +60,7 @@ from nuspace.system.devices.web.viewer.interactions import (
     STATE_STOPPED,
 )
 from nuspace.system.kernel.utils import snap
+from nuspace.system.services import nav
 from nuspace.system.services.nav import pane_key, panes, routable
 from nuspace.system.utils import drawing, follows, redraw
 
@@ -258,8 +259,11 @@ def _on_cell(name: str, change: nu.Nu, op: Callable[[nu.Str, nu.Attr], nu.Nu]) -
     return _arms.event(name, change, body)
 
 
-def _events(viewer: Ref, snippets: Sequence[Snippet]) -> list[nu.Nu]:
+def _events(viewer: Ref, sid: nu.StrArg, snippets: Sequence[Snippet]) -> list[nu.Nu]:
     """Browser to store: one arm per viewer op.
+
+    A restart is the connection's: nav runs this tab's pane again, not
+    another tab's on the same plane.
 
     A created cell stores the prog and ``made_by`` of the snippet its
     ``name`` names, the registered name, and is called by its short name; an
@@ -286,6 +290,16 @@ def _events(viewer: Ref, snippets: Sequence[Snippet]) -> list[nu.Nu]:
             lambda c, event: ops.set_prog(c, field_str(event, "source")),
         ),
         _on_cell("delete", interactions.on_delete_cell(viewer), lambda c, _: ops.remove_cell(c)),
+        _on_cell(
+            "restart_cell",
+            interactions.on_restart_cell(viewer),
+            lambda c, _: nav.restart_cell(sid, c),
+        ),
+        _arms.plane_event(
+            "restart_plane",
+            interactions.on_restart_plane(viewer),
+            lambda p, _: nav.restart(sid, p),
+        ),
         _arms.plane_event(
             "meta",
             interactions.on_set_meta(viewer),
@@ -321,4 +335,4 @@ def viewer_feed(viewer: Ref, sid: nu.StrArg, snippets: Iterable[Snippet] = ()) -
     # shipped, a plane closed has its subscriptions torn down, and the other
     # panes' arms are untouched.
     routed = nu.ForEachParReactive(snap(routes.fallback([])), snap(routes.on_change()), shown)
-    return nu.ParallelAsync(_arms.guard(routed, "routes"), *_events(viewer, snippets))
+    return nu.ParallelAsync(_arms.guard(routed, "routes"), *_events(viewer, sid, snippets))

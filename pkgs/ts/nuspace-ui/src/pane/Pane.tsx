@@ -124,6 +124,7 @@ export function Pane({
 				meta={plane?.meta ?? null}
 				onMeta={(patch) => onMeta(planeId, patch)}
 				onDelete={onDelete}
+				onRestart={absent ? undefined : () => notify("plane.restart", { plane_id: planeId })}
 				onClose={() => closePane(planeId)}
 				first={!divided}
 				movable={many}
