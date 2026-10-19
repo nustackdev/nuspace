@@ -2,15 +2,16 @@
 
 ## Packages shipped from this repo
 
-- **nuspace** (the runtime, the `nuspace` command) — 0.5.3
-- **nuspace-ui** (the compiled web bundle) — 0.5.3
+- **nuspace** (the runtime, the `nuspace` command) — 0.5.5
+- **nuspace-ui** (the compiled web bundle) — 0.5.4
 
 Below is the changelog for **nuspace** - the full commit stream. Newest first.
 The `nuspace-ui` wheel is the same source tree's vite output and is not tracked
 separately here.
 
-## Unreleased
+## 0.5.5 — 2026-10-20
 
+- Release nuspace 0.5.5, built on nu 0.6.5, UI kit 0.3.4 and nuverse 0.3.3
 - Keep cell menus in charge of the keyboard, wrap arrow travel, new favicons
 - Restart a plane or a single cell from their menus
 - Add an empty plane built into every space, pinned atop Add plane
