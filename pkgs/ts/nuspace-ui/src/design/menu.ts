@@ -12,10 +12,10 @@ import { cn, commandHeadingClasses, commandItemClasses } from "@nustackdev/ui-ki
 /** A section heading. */
 export const menuHeading = cn(commandHeadingClasses, "pt-2 first:pt-1");
 
-/** A row: icon tile, label over description, and the Enter hint when lit. */
+/** A row: icon tile, label over description, and the Enter hint when lit. Lit, it lifts as its float does. */
 export const menuItem = cn(
 	commandItemClasses,
-	"group w-full gap-3 rounded-md px-2 py-1.5 text-left",
+	"group w-full gap-3 rounded-md px-2 py-1.5 text-left data-[selected=true]:shadow-raised",
 );
 
 /** The icon's tile, so a glyph and an emoji read as the same kind of thing. */
@@ -27,16 +27,41 @@ export const menuTile = cn(
 
 export const menuText = "flex min-w-0 flex-1 flex-col";
 
+// Label and description lines are 20px and 16px, the tile's 36px together, so
+// a row's tile, text and hint sit at the same offsets whether centered (the
+// row) or from the top (its float): lighting a row moves nothing in it.
+
 /** The row's label. Owns the line: it truncates, the hint never does. */
-export const menuLabel = "truncate font-medium text-text-primary";
+export const menuLabel = "truncate font-medium leading-5 text-text-primary";
 
 /** The part of the label the query matched. */
 export const menuHit = "bg-transparent font-semibold text-accent-text";
 
-export const menuDescription = "truncate text-xs text-text-muted";
+export const menuDescription = "truncate text-xs leading-4 text-text-muted";
 
-/** The Enter hint on the lit row. */
-export const menuEnter = "shrink-0 opacity-0 group-data-[selected=true]:opacity-100";
+/**
+ * The lit row whole, when its row cut it off: drawn over the row and the rows
+ * under it, so nothing in the list moves. Lined up with the row it covers
+ * (same padding and gap), opaque under the hover tint, and blind to the
+ * pointer so the rows beneath still take hover.
+ */
+export const menuFloat = cn(
+	"pointer-events-none absolute inset-x-0 top-0 z-10 hidden group-data-[selected=true]:block",
+	"rounded-md bg-bg-elevated shadow-raised",
+);
+
+export const menuFloatRow = "flex items-start gap-3 rounded-md bg-bg-hover px-2 py-1.5";
+
+/** The labels in the float, wrapping instead of truncating. */
+export const menuFloatLabel = "break-words font-medium leading-5 text-text-primary";
+
+export const menuFloatDescription = "break-words text-xs leading-4 text-text-muted";
+
+/**
+ * The Enter hint on the lit row. Out of the layout elsewhere, so it leaves no
+ * gap. Pinned to the middle of the first 36px, so the float's sits where the row's did.
+ */
+export const menuEnter = "mt-2 hidden shrink-0 self-start group-data-[selected=true]:inline-flex";
 
 /** The keys, along the bottom edge. */
 export const menuFooter = cn(

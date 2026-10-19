@@ -35,6 +35,7 @@ from typing import TYPE_CHECKING
 
 import nu
 from nuspace import ops
+from nuspace.ext import EMPTY
 from nuspace.ops.utils import field_str
 from nuspace.shapes import Space
 from nuspace.system import search
@@ -144,15 +145,15 @@ def pins() -> nu.List:
 
 def create(
     planes: Sequence[Plane], made_by: nu.Nu, plane_id: nu.Nu, parent_id: nu.Nu, title: nu.Nu
-) -> nu.Nu | None:
+) -> nu.Nu:
     """Create ``plane_id`` from the registered Plane ``made_by`` names.
 
-    A name nothing registered answers to creates the first Plane. An empty
-    ``title`` takes the Plane's label. None when nothing is registered.
+    ``""``, or a name nothing registered answers to, creates the empty plane
+    (:data:`~nuspace.ext.EMPTY`), which every space has. An empty ``title``
+    takes the Plane's label.
     """
-    if not planes:
-        return None
-    named = [nu.Str(made_by) == spec.name for spec in planes]
+    specs = (EMPTY, *planes)
+    named = [nu.Str(made_by) == spec.name for spec in specs]
     unknown = nu.Not(nu.Or(*named))
     return nu.Sequential(
         *(
@@ -165,7 +166,7 @@ def create(
                     plane_id=plane_id,
                 ),
             )
-            for i, spec in enumerate(planes)
+            for i, spec in enumerate(specs)
         )
     )
 
@@ -234,19 +235,18 @@ def sidebar_feed(sidebar: Ref, planes: Sequence[Plane], snippets: Sequence[Snipp
 
     Args:
         sidebar: The shell's sidebar ref.
-        planes: The registered Planes, what ``plane.create`` can create.
+        planes: The registered Planes, what ``plane.create`` can create
+            beside the empty one.
         snippets: The registered snippets, what ``search.run`` can search.
     """
-    arms = [_arms.states("tree", _changes(), _ship(sidebar))]
-    if planes:
 
-        def made(plane_id: nu.Str, event: nu.Attr) -> nu.Nu:
-            made_by, parent_id = field_str(event, "made_by"), field_str(event, "parent_id")
-            return create(planes, made_by, plane_id, parent_id, field_str(event, "title"))
+    def made(plane_id: nu.Str, event: nu.Attr) -> nu.Nu:
+        made_by, parent_id = field_str(event, "made_by"), field_str(event, "parent_id")
+        return create(planes, made_by, plane_id, parent_id, field_str(event, "title"))
 
-        arms.append(_arms.plane_event("create", interactions.on_create_plane(sidebar), made))
     return nu.ParallelAsync(
-        *arms,
+        _arms.states("tree", _changes(), _ship(sidebar)),
+        _arms.plane_event("create", interactions.on_create_plane(sidebar), made),
         _arms.plane_event(
             "rename",
             interactions.on_rename_plane(sidebar),

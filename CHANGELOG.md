@@ -11,6 +11,8 @@ separately here.
 
 ## Unreleased
 
+- Add an empty plane built into every space, pinned atop Add plane
+- Polish palette rows: whole text floats over the list, arrows wrap around
 - Show a friendly waking up note when the first boot runs long
 - Open any installed plane straight from the command line, replacing the demo command
 - Name installed planes and snippets after their package, so two packages never clash

@@ -1,8 +1,9 @@
 """Extension ops: create a registered Plane, insert a snippet.
 
 The Planes and snippets themselves are :mod:`nuspace.ext` specs, registered
-by the host at open. Core ships none privileged: a third party registers the
-same way.
+by the host at open. Core registers none: its one own Plane, the empty one
+(:data:`~nuspace.ext.EMPTY`), is no registry entry, and a third party registers
+the same way.
 """
 
 from __future__ import annotations

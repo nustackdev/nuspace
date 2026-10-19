@@ -1,7 +1,7 @@
 """Layer zero: the extension system, what a package plugs into a space with.
 
 - :mod:`.specs`: :class:`Plane`, what ``+`` creates, and :class:`Snippet`,
-  what ``/`` inserts. Plain data.
+  what ``/`` inserts. Plain data. :data:`EMPTY`, the plane every space has.
 - :mod:`.registry`: :class:`Extension`, a bundle of them, found through the
   ``nuspace.extensions`` entry point group, and the merged :class:`Registry`
   a space opens with.
@@ -20,10 +20,11 @@ from .registry import (
     short_name,
     space_registry,
 )
-from .specs import TEXT, Plane, Snippet
+from .specs import EMPTY, TEXT, Plane, Snippet
 
 
 __all__ = [
+    "EMPTY",
     "GROUP",
     "TEXT",
     "Extension",

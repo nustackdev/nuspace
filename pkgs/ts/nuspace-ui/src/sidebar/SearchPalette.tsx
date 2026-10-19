@@ -186,6 +186,7 @@ export function SearchPopup({ searchable, notify }: { searchable: Searchable[]; 
 			}}
 			label="Search"
 			shouldFilter={false}
+			loop
 			value={lit}
 			onValueChange={setLit}
 		>

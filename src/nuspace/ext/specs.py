@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     import nu
 
 
-__all__ = ["TEXT", "Plane", "Snippet"]
+__all__ = ["EMPTY", "TEXT", "Plane", "Snippet"]
 
 
 #: The ``nuverse.text`` snippet: nuspace's document editing works on its cells.
@@ -67,6 +67,19 @@ class Plane:
         if not self.backend:
             msg = f"Plane {self.name!r}: backend is required, eg mp or async"
             raise ValueError(msg)
+
+
+#: The empty plane: no cells, no children. Inherent to a space like the empty
+#: cell is, so it needs no registry entry: ``""`` is no registered Plane's
+#: name, and the planes made from it record ``made_by`` as none. With nothing
+#: under it, it works as a folder too: grouping in the sidebar is nesting.
+EMPTY = Plane(
+    "",
+    "Empty",
+    description="An empty plane. Add cells with /, or nest planes under it.",
+    meta={"editable": True, "full_width": False},
+    backend="async",
+)
 
 
 @dataclass(frozen=True)

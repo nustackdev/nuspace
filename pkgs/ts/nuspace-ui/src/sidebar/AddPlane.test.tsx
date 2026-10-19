@@ -21,7 +21,7 @@ globalThis.ResizeObserver ??= class {
 Element.prototype.scrollIntoView ??= () => {};
 
 const registered = [
-	{ name: "nuverse.plain", label: "Plain", group: "Basics", icon: "", description: "" },
+	{ name: "nuverse.notes", label: "Notes", group: "Basics", icon: "", description: "" },
 	{ name: "nuverse.jobs", label: "Jobs", group: "System", icon: "", description: "" },
 	{
 		name: "nuverse.runs",
@@ -73,12 +73,13 @@ describe("AddPlane", () => {
 		expect(document.querySelector('[cmdk-item=""]')).toBeNull();
 	});
 
-	it("names a plain Plane Untitled", () => {
+	it("pins the empty plane on top, made by none and named Untitled", () => {
 		act(() => openAddPlane({ parent: ROOT_ID }));
-		act(() => item("Plain")?.click());
+		expect(document.querySelector('[cmdk-item=""]')?.textContent).toContain("Empty");
+		act(() => item("Empty")?.click());
 		expect(notify).toHaveBeenCalledWith(
 			"plane.create",
-			expect.objectContaining({ made_by: "nuverse.plain", title: "Untitled" }),
+			expect.objectContaining({ made_by: "", title: "Untitled" }),
 		);
 	});
 

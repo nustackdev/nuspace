@@ -228,15 +228,21 @@ async def test_create_makes_the_named_plane(store):
         "backend": "mp",
     }
     assert [c["name"] for c in await store.read(ops.cell_rows("pj"))] == ["list"]
-    # An unknown name creates the first registered Plane, at the top level.
+    # An unknown name creates the empty plane, at the top level, made by none.
     assert (by_id["px"]["name"], by_id["px"]["parent"]) == ("X", "")
-    assert by_id["px"]["props"]["made_by"] == "plain"
-    # Each runs on its registered Plane's own backend.
+    assert by_id["px"]["props"]["made_by"] == ""
+    # Each runs on its own spec's backend.
     assert by_id["px"]["props"]["backend"] == "async"
     # The registered Plane's icon is the new plane's.
     assert by_id["pj"]["meta"] == {"icon": "lucide:list"}
-    assert by_id["px"]["meta"] == {}
-    assert create([], "x", "y", "z", "w") is None
+    assert by_id["px"]["meta"] == {"editable": True, "full_width": False}
+
+
+async def test_create_makes_the_empty_plane_with_nothing_registered(store):
+    await store.run(create([], nu.Str(""), nu.Str("pe"), nu.Str("space"), nu.Str("")))
+    (row,) = [r for r in await store.read(ops.plane_rows()) if r["id"] == "pe"]
+    assert (row["name"], row["props"]["made_by"]) == ("Empty", "")
+    assert await store.read(ops.cell_rows("pe")) == []
 
 
 async def test_move_counts_drawn_siblings_only(store):
