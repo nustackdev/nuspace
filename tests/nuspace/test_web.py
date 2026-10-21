@@ -422,6 +422,11 @@ class FakeSession(WsSession):
         ]
 
 
+# A connection compiles and validates its whole term before the first frame, which
+# can take seconds on a loaded machine. Reactions after boot keep the short timeout.
+BOOT_TIMEOUT = 30.0
+
+
 async def _until(check, timeout: float = 3.0) -> None:
     deadline = asyncio.get_running_loop().time() + timeout
     while not check():
@@ -442,7 +447,7 @@ async def test_connection_live(store):
     conns = Space.connections
     try:
         # Boot, the connection published, the sidebar shipped.
-        await _until(lambda: session.writes("set_tree"))
+        await _until(lambda: session.writes("set_tree"), BOOT_TIMEOUT)
         assert session.frames[0].op == "remove"
         viewer_init = next(f for f in session.frames if f.ref == ("viewer",))
         assert viewer_init.chain[0][2]["snippets"] == slash_entries(SNIPPETS)
@@ -605,7 +610,7 @@ async def test_connection_panes(store):
         return {w["plane_id"] for w in session.writes("set_status")}
 
     try:
-        await _until(lambda: session.writes("set_tree"))
+        await _until(lambda: session.writes("set_tree"), BOOT_TIMEOUT)
         # Two panes: each gets its own plane and statuses, keyed by plane_id.
         session.notify(("viewer", "ops", "planes.open"), {"plane_ids": ["p2", "p1"]})
         await _until(lambda: {"p1", "p2"} <= with_status())
@@ -676,7 +681,7 @@ async def test_connection_status_hears_its_own_pane_run_only(store):
         return [w for w in session.writes("set_status") if w["plane_id"] == plane_id]
 
     try:
-        await _until(lambda: session.writes("set_tree"))
+        await _until(lambda: session.writes("set_tree"), BOOT_TIMEOUT)
         session.notify(("viewer", "ops", "planes.open"), {"plane_ids": ["p1", "p2"]})
         await _until(lambda: status("p1") and status("p2"))
         await store.run(_run("r_1", "p1", ("cr_1", "a1", False, "", "")))
@@ -725,7 +730,7 @@ async def test_connection_absent_panes(store):
         return said[-1] if said else {}
 
     try:
-        await _until(lambda: session.writes("set_tree"))
+        await _until(lambda: session.writes("set_tree"), BOOT_TIMEOUT)
         # A ui plane is drawn, a missing one and a headless one are told why not.
         session.notify(("viewer", "ops", "planes.open"), {"plane_ids": ["ui", "nope", "svc"]})
         await _until(lambda: all(last(p) for p in ("ui", "nope", "svc")))
@@ -787,7 +792,7 @@ async def test_connection_new_plane_runs_on_the_real_store():
         return f"{rid}_c"
 
     try:
-        await _until(lambda: session.writes("set_tree"), 10)
+        await _until(lambda: session.writes("set_tree"), BOOT_TIMEOUT)
         for n, gap in enumerate([0.0, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1]):
             pid = f"p{n}"
             # Made from the sidebar and opened, the way the Add plane popup does it.

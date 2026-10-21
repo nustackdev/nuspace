@@ -9,6 +9,10 @@ Below is the changelog for **nuspace** - the full commit stream. Newest first.
 The `nuspace-ui` wheel is the same source tree's vite output and is not tracked
 separately here.
 
+## Unreleased
+
+- Give connection tests room to boot on a busy machine
+
 ## 0.5.5 — 2026-10-20
 
 - Release nuspace 0.5.5, built on nu 0.6.5, UI kit 0.3.4 and nuverse 0.3.3
