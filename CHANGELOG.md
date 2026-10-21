@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Rework the README with demo videos and install paths
 - Give connection tests room to boot on a busy machine
 
 ## 0.5.5 — 2026-10-20
