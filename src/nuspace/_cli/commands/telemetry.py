@@ -6,16 +6,32 @@ you open. ``NUSPACE_TELEMETRY=0`` turns it off whatever the file says.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import rich_click as click
 from rich.text import Text
 
 from nuspace import _telemetry
-from nuspace._branding import BLUE
+from nuspace._branding import BLUE, PURPLE
 
 from .._meta import console
 
 
 __all__ = ["telemetry"]
+
+
+#: Why we ask, said once wherever the choice is shown.
+_WHY = (
+    "nuspace is early. Anonymous usage events are how we learn what people actually do"
+    " with it, so we'd be grateful if you keep telemetry on."
+)
+
+#: What goes out and what never does, as ``(label, text)`` rows.
+_WHAT = (
+    ("events", "a space or its UI opened, a plane or a cell added or removed"),
+    ("details", "nuspace, nu and Python versions, OS and CPU type, an anonymous id"),
+    ("never", "your code, names, outputs, file paths, or anything else in your spaces"),
+)
 
 
 def _state_line(on: bool) -> Text:
@@ -24,12 +40,44 @@ def _state_line(on: bool) -> Text:
     return line
 
 
+def _heading(title: str) -> Text:
+    return Text(title, style=f"bold {PURPLE}")
+
+
+def _row(label: str, value: str, style: str = "") -> Text:
+    return Text.assemble((f"  {label:<10}", "dim"), (value, style))
+
+
+def _switch(on: bool) -> str:
+    """How to flip it from here."""
+    if on:
+        return "nuspace telemetry off"
+    if _telemetry.env_override():
+        return f"unset ${_telemetry.ENV}"
+    return "nuspace telemetry on"
+
+
+def _where(path: Path) -> str:
+    """``path`` as a person reads it, home as ``~``."""
+    try:
+        return str(Path("~") / path.relative_to(Path.home()))
+    except ValueError:
+        return str(path)
+
+
+def _print(*lines: Text | str) -> None:
+    for line in lines:
+        console.print(line, highlight=False, soft_wrap=True)
+
+
 @click.group(
     short_help="Show or set anonymous usage telemetry.",
     invoke_without_command=True,
     help=(
-        "Anonymous usage telemetry, for you across every space. Status with no"
-        f" command. ${_telemetry.ENV}=0 turns it off whatever is set here."
+        "Anonymous usage telemetry, set once for you across every space. It sends a few usage"
+        " events, never anything from inside your spaces. Status with no command. nuspace is"
+        " early and this is how we learn what works, so please keep it on."
+        f" ${_telemetry.ENV}=0 turns it off whatever is set here."
     ),
 )
 @click.pass_context
@@ -39,29 +87,46 @@ def telemetry(ctx: click.Context) -> None:
         ctx.invoke(status)
 
 
-@telemetry.command(help="Show whether telemetry is on, your anonymous id and the config file.")
+@telemetry.command(help="Show whether telemetry is on, what it sends, your anonymous id.")
 def status() -> None:
-    """Print the state, why when the environment decides it, the id and the path."""
-    console.print(_state_line(_telemetry.telemetry_enabled()))
+    """Print the state and why, what is sent and what never is, the id, the path, how to switch."""
+    on = _telemetry.telemetry_enabled()
+    _print(_state_line(on))
     if _telemetry.env_override():
-        console.print(f"[dim]off by ${_telemetry.ENV}, whatever the config says[/dim]")
+        _print(f"[dim]off by ${_telemetry.ENV}, whatever the config says[/dim]")
     if _telemetry.is_dev_install():
-        console.print("[dim]dev install: nothing is sent either way[/dim]")
-    console.print(Text.assemble(("distinct_id: ", "dim"), (_telemetry.distinct_id(), BLUE)))
-    console.print(Text.assemble(("config:      ", "dim"), (str(_telemetry.config_path()), BLUE)))
+        _print("[dim]dev install: nothing is sent either way[/dim]")
+    _print(
+        "",
+        _heading("What we collect"),
+        *(_row(label, text) for label, text in _WHAT),
+        "",
+        _heading("Your settings"),
+        _row("id", _telemetry.distinct_id(), BLUE),
+        _row("config", _where(_telemetry.config_path()), BLUE),
+        _row("turn " + ("off" if on else "on"), _switch(on), BLUE),
+        "",
+        f"[dim]{_WHY}[/dim]",
+    )
 
 
 @telemetry.command(help="Turn telemetry on.")
 def on() -> None:
     """Set the flag on."""
     _telemetry.set_telemetry(True)
-    console.print(_state_line(True))
+    _print(_state_line(True))
     if _telemetry.env_override():
-        console.print(f"[dim]still off while ${_telemetry.ENV} says so[/dim]")
+        _print(f"[dim]still off while ${_telemetry.ENV} says so[/dim]")
+    else:
+        _print("[dim]Thank you, it helps a lot while nuspace is young.[/dim]")
 
 
 @telemetry.command(help="Turn telemetry off.")
 def off() -> None:
     """Set the flag off."""
     _telemetry.set_telemetry(False)
-    console.print(_state_line(False))
+    _print(
+        _state_line(False),
+        "[dim]Nothing will be sent from here on. If you change your mind:"
+        " nuspace telemetry on[/dim]",
+    )

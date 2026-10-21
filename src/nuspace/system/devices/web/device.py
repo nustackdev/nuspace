@@ -23,15 +23,16 @@ What a run needs to draw on a tab is the session env, returned beside the
 term for the host to register with the kernel.
 
 Beside the socket the server answers one plain route,
-``/api/telemetry-config``: the user's telemetry choice and id (see
-:mod:`nuspace._telemetry`), so the browser's events follow the same opt out.
+``POST /api/telemetry/space-loaded``: the browser saying a page loaded,
+queued as ``space_loaded`` (see :mod:`nuspace._telemetry`), so the browser
+never talks to PostHog and follows the same opt out.
 """
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from starlette.responses import JSONResponse
+from starlette.responses import Response
 from starlette.routing import Route
 
 import nu
@@ -79,7 +80,7 @@ __all__ = [
     "remember",
     "route_arm",
     "serve_web",
-    "telemetry_config",
+    "space_loaded",
 ]
 
 
@@ -193,14 +194,15 @@ def connection(
     )
 
 
-async def telemetry_config(request: Request) -> JSONResponse:
-    """``GET /api/telemetry-config``: what the browser needs to send, or not."""
+async def space_loaded(request: Request) -> Response:
+    """``POST /api/telemetry/space-loaded``: a page loaded. Queued, answered at once."""
     del request
-    return JSONResponse(_telemetry.browser_config())
+    _telemetry.track("space_loaded")
+    return Response(status_code=204)
 
 
 #: The plain routes the server answers beside the socket.
-ROUTES = (Route("/api/telemetry-config", telemetry_config, methods=["GET"]),)
+ROUTES = (Route("/api/telemetry/space-loaded", space_loaded, methods=["POST"]),)
 
 
 def serve_web(

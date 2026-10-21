@@ -52,7 +52,7 @@ class _Recorder:
 def held(monkeypatch):
     """The terms the commands would hold, in order. Nothing is run."""
     terms: list = []
-    monkeypatch.setattr(run_command, "hold", terms.append)
+    monkeypatch.setattr(run_command, "hold", lambda term, **_: terms.append(term))
     return terms
 
 

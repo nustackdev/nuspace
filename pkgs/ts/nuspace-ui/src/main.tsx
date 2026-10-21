@@ -11,6 +11,13 @@ import "./refs/register";
 
 ensureLanding();
 
+// Tell the server a page loaded, once: it queues the anonymous `space_loaded`
+// event behind the user's opt out. The browser never talks to PostHog. Not in
+// vite dev, where no server answers.
+if (!import.meta.env.DEV) {
+	void fetch("/api/telemetry/space-loaded", { method: "POST", keepalive: true }).catch(() => {});
+}
+
 const root = document.getElementById("root");
 if (!root) throw new Error("Root element not found");
 

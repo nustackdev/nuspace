@@ -1,17 +1,21 @@
-"""Telemetry: the user's config, the opt out, the first run event, what the browser is told.
+"""Telemetry: the config, the opt out, the sender thread, the host's usage, the browser's route.
 
-Nothing leaves the machine: the thread runs its target inline and the POST
-is a stub that records what it was handed.
+Nothing leaves the machine: the sender thread is real, the POST is a stub
+that records what it was handed, and each test flushes before it looks.
 """
 
 from __future__ import annotations
 
 import json
+import threading
+import time
 
 import pytest
 
+import nu
 from nuspace import _telemetry
 from nuspace._telemetry import config, send
+from nuspace.system.usage import Track, Usage
 
 
 @pytest.fixture(autouse=True)
@@ -35,20 +39,15 @@ class _Response:
         return b"{}"
 
 
-class _Inline:
-    """A Thread that runs its target on ``start``, in this thread."""
-
-    def __init__(self, target, args=(), daemon=False) -> None:
-        self.target, self.args = target, args
-
-    def start(self) -> None:
-        self.target(*self.args)
-
-
 class _Posted(list):
     """The POSTs made, in order. ``answer`` is what the next one gets: a status or an error."""
 
     answer: int | Exception = 200
+
+    def events(self) -> list[dict]:
+        """Every event sent, flushed first, across POSTs in order."""
+        assert send.flush(5)
+        return [event for post in self for event in post["body"]["batch"]]
 
 
 @pytest.fixture
@@ -69,9 +68,10 @@ def posted(monkeypatch):
         return _Response(sent.answer)
 
     monkeypatch.setattr(config, "is_dev_install", lambda: False)
-    monkeypatch.setattr(send.threading, "Thread", _Inline)
+    monkeypatch.setattr(send, "_GATHER_SECONDS", 0.05)
     monkeypatch.setattr(send.urllib.request, "urlopen", urlopen)
-    return sent
+    yield sent
+    send.flush(5)
 
 
 # --- The config ------------------------------------------------------------------
@@ -126,70 +126,100 @@ def test_a_source_checkout_is_a_dev_install():
 
 def test_first_run_sends_once_acked(tmp_path, posted):
     _telemetry.first_run()
-    (event,) = posted
-    assert event["url"] == "https://t.nustack.dev/i/v0/e/"
-    assert event["agent"].startswith("nuspace-py/")
-    body = event["body"]
-    assert body["event"] == send.FIRST_RUN_EVENT
-    assert body["distinct_id"] == _telemetry.distinct_id()
-    assert body["properties"]["product"] == "nuspace"
+    (event,) = posted.events()
+    (post,) = posted
+    assert post["url"] == "https://t.nustack.dev/batch/"
+    assert post["agent"].startswith("nuspace-py/")
+    assert post["body"]["api_key"] == send.posthog_token()
+    assert event["event"] == send.FIRST_RUN_EVENT
+    assert event["distinct_id"] == _telemetry.distinct_id()
+    assert event["timestamp"]
+    assert event["properties"]["product"] == "nuspace"
     assert {"nuspace_version", "nu_version", "python_version", "platform", "arch"} <= set(
-        body["properties"]
+        event["properties"]
     )
     assert (tmp_path / ".nuspace" / "first_run.sent").exists()
     _telemetry.first_run()
-    assert len(posted) == 1
+    assert len(posted.events()) == 1
 
 
 @pytest.mark.parametrize("answer", [500, OSError("offline")])
 def test_first_run_retries_until_acked(tmp_path, posted, answer):
     posted.answer = answer
     _telemetry.first_run()
+    posted.events()
     _telemetry.first_run()
-    assert len(posted) == 2
+    assert len(posted.events()) == 2
     assert not (tmp_path / ".nuspace" / "first_run.sent").exists()
+
+
+def test_events_close_together_go_in_one_post(posted):
+    for n in range(5):
+        _telemetry.capture(f"x{n}")
+    assert [e["event"] for e in posted.events()] == ["x0", "x1", "x2", "x3", "x4"]
+    assert len(posted) == 1
+
+
+def test_an_event_carries_the_machine_and_nothing_else(posted):
+    _telemetry.track("plane_created")
+    (event,) = posted.events()
+    assert event["event"] == "nuspace_plane_created"
+    assert event["properties"] == send.base_properties()
+
+
+def test_capture_never_waits_on_the_network(monkeypatch, posted):
+    gate = threading.Event()
+    monkeypatch.setattr(send, "_post", lambda batch: gate.wait(5))
+    started = time.monotonic()
+    for _ in range(send._QUEUE_CAP * 2):  # past the cap: dropped, not waited on
+        _telemetry.capture("x")
+    assert time.monotonic() - started < 1
+    gate.set()
 
 
 def test_nothing_is_sent_when_off(monkeypatch, posted):
     _telemetry.set_telemetry(False)
     _telemetry.first_run()
     _telemetry.capture("x")
+    assert posted.events() == []
     monkeypatch.setenv("NUSPACE_TELEMETRY", "0")
     _telemetry.set_telemetry(True)
     _telemetry.first_run()
     _telemetry.capture("x")
-    assert posted == []
+    assert posted.events() == []
 
 
 def test_nothing_is_sent_from_a_dev_install(monkeypatch, posted):
     monkeypatch.setattr(config, "is_dev_install", lambda: True)
     _telemetry.first_run()
     _telemetry.capture("x")
-    assert posted == []
+    assert posted.events() == []
 
 
-# --- The browser -----------------------------------------------------------------
+# --- The host's usage and the browser's route ------------------------------------
 
 
-def test_browser_config_follows_the_choice(monkeypatch, posted):
-    on = _telemetry.browser_config()
-    assert on["enabled"] is True
-    assert on["posthog_token"] == send.posthog_token()
-    assert on["distinct_id"] == _telemetry.distinct_id()
-    assert on["product"] == "nuspace"
+def test_a_sink_that_raises_breaks_nothing():
+    def sink(event):
+        raise RuntimeError
 
-    monkeypatch.setenv("NUSPACE_TELEMETRY", "off")
-    off = _telemetry.browser_config()
-    assert (off["enabled"], off["posthog_token"]) == (False, "")
-    assert off["distinct_id"] == on["distinct_id"]
+    Usage(sink=sink).track("x")
 
 
-async def test_the_web_device_serves_the_browser_config():
+def test_track_tells_the_bound_usage_and_nobody_otherwise():
+    told = []
+    track = Track("plane_created") >> Track("cell_removed")
+    nu.run(track)
+    assert told == []
+    nu.run(nu.Provide(Usage, {"sink": told.append}, track))
+    assert told == ["plane_created", "cell_removed"]
+
+
+async def test_the_web_device_queues_space_loaded(posted):
     from nuspace.system.devices.web import device
 
     (route,) = device.ROUTES
-    assert route.path == "/api/telemetry-config"
-    response = await device.telemetry_config(None)
-    body = json.loads(response.body)
-    assert body["product"] == "nuspace"
-    assert body["enabled"] is False  # a source checkout
+    assert (route.path, route.methods >= {"POST"}) == ("/api/telemetry/space-loaded", True)
+    response = await device.space_loaded(None)
+    assert response.status_code == 204
+    assert [e["event"] for e in posted.events()] == ["nuspace_space_loaded"]

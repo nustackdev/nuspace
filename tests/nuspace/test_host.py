@@ -35,6 +35,7 @@ from nuspace.system import home
 from nuspace.system.kernel import Env, store
 from nuspace.system.kernel.space import free_port
 from nuspace.system.services import BOOTED, SERVICES, ensure_system, init
+from nuspace.system.usage import Usage
 
 
 def _plane(name: str, label: str = "") -> Plane:
@@ -257,6 +258,55 @@ async def test_open_space_headless_runs_a_booted_plane(tmp_path, monkeypatch):
         assert info["opened"] > 0
         assert info["versions"] == home.versions()
         assert set(info["versions"]) == {"nuspace"}
+    finally:
+        await space.close()
+
+
+async def test_open_space_tells_a_bound_usage_what_is_made_and_removed(tmp_path, monkeypatch):
+    """Each user plane and cell made or removed told once, the system's never, edits not at all."""
+    _points(monkeypatch, [])
+    path = str(tmp_path / "space")
+    await nu.arun(nu.With(store(path), body=ops.add_plane(USER, backend="async") >> boot(USER)))
+
+    told: list[str] = []
+    loop = asyncio.get_running_loop()
+    ready, done = loop.create_future(), asyncio.Event()
+    held = nu.let(_Hold(ready, done), lambda _: nu.Noop())
+    term = open_space(path, web=False, spares=1, name="nuspace-host", body=held)
+    task = asyncio.create_task(nu.arun(nu.Provide(Usage, {"sink": told.append}, term)))
+    space = Kernel(await asyncio.wait_for(asyncio.shield(ready), 20), done, task)
+
+    async def heard(event: str, n: int) -> None:
+        deadline = loop.time() + 4
+        while told.count(event) < n and loop.time() < deadline:
+            await asyncio.sleep(0.05)
+        assert told.count(event) == n, told
+
+    try:
+        # Booted: the services, home and settings made themselves, none of it told.
+        for plane in BOOTED:
+            await space.until(history(plane), lambda rs: any(r["started_at"] for r in rs))
+        assert told == []
+        await space.run(ops.add_plane("extra", backend="async"))
+        await heard("plane_created", 1)
+        await space.run(ops.add_cell("extra", SET_42, cell_id="e1"))
+        await space.run(ops.add_cell("extra", SET_42, cell_id="e2"))
+        await heard("cell_created", 2)
+        await space.run(ops.rename_plane("extra", "renamed") >> ops.set_prog("e1", SET_42))
+        await space.run(ops.remove_cell("e1"))
+        await heard("cell_removed", 1)
+        await space.run(ops.remove_plane("extra"))
+        await heard("plane_removed", 1)
+        await heard("cell_removed", 2)
+        await asyncio.sleep(0.3)
+        assert sorted(told) == [
+            "cell_created",
+            "cell_created",
+            "cell_removed",
+            "cell_removed",
+            "plane_created",
+            "plane_removed",
+        ]
     finally:
         await space.close()
 
