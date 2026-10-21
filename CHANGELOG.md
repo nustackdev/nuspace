@@ -2,8 +2,8 @@
 
 ## Packages shipped from this repo
 
-- **nuspace** (the runtime, the `nuspace` command) — 0.5.5
-- **nuspace-ui** (the compiled web bundle) — 0.5.4
+- **nuspace** (the runtime, the `nuspace` command) — 0.5.6
+- **nuspace-ui** (the compiled web bundle) — 0.5.5
 
 Below is the changelog for **nuspace** - the full commit stream. Newest first.
 The `nuspace-ui` wheel is the same source tree's vite output and is not tracked
@@ -11,6 +11,9 @@ separately here.
 
 ## Unreleased
 
+## 0.5.6 — 2026-10-22
+
+- Release nuspace 0.5.6, built on nu 0.6.6 and nuspace-ui 0.5.5
 - Polish CLI wording
 - Polish the README wording to match the site
 - Track opens and planes or cells added and removed, never blocking, explained in telemetry status
