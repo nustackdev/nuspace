@@ -2,14 +2,14 @@
   <img width="112" alt="nuspace" src="https://nustack.dev/brand/logo-square-512@2x.png" />
   <h1>nuspace</h1>
   <p>Computational space for everything you work with: notes, data, tools, agents.</p>
-
-[![PyPI](https://img.shields.io/pypi/v/nuspace?color=yellow)](https://pypi.org/project/nuspace/)
-[![Python](https://img.shields.io/badge/python-%3E%3D%203.10-blue)](https://pypi.org/project/nuspace/)
-![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20macOS-blue)
-[![Downloads](https://img.shields.io/pypi/dw/nuspace?color=green)](https://pypi.org/project/nuspace/)
-[![License](https://img.shields.io/badge/license-AGPL%20v3-orange.svg)](https://github.com/nustackdev/nuspace/blob/main/LICENSE.md)
-[![Discord](https://img.shields.io/badge/discord-join-5865F2?logo=discord&logoColor=white)](https://discord.gg/tCa8YE7XVr)
-[![X](https://img.shields.io/twitter/follow/nustackdev?style=social)](https://x.com/nustackdev)
+  
+  [![Python](https://img.shields.io/badge/python-%3E%3D%203.10-blue)](https://pypi.org/project/nuspace/)
+  [![PyPI](https://img.shields.io/pypi/v/nuspace?color=yellow)](https://pypi.org/project/nuspace/)
+  [![Downloads](https://img.shields.io/pypi/dw/nuspace?color=green)](https://pypi.org/project/nuspace/)
+  [![License](https://img.shields.io/badge/license-AGPL%20v3-orange.svg)](https://github.com/nustackdev/nuspace/blob/main/LICENSE.md)
+  
+  [![Discord](https://img.shields.io/badge/discord-join-5865F2?logo=discord&logoColor=white)](https://discord.gg/tCa8YE7XVr)
+  [![X](https://img.shields.io/twitter/follow/nustackdev?style=social)](https://x.com/nustackdev)
 
 </div>
 
@@ -267,11 +267,11 @@ The skills are plain folders. Drop them where your agent looks for skills.
 
 | | Layer | What it is |
 | --- | --- | --- |
-| 01 | [**interaction-model**](https://github.com/nustackdev/interaction-model), the theory | Every resource is a Ref: a KV slot, a UI widget, an LLM endpoint, a remote object. Everything you do with it is an Interaction. |
-| 02 | [**nu**](https://github.com/nustackdev/nu), the primitive | The interaction model implementation in Python. |
-| 03 | [**nustd**](https://github.com/nustackdev/nu/tree/main/pkgs/nustd), the standard library | nu Refs and Interactions for everyday tasks. |
-| 04 | [**nuspace**](https://github.com/nustackdev/nuspace), the space | A space that runs nu programs. Every cell is one. |
-| 05 | [**nuverse**](https://github.com/nustackdev/nuverse), the ecosystem | Ready made spaces and extensions, one install away. |
+| 01 | <code>the theory</code> <br/> [**interaction-model**](https://github.com/nustackdev/interaction-model) | Every resource is a Ref: a KV slot, a UI widget, an LLM endpoint, a remote object. Everything you do with it is an Interaction. |
+| 02 | <code>the primitive</code> <br/> [**nu**](https://github.com/nustackdev/nu) | The interaction model implementation in Python. |
+| 03 | <code>the std library</code> <br/> [**nustd**](https://github.com/nustackdev/nu/tree/main/pkgs/nustd) | nu Refs and Interactions for everyday tasks. |
+| 04 | <code>the space</code> <br/> [**nuspace**](https://github.com/nustackdev/nuspace) | A space that runs nu programs. Every cell is one. |
+| 05 | <code>the ecosystem</code> <br/> [**nuverse**](https://github.com/nustackdev/nuverse) | Ready made spaces and extensions, one install away. |
 | + | **your space**, on top of it all | Everything below exists so your space can be anything. |
 
 ## Community
