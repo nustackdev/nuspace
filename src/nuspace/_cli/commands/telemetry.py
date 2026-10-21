@@ -22,8 +22,8 @@ __all__ = ["telemetry"]
 
 #: Why we ask, said once wherever the choice is shown.
 _WHY = (
-    "nuspace is early. Anonymous usage events are how we learn what people actually do"
-    " with it, so we'd be grateful if you keep telemetry on."
+    "nuspace is still young, and these few anonymous events help us a lot."
+    " We'd appreciate it if you kept telemetry on."
 )
 
 #: What goes out and what never does, as ``(label, text)`` rows.
@@ -76,7 +76,7 @@ def _print(*lines: Text | str) -> None:
     help=(
         "Anonymous usage telemetry, set once for you across every space. It sends a few usage"
         " events, never anything from inside your spaces. Status with no command. nuspace is"
-        " early and this is how we learn what works, so please keep it on."
+        " still young, so we'd appreciate you keeping it on."
         f" ${_telemetry.ENV}=0 turns it off whatever is set here."
     ),
 )

@@ -11,8 +11,8 @@ separately here.
 
 ## Unreleased
 
+- Polish CLI wording
 - Polish the README wording to match the site
-
 - Track opens and planes or cells added and removed, never blocking, explained in telemetry status
 - Rework the README with demo videos and install paths
 - Give connection tests room to boot on a busy machine
