@@ -1,5 +1,5 @@
 // The rail's search entry, under the top bar: a row that opens the search
-// popup (./SearchPalette.tsx), with the shortcut that opens it from anywhere.
+// Plane (./search.ts), with the shortcut that opens it from anywhere.
 //
 // It is nuspace's own, not a kit control dressed as an input: it is laid out
 // like a flat plane row (design/rail.ts, `railSearchTrigger`), so the top bar

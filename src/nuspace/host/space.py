@@ -13,7 +13,7 @@ inside :func:`~nuspace.system.kernel.open_kernel` after reconcile:
    search planes, made where missing, so they exist before the web device
    serves;
 3. :func:`~nuspace.system.home.write_info`: ``Space.state.info`` for this
-   open (space path, when, versions);
+   open (space path, when, versions, the registered content kinds);
 4. :func:`~nuspace.system.services.nav.clear_connections`: tabs of a previous
    run dropped, so nav never brings a plane up for one (D34);
 5. init started by the kernel's own :func:`~nuspace.system.kernel.init_start`,
@@ -51,6 +51,7 @@ from nuspace.system.utils import park
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
 
+    from nuspace.content import Content
     from nuspace.ext import Extension, Plane, Snippet
     from nuspace.system.backends import Backend
     from nuspace.system.kernel import EnvFactory
@@ -104,6 +105,7 @@ def open_space(
     spares: int = DEFAULT_SPARES,
     planes: Sequence[Plane] = (),
     snippets: Sequence[Snippet] = (),
+    contents: Sequence[type[Content]] = (),
     envs: Mapping[str, EnvFactory] | None = None,
     space_envs: Sequence[Sequence[str] | str] = (),
     backends: Mapping[str, type[Backend]] | None = None,
@@ -132,6 +134,7 @@ def open_space(
         spares: Idle workers to keep up.
         planes: Planes registered directly, ahead of any extension.
         snippets: Snippets registered directly.
+        contents: Content kinds registered directly.
         envs: Env factories registered directly.
         space_envs: Env specs every run executes inside, outermost.
         backends: Backend classes by name, on top of the built in ``async``
@@ -143,7 +146,12 @@ def open_space(
         name: Process name prefix for workers.
     """
     reg = space_registry(
-        planes=planes, snippets=snippets, envs=envs, extensions=extensions, discover=discover
+        planes=planes,
+        snippets=snippets,
+        contents=contents,
+        envs=envs,
+        extensions=extensions,
+        discover=discover,
     )
     factories = dict(reg.envs)
     arms: list[nu.Nu] = []
@@ -165,7 +173,7 @@ def open_space(
     kwargs = {} if name is None else {"name": name}
     return open_kernel(
         seed_space()
-        >> write_info(path)
+        >> write_info(path, reg.contents.values())
         >> clear_connections()
         >> init_start(init_service.PLANE)
         >> beside,

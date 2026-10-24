@@ -43,11 +43,7 @@ from nuspace.shapes import RECENTS_CAP, Space
 from nuspace.system.devices.web.env import SESSION_ENV, session_env
 from nuspace.system.devices.web.session import served_sessions
 from nuspace.system.devices.web.shell import Shell
-from nuspace.system.devices.web.sidebar import (
-    registered_entries,
-    searchable_entries,
-    sidebar_feed,
-)
+from nuspace.system.devices.web.sidebar import registered_entries, sidebar_feed
 from nuspace.system.devices.web.utils import Arms, cell_ui, field_ids
 from nuspace.system.devices.web.viewer import on_open, slash_entries, viewer_feed
 from nuspace.system.home import PLANE as HOME
@@ -177,15 +173,12 @@ def connection(
     Args:
         sid: The connection id.
         planes: The registered Planes, what the sidebar can create.
-        snippets: The registered snippets, for the viewer's ``/`` menu and
-            the sidebar's search.
+        snippets: The registered snippets, for the viewer's ``/`` menu.
         shell: The shell every tab holds.
     """
-    boot = shell.boot(
-        slash_entries(snippets), registered_entries(planes), searchable_entries(snippets)
-    )
+    boot = shell.boot(slash_entries(snippets), registered_entries(planes))
     feeds = boot >> nu.ParallelAsync(
-        sidebar_feed(shell.sidebar, planes, snippets),
+        sidebar_feed(shell.sidebar, planes),
         viewer_feed(shell.viewer, sid, snippets),
     )
     return nu.TryCatch(

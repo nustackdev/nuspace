@@ -12,9 +12,9 @@ one key to watch.
 A cell is addressed by its id alone. An op that needs its plane reads
 ``plane`` off it, inside its own bracket.
 
-A cell's state is in the other store (States). Dropping a cell drops it
-too, as a commit of its own after the structure one, in the order
-:func:`~.utils.atomic_state` gives.
+A cell's state is in the other store (States), and so are its items.
+Dropping a cell drops both, as a commit of its own after the structure
+one, in the order :func:`~.utils.atomic_state` gives.
 """
 
 from __future__ import annotations
@@ -219,9 +219,10 @@ def cell_writes(
 
 
 def remove_cell(cell_id: nu.StrArg) -> nu.Nu:
-    """Drop a cell: its live cell runs interrupted, off its plane, row deleted, then its state.
+    """Drop a cell: its live cell runs interrupted, off its plane, row deleted, then its state and items.
 
-    Two commits, the row first. The other way round, a cell still on the
+    Two commits, the row first. The second deletes its items of every kind
+    with its state. The other way round, a cell still on the
     plane (and its runs, still live until the interrupt lands) would read
     its state gone. This way the worst a crash between them leaves is state
     no cell points at.

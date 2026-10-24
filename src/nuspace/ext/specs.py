@@ -98,13 +98,8 @@ class Snippet:
             as ``<package>.<name>``, the registry key and what the cells made
             from it record as ``props.made_by``.
         label: What the menu shows.
-        source: The cell's prog.
-        search: What searching one of its cells means, None when it has no
-            content to search. ``search(query, cell)`` returns a term
-            yielding that cell's hits, a list of ``{excerpt}``, ``[]`` for
-            none. It runs inside a search's run, on a worker, so it
-            is named there by module and qualified name: a module level
-            function, never a lambda or a closure.
+        source: The cell's prog. A snippet keeps what it edits or shows in
+            content items (:mod:`nuspace.content`), where search finds them.
         description: One line on what a cell made from it is for.
         ops: The ops on a cell made from it, each taking the cell id first, for whoever writes a program against its cells.
         group: The ``/`` menu heading it sits under, ``""`` for none. Groups
@@ -117,13 +112,7 @@ class Snippet:
     name: str
     label: str
     source: str
-    search: Callable[[nu.Nu, nu.Nu, nu.Nu], nu.Nu] | None = None
     description: str = ""
     ops: tuple[Callable[..., nu.Nu], ...] = ()
     group: str = ""
     icon: str = ""
-
-    def __post_init__(self) -> None:
-        if self.search is not None and "<" in getattr(self.search, "__qualname__", "<"):
-            msg = f"Snippet {self.name!r}: search must be a module level function"
-            raise ValueError(msg)

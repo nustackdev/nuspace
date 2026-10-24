@@ -1,36 +1,27 @@
-"""Search: the op, the search's own cell, the viewer's two cells, and one search run on a worker."""
+"""Search: the op, the search's own cell, the viewer's three cells, and one search run on a worker."""
 
 from __future__ import annotations
 
-import asyncio
-
 import pytest
-from _support import search as notes
+from _support.contents import NoteContent, PlainContent, write
 from _support.kernel import ended, opened
 
 import nu
 import nustd.kv
-from nuspace import Snippet, ops
+from nuspace import ops
+from nuspace.content import CELL, PLANE, SPACE
 from nuspace.shapes import PlaneState, Reroot, Space, States
-from nuspace.system import search
+from nuspace.system import home, search
 from nuspace.system.devices.web.env import session_env
+from nuspace.system.home import seed, seeded_id
 from nuspace.system.kernel.body import Rewrites
 from nustd.ui import Session
-from nustd.ui.core import OP_NOTIFY, Frame, WsSession
 
 
 S = search.Search
 
-#: What a space with the test snippets registered can search.
-SEARCHERS = search.searchable([notes.NOTE, notes.SLOW_NOTE, notes.PLAIN])
-
-
-def _drawn(plane_id: str, name: str) -> nu.Nu:
-    return ops.add_plane(plane_id, name=name, ui=True, made_by="plain", backend="async")
-
-
-def _note(plane_id: str, cell_id: str, body: str, snippet: Snippet = notes.NOTE) -> nu.Nu:
-    return ops.insert_snippet(plane_id, snippet, cell_id=cell_id) >> notes.write(cell_id, body)
+NOTE = "_support.contents.NoteContent"
+PLAIN = "_support.contents.PlainContent"
 
 
 def _state(plane_id: str, term: nu.Nu) -> nu.Nu:
@@ -42,13 +33,17 @@ async def _hits(store, plane_id: str) -> list[dict]:
     return await store.read(nu.If(hits.exists(), hits.extract(), nu.Literal([])))
 
 
+async def _addresses(store, plane_id: str) -> list[tuple]:
+    return [(h["kind"], tuple(h["scope"]), h["id"]) for h in await _hits(store, plane_id)]
+
+
 async def _finished(store, plane_id: str) -> bool:
     return await store.read(_state(plane_id, S.finished_at).exists())
 
 
-async def _searched(store, *args: object, **kwargs: object) -> str:
+async def _searched(store, request, **kwargs: object) -> str:
     """Search through ``store``. The new search is the newest child of ``SEARCHES``."""
-    await store.run(search.search(*args, **kwargs))
+    await store.run(search.search(request, **kwargs))
     return (await store.read(ops.children(search.SEARCHES)))[-1]
 
 
@@ -69,16 +64,14 @@ async def _run_search(store, plane_id: str) -> None:
 
 
 async def _garden(store) -> None:
-    """Two drawn planes of notes, one plain cell, one plane nobody draws."""
+    """Notes in two cells, on a plane and in the space, and plain items beside them."""
     await store.run(
-        _drawn("p1", "Garden")
-        >> _note("p1", "c1", "Tomato needs\nsun and water")
-        >> _note("p1", "c2", "Tomatoes are not the word")
-        >> ops.insert_snippet("p1", notes.PLAIN, cell_id="c3")
-        >> _drawn("p2", "Tomato plan")
-        >> _note("p2", "c4", "Buy TOMATO seeds")
-        >> ops.add_plane("hidden", name="tomato hideout", backend="async")
-        >> _note("hidden", "c5", "tomato")
+        write(NoteContent, (CELL, "c1"), "a", body="Tomato needs sun", stars=4.0)
+        >> write(NoteContent, (CELL, "c1"), "b", body="Basil", stars=1.0, done=True)
+        >> write(NoteContent, (CELL, "c2"), "a", body="Buy TOMATO seeds", stars=2.0)
+        >> write(NoteContent, (PLANE, "p1"), "t", body="Tomato plan", stars=5.0, done=True)
+        >> write(NoteContent, (SPACE, ""), "r", body="Read me")
+        >> write(PlainContent, (CELL, "c1"), "z", body="tomato, plainly")
     )
 
 
@@ -86,180 +79,141 @@ async def _garden(store) -> None:
 
 
 async def test_search_makes_a_plane_under_searches_and_starts_its_run(store):
-    pid = await _searched(store, "tomato", ["note"], True, searchers=SEARCHERS)
-    assert pid
+    request = {NOTE: {"text": "tomato"}}
+    pid = await _searched(store, request)
     rows = {r["id"]: r for r in await store.read(ops.plane_rows())}
     parent = rows[search.SEARCHES]
     assert parent["name"] == "Searches"
     assert parent["props"]["system"] is True and parent["props"]["ui"] is False
-    assert rows[pid]["name"] == "tomato"
+    assert rows[pid]["name"] == "Note: tomato"
     assert rows[pid]["props"]["ui"] is False and rows[pid]["parent"] == search.SEARCHES
     assert (parent["props"]["backend"], rows[pid]["props"]["backend"]) == ("mp", "mp")
-    assert await store.read(ops.children(search.SEARCHES)) == [pid]
 
     (cell,) = await store.read(ops.cell_rows(pid))
     assert cell["name"] == search.CELL
-    assert cell["prog"] == search.source(SEARCHERS)
+    assert cell["prog"] == search.source(request)
     assert cell["props"] == {"made_by": "", "has_ui": False}
 
     state = await store.read(States.planes[pid].state.extract())
-    assert state["query"] == "tomato"
-    assert state["snippets"] == ["note"]
-    assert state["titles"] is True
+    assert state["request"] == request
     assert state["started_at"] > 0
     assert "finished_at" not in state
 
     (run,) = await store.read(ops.runs(pid))
     assert run["by"] == search.BY
 
-    # A second search: the parent is kept, the new one listed after.
-    again = await _searched(store, "sun", [], False, searchers=SEARCHERS)
+    # A second search, its request a term: the parent is kept, the new one listed after.
+    again = await _searched(store, nu.Literal({PLAIN: {}}))
     assert await store.read(ops.children(search.SEARCHES)) == [pid, again]
+    (cell,) = await store.read(ops.cell_rows(again))
+    assert cell["prog"] == search.source({PLAIN: {}})
+    assert await store.read(ops.plane_title(again)) == "Plain: all"
 
 
-def test_the_prog_names_only_snippets_with_a_search():
-    assert SEARCHERS == {"note": "_support.search:search", "slow": "_support.search:slow"}
-    assert search.load_searcher(SEARCHERS["slow"]) is notes.slow
-
-
-def test_a_search_that_is_not_module_level_is_refused():
-    with pytest.raises(ValueError, match="module level"):
-        Snippet("x", "X", "", search=lambda q, c: nu.List.of())
-
-
-async def test_insert_snippet_records_its_snippet_as_a_prop(store):
-    await store.run(_drawn("p", "P") >> ops.insert_snippet("p", notes.NOTE, cell_id="c"))
-    (cell,) = await store.read(ops.cell_rows("p"))
-    assert cell["props"]["made_by"] == "note"
+def test_describe_says_what_was_asked():
+    assert search.describe({NOTE: {"text": "tomato", "min_stars": 3.0, "done": True}}) == (
+        "Note: tomato, min_stars 3.0, done"
+    )
+    assert search.describe({NOTE: {}, PLAIN: {}}) == "Note: all; Plain: all"
+    assert search.describe({}) == "Nothing asked"
 
 
 # --- The search's cell --------------------------------------------------------------------
 
 
-async def test_the_cell_finds_notes_and_titles_in_drawn_planes(store):
+async def test_the_cell_walks_cells_then_planes_then_the_space(store):
     await _garden(store)
-    pid = await _searched(store, "tomato", ["note"], True, searchers=SEARCHERS)
+    pid = await _searched(store, {NOTE: {"text": "tomato"}})
     await _run_search(store, pid)
-    hits = await _hits(store, pid)
-    assert hits == [
-        {
-            "plane": "p2",
-            "cell": "",
-            "title": "Tomato plan",
-            "excerpt": "Tomato plan",
-            "by": "title",
-        },
-        {
-            "plane": "p1",
-            "cell": "c1",
-            "title": "Garden",
-            "excerpt": "Tomato needs sun and water",
-            "by": "note",
-        },
-        {
-            "plane": "p2",
-            "cell": "c4",
-            "title": "Tomato plan",
-            "excerpt": "Buy TOMATO seeds",
-            "by": "note",
-        },
+    assert await _addresses(store, pid) == [
+        (NOTE, (CELL, "c1"), "a"),
+        (NOTE, (CELL, "c2"), "a"),
+        (NOTE, (PLANE, "p1"), "t"),
     ]
     assert await _finished(store, pid)
 
 
-async def test_unpicked_snippets_and_titles_are_left_out(store):
+async def test_keywords_left_out_stay_unset(store):
     await _garden(store)
-    titles = await _searched(store, "tomato", [], True, searchers=SEARCHERS)
-    await _run_search(store, titles)
-    assert [(h["plane"], h["by"]) for h in await _hits(store, titles)] == [("p2", "title")]
+    everything = await _searched(store, {NOTE: {}})
+    await _run_search(store, everything)
+    assert len(await _hits(store, everything)) == 5
 
-    notes_only = await _searched(store, "tomato", ["note"], False, searchers=SEARCHERS)
-    await _run_search(store, notes_only)
-    assert [(h["cell"], h["by"]) for h in await _hits(store, notes_only)] == [
-        ("c1", "note"),
-        ("c4", "note"),
+    stars = await _searched(store, {NOTE: {"min_stars": 2.0}})
+    await _run_search(store, stars)
+    assert [a[1:] for a in await _addresses(store, stars)] == [
+        ((CELL, "c1"), "a"),
+        ((CELL, "c2"), "a"),
+        ((PLANE, "p1"), "t"),
     ]
 
-    # Picked, but the space it was made in could not search it.
-    unknown = await _searched(store, "tomato", ["plain", "gone"], False, searchers=SEARCHERS)
-    await _run_search(store, unknown)
-    assert await _hits(store, unknown) == []
-    assert await _finished(store, unknown)
+    both = await _searched(store, {NOTE: {"text": "tomato", "done": True}})
+    await _run_search(store, both)
+    assert [a[1:] for a in await _addresses(store, both)] == [((PLANE, "p1"), "t")]
 
 
-async def test_an_empty_query_finds_nothing_and_finishes(store):
+async def test_kinds_are_searched_each_on_their_own(store):
     await _garden(store)
-    pid = await _searched(store, "  ", ["note"], True, searchers=SEARCHERS)
+    pid = await _searched(store, {PLAIN: {}, NOTE: {"text": "basil"}})
     await _run_search(store, pid)
-    assert await _hits(store, pid) == []
+    assert await _addresses(store, pid) == [
+        (PLAIN, (CELL, "c1"), "z"),
+        (NOTE, (CELL, "c1"), "b"),
+    ]
+
+
+async def test_an_unknown_kind_or_keyword_is_passed_by_and_the_search_finishes(store):
+    await _garden(store)
+    pid = await _searched(store, {"nowhere.Gone": {}, NOTE: {"text": "basil", "colour": "red"}})
+    await _run_search(store, pid)
+    assert await _addresses(store, pid) == [(NOTE, (CELL, "c1"), "b")]
     assert await _finished(store, pid)
 
 
-def test_excerpt_cuts_around_the_match():
-    long = "x" * 60 + " the Needle is here " + "y" * 60
-    got, _ = nu.run(search.excerpt(nu.Str(long), nu.Str("needle")))
-    assert got.startswith("…") and got.endswith("…")
-    assert "the Needle is here" in got
-    assert len(got) <= 2 * search.EXCERPT_WIDTH + len("needle") + 2
-    short, _ = nu.run(search.excerpt(nu.Str("a needle"), nu.Str("NEEDLE")))
-    assert short == "a needle"
-    assert nu.run(search.matches(nu.Str("Haystack"), nu.Str("")))[0] is False
-
-
-@pytest.mark.parametrize(
-    ("value", "query", "at"),
-    [
-        ("Haystack", "STACK", -1),
-        ("Haystack hay", "hay", 9),
-        ("stack haystack stack.", "stack", 0),
-        ("water the basil's pot", "BASIL", 10),
-        ("water the basil", "the basil", 6),
-        ("", "a", -1),
-        ("anything", "", -1),
-    ],
-)
-def test_matches_whole_words_only(value, query, at):
-    assert nu.run(search.WordAt(nu.Str(value), nu.Str(query)))[0] == at
-    assert nu.run(search.matches(nu.Str(value), nu.Str(query)))[0] is (at >= 0)
-
-
-def test_excerpt_skips_a_match_inside_a_word():
-    long = "haystack " + "x" * 60 + " a stack here"
-    got, _ = nu.run(search.excerpt(nu.Str(long), nu.Str("stack")))
-    assert "a stack here" in got and "haystack" not in got
+async def test_items_of_a_removed_cell_are_no_longer_found(store):
+    await store.run(ops.add_plane("p", backend="async") >> ops.add_cell("p", "", cell_id="c1"))
+    await _garden(store)
+    await store.run(ops.remove_cell("c1"))
+    pid = await _searched(store, {NOTE: {"text": "tomato"}})
+    await _run_search(store, pid)
+    assert [a[1] for a in await _addresses(store, pid)] == [(CELL, "c2"), (PLANE, "p1")]
 
 
 # --- The viewer ------------------------------------------------------------------------------
 
 
 class _Recording:
-    """A session that keeps the frames it is sent instead of sending them."""
+    """A session that keeps the frames it is sent instead of sending them, and answers reads."""
 
-    def __init__(self) -> None:
+    def __init__(self, values: dict | None = None) -> None:
         self.frames: list = []
+        self.values = values or {}
 
     async def send(self, frame: object) -> None:
         self.frames.append(frame)
 
+    async def aread(self, path: tuple[str, ...]) -> object:
+        return self.values.get(tuple(path), nu.lang.EMPTY)
 
-async def _frames(store, source: str, cell: str, build) -> list[tuple]:
+
+async def _frames(store, source: str, cell: str, build, values: dict | None = None) -> list[tuple]:
     """``build(namespace)`` from a viewer cell's source, run as the kernel would run it there.
 
     Yields ``(ref path, payload)`` in order, ``None`` for an erase.
     """
     namespace: dict = {}
     exec(compile(source, cell, "exec"), namespace)  # noqa: S102
-    term = Rewrites(Reroot(search.PLANE, cell))(build(namespace))
-    session = _Recording()
+    term = Rewrites(Reroot(search.PLANE, seeded_id(search.PLANE, cell)))(build(namespace))
+    session = _Recording(values)
     await nu.arun(term, store.ctx.bind(Session, session))
     return [
         (frame.ref, None if frame.op == "remove" else frame.payload) for frame in session.frames
     ]
 
 
-async def _draw(store, source: str, cell: str, build) -> dict:
+async def _draw(store, source: str, cell: str, build, values: dict | None = None) -> dict:
     """:func:`_frames` as ``{ref path: payload}``, the last write to a path winning."""
-    return dict(await _frames(store, source, cell, build))
+    return dict(await _frames(store, source, cell, build, values))
 
 
 class _Chosen(PlaneState):
@@ -276,8 +230,24 @@ async def test_the_viewer_is_seeded_once_unpinned(store):
     assert row["name"] == "Search"
     assert row["props"]["system"] is True and row["props"]["ui"] is True
     assert row["props"]["backend"] == "async"
-    assert [c["name"] for c in await store.read(ops.cell_rows(search.PLANE))] == ["pick", "results"]
+    cells = await store.read(ops.cell_rows(search.PLANE))
+    assert [c["name"] for c in cells] == ["form", "pick", "results"]
+    assert all(c["props"]["has_ui"] for c in cells)
     assert search.PLANE not in await store.read(ops.pinned())
+
+
+async def test_a_viewer_seeded_before_content_gets_its_form_and_new_results(store):
+    old = (("pick", search.PICK), ("results", "def out():\n    return None\n"))
+    await store.run(seed(search.PLANE, search.NAME, search.ICON, old, backend="async", pin=False))
+    await store.run(search.ensure_search())
+    cells = await store.read(ops.cell_rows(search.PLANE))
+    assert [c["name"] for c in cells] == ["form", "pick", "results"]
+    assert cells[0]["prog"] == search.FORM and cells[2]["prog"] == search.RESULTS
+
+    # Once it has a form, the owner's edits stay.
+    await store.run(ops.set_prog(seeded_id(search.PLANE, "results"), "edited"))
+    await store.run(search.ensure_search())
+    assert await store.read(ops.prog(seeded_id(search.PLANE, "results"))) == "edited"
 
 
 @pytest.mark.parametrize("cell", search.CELLS, ids=lambda c: c[0])
@@ -296,10 +266,46 @@ async def test_each_viewer_cell_loads_through_the_kernel_rewrites(store, cell):
     nu.validate(nu.compile(term))
 
 
+async def test_the_form_offers_the_registered_kinds_and_the_picked_ones_fields(store):
+    await store.run(home.write_info(None, [NoteContent, PlainContent]))
+    frames = await _frames(store, search.FORM, "form", lambda ns: ns["draw"]())
+    got = dict(frames)
+    assert got[("head", "kind")] == NOTE
+    options = next(p for r, p in frames if r == ("head", "kind"))
+    assert options == {
+        "options": [{"value": NOTE, "label": "Note"}, {"value": PLAIN, "label": "Plain"}]
+    }
+    assert got[("fields", "f_text", "label")] == "Text"
+    assert got[("fields", "f_text", "text")] == ""
+    assert got[("fields", "f_min_stars", "label")] == "Min stars"
+    assert got[("fields", "f_min_stars", "number")] == ""
+    assert got[("fields", "f_done", "switch")] is False
+    assert ("fields", "f_done", "text") not in got
+
+
+async def test_the_forms_button_makes_a_search_of_what_was_filled_in(store):
+    await store.run(home.write_info(None, [NoteContent, PlainContent]))
+    values = {
+        ("head", "kind"): NOTE,
+        ("fields", "f_text", "text"): "  tomato ",
+        ("fields", "f_min_stars", "number"): "",
+        ("fields", "f_done", "switch"): True,
+    }
+    await _frames(store, search.FORM, "form", lambda ns: ns["go"](), values)
+    (pid,) = await store.read(ops.children(search.SEARCHES))
+    assert await store.read(_state(pid, S.request)) == {NOTE: {"text": "tomato", "done": True}}
+    assert await store.read(ops.plane_title(pid)) == "Note: tomato, done"
+
+    stars = {**values, ("fields", "f_text", "text"): "", ("fields", "f_min_stars", "number"): "3"}
+    await _frames(store, search.FORM, "form", lambda ns: ns["go"](), stars)
+    newest = (await store.read(ops.children(search.SEARCHES)))[-1]
+    assert await store.read(_state(newest, S.request)) == {NOTE: {"min_stars": 3.0, "done": True}}
+
+
 async def test_pick_lists_searches_newest_first_and_shows_the_newest(store):
     await store.run(search.ensure_search())
-    old = await _searched(store, "old", [], True, searchers=SEARCHERS)
-    new = await _searched(store, "new", [], True, searchers=SEARCHERS)
+    old = await _searched(store, {NOTE: {}}, name="old")
+    new = await _searched(store, {NOTE: {}}, name="new")
     got = await _frames(
         store, search.PICK, "pick", lambda ns: nu.Frame(ns["Seen"], ns["draw"](), ids=[])
     )
@@ -311,44 +317,34 @@ async def test_pick_lists_searches_newest_first_and_shows_the_newest(store):
     assert await store.read(ops.plane_state(search.PLANE, _Chosen.shown)) == new
 
 
-async def test_a_picked_search_holds_until_a_newer_one_is_made(store):
-    await store.run(search.ensure_search())
-    old = await _searched(store, "old", [], True, searchers=SEARCHERS)
-    new = await _searched(store, "new", [], True, searchers=SEARCHERS)
-    chosen = ops.plane_state(search.PLANE, _Chosen.picked.set(old) >> _Chosen.newest.set(new))
-    await store.run(ops.utils.atomic_state(chosen))
-
-    def draw(ns):
-        return nu.Frame(ns["Seen"], ns["draw"](), ids=[])
-
-    shown = ops.plane_state(search.PLANE, _Chosen.shown)
-    await _frames(store, search.PICK, "pick", draw)
-    assert await store.read(shown) == old
-    newer = await _searched(store, "newer", [], True, searchers=SEARCHERS)
-    got = await _draw(store, search.PICK, "pick", draw)
-    assert got[("pick", "search")] == newer
-    assert await store.read(shown) == newer
-
-
-async def test_results_draw_the_shown_search(store):
+async def test_results_draw_each_hit_with_its_kinds_render_hit(store):
+    await store.run(
+        ops.add_plane("p1", name="Garden", ui=True, backend="async")
+        >> ops.add_cell("p1", "", cell_id="c1")
+        >> ops.add_cell("p1", "", cell_id="c2")
+        >> home.write_info(None, [NoteContent, PlainContent])
+    )
     await _garden(store)
-    pid = await _searched(store, "tomato", ["note"], True, searchers=SEARCHERS)
+    pid = await _searched(store, {NOTE: {"text": "tomato"}, PLAIN: {}})
     await _run_search(store, pid)
     got = await _draw(store, search.RESULTS, "results", lambda ns: ns["shown"](nu.Str(pid)))
-    assert got[("title",)]["label"] == "Results for “tomato”"
-    assert got[("status",)] == "Done: 3 hits"
-    assert got[("hits", "h0", "head", "link")] == {"href": "/p2", "label": "Tomato plan"}
-    assert got[("hits", "h0", "head", "by")]["label"] == "title"
-    assert ("hits", "h0", "excerpt") not in got
+    assert got[("title",)]["label"] == "Results for “Note: tomato; Plain: all”"
+    assert got[("status",)] == "Done: 4 hits"
+    # A cell's item opens its cell's plane, a plane's its plane.
+    assert got[("hits", "h0", "head", "link")] == {"href": "/p1", "label": "Garden"}
+    assert got[("hits", "h0", "head", "kind")]["label"] == "Note"
+    assert got[("hits", "h0", "item", "body")] == "Tomato needs sun"
     assert got[("hits", "h1", "head", "link")] == {"href": "/p1", "label": "Garden"}
-    assert got[("hits", "h1", "head", "by")]["label"] == "note"
-    assert got[("hits", "h1", "excerpt")] == "Tomato needs sun and water"
-    assert got[("hits", "h2", "head", "link")] == {"href": "/p2", "label": "Tomato plan"}
+    assert got[("hits", "h1", "item", "body")] == "Buy TOMATO seeds"
+    assert got[("hits", "h2", "head", "link")] == {"href": "/p1", "label": "Garden"}
+    # A kind that draws nothing draws nothing, under its head.
+    assert got[("hits", "h3", "head", "kind")]["label"] == "Plain"
+    assert ("hits", "h3", "item", "body") not in got
     assert got[("empty",)] is None
 
 
 async def test_results_say_when_nothing_was_found_or_searched(store):
-    pid = await _searched(store, "zzz", ["note"], True, searchers=SEARCHERS)
+    pid = await _searched(store, {NOTE: {"text": "zzz"}})
     await _run_search(store, pid)
     got = await _draw(store, search.RESULTS, "results", lambda ns: ns["shown"](nu.Str(pid)))
     assert got[("status",)] == "Done: 0 hits"
@@ -357,115 +353,18 @@ async def test_results_say_when_nothing_was_found_or_searched(store):
     assert none[("empty",)]["label"] == "No searches yet"
 
 
-# --- The sidebar ------------------------------------------------------------------------------
-
-
-class _FakeSession(WsSession):
-    """A session with no socket: frames sent are kept, notifies are fired by hand."""
-
-    def __init__(self) -> None:
-        super().__init__(ws=None)
-        self.frames: list[Frame] = []
-
-    async def send(self, frame: Frame) -> None:
-        self.frames.append(frame)
-
-    def notify(self, path: tuple[str, ...], payload: dict) -> None:
-        self._dispatch(Frame(OP_NOTIFY, ref=path, payload=payload))
-
-
-async def _until(store, term: nu.Nu, check, timeout: float = 3.0) -> object:
-    deadline = asyncio.get_running_loop().time() + timeout
-    while True:
-        value = await store.read(term)
-        if check(value):
-            return value
-        assert asyncio.get_running_loop().time() < deadline, f"timed out, last read {value!r}"
-        await asyncio.sleep(0.01)
-
-
-async def test_the_sidebar_offers_searchable_snippets_and_runs_a_search(store):
-    from nuspace.system.devices.web.device import connection
-
-    await store.run(_drawn("p1", "Tomato plan"))
-    session = _FakeSession()
-    snippets = [notes.PLAIN, notes.NOTE]
-    task = asyncio.create_task(
-        nu.arun(connection(nu.Str("s1"), snippets=snippets), store.ctx.bind(Session, session))
-    )
-    kids = ops.children(search.SEARCHES)
-    try:
-        # Booted and the tree shipped: every arm is listening.
-        deadline = asyncio.get_running_loop().time() + 3.0
-        while not any(
-            isinstance(f.payload, dict) and f.payload.get("op") == "set_tree"
-            for f in session.frames
-        ):
-            assert asyncio.get_running_loop().time() < deadline, "never booted"
-            await asyncio.sleep(0.01)
-        sidebar = next(f for f in session.frames if f.ref == ("sidebar",))
-        assert sidebar.chain[0][2]["searchable"] == [
-            {"name": "note", "label": "Note", "group": "", "icon": "", "description": ""}
-        ]
-
-        run = ("sidebar", "ops", "search.run")
-        session.notify(run, {"query": "  ", "snippets": ["note"], "titles": True})
-        await asyncio.sleep(0.2)
-        assert await store.read(kids) == []
-        session.notify(run, {"query": "tomato", "snippets": ["note"], "titles": False})
-        (pid,) = await _until(store, kids, lambda k: len(k) == 1)
-        state = await store.read(States.planes[pid].state.extract())
-        assert (state["query"], state["snippets"], state["titles"]) == ("tomato", ["note"], False)
-        (cell,) = await store.read(ops.cell_rows(pid))
-        # The prog names what the space registered with a search, and nothing else.
-        assert cell["prog"] == search.source({"note": "_support.search:search"})
-        assert [r["by"] for r in await store.read(ops.runs(pid))] == [search.BY]
-    finally:
-        task.cancel()
-        await asyncio.gather(task, return_exceptions=True)
-
-
 # --- On a worker ---------------------------------------------------------------------------
 
 
 async def test_a_search_runs_on_a_worker_and_its_run_ends():
     space = await opened(spares=1)
     try:
-        await space.run(_drawn("p", "Tomato plan") >> _note("p", "c", "ripe tomato"))
-        pid = await _searched(space, "tomato", ["note"], True, searchers=SEARCHERS)
+        await space.run(write(NoteContent, (CELL, "c"), "x", body="ripe tomato"))
+        pid = await _searched(space, {NOTE: {"text": "tomato"}})
         (run,) = await space.read(ops.runs(pid))
         row = await space.run_row(run["id"], ended, 20.0)
         assert row["exit"] == "ok", row
-        hits = ops.plane_state(pid, S.hits.extract())
-        assert [(h["cell"], h["by"]) for h in await space.read(hits)] == [
-            ("", "title"),
-            ("c", "note"),
-        ]
-        assert await space.read(ops.plane_state(pid, S.finished_at).exists())
-    finally:
-        await space.close()
-
-
-async def test_hits_land_one_cell_at_a_time():
-    """On a worker, so this loop reads while the slow searcher works there."""
-    space = await opened(spares=1)
-    try:
-        await space.run(
-            _drawn("p", "Slow")
-            >> _note("p", "a", "apple one", notes.SLOW_NOTE)
-            >> _note("p", "b", "apple two", notes.SLOW_NOTE)
-            >> _note("p", "c", "apple three", notes.SLOW_NOTE)
-        )
-        pid = await _searched(space, "apple", ["slow"], False, searchers=SEARCHERS)
-        seen: set[int] = set()
-
-        async def watch() -> None:
-            while not await _finished(space, pid):
-                seen.add(len(await _hits(space, pid)))
-                await asyncio.sleep(0.05)
-
-        await asyncio.wait_for(watch(), 20.0)
-        assert {1, 2} <= seen
-        assert [h["cell"] for h in await _hits(space, pid)] == ["a", "b", "c"]
+        assert await _addresses(space, pid) == [(NOTE, (CELL, "c"), "x")]
+        assert await _finished(space, pid)
     finally:
         await space.close()

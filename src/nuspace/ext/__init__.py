@@ -2,7 +2,8 @@
 
 - :mod:`.specs`: :class:`Plane`, what ``+`` creates, and :class:`Snippet`,
   what ``/`` inserts. Plain data. :data:`EMPTY`, the plane every space has.
-- :mod:`.registry`: :class:`Extension`, a bundle of them, found through the
+- :mod:`.registry`: :class:`Extension`, a bundle of them and of content
+  kinds (:class:`nuspace.Content`), found through the
   ``nuspace.extensions`` entry point group, and the merged :class:`Registry`
   a space opens with.
 

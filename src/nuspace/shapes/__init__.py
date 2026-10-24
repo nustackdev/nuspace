@@ -28,7 +28,7 @@ Space, what the space is::
       connections   id -> Connection
       state         SpaceState
         recents     [plane id], newest first
-        info        path, opened, versions
+        info        path, opened, versions, contents
       pinned        [plane id], in order
 
 States, what the programs remember, by the same ids::
@@ -39,6 +39,11 @@ States, what the programs remember, by the same ids::
           state     PlaneState shapes, rerooted here
       cells         id -> CellStates
         <c>         CellState shapes, rerooted here
+      contents      kind name -> KindContents
+        <kind>
+          cells     cell id -> Items, that cell's items by id
+          planes    plane id -> Items
+          space     Items, the space's own
 
 Plane and cell hold structure only, but for the plane's ``backend``. What
 ran and how it ended is a run. What a program remembers is a state.
@@ -46,6 +51,7 @@ ran and how it ended is a run. What a program remembers is a state.
 
 from .cell import Cell, CellProps
 from .connection import Connection
+from .contents import CONTENT_KIND, CellContent, Items, KindContents, PlaneContent
 from .kernel import (
     EXIT_FAILED,
     EXIT_INTERRUPTED,
@@ -59,13 +65,14 @@ from .kernel import (
     Worker,
 )
 from .plane import Plane, PlaneProps
-from .reroot import Reroot, reroot, reroot_base
-from .space import RECENTS_CAP, Space, SpaceInfo, SpaceState
+from .reroot import Reroot, reroot, reroot_base, reroot_contents
+from .space import RECENTS_CAP, ContentInfo, Space, SpaceInfo, SpaceState
 from .state import CellState, PlaneState
 from .states import CellStates, PlaneStates, States
 
 
 __all__ = [
+    "CONTENT_KIND",
     "EXITS",
     "EXIT_FAILED",
     "EXIT_INTERRUPTED",
@@ -73,13 +80,18 @@ __all__ = [
     "EXIT_OK",
     "RECENTS_CAP",
     "Cell",
+    "CellContent",
     "CellProps",
     "CellRun",
     "CellState",
     "CellStates",
     "Connection",
+    "ContentInfo",
+    "Items",
     "Kernel",
+    "KindContents",
     "Plane",
+    "PlaneContent",
     "PlaneProps",
     "PlaneRuns",
     "PlaneState",
@@ -93,4 +105,5 @@ __all__ = [
     "Worker",
     "reroot",
     "reroot_base",
+    "reroot_contents",
 ]

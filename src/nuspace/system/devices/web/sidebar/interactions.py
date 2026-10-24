@@ -32,7 +32,6 @@ __all__ = [
     "on_move_plane",
     "on_pin_plane",
     "on_rename_plane",
-    "on_search",
     "on_set_icon",
     "on_unpin_plane",
     "set_tree",
@@ -117,8 +116,3 @@ def on_unpin_plane(sidebar: Ref) -> Changed:
 def on_move_pin(sidebar: Ref) -> Changed:
     """``{plane_id, index}``. Reorders a pinned plane, ``index`` as in ``plane.pin``."""
     return event(sidebar, "plane.pin_move")
-
-
-def on_search(sidebar: Ref) -> Changed:
-    """``{query, snippets, titles}``. ``snippets`` names the searchable snippets picked."""
-    return event(sidebar, "search.run")

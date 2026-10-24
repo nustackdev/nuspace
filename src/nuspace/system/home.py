@@ -28,9 +28,12 @@ from __future__ import annotations
 
 import importlib.metadata
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 import nu
 import nustd.time
+from nuspace.content import info as content_info
+from nuspace.content import kind_name
 from nuspace.ops.cell import HasUi, cell_writes
 from nuspace.ops.pin import pin as pin_last
 from nuspace.ops.plane import plane_writes
@@ -38,6 +41,12 @@ from nuspace.ops.utils import atomic
 from nuspace.shapes import Space
 
 from .kernel.utils import snap
+
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable
+
+    from nuspace.content import Content
 
 
 __all__ = [
@@ -373,14 +382,22 @@ def versions(packages: tuple[str, ...] = PACKAGES) -> dict[str, str]:
     return out
 
 
-def write_info(path: str | None) -> nu.Nu:
-    """``Space.state.info`` for this open: the space path, now, the versions. One commit.
+def write_info(path: str | None, contents: Iterable[type[Content[Any]]] = ()) -> nu.Nu:
+    """``Space.state.info`` for this open: the space path, now, the versions, the kinds. One commit.
 
     Args:
         path: The space directory, None for a throwaway one (written ``""``).
+        contents: The registered content kinds, each written by name with
+            its label and search fields (:func:`nuspace.content.info`), for
+            the search ui. Those of an earlier open go first.
     """
     info = Space.state.info
     where = "" if path is None else str(Path(path).resolve())
+    kinds = nu.Sequential(*[info.contents[kind_name(k)].set(content_info(k)) for k in contents])
     return atomic(
-        info.path.set(where) >> info.opened.set(nustd.time.time()) >> info.versions.set(versions())
+        info.path.set(where)
+        >> info.opened.set(nustd.time.time())
+        >> info.versions.set(versions())
+        >> info.contents.clear()
+        >> kinds
     )

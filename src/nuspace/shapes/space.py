@@ -11,11 +11,22 @@ from .kernel import Kernel
 from .plane import Plane
 
 
-__all__ = ["RECENTS_CAP", "Space", "SpaceInfo", "SpaceState"]
+__all__ = ["RECENTS_CAP", "ContentInfo", "Space", "SpaceInfo", "SpaceState"]
 
 
 #: How many plane ids ``SpaceState.recents`` keeps.
 RECENTS_CAP = 20
+
+
+class ContentInfo(nu.Shape):
+    """One registered kind, as the search ui reads it: what it is called, its search fields.
+
+    ``fields`` is the kind's search form, plain data: ``{name, input,
+    label}`` per ``match`` keyword, in order (:meth:`nuspace.Content.form`).
+    """
+
+    label = nustd.kv.StrRef.slot()
+    fields = nustd.kv.PrimitiveListRef.slot()
 
 
 class SpaceInfo(nu.Shape):
@@ -23,12 +34,14 @@ class SpaceInfo(nu.Shape):
 
     ``path`` is the space directory, ``""`` for a throwaway one. ``opened``
     is when this open started, in seconds since the epoch. ``versions`` maps
-    a package name (``nuspace``) to its installed version.
+    a package name (``nuspace``) to its installed version. ``contents`` is
+    every registered kind by name (:class:`ContentInfo`), for the search ui.
     """
 
     path = nustd.kv.StrRef.slot()
     opened = nustd.kv.FloatRef.slot()
     versions = nustd.kv.DictRef.slot(str)
+    contents = nustd.kv.DictRef.slot(ContentInfo)
 
 
 class SpaceState(nu.Shape):

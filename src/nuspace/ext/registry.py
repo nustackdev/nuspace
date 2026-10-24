@@ -1,6 +1,7 @@
 """The registry: what a space can make and what its runs can be plugged into.
 
-An :class:`Extension` is a bundle of Planes, snippets and env factories. A
+An :class:`Extension` is a bundle of Planes, snippets, content kinds and
+env factories. A
 package ships one through the ``nuspace.extensions`` entry point group; the
 host passes its own straight to :func:`~nuspace.host.open_space`.
 :func:`space_registry` is what a space opens with: the host's, then the
@@ -32,6 +33,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping, Sequence
 
+    from nuspace.content import Content
     from nuspace.system.kernel import EnvFactory
 
     from .specs import Plane, Snippet
@@ -60,7 +62,7 @@ class RegistryWarning(UserWarning):
 
 @dataclass(frozen=True)
 class Extension:
-    """Planes, snippets and env factories, registered together.
+    """Planes, snippets, content kinds and env factories, registered together.
 
     Args:
         planes: What ``+`` can create.
@@ -68,12 +70,16 @@ class Extension:
         envs: Env factories by name, see :mod:`nuspace.system.kernel.envs`.
         name: Where it came from, for warnings. An entry point's name when
             discovered and left empty.
+        contents: The content kinds, :class:`~nuspace.content.Content`
+            subclasses, what cells keep items of and search finds. Last, so
+            an extension spelled positionally before kinds still reads.
     """
 
     planes: tuple[Plane, ...] = ()
     snippets: tuple[Snippet, ...] = ()
     envs: Mapping[str, EnvFactory] = field(default_factory=dict)
     name: str = ""
+    contents: tuple[type[Content], ...] = ()
 
 
 def _load(point: object) -> Extension | None:
@@ -170,20 +176,25 @@ class Registry:
     Args:
         planes: By name, in registration order.
         snippets: By name.
+        contents: Content kinds by their importable name, in registration order.
         envs: Env factories by name.
     """
 
     planes: Mapping[str, Plane] = field(default_factory=dict)
     snippets: Mapping[str, Snippet] = field(default_factory=dict)
+    contents: Mapping[str, type[Content]] = field(default_factory=dict)
     envs: Mapping[str, EnvFactory] = field(default_factory=dict)
 
     @classmethod
     def merge(cls, extensions: Iterable[Extension]) -> Registry:
         """Extensions in precedence order merged: the first to name a thing keeps it."""
         exts = list(extensions)
+        # Each kind by its importable name, as nuspace.content.kind_name spells it.
+        kinds = ((f"{k.__module__}.{k.__qualname__}", e.name, k) for e in exts for k in e.contents)
         return cls(
             planes=_merge("plane", ((p.name, e.name, p) for e in exts for p in e.planes)),
             snippets=_merge("snippet", ((s.name, e.name, s) for e in exts for s in e.snippets)),
+            contents=_merge("content", kinds),
             envs=_merge("env", ((n, e.name, f) for e in exts for n, f in e.envs.items())),
         )
 
@@ -205,6 +216,7 @@ def space_registry(
     *,
     planes: Sequence[Plane] = (),
     snippets: Sequence[Snippet] = (),
+    contents: Sequence[type[Content]] = (),
     envs: Mapping[str, EnvFactory] | None = None,
     extensions: Sequence[Extension] | None = None,
     discover: bool = True,
@@ -214,9 +226,16 @@ def space_registry(
     Args:
         planes: Planes passed directly, ahead of everything.
         snippets: Snippets passed directly.
+        contents: Content kinds passed directly.
         envs: Env factories passed directly.
         extensions: Explicit extensions, after the loose arguments.
         discover: Also load the ``nuspace.extensions`` entry points.
     """
-    loose = Extension(tuple(planes), tuple(snippets), dict(envs or {}), name="open_space")
+    loose = Extension(
+        tuple(planes),
+        tuple(snippets),
+        dict(envs or {}),
+        name="open_space",
+        contents=tuple(contents),
+    )
     return Registry.build([loose, *(extensions or ())], discovered=None if discover else [])

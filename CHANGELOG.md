@@ -11,6 +11,8 @@ separately here.
 
 ## Unreleased
 
+- Add Content: typed items any cell writes, searched by kind in the Search plane
+
 ## 0.5.6 — 2026-10-22
 
 - Release nuspace 0.5.6, built on nu 0.6.6 and nuspace-ui 0.5.5

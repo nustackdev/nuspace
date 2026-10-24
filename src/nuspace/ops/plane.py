@@ -147,15 +147,15 @@ def plane_writes(
 
 
 def remove_plane(plane_id: nu.StrArg) -> nu.Nu:
-    """Drop a plane, its cells, and every plane nested below it, unpinning each. Then their state.
+    """Drop a plane, its cells, and every plane nested below it, unpinning each. Then their state and items.
 
     Refused when the plane or any plane below it is a system plane. Live
     runs of every plane going are killed in the same commit, so nothing keeps
     running against rows that are gone. Whether it went is in the record:
     :func:`~nuspace.ops.read.plane_exists`.
 
-    Two commits: the rows, then their state, one subtree delete per plane
-    and per cell. The first writes which planes and cells went into slots
+    Two commits: the rows, then their state and items, one subtree delete
+    per plane and per cell, and one per kind holding items of theirs. The first writes which planes and cells went into slots
     of the op's own, where the second reads them. Rows first, as
     :func:`~nuspace.ops.cell.remove_cell` does, so no plane or cell still
     there reads its state gone.

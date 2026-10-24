@@ -9,8 +9,15 @@ chain rooted at           lands at
 ========================  ==========================================
 a ``CellState`` subclass  ``States.cells[cell]``
 a ``PlaneState`` subclass ``States.planes[plane].state``
+``CellContent``           ``States.contents[kind].cells[cell]``
+``PlaneContent``          ``States.contents[kind].planes[plane]``
 anything else             left alone: another store, Space, ui refs
 ========================  ==========================================
+
+An item chain (``TextContent.cell("summary")``, :mod:`nuspace.content`)
+lands under its own kind, so one splice per kind the term names: the kinds
+are read off the term's chain roots, never off a registry, so the rewrite
+needs nothing but the two ids.
 
 Explicit bases rather than "anything not rooted at Space", because a movies
 db ref a program brings along must not move. The splice itself is
@@ -23,7 +30,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import nu
+from nu.domains.shape import StructuredRef
 
+from .contents import CONTENT_KIND, CellContent, PlaneContent
 from .state import CellState, PlaneState
 from .states import States
 
@@ -31,10 +40,8 @@ from .states import States
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from nu.domains.shape.refs.base import StructuredRef
 
-
-__all__ = ["Reroot", "reroot", "reroot_base"]
+__all__ = ["Reroot", "reroot", "reroot_base", "reroot_contents"]
 
 
 def _foreign(base: type[nu.Shape]) -> Callable[[StructuredRef], bool]:
@@ -65,8 +72,47 @@ def reroot_base(term: nu.Nu, base: type[nu.Shape], at: nu.Nu) -> nu.Nu:
     return nu.shape.reroot(term, at, rooted=_foreign(base))
 
 
+def _kind_of(ref: StructuredRef, base: type[nu.Shape]) -> str | None:
+    """The kind a chain root of an item relative to ``base`` names, None for any other chain."""
+    if nu.shape.root_shape(ref) is not base:
+        return None
+    return nu.tree.payload(ref).get(CONTENT_KIND)  # type: ignore[return-value]
+
+
+def _chain_root(node: nu.Nu) -> bool:
+    """Whether ``node`` is a chain root: a ref whose parent is the anchor."""
+    return isinstance(node, StructuredRef) and not isinstance(
+        nu.tree.children(node)[0], StructuredRef
+    )
+
+
+def reroot_contents(term: nu.Nu, base: type[nu.Shape], at: nu.StrArg) -> nu.Nu:
+    """``term`` with its item chains relative to ``base`` landed under scope ``at``, per kind.
+
+    Args:
+        term: Any Nu term.
+        base: :class:`~.contents.CellContent` or
+            :class:`~.contents.PlaneContent`, which says the scope's level.
+        at: The cell or plane id the items land under.
+
+    Returns:
+        The rewritten term, or ``term`` itself when it names no such item.
+    """
+    slot = "cells" if base is CellContent else "planes"
+    roots = nu.tree.find(term, _chain_root)
+    kinds = sorted({k for k in (_kind_of(r, base) for r in roots) if k is not None})
+    for kind in kinds:
+
+        def rooted(ref: StructuredRef, kind: str = kind) -> bool:
+            return _kind_of(ref, base) != kind
+
+        under = getattr(States.contents[kind], slot)[at]
+        term = nu.shape.reroot(term, under, rooted=rooted)
+    return term
+
+
 def reroot(term: nu.Nu, plane: nu.StrArg, cell: nu.StrArg) -> nu.Nu:
-    """``term`` with its cell state under ``cell`` and its plane state under ``plane``.
+    """``term`` with its cell state and items under ``cell``, its plane's under ``plane``.
 
     Both ids, since the two land apart: a cell's state is keyed by the cell
     alone, the state it shares by its plane.
@@ -82,7 +128,9 @@ def reroot(term: nu.Nu, plane: nu.StrArg, cell: nu.StrArg) -> nu.Nu:
         state chains comes back as the same object.
     """
     term = reroot_base(term, CellState, States.cells[cell])
-    return reroot_base(term, PlaneState, States.planes[plane].state)
+    term = reroot_base(term, PlaneState, States.planes[plane].state)
+    term = reroot_contents(term, CellContent, cell)
+    return reroot_contents(term, PlaneContent, plane)
 
 
 class Reroot:

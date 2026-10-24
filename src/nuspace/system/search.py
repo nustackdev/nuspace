@@ -1,62 +1,66 @@
-"""Search: a content search is a plane that runs once, and a system plane that shows them.
+"""Search: a content search is a plane that runs once, and a system plane that asks and shows them.
 
-Three parts, all planes and cells:
+Search is by kind, never by snippet or by who made a cell. Three parts, all
+planes and cells:
 
 - **a search**: a plane under the system parent :data:`SEARCHES`, made by
-  :func:`search`. Not drawn. What it looks for is its plane state
-  (:class:`Search`: the query, the snippets picked, whether titles count),
-  and its one cell, named :data:`CELL`, looks: it walks the drawn planes'
-  titles, then scans ``Space.cells`` for the cells on a drawn plane, and
-  appends what it finds to ``Search.hits`` as it goes, a commit per cell,
-  so a reader sees them land. It stamps ``finished_at`` once it is
+  :func:`search`. Not drawn. What it asks is plain data, per kind name the
+  ``match`` keywords given, and its one cell, named
+  :data:`CELL`, looks: per kind it walks the store's ``cells``, then
+  ``planes``, then ``space`` (:mod:`nuspace.shapes.contents`), checks each
+  item with the kind's ``match`` and appends the hits, a commit per scope,
+  so a reader sees them land. A hit is the item's address, ``(kind,
+  scope, id)`` (:class:`Hit`). It stamps ``finished_at`` once it is
   through, then ends, and its run with it. The plane stays: it is the record.
-- **what is searched**: a cell is searched by the snippet that made it
-  (``props.made_by``), when the snippet registered a ``search``
-  (:class:`~nuspace.ext.Snippet`). Plane titles are searched by the search
-  itself, no snippet needed.
+- **what is searched**: every item of the kinds asked, wherever it lives.
+  A keyword left out stays ``UNSET``, so ``match`` checks only what was
+  asked, and a kind asked nothing lists all its items.
 - **the viewer**: :data:`PLANE`, a system ui plane like home, seeded by the
-  host at open. Its ``pick`` cell lists the searches, newest first, and its
-  ``results`` cell draws the picked one's hits, live, off that plane's state.
+  host at open. Its ``form`` cell asks (the registered kinds, the picked
+  kind's search fields, a Search button), its ``pick`` cell lists the
+  searches, newest first, and its ``results`` cell draws the picked one's
+  hits, live, each with its kind's ``render_hit``.
 
-A search's cell runs on a worker, where the registry is not. So its prog
-names each searchable snippet's ``search`` by module and qualified name
-(:func:`searcher_ref`), read off the registry when the search is made, and
-imports them there (:func:`load_searcher`). Like a service's prog, it is a
-thin shim over this module (D20).
+A search's cell runs on a worker, where the registry is not. A kind's name
+is its importable name, so its prog names the request and imports each
+kind there (:func:`~nuspace.content.load_kind`). Like a service's prog, it
+is a thin shim over this module (D20).
 
 Workers import this module: nothing here may pull in a server.
 """
 
 from __future__ import annotations
 
-import importlib
-import re
-from typing import TYPE_CHECKING
+import inspect
+from typing import TYPE_CHECKING, Any
 
 import nu
 import nustd.kv
 import nustd.time
 from nuspace import ops
+from nuspace.content import CELL as CELL_LEVEL
+from nuspace.content import PLANE as PLANE_LEVEL
+from nuspace.content import SPACE, kind_name, load_kind
 from nuspace.ops.cell import HasUi, cell_writes
 from nuspace.ops.plane import plane_writes
-from nuspace.ops.utils import MintId, atomic, atomic_state, field_str
-from nuspace.shapes import PlaneState, Space
+from nuspace.ops.utils import MintId, atomic, atomic_state
+from nuspace.shapes import PlaneState, States
 
-from .home import seed
+from .home import seed, seeded_id
 from .kernel.utils import snap
 
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Mapping, Sequence
+    from collections.abc import Mapping
 
-    from nuspace.ext import Snippet
+    from nuspace.content import Content
 
 
 __all__ = [
     "BY",
     "CELL",
     "CELLS",
-    "EXCERPT_WIDTH",
+    "FORM",
     "ICON",
     "NAME",
     "PICK",
@@ -64,18 +68,14 @@ __all__ = [
     "RESULTS",
     "SEARCHES",
     "SEARCHES_NAME",
-    "TITLES",
+    "Describe",
     "Hit",
     "Search",
-    "WordAt",
+    "Source",
+    "describe",
     "ensure_search",
-    "excerpt",
-    "load_searcher",
-    "matches",
     "run",
     "search",
-    "searchable",
-    "searcher_ref",
     "source",
 ]
 
@@ -101,262 +101,149 @@ CELL = "search"
 #: The ``by`` a search's run is started with.
 BY = "search"
 
-#: The ``by`` of a hit on a plane's title, where a cell's names its snippet.
-TITLES = "title"
-
-#: How many characters an excerpt keeps on each side of the match.
-EXCERPT_WIDTH = 40
+#: The scope levels' slots in a kind's contents, the space's aside.
+_SLOTS = {CELL_LEVEL: "cells", PLANE_LEVEL: "planes"}
 
 
 class Hit(nu.Shape):
-    """One hit: the plane and cell it is in, what the plane was called, a bit of text around it.
+    """One hit: the item's address. ``scope`` is ``[level, id]``, ``id`` the item's own."""
 
-    ``cell`` is ``""`` for a title hit. ``by`` is the snippet that searched
-    the cell, :data:`TITLES` for a title.
-    """
-
-    plane = nustd.kv.StrRef.slot()
-    cell = nustd.kv.StrRef.slot()
-    title = nustd.kv.StrRef.slot()
-    excerpt = nustd.kv.StrRef.slot()
-    by = nustd.kv.StrRef.slot()
+    kind = nustd.kv.StrRef.slot()
+    scope = nustd.kv.PrimitiveListRef.slot()
+    id = nustd.kv.StrRef.slot()
 
 
 class Search(PlaneState):
-    """A search plane's state: what it looks for, what it found, when it was done.
+    """A search plane's state: what it asked, what it found, when it was done.
 
-    Written by :func:`search` when it is made (query, snippets, titles,
-    ``started_at``) and by its cell as it runs (``hits``, one commit per cell,
-    then ``finished_at``). Read by the viewer from outside, through
+    Written by :func:`search` when it is made (``request``, ``started_at``)
+    and by its cell as it runs (``hits``, one commit per scope, then
+    ``finished_at``). Read by the viewer from outside, through
     :func:`~nuspace.ops.plane_state`.
     """
 
-    query = nustd.kv.StrRef.slot()
-    snippets = nustd.kv.ListRef.slot(str)
-    titles = nustd.kv.BoolRef.slot()
+    request = nustd.kv.PrimitiveDictRef.slot()
     started_at = nustd.kv.FloatRef.slot()
     finished_at = nustd.kv.FloatRef.slot()
     hits = nustd.kv.ListRef.slot(Hit)
 
 
-# --- Matching, for any snippet's search ------------------------------------------------
-
-
-def _word_at(value: object, query: object) -> int:
-    q = str(query).lower()
-    if not q:
-        return -1
-    found = re.search(rf"(?<!\w){re.escape(q)}(?!\w)", str(value).lower())
-    return found.start() if found else -1
-
-
-#: Where ``query`` first stands in ``value`` as whole words, ignoring case; ``-1`` when nowhere.
-#: Whole means no letter, digit or ``_`` right before or after it: ``stack`` is
-#: not in ``Haystack``, ``basil`` is in ``basil's``. An empty query is nowhere.
-WordAt = nu.host(_word_at, name="SearchWordAt")
-
-
-def matches(value: nu.StrArg, query: nu.StrArg) -> nu.Bool:
-    """Whether ``query`` is in ``value`` as whole words, ignoring case (see :data:`WordAt`)."""
-    return nu.Int(WordAt(value, query)) >= 0
-
-
-def excerpt(value: nu.StrArg, query: nu.StrArg, width: int = EXCERPT_WIDTH) -> nu.Str:
-    """The text around the first whole-word match of ``query`` in ``value``, on one line.
-
-    ``width`` characters each side, an ellipsis where it was cut. ``value``
-    from its start when there is no match.
-    """
-    body = nu.Str(value)
-    at = nu.Int(WordAt(body, query))
-    begin = nu.Int(nu.If(at > width, at - width, 0))
-    end = nu.Int(nu.If(at >= 0, at, 0)) + nu.Str(query).len() + width
-    cut = body[begin:end].replace("\n", " ").strip()
-    return nu.Str(nu.If(begin > 0, "…", "")) + cut + nu.If(end < body.len(), "…", "")
-
-
-# --- Searchers: a snippet's search, named so a worker can import it --------------------
-
-
-def searcher_ref(fn: Callable[..., nu.Nu]) -> str:
-    """``module:qualname`` of a snippet's ``search``, how a search's prog names it."""
-    return f"{fn.__module__}:{fn.__qualname__}"
-
-
-def load_searcher(ref: str) -> Callable[..., nu.Nu]:
-    """The function a :func:`searcher_ref` names, imported."""
-    module, _, name = ref.partition(":")
-    found: object = importlib.import_module(module)
-    for part in name.split("."):
-        found = getattr(found, part)
-    return found  # type: ignore[return-value]
-
-
-def searchable(snippets: Sequence[Snippet]) -> dict[str, str]:
-    """The snippets that registered a ``search``, name to :func:`searcher_ref`, in order."""
-    return {s.name: searcher_ref(s.search) for s in snippets if s.search is not None}
-
-
 # --- The search's own cell --------------------------------------------------------------
 
 
-class _Asked(nu.Shape):
-    """What a search looks for, read once before its walk."""
-
-    query = nu.StrRef.slot()
-    snippets = nu.ObjectRef.slot()
-    titles = nu.BoolRef.slot()
-
-
-class _At(nu.Shape):
-    """Where the walk is: the plane a hit opens, what that plane is called, the cell, its snippet.
-
-    ``cell_id`` and ``made_by`` are ``""`` on a title.
-    """
-
-    plane = nu.StrRef.slot()
-    title = nu.StrRef.slot()
-    cell_id = nu.StrRef.slot()
-    made_by = nu.StrRef.slot()
+def _asked(kind: type[Content[Any]], keywords: Mapping[str, Any]) -> dict[str, Any]:
+    """The keywords ``kind``'s ``match`` takes, the rest dropped: a form older than the kind asks no more."""
+    params = inspect.signature(kind.match).parameters
+    if any(p.kind is inspect.Parameter.VAR_KEYWORD for p in params.values()):
+        return dict(keywords)
+    return {k: v for k, v in keywords.items() if k in params}
 
 
-def _append(found: nu.Nu, by: nu.StrArg) -> nu.Nu:
-    """``found`` appended to ``Search.hits``, placed, titled and tagged, in one commit. Nothing when empty."""
+def _scope(
+    kind: type[Content[Any]], keywords: Mapping[str, Any], level: str, scope_id: nu.StrArg
+) -> nu.Nu:
+    """One scope of one kind searched: its items' ids read, each matched, the hits appended in one commit."""
+    name = kind_name(kind)
+    held = States.contents[name]
+    items = held.space if level == SPACE else getattr(held, _SLOTS[level])[scope_id]
 
-    def add(hit: nu.Attr) -> nu.Nu:
-        return Search.hits.append(
-            nu.Dict.of(
-                plane=_At.plane,
-                cell=_At.cell_id,
-                title=_At.title,
-                excerpt=field_str(hit, "excerpt"),
-                by=by,
-            )
-        )
+    def matched(item: nu.Attr) -> nu.Bool:
+        return kind.match(kind.at((level, scope_id), nu.Str(item)), **keywords)
 
-    return nu.IfDo(nu.List(found).len() > 0, atomic_state(nu.ForEachDo(nu.List(found), add)))
+    found = snap(nu.list(items.keys()).iter().filter(matched).to_list())
 
+    def add(ids: nu.ObjectRef) -> nu.Nu:
+        def one(item: nu.Attr) -> nu.Nu:
+            at = nu.List.of(level, scope_id)
+            return Search.hits.append(nu.Dict.of(kind=name, scope=at, id=nu.Str(item)))
 
-def _drawn(plane: nu.Nu) -> nu.Bool:
-    """Whether a plane draws: a hit on it can be opened."""
-    return Space.planes[plane].props.ui.fallback(False)
+        hits = atomic_state(nu.ForEachDo(nu.List(ids), one))
+        return nu.IfDo(nu.List(ids).len() > 0, hits)
 
-
-def _title(plane: nu.Nu) -> nu.Str:
-    """What a hit's plane is called: its name, ``Untitled`` where it has none."""
-    name = Space.planes[plane].name.fallback("")
-    return nu.Str(nu.If(name == "", "Untitled", name))
+    return nu.let(found, add)
 
 
-def _plane_rows() -> nu.List:
-    """Every plane that draws as ``{plane, title}``, in creation order."""
+def _kind(kind: type[Content[Any]], keywords: Mapping[str, Any]) -> nu.Nu:
+    """Every item of one kind searched: its cells, then its planes, then the space's."""
+    held = States.contents[kind_name(kind)]
 
-    def row(at: nu.Attr) -> nu.Dict:
-        return nu.Dict.of(plane=at, title=_title(nu.Str(at)))
+    def walk(level: str) -> nu.Nu:
+        scopes = snap(nu.list(getattr(held, _SLOTS[level]).keys()))
+        return nu.ForEachDo(scopes, lambda at: _scope(kind, keywords, level, nu.Str(at)))
 
-    return ops.planes().iter().filter(lambda p: _drawn(nu.Str(p))).map(row).to_list()
-
-
-def _cell_rows() -> nu.List:
-    """Every cell on a plane that draws as ``{id, plane, title, made_by}``: a scan of ``Space.cells``."""
-
-    def row(at: nu.Attr) -> nu.Dict:
-        cell = Space.cells[nu.Str(at)]
-        plane = cell.plane.fallback("")
-        return nu.Dict.of(
-            id=at, plane=plane, title=_title(plane), made_by=cell.props.made_by.fallback("")
-        )
-
-    ids = nu.list(Space.cells.keys()).iter()
-    return ids.filter(lambda c: _drawn(ops.cell_plane(nu.Str(c)))).map(row).to_list()
+    return walk(CELL_LEVEL) >> walk(PLANE_LEVEL) >> _scope(kind, keywords, SPACE, "")
 
 
-def _at(row: nu.Attr, body: nu.Nu) -> nu.Nu:
-    """``body`` with :class:`_At` read off a row of the walk."""
-    return nu.Frame(
-        _At,
-        body,
-        plane=field_str(row, "plane"),
-        title=field_str(row, "title"),
-        cell_id=field_str(row, "id"),
-        made_by=field_str(row, "made_by"),
-    )
+def run(request: Mapping[str, Mapping[str, Any]]) -> nu.Nu:
+    """A search's cell: each kind asked, its hits appended as they turn up, then ``finished_at``.
 
-
-def _by_snippet(name: str, fn: Callable[..., nu.Nu]) -> nu.Nu:
-    """The cell at hand searched by ``fn``, when its snippet is ``name`` and ``name`` was picked."""
-    picked = (_At.made_by == name).and_(nu.List(_Asked.snippets).contains(name))
-    hits = snap(nu.List(fn(_Asked.query, _At.cell_id)))
-    return nu.IfDo(picked, nu.let(hits, lambda found: _append(found, name)))
-
-
-def _by_title() -> nu.Nu:
-    """The plane at hand, a hit when its name matches."""
-    hit = nu.List.of(nu.Dict.of(excerpt=_At.title))
-    return nu.IfDo(matches(_At.title, _Asked.query), _append(hit, TITLES))
-
-
-def run(searchers: Mapping[str, str]) -> nu.Nu:
-    """A search's cell: titles, then cells, hits appended as they turn up, then ``finished_at``.
-
-    Reads what to look for from its own plane's :class:`Search`. Titles are
-    the drawn planes' names; cells are a scan of ``Space.cells``, those on a
-    drawn plane, each searched by the snippet that made it. Each read is a
-    snapshot of its own and each cell's hits one commit, so nothing is held
-    open across the walk and a reader sees hits land one cell at a time.
-    ``finished_at`` is stamped however the walk ends, a failure or an
-    interrupt included.
+    Each scope's read is a snapshot of its own and its hits one commit, so
+    nothing is held open across the walk and a reader sees hits land one
+    scope at a time. ``finished_at`` is stamped however the walk ends, a
+    failure or an interrupt included.
 
     Args:
-        searchers: The searchable snippets when the search was made, name to
-            :func:`searcher_ref`. A picked snippet missing from it is not
-            searched.
+        request: Per kind name, the ``match`` keywords given; a keyword left
+            out stays ``UNSET``. A kind that does not import here, or is
+            not one, is not searched.
     """
-    loaded = [(name, load_searcher(ref)) for name, ref in searchers.items()]
-    by_snippets = nu.Sequential(*[_by_snippet(name, fn) for name, fn in loaded])
-    titles = nu.ForEachDo(snap(_plane_rows()), lambda row: _at(row, _by_title()))
-    cells = nu.ForEachDo(snap(_cell_rows()), lambda row: _at(row, by_snippets))
-
-    asked = snap(
-        nu.Dict.of(
-            query=Search.query.fallback(""),
-            snippets=nu.list(Search.snippets).fallback([]),
-            titles=Search.titles.fallback(False),
-        )
-    )
-
-    def looking(held: nu.ObjectRef) -> nu.Nu:
-        got = nu.Dict(held)
-        walk = nu.IfDo(_Asked.titles, titles) >> (cells if loaded else nu.Noop())
-        return nu.Frame(
-            _Asked,
-            nu.IfDo(_Asked.query.strip() != "", walk),
-            query=field_str(held, "query"),
-            titles=nu.bool(got.get_item("titles", False)),
-            snippets=nu.List(got.get_item("snippets", [])),
-        )
-
-    return nu.TryCatch(
-        nu.let(asked, looking), finally_=atomic_state(Search.finished_at.set(nustd.time.time()))
-    )
+    kinds: list[nu.Nu] = []
+    for name, keywords in request.items():
+        try:
+            kind = load_kind(name)
+        except (ImportError, AttributeError, TypeError):
+            continue
+        kinds.append(_kind(kind, _asked(kind, keywords)))
+    walk = nu.Sequential(*kinds) if kinds else nu.Noop()
+    return nu.TryCatch(walk, finally_=atomic_state(Search.finished_at.set(nustd.time.time())))
 
 
 _SOURCE = """\
 from nuspace.system import search
 
-#: The snippets this search can read, as registered when it was made:
-#: name, and the search function a worker imports.
-SEARCHERS = {searchers!r}
+#: What this search asks, as it was made: per kind name, the match keywords.
+REQUEST = {request!r}
 
 
 def out():
-    return search.run(SEARCHERS)
+    return search.run(REQUEST)
 """
 
 
-def source(searchers: Mapping[str, str]) -> str:
-    """A search cell's prog, naming ``searchers`` (:func:`searchable`)."""
-    return _SOURCE.format(searchers=dict(searchers))
+def source(request: Mapping[str, Mapping[str, Any]]) -> str:
+    """A search cell's prog, asking ``request``."""
+    return _SOURCE.format(request={str(k): dict(v) for k, v in request.items()})
+
+
+def describe(request: Mapping[str, Mapping[str, Any]]) -> str:
+    """What a search is called: each kind, short, and what was asked of it.
+
+    ``{"pkg.TextContent": {"text": "tomato"}}`` reads ``Text: tomato``, a
+    number or another value as ``min 10``, a switch on as its keyword, and a
+    kind asked nothing as ``all``.
+    """
+
+    def said(key: str, value: object) -> str:
+        if value is True:
+            return key
+        return str(value) if isinstance(value, str) else f"{key} {value}"
+
+    parts = []
+    for name, keywords in request.items():
+        short = name.rpartition(".")[2]
+        short = (
+            short[: -len("Content")] if short.endswith("Content") and short != "Content" else short
+        )
+        asked = ", ".join(said(k, v) for k, v in keywords.items()) or "all"
+        parts.append(f"{short}: {asked}")
+    return "; ".join(parts) or "Nothing asked"
+
+
+#: :func:`source` of a request known only at run time.
+Source = nu.host(source, name="SearchSource")
+
+#: :func:`describe` of a request known only at run time.
+Describe = nu.host(describe, name="SearchDescribe")
 
 
 # --- The op ------------------------------------------------------------------------------
@@ -369,11 +256,7 @@ def _searches() -> nu.Nu:
 
 
 def search(
-    query: nu.StrArg,
-    snippets: Sequence[nu.StrArg] | nu.Nu = (),
-    titles: nu.BoolArg = True,
-    *,
-    searchers: Mapping[str, str] | None = None,
+    request: Mapping[str, Mapping[str, Any]] | nu.Nu, *, name: nu.StrArg | None = None
 ) -> nu.Nu:
     """Search the space: a new search plane under :data:`SEARCHES`, its state set, its run started.
 
@@ -382,42 +265,173 @@ def search(
     does the searching.
 
     Args:
-        query: What to look for, in any case.
-        snippets: The names of the snippets whose cells to search.
-        titles: Whether plane titles count.
-        searchers: The searchable snippets, name to :func:`searcher_ref`, as
-            the registry has them (:func:`searchable`). The search's prog
-            names them, so a name picked but missing here is not searched.
+        request: Per kind name, the ``match`` keywords given, plain data: a
+            mapping, or a term yielding one (eg read off a form).
+        name: What the search plane is called. :func:`describe` of the
+            request when None.
 
     The new search is the newest child of :data:`SEARCHES`, where the
     viewer finds it.
     """
-    prog = source(searchers or {})
-    picked = snippets if isinstance(snippets, nu.Nu) else list(snippets)
+    if isinstance(request, nu.Nu):
+        asked: nu.Nu | dict = request
+        prog: nu.StrArg = Source(request)
+        called: nu.StrArg = Describe(request) if name is None else name
+    else:
+        asked = {str(k): dict(v) for k, v in request.items()}
+        prog = source(asked)
+        called = describe(asked) if name is None else name
 
-    def fill(minted: nu.ObjectRef, cell: nu.ObjectRef) -> nu.Nu:
+    def fill(minted: nu.ObjectRef, cell: nu.ObjectRef, text: nu.ObjectRef) -> nu.Nu:
         pid, cid = nu.Str(minted), nu.Str(cell)
-        state = (
-            Search.query.set(query)
-            >> Search.snippets.set(picked)
-            >> Search.titles.set(titles)
-            >> Search.started_at.set(nustd.time.time())
-        )
+        state = Search.request.set(asked) >> Search.started_at.set(nustd.time.time())
 
         def made(ui: nu.ObjectRef) -> nu.Nu:
             plane = atomic(
                 _searches()
-                >> plane_writes(pid, backend="mp", name=query, parent=SEARCHES)
-                >> cell_writes(pid, cid, prog, nu.Bool(ui), name=CELL)
+                >> plane_writes(pid, backend="mp", name=called, parent=SEARCHES)
+                >> cell_writes(pid, cid, nu.Str(text), nu.Bool(ui), name=CELL)
             )
             return plane >> atomic_state(ops.plane_state(pid, state)) >> ops.plane_run(pid, by=BY)
 
-        return nu.let(HasUi(prog, pid, cid), made)
+        return nu.let(HasUi(nu.Str(text), pid, cid), made)
 
-    return nu.let(MintId("p"), lambda pid: nu.let(MintId("c"), lambda cid: fill(pid, cid)))
+    return nu.let(
+        MintId("p"),
+        lambda pid: nu.let(
+            MintId("c"), lambda cid: nu.let(prog, lambda text: fill(pid, cid, text))
+        ),
+    )
 
 
 # --- The viewer ---------------------------------------------------------------------------
+
+
+FORM = """\
+import nu
+import nustd.kv
+import nustd.ui
+import nuspace
+from nuspace import ops
+from nuspace.system import search
+
+# Every registered kind, as the host wrote it at open: name, label, fields.
+KINDS = nuspace.Space.state.info.contents
+
+
+class Asked(nuspace.CellState):
+    # The kind picked last, kept across runs.
+    kind = nustd.kv.StrRef.slot()
+
+
+class Head(nustd.ui.Row):
+    kind = nustd.ui.SelectRef.slot(placeholder="No content kinds registered")
+    go = nustd.ui.ButtonRef.slot(label="Search", icon="search")
+
+
+class Ask(nustd.ui.Column):
+    # One search field: only the input it asks with is drawn.
+    label = nustd.ui.TextRef.slot()
+    text = nustd.ui.InputRef.slot()
+    number = nustd.ui.InputRef.slot(type="number")
+    switch = nustd.ui.SwitchRef.slot()
+
+
+class View(nustd.ui.Column):
+    head = Head.slot(gap=2, align="center")
+    fields = nustd.ui.Column.slot(gap=3)
+
+
+class Building(nu.Shape):
+    # The request as it is read off the form.
+    keywords = nu.DictRef.slot(object)
+    request = nu.DictRef.slot(object)
+
+
+def ask(name):
+    return nustd.ui.core.SectionRef(
+        nu.Str("f_") + nu.str(name), section_cls=Ask, parent_ref=View.fields
+    )
+
+
+def fields_of(kind):
+    return nu.List(nu.list(KINDS[kind].fields).fallback([]))
+
+
+def draw_field(f):
+    d = nu.Dict(f)
+    row, given = ask(d["name"]), nu.str(d["input"])
+    drawn = nu.IfDo(
+        given == "number",
+        row.number.set(""),
+        nu.IfDo(given == "switch", row.switch.set(False), row.text.set("")),
+    )
+    return row.label.set(nu.str(d["label"])) >> drawn
+
+
+def draw_fields(kind):
+    fields = ops.snapshot(fields_of(kind))
+    return View.fields.erase() >> nu.ForEachDo(fields, draw_field)
+
+
+def draw():
+    names = ops.snapshot(nu.list(KINDS.keys()))
+
+    def show(ids):
+        options = nu.Collect(
+            nu.Map(nu.Iter(ids), lambda k: nu.Dict.of(value=k, label=KINDS[nu.Str(k)].label))
+        )
+        kept = ops.snapshot(Asked.kind.fallback(""))
+        first = nu.str(nu.List(ids).first_elem()).fallback("")
+        kind = nu.If(nu.List(ids).contains(kept), kept, first)
+
+        def picked(k):
+            return (
+                View.head.kind.set_options(ops.snapshot(options))
+                >> View.head.kind.set(k)
+                >> View.head.go.set_disabled(nu.Str(k) == "")
+                >> draw_fields(nu.Str(k))
+            )
+
+        return nu.let(kind, picked)
+
+    return nu.let(names, show)
+
+
+def pick():
+    kind = nu.Str(View.head.kind)
+    keep = nustd.kv.Transaction(Asked.kind.set(kind), scope=nuspace.States)
+    return keep >> draw_fields(kind)
+
+
+def read_field(f):
+    d = nu.Dict(f)
+    name, given = nu.str(d["name"]), nu.str(d["input"])
+    row, put = ask(name), Building.keywords[name]
+    text = nu.str(row.text).fallback("").strip()
+    number = nu.str(row.number).fallback("").strip()
+    on = nu.bool(row.switch).fallback(False)
+    return nu.IfDo(
+        given == "number",
+        nu.IfDo(number != "", put.set(nu.float(number))),
+        nu.IfDo(given == "switch", nu.IfDo(on, put.set(True)), nu.IfDo(text != "", put.set(text))),
+    )
+
+
+def go():
+    kind = nu.Str(View.head.kind)
+    fields = ops.snapshot(fields_of(kind))
+    read = nu.ForEachDo(fields, read_field) >> Building.request[kind].set(Building.keywords.extract())
+    asked = read >> search.search(Building.request.extract())
+    return nu.IfDo(kind != "", nu.Frame(Building, asked, keywords={}, request={}))
+
+
+def out():
+    return draw() >> nu.ParallelAsync(
+        nu.ReactForever(View.head.kind.on_change(), pick()),
+        nu.ReactForever(View.head.go.on_click(), go()),
+    )
+"""
 
 
 PICK = """\
@@ -510,11 +524,15 @@ import nustd.kv
 import nustd.ui
 import nuspace
 from nuspace import ops
+from nuspace.content import Drawing
 from nuspace.system import search
 from nuspace.system.utils import follows
 
 #: Hits drawn at most. The rest are counted.
 SHOWN = 200
+
+# Every registered kind, as the host wrote it at open: what it is called.
+KINDS = nuspace.Space.state.info.contents
 
 
 class Chosen(nuspace.PlaneState):
@@ -523,12 +541,15 @@ class Chosen(nuspace.PlaneState):
 
 class Head(nustd.ui.Row):
     link = nustd.ui.LinkRef.slot()
-    by = nustd.ui.BadgeRef.slot()
+    where = nustd.ui.TextRef.slot()
+    kind = nustd.ui.BadgeRef.slot()
 
 
 class Hit(nustd.ui.Column):
     head = Head.slot(gap=2, align="center")
-    excerpt = nustd.ui.TextRef.slot()
+    # Where the kind's render_hit draws.
+    item = nustd.ui.Column.slot()
+    note = nustd.ui.TextRef.slot()
 
 
 class Results(nustd.ui.Column):
@@ -545,13 +566,29 @@ def of(sel, term):
 
 def hit(i, h):
     row = nustd.ui.core.SectionRef(nu.Str("h") + nu.str(i), section_cls=Hit, parent_ref=Results.hits)
-    by = nu.str(h["by"])
-    title = by == search.TITLES
-    return (
-        row.head.link.set(href=nu.Str("/") + nu.str(h["plane"]), label=nu.str(h["title"]))
-        >> row.head.by.set(nu.If(title, "title", by))
-        >> nu.IfDo(title.not_(), row.excerpt.set(nu.str(h["excerpt"])))
+    # Read totally: a search made before content search kept hits of another shape.
+    got = nu.Dict(h)
+    scope = nu.List(got.get_item("scope", ["", ""]))
+    level, at, kind = nu.str(scope[0]), nu.str(scope[1]), nu.str(got.get_item("kind", ""))
+    # The plane a hit opens: its cell's, its own, none for the space's.
+    where = ops.snapshot(
+        nu.Dict.of(
+            plane=nu.If(level == "cell", ops.cell_plane(at), nu.If(level == "plane", at, "")),
+            label=KINDS[kind].label.fallback(kind),
+        )
     )
+
+    def head(place):
+        plane, label = nu.str(place["plane"]), nu.str(place["label"])
+        title = ops.snapshot(ops.plane_title(plane))
+        linked = row.head.link.set(href=nu.Str("/") + plane, label=title)
+        return nu.IfDo(plane != "", linked, row.head.where.set("Space")) >> row.head.kind.set(label)
+
+    # One draw of what the item holds now, read in a snapshot.
+    item = nu.str(got.get_item("id", ""))
+    drawn = ops.snapshot(nu.Eval(Drawing(kind, level, at, item, row.item, hit=True)))
+    failed = lambda err: row.note.set(nu.Str("Cannot draw this hit: ") + nu.str(err))
+    return nu.let(where, head) >> nu.TryCatch(drawn, catch=failed)
 
 
 def more(sel, drawn, upto):
@@ -566,7 +603,7 @@ def status(total, done):
     hits = nu.str(total) + nu.If(total == 1, " hit", " hits")
     cut = nu.If(total > SHOWN, f", the first {SHOWN} shown", "")
     line = nu.Str(nu.If(done, "Done: ", "Searching: ")) + hits + cut
-    empty = Results.empty.set(label="Nothing found", description="Try other words, or tick more kinds.")
+    empty = Results.empty.set(label="Nothing found", description="Try asking less, or another kind.")
     return Results.status.set(line) >> nu.IfDo(done.and_(total == 0), empty)
 
 
@@ -586,7 +623,7 @@ def look(sel, drawn):
 
 
 def shown(sel):
-    said = ops.snapshot(of(sel, search.Search.query).fallback(""))
+    said = ops.snapshot(ops.plane_title(sel))
     # Hits land while it runs: look twice a second until it is done, then once more.
     done = ops.snapshot(of(sel, search.Search.finished_at).exists())
 
@@ -607,7 +644,7 @@ def none():
         >> Results.status.erase()
         >> Results.hits.erase()
         >> Results.empty.set(
-            label="No searches yet", description="Search from the sidebar, or press Cmd+K."
+            label="No searches yet", description="Pick a kind above and press Search."
         )
     )
 
@@ -623,9 +660,39 @@ def out():
 
 
 #: The cells the viewer is seeded with, in order, as ``(name, source)``.
-CELLS = (("pick", PICK), ("results", RESULTS))
+CELLS = (("form", FORM), ("pick", PICK), ("results", RESULTS))
+
+
+def _form_missing() -> nu.Bool:
+    """Whether the viewer is there but was seeded before it asked: it has no form cell."""
+    return ops.plane_exists(PLANE).and_(ops.cell_exists(seeded_id(PLANE, "form")).not_())
+
+
+def _upgrade() -> nu.Nu:
+    """A viewer seeded before content search brought up to it: the form cell first, results redrawn.
+
+    Only when the form cell is missing, so a viewer that has one is left as
+    the owner keeps it. The results cell drew the old hits, so its prog is
+    rewritten too, where it is still there. One commit, each ``has_ui``
+    worked out first, outside the bracket.
+    """
+    form, results = seeded_id(PLANE, "form"), seeded_id(PLANE, "results")
+
+    def write(on_form: nu.ObjectRef, on_results: nu.ObjectRef) -> nu.Nu:
+        writes = cell_writes(PLANE, form, FORM, nu.Bool(on_form), name="form", index=0)
+        redrawn = cell_writes(PLANE, results, RESULTS, nu.Bool(on_results), name="results")
+        writes = writes >> nu.IfDo(ops.cell_exists(results), redrawn)
+        return atomic(nu.IfDo(_form_missing(), writes))
+
+    def known(on_form: nu.ObjectRef) -> nu.Nu:
+        return nu.let(HasUi(RESULTS, PLANE, results), lambda r: write(on_form, r))
+
+    return nu.IfDo(snap(_form_missing()), nu.let(HasUi(FORM, PLANE, form), known))
 
 
 def ensure_search() -> nu.Nu:
-    """The viewer plane and its cells, seeded once. Not pinned: the sidebar's search opens it."""
-    return seed(PLANE, NAME, ICON, CELLS, backend="async", pin=False)
+    """The viewer plane and its cells, seeded once, an older one given its form. Not pinned.
+
+    The sidebar's search entry and Cmd+K open it.
+    """
+    return seed(PLANE, NAME, ICON, CELLS, backend="async", pin=False) >> _upgrade()

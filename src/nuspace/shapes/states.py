@@ -9,9 +9,12 @@ nesting, runs); States holds what the programs remember::
           state       PlaneState shapes, rerooted here
       cells           id -> CellStates
         <c>           CellState shapes, rerooted here
+      contents        kind name -> KindContents, every item, by kind and scope
 
 Keyed by the same ids as ``Space.planes`` and ``Space.cells``, and nothing
-else: no names, no progs, no run info. Flat as Space is, so a cell's state
+else: no names, no progs, no run info. ``contents`` is the one exception
+to keying by id first: an item is found by its kind, then its scope
+(:mod:`nuspace.shapes.contents`). Flat as Space is, so a cell's state
 is one lookup away by its id, wherever the cell sits. A plane's own state
 sits in ``state`` rather than at the plane's row, so the row can grow
 without a state field ever sharing a key. Dropping a plane's state or a
@@ -26,6 +29,8 @@ from __future__ import annotations
 
 import nu
 import nustd.kv
+
+from .contents import KindContents
 
 
 __all__ = ["CellStates", "PlaneStates", "States"]
@@ -45,9 +50,10 @@ class States(nu.Shape):
     """The state store's root: every plane's state and every cell's, by id.
 
     Written by programs, through their rerooted ``CellState`` and
-    ``PlaneState`` slots, and by the ops that drop a plane or cell after its
-    structure.
+    ``PlaneState`` slots and their kinds' items, and by the ops that drop a
+    plane or cell after its structure.
     """
 
     planes = nustd.kv.DictRef.slot(PlaneStates)
     cells = nustd.kv.DictRef.slot(CellStates)
+    contents = nustd.kv.DictRef.slot(KindContents)

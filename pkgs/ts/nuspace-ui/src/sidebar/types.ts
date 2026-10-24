@@ -68,21 +68,6 @@ export type Registered = {
 	description: string;
 };
 
-/**
- * One snippet the search popup offers to search: those that registered a
- * search, in registry order. Seeded at boot. Titles are not one: the popup
- * always offers them.
- */
-export type Searchable = {
-	name: string;
-	label: string;
-	/** The heading it folds under, "" for none. */
-	group: string;
-	/** A lucide icon name, "" for the default. Any spelling ../icon/parse.ts reads. */
-	icon: string;
-	description: string;
-};
-
 /** Every Plane that draws, keyed by id. What the sidebar walks. */
 export type PlaneTree = Record<string, TreeRow>;
 
@@ -92,7 +77,6 @@ export type SidebarValue = {
 	pinned: string[];
 	loaded: boolean;
 	registered: Registered[];
-	searchable: Searchable[];
 };
 
 export const EMPTY_TREE: PlaneTree = {};
@@ -177,25 +161,6 @@ export function coerceTree(raw: unknown): PlaneTree {
 export function coerceRegistered(raw: unknown): Registered[] {
 	if (!Array.isArray(raw)) return [];
 	const out: Registered[] = [];
-	for (const e of raw) {
-		if (!e || typeof e !== "object") continue;
-		const r = e as Record<string, unknown>;
-		const name = String(r.name ?? "");
-		if (!name) continue;
-		out.push({
-			name,
-			label: String(r.label ?? name),
-			group: String(r.group ?? ""),
-			icon: String(r.icon ?? ""),
-			description: String(r.description ?? ""),
-		});
-	}
-	return out;
-}
-
-export function coerceSearchable(raw: unknown): Searchable[] {
-	if (!Array.isArray(raw)) return [];
-	const out: Searchable[] = [];
 	for (const e of raw) {
 		if (!e || typeof e !== "object") continue;
 		const r = e as Record<string, unknown>;

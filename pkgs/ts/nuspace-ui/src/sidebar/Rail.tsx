@@ -23,8 +23,7 @@
 //   Rail.tsx          this: the aside and its strips
 //   RailHeader.tsx    the top bar: collapse, the wordmark
 //   NewPlaneRow.tsx   the tree's sticky first row, which makes a top-level plane
-//   SearchTrigger.tsx the search entry under it
-//   SearchPalette.tsx the search popup
+//   SearchTrigger.tsx the search entry under it, opening the search Plane
 //   PinnedRow.tsx     the pinned planes, the header group's last strip
 //   RailFooter.tsx    the bottom bar: links, connection, theme
 //   pin.ts            the pins and their ops
@@ -62,17 +61,16 @@ import type { Pins } from "./pin";
 import { RailFooter } from "./RailFooter";
 import { RailHeader } from "./RailHeader";
 import { RailTree } from "./RailTree";
-import { SearchPopup } from "./SearchPalette";
 import { SearchTrigger } from "./SearchTrigger";
+import { useSearchShortcut } from "./search";
 import { visibleRows } from "./tree";
-import { childrenOf, type PlaneTree, type Registered, rootId, type Searchable } from "./types";
+import { childrenOf, type PlaneTree, type Registered, rootId } from "./types";
 import { useReveal } from "./useReveal";
 
 export function Rail({
 	tree,
 	loaded,
 	registered,
-	searchable,
 	expanded,
 	onToggle,
 	notify,
@@ -81,7 +79,6 @@ export function Rail({
 	tree: PlaneTree;
 	loaded: boolean;
 	registered: Registered[];
-	searchable: Searchable[];
 	expanded: Set<string>;
 	onToggle: (key: string) => void;
 	notify: Notify;
@@ -101,11 +98,11 @@ export function Rail({
 	);
 
 	const reveal = useReveal({ tree, root, routes, selKey, expanded, onToggle });
+	useSearchShortcut();
 
 	return (
 		// Folded is inert, not unmounted: the Add plane popup lives here and a
-		// pane's `...` still opens it, and so does the search popup, which
-		// cmd/ctrl+K opens from anywhere.
+		// pane's `...` still opens it, and cmd/ctrl+K still opens search.
 		<aside aria-label="Sidebar" className={railAside}>
 			<RailHeader />
 			<SearchTrigger />
@@ -140,7 +137,6 @@ export function Rail({
 			</nav>
 			<RailFooter />
 			<AddPlane registered={registered} notify={notify} reveal={reveal} />
-			<SearchPopup searchable={searchable} notify={notify} />
 		</aside>
 	);
 }

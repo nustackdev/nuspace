@@ -18,7 +18,7 @@ import { Rail } from "./Rail";
 import { patchSidebar, useExpanded, useSidebarValue } from "./state";
 
 export function Sidebar({ path }: NodeProps) {
-	const { tree, loaded, registered, searchable } = useSidebarValue(path);
+	const { tree, loaded, registered } = useSidebarValue(path);
 	const pins = usePins(path);
 	const expandedList = useExpanded(path);
 	const key = pathKey(path);
@@ -51,7 +51,6 @@ export function Sidebar({ path }: NodeProps) {
 			tree={tree}
 			loaded={loaded}
 			registered={registered}
-			searchable={searchable}
 			expanded={expanded}
 			onToggle={toggleExpanded}
 			notify={notify}

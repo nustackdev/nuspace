@@ -21,16 +21,11 @@ from nuspace.system.devices.web.sidebar.interactions import (
     on_move_plane,
     on_pin_plane,
     on_rename_plane,
-    on_search,
     on_set_icon,
     on_unpin_plane,
     set_tree,
 )
-from nuspace.system.devices.web.sidebar.ref import (
-    SidebarRef,
-    registered_entries,
-    searchable_entries,
-)
+from nuspace.system.devices.web.sidebar.ref import SidebarRef, registered_entries
 
 
 __all__ = [
@@ -48,13 +43,11 @@ __all__ = [
     "on_move_plane",
     "on_pin_plane",
     "on_rename_plane",
-    "on_search",
     "on_set_icon",
     "on_unpin_plane",
     "pins",
     "registered_entries",
     "rows",
-    "searchable_entries",
     "set_tree",
     "sidebar_feed",
 ]
