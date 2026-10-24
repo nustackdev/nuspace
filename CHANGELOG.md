@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Add Content items, new and find, and drop snippet ops
 - Add Content: typed items any cell writes, searched by kind in the Search plane
 
 ## 0.5.6 — 2026-10-22

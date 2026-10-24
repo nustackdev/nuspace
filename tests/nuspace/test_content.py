@@ -179,6 +179,94 @@ def out():
     assert await store.read(NoteContent.at((CELL, "c"), "summary").body) == "loaded"
 
 
+# --- items, new, find --------------------------------------------------------------------------
+
+
+async def test_items_is_one_scopes_items_by_id_typed_as_the_kinds_shape(store):
+    await store.run(
+        write(NoteContent, (CELL, "c1"), "a", body="one")
+        >> write(NoteContent, (CELL, "c1"), "b", body="two")
+        >> write(NoteContent, (CELL, "c2"), "a", body="elsewhere")
+        >> write(NoteContent, (SPACE, ""), "s", body="space")
+    )
+    held = NoteContent.items((CELL, "c1"))
+    assert isinstance(held, nustd.kv.DictRef)
+    assert isinstance(held["a"].body, nustd.kv.StrRef)
+    assert sorted(await store.read(nu.list(held.keys()))) == ["a", "b"]
+    assert await store.read(held["b"].body) == "two"
+    assert await store.read(nu.list(NoteContent.items((SPACE, "")).keys())) == ["s"]
+    assert await store.read(NoteContent.items((PLANE, "p")).len()) == 0
+    # An item removed through the mapping is gone from it.
+    await store.run(ops.atomic_state(held["a"].erase()))
+    assert await store.read(nu.list(held.keys())) == ["b"]
+    with pytest.raises(ValueError, match="scope level"):
+        NoteContent.items(("shelf", "s"))
+
+
+async def test_new_makes_an_empty_item_under_a_fresh_ordered_id(store):
+    scope = (PLANE, "p")
+    first = await store.made(ops.atomic_state(NoteContent.new(scope, into=MADE)))
+    second = await store.made(ops.atomic_state(NoteContent.new(scope, into=MADE)))
+    assert first != second
+    assert first.startswith(content.ITEM_PREFIX + "_")
+    # Listed at once, in the order made, before a field is set.
+    assert await store.read(nu.list(NoteContent.items(scope).keys())) == [first, second]
+    assert await store.read(NoteContent.at(scope, first).extract()) == {}
+    # Without into, it only makes one.
+    await store.run(ops.atomic_state(NoteContent.new(scope)))
+    assert await store.read(NoteContent.items(scope).len()) == 3
+
+
+async def test_find_walks_every_scope_cells_then_planes_then_space(store):
+    await store.run(
+        write(NoteContent, (SPACE, ""), "s", body="basil in the space")
+        >> write(NoteContent, (PLANE, "p"), "t", body="basil on a plane", stars=4.0)
+        >> write(NoteContent, (CELL, "c"), "a", body="basil in a cell", stars=1.0)
+        >> write(NoteContent, (CELL, "c"), "b", body="mint")
+        >> write(PlainContent, (CELL, "c"), "a", body="basil, another kind")
+    )
+    found = await store.read(NoteContent.find(text="basil"))
+    assert [(a["kind"], list(a["scope"]), a["id"]) for a, _ in found] == [
+        (NOTE, [CELL, "c"], "a"),
+        (NOTE, [PLANE, "p"], "t"),
+        (NOTE, [SPACE, ""], "s"),
+    ]
+    assert found[0][1] == {"body": "basil in a cell", "stars": 1.0}
+    both = await store.read(NoteContent.find(text="basil", min_stars=2))
+    assert [a["id"] for a, _ in both] == ["t"]
+    # Asked nothing, everything match lets through: every item of the kind.
+    assert len(await store.read(NoteContent.find())) == 4
+    # A keyword match does not take is refused when the term is built.
+    with pytest.raises(TypeError):
+        PlainContent.find(text="basil")
+
+
+async def test_find_runs_from_a_loaded_program(store):
+    prog = """\
+import nu
+import nuspace
+from _support.contents import NoteContent
+
+
+def first(found):
+    address = nu.Dict(nu.List(nu.List(found)[0])[0])
+    return NoteContent.cell("found").body.set(nu.str(address["id"]))
+
+
+def out():
+    found = nuspace.ops.snapshot(NoteContent.find(text="basil"))
+    return nuspace.ops.atomic_state(nu.let(found, first))
+"""
+    await store.run(
+        write(NoteContent, (PLANE, "p"), "t", body="basil")
+        >> ops.add_plane("p", backend="async")
+        >> ops.add_cell("p", prog, cell_id="c")
+    )
+    load = Space.cells["c"].prog.load(scope={"plane": "p", "cell": "c"}, rewrite=Reroot("p", "c"))
+    await store.run(await store.run(nustd.kv.Snapshot(load, scope=Space)))
+    assert await store.read(NoteContent.at((CELL, "c"), "found").body) == "t"
+
+
 # --- Lifecycle --------------------------------------------------------------------------------
 
 

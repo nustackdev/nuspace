@@ -7,13 +7,7 @@ Plain data. The ops that act on them, :func:`~nuspace.ops.create_plane` and
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any
-
-
-if TYPE_CHECKING:
-    from collections.abc import Callable
-
-    import nu
+from typing import Any
 
 
 __all__ = ["EMPTY", "TEXT", "Plane", "Snippet"]
@@ -101,7 +95,6 @@ class Snippet:
         source: The cell's prog. A snippet keeps what it edits or shows in
             content items (:mod:`nuspace.content`), where search finds them.
         description: One line on what a cell made from it is for.
-        ops: The ops on a cell made from it, each taking the cell id first, for whoever writes a program against its cells.
         group: The ``/`` menu heading it sits under, ``""`` for none. Groups
             show in the order their first snippet registers; the ungrouped
             come last, under no heading.
@@ -113,6 +106,5 @@ class Snippet:
     label: str
     source: str
     description: str = ""
-    ops: tuple[Callable[..., nu.Nu], ...] = ()
     group: str = ""
     icon: str = ""

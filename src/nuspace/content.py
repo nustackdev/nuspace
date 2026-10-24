@@ -25,6 +25,9 @@ with the level one of :data:`CELL`, :data:`PLANE` and :data:`SPACE`::
     TextContent.plane("title")            # this plane's
     TextContent.space("readme")           # the space's
     TextContent.at(("cell", c), "summary")  # any item, by its address
+    TextContent.items(("cell", c))        # every item of a scope, by id
+    TextContent.new(("cell", c), into=r)  # a fresh item, its id set in r
+    TextContent.find(text="basil")        # (address, item) of every match
 
 ``cell`` and ``plane`` are relative, like ``CellState`` and ``PlaneState``:
 the kernel lands them under the cell and plane running the program
@@ -54,7 +57,7 @@ from nustd.ui.core import Ref as UiRef
 
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Mapping
 
     from nu.domains.shape import StructuredRef
     from nu.lang.runtime import Runtime
@@ -63,6 +66,7 @@ if TYPE_CHECKING:
 __all__ = [
     "CELL",
     "INPUTS",
+    "ITEM_PREFIX",
     "LEVELS",
     "NUMBER_INPUT",
     "PLANE",
@@ -74,9 +78,12 @@ __all__ = [
     "Drawing",
     "SearchField",
     "Unset",
+    "address",
     "info",
     "kind_name",
     "load_kind",
+    "matched",
+    "scopes",
 ]
 
 
@@ -97,6 +104,9 @@ LEVELS = (CELL, PLANE, SPACE)
 
 #: The :class:`~nuspace.shapes.contents.KindContents` slot each scoped level is under.
 _SLOTS = {CELL: "cells", PLANE: "planes"}
+
+#: What the ids :meth:`Content.new` mints start with.
+ITEM_PREFIX = "i"
 
 #: A search field's inputs: a text box, a number input, a switch.
 TEXT_INPUT = "text"
@@ -172,17 +182,46 @@ def _label(name: str) -> str:
     return name.replace("_", " ").strip().capitalize()
 
 
-def _item(
-    parent: StructuredRef | None, item_id: nu.StrArg, schema: type[S], owner: type[nu.Shape]
-) -> S:
-    """The ref to one item of ``schema`` at ``item_id`` under ``parent``, typed as ``schema``.
+def _item(item_id: nu.StrArg, schema: type[S], owner: type[nu.Shape]) -> S:
+    """A relative chain's root: the item ``item_id`` of ``schema``, rooted at ``owner``, typed as ``schema``.
 
     What a ``DictRef`` of the Shape hands out for a key, built here because
-    the store's containers are one type for every kind.
+    a relative chain has no parent until the kernel lands it.
     """
-    ref = nustd.kv.ShapeRef(item_id, shape_type=schema, parent_ref=parent, owner_shape=owner)
+    ref = nustd.kv.ShapeRef(item_id, shape_type=schema, parent_ref=None, owner_shape=owner)
     ref._payload["type_info"] = TypeInfo.from_annotation(schema)
     return cast("S", ref)
+
+
+def _level(scope: tuple[str, nu.StrArg]) -> tuple[str, nu.StrArg]:
+    """``scope`` checked: its level one of :data:`LEVELS`.
+
+    Raises:
+        ValueError: The level is none of :data:`LEVELS`.
+    """
+    level, scope_id = scope
+    if level not in LEVELS:
+        msg = f"scope level {level!r} is none of {LEVELS}"
+        raise ValueError(msg)
+    return level, scope_id
+
+
+def address(
+    kind: str | type[Content[Any]], scope: tuple[str, nu.StrArg], item_id: nu.StrArg
+) -> nu.Dict:
+    """An item's address as plain data: ``{"kind": name, "scope": [level, id], "id": item id}``.
+
+    What a search hit, :meth:`Content.find` and a cell linking to an item
+    keep. Read it back with :func:`load_kind` and :meth:`Content.at`.
+
+    Args:
+        kind: The kind, or its name.
+        scope: ``(level, id)``, as :meth:`Content.at` takes it.
+        item_id: The item's id in that scope.
+    """
+    name = kind if isinstance(kind, str) else kind_name(kind)
+    level, scope_id = scope
+    return nu.Dict.of(kind=name, scope=nu.List.of(level, scope_id), id=item_id)
 
 
 class Content(Generic[S]):
@@ -280,21 +319,21 @@ class Content(Generic[S]):
     @classmethod
     def cell(cls, item_id: nu.StrArg) -> S:
         """The running cell's item ``item_id``. Relative: lands under the cell at load."""
-        ref = _item(None, item_id, cls.schema(), CellContent)
+        ref = _item(item_id, cls.schema(), CellContent)
         ref._payload[CONTENT_KIND] = kind_name(cls)  # type: ignore[attr-defined]
         return ref
 
     @classmethod
     def plane(cls, item_id: nu.StrArg) -> S:
         """The running plane's own item ``item_id``. Relative: lands under the plane at load."""
-        ref = _item(None, item_id, cls.schema(), PlaneContent)
+        ref = _item(item_id, cls.schema(), PlaneContent)
         ref._payload[CONTENT_KIND] = kind_name(cls)  # type: ignore[attr-defined]
         return ref
 
     @classmethod
     def space(cls, item_id: nu.StrArg) -> S:
         """The space's own item ``item_id``."""
-        return _item(States.contents[kind_name(cls)].space, item_id, cls.schema(), States)
+        return cls.at((SPACE, ""), item_id)
 
     @classmethod
     def at(cls, scope: tuple[str, nu.StrArg], item_id: nu.StrArg) -> S:
@@ -309,14 +348,124 @@ class Content(Generic[S]):
         Raises:
             ValueError: The level is none of :data:`LEVELS`.
         """
-        level, scope_id = scope
-        if level == SPACE:
-            return cls.space(item_id)
-        if level not in _SLOTS:
-            msg = f"scope level {level!r} is none of {LEVELS}"
-            raise ValueError(msg)
-        held = getattr(States.contents[kind_name(cls)], _SLOTS[level])[scope_id]
-        return _item(held, item_id, cls.schema(), States)
+        return cast("S", cls.items(scope)[item_id])
+
+    @classmethod
+    def items(cls, scope: tuple[str, nu.StrArg]) -> nustd.kv.DictRef[str, S]:
+        """One scope's items of the kind, by id: a ``DictRef[str, S]`` in the kind's own layout.
+
+        ``items(scope)[id]`` is :meth:`at`. The mapping is the store's own, so
+        ``keys``, ``len``, ``contains`` and ``on_children_change`` read and
+        watch storage, a write lands an item and ``items(scope)[id].erase()``
+        removes one. Not relative: name the running cell as
+        ``(CELL, ops.Here.cell)``.
+
+        Args:
+            scope: ``(level, id)``, as :meth:`at` takes it.
+
+        Raises:
+            ValueError: The level is none of :data:`LEVELS`.
+        """
+        level, scope_id = _level(scope)
+        held = States.contents[kind_name(cls)]
+        parent, at = (held, "space") if level == SPACE else (getattr(held, _SLOTS[level]), scope_id)
+        ref = nustd.kv.DictRef(at, parent_ref=parent, owner_shape=States)
+        ref._payload["type_info"] = TypeInfo.from_annotation(dict[str, cls.schema()])
+        return ref
+
+    @classmethod
+    def new(cls, scope: tuple[str, nu.StrArg], *, into: nu.Ref | None = None) -> nu.Nu:
+        """A new item in ``scope``: a fresh id minted, the item written empty, the id set in ``into``.
+
+        The id is time ordered (:data:`ITEM_PREFIX`, then the moment it was
+        minted), so a scope's ids sort the way its items were made. Written
+        empty, the item is there at once: :meth:`items` lists it before any
+        field is set. Its address is ``(kind, scope, id)``. Bare, as any
+        write: its caller brackets it, eg with ``ops.atomic_state``::
+
+            made = RowContent.new(scope, into=Local.id)
+            fill = RowContent.at(scope, nu.Str(Local.id)).cells["name"].set("Basil")
+            ops.atomic_state(made >> fill)
+
+        Args:
+            scope: ``(level, id)``, as :meth:`at` takes it.
+            into: A ref set to the new id, for the writes after. None to only
+                make the item.
+        """
+        from nuspace.ops.utils import MintId
+
+        items = cls.items(scope)
+
+        def made(minted: nu.ObjectRef) -> nu.Nu:
+            item_id = nu.Str(minted)
+            kept = into.set(item_id) if into is not None else nu.Noop()
+            return items[item_id].set({}) >> kept
+
+        return nu.let(MintId(ITEM_PREFIX), made)
+
+    @classmethod
+    def find(cls, **question: Any) -> nu.Nu:  # noqa: ANN401
+        """Every item of the kind :meth:`match` holds for, from every scope: the Search plane's walk.
+
+        Cells first, then planes, then the space's, as a search walks them
+        (:func:`scopes`, :func:`matched`). The keywords are :meth:`match`'s;
+        one left out stays ``UNSET``, so asked nothing every item ``match``
+        lets through is found. A read, bare: its caller brackets it, eg with
+        ``ops.snapshot``.
+
+        Yields:
+            A list of ``(address, item)`` pairs: the item's :func:`address`
+            and its fields, plain data.
+        """
+        name = kind_name(cls)
+
+        def scope_pairs(level: str, scope_id: nu.StrArg) -> nu.Nu:
+            scope = (level, scope_id)
+
+            def pair(found: nu.Attr) -> nu.Nu:
+                item_id = nu.Str(found)
+                return nu.Tuple.of(address(name, scope, item_id), cls.at(scope, item_id).extract())
+
+            return matched(cls, scope, question).map(pair).to_list()
+
+        def level_pairs(level: str) -> nu.Nu:
+            each = scopes(cls, level).iter().map(lambda at: scope_pairs(level, nu.Str(at)))
+            return each.flatten().to_list()
+
+        walked = (level_pairs(CELL), level_pairs(PLANE), scope_pairs(SPACE, ""))
+        return nu.List.of(*walked).iter().flatten().to_list()
+
+
+def scopes(kind: type[Content[Any]], level: str) -> nu.List:
+    """The ids of the scopes at ``level`` holding items of ``kind``: cells or planes. A bare read.
+
+    Raises:
+        ValueError: ``level`` is :data:`SPACE`, one scope only, or none of :data:`LEVELS`.
+    """
+    if level not in _SLOTS:
+        msg = f"scope level {level!r} is none of {tuple(_SLOTS)}"
+        raise ValueError(msg)
+    return nu.list(getattr(States.contents[kind_name(kind)], _SLOTS[level]).keys())
+
+
+def matched(
+    kind: type[Content[Any]], scope: tuple[str, nu.StrArg], question: Mapping[str, Any]
+) -> nu.Iterator:
+    """The ids of the items in ``scope`` that ``kind``'s :meth:`~Content.match` holds for. A bare read.
+
+    The one check a search and :meth:`Content.find` both make, per scope.
+
+    Args:
+        kind: The kind.
+        scope: ``(level, id)``, as :meth:`Content.at` takes it.
+        question: ``match``'s keywords.
+    """
+    held = kind.items(scope)
+    return (
+        nu.list(held.keys())
+        .iter()
+        .filter(lambda found: kind.match(kind.at(scope, nu.Str(found)), **question))
+    )
 
 
 def info(kind: type[Content[Any]]) -> dict[str, Any]:

@@ -40,11 +40,11 @@ import nustd.time
 from nuspace import ops
 from nuspace.content import CELL as CELL_LEVEL
 from nuspace.content import PLANE as PLANE_LEVEL
-from nuspace.content import SPACE, kind_name, load_kind
+from nuspace.content import SPACE, address, load_kind, matched, scopes
 from nuspace.ops.cell import HasUi, cell_writes
 from nuspace.ops.plane import plane_writes
 from nuspace.ops.utils import MintId, atomic, atomic_state
-from nuspace.shapes import PlaneState, States
+from nuspace.shapes import PlaneState
 
 from .home import seed, seeded_id
 from .kernel.utils import snap
@@ -101,12 +101,9 @@ CELL = "search"
 #: The ``by`` a search's run is started with.
 BY = "search"
 
-#: The scope levels' slots in a kind's contents, the space's aside.
-_SLOTS = {CELL_LEVEL: "cells", PLANE_LEVEL: "planes"}
-
 
 class Hit(nu.Shape):
-    """One hit: the item's address. ``scope`` is ``[level, id]``, ``id`` the item's own."""
+    """One hit: the item's :func:`~nuspace.content.address`. ``scope`` is ``[level, id]``, ``id`` the item's own."""
 
     kind = nustd.kv.StrRef.slot()
     scope = nustd.kv.PrimitiveListRef.slot()
@@ -142,20 +139,13 @@ def _asked(kind: type[Content[Any]], keywords: Mapping[str, Any]) -> dict[str, A
 def _scope(
     kind: type[Content[Any]], keywords: Mapping[str, Any], level: str, scope_id: nu.StrArg
 ) -> nu.Nu:
-    """One scope of one kind searched: its items' ids read, each matched, the hits appended in one commit."""
-    name = kind_name(kind)
-    held = States.contents[name]
-    items = held.space if level == SPACE else getattr(held, _SLOTS[level])[scope_id]
-
-    def matched(item: nu.Attr) -> nu.Bool:
-        return kind.match(kind.at((level, scope_id), nu.Str(item)), **keywords)
-
-    found = snap(nu.list(items.keys()).iter().filter(matched).to_list())
+    """One scope of one kind searched: its matches read in a snapshot, the hits appended in one commit."""
+    scope = (level, scope_id)
+    found = snap(matched(kind, scope, keywords).to_list())
 
     def add(ids: nu.ObjectRef) -> nu.Nu:
         def one(item: nu.Attr) -> nu.Nu:
-            at = nu.List.of(level, scope_id)
-            return Search.hits.append(nu.Dict.of(kind=name, scope=at, id=nu.Str(item)))
+            return Search.hits.append(address(kind, scope, nu.Str(item)))
 
         hits = atomic_state(nu.ForEachDo(nu.List(ids), one))
         return nu.IfDo(nu.List(ids).len() > 0, hits)
@@ -164,12 +154,14 @@ def _scope(
 
 
 def _kind(kind: type[Content[Any]], keywords: Mapping[str, Any]) -> nu.Nu:
-    """Every item of one kind searched: its cells, then its planes, then the space's."""
-    held = States.contents[kind_name(kind)]
+    """Every item of one kind searched: its cells, then its planes, then the space's.
+
+    The walk :meth:`~nuspace.content.Content.find` makes, a commit per scope.
+    """
 
     def walk(level: str) -> nu.Nu:
-        scopes = snap(nu.list(getattr(held, _SLOTS[level]).keys()))
-        return nu.ForEachDo(scopes, lambda at: _scope(kind, keywords, level, nu.Str(at)))
+        held = snap(scopes(kind, level))
+        return nu.ForEachDo(held, lambda at: _scope(kind, keywords, level, nu.Str(at)))
 
     return walk(CELL_LEVEL) >> walk(PLANE_LEVEL) >> _scope(kind, keywords, SPACE, "")
 
