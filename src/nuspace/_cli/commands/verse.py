@@ -2,7 +2,7 @@
 
 One line per package registering under the ``nuspace.extensions`` entry
 points: its name, its version, the short names of the planes it adds, and
-how many snippets. ``nuspace run --with`` takes a plane as ``pkg.plane``,
+how many cells. ``nuspace run --with`` takes a plane as ``pkg.plane``,
 the package and the short name. A package whose
 extension fails to load says why on a dim line under it.
 """
@@ -32,9 +32,9 @@ def _detail(package: Installed) -> dict[str, object]:
             {"name": f"{package.name}.{p.name}", "label": p.label, "description": p.description}
             for p in (ext.planes if ext else ())
         ],
-        "snippets": [
+        "cells": [
             {"name": s.name, "label": s.label, "description": s.description}
-            for s in (ext.snippets if ext else ())
+            for s in (ext.cells if ext else ())
         ],
         "envs": sorted(ext.envs) if ext else [],
         "error": package.error or None,
@@ -51,8 +51,8 @@ def _line(package: Installed, name_width: int, version_width: int) -> Text:
     if ext is not None and ext.planes:
         line.append("  ")
         line.append(" · ".join(p.name for p in ext.planes), style=BLUE)
-    if ext is not None and ext.snippets:
-        line.append(f"  +{len(ext.snippets)} snippets", style="dim")
+    if ext is not None and ext.cells:
+        line.append(f"  +{len(ext.cells)} cells", style="dim")
     line.rstrip()
     return line
 
@@ -61,7 +61,7 @@ def _line(package: Installed, name_width: int, version_width: int) -> Text:
     short_help="List the installed packages and the planes they add.",
     help=(
         "List every installed package extending nuspace: its version, the planes it"
-        " adds and how many snippets. Open one with: nuspace run --with <pkg>.<plane>"
+        " adds and how many cells. Open one with: nuspace run --with <pkg>.<plane>"
     ),
 )
 @click.option(

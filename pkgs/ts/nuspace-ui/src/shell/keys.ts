@@ -103,7 +103,7 @@ export const BINDINGS: BindingGroup[] = [
 		bindings: [
 			{ does: "New cell below", keys: [["mod", "enter"]] },
 			{ does: "Delete an empty cell", keys: [["backspace"]] },
-			{ does: "Insert a snippet, on a new line", keys: [["/"]] },
+			{ does: "Insert a cell, on a new line", keys: [["/"]] },
 		],
 	},
 	{

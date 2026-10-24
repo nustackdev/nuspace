@@ -1,6 +1,6 @@
 """A space in the browser, with whatever extensions are installed.
 
-Every Plane and snippet comes from an extension, found through its entry point.
+Every Plane and Cell comes from an extension, found through its entry point.
 The space is the directory ``examples/example.nuspace``, kept between runs.
 
 Run it::

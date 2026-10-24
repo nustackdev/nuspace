@@ -41,7 +41,7 @@ from .cell import (
     set_cell_meta,
     set_prog,
 )
-from .extend import create_plane, insert_snippet
+from .extend import create_cell, create_plane
 from .kernel import (
     STOP_GRACE,
     Here,
@@ -110,9 +110,9 @@ __all__ = [
     "children",
     "clear_cell_state",
     "clear_plane_state",
+    "create_cell",
     "create_plane",
     "env",
-    "insert_snippet",
     "latest",
     "mint_ordered_id",
     "move_pin",

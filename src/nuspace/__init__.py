@@ -2,9 +2,9 @@
 
 What a host and a program need, without knowing the layers:
 
-- :func:`open_space`, and :class:`Extension`, :class:`Plane`, :class:`Snippet`
-  to register (the store's own plane shape is ``shapes.Plane``), and
-  :data:`TEXT`, ``nuverse.text``, the snippet document editing works on;
+- :func:`open_space`, and :class:`Extension`, :class:`Plane`, :class:`Cell`
+  to register (the store's own shapes are ``shapes.Plane`` and ``shapes.Cell``),
+  and :data:`TEXT`, ``nuverse.text``, the Cell document editing works on;
 - :class:`Content`, a kind of findable item, ``class
   TextContent(nuspace.Content[Text])``, registered through an
   :class:`Extension` (:mod:`nuspace.content`);
@@ -19,7 +19,7 @@ Workers import this package: nothing here may pull in a server.
 
 from nuspace import content, ops, shapes
 from nuspace.content import Content
-from nuspace.ext import TEXT, Extension, Plane, Snippet
+from nuspace.ext import TEXT, Cell, Extension, Plane
 from nuspace.host import open_space
 from nuspace.ops import env
 from nuspace.shapes import CellState, PlaneState, Space, States
@@ -35,12 +35,12 @@ from nuspace.system.services import (
 
 __all__ = [
     "TEXT",
+    "Cell",
     "CellState",
     "Content",
     "Extension",
     "Plane",
     "PlaneState",
-    "Snippet",
     "Space",
     "States",
     "boot",

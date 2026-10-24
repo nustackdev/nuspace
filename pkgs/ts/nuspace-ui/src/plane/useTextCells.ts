@@ -1,8 +1,8 @@
-// Text cells: the cells made from the text snippet, written like a document.
+// Text cells: the cells made from the text Cell, written like a document.
 //
 // A cell is a text cell when its `made_by` is TEXT, `nuverse.text`, and that
-// snippet is registered. Nothing here
-// knows what editor the snippet draws. The keys are caught on the cell's row
+// Cell is registered. Nothing here
+// knows what editor the Cell draws. The keys are caught on the cell's row
 // in the capture phase, before the editor inside sees them, and only when
 // they come from the cell's own editable surface (./Draft.tsx `cellSurface`):
 //
@@ -13,18 +13,18 @@
 //     when it has none.
 //
 // Enter in the title is the third way in, wired by the pane (see
-// ../pane/Title.tsx). With no text snippet, none of it happens.
+// ../pane/Title.tsx). With no text Cell, none of it happens.
 
 import type * as React from "react";
 import { useCallback } from "react";
 import { cellSurface, keepCaret, placeCaret, surfaceEmpty } from "./Draft";
 import type { PlaneModel } from "./model";
 import type { FocusReq } from "./state";
-import { type Cell, hasText, type SlashSnippet, TEXT } from "./types";
+import { type Cell, type CellSpec, hasText, TEXT } from "./types";
 
 export function useTextCells(
 	{ cells, editor, notify, index, rootRef }: PlaneModel,
-	snippets: SlashSnippet[],
+	cellSpecs: CellSpec[],
 	{
 		focusCell,
 		startDraft,
@@ -35,7 +35,7 @@ export function useTextCells(
 		openGhost: (after: string | null, home: (() => void) | null) => void;
 	},
 ) {
-	const on = hasText(snippets);
+	const on = hasText(cellSpecs);
 
 	const isText = useCallback((cell: Cell) => on && cell.made_by === TEXT, [on]);
 
@@ -78,14 +78,14 @@ export function useTextCells(
 	);
 
 	/** Enter mid-title: a text cell at the top holding `tail`, caret at its
-	 *  start. False with no text snippet, or a draft already on its way. */
+	 *  start. False with no text Cell, or a draft already on its way. */
 	const splitTitle = useCallback(
 		(tail: string) => startDraft?.(null, tail, 0) ?? false,
 		[startDraft],
 	);
 
 	/** Enter at the end of the title: a ghost at the top, Escape going back
-	 *  to `home`. False with no text snippet. */
+	 *  to `home`. False with no text Cell. */
 	const openTop = useCallback(
 		(home: () => void) => {
 			if (!on) return false;

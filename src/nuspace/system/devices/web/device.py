@@ -61,7 +61,7 @@ if TYPE_CHECKING:
 
     from starlette.requests import Request
 
-    from nuspace.ext import Plane, Snippet
+    from nuspace.ext import Cell, Plane
     from nuspace.system.kernel import EnvFactory
     from nustd.ui.core import Ref
 
@@ -165,7 +165,7 @@ def connection(
     sid: nu.StrArg,
     *,
     planes: Sequence[Plane] = (),
-    snippets: Sequence[Snippet] = (),
+    cells: Sequence[Cell] = (),
     shell: type[Shell] = Shell,
 ) -> nu.Nu:
     """What one browser tab runs, with its session bound. Never ends.
@@ -173,13 +173,13 @@ def connection(
     Args:
         sid: The connection id.
         planes: The registered Planes, what the sidebar can create.
-        snippets: The registered snippets, for the viewer's ``/`` menu.
+        cells: The registered Cells, for the viewer's ``/`` menu.
         shell: The shell every tab holds.
     """
-    boot = shell.boot(slash_entries(snippets), registered_entries(planes))
+    boot = shell.boot(slash_entries(cells), registered_entries(planes))
     feeds = boot >> nu.ParallelAsync(
         sidebar_feed(shell.sidebar, planes),
-        viewer_feed(shell.viewer, sid, snippets),
+        viewer_feed(shell.viewer, sid, cells),
     )
     return nu.TryCatch(
         open_connection(sid) >> nu.ParallelAsync(route_arm(shell.viewer, sid), feeds),
@@ -201,7 +201,7 @@ ROUTES = (Route("/api/telemetry/space-loaded", space_loaded, methods=["POST"]),)
 def serve_web(
     *,
     planes: Sequence[Plane] = (),
-    snippets: Sequence[Snippet] = (),
+    cells: Sequence[Cell] = (),
     host: str = "127.0.0.1",
     port: int = 8080,
     static: str | None = "nuspace_ui",
@@ -219,7 +219,7 @@ def serve_web(
 
     Args:
         planes: The registered Planes, what the sidebar can create.
-        snippets: The registered snippets: the viewer's ``/`` menu, and what
+        cells: The registered Cells: the viewer's ``/`` menu, and what
             a cell made from each entry stores.
         host: The interface the server binds.
         port: The port the server binds.
@@ -254,7 +254,7 @@ def serve_web(
                 # Once per connection: the fold respawns ended arms on every
                 # connect or disconnect anywhere, and a tab rebooted because
                 # somebody else opened one is wiped for no reason.
-                run_once(connection(sid, planes=planes, snippets=snippets)),
+                run_once(connection(sid, planes=planes, cells=cells)),
             )
         ),
     )

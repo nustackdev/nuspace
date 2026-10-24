@@ -22,7 +22,7 @@ dependencies = [
     # project size and a SPA rebuilt on every UI tweak would eat the quota --
     # not optional. `pip install nuspace` gives you the browser.
     "nuspace-ui>=0.5.5",
-    # The everyday Planes and snippets. A plugin like any other, found through
+    # The everyday Planes and Cells. A plugin like any other, found through
     # its entry point, but every space ships with it.
     "nuverse>=0.3.3",
     "typing-extensions>=4.7.0",

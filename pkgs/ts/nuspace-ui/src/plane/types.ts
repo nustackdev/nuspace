@@ -24,8 +24,8 @@ export type Cell = {
 	name: string;
 	/** The Nu program this cell stores. */
 	source: string;
-	/** The snippet it was made from, "" when none. A cell made from the text
-	 *  snippet is a text cell (see ./useTextCells.ts). */
+	/** The Cell it was made from, "" when none. A cell made from the text
+	 *  Cell is a text cell (see ./useTextCells.ts). */
 	made_by: string;
 	/** Whether its program draws, as the server worked out from the source.
 	 *  Null when it never said (an older cell): it may draw. */
@@ -72,9 +72,9 @@ export function coerceAbsent(raw: unknown): AbsentReason | null {
 	return raw === "missing" || raw === "headless" ? raw : null;
 }
 
-/** One registered snippet, as the `/` menu offers it. `group` heads its
+/** One registered Cell, as the `/` menu offers it. `group` heads its
  *  section, `icon` is spelled as a plane's (../icon/parse.ts). */
-export type SlashSnippet = {
+export type CellSpec = {
 	name: string;
 	label: string;
 	group?: string;
@@ -82,13 +82,13 @@ export type SlashSnippet = {
 	description?: string;
 };
 
-/** The `nuverse.text` snippet, as `nuspace.TEXT`: document editing works on
+/** The `nuverse.text` Cell, as `nuspace.TEXT`: document editing works on
  *  its cells, the text cells (see ./Draft.tsx and ./useTextCells.ts). */
 export const TEXT = "nuverse.text";
 
-/** Whether the text snippet is registered: without it, the text sugar is off. */
-export function hasText(snippets: SlashSnippet[]): boolean {
-	return snippets.some((s) => s.name === TEXT);
+/** Whether the text Cell is registered: without it, the text sugar is off. */
+export function hasText(cellSpecs: CellSpec[]): boolean {
+	return cellSpecs.some((s) => s.name === TEXT);
 }
 
 /** `invalid` never compiled; `failed` ran and died. They read differently. */

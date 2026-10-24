@@ -29,7 +29,7 @@ import {
 } from "../design";
 import type { Notify } from "../plane/ops";
 import { Plane } from "../plane/Plane";
-import type { AbsentReason, ActivePlane, SlashSnippet } from "../plane/types";
+import type { AbsentReason, ActivePlane, CellSpec } from "../plane/types";
 import { useRegisteredIcon } from "../sidebar/state";
 import { PaneBar } from "./PaneBar";
 import { Title } from "./Title";
@@ -60,7 +60,7 @@ export function Pane({
 	planeId,
 	plane,
 	absent = null,
-	snippets,
+	cellSpecs,
 	notify,
 	onMeta,
 	onRename,
@@ -77,7 +77,7 @@ export function Pane({
 	plane: ActivePlane | null;
 	/** Why there is no Plane to draw, once the server says so. */
 	absent?: AbsentReason | null;
-	snippets: SlashSnippet[];
+	cellSpecs: CellSpec[];
 	notify: Notify;
 	/** Change this plane's settings. */
 	onMeta: (planeId: string, patch: Record<string, unknown>) => void;
@@ -170,7 +170,7 @@ export function Pane({
 						<Plane
 							viewerPath={viewerPath}
 							plane={plane}
-							snippets={snippets}
+							cellSpecs={cellSpecs}
 							editable={plane.meta.editable}
 							wide={wide}
 							compact={compact}

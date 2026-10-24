@@ -6,9 +6,9 @@ It never asks what kind of plane it draws; what it reads off the plane is
 its meta (``editable``, ``full_width``), which arrives with the plane like
 anything else, and goes back through ``plane.meta``.
 
-It is mounted with one prop off the registered snippets (D19):
-``snippets``, the ``/`` menu's entries in order. Seeded when the shell boots,
-since the snippets are the host's registry and the shell is a static class.
+It is mounted with one prop off the registered Cells (D19):
+``cell_specs``, the ``/`` menu's entries in order. Seeded when the shell boots,
+since the Cells are the host's registry and the shell is a static class.
 """
 
 from __future__ import annotations
@@ -25,14 +25,14 @@ if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping, Sequence
 
     from nu.lang import DictArg, ListArg, Nu, StrArg
-    from nuspace.ext import Snippet
+    from nuspace.ext import Cell
     from nustd.ui.core import Changed
 
 
 __all__ = ["ViewerRef", "slash_entries"]
 
 
-def slash_entries(snippets: Iterable[Snippet]) -> list[dict]:
+def slash_entries(cells: Iterable[Cell]) -> list[dict]:
     """The ``/`` menu's entries, ``{name, label, group, icon, description}`` in registry order."""
     return [
         {
@@ -42,7 +42,7 @@ def slash_entries(snippets: Iterable[Snippet]) -> list[dict]:
             "icon": s.icon,
             "description": s.description,
         }
-        for s in snippets
+        for s in cells
     ]
 
 
@@ -52,9 +52,9 @@ class ViewerRef(SpaceRef):
     _wire_type: ClassVar[str] = "ViewerRef"
 
     @classmethod
-    def slot(cls, *, snippets: Sequence[Mapping[str, object]] | None = None) -> Self:
+    def slot(cls, *, cell_specs: Sequence[Mapping[str, object]] | None = None) -> Self:
         """Mount the viewer, seeded with the ``/`` menu."""
-        return super().slot(snippets=[dict(s) for s in snippets or ()])
+        return super().slot(cell_specs=[dict(s) for s in cell_specs or ()])
 
     def set_plane(
         self,

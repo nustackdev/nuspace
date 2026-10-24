@@ -5,18 +5,21 @@
 import { useCallback, useMemo } from "react";
 import type { PlaneModel } from "./model";
 import { slashItems as listed } from "./slash";
-import type { SlashSnippet } from "./types";
+import type { CellSpec } from "./types";
 
 export function useSlash(
 	{ editor, patch }: PlaneModel,
-	snippets: SlashSnippet[],
+	cellSpecs: CellSpec[],
 	createAfter: (afterId: string | null, name: string) => void,
 ) {
 	const slash = editor.slash;
-	const slashItems = useMemo(() => (slash ? listed(slash.query, snippets) : []), [slash, snippets]);
+	const slashItems = useMemo(
+		() => (slash ? listed(slash.query, cellSpecs) : []),
+		[slash, cellSpecs],
+	);
 
 	const pickSlash = useCallback(
-		(item: SlashSnippet) => {
+		(item: CellSpec) => {
 			const s = editor.slash;
 			if (!s) return;
 			patch({ slash: null, ghost: null });
@@ -30,7 +33,7 @@ export function useSlash(
 		(key: string): boolean => {
 			const s = editor.slash;
 			if (!s) return false;
-			const items = listed(s.query, snippets);
+			const items = listed(s.query, cellSpecs);
 			if (key === "ArrowDown" || key === "ArrowUp") {
 				const d = key === "ArrowDown" ? 1 : -1;
 				const n = Math.max(1, items.length);
@@ -48,7 +51,7 @@ export function useSlash(
 			}
 			return false;
 		},
-		[editor.slash, snippets, patch, pickSlash],
+		[editor.slash, cellSpecs, patch, pickSlash],
 	);
 
 	/** Hover moved the highlight by `d` rows. */

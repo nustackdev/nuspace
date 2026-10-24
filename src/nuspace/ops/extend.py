@@ -1,6 +1,6 @@
-"""Extension ops: create a registered Plane, insert a snippet.
+"""Extension ops: create a registered Plane or Cell.
 
-The Planes and snippets themselves are :mod:`nuspace.ext` specs, registered
+The Planes and Cells themselves are :mod:`nuspace.ext` specs, registered
 by the host at open. Core registers none: its one own Plane, the empty one
 (:data:`~nuspace.ext.EMPTY`), is no registry entry, and a third party registers
 the same way.
@@ -19,10 +19,10 @@ from .utils import MintId, atomic
 
 
 if TYPE_CHECKING:
-    from nuspace.ext import Plane, Snippet
+    from nuspace.ext import Cell, Plane
 
 
-__all__ = ["create_plane", "insert_snippet"]
+__all__ = ["create_cell", "create_plane"]
 
 
 class _Seeding(nu.Shape):
@@ -105,36 +105,36 @@ def _seeded(
     return nu.Sequential(*writes)
 
 
-def insert_snippet(
+def create_cell(
     plane_id: nu.StrArg,
-    snippet: Snippet,
+    spec: Cell,
     *,
     index: nu.IntArg | None = None,
     cell_id: nu.StrArg | None = None,
     into: nu.Ref | None = None,
 ) -> nu.Nu:
-    """Add a cell from a snippet: its source as the prog, its short name as the name.
+    """Add a cell from ``spec``: its source as the prog, its short name as the name.
 
     ``made_by`` is the name it registers under (:func:`~nuspace.ext.registered_name`):
-    ``nuverse.slider`` for the slider nuverse adds, whether ``snippet`` is the
+    ``nuverse.slider`` for the slider nuverse adds, whether ``spec`` is the
     package's own spec or the registry's.
 
     ``into`` is :func:`~nuspace.ops.cell.add_cell`'s: set to the new cell's
     id in the commit, ``""`` when nothing was written. A program that goes
     on to write the cell holds it in a ``nu.let`` slot and hands the slot to
-    the snippet's ops::
+    the Cell's ops::
 
         nu.let("", lambda cell: (
-            ops.insert_snippet(plane, prose.SNIPPET, into=cell)
+            ops.create_cell(plane, prose.CELL, into=cell)
             >> prose.set_text(cell, "Water the basil")
         ))
     """
     return add_cell(
         plane_id,
-        snippet.source,
+        spec.source,
         cell_id=cell_id,
-        name=short_name(snippet.name),
+        name=short_name(spec.name),
         index=index,
-        made_by=registered_name(snippet),
+        made_by=registered_name(spec),
         into=into,
     )

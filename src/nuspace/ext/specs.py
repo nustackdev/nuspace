@@ -1,7 +1,7 @@
-"""The specs an extension registers: a :class:`Plane` ``+`` creates, a :class:`Snippet` ``/`` inserts.
+"""The specs an extension registers: a :class:`Plane` ``+`` creates, a :class:`Cell` ``/`` inserts.
 
 Plain data. The ops that act on them, :func:`~nuspace.ops.create_plane` and
-:func:`~nuspace.ops.insert_snippet`, live in :mod:`nuspace.ops`.
+:func:`~nuspace.ops.create_cell`, live in :mod:`nuspace.ops`.
 """
 
 from __future__ import annotations
@@ -10,11 +10,11 @@ from dataclasses import dataclass, field
 from typing import Any
 
 
-__all__ = ["EMPTY", "TEXT", "Plane", "Snippet"]
+__all__ = ["EMPTY", "TEXT", "Cell", "Plane"]
 
 
-#: The ``nuverse.text`` snippet: nuspace's document editing works on its cells.
-#: See :class:`Snippet`.
+#: The ``nuverse.text`` Cell: nuspace's document editing works on its cells.
+#: See :class:`Cell`.
 TEXT = "nuverse.text"
 
 
@@ -77,14 +77,14 @@ EMPTY = Plane(
 
 
 @dataclass(frozen=True)
-class Snippet:
+class Cell:
     """Source for one cell, offered from the ``/`` menu.
 
     nuspace's document editing works on the cells of the ``nuverse.text``
-    snippet (:data:`TEXT`), the plane's text cells, written like a document: typing on an empty line
+    Cell (:data:`TEXT`), the plane's text cells, written like a document: typing on an empty line
     starts one, Enter in the title starts one at the top with the text after
     the caret, Cmd+Enter in one starts the next below, and Backspace in an
-    empty one removes it. With no snippet under that name, typing opens the
+    empty one removes it. With no Cell under that name, typing opens the
     ``/`` menu and the rest is off.
 
     Args:
@@ -92,11 +92,11 @@ class Snippet:
             as ``<package>.<name>``, the registry key and what the cells made
             from it record as ``props.made_by``.
         label: What the menu shows.
-        source: The cell's prog. A snippet keeps what it edits or shows in
+        source: The cell's prog. A cell keeps what it edits or shows in
             content items (:mod:`nuspace.content`), where search finds them.
         description: One line on what a cell made from it is for.
         group: The ``/`` menu heading it sits under, ``""`` for none. Groups
-            show in the order their first snippet registers; the ungrouped
+            show in the order their first Cell registers; the ungrouped
             come last, under no heading.
         icon: What the menu draws beside it, spelled as :class:`Plane`'s
             ``icon``. ``""`` for the default.

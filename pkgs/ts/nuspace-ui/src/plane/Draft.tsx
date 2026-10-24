@@ -1,6 +1,6 @@
 // Type to create: a letter typed into a ghost, carried into a new text cell.
 //
-// The letter starts a cell from the text snippet and turns the ghost into a
+// The letter starts a cell from the text Cell and turns the ghost into a
 // draft: plain text, held here in the browser, that keeps taking keys while
 // the cell makes its round trip. When the cell's editor is ready the draft's
 // text is typed into it through the browser's own insert, so the editor's
@@ -32,7 +32,7 @@ import { flushSync } from "react-dom";
 import { docDraft } from "../design";
 import { cellUiPath } from "./cell/address";
 import type { PlaneModel } from "./model";
-import { hasText, type SlashSnippet, TEXT } from "./types";
+import { type CellSpec, hasText, TEXT } from "./types";
 
 /** What counts as a cell's editable text surface. The first one wins. */
 export const EDITABLE = '[contenteditable="true"], textarea, input';
@@ -121,7 +121,7 @@ function holdsValue(node: TreeNode | null): boolean {
 export function useDraft(
 	{ rootRef, patch }: PlaneModel,
 	viewerPath: Path,
-	snippets: SlashSnippet[],
+	cellSpecs: CellSpec[],
 	createAfter: (afterId: string | null, name: string, land?: boolean) => string,
 ) {
 	const [draft, setDraft] = useState<DraftState | null>(null);
@@ -130,9 +130,9 @@ export function useDraft(
 	/**
 	 * Start a text cell after `after`, holding `text` with the caret at
 	 * `caret` (its end by default). False when one is already on its way.
-	 * Null with no text snippet: the ghost opens the menu as before.
+	 * Null with no text Cell: the ghost opens the menu as before.
 	 */
-	const startDraft = !hasText(snippets)
+	const startDraft = !hasText(cellSpecs)
 		? null
 		: (after: string | null, text: string, caret = text.length): boolean => {
 				patch({ ghost: null, slash: null });

@@ -2,10 +2,10 @@
 //
 // A ghost is a line you can put a caret in that has not decided what it is
 // yet. It holds no value, owns no id, and nothing exists in the store because
-// of it. Press `/` and it offers the registered snippets; pick one and it
-// becomes a cell made from that snippet. Start typing and it becomes a text
-// cell with the typing in it (./Draft.tsx), when a text snippet is
-// registered, or else the typing searches the snippets. Enter on an empty
+// of it. Press `/` and it offers the registered Cells; pick one and it
+// becomes a cell made from that Cell. Start typing and it becomes a text
+// cell with the typing in it (./Draft.tsx), when a text Cell is
+// registered, or else the typing searches the Cells. Enter on an empty
 // ghost makes a plain program.
 //
 // There is always one at the end of the plane, which is what makes an empty

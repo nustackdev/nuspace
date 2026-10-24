@@ -12,8 +12,8 @@ __all__ = ["Cell", "CellProps"]
 class CellProps(nu.Shape):
     """What nuspace itself reads off a cell to work. Typed, unlike ``meta``.
 
-    ``made_by`` names the snippet the cell was made from (``""`` for none).
-    A cell without one is not of any snippet's type.
+    ``made_by`` names the Cell spec the cell was made from (``""`` for none).
+    A cell without one is not of any Cell spec's type.
 
     ``has_ui`` says whether the cell's program draws: its constructed tree
     holds a ui ref. Worked out whenever the prog is written, never by hand.

@@ -1,6 +1,6 @@
 """Search: a content search is a plane that runs once, and a system plane that asks and shows them.
 
-Search is by kind, never by snippet or by who made a cell. Three parts, all
+Search is by kind, never by Cell spec or by who made a cell. Three parts, all
 planes and cells:
 
 - **a search**: a plane under the system parent :data:`SEARCHES`, made by

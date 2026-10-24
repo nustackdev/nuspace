@@ -1,5 +1,5 @@
 // What a registry menu lists for a query, and in what order: the `/` menu's
-// snippets (../plane/SlashMenu.tsx) and the Add plane popup's Planes
+// Cells (../plane/SlashMenu.tsx) and the Add plane popup's Planes
 // (../sidebar/AddPlane.tsx) alike.
 //
 // Pure: a menu draws what this returns and steps its keys through the same
@@ -12,7 +12,7 @@
 // beating anywhere in it, then the name, then a word's start in the group or
 // the description.
 
-/** What a registry menu ranks: a registered snippet or Plane, as shipped, named `pkg.name`. */
+/** What a registry menu ranks: a registered Cell or Plane, as shipped, named `pkg.name`. */
 export type MenuEntry = { name: string; label: string; group?: string; description?: string };
 
 /** The heading over the ungrouped rows, when any other row has a group. */

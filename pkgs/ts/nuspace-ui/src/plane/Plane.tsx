@@ -40,7 +40,7 @@ import type { PlaneModel } from "./model";
 import type { Notify } from "./ops";
 import { SlashMenu } from "./SlashMenu";
 import { type EditorPatch, patchEditor, useEditorState } from "./state";
-import type { ActivePlane, SlashSnippet } from "./types";
+import type { ActivePlane, CellSpec } from "./types";
 import { useBoxSelect } from "./useBoxSelect";
 import { useCellDrag } from "./useCellDrag";
 import { useCellKeys } from "./useCellKeys";
@@ -50,12 +50,12 @@ import { useSlash } from "./useSlash";
 import { useStructure } from "./useStructure";
 import { useTextCells } from "./useTextCells";
 
-const NO_SNIPPETS: SlashSnippet[] = [];
+const NO_CELL_SPECS: CellSpec[] = [];
 
 export function Plane({
 	viewerPath,
 	plane,
-	snippets = NO_SNIPPETS,
+	cellSpecs = NO_CELL_SPECS,
 	editable,
 	wide,
 	compact,
@@ -69,8 +69,8 @@ export function Plane({
 	 *  every cell's refs. */
 	viewerPath: Path;
 	plane: ActivePlane;
-	/** The registered snippets, in order: the `/` menu's rows. */
-	snippets?: SlashSnippet[];
+	/** The registered Cells, in order: the `/` menu's rows. */
+	cellSpecs?: CellSpec[];
 	/** The plane's setting. False draws the same cells, output only. */
 	editable: boolean;
 	/** The plane's full-width setting. */
@@ -135,17 +135,17 @@ export function Plane({
 	const { box, startBox } = useBoxSelect(model);
 	const { slash, pickSlash, slashKey, moveSlash, closeSlash } = useSlash(
 		model,
-		snippets,
+		cellSpecs,
 		createAfter,
 	);
-	const { draft, boxRef, startDraft } = useDraft(model, viewerPath, snippets, createAfter);
+	const { draft, boxRef, startDraft } = useDraft(model, viewerPath, cellSpecs, createAfter);
 	const { ghostProps, openGhost } = useGhosts(model, {
 		focusCell,
 		createAfter,
 		slashKey,
 		startDraft,
 	});
-	const { isText, textKey, splitTitle, openTop } = useTextCells(model, snippets, {
+	const { isText, textKey, splitTitle, openTop } = useTextCells(model, cellSpecs, {
 		focusCell,
 		startDraft,
 		openGhost,
@@ -309,7 +309,7 @@ export function Plane({
 			{editable && slash ? (
 				<SlashMenu
 					query={slash.query}
-					snippets={snippets}
+					cellSpecs={cellSpecs}
 					index={slash.index}
 					anchor={slash.anchor}
 					onPick={pickSlash}

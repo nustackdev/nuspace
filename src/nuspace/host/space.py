@@ -52,7 +52,7 @@ if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
 
     from nuspace.content import Content
-    from nuspace.ext import Extension, Plane, Snippet
+    from nuspace.ext import Cell, Extension, Plane
     from nuspace.system.backends import Backend
     from nuspace.system.kernel import EnvFactory
 
@@ -104,7 +104,7 @@ def open_space(
     static: str | None = "nuspace_ui",
     spares: int = DEFAULT_SPARES,
     planes: Sequence[Plane] = (),
-    snippets: Sequence[Snippet] = (),
+    cells: Sequence[Cell] = (),
     contents: Sequence[type[Content]] = (),
     envs: Mapping[str, EnvFactory] | None = None,
     space_envs: Sequence[Sequence[str] | str] = (),
@@ -133,7 +133,7 @@ def open_space(
             socket alone, eg for a vite dev server.
         spares: Idle workers to keep up.
         planes: Planes registered directly, ahead of any extension.
-        snippets: Snippets registered directly.
+        cells: Cells registered directly.
         contents: Content kinds registered directly.
         envs: Env factories registered directly.
         space_envs: Env specs every run executes inside, outermost.
@@ -147,7 +147,7 @@ def open_space(
     """
     reg = space_registry(
         planes=planes,
-        snippets=snippets,
+        cells=cells,
         contents=contents,
         envs=envs,
         extensions=extensions,
@@ -160,7 +160,7 @@ def open_space(
 
         served, web_envs = serve_web(
             planes=list(reg.planes.values()),
-            snippets=list(reg.snippets.values()),
+            cells=list(reg.cells.values()),
             host=host,
             port=port,
             static=static,

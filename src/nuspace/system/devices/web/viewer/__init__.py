@@ -1,7 +1,7 @@
 """The viewer: the open planes' cells, drawn, one pane per plane. One, never one per kind.
 
 ``ref``
-    The node the browser draws, mounted with the snippets' ``/`` menu.
+    The node the browser draws, mounted with the registered Cells, its ``/`` menu.
 ``interactions``
     Everything that node says and hears, in the browser's words.
 ``feed``

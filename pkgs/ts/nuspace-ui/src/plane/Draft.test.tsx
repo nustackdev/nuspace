@@ -11,7 +11,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Plane } from "./Plane";
-import { type ActivePlane, type Cell, type SlashSnippet, TEXT } from "./types";
+import { type ActivePlane, type Cell, type CellSpec, TEXT } from "./types";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -20,7 +20,7 @@ register("TestEditor", {
 });
 
 const VIEWER = ["viewer"];
-const SNIPPETS: SlashSnippet[] = [
+const CELL_SPECS: CellSpec[] = [
 	{ name: "program", label: "Program" },
 	{ name: TEXT, label: "Text" },
 ];
@@ -32,7 +32,7 @@ const insert = vi.fn(() => true);
 
 const openRef: { current: ((home: () => void) => boolean) | null } = { current: null };
 
-function render(cells: Cell[], snippets = SNIPPETS, editable = true) {
+function render(cells: Cell[], cellSpecs = CELL_SPECS, editable = true) {
 	const plane: ActivePlane = {
 		plane_id: "p1",
 		title: "",
@@ -45,7 +45,7 @@ function render(cells: Cell[], snippets = SNIPPETS, editable = true) {
 				<Plane
 					viewerPath={VIEWER}
 					plane={plane}
-					snippets={snippets}
+					cellSpecs={cellSpecs}
 					editable={editable}
 					wide={false}
 					compact={false}
@@ -112,7 +112,7 @@ afterEach(() => {
 });
 
 describe("typing into the ghost", () => {
-	it("starts a draft and a cell from the flagged snippet, then hands the text off", async () => {
+	it("starts a draft and a cell from the text cell spec, then hands the text off", async () => {
 		render([]);
 		typeInto(ghost() as HTMLInputElement, "h");
 
@@ -144,7 +144,7 @@ describe("typing into the ghost", () => {
 		expect(document.activeElement).toBe(row?.querySelector("[contenteditable]"));
 	});
 
-	it("opens the / search as before when no text snippet is registered", () => {
+	it("opens the / search as before when no text cell spec is registered", () => {
 		render([], [{ name: "program", label: "Program" }]);
 		typeInto(ghost() as HTMLInputElement, "h");
 		expect(notify).not.toHaveBeenCalled();
@@ -199,7 +199,7 @@ describe("a text cell's keys", () => {
 	it("Cmd+Enter does nothing in a cell of another kind, or on a read-only plane", async () => {
 		render([cell("a", "program")]);
 		press(await mountEditor("a"), "Enter", { metaKey: true });
-		render([cell("b")], SNIPPETS, false);
+		render([cell("b")], CELL_SPECS, false);
 		press(await mountEditor("b"), "Enter", { metaKey: true });
 		expect(notify).not.toHaveBeenCalled();
 		expect(draftBox()).toBeNull();
@@ -239,10 +239,10 @@ describe("Enter at the end of the title", () => {
 		expect(ghosts()).toHaveLength(1);
 	});
 
-	it("does nothing without a text snippet, or on a read-only plane", () => {
+	it("does nothing without a text cell spec, or on a read-only plane", () => {
 		render([cell("a")], [{ name: "program", label: "Program" }]);
 		expect(openRef.current?.(() => {})).toBe(false);
-		render([cell("a")], SNIPPETS, false);
+		render([cell("a")], CELL_SPECS, false);
 		expect(openRef.current).toBeNull();
 	});
 });

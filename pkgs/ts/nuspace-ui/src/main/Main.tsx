@@ -62,8 +62,8 @@ import {
 	patchPlaneTitle,
 	pruneViewer,
 	useAbsent,
+	useCellSpecs,
 	usePlanes,
-	useSnippets,
 } from "./state";
 import { useCanvasDrop } from "./useCanvasDrop";
 
@@ -74,7 +74,7 @@ const NOTHING_OPEN = "pick a Plane";
 export function Main({ path }: NodeProps) {
 	const planes = usePlanes(path);
 	const absent = useAbsent(path);
-	const snippets = useSnippets(path);
+	const cellSpecs = useCellSpecs(path);
 	const routes = useRoutes();
 	const focused = useFocusedRoute();
 	const sidebar = useTypePath("SidebarRef");
@@ -213,7 +213,7 @@ export function Main({ path }: NodeProps) {
 							planeId={id}
 							plane={planes[id] ?? null}
 							absent={absent[id] ?? null}
-							snippets={snippets}
+							cellSpecs={cellSpecs}
 							notify={notify}
 							onMeta={onMeta}
 							onRename={onRename}

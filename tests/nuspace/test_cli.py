@@ -17,7 +17,7 @@ import nu
 from nuspace import ops
 from nuspace._cli import _installed, cli
 from nuspace._cli.commands import run as run_command
-from nuspace.ext import Extension, Plane, Snippet
+from nuspace.ext import Cell, Extension, Plane
 from nuspace.host import presets
 from nuspace.system import home
 from nuspace.system.kernel import KERNEL_FILE, store
@@ -77,7 +77,7 @@ def verse(monkeypatch):
             "tools",
             "1.2.0",
             lambda: Extension(
-                (_plane("chat", "Talk."), _plane("jobs")), (Snippet("text", "Text", "1"),)
+                (_plane("chat", "Talk."), _plane("jobs")), (Cell("text", "Text", "1"),)
             ),
         ),
         _point("agents", "0.1.0", lambda: Extension((_plane("chat"), _plane("crew")))),
@@ -248,7 +248,7 @@ def test_verse_lists_each_package_and_its_planes(verse):
     result = _invoke("verse")
     assert result.exit_code == 0, result.output
     lines = result.output.splitlines()
-    assert lines[0].split() == ["tools", "1.2.0", "chat", "·", "jobs", "+1", "snippets"]
+    assert lines[0].split() == ["tools", "1.2.0", "chat", "·", "jobs", "+1", "cells"]
     assert lines[1].split() == ["agents", "0.1.0", "chat", "·", "crew"]
     assert lines[2].split() == ["broken", "0.0.1"]
     assert "torch" in lines[3]
@@ -262,7 +262,7 @@ def test_verse_json_gives_the_detail(verse):
     assert tools["name"] == "tools"
     assert tools["version"] == "1.2.0"
     assert tools["planes"][0] == {"name": "tools.chat", "label": "Chat", "description": "Talk."}
-    assert [s["name"] for s in tools["snippets"]] == ["text"]
+    assert [s["name"] for s in tools["cells"]] == ["text"]
     assert tools["error"] is None
     assert [p["name"] for p in agents["planes"]] == ["agents.chat", "agents.crew"]
     assert broken["planes"] == []

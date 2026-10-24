@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Rename snippets to cells, so planes, cells and content are the three extension points
 - Add Content items, new and find, and drop snippet ops
 - Add Content: typed items any cell writes, searched by kind in the Search plane
 

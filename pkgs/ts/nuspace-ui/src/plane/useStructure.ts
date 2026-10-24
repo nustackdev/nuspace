@@ -4,7 +4,7 @@
 // it and sends it, so focus is aimed at a known id rather than guessed at from
 // a position once `set_plane` comes back.
 //
-// A snippet's cell is landed on selected, and then handed what it draws: the
+// A cell made from a Cell is landed on selected, and then handed what it draws: the
 // first focusable thing its program puts up takes the keyboard, a text
 // surface with the caret at its end. Drawing takes a run, so the cell is
 // watched until something arrives. The watch ends when the hand off happens,
@@ -40,9 +40,10 @@ export function useStructure({
 	/** When the watch on `handing` gives up, fixed at landing so a re-run keeps it. */
 	const handUntil = useRef(0);
 
-	// Land on a newly created cell once the server confirms it. A snippet's
-	// cell is selected with its source closed: what it draws is the point. A
-	// plain program is there to be written, so its source opens for typing.
+	// Land on a newly created cell once the server confirms it. A cell made
+	// from a Cell is selected with its source closed: what it draws is the
+	// point. A plain program is there to be written, so its source opens for
+	// typing.
 	useEffect(() => {
 		const want = pendingFocus.current;
 		if (!want) return;
@@ -118,9 +119,9 @@ export function useStructure({
 	);
 
 	/**
-	 * Add a cell made from the snippet `name` after `afterId` (at the top when
+	 * Add a cell made from the Cell `name` after `afterId` (at the top when
 	 * null, or last when `afterId` is gone), and land on it unless `land` is
-	 * off. The server stores the snippet's program; a name no snippet has
+	 * off. The server stores the Cell's program; a name no Cell has
 	 * makes the starter program. Returns the new id.
 	 */
 	const createAfter = useCallback(

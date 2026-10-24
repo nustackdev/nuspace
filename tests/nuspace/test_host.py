@@ -17,7 +17,7 @@ import pytest
 from _support.kernel import SET_42, Kernel, _Hold, history
 
 import nu
-from nuspace import Extension, Plane, Snippet, boot, open_space, ops
+from nuspace import Cell, Extension, Plane, boot, open_space, ops
 from nuspace.ext import (
     GROUP,
     Registry,
@@ -42,8 +42,8 @@ def _plane(name: str, label: str = "") -> Plane:
     return Plane(name, label or name, backend="async")
 
 
-def _snippet(name: str, source: str = "") -> Snippet:
-    return Snippet(name, name, source or name)
+def _cell(name: str, source: str = "") -> Cell:
+    return Cell(name, name, source or name)
 
 
 def _env(label: str):
@@ -79,12 +79,10 @@ def _points(monkeypatch, points: list[_Point]) -> list[str]:
 
 
 def test_merge_keeps_the_first_per_name_and_warns():
-    first = Extension(
-        (_plane("plain", "Mine"),), (_snippet("text", "a"),), {"db": _env("mine")}, "a"
-    )
+    first = Extension((_plane("plain", "Mine"),), (_cell("text", "a"),), {"db": _env("mine")}, "a")
     second = Extension(
         (_plane("plain", "Theirs"), _plane("jobs")),
-        (_snippet("text", "b"), _snippet("heading")),
+        (_cell("text", "b"), _cell("heading")),
         {"db": _env("theirs"), "llm": _env("llm")},
         "b",
     )
@@ -94,8 +92,8 @@ def test_merge_keeps_the_first_per_name_and_warns():
     assert "'plain' from b ignored: a registered it first" in str(caught[0].message)
     assert list(reg.planes) == ["plain", "jobs"]
     assert reg.planes["plain"].label == "Mine"
-    assert reg.snippets["text"].source == "a"
-    assert list(reg.snippets) == ["text", "heading"]
+    assert reg.cells["text"].source == "a"
+    assert list(reg.cells) == ["text", "heading"]
     assert reg.envs["db"]().label == "mine"
     assert set(reg.envs) == {"db", "llm"}
 
@@ -109,7 +107,7 @@ def test_discover_loads_extensions_and_factories_and_skips_the_broken(monkeypatc
         monkeypatch,
         [
             _Point("plain", lambda: ext),
-            _Point("factory", lambda: lambda: Extension(snippets=(_snippet("text"),))),
+            _Point("factory", lambda: lambda: Extension(cells=(_cell("text"),))),
             _Point("broken", broken),
             _Point("wrong", lambda: lambda: 42),
         ],
@@ -119,7 +117,7 @@ def test_discover_loads_extensions_and_factories_and_skips_the_broken(monkeypatc
     assert asked == [GROUP]
     assert [e.name for e in found] == ["plain", "factory"]
     assert [p.name for p in found[0].planes] == ["plain.plain"]
-    assert [s.name for s in found[1].snippets] == ["factory.text"]
+    assert [s.name for s in found[1].cells] == ["factory.text"]
     said = [str(w.message) for w in caught]
     assert any("'broken' failed to load" in s for s in said)
     assert any("'wrong' is not an Extension: int" in s for s in said)
@@ -147,12 +145,12 @@ def test_explicit_wins_over_discovered(monkeypatch):
 
 
 def test_installed_planes_are_named_after_their_package(monkeypatch):
-    """Two packages may add a plane or a snippet of one short name."""
+    """Two packages may add a plane or a Cell of one short name."""
     _points(
         monkeypatch,
         [
-            _Point("tools", lambda: Extension((_plane("chat", "Tools"),), (_snippet("text"),))),
-            _Point("agents", lambda: Extension((_plane("chat", "Agents"),), (_snippet("text"),))),
+            _Point("tools", lambda: Extension((_plane("chat", "Tools"),), (_cell("text"),))),
+            _Point("agents", lambda: Extension((_plane("chat", "Agents"),), (_cell("text"),))),
         ],
     )
     with warnings.catch_warnings():
@@ -163,18 +161,18 @@ def test_installed_planes_are_named_after_their_package(monkeypatch):
         "tools.chat": "Tools",
         "agents.chat": "Agents",
     }
-    assert list(reg.snippets) == ["tools.text", "agents.text"]
+    assert list(reg.cells) == ["tools.text", "agents.text"]
 
 
 def test_a_package_spec_knows_the_name_it_registers_under(monkeypatch):
     """What code holding the package's own spec writes as made_by."""
-    plane, snippet = _plane("chat"), _snippet("slider")
-    _points(monkeypatch, [_Point("tools", lambda: Extension((plane,), (snippet,)))])
+    plane, cell = _plane("chat"), _cell("slider")
+    _points(monkeypatch, [_Point("tools", lambda: Extension((plane,), (cell,)))])
     assert registered_name(plane) == "tools.chat"
-    assert registered_name(snippet) == "tools.slider"
-    assert registered_name(_snippet("slider")) == "slider"
+    assert registered_name(cell) == "tools.slider"
+    assert registered_name(_cell("slider")) == "slider"
     reg = space_registry()
-    assert registered_name(reg.snippets["tools.slider"]) == "tools.slider"
+    assert registered_name(reg.cells["tools.slider"]) == "tools.slider"
     assert short_name("tools.slider") == short_name("slider") == "slider"
 
 
@@ -182,9 +180,9 @@ def test_discovery_can_be_turned_off(monkeypatch):
     asked = _points(monkeypatch, [_Point("installed", lambda: Extension((_plane("plain"),)))])
     with warnings.catch_warnings():
         warnings.simplefilter("error")
-        reg = space_registry(snippets=[_snippet("text")], discover=False)
+        reg = space_registry(cells=[_cell("text")], discover=False)
     assert asked == []
-    assert (list(reg.planes), list(reg.snippets)) == ([], ["text"])
+    assert (list(reg.planes), list(reg.cells)) == ([], ["text"])
 
 
 # --- open_space ------------------------------------------------------------------
@@ -313,7 +311,7 @@ async def test_open_space_tells_a_bound_usage_what_is_made_and_removed(tmp_path,
 
 def test_open_space_with_web_compiles(monkeypatch):
     _points(monkeypatch, [])
-    term = open_space(planes=[_plane("plain")], snippets=[_snippet("text")], open_browser=False)
+    term = open_space(planes=[_plane("plain")], cells=[_cell("text")], open_browser=False)
     nu.validate(nu.compile(term))
 
 

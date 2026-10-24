@@ -28,7 +28,7 @@ function render(planeId: string, absent: AbsentReason) {
 					planeId={planeId}
 					plane={null}
 					absent={absent}
-					snippets={[]}
+					cellSpecs={[]}
 					notify={() => {}}
 					onMeta={() => {}}
 					onRename={() => {}}

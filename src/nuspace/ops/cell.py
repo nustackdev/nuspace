@@ -65,7 +65,7 @@ def _draws(built: object) -> bool:
 class HasUi(ScalarQuery):
     """Whether ``prog`` draws: constructed, its tree holds a ui ref.
 
-    Construction runs the snippet's module code in this process, offered the
+    Construction runs the prog's module code in this process, offered the
     ``plane`` and ``cell`` a run offers. Source that does not construct reads
     False: as it stands it draws nothing.
     """
@@ -159,7 +159,7 @@ def add_cell(
             is on another plane.
         name: What to call it.
         index: Where in the plane's cells. The end when absent.
-        made_by: Prop, the snippet it was made from, ``""`` for none.
+        made_by: Prop, the Cell spec it was made from, ``""`` for none.
         meta: Fields to merge into its meta.
         into: Set to the cell id in the commit, ``""`` when nothing was
             written, for a caller that needs a minted one: the record does

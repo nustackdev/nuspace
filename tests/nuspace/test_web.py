@@ -19,7 +19,7 @@ import nu
 import nustd.ui
 from nu.lang import wire
 from nuspace import ops
-from nuspace.ext import TEXT, Plane, Snippet
+from nuspace.ext import TEXT, Cell, Plane
 from nuspace.ops.utils import atomic, atomic_state
 from nuspace.shapes import EXIT_FAILED, EXIT_INTERRUPTED, EXIT_KILLED, EXIT_OK, Space, States
 from nuspace.system.devices.web import CellRoot, SessionWrap, Shell, session_env
@@ -40,9 +40,9 @@ PLANES = [
     Plane("plain", "Plain", backend="async"),
     Plane("jobs", "Jobs", icon="list", cells=(("list", TEXT_SRC),), backend="mp"),
 ]
-SNIPPETS = [
-    Snippet(TEXT, "Text", TEXT_SRC),
-    Snippet("program", "Program", "def out():\n    return nu.Noop()\n"),
+CELLS = [
+    Cell(TEXT, "Text", TEXT_SRC),
+    Cell("program", "Program", "def out():\n    return nu.Noop()\n"),
 ]
 
 
@@ -113,7 +113,7 @@ def test_warm_imports_cover_drawing_runs_and_no_web_server():
 def test_device_term_compiles_and_validates():
     from nuspace.system.devices.web import serve_web
 
-    term, envs = serve_web(planes=PLANES, snippets=SNIPPETS, open_browser=False, port=0)
+    term, envs = serve_web(planes=PLANES, cells=CELLS, open_browser=False, port=0)
     assert set(envs) == {"session"}
     assert envs["session"]("s1").label == "session:s1"
     nu.validate(nu.compile(term))
@@ -268,7 +268,7 @@ async def test_move_counts_drawn_siblings_only(store):
 
 async def test_viewer_plane(store):
     await _plane(store, "p1", "Notes", {"editable": True, "tone": "calm"}, ui=True)
-    await store.run(ops.insert_snippet("p1", SNIPPETS[0], cell_id="c1"))
+    await store.run(ops.create_cell("p1", CELLS[0], cell_id="c1"))
     await store.run(ops.rename_cell("c1", "intro"))
     await store.run(ops.add_cell("p1", "x = 1", cell_id="c2", name="code"))
     await store.run(ops.add_cell("p1", "y = 2", cell_id="c0", name="first", index=0))
@@ -441,17 +441,15 @@ async def test_connection_live(store):
     await store.run(ops.add_cell("p1", "x = 1", cell_id="c1", name="one"))
     session = FakeSession()
     ctx = store.ctx.bind(Session, session)
-    task = asyncio.create_task(
-        nu.arun(connection(nu.Str("s1"), planes=PLANES, snippets=SNIPPETS), ctx)
-    )
+    task = asyncio.create_task(nu.arun(connection(nu.Str("s1"), planes=PLANES, cells=CELLS), ctx))
     conns = Space.connections
     try:
         # Boot, the connection published, the sidebar shipped.
         await _until(lambda: session.writes("set_tree"), BOOT_TIMEOUT)
         assert session.frames[0].op == "remove"
         viewer_init = next(f for f in session.frames if f.ref == ("viewer",))
-        assert viewer_init.chain[0][2]["snippets"] == slash_entries(SNIPPETS)
-        assert viewer_init.chain[0][2]["snippets"][0] == {
+        assert viewer_init.chain[0][2]["cell_specs"] == slash_entries(CELLS)
+        assert viewer_init.chain[0][2]["cell_specs"][0] == {
             "name": TEXT,
             "label": "Text",
             "group": "",
@@ -520,7 +518,7 @@ async def test_connection_live(store):
         }
         assert await store.read(ops.plane_exists("nope")) is False
 
-        # Browser events run ops. A create stores the named snippet's prog, an
+        # Browser events run ops. A create stores the named Cell spec's prog, an
         # unknown name the starter program.
         session.notify(
             ("viewer", "ops", "cell.create"),
@@ -598,9 +596,7 @@ async def test_connection_panes(store):
     await store.run(ops.add_cell("p2", "y = 2", cell_id="b1"))
     session = FakeSession()
     ctx = store.ctx.bind(Session, session)
-    task = asyncio.create_task(
-        nu.arun(connection(nu.Str("s1"), planes=PLANES, snippets=SNIPPETS), ctx)
-    )
+    task = asyncio.create_task(nu.arun(connection(nu.Str("s1"), planes=PLANES, cells=CELLS), ctx))
     conns = Space.connections
 
     def shown() -> dict:
@@ -673,9 +669,7 @@ async def test_connection_status_hears_its_own_pane_run_only(store):
     await store.run(ops.add_cell("p2", "y = 2", cell_id="b1"))
     session = FakeSession()
     ctx = store.ctx.bind(Session, session)
-    task = asyncio.create_task(
-        nu.arun(connection(nu.Str("s1"), planes=PLANES, snippets=SNIPPETS), ctx)
-    )
+    task = asyncio.create_task(nu.arun(connection(nu.Str("s1"), planes=PLANES, cells=CELLS), ctx))
 
     def status(plane_id: str) -> list[dict]:
         return [w for w in session.writes("set_status") if w["plane_id"] == plane_id]
@@ -714,9 +708,7 @@ async def test_connection_absent_panes(store):
     await _plane(store, "svc", "Service", system=True)
     session = FakeSession()
     ctx = store.ctx.bind(Session, session)
-    task = asyncio.create_task(
-        nu.arun(connection(nu.Str("s1"), planes=PLANES, snippets=SNIPPETS), ctx)
-    )
+    task = asyncio.create_task(nu.arun(connection(nu.Str("s1"), planes=PLANES, cells=CELLS), ctx))
 
     def last(plane_id: str) -> dict:
         """The last set_plane or set_absent for one pane."""

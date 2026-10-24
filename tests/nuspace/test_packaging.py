@@ -1,4 +1,4 @@
-"""Packaging: nuspace stands alone, every Plane and snippet comes from an extension.
+"""Packaging: nuspace stands alone, every Plane and Cell comes from an extension.
 
 nuspace ships none of its own. These check nuspace registers nothing itself,
 and the example leaves it all to what is installed.
@@ -34,16 +34,16 @@ def test_a_bare_install_registers_nothing():
     """Whatever is discovered comes from another distribution, eg the demos extra."""
     assert not [p for p in entry_points(group=GROUP) if p.dist and p.dist.name == "nuspace"]
     reg = space_registry(discover=False)
-    assert (reg.planes, reg.snippets) == ({}, {})
+    assert (reg.planes, reg.cells) == ({}, {})
 
 
 def test_example_defines_nothing_of_its_own():
-    """The example registers no Planes or snippets: they come from extensions."""
+    """The example registers no Planes or Cells: they come from extensions."""
     out = _run(
         """
         import runpy
         space = runpy.run_path("examples/space.py")
-        print("PLANES" in space, "SNIPPETS" in space)
+        print("PLANES" in space, "CELLS" in space)
         """
     )
     assert out == "False False"

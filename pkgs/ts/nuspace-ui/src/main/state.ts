@@ -29,12 +29,12 @@ import { type EditorState, EMPTY_EDITOR, pruneEditor } from "../plane/state";
 import {
 	type AbsentReason,
 	type ActivePlane,
+	type CellSpec,
 	type CellStatus,
 	coerceAbsent,
 	coerceCells,
 	coerceMeta,
 	coerceStatus,
-	type SlashSnippet,
 } from "../plane/types";
 
 /** Every open Plane that has landed, by id, off the node's props. */
@@ -207,14 +207,14 @@ export function useAbsent(path: Path): Record<string, AbsentReason> {
 	return (useProps(path).absent as Record<string, AbsentReason> | undefined) ?? NO_ABSENT;
 }
 
-const EMPTY_SNIPPETS: SlashSnippet[] = [];
+const EMPTY_CELL_SPECS: CellSpec[] = [];
 
 /** The `/` menu's entries, in registry order, off the mount's props. */
-export function useSnippets(path: Path): SlashSnippet[] {
-	const raw = useProps(path).snippets;
+export function useCellSpecs(path: Path): CellSpec[] {
+	const raw = useProps(path).cell_specs;
 	return useMemo(() => {
-		if (!Array.isArray(raw)) return EMPTY_SNIPPETS;
-		const out: SlashSnippet[] = [];
+		if (!Array.isArray(raw)) return EMPTY_CELL_SPECS;
+		const out: CellSpec[] = [];
 		for (const r of raw) {
 			if (!r || typeof r !== "object") continue;
 			const o = r as Record<string, unknown>;
@@ -230,6 +230,6 @@ export function useSnippets(path: Path): SlashSnippet[] {
 				description: text("description"),
 			});
 		}
-		return out.length ? out : EMPTY_SNIPPETS;
+		return out.length ? out : EMPTY_CELL_SPECS;
 	}, [raw]);
 }

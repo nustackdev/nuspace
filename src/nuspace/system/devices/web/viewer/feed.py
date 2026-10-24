@@ -68,7 +68,7 @@ from nuspace.system.utils import drawing, follows, redraw
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable, Sequence
 
-    from nuspace.ext import Snippet
+    from nuspace.ext import Cell
     from nustd.ui.core import Ref
 
 
@@ -81,7 +81,7 @@ _runs = Space.kernel.runs
 #: What a shipped plane's meta says where the stored one does not: the keys the browser reads.
 PLANE_META = {"editable": False, "full_width": False}
 
-#: What a cell made from no snippet starts as: a program that runs and draws, not an empty one that fails.
+#: What a cell made from no Cell spec starts as: a program that runs and draws, not an empty one that fails.
 PROGRAM = """\
 import nustd
 out = nustd.ui.TextRef("out").set("Hello, cell!")
@@ -94,7 +94,7 @@ out = nustd.ui.TextRef("out").set("Hello, cell!")
 def plane_cells(plane_id: nu.StrArg) -> nu.List:
     """A plane's cells as ``{id, name, source, made_by, has_ui}``, in order. Bare read.
 
-    ``made_by`` is the snippet the cell was made from, ``""`` when none.
+    ``made_by`` is the Cell spec the cell was made from, ``""`` when none.
     ``has_ui`` is whether its program draws, True where never worked out.
     """
 
@@ -259,13 +259,13 @@ def _on_cell(name: str, change: nu.Nu, op: Callable[[nu.Str, nu.Attr], nu.Nu]) -
     return _arms.event(name, change, body)
 
 
-def _events(viewer: Ref, sid: nu.StrArg, snippets: Sequence[Snippet]) -> list[nu.Nu]:
+def _events(viewer: Ref, sid: nu.StrArg, specs: Sequence[Cell]) -> list[nu.Nu]:
     """Browser to store: one arm per viewer op.
 
     A restart is the connection's: nav runs this tab's pane again, not
     another tab's on the same plane.
 
-    A created cell stores the prog and ``made_by`` of the snippet its
+    A created cell stores the prog and ``made_by`` of the Cell spec its
     ``name`` names, the registered name, and is called by its short name; an
     unknown or empty name stores :data:`PROGRAM` and ``""``.
     """
@@ -274,11 +274,11 @@ def _events(viewer: Ref, sid: nu.StrArg, snippets: Sequence[Snippet]) -> list[nu
         name, cell_id = field_str(event, "name"), field_str(event, "cell_id")
         made = ops.add_cell(
             plane_id,
-            nu.Switch(name, {s.name: s.source for s in snippets}, default=PROGRAM),
+            nu.Switch(name, {s.name: s.source for s in specs}, default=PROGRAM),
             cell_id=cell_id,
-            name=nu.Switch(name, {s.name: short_name(s.name) for s in snippets}, default=name),
+            name=nu.Switch(name, {s.name: short_name(s.name) for s in specs}, default=name),
             index=field_index(event, "index", ops.cells(plane_id).len()),
-            made_by=nu.Switch(name, {s.name: s.name for s in snippets}, default=""),
+            made_by=nu.Switch(name, {s.name: s.name for s in specs}, default=""),
         )
         return nu.IfDo(cell_id != "", made)
 
@@ -315,16 +315,16 @@ def _events(viewer: Ref, sid: nu.StrArg, snippets: Sequence[Snippet]) -> list[nu
     ]
 
 
-def viewer_feed(viewer: Ref, sid: nu.StrArg, snippets: Iterable[Snippet] = ()) -> nu.Nu:
+def viewer_feed(viewer: Ref, sid: nu.StrArg, specs: Iterable[Cell] = ()) -> nu.Nu:
     """The viewer, live, as one term. Built per connection, never ends.
 
     Args:
         viewer: The shell's viewer ref.
         sid: The connection id, whose ``connections[sid].routes`` says which
             planes are open. The row must exist before this runs.
-        snippets: The registered snippets, what a created cell stores.
+        specs: The registered Cells, what a created cell stores.
     """
-    snippets = list(snippets)
+    specs = list(specs)
     routes = Space.connections[sid].routes
 
     def shown(at: nu.Attr) -> nu.Nu:
@@ -335,4 +335,4 @@ def viewer_feed(viewer: Ref, sid: nu.StrArg, snippets: Iterable[Snippet] = ()) -
     # shipped, a plane closed has its subscriptions torn down, and the other
     # panes' arms are untouched.
     routed = nu.ForEachParReactive(snap(routes.fallback([])), snap(routes.on_change()), shown)
-    return nu.ParallelAsync(_arms.guard(routed, "routes"), *_events(viewer, sid, snippets))
+    return nu.ParallelAsync(_arms.guard(routed, "routes"), *_events(viewer, sid, specs))

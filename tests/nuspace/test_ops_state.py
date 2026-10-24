@@ -10,7 +10,7 @@ from _support.made import MADE
 import nu
 import nustd.kv
 from nuspace import ops
-from nuspace.ext import Plane, Snippet
+from nuspace.ext import Cell, Plane
 from nuspace.ops.plane import plane_icon
 from nuspace.ops.state import drop_cell_state, drop_plane_state
 from nuspace.ops.utils import atomic_state
@@ -346,11 +346,11 @@ def test_plane_icon_spelling():
             plane_icon(bad)
 
 
-async def test_insert_snippet(store):
+async def test_create_cell(store):
     p = await store.made(ops.add_plane(backend="async", into=MADE))
     first = await store.made(ops.add_cell(p, "x", into=MADE))
-    snippet = Snippet("ticker", "Ticker", "def out(): ...")
-    c = await store.made(ops.insert_snippet(p, snippet, index=0, into=MADE))
+    spec = Cell("ticker", "Ticker", "def out(): ...")
+    c = await store.made(ops.create_cell(p, spec, index=0, into=MADE))
     assert await store.read(ops.cells(p)) == [c, first]
     assert (await store.read(ops.cell_rows(p)))[0] == {
         "id": c,
@@ -361,10 +361,10 @@ async def test_insert_snippet(store):
     }
 
 
-async def test_snippet_cell_meta_stays_free(store):
+async def test_cell_meta_stays_free(store):
     """``made_by`` is a prop: a cell's meta takes the same key without touching it."""
     p = await store.made(ops.add_plane(backend="async", into=MADE))
-    c = await store.made(ops.insert_snippet(p, Snippet("ticker", "Ticker", ""), into=MADE))
+    c = await store.made(ops.create_cell(p, Cell("ticker", "Ticker", ""), into=MADE))
     await store.run(ops.set_cell_meta(c, {"made_by": "x", "k": 1}))
     row = (await store.read(ops.cell_rows(p)))[0]
     assert row["props"] == {"made_by": "ticker", "has_ui": False}

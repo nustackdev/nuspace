@@ -104,17 +104,17 @@ class Shell(nu.Shape):
     @classmethod
     def boot(
         cls,
-        snippets: Sequence[Mapping[str, Any]] | None = None,
+        cell_specs: Sequence[Mapping[str, Any]] | None = None,
         registered: Sequence[Mapping[str, Any]] | None = None,
     ) -> Boot:
         """This shell's slots as the batch that seeds a tab.
 
         Args:
-            snippets: The ``/`` menu's entries, ``{name, label, text}`` in order,
-                mounted on the viewer.
+            cell_specs: The ``/`` menu's entries, the registered Cells as ``{name,
+                label, group, icon, description}`` in order, mounted on the viewer.
             registered: The add plane popup's entries, ``{name, label, icon,
                 description}`` in order, mounted on the sidebar.
         """
-        viewer = {"snippets": [dict(s) for s in snippets or ()]}
+        viewer = {"cell_specs": [dict(s) for s in cell_specs or ()]}
         sidebar = {"registered": [dict(r) for r in registered or ()]}
         return Boot(cls, {"viewer": viewer, "sidebar": sidebar})

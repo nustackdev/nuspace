@@ -124,7 +124,7 @@ def on_open(viewer: Ref) -> Changed:
 def on_create_cell(viewer: Ref) -> Changed:
     """``{plane_id, cell_id, name, index}``. Browser minted id.
 
-    ``name`` names a snippet: the cell stores its prog and takes its name.
+    ``name`` names a Cell spec: the cell stores its prog and takes its name.
     """
     return event(viewer, "cell.create")
 
