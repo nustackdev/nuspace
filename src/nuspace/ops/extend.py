@@ -2,7 +2,7 @@
 
 The Planes and Cells themselves are :mod:`nuspace.ext` specs, registered
 by the host at open. Core registers none: its one own Plane, the empty one
-(:data:`~nuspace.ext.EMPTY`), is no registry entry, and a third party registers
+(:data:`~nuspace.ext.EMPTY_PLANE`), is no registry entry, and a third party registers
 the same way.
 """
 
@@ -19,7 +19,7 @@ from .utils import MintId, atomic
 
 
 if TYPE_CHECKING:
-    from nuspace.ext import Cell, Plane
+    from nuspace.ext import CellSpec, PlaneSpec
 
 
 __all__ = ["create_cell", "create_plane"]
@@ -33,7 +33,7 @@ class _Seeding(nu.Shape):
 
 
 def create_plane(
-    spec: Plane,
+    spec: PlaneSpec,
     *,
     parent: nu.StrArg = "",
     name: nu.StrArg | None = None,
@@ -67,7 +67,7 @@ def create_plane(
 
 
 def _seeded(
-    spec: Plane,
+    spec: PlaneSpec,
     plane_id: nu.Nu,
     parent: nu.StrArg,
     name: nu.StrArg,
@@ -107,7 +107,7 @@ def _seeded(
 
 def create_cell(
     plane_id: nu.StrArg,
-    spec: Cell,
+    spec: CellSpec,
     *,
     index: nu.IntArg | None = None,
     cell_id: nu.StrArg | None = None,

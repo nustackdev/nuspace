@@ -1,0 +1,15 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "nuspace-testing"
+version = "0.0.0"
+description = "nuspace's test extension: the Planes, Cells and content kinds its tests register, installed in the dev env only."
+requires-python = ">=3.10"
+
+[project.entry-points."nuspace.extensions"]
+testing = "nuspace_testing:extension"
+
+[tool.hatch.build.targets.wheel]
+packages = ["nuspace_testing"]

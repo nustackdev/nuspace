@@ -11,7 +11,7 @@ import nustd.kv
 from nuspace import ops
 from nuspace.content import CELL, PLANE, SPACE
 from nuspace.shapes import PlaneState, Reroot, Space, States
-from nuspace.system import home, search
+from nuspace.system import search
 from nuspace.system.devices.web.env import session_env
 from nuspace.system.home import seed, seeded_id
 from nuspace.system.kernel.body import Rewrites
@@ -20,8 +20,8 @@ from nustd.ui import Session
 
 S = search.Search
 
-NOTE = "_support.contents.NoteContent"
-PLAIN = "_support.contents.PlainContent"
+NOTE = "testing.Note"
+PLAIN = "testing.Plain"
 
 
 def _state(plane_id: str, term: nu.Nu) -> nu.Nu:
@@ -107,14 +107,14 @@ async def test_search_makes_a_plane_under_searches_and_starts_its_run(store):
     assert await store.read(ops.children(search.SEARCHES)) == [pid, again]
     (cell,) = await store.read(ops.cell_rows(again))
     assert cell["prog"] == search.source({PLAIN: {}})
-    assert await store.read(ops.plane_title(again)) == "Plain: all"
+    assert await store.read(ops.plane_title(again)) == "Plain note: all"
 
 
 def test_describe_says_what_was_asked():
     assert search.describe({NOTE: {"text": "tomato", "min_stars": 3.0, "done": True}}) == (
         "Note: tomato, min_stars 3.0, done"
     )
-    assert search.describe({NOTE: {}, PLAIN: {}}) == "Note: all; Plain: all"
+    assert search.describe({NOTE: {}, PLAIN: {}}) == "Note: all; Plain note: all"
     assert search.describe({}) == "Nothing asked"
 
 
@@ -266,14 +266,35 @@ async def test_each_viewer_cell_loads_through_the_kernel_rewrites(store, cell):
     nu.validate(nu.compile(term))
 
 
-async def test_the_form_offers_the_registered_kinds_and_the_picked_ones_fields(store):
-    await store.run(home.write_info(None, [NoteContent, PlainContent]))
+def test_the_viewer_reads_every_installed_kind_off_the_registry():
+    kinds = search.kinds()
+    assert kinds[PLAIN] == {"label": "Plain note", "fields": []}
+    assert kinds[NOTE] == {
+        "label": "Note",
+        "fields": [
+            {"name": "text", "input": "text", "label": "Text"},
+            {"name": "min_stars", "input": "number", "label": "Min stars"},
+            {"name": "done", "input": "switch", "label": "Done"},
+        ],
+    }
+
+
+@pytest.fixture
+def ours(monkeypatch):
+    """The viewer offers the tests' kinds only, not every other installed one."""
+    every = search.kinds()
+    kept = {name: kind for name, kind in every.items() if name in (NOTE, PLAIN)}
+    monkeypatch.setattr(search, "kinds", lambda: kept)
+
+
+@pytest.mark.usefixtures("ours")
+async def test_the_form_offers_the_installed_kinds_and_the_picked_ones_fields(store):
     frames = await _frames(store, search.FORM, "form", lambda ns: ns["draw"]())
     got = dict(frames)
     assert got[("head", "kind")] == NOTE
     options = next(p for r, p in frames if r == ("head", "kind"))
     assert options == {
-        "options": [{"value": NOTE, "label": "Note"}, {"value": PLAIN, "label": "Plain"}]
+        "options": [{"value": NOTE, "label": "Note"}, {"value": PLAIN, "label": "Plain note"}]
     }
     assert got[("fields", "f_text", "label")] == "Text"
     assert got[("fields", "f_text", "text")] == ""
@@ -284,7 +305,6 @@ async def test_the_form_offers_the_registered_kinds_and_the_picked_ones_fields(s
 
 
 async def test_the_forms_button_makes_a_search_of_what_was_filled_in(store):
-    await store.run(home.write_info(None, [NoteContent, PlainContent]))
     values = {
         ("head", "kind"): NOTE,
         ("fields", "f_text", "text"): "  tomato ",
@@ -322,13 +342,12 @@ async def test_results_draw_each_hit_with_its_kinds_render_hit(store):
         ops.add_plane("p1", name="Garden", ui=True, backend="async")
         >> ops.add_cell("p1", "", cell_id="c1")
         >> ops.add_cell("p1", "", cell_id="c2")
-        >> home.write_info(None, [NoteContent, PlainContent])
     )
     await _garden(store)
     pid = await _searched(store, {NOTE: {"text": "tomato"}, PLAIN: {}})
     await _run_search(store, pid)
     got = await _draw(store, search.RESULTS, "results", lambda ns: ns["shown"](nu.Str(pid)))
-    assert got[("title",)]["label"] == "Results for “Note: tomato; Plain: all”"
+    assert got[("title",)]["label"] == "Results for “Note: tomato; Plain note: all”"
     assert got[("status",)] == "Done: 4 hits"
     # A cell's item opens its cell's plane, a plane's its plane.
     assert got[("hits", "h0", "head", "link")] == {"href": "/p1", "label": "Garden"}
@@ -338,7 +357,7 @@ async def test_results_draw_each_hit_with_its_kinds_render_hit(store):
     assert got[("hits", "h1", "item", "body")] == "Buy TOMATO seeds"
     assert got[("hits", "h2", "head", "link")] == {"href": "/p1", "label": "Garden"}
     # A kind that draws nothing draws nothing, under its head.
-    assert got[("hits", "h3", "head", "kind")]["label"] == "Plain"
+    assert got[("hits", "h3", "head", "kind")]["label"] == "Plain note"
     assert ("hits", "h3", "item", "body") not in got
     assert got[("empty",)] is None
 

@@ -25,14 +25,14 @@ if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping, Sequence
 
     from nu.lang import DictArg, ListArg, Nu, StrArg
-    from nuspace.ext import Cell
+    from nuspace.ext import CellSpec
     from nustd.ui.core import Changed
 
 
 __all__ = ["ViewerRef", "slash_entries"]
 
 
-def slash_entries(cells: Iterable[Cell]) -> list[dict]:
+def slash_entries(cells: Iterable[CellSpec]) -> list[dict]:
     """The ``/`` menu's entries, ``{name, label, group, icon, description}`` in registry order."""
     return [
         {

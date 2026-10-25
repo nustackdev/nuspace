@@ -82,7 +82,7 @@ export type CellSpec = {
 	description?: string;
 };
 
-/** The `nuverse.text` Cell, as `nuspace.TEXT`: document editing works on
+/** The `nuverse.text` Cell, as `nuspace.TEXT_CELL`: document editing works on
  *  its cells, the text cells (see ./Draft.tsx and ./useTextCells.ts). */
 export const TEXT = "nuverse.text";
 

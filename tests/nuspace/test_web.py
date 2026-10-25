@@ -14,12 +14,13 @@ import subprocess
 import sys
 
 from _support.kernel import Kernel, _Hold
+from _support.specs import TEXT_SRC
 
 import nu
 import nustd.ui
 from nu.lang import wire
 from nuspace import ops
-from nuspace.ext import TEXT, Cell, Plane
+from nuspace.ext import space_registry
 from nuspace.ops.utils import atomic, atomic_state
 from nuspace.shapes import EXIT_FAILED, EXIT_INTERRUPTED, EXIT_KILLED, EXIT_OK, Space, States
 from nuspace.system.devices.web import CellRoot, SessionWrap, Shell, session_env
@@ -33,17 +34,13 @@ from nustd.ui.core import OP_NOTIFY, Frame, WsSession
 from nustd.ui.core.session import Session
 
 
-TEXT_SRC = "def out():\n    return prose()\n"
+#: The tests' Planes and Cells, as a space registers them (``_support.specs``).
+REGISTRY = space_registry(extensions=["testing"])
+PLANES = list(REGISTRY.planes.values())
+CELLS = list(REGISTRY.cells.values())
 
-
-PLANES = [
-    Plane("plain", "Plain", backend="async"),
-    Plane("jobs", "Jobs", icon="list", cells=(("list", TEXT_SRC),), backend="mp"),
-]
-CELLS = [
-    Cell(TEXT, "Text", TEXT_SRC),
-    Cell("program", "Program", "def out():\n    return nu.Noop()\n"),
-]
+#: The text Cell's registered name, what a cell made from it records as ``made_by``.
+TEXT = "testing.text"
 
 
 # --- The session env -------------------------------------------------------------
@@ -113,7 +110,7 @@ def test_warm_imports_cover_drawing_runs_and_no_web_server():
 def test_device_term_compiles_and_validates():
     from nuspace.system.devices.web import serve_web
 
-    term, envs = serve_web(planes=PLANES, cells=CELLS, open_browser=False, port=0)
+    term, envs = serve_web(registry=REGISTRY, open_browser=False, port=0)
     assert set(envs) == {"session"}
     assert envs["session"]("s1").label == "session:s1"
     nu.validate(nu.compile(term))
@@ -209,14 +206,14 @@ async def test_sidebar_pins_are_drawn_planes_in_order(store):
 
 def test_registered_entries():
     assert registered_entries(PLANES) == [
-        {"name": "plain", "label": "Plain", "group": "", "icon": "", "description": ""},
-        {"name": "jobs", "label": "Jobs", "group": "", "icon": "list", "description": ""},
+        {"name": "testing.plain", "label": "Plain", "group": "", "icon": "", "description": ""},
+        {"name": "testing.jobs", "label": "Jobs", "group": "", "icon": "list", "description": ""},
     ]
 
 
 async def test_create_makes_the_named_plane(store):
     await _plane(store, "top", "Top", ui=True)
-    await store.run(create(PLANES, nu.Str("jobs"), nu.Str("pj"), nu.Str("top"), nu.Str("")))
+    await store.run(create(PLANES, nu.Str("testing.jobs"), nu.Str("pj"), nu.Str("top"), nu.Str("")))
     await store.run(create(PLANES, nu.Str("nope"), nu.Str("px"), nu.Str("space"), nu.Str("X")))
     by_id = {row["id"]: row for row in await store.read(ops.plane_rows())}
     # An empty title takes the label, the parent is the one asked for.
@@ -224,7 +221,7 @@ async def test_create_makes_the_named_plane(store):
     assert by_id["pj"]["props"] == {
         "system": False,
         "ui": True,
-        "made_by": "jobs",
+        "made_by": "testing.jobs",
         "backend": "mp",
     }
     assert [c["name"] for c in await store.read(ops.cell_rows("pj"))] == ["list"]
@@ -441,7 +438,7 @@ async def test_connection_live(store):
     await store.run(ops.add_cell("p1", "x = 1", cell_id="c1", name="one"))
     session = FakeSession()
     ctx = store.ctx.bind(Session, session)
-    task = asyncio.create_task(nu.arun(connection(nu.Str("s1"), planes=PLANES, cells=CELLS), ctx))
+    task = asyncio.create_task(nu.arun(connection(nu.Str("s1"), registry=REGISTRY), ctx))
     conns = Space.connections
     try:
         # Boot, the connection published, the sidebar shipped.
@@ -537,7 +534,7 @@ async def test_connection_live(store):
         assert blank["source"] == PROGRAM and blank["made_by"] == ""
         session.notify(
             ("sidebar", "ops", "plane.create"),
-            {"plane_id": "p2", "parent_id": "p1", "made_by": "jobs", "title": "Two"},
+            {"plane_id": "p2", "parent_id": "p1", "made_by": "testing.jobs", "title": "Two"},
         )
         await _until(lambda: "p2" in [r["id"] for r in session.writes("set_tree")[-1]["planes"]])
         assert [c["name"] for c in await store.read(ops.cell_rows("p2"))] == ["list"]
@@ -546,7 +543,7 @@ async def test_connection_live(store):
         session.notify(("sidebar", "ops", "plane.rename"), {"plane_id": "p2", "title": "Deux"})
         await _until(
             lambda: (
-                _row("p2", "Deux", parent="p1", made_by="jobs", icon="lucide:list")
+                _row("p2", "Deux", parent="p1", made_by="testing.jobs", icon="lucide:list")
                 in session.writes("set_tree")[-1]["planes"]
             )
         )
@@ -554,7 +551,7 @@ async def test_connection_live(store):
         session.notify(("sidebar", "ops", "plane.icon"), {"plane_id": "p2", "icon": "emoji:\u2728"})
         await _until(
             lambda: (
-                _row("p2", "Deux", parent="p1", made_by="jobs", icon="emoji:\u2728")
+                _row("p2", "Deux", parent="p1", made_by="testing.jobs", icon="emoji:\u2728")
                 in session.writes("set_tree")[-1]["planes"]
             )
         )
@@ -596,7 +593,7 @@ async def test_connection_panes(store):
     await store.run(ops.add_cell("p2", "y = 2", cell_id="b1"))
     session = FakeSession()
     ctx = store.ctx.bind(Session, session)
-    task = asyncio.create_task(nu.arun(connection(nu.Str("s1"), planes=PLANES, cells=CELLS), ctx))
+    task = asyncio.create_task(nu.arun(connection(nu.Str("s1"), registry=REGISTRY), ctx))
     conns = Space.connections
 
     def shown() -> dict:
@@ -669,7 +666,7 @@ async def test_connection_status_hears_its_own_pane_run_only(store):
     await store.run(ops.add_cell("p2", "y = 2", cell_id="b1"))
     session = FakeSession()
     ctx = store.ctx.bind(Session, session)
-    task = asyncio.create_task(nu.arun(connection(nu.Str("s1"), planes=PLANES, cells=CELLS), ctx))
+    task = asyncio.create_task(nu.arun(connection(nu.Str("s1"), registry=REGISTRY), ctx))
 
     def status(plane_id: str) -> list[dict]:
         return [w for w in session.writes("set_status") if w["plane_id"] == plane_id]
@@ -708,7 +705,7 @@ async def test_connection_absent_panes(store):
     await _plane(store, "svc", "Service", system=True)
     session = FakeSession()
     ctx = store.ctx.bind(Session, session)
-    task = asyncio.create_task(nu.arun(connection(nu.Str("s1"), planes=PLANES, cells=CELLS), ctx))
+    task = asyncio.create_task(nu.arun(connection(nu.Str("s1"), registry=REGISTRY), ctx))
 
     def last(plane_id: str) -> dict:
         """The last set_plane or set_absent for one pane."""
@@ -759,7 +756,6 @@ async def test_connection_new_plane_runs_on_the_real_store():
     """
     from nuspace.system.devices.web.device import connection
 
-    planes = [Plane("text", "Text", backend="async", cells=((TEXT, TEXT_SRC),))]
     loop = asyncio.get_running_loop()
     ready, done = loop.create_future(), asyncio.Event()
     held = asyncio.create_task(nu.arun(nu.With(space_store(), body=_Hold(ready, done))))
@@ -767,7 +763,7 @@ async def test_connection_new_plane_runs_on_the_real_store():
     space = Kernel(ctx, done, held)
     session = FakeSession()
     task = asyncio.create_task(
-        nu.arun(connection(nu.Str("s1"), planes=planes), ctx.bind(Session, session))
+        nu.arun(connection(nu.Str("s1"), registry=REGISTRY), ctx.bind(Session, session))
     )
 
     def state(plane_id: str) -> str:
@@ -790,7 +786,7 @@ async def test_connection_new_plane_runs_on_the_real_store():
             # Made from the sidebar and opened, the way the Add plane popup does it.
             session.notify(
                 ("sidebar", "ops", "plane.create"),
-                {"plane_id": pid, "parent_id": "space", "made_by": "text", "title": ""},
+                {"plane_id": pid, "parent_id": "space", "made_by": "testing.jobs", "title": ""},
             )
             session.notify(("viewer", "ops", "planes.open"), {"plane_ids": [pid]})
             await _until(lambda pid=pid: state(pid) == "idle", 10)

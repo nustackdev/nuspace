@@ -10,7 +10,7 @@ from _support.made import MADE
 import nu
 import nustd.kv
 from nuspace import ops
-from nuspace.ext import Cell, Plane
+from nuspace.ext import CellSpec, PlaneSpec
 from nuspace.ops.plane import plane_icon
 from nuspace.ops.state import drop_cell_state, drop_plane_state
 from nuspace.ops.utils import atomic_state
@@ -209,9 +209,9 @@ async def test_dropping_state_spares_a_cell_that_is_there(store):
 
 
 async def test_create_plane_seeds_cells_and_nested_children(store):
-    leaf = Plane("leaf", "Leaf", cells=(("note", "n"),), backend="mp")
-    mid = Plane("mid", "Mid", meta={"editable": True}, children=(leaf,), backend="async")
-    spec = Plane(
+    leaf = PlaneSpec("leaf", "Leaf", cells=(("note", "n"),), backend="mp")
+    mid = PlaneSpec("mid", "Mid", meta={"editable": True}, children=(leaf,), backend="async")
+    spec = PlaneSpec(
         "tracker",
         "Tracker",
         icon="list",
@@ -250,14 +250,14 @@ async def test_create_plane_seeds_cells_and_nested_children(store):
 
 
 async def test_create_plane_runs_on_its_specs_backend(store):
-    made = await store.made(ops.create_plane(Plane("j", "J", backend="mp"), into=MADE))
+    made = await store.made(ops.create_plane(PlaneSpec("j", "J", backend="mp"), into=MADE))
     assert await store.read(Space.planes[made].props.backend) == "mp"
 
 
 async def test_create_plane_is_seen_whole_or_not_at_all(store):
     prog = "def out():\n    return nu.Noop()\n"
-    kid = Plane("kid", "Kid", cells=(("c", prog),), backend="async")
-    spec = Plane("t", "T", cells=(("a", prog), ("b", prog)), children=(kid,), backend="async")
+    kid = PlaneSpec("kid", "Kid", cells=(("c", prog),), backend="async")
+    spec = PlaneSpec("t", "T", cells=(("a", prog), ("b", prog)), children=(kid,), backend="async")
     shape = nu.Dict.of(
         planes=nu.Len(ops.plane_rows()),
         cells=nu.Len(ops.cells("p1")),
@@ -283,9 +283,9 @@ async def test_create_plane_is_seen_whole_or_not_at_all(store):
 
 def test_plane_spec_requires_a_backend():
     with pytest.raises(TypeError, match="backend"):
-        Plane("x", "X")  # type: ignore[call-arg]
+        PlaneSpec("x", "X")  # type: ignore[call-arg]
     with pytest.raises(ValueError, match="backend is required"):
-        Plane("x", "X", backend="")
+        PlaneSpec("x", "X", backend="")
 
 
 async def test_add_plane_refuses_an_empty_backend(store):
@@ -298,7 +298,7 @@ async def test_add_plane_refuses_an_empty_backend(store):
 
 
 async def test_create_plane_name_and_id(store):
-    plain = Plane("plain", "Plain", backend="async")
+    plain = PlaneSpec("plain", "Plain", backend="async")
     assert await store.made(ops.create_plane(plain, name="Notes", plane_id="p1", into=MADE)) == "p1"
     (row,) = await store.read(ops.plane_rows())
     assert (row["name"], row["parent"]) == ("Notes", "")
@@ -309,9 +309,9 @@ async def test_create_plane_name_and_id(store):
 
 
 async def test_create_plane_writes_the_icon(store):
-    emoji = Plane("e", "E", icon="emoji:\U0001f4da", backend="async")
-    kept = Plane("k", "K", icon="list", meta={"icon": "emoji:\U0001f331"}, backend="async")
-    blank = Plane("b", "B", icon="list", meta={"icon": ""}, backend="async")
+    emoji = PlaneSpec("e", "E", icon="emoji:\U0001f4da", backend="async")
+    kept = PlaneSpec("k", "K", icon="list", meta={"icon": "emoji:\U0001f331"}, backend="async")
+    blank = PlaneSpec("b", "B", icon="list", meta={"icon": ""}, backend="async")
     for spec in (emoji, kept, blank):
         await store.run(ops.create_plane(spec, plane_id=spec.name))
     meta = {r["id"]: r["meta"] for r in await store.read(ops.plane_rows())}
@@ -320,7 +320,7 @@ async def test_create_plane_writes_the_icon(store):
     assert meta["k"] == {"icon": "emoji:\U0001f331"}
     assert meta["b"] == {"icon": ""}
     with pytest.raises(ValueError, match="neither"):
-        ops.create_plane(Plane("x", "X", icon="svg:x", backend="async"))
+        ops.create_plane(PlaneSpec("x", "X", icon="svg:x", backend="async"))
 
 
 async def test_set_plane_icon(store):
@@ -349,7 +349,7 @@ def test_plane_icon_spelling():
 async def test_create_cell(store):
     p = await store.made(ops.add_plane(backend="async", into=MADE))
     first = await store.made(ops.add_cell(p, "x", into=MADE))
-    spec = Cell("ticker", "Ticker", "def out(): ...")
+    spec = CellSpec("ticker", "Ticker", "def out(): ...")
     c = await store.made(ops.create_cell(p, spec, index=0, into=MADE))
     assert await store.read(ops.cells(p)) == [c, first]
     assert (await store.read(ops.cell_rows(p)))[0] == {
@@ -364,7 +364,7 @@ async def test_create_cell(store):
 async def test_cell_meta_stays_free(store):
     """``made_by`` is a prop: a cell's meta takes the same key without touching it."""
     p = await store.made(ops.add_plane(backend="async", into=MADE))
-    c = await store.made(ops.create_cell(p, Cell("ticker", "Ticker", ""), into=MADE))
+    c = await store.made(ops.create_cell(p, CellSpec("ticker", "Ticker", ""), into=MADE))
     await store.run(ops.set_cell_meta(c, {"made_by": "x", "k": 1}))
     row = (await store.read(ops.cell_rows(p)))[0]
     assert row["props"] == {"made_by": "ticker", "has_ui": False}

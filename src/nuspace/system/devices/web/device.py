@@ -38,6 +38,7 @@ from starlette.routing import Route
 import nu
 import nustd.time
 from nuspace import _telemetry, ops
+from nuspace.ext import space_registry
 from nuspace.ops.utils import atomic
 from nuspace.shapes import RECENTS_CAP, Space
 from nuspace.system.devices.web.env import SESSION_ENV, session_env
@@ -57,11 +58,9 @@ from nustd.ws_server import SID_ATTR, listen, run_once, session_for, sessions_fo
 
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
-
     from starlette.requests import Request
 
-    from nuspace.ext import Cell, Plane
+    from nuspace.ext import Registry
     from nuspace.system.kernel import EnvFactory
     from nustd.ui.core import Ref
 
@@ -162,20 +161,19 @@ def route_arm(viewer: Ref, sid: nu.StrArg) -> nu.Nu:
 
 
 def connection(
-    sid: nu.StrArg,
-    *,
-    planes: Sequence[Plane] = (),
-    cells: Sequence[Cell] = (),
-    shell: type[Shell] = Shell,
+    sid: nu.StrArg, *, registry: Registry | None = None, shell: type[Shell] = Shell
 ) -> nu.Nu:
     """What one browser tab runs, with its session bound. Never ends.
 
     Args:
         sid: The connection id.
-        planes: The registered Planes, what the sidebar can create.
-        cells: The registered Cells, for the viewer's ``/`` menu.
+        registry: What the space registered: its Planes, what the sidebar
+            can create, and its Cells, for the viewer's ``/`` menu. None is
+            every installed package's (:func:`~nuspace.ext.space_registry`).
         shell: The shell every tab holds.
     """
+    reg = space_registry() if registry is None else registry
+    planes, cells = list(reg.planes.values()), list(reg.cells.values())
     boot = shell.boot(slash_entries(cells), registered_entries(planes))
     feeds = boot >> nu.ParallelAsync(
         sidebar_feed(shell.sidebar, planes),
@@ -200,8 +198,7 @@ ROUTES = (Route("/api/telemetry/space-loaded", space_loaded, methods=["POST"]),)
 
 def serve_web(
     *,
-    planes: Sequence[Plane] = (),
-    cells: Sequence[Cell] = (),
+    registry: Registry | None = None,
     host: str = "127.0.0.1",
     port: int = 8080,
     static: str | None = "nuspace_ui",
@@ -218,9 +215,10 @@ def serve_web(
     store brackets (``open_kernel``).
 
     Args:
-        planes: The registered Planes, what the sidebar can create.
-        cells: The registered Cells: the viewer's ``/`` menu, and what
-            a cell made from each entry stores.
+        registry: What the space registered: its Planes, what the sidebar
+            can create, and its Cells, the viewer's ``/`` menu and what a
+            cell made from each entry stores. None is every installed
+            package's (:func:`~nuspace.ext.space_registry`).
         host: The interface the server binds.
         port: The port the server binds.
         static: The wheel shipping the browser bundle. None serves the socket
@@ -235,6 +233,7 @@ def serve_web(
         factory, ``factory(sid) -> Env``.
     """
     session_address = session_address or f"127.0.0.1:{free_port()}"
+    registry = space_registry() if registry is None else registry
     sid = nu.Str(nu.Attr(SID_ATTR))
     term = nu.With(
         listen(
@@ -254,7 +253,7 @@ def serve_web(
                 # Once per connection: the fold respawns ended arms on every
                 # connect or disconnect anywhere, and a tab rebooted because
                 # somebody else opened one is wiped for no reason.
-                run_once(connection(sid, planes=planes, cells=cells)),
+                run_once(connection(sid, registry=registry)),
             )
         ),
     )

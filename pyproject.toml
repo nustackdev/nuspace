@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "nuspace"
 version = "0.5.6"
-description = "Nu runtime built on Nu. A self-hosted programmable space that runs Nu programs as a tree of planes and cells."
+description = "Computational space for everything you work with: notes, data, tools, agents."
 readme = "README.md"
 license = "AGPL-3.0-or-later"
 authors = [{ name = "Gor Arakelyan", email = "gorarkln@gmail.com" }]
@@ -78,6 +78,7 @@ nucore = { path = "../nu", editable = true }
 nustd = { path = "../nu/pkgs/nustd", editable = true }
 nuverse = { path = "../nuverse/pkgs/nuverse", editable = true }
 nudemos = { path = "../nuverse/pkgs/nudemos", editable = true }
+nuspace-testing = { path = "./tests/_ext", editable = true }
 
 [tool.uv]
 default-groups = ["dev"]
@@ -86,6 +87,8 @@ default-groups = ["dev"]
 dev = [
     # The demos, for trying `nuspace run --with` by hand.
     "nudemos",
+    # The tests' content kinds, installed: a kind is found by its entry point.
+    "nuspace-testing",
     "ruff>=0.8.0",
     "pre-commit>=3.0.0",
     "pytest>=7.0.0",

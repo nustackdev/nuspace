@@ -24,7 +24,7 @@ from .space import open_space
 
 if TYPE_CHECKING:
     from nu.lang.runtime import Context
-    from nuspace.ext import Plane
+    from nuspace.ext import PlaneSpec
 
 
 __all__ = ["headless", "plane_id", "serve", "with_plane"]
@@ -47,7 +47,7 @@ def headless(path: str | None = None, **kwargs: object) -> nu.Nu:
     return open_space(path, web=False, **kwargs)
 
 
-def plane_id(spec: Plane) -> str:
+def plane_id(spec: PlaneSpec) -> str:
     """The plane id :func:`with_plane` makes ``spec`` under: fixed, so a second open finds it.
 
     Its name with the dot a dash, ``nudemos.movies`` as ``nudemos-movies``.
@@ -88,7 +88,7 @@ class Browse:
 
 
 def with_plane(
-    spec: Plane,
+    spec: PlaneSpec,
     path: str | None = None,
     *,
     web: bool = True,

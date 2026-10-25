@@ -2,9 +2,9 @@
 
 One line per package registering under the ``nuspace.extensions`` entry
 points: its name, its version, the short names of the planes it adds, and
-how many cells. ``nuspace run --with`` takes a plane as ``pkg.plane``,
-the package and the short name. A package whose
-extension fails to load says why on a dim line under it.
+how many cells and content kinds. ``nuspace run --with`` takes a plane as
+``pkg.plane``, the package and the short name. A package whose extension
+fails to load says why on a dim line under it.
 """
 
 from __future__ import annotations
@@ -36,6 +36,10 @@ def _detail(package: Installed) -> dict[str, object]:
             {"name": s.name, "label": s.label, "description": s.description}
             for s in (ext.cells if ext else ())
         ],
+        "contents": [
+            {"name": f"{package.name}.{c.name}", "label": c.label, "description": c.description}
+            for c in (ext.contents if ext else ())
+        ],
         "envs": sorted(ext.envs) if ext else [],
         "error": package.error or None,
     }
@@ -53,6 +57,8 @@ def _line(package: Installed, name_width: int, version_width: int) -> Text:
         line.append(" · ".join(p.name for p in ext.planes), style=BLUE)
     if ext is not None and ext.cells:
         line.append(f"  +{len(ext.cells)} cells", style="dim")
+    if ext is not None and ext.contents:
+        line.append(f"  +{len(ext.contents)} content kinds", style="dim")
     line.rstrip()
     return line
 

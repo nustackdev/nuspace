@@ -21,7 +21,7 @@ from ._meta import version_of
 
 
 if TYPE_CHECKING:
-    from nuspace.ext import Extension, Plane
+    from nuspace.ext import Extension, PlaneSpec
 
 
 __all__ = ["Installed", "installed", "resolve"]
@@ -58,7 +58,7 @@ def installed(group: str = GROUP) -> list[Installed]:
     return found
 
 
-def resolve(spec: str, packages: list[Installed] | None = None) -> Plane:
+def resolve(spec: str, packages: list[Installed] | None = None) -> PlaneSpec:
     """``pkg.plane`` as the Plane it names, qualified as a space registers it.
 
     Raises:

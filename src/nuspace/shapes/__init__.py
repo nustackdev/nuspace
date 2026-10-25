@@ -28,7 +28,7 @@ Space, what the space is::
       connections   id -> Connection
       state         SpaceState
         recents     [plane id], newest first
-        info        path, opened, versions, contents
+        info        path, opened, versions
       pinned        [plane id], in order
 
 States, what the programs remember, by the same ids::
@@ -66,7 +66,7 @@ from .kernel import (
 )
 from .plane import Plane, PlaneProps
 from .reroot import Reroot, reroot, reroot_base, reroot_contents
-from .space import RECENTS_CAP, ContentInfo, Space, SpaceInfo, SpaceState
+from .space import RECENTS_CAP, Space, SpaceInfo, SpaceState
 from .state import CellState, PlaneState
 from .states import CellStates, PlaneStates, States
 
@@ -86,7 +86,6 @@ __all__ = [
     "CellState",
     "CellStates",
     "Connection",
-    "ContentInfo",
     "Items",
     "Kernel",
     "KindContents",

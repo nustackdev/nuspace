@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -24,6 +25,10 @@ from nuspace.system.kernel import KERNEL_FILE, STATE_FILE
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+
+
+# The tests' specs register (nuspace_testing, _support.specs), here and on every worker.
+os.environ["NUSPACE_TESTING"] = "1"
 
 
 class _Hold(ScalarQuery):

@@ -25,9 +25,7 @@ class Shown(nustd.ui.Column):
     body = nustd.ui.TextRef.slot()
 
 
-class NoteContent(nuspace.Content[Note]):
-    label = "Note"
-
+class NoteContent(nuspace.Content[Note], name="Note"):
     @classmethod
     def match(
         cls,
@@ -52,7 +50,7 @@ class NoteContent(nuspace.Content[Note]):
         return Shown.body.set(item.body)
 
 
-class PlainContent(nuspace.Content[Note]):
+class PlainContent(nuspace.Content[Note], name="Plain"):
     pass
 
 

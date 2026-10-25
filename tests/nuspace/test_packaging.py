@@ -33,8 +33,8 @@ def _run(code: str) -> str:
 def test_a_bare_install_registers_nothing():
     """Whatever is discovered comes from another distribution, eg the demos extra."""
     assert not [p for p in entry_points(group=GROUP) if p.dist and p.dist.name == "nuspace"]
-    reg = space_registry(discover=False)
-    assert (reg.planes, reg.cells) == ({}, {})
+    reg = space_registry(extensions=())
+    assert (reg.planes, reg.cells, reg.contents) == ({}, {}, {})
 
 
 def test_example_defines_nothing_of_its_own():

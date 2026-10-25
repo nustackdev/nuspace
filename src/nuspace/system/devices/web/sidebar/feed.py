@@ -31,7 +31,7 @@ from typing import TYPE_CHECKING
 
 import nu
 from nuspace import ops
-from nuspace.ext import EMPTY
+from nuspace.ext import EMPTY_PLANE
 from nuspace.ops.utils import field_str
 from nuspace.shapes import Space
 from nuspace.system.devices.web.sidebar import interactions
@@ -43,7 +43,7 @@ from nuspace.system.kernel.utils import snap
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
-    from nuspace.ext import Plane
+    from nuspace.ext import PlaneSpec
     from nustd.ui.core import Ref
 
 
@@ -139,15 +139,15 @@ def pins() -> nu.List:
 
 
 def create(
-    planes: Sequence[Plane], made_by: nu.Nu, plane_id: nu.Nu, parent_id: nu.Nu, title: nu.Nu
+    planes: Sequence[PlaneSpec], made_by: nu.Nu, plane_id: nu.Nu, parent_id: nu.Nu, title: nu.Nu
 ) -> nu.Nu:
     """Create ``plane_id`` from the registered Plane ``made_by`` names.
 
     ``""``, or a name nothing registered answers to, creates the empty plane
-    (:data:`~nuspace.ext.EMPTY`), which every space has. An empty ``title``
+    (:data:`~nuspace.ext.EMPTY_PLANE`), which every space has. An empty ``title``
     takes the Plane's label.
     """
-    specs = (EMPTY, *planes)
+    specs = (EMPTY_PLANE, *planes)
     named = [nu.Str(made_by) == spec.name for spec in specs]
     unknown = nu.Not(nu.Or(*named))
     return nu.Sequential(
@@ -213,7 +213,7 @@ def _ship(sidebar: Ref) -> nu.Nu:
     return nu.let(snap(rows()), ship)
 
 
-def sidebar_feed(sidebar: Ref, planes: Sequence[Plane]) -> nu.Nu:
+def sidebar_feed(sidebar: Ref, planes: Sequence[PlaneSpec]) -> nu.Nu:
     """The sidebar, live, as one term. Built per connection, never ends.
 
     Args:

@@ -23,14 +23,14 @@ if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping, Sequence
 
     from nu.lang import ListArg, Nu
-    from nuspace.ext import Plane
+    from nuspace.ext import PlaneSpec
     from nustd.ui.core import Changed
 
 
 __all__ = ["SidebarRef", "registered_entries"]
 
 
-def registered_entries(planes: Iterable[Plane]) -> list[dict]:
+def registered_entries(planes: Iterable[PlaneSpec]) -> list[dict]:
     """The popup's entries, ``{name, label, group, icon, description}`` in registry order."""
     return [
         {

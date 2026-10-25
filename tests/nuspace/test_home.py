@@ -11,7 +11,7 @@ import nu
 import nustd.kv
 import nustd.ui
 from nuspace import ops
-from nuspace.ext import Plane
+from nuspace.ext import space_registry
 from nuspace.ops.utils import atomic, atomic_state
 from nuspace.shapes import RECENTS_CAP, CellState, Reroot, Space, reroot
 from nuspace.system import home, settings
@@ -27,7 +27,8 @@ def _drawn(plane_id=None, name=""):
     return ops.add_plane(plane_id, name=name, ui=True, made_by="plain", backend="async")
 
 
-PLANES = [Plane("plain", "Plain", backend="async")]
+#: The tests' Planes and Cells, as a space registers them (``_support.specs``).
+REGISTRY = space_registry(extensions=["testing"])
 
 
 # --- The seed ---------------------------------------------------------------------
@@ -74,6 +75,8 @@ async def test_write_info(store, tmp_path):
     assert info["opened"] >= before
     assert info["versions"] == home.versions()
     assert "nuspace" in info["versions"]
+    # Nothing of the content kinds: a reader takes them off the registry.
+    assert set(info) == {"path", "opened", "versions"}
     await store.run(home.write_info(None))
     assert await store.read(Space.state.info.path) == ""
 
@@ -148,7 +151,7 @@ async def test_planes_open_pushes_recents(store):
     await store.run(home.ensure_home() >> _drawn("p1", "One") >> _drawn("p2", "Two"))
     session = _FakeSession()
     ctx = store.ctx.bind(Session, session)
-    task = asyncio.create_task(nu.arun(connection(nu.Str("s1"), planes=PLANES), ctx))
+    task = asyncio.create_task(nu.arun(connection(nu.Str("s1"), registry=REGISTRY), ctx))
     recents = Space.state.recents
     routes = Space.connections["s1"].routes
 

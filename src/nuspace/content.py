@@ -7,14 +7,21 @@ A prog is code, content is data. A kind is a :class:`Content` over a plain
         value = nustd.kv.StrRef.slot()
 
 
-    class TextContent(nuspace.Content[Text]):
+    class TextContent(nuspace.Content[Text], name="Text"):
         @classmethod
         def match(cls, item: Text, *, text: nu.StrArg | Unset = UNSET) -> nu.Bool: ...
 
-A kind is registered through an extension (``Extension(contents=...)``) and
-named by its importable name, module then qualified name
-(:func:`kind_name`), so a worker imports it from the name alone
-(:func:`load_kind`).
+A kind declares its name on the class, by convention the class's own less
+``Content``, and an installed package registers it with a
+:class:`~nuspace.ext.ContentSpec` in its extension
+(``Extension(contents=(ContentSpec(TextContent),))``), which says how a
+space presents it: its label, description and icon. Registered, it is named
+``<package>.<name>``, ``nuverse.Text``, like a Plane or a Cell
+(:func:`kind_name`). The store and every address key by that name, never by
+where the class lives, so moving a module leaves items in place. Any
+process, a worker too, finds the spec a name names, and the kind through
+it, from the installed entry points (:func:`~nuspace.ext.content_spec`): a
+headless op needs the name only, never a host's registry.
 
 An item lives in nuspace's store, never in a program's own state, at a
 fixed place per kind and scope (:mod:`nuspace.shapes.contents`). Its
@@ -40,10 +47,9 @@ Workers import this module: nothing here may pull in a server.
 
 from __future__ import annotations
 
-import importlib
 import inspect
 import re
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, ClassVar, Generic, TypeVar, cast, get_args, get_origin
 
 import nu
@@ -52,6 +58,7 @@ from nu.engine import Declared
 from nu.lang import ScalarQuery
 from nu.lang.sentinels import UNSET, Unset
 from nu.lang.typeinfo import TypeInfo
+from nuspace.ext.registry import content_spec, kind_name
 from nuspace.shapes import CONTENT_KIND, CellContent, PlaneContent, States
 from nustd.ui.core import Ref as UiRef
 
@@ -79,9 +86,7 @@ __all__ = [
     "SearchField",
     "Unset",
     "address",
-    "info",
     "kind_name",
-    "load_kind",
     "matched",
     "scopes",
 ]
@@ -136,35 +141,6 @@ class SearchField:
     label: str = ""
 
 
-def kind_name(kind: type[Content[Any]]) -> str:
-    """A kind's name: its importable name, ``nuverse.contents.text.TextContent``."""
-    return f"{kind.__module__}.{kind.__qualname__}"
-
-
-def load_kind(name: str) -> type[Content[Any]]:
-    """The kind a :func:`kind_name` names, imported: the longest module prefix, then attributes.
-
-    Raises:
-        ImportError: No prefix of ``name`` is a module.
-        AttributeError: The module has no such class.
-        TypeError: What it names is not a kind.
-    """
-    parts = name.split(".")
-    for cut in range(len(parts) - 1, 0, -1):
-        try:
-            found: object = importlib.import_module(".".join(parts[:cut]))
-        except ImportError:
-            continue
-        for part in parts[cut:]:
-            found = getattr(found, part)
-        if not (isinstance(found, type) and issubclass(found, Content)):
-            msg = f"{name!r} is not a kind: {found!r}"
-            raise TypeError(msg)
-        return found
-    msg = f"No module to import kind {name!r} from"
-    raise ImportError(msg)
-
-
 def _input(annotation: object) -> str:
     """The input a ``match`` keyword annotated so gets: a switch, a number, or text."""
     if annotation is inspect.Parameter.empty:
@@ -212,7 +188,8 @@ def address(
     """An item's address as plain data: ``{"kind": name, "scope": [level, id], "id": item id}``.
 
     What a search hit, :meth:`Content.find` and a cell linking to an item
-    keep. Read it back with :func:`load_kind` and :meth:`Content.at`.
+    keep. Read it back with :func:`~nuspace.ext.content_spec` and
+    :meth:`Content.at`.
 
     Args:
         kind: The kind, or its name.
@@ -227,9 +204,10 @@ def address(
 class Content(Generic[S]):
     """A kind: the behaviors of one kind of item and the schema they read. Not a Shape.
 
-    Subclass it over the schema, ``class TextContent(Content[Text])``, and
-    register it in an extension. Every behavior is a classmethod; a kind is
-    never instantiated.
+    Subclass it over the schema, ``class TextContent(Content[Text], name="Text")``,
+    and register it in an extension with a :class:`~nuspace.ext.ContentSpec`,
+    which says how a space presents it. Every behavior is a classmethod; a
+    kind is never instantiated.
 
     Behaviors:
 
@@ -242,12 +220,32 @@ class Content(Generic[S]):
       (:class:`Drawing`).
     - :meth:`form`: the search form, generated from ``match``'s keywords.
 
+    Every kind names itself, ``class TextContent(Content[Text], name="Text")``:
+    its identity in the store, so one word, no dots, by convention the class
+    name less ``Content``. Installed, its package goes in front
+    (:func:`kind_name`).
+
     Attributes:
-        label: What the search ui calls the kind. Empty takes the class name,
-            less a trailing ``Content``.
+        name: The name, as declared.
+
+    Raises:
+        TypeError: A subclass declares no name.
+        ValueError: The name is empty or has a dot.
     """
 
-    label: ClassVar[str] = ""
+    name: ClassVar[str] = ""
+
+    def __init_subclass__(cls, name: str | None = None, **kwargs: object) -> None:
+        super().__init_subclass__(**kwargs)
+        if name is None:
+            msg = (
+                f"{cls.__qualname__} declares no name: class {cls.__name__}(Content[...], name=...)"
+            )
+            raise TypeError(msg)
+        if not name or "." in name:
+            msg = f"{cls.__qualname__}: a kind's name is one word with no dots, not {name!r}"
+            raise ValueError(msg)
+        cls.name = name
 
     @classmethod
     def schema(cls) -> type[S]:
@@ -265,14 +263,6 @@ class Content(Generic[S]):
                         return cast("type[S]", arg)
         msg = f"{cls.__qualname__} names no schema: subclass Content[YourShape]"
         raise TypeError(msg)
-
-    @classmethod
-    def title(cls) -> str:
-        """:attr:`label`, or the class name less a trailing ``Content``."""
-        if cls.label:
-            return cls.label
-        name = cls.__name__
-        return name[: -len("Content")] if name.endswith("Content") and name != "Content" else name
 
     # --- Behaviors ---------------------------------------------------------------
 
@@ -468,11 +458,6 @@ def matched(
     )
 
 
-def info(kind: type[Content[Any]]) -> dict[str, Any]:
-    """What space info keeps of a kind for the search ui: ``{label, fields}``, plain data."""
-    return {"label": kind.title(), "fields": [asdict(f) for f in kind.form()]}
-
-
 def _drawn_ui(ref: StructuredRef) -> bool:
     """A ``rooted`` predicate: every chain but a bare ui one stays where it is."""
     return not isinstance(ref, UiRef)
@@ -482,7 +467,7 @@ class Drawing(ScalarQuery):
     """The term drawing one item by its address, landed under ``under``. Run it with ``nu.Eval``.
 
     For a program that learns which item to draw only at run time (eg a
-    search hit): the kind is imported by name, the item reached with
+    search hit): the kind is found by name (:func:`~nuspace.ext.content_spec`), the item reached with
     :meth:`Content.at`, and its :meth:`~Content.render` (or
     :meth:`~Content.render_hit`) term built, its bare ui chains spliced
     under ``under``. ``under`` is a ref the program names bare like any of
@@ -519,7 +504,7 @@ class Drawing(ScalarQuery):
         self._payload["hit"] = hit
 
     def _term(self, kind: object, level: object, scope: object, item_id: object) -> nu.Nu:
-        found = load_kind(str(kind))
+        found = content_spec(str(kind)).kind
         item = found.at((str(level), str(scope)), str(item_id))
         drawn = found.render_hit(item) if self._payload["hit"] else found.render(item)
         return nu.shape.reroot(drawn, self._children[4], rooted=_drawn_ui)

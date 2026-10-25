@@ -16,15 +16,17 @@ planes and cells:
   A keyword left out stays ``UNSET``, so ``match`` checks only what was
   asked, and a kind asked nothing lists all its items.
 - **the viewer**: :data:`PLANE`, a system ui plane like home, seeded by the
-  host at open. Its ``form`` cell asks (the registered kinds, the picked
+  host at open. Its ``form`` cell asks (the installed kinds, the picked
   kind's search fields, a Search button), its ``pick`` cell lists the
   searches, newest first, and its ``results`` cell draws the picked one's
-  hits, live, each with its kind's ``render_hit``.
+  hits, live, each with its kind's ``render_hit``. The kinds are read from
+  the installed specs where the cell is built (:func:`kinds`), never from
+  the store.
 
-A search's cell runs on a worker, where the registry is not. A kind's name
-is its importable name, so its prog names the request and imports each
-kind there (:func:`~nuspace.content.load_kind`). Like a service's prog, it
-is a thin shim over this module (D20).
+A search's cell runs on a worker, where the host's registry is not. Its
+prog names the request, and each kind is found there by its registered
+name, through its installed spec (:func:`~nuspace.ext.content_spec`). Like
+a service's prog, it is a thin shim over this module (D20).
 
 Workers import this module: nothing here may pull in a server.
 """
@@ -32,6 +34,7 @@ Workers import this module: nothing here may pull in a server.
 from __future__ import annotations
 
 import inspect
+from dataclasses import asdict
 from typing import TYPE_CHECKING, Any
 
 import nu
@@ -40,7 +43,8 @@ import nustd.time
 from nuspace import ops
 from nuspace.content import CELL as CELL_LEVEL
 from nuspace.content import PLANE as PLANE_LEVEL
-from nuspace.content import SPACE, address, load_kind, matched, scopes
+from nuspace.content import SPACE, address, matched, scopes
+from nuspace.ext import content_spec, content_specs, short_name
 from nuspace.ops.cell import HasUi, cell_writes
 from nuspace.ops.plane import plane_writes
 from nuspace.ops.utils import MintId, atomic, atomic_state
@@ -74,6 +78,7 @@ __all__ = [
     "Source",
     "describe",
     "ensure_search",
+    "kinds",
     "run",
     "search",
     "source",
@@ -176,14 +181,14 @@ def run(request: Mapping[str, Mapping[str, Any]]) -> nu.Nu:
 
     Args:
         request: Per kind name, the ``match`` keywords given; a keyword left
-            out stays ``UNSET``. A kind that does not import here, or is
-            not one, is not searched.
+            out stays ``UNSET``. A name no installed kind registers under
+            is not searched.
     """
     kinds: list[nu.Nu] = []
     for name, keywords in request.items():
         try:
-            kind = load_kind(name)
-        except (ImportError, AttributeError, TypeError):
+            kind = content_spec(name).kind
+        except LookupError:
             continue
         kinds.append(_kind(kind, _asked(kind, keywords)))
     walk = nu.Sequential(*kinds) if kinds else nu.Noop()
@@ -210,9 +215,10 @@ def source(request: Mapping[str, Mapping[str, Any]]) -> str:
 def describe(request: Mapping[str, Mapping[str, Any]]) -> str:
     """What a search is called: each kind, short, and what was asked of it.
 
-    ``{"pkg.TextContent": {"text": "tomato"}}`` reads ``Text: tomato``, a
-    number or another value as ``min 10``, a switch on as its keyword, and a
-    kind asked nothing as ``all``.
+    ``{"nuverse.Text": {"text": "tomato"}}`` reads ``Text: tomato``: the
+    kind's label, off its spec (the name's last part for a kind not
+    installed), a number or another value as ``min 10``, a switch on as its
+    keyword, and a kind asked nothing as ``all``.
     """
 
     def said(key: str, value: object) -> str:
@@ -222,13 +228,27 @@ def describe(request: Mapping[str, Mapping[str, Any]]) -> str:
 
     parts = []
     for name, keywords in request.items():
-        short = name.rpartition(".")[2]
-        short = (
-            short[: -len("Content")] if short.endswith("Content") and short != "Content" else short
-        )
+        try:
+            short = content_spec(name).label
+        except LookupError:
+            short = short_name(name)
         asked = ", ".join(said(k, v) for k, v in keywords.items()) or "all"
         parts.append(f"{short}: {asked}")
     return "; ".join(parts) or "Nothing asked"
+
+
+def kinds() -> dict[str, dict[str, Any]]:
+    """Every installed kind by name, as the viewer offers it: ``{label, fields}``, plain data.
+
+    ``label`` is its spec's, ``fields`` its search form, ``{name, input,
+    label}`` per ``match`` keyword, in order (:meth:`~nuspace.Content.form`).
+    Built in whatever process asks, from the installed specs
+    (:func:`~nuspace.ext.content_specs`).
+    """
+    return {
+        name: {"label": spec.label, "fields": [asdict(f) for f in spec.kind.form()]}
+        for name, spec in content_specs().items()
+    }
 
 
 #: :func:`source` of a request known only at run time.
@@ -307,8 +327,9 @@ import nuspace
 from nuspace import ops
 from nuspace.system import search
 
-# Every registered kind, as the host wrote it at open: name, label, fields.
-KINDS = nuspace.Space.state.info.contents
+# Every installed kind, read off the registry as the cell is built: name to {label, fields}.
+KINDS = search.kinds()
+FIELDS = nu.Dict(nu.Literal({name: kind["fields"] for name, kind in KINDS.items()}))
 
 
 class Asked(nuspace.CellState):
@@ -347,7 +368,7 @@ def ask(name):
 
 
 def fields_of(kind):
-    return nu.List(nu.list(KINDS[kind].fields).fallback([]))
+    return nu.List(FIELDS.get_item(kind, []))
 
 
 def draw_field(f):
@@ -362,32 +383,24 @@ def draw_field(f):
 
 
 def draw_fields(kind):
-    fields = ops.snapshot(fields_of(kind))
-    return View.fields.erase() >> nu.ForEachDo(fields, draw_field)
+    return View.fields.erase() >> nu.ForEachDo(fields_of(kind), draw_field)
 
 
 def draw():
-    names = ops.snapshot(nu.list(KINDS.keys()))
+    options = [{"value": name, "label": kind["label"]} for name, kind in KINDS.items()]
+    names = nu.List(nu.Literal(list(KINDS)))
+    kept = ops.snapshot(Asked.kind.fallback(""))
+    kind = nu.If(names.contains(kept), kept, next(iter(KINDS), ""))
 
-    def show(ids):
-        options = nu.Collect(
-            nu.Map(nu.Iter(ids), lambda k: nu.Dict.of(value=k, label=KINDS[nu.Str(k)].label))
+    def picked(k):
+        return (
+            View.head.kind.set_options(options)
+            >> View.head.kind.set(k)
+            >> View.head.go.set_disabled(nu.Str(k) == "")
+            >> draw_fields(nu.Str(k))
         )
-        kept = ops.snapshot(Asked.kind.fallback(""))
-        first = nu.str(nu.List(ids).first_elem()).fallback("")
-        kind = nu.If(nu.List(ids).contains(kept), kept, first)
 
-        def picked(k):
-            return (
-                View.head.kind.set_options(ops.snapshot(options))
-                >> View.head.kind.set(k)
-                >> View.head.go.set_disabled(nu.Str(k) == "")
-                >> draw_fields(nu.Str(k))
-            )
-
-        return nu.let(kind, picked)
-
-    return nu.let(names, show)
+    return nu.let(kind, picked)
 
 
 def pick():
@@ -412,8 +425,7 @@ def read_field(f):
 
 def go():
     kind = nu.Str(View.head.kind)
-    fields = ops.snapshot(fields_of(kind))
-    read = nu.ForEachDo(fields, read_field) >> Building.request[kind].set(Building.keywords.extract())
+    read = nu.ForEachDo(fields_of(kind), read_field) >> Building.request[kind].set(Building.keywords.extract())
     asked = read >> search.search(Building.request.extract())
     return nu.IfDo(kind != "", nu.Frame(Building, asked, keywords={}, request={}))
 
@@ -523,8 +535,8 @@ from nuspace.system.utils import follows
 #: Hits drawn at most. The rest are counted.
 SHOWN = 200
 
-# Every registered kind, as the host wrote it at open: what it is called.
-KINDS = nuspace.Space.state.info.contents
+# Every installed kind's label, read off the registry as the cell is built.
+LABELS = nu.Dict(nu.Literal({name: kind["label"] for name, kind in search.kinds().items()}))
 
 
 class Chosen(nuspace.PlaneState):
@@ -566,7 +578,7 @@ def hit(i, h):
     where = ops.snapshot(
         nu.Dict.of(
             plane=nu.If(level == "cell", ops.cell_plane(at), nu.If(level == "plane", at, "")),
-            label=KINDS[kind].label.fallback(kind),
+            label=LABELS.get_item(kind, kind),
         )
     )
 

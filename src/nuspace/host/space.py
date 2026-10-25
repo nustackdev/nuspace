@@ -13,7 +13,7 @@ inside :func:`~nuspace.system.kernel.open_kernel` after reconcile:
    search planes, made where missing, so they exist before the web device
    serves;
 3. :func:`~nuspace.system.home.write_info`: ``Space.state.info`` for this
-   open (space path, when, versions, the registered content kinds);
+   open (space path, when, versions);
 4. :func:`~nuspace.system.services.nav.clear_connections`: tabs of a previous
    run dropped, so nav never brings a plane up for one (D34);
 5. init started by the kernel's own :func:`~nuspace.system.kernel.init_start`,
@@ -51,8 +51,6 @@ from nuspace.system.utils import park
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
 
-    from nuspace.content import Content
-    from nuspace.ext import Cell, Extension, Plane
     from nuspace.system.backends import Backend
     from nuspace.system.kernel import EnvFactory
 
@@ -103,14 +101,10 @@ def open_space(
     open_browser: bool = True,
     static: str | None = "nuspace_ui",
     spares: int = DEFAULT_SPARES,
-    planes: Sequence[Plane] = (),
-    cells: Sequence[Cell] = (),
-    contents: Sequence[type[Content]] = (),
+    extensions: Sequence[str] | None = None,
     envs: Mapping[str, EnvFactory] | None = None,
     space_envs: Sequence[Sequence[str] | str] = (),
     backends: Mapping[str, type[Backend]] | None = None,
-    extensions: Sequence[Extension] | None = None,
-    discover: bool = True,
     body: nu.Nu | None = None,
     name: str | None = None,
 ) -> nu.Nu:
@@ -132,35 +126,25 @@ def open_space(
         static: The wheel shipping the browser bundle. None serves the
             socket alone, eg for a vite dev server.
         spares: Idle workers to keep up.
-        planes: Planes registered directly, ahead of any extension.
-        cells: Cells registered directly.
-        contents: Content kinds registered directly.
-        envs: Env factories registered directly.
+        extensions: The installed packages whose extensions register, by
+            entry point name. None registers every installed one, ``()``
+            none. Planes, Cells and content kinds register only so, by
+            package, so a worker finds each by name.
+        envs: Env factories of the host's own, ahead of every package's.
         space_envs: Env specs every run executes inside, outermost.
         backends: Backend classes by name, on top of the built in ``async``
             and ``mp``. A plane runs on the one its ``backend`` prop names.
-        extensions: Extensions registered explicitly, ahead of discovered ones.
-        discover: Also register the extensions installed under the
-            ``nuspace.extensions`` entry point group.
         body: Host Nu run beside everything. The space closes when it returns.
         name: Process name prefix for workers.
     """
-    reg = space_registry(
-        planes=planes,
-        cells=cells,
-        contents=contents,
-        envs=envs,
-        extensions=extensions,
-        discover=discover,
-    )
+    reg = space_registry(extensions=extensions, envs=envs)
     factories = dict(reg.envs)
     arms: list[nu.Nu] = []
     if web:
         from nuspace.system.devices.web.device import serve_web
 
         served, web_envs = serve_web(
-            planes=list(reg.planes.values()),
-            cells=list(reg.cells.values()),
+            registry=reg,
             host=host,
             port=port,
             static=static,
@@ -173,7 +157,7 @@ def open_space(
     kwargs = {} if name is None else {"name": name}
     return open_kernel(
         seed_space()
-        >> write_info(path, reg.contents.values())
+        >> write_info(path)
         >> clear_connections()
         >> init_start(init_service.PLANE)
         >> beside,

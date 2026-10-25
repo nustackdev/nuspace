@@ -68,7 +68,7 @@ from nuspace.system.utils import drawing, follows, redraw
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable, Sequence
 
-    from nuspace.ext import Cell
+    from nuspace.ext import CellSpec
     from nustd.ui.core import Ref
 
 
@@ -259,7 +259,7 @@ def _on_cell(name: str, change: nu.Nu, op: Callable[[nu.Str, nu.Attr], nu.Nu]) -
     return _arms.event(name, change, body)
 
 
-def _events(viewer: Ref, sid: nu.StrArg, specs: Sequence[Cell]) -> list[nu.Nu]:
+def _events(viewer: Ref, sid: nu.StrArg, specs: Sequence[CellSpec]) -> list[nu.Nu]:
     """Browser to store: one arm per viewer op.
 
     A restart is the connection's: nav runs this tab's pane again, not
@@ -315,7 +315,7 @@ def _events(viewer: Ref, sid: nu.StrArg, specs: Sequence[Cell]) -> list[nu.Nu]:
     ]
 
 
-def viewer_feed(viewer: Ref, sid: nu.StrArg, specs: Iterable[Cell] = ()) -> nu.Nu:
+def viewer_feed(viewer: Ref, sid: nu.StrArg, specs: Iterable[CellSpec] = ()) -> nu.Nu:
     """The viewer, live, as one term. Built per connection, never ends.
 
     Args:

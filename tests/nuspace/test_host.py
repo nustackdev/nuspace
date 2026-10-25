@@ -17,7 +17,7 @@ import pytest
 from _support.kernel import SET_42, Kernel, _Hold, history
 
 import nu
-from nuspace import Cell, Extension, Plane, boot, open_space, ops
+from nuspace import CellSpec, Extension, PlaneSpec, boot, open_space, ops
 from nuspace.ext import (
     GROUP,
     Registry,
@@ -38,12 +38,12 @@ from nuspace.system.services import BOOTED, SERVICES, ensure_system, init
 from nuspace.system.usage import Usage
 
 
-def _plane(name: str, label: str = "") -> Plane:
-    return Plane(name, label or name, backend="async")
+def _plane(name: str, label: str = "") -> PlaneSpec:
+    return PlaneSpec(name, label or name, backend="async")
 
 
-def _cell(name: str, source: str = "") -> Cell:
-    return Cell(name, name, source or name)
+def _cell(name: str, source: str = "") -> CellSpec:
+    return CellSpec(name, name, source or name)
 
 
 def _env(label: str):
@@ -69,9 +69,9 @@ def _points(monkeypatch, points: list[_Point]) -> list[str]:
         return points
 
     monkeypatch.setattr(registry_module, "entry_points", entry_points)
-    # registered_name's cache, fresh over the patched points and dropped after.
-    fresh = functools.cache(registry_module._registered.__wrapped__)
-    monkeypatch.setattr(registry_module, "_registered", fresh)
+    # The installed listing's cache, fresh over the patched points and dropped after.
+    fresh = functools.cache(registry_module._installed.__wrapped__)
+    monkeypatch.setattr(registry_module, "_installed", fresh)
     return asked
 
 
@@ -79,21 +79,23 @@ def _points(monkeypatch, points: list[_Point]) -> list[str]:
 
 
 def test_merge_keeps_the_first_per_name_and_warns():
-    first = Extension((_plane("plain", "Mine"),), (_cell("text", "a"),), {"db": _env("mine")}, "a")
+    first = Extension(
+        (_plane("a.plain", "Mine"),), (_cell("a.text", "a"),), (), {"db": _env("mine")}
+    )
     second = Extension(
-        (_plane("plain", "Theirs"), _plane("jobs")),
-        (_cell("text", "b"), _cell("heading")),
+        (_plane("a.plain", "Theirs"), _plane("b.jobs")),
+        (_cell("a.text", "b"), _cell("b.heading")),
+        (),
         {"db": _env("theirs"), "llm": _env("llm")},
-        "b",
     )
     with pytest.warns(RegistryWarning) as caught:
-        reg = Registry.merge([first, second])
+        reg = Registry.merge({"a": first, "b": second})
     assert len(caught) == 3
-    assert "'plain' from b ignored: a registered it first" in str(caught[0].message)
-    assert list(reg.planes) == ["plain", "jobs"]
-    assert reg.planes["plain"].label == "Mine"
-    assert reg.cells["text"].source == "a"
-    assert list(reg.cells) == ["text", "heading"]
+    assert "'a.plain' from b ignored: a registered it first" in str(caught[0].message)
+    assert list(reg.planes) == ["a.plain", "b.jobs"]
+    assert reg.planes["a.plain"].label == "Mine"
+    assert reg.cells["a.text"].source == "a"
+    assert list(reg.cells) == ["a.text", "b.heading"]
     assert reg.envs["db"]().label == "mine"
     assert set(reg.envs) == {"db", "llm"}
 
@@ -110,38 +112,33 @@ def test_discover_loads_extensions_and_factories_and_skips_the_broken(monkeypatc
             _Point("factory", lambda: lambda: Extension(cells=(_cell("text"),))),
             _Point("broken", broken),
             _Point("wrong", lambda: lambda: 42),
+            _Point("plain", lambda: Extension(planes=(_plane("again"),))),
         ],
     )
     with pytest.warns(RegistryWarning) as caught:
         found = discover()
     assert asked == [GROUP]
-    assert [e.name for e in found] == ["plain", "factory"]
-    assert [p.name for p in found[0].planes] == ["plain.plain"]
-    assert [s.name for s in found[1].cells] == ["factory.text"]
+    assert list(found) == ["plain", "factory"]
+    assert [p.name for p in found["plain"].planes] == ["plain.plain"]
+    assert [s.name for s in found["factory"].cells] == ["factory.text"]
     said = [str(w.message) for w in caught]
     assert any("'broken' failed to load" in s for s in said)
     assert any("'wrong' is not an Extension: int" in s for s in said)
+    assert any("'plain' is installed twice" in s for s in said)
 
 
-def test_explicit_wins_over_discovered(monkeypatch):
+def test_the_host_env_wins_over_an_installed_one(monkeypatch):
     installed = Extension(
-        (_plane("plain", "Installed"), _plane("jobs")), (), {"db": _env("installed")}
+        (_plane("plain", "Installed"), _plane("jobs")), (), (), {"db": _env("installed")}
     )
     _points(monkeypatch, [_Point("installed", lambda: installed)])
-    mine = Extension((_plane("chat"),), (), {}, name="mine")
     with pytest.warns(RegistryWarning) as caught:
-        reg = space_registry(
-            planes=[_plane("installed.plain", "Loose"), _plane("plain")],
-            envs={"db": _env("loose")},
-            extensions=[mine],
-        )
+        reg = space_registry(envs={"db": _env("host")})
     assert {str(w.message) for w in caught} == {
-        "Plane 'installed.plain' from installed ignored: open_space registered it first",
         "Env 'db' from installed ignored: open_space registered it first",
     }
-    assert list(reg.planes) == ["installed.plain", "plain", "chat", "installed.jobs"]
-    assert reg.planes["installed.plain"].label == "Loose"
-    assert reg.envs["db"]().label == "loose"
+    assert list(reg.planes) == ["installed.plain", "installed.jobs"]
+    assert reg.envs["db"]().label == "host"
 
 
 def test_installed_planes_are_named_after_their_package(monkeypatch):
@@ -155,9 +152,8 @@ def test_installed_planes_are_named_after_their_package(monkeypatch):
     )
     with warnings.catch_warnings():
         warnings.simplefilter("error")
-        reg = space_registry(planes=[_plane("chat", "Mine")])
+        reg = space_registry()
     assert {n: p.label for n, p in reg.planes.items()} == {
-        "chat": "Mine",
         "tools.chat": "Tools",
         "agents.chat": "Agents",
     }
@@ -176,13 +172,33 @@ def test_a_package_spec_knows_the_name_it_registers_under(monkeypatch):
     assert short_name("tools.slider") == short_name("slider") == "slider"
 
 
-def test_discovery_can_be_turned_off(monkeypatch):
-    asked = _points(monkeypatch, [_Point("installed", lambda: Extension((_plane("plain"),)))])
+def test_a_space_takes_the_packages_it_names(monkeypatch):
+    _points(
+        monkeypatch,
+        [
+            _Point("tools", lambda: Extension((_plane("chat"),))),
+            _Point("agents", lambda: Extension((_plane("crew"),), (_cell("text"),))),
+        ],
+    )
     with warnings.catch_warnings():
         warnings.simplefilter("error")
-        reg = space_registry(cells=[_cell("text")], discover=False)
-    assert asked == []
-    assert (list(reg.planes), list(reg.cells)) == ([], ["text"])
+        assert list(space_registry(extensions=["agents"]).planes) == ["agents.crew"]
+        # Entry point order, whatever order they are named in.
+        assert list(space_registry(extensions=["agents", "tools"]).planes) == [
+            "tools.chat",
+            "agents.crew",
+        ]
+        none = space_registry(extensions=())
+    assert (list(none.planes), list(none.cells)) == ([], [])
+    with pytest.raises(LookupError, match="'nobody'"):
+        space_registry(extensions=["tools", "nobody"])
+
+
+def test_the_tests_specs_register_through_their_installed_package():
+    reg = space_registry(extensions=["testing"])
+    assert list(reg.planes) == ["testing.plain", "testing.jobs"]
+    assert list(reg.cells) == ["testing.text", "testing.program"]
+    assert list(reg.contents) == ["testing.Note", "testing.Plain"]
 
 
 # --- open_space ------------------------------------------------------------------
@@ -309,9 +325,8 @@ async def test_open_space_tells_a_bound_usage_what_is_made_and_removed(tmp_path,
         await space.close()
 
 
-def test_open_space_with_web_compiles(monkeypatch):
-    _points(monkeypatch, [])
-    term = open_space(planes=[_plane("plain")], cells=[_cell("text")], open_browser=False)
+def test_open_space_with_web_compiles():
+    term = open_space(extensions=["testing"], open_browser=False)
     nu.validate(nu.compile(term))
 
 

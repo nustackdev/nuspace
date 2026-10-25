@@ -11,13 +11,14 @@ import json
 from types import SimpleNamespace
 
 import pytest
+from _support.contents import NoteContent
 from click.testing import CliRunner
 
 import nu
 from nuspace import ops
 from nuspace._cli import _installed, cli
 from nuspace._cli.commands import run as run_command
-from nuspace.ext import Cell, Extension, Plane
+from nuspace.ext import CellSpec, ContentSpec, Extension, PlaneSpec
 from nuspace.host import presets
 from nuspace.system import home
 from nuspace.system.kernel import KERNEL_FILE, store
@@ -56,8 +57,8 @@ def held(monkeypatch):
     return terms
 
 
-def _plane(name: str, description: str = "") -> Plane:
-    return Plane(name, name.capitalize(), description=description, backend="async")
+def _plane(name: str, description: str = "") -> PlaneSpec:
+    return PlaneSpec(name, name.capitalize(), description=description, backend="async")
 
 
 def _point(name: str, version: str, load):
@@ -77,7 +78,9 @@ def verse(monkeypatch):
             "tools",
             "1.2.0",
             lambda: Extension(
-                (_plane("chat", "Talk."), _plane("jobs")), (Cell("text", "Text", "1"),)
+                (_plane("chat", "Talk."), _plane("jobs")),
+                (CellSpec("text", "Text", "1"),),
+                (ContentSpec(NoteContent, description="Notes."),),
             ),
         ),
         _point("agents", "0.1.0", lambda: Extension((_plane("chat"), _plane("crew")))),
@@ -204,10 +207,10 @@ def test_run_from_refuses_anything_but_an_installed_pkg_plane(held, verse, plane
 
 def test_run_from_makes_the_plane_once(tmp_path):
     """The real thing, headless: the plane lands under its fixed id, once."""
-    spec = Plane("nudemos.counter", "Counter", cells=(("count", "1"),), backend="async")
+    spec = PlaneSpec("nudemos.counter", "Counter", cells=(("count", "1"),), backend="async")
     path = str(tmp_path / "space")
     for _ in range(2):
-        term = presets.with_plane(spec, path, web=False, discover=False)
+        term = presets.with_plane(spec, path, web=False, extensions=())
         nu.eval_in_loop(nu.compile(nu.Race(term, nu.Delay(3.0))), nu.Context())
     plane = presets.plane_id(spec)
     assert plane == "nudemos-counter"
@@ -248,7 +251,18 @@ def test_verse_lists_each_package_and_its_planes(verse):
     result = _invoke("verse")
     assert result.exit_code == 0, result.output
     lines = result.output.splitlines()
-    assert lines[0].split() == ["tools", "1.2.0", "chat", "·", "jobs", "+1", "cells"]
+    assert lines[0].split() == [
+        "tools",
+        "1.2.0",
+        "chat",
+        "·",
+        "jobs",
+        "+1",
+        "cells",
+        "+1",
+        "content",
+        "kinds",
+    ]
     assert lines[1].split() == ["agents", "0.1.0", "chat", "·", "crew"]
     assert lines[2].split() == ["broken", "0.0.1"]
     assert "torch" in lines[3]
@@ -263,6 +277,7 @@ def test_verse_json_gives_the_detail(verse):
     assert tools["version"] == "1.2.0"
     assert tools["planes"][0] == {"name": "tools.chat", "label": "Chat", "description": "Talk."}
     assert [s["name"] for s in tools["cells"]] == ["text"]
+    assert tools["contents"] == [{"name": "tools.Note", "label": "Note", "description": "Notes."}]
     assert tools["error"] is None
     assert [p["name"] for p in agents["planes"]] == ["agents.chat", "agents.crew"]
     assert broken["planes"] == []

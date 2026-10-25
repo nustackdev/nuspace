@@ -7,22 +7,30 @@ import warnings
 import pytest
 from _support.contents import Note, NoteContent, PlainContent, write
 from _support.made import MADE
+from _support.specs import CONTENTS
 
 import nu
 import nuspace
 import nustd.kv
 from nuspace import content, ops
-from nuspace.content import CELL, PLANE, SPACE, SearchField, kind_name, load_kind
-from nuspace.ext import Extension, Registry, RegistryWarning, space_registry
+from nuspace.content import CELL, PLANE, SPACE, SearchField, kind_name
+from nuspace.ext import (
+    ContentSpec,
+    Extension,
+    Registry,
+    RegistryWarning,
+    content_spec,
+    space_registry,
+)
 from nuspace.shapes import Reroot, Space, States
-from nuspace.system import home
 
 
 #: Run on both backends: in memory, and the space's sqlite files.
 STORES = ("memory", "sqlite")
 
-NOTE = "_support.contents.NoteContent"
-PLAIN = "_support.contents.PlainContent"
+NOTE = "testing.Note"
+PLAIN = "testing.Plain"
+NOTE_SPEC, PLAIN_SPEC = CONTENTS
 
 
 def in_run(plane_id: str, cell_id: str, term: nu.Nu) -> nu.Nu:
@@ -33,26 +41,43 @@ def in_run(plane_id: str, cell_id: str, term: nu.Nu) -> nu.Nu:
 # --- A kind --------------------------------------------------------------------------------
 
 
-def test_a_kind_is_its_importable_name_and_its_schema_comes_off_the_generic():
-    assert kind_name(NoteContent) == NOTE
-    assert load_kind(NOTE) is NoteContent
+def test_a_kind_is_its_declared_name_and_its_schema_comes_off_the_generic():
+    assert (NoteContent.name, kind_name(NoteContent)) == ("Note", NOTE)
+    assert content_spec(NOTE) is NOTE_SPEC
+    assert content_spec(NOTE).kind is NoteContent
     assert NoteContent.schema() is Note
     assert PlainContent.schema() is Note
 
-    class Deeper(NoteContent):
+    class Deeper(NoteContent, name="Deeper"):
         pass
 
     assert Deeper.schema() is Note
-    assert (NoteContent.title(), PlainContent.title()) == ("Note", "Plain")
 
 
-def test_a_kind_with_no_schema_and_a_name_that_is_not_a_kind_are_refused():
+def test_a_spec_names_its_kind_and_labels_it():
+    assert (NOTE_SPEC.name, NOTE_SPEC.label) == ("Note", "Note")
+    assert (PLAIN_SPEC.name, PLAIN_SPEC.label) == ("Plain", "Plain note")
+    assert NOTE_SPEC.description.startswith("A note")
+    assert ContentSpec(nuspace.Content).label == "Content"
+    with pytest.raises(TypeError, match="no Content subclass"):
+        ContentSpec(Note)
+
+
+def test_a_kind_with_no_schema_or_no_name_and_a_name_of_no_kind_are_refused():
     with pytest.raises(TypeError, match="names no schema"):
         nuspace.Content.schema()
-    with pytest.raises(TypeError, match="not a kind"):
-        load_kind("_support.contents.Note")
-    with pytest.raises(ImportError):
-        load_kind("nowhere_at_all.Kind")
+    with pytest.raises(TypeError, match="declares no name"):
+
+        class Nameless(nuspace.Content[Note]):
+            pass
+
+    with pytest.raises(ValueError, match="no dots"):
+
+        class Dotted(nuspace.Content[Note], name="a.b"):
+            pass
+
+    with pytest.raises(LookupError):
+        content_spec("nowhere.at_all")
 
 
 def test_the_form_is_generated_from_match_keywords():
@@ -62,23 +87,15 @@ def test_the_form_is_generated_from_match_keywords():
         SearchField("done", "switch", "Done"),
     )
     assert PlainContent.form() == ()
-    assert content.info(NoteContent) == {
-        "label": "Note",
-        "fields": [
-            {"name": "text", "input": "text", "label": "Text"},
-            {"name": "min_stars", "input": "number", "label": "Min stars"},
-            {"name": "done", "input": "switch", "label": "Done"},
-        ],
-    }
 
 
 def test_a_kind_can_write_its_own_form():
-    class Asked(nuspace.Content[Note]):
+    class Asked(nuspace.Content[Note], name="Asked"):
         @classmethod
         def form(cls):
             return (SearchField("text", "text", "Words"),)
 
-    assert content.info(Asked)["fields"] == [{"name": "text", "input": "text", "label": "Words"}]
+    assert Asked.form() == (SearchField("text", "text", "Words"),)
 
 
 def test_defaults_match_everything_and_draw_nothing():
@@ -315,27 +332,27 @@ async def test_items_of_a_cell_that_is_there_are_kept(store):
 # --- Registry and space info ---------------------------------------------------------------
 
 
-def test_extensions_register_kinds_by_name_first_wins():
-    first = Extension(contents=(NoteContent, PlainContent), name="first")
-    second = Extension(contents=(NoteContent,), name="second")
+def test_kinds_register_by_package_and_name_one_name_per_kind():
+    first = Extension(contents=(NOTE_SPEC, PLAIN_SPEC))
+    second = Extension(contents=(ContentSpec(NoteContent, label="Again"),))
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
-        reg = Registry.merge([first, second])
-    assert dict(reg.contents) == {NOTE: NoteContent, PLAIN: PlainContent}
-    assert any(issubclass(w.category, RegistryWarning) for w in caught)
+        reg = Registry.merge({"first": first, "second": second})
+    assert dict(reg.contents) == {"first.Note": NOTE_SPEC, "first.Plain": PLAIN_SPEC}
+    said = [str(w.message) for w in caught if issubclass(w.category, RegistryWarning)]
+    assert said == ["Content 'second.Note' ignored: its kind is registered as 'first.Note'"]
 
 
-def test_loose_kinds_come_ahead_of_extensions():
-    reg = space_registry(
-        contents=(PlainContent,),
-        extensions=[Extension(contents=(NoteContent,))],
-        discover=False,
-    )
-    assert list(reg.contents) == [PLAIN, NOTE]
+def test_a_kind_no_installed_package_adds_has_no_name():
+    class Loose(nuspace.Content[Note], name="Loose"):
+        pass
+
+    with pytest.raises(LookupError, match="not installed"):
+        kind_name(Loose)
+    with pytest.raises(LookupError):
+        Loose.cell("x")
 
 
-async def test_open_writes_every_kind_with_its_fields_to_space_info(store):
-    await store.run(home.write_info(None, [NoteContent]))
-    await store.run(home.write_info(None, [PlainContent, NoteContent]))
-    info = await store.read(Space.state.info.contents.extract())
-    assert info == {NOTE: content.info(NoteContent), PLAIN: {"label": "Plain", "fields": []}}
+def test_the_installed_kinds_register_with_the_space():
+    assert list(space_registry(extensions=["testing"]).contents) == [NOTE, PLAIN]
+    assert {NOTE, PLAIN} <= set(space_registry().contents)
