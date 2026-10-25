@@ -23,8 +23,9 @@ planes and cells:
   the installed specs where the cell is built (:func:`kinds`), never from
   the store.
 
-A search's cell runs on a worker, where the host's registry is not. Its
-prog names the request, and each kind is found there by its registered
+The walk itself is content's (:func:`~nuspace.content.search.walk`): this
+module appends what it finds. A search's cell runs on a worker, where the
+host's registry is not. Its prog names the request, and each kind is found there by its registered
 name, through its installed spec (:func:`~nuspace.ext.content_spec`). Like
 a service's prog, it is a thin shim over this module (D20).
 
@@ -33,7 +34,6 @@ Workers import this module: nothing here may pull in a server.
 
 from __future__ import annotations
 
-import inspect
 from dataclasses import asdict
 from typing import TYPE_CHECKING, Any
 
@@ -41,17 +41,16 @@ import nu
 import nustd.kv
 import nustd.time
 from nuspace import ops
-from nuspace.content import CELL as CELL_LEVEL
-from nuspace.content import PLANE as PLANE_LEVEL
-from nuspace.content import SPACE, address, matched, scopes
+from nuspace.content import address
+from nuspace.content.search import walk
 from nuspace.ext import content_spec, content_specs, short_name
 from nuspace.ops.cell import HasUi, cell_writes
 from nuspace.ops.plane import plane_writes
 from nuspace.ops.utils import MintId, atomic, atomic_state
 from nuspace.shapes import PlaneState
 
-from .home import seed, seeded_id
-from .kernel.utils import snap
+from ..kernel.utils import snap
+from .seed import seed, seeded_id
 
 
 if TYPE_CHECKING:
@@ -133,42 +132,14 @@ class Search(PlaneState):
 # --- The search's own cell --------------------------------------------------------------
 
 
-def _asked(kind: type[Content[Any]], keywords: Mapping[str, Any]) -> dict[str, Any]:
-    """The keywords ``kind``'s ``match`` takes, the rest dropped: a form older than the kind asks no more."""
-    params = inspect.signature(kind.match).parameters
-    if any(p.kind is inspect.Parameter.VAR_KEYWORD for p in params.values()):
-        return dict(keywords)
-    return {k: v for k, v in keywords.items() if k in params}
+def _hits(kind: type[Content[Any]], scope: tuple[str, nu.StrArg], ids: nu.ObjectRef) -> nu.Nu:
+    """One scope's hits appended, in one commit, when there are any."""
 
+    def one(item: nu.Attr) -> nu.Nu:
+        return Search.hits.append(address(kind, scope, nu.Str(item)))
 
-def _scope(
-    kind: type[Content[Any]], keywords: Mapping[str, Any], level: str, scope_id: nu.StrArg
-) -> nu.Nu:
-    """One scope of one kind searched: its matches read in a snapshot, the hits appended in one commit."""
-    scope = (level, scope_id)
-    found = snap(matched(kind, scope, keywords).to_list())
-
-    def add(ids: nu.ObjectRef) -> nu.Nu:
-        def one(item: nu.Attr) -> nu.Nu:
-            return Search.hits.append(address(kind, scope, nu.Str(item)))
-
-        hits = atomic_state(nu.ForEachDo(nu.List(ids), one))
-        return nu.IfDo(nu.List(ids).len() > 0, hits)
-
-    return nu.let(found, add)
-
-
-def _kind(kind: type[Content[Any]], keywords: Mapping[str, Any]) -> nu.Nu:
-    """Every item of one kind searched: its cells, then its planes, then the space's.
-
-    The walk :meth:`~nuspace.content.Content.find` makes, a commit per scope.
-    """
-
-    def walk(level: str) -> nu.Nu:
-        held = snap(scopes(kind, level))
-        return nu.ForEachDo(held, lambda at: _scope(kind, keywords, level, nu.Str(at)))
-
-    return walk(CELL_LEVEL) >> walk(PLANE_LEVEL) >> _scope(kind, keywords, SPACE, "")
+    hits = atomic_state(nu.ForEachDo(nu.List(ids), one))
+    return nu.IfDo(nu.List(ids).len() > 0, hits)
 
 
 def run(request: Mapping[str, Mapping[str, Any]]) -> nu.Nu:
@@ -190,13 +161,13 @@ def run(request: Mapping[str, Mapping[str, Any]]) -> nu.Nu:
             kind = content_spec(name).kind
         except LookupError:
             continue
-        kinds.append(_kind(kind, _asked(kind, keywords)))
-    walk = nu.Sequential(*kinds) if kinds else nu.Noop()
-    return nu.TryCatch(walk, finally_=atomic_state(Search.finished_at.set(nustd.time.time())))
+        kinds.append(walk(kind, keywords, lambda scope, ids, kind=kind: _hits(kind, scope, ids)))
+    walked = nu.Sequential(*kinds) if kinds else nu.Noop()
+    return nu.TryCatch(walked, finally_=atomic_state(Search.finished_at.set(nustd.time.time())))
 
 
 _SOURCE = """\
-from nuspace.system import search
+from nuspace.system.ui import search
 
 #: What this search asks, as it was made: per kind name, the match keywords.
 REQUEST = {request!r}
@@ -325,7 +296,7 @@ import nustd.kv
 import nustd.ui
 import nuspace
 from nuspace import ops
-from nuspace.system import search
+from nuspace.system.ui import search
 
 # Every installed kind, read off the registry as the cell is built: name to {label, fields}.
 KINDS = search.kinds()
@@ -444,7 +415,7 @@ import nustd.kv
 import nustd.ui
 import nuspace
 from nuspace import ops
-from nuspace.system import search
+from nuspace.system.ui import search
 
 
 class Chosen(nuspace.PlaneState):
@@ -529,7 +500,7 @@ import nustd.ui
 import nuspace
 from nuspace import ops
 from nuspace.content import Drawing
-from nuspace.system import search
+from nuspace.system.ui import search
 from nuspace.system.utils import follows
 
 #: Hits drawn at most. The rest are counted.

@@ -31,10 +31,12 @@ from nuspace.ext import registry as registry_module
 from nuspace.host import presets
 from nuspace.ops.utils import atomic
 from nuspace.shapes import Space, States, reroot
-from nuspace.system import home
+from nuspace.system.info import versions
 from nuspace.system.kernel import Env, store
 from nuspace.system.kernel.space import free_port
 from nuspace.system.services import BOOTED, SERVICES, ensure_system, init
+from nuspace.system.ui import home
+from nuspace.system.ui.seed import seeded_id
 from nuspace.system.usage import Usage
 
 
@@ -265,12 +267,12 @@ async def test_open_space_headless_runs_a_booted_plane(tmp_path, monkeypatch):
         assert await space.read(ops.runs(plane=TAB)) == []
         # Home seeded, and this open's info written by the host.
         assert await space.read(ops.cells(home.PLANE)) == [
-            home.seeded_id(home.PLANE, name) for name, _ in home.CELLS
+            seeded_id(home.PLANE, name) for name, _ in home.CELLS
         ]
         info = await space.read(Space.state.info.extract())
         assert info["path"] == str(tmp_path / "space")
         assert info["opened"] > 0
-        assert info["versions"] == home.versions()
+        assert info["versions"] == versions()
         assert set(info["versions"]) == {"nuspace"}
     finally:
         await space.close()

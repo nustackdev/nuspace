@@ -11,10 +11,10 @@ import nustd.kv
 from nuspace import ops
 from nuspace.content import CELL, PLANE, SPACE
 from nuspace.shapes import PlaneState, Reroot, Space, States
-from nuspace.system import search
 from nuspace.system.devices.web.env import session_env
-from nuspace.system.home import seed, seeded_id
 from nuspace.system.kernel.body import Rewrites
+from nuspace.system.ui import search
+from nuspace.system.ui.seed import seed, seeded_id
 from nustd.ui import Session
 
 

@@ -1,7 +1,7 @@
 """Settings: the space's own settings plane, seeded by the host at open when missing.
 
-Like home (:mod:`nuspace.system.home`): a system ui plane with a fixed id,
-seeded once by the same :func:`~nuspace.system.home.seed`, its cells the
+Like home (:mod:`nuspace.system.ui.home`): a system ui plane with a fixed id,
+seeded once by the same :func:`~nuspace.system.ui.seed.seed`, its cells the
 owner's after that. Pinned when seeded, after home: the sidebar's pin is the
 way to it. One cell so far, ``header``: home's header, the same source.
 
@@ -14,7 +14,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from .home import HEADER, seed
+from .home import HEADER
+from .seed import seed
 
 
 if TYPE_CHECKING:

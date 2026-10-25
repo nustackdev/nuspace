@@ -47,12 +47,12 @@ from nuspace.system.devices.web.shell import Shell
 from nuspace.system.devices.web.sidebar import registered_entries, sidebar_feed
 from nuspace.system.devices.web.utils import Arms, cell_ui, field_ids
 from nuspace.system.devices.web.viewer import on_open, slash_entries, viewer_feed
-from nuspace.system.home import PLANE as HOME
 from nuspace.system.kernel.space import free_port
 from nuspace.system.kernel.utils import snap
-from nuspace.system.search import PLANE as SEARCH
 from nuspace.system.services.nav import clear_connections
-from nuspace.system.settings import PLANE as SETTINGS
+from nuspace.system.ui.home import PLANE as HOME
+from nuspace.system.ui.search import PLANE as SEARCH
+from nuspace.system.ui.settings import PLANE as SETTINGS
 from nustd.ui.core import WsSession
 from nustd.ws_server import SID_ATTR, listen, run_once, session_for, sessions_fold
 

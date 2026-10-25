@@ -20,8 +20,8 @@ from nuspace._cli import _installed, cli
 from nuspace._cli.commands import run as run_command
 from nuspace.ext import CellSpec, ContentSpec, Extension, PlaneSpec
 from nuspace.host import presets
-from nuspace.system import home
 from nuspace.system.kernel import KERNEL_FILE, store
+from nuspace.system.ui import home
 from nuspace.system.utils import snap
 
 

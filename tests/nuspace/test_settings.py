@@ -8,10 +8,11 @@ import nu
 import nustd.kv
 from nuspace import ops
 from nuspace.shapes import Reroot, Space
-from nuspace.system import home, settings
 from nuspace.system.devices.web.env import session_env
 from nuspace.system.devices.web.sidebar import rows
 from nuspace.system.kernel.body import Rewrites
+from nuspace.system.ui import home, settings
+from nuspace.system.ui.seed import seeded_id
 
 
 async def test_settings_is_seeded_once_with_home_header(store):
@@ -22,7 +23,7 @@ async def test_settings_is_seeded_once_with_home_header(store):
     cells = await store.read(ops.cell_rows(settings.PLANE))
     assert [(c["name"], c["prog"]) for c in cells] == [("header", home.HEADER)]
 
-    await store.run(ops.remove_cell(home.seeded_id(settings.PLANE, "header")))
+    await store.run(ops.remove_cell(seeded_id(settings.PLANE, "header")))
     await store.run(settings.ensure_settings())
     cells = await store.read(ops.cell_rows(settings.PLANE))
     assert cells == []

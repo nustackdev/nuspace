@@ -26,36 +26,25 @@ open term is built: a cell cannot call python.
 
 from __future__ import annotations
 
-import importlib.metadata
-from pathlib import Path
+from typing import TYPE_CHECKING
 
-import nu
-import nustd.time
-from nuspace.ops.cell import HasUi, cell_writes
-from nuspace.ops.pin import pin as pin_last
-from nuspace.ops.plane import plane_writes
-from nuspace.ops.utils import atomic
-from nuspace.shapes import Space
+from .seed import seed
 
-from .kernel.utils import snap
+
+if TYPE_CHECKING:
+    import nu
 
 
 __all__ = [
     "CELLS",
     "GLANCE",
     "HEADER",
-    "META",
     "NAME",
-    "PACKAGES",
     "PLANE",
     "RECENT",
     "RECENT_SHOWN",
     "START",
     "ensure_home",
-    "seed",
-    "seeded_id",
-    "versions",
-    "write_info",
 ]
 
 
@@ -67,12 +56,6 @@ NAME = "Home"
 
 #: Its icon, as :func:`~nuspace.ops.plane.plane_icon` spells it.
 ICON = "emoji:🏠"
-
-#: The plane's meta.
-META = {"editable": True, "full_width": False}
-
-#: The packages whose versions the header shows, when installed.
-PACKAGES = ("nuspace",)
 
 #: How many recent planes the ``recent`` cell links.
 RECENT_SHOWN = 8
@@ -296,91 +279,6 @@ def out():
 CELLS = (("header", HEADER), ("recent", RECENT), ("glance", GLANCE), ("start", START))
 
 
-class _Seeding(nu.Shape):
-    """What :func:`seed` works out before its bracket: each cell's ``has_ui``, by cell id."""
-
-    ui = nu.DictRef.slot(bool)
-
-
-def seeded_id(plane: str, name: str) -> str:
-    """The id of the cell :func:`seed` makes under this name: the plane's id, then the name.
-
-    Fixed, so the cell is found without a lookup, and under the plane's id,
-    so two seeded planes' cells of one name never meet.
-    """
-    return f"{plane}_{name}"
-
-
-def seed(
-    plane: str,
-    name: str,
-    icon: str,
-    cells: tuple[tuple[str, str], ...],
-    *,
-    backend: str,
-    pin: bool = True,
-) -> nu.Nu:
-    """A system ui plane and its cells, pinned last, when the plane was never made. Idempotent.
-
-    Missing means ``add_plane`` never wrote it (no name), so a plane the owner
-    has edited since, cells removed or renamed included, is left as it is,
-    and so is a pin the owner has taken off. One commit: the plane, its
-    cells and its pin land together. Each cell's ``has_ui`` is worked out
-    first, outside the bracket, and only when the plane is missing.
-
-    Args:
-        plane: The plane id, fixed.
-        name: What the plane is called.
-        icon: Its icon, eg ``"emoji:<char>"``.
-        cells: ``(name, source)`` in order. Each cell's id is
-            :func:`seeded_id`.
-        backend: The backend its runs execute on. Required: there is no default.
-        pin: Pin it, after the pins there are.
-    """
-    missing = Space.planes[plane].contains("name").not_()
-    writes = plane_writes(
-        plane,
-        backend=backend,
-        name=name,
-        system=True,
-        ui=True,
-        made_by="",
-        meta={**META, "icon": icon},
-    )
-    ids = [(seeded_id(plane, name), name, source) for name, source in cells]
-    for cell, name, source in ids:
-        writes = writes >> cell_writes(plane, cell, source, _Seeding.ui[cell], name=name)
-    if pin:
-        writes = writes >> pin_last(plane)
-    uis = [_Seeding.ui[cell].set(HasUi(source, plane, cell)) for cell, _, source in ids]
-    body = nu.Sequential(*uis, atomic(nu.IfDo(missing, writes)))
-    return nu.IfDo(snap(missing), nu.Frame(_Seeding, body, ui={}))
-
-
 def ensure_home() -> nu.Nu:
     """The home plane and its cells, seeded once (:func:`seed`)."""
     return seed(PLANE, NAME, ICON, CELLS, backend="async")
-
-
-def versions(packages: tuple[str, ...] = PACKAGES) -> dict[str, str]:
-    """The installed version of each of ``packages``, those not installed left out."""
-    out: dict[str, str] = {}
-    for name in packages:
-        try:
-            out[name] = importlib.metadata.version(name)
-        except importlib.metadata.PackageNotFoundError:
-            continue
-    return out
-
-
-def write_info(path: str | None) -> nu.Nu:
-    """``Space.state.info`` for this open: the space path, now, the versions. One commit.
-
-    Args:
-        path: The space directory, None for a throwaway one (written ``""``).
-    """
-    info = Space.state.info
-    where = "" if path is None else str(Path(path).resolve())
-    return atomic(
-        info.path.set(where) >> info.opened.set(nustd.time.time()) >> info.versions.set(versions())
-    )

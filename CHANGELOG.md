@@ -11,6 +11,8 @@ separately here.
 
 ## Unreleased
 
+- Group the seeded ui planes apart from services, and split content into kind and search
+
 ## 0.5.7 — 2026-10-25
 
 - Release nuspace 0.5.7, built on nuspace-ui 0.5.6 and nuverse 0.3.4

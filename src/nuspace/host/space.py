@@ -7,12 +7,12 @@ inside :func:`~nuspace.system.kernel.open_kernel` after reconcile:
 
 1. :func:`~nuspace.system.services.ensure_system`: the service planes, made
    where missing;
-2. :func:`~nuspace.system.home.ensure_home`,
-   :func:`~nuspace.system.settings.ensure_settings` and
-   :func:`~nuspace.system.search.ensure_search`: the home, settings and
+2. :func:`~nuspace.system.ui.home.ensure_home`,
+   :func:`~nuspace.system.ui.settings.ensure_settings` and
+   :func:`~nuspace.system.ui.search.ensure_search`: the home, settings and
    search planes, made where missing, so they exist before the web device
    serves;
-3. :func:`~nuspace.system.home.write_info`: ``Space.state.info`` for this
+3. :func:`~nuspace.system.info.write_info`: ``Space.state.info`` for this
    open (space path, when, versions);
 4. :func:`~nuspace.system.services.nav.clear_connections`: tabs of a previous
    run dropped, so nav never brings a plane up for one (D34);
@@ -38,13 +38,14 @@ from typing import TYPE_CHECKING
 
 import nu
 from nuspace.ext import RegistryWarning, space_registry
-from nuspace.system.home import ensure_home, write_info
+from nuspace.system.info import write_info
 from nuspace.system.kernel import DEFAULT_SPARES, init_start, open_kernel, store
-from nuspace.system.search import ensure_search
 from nuspace.system.services import ensure_system
 from nuspace.system.services import init as init_service
 from nuspace.system.services.nav import clear_connections
-from nuspace.system.settings import ensure_settings
+from nuspace.system.ui.home import ensure_home
+from nuspace.system.ui.search import ensure_search
+from nuspace.system.ui.settings import ensure_settings
 from nuspace.system.utils import park
 
 

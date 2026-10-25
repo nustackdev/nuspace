@@ -14,10 +14,12 @@ from nuspace import ops
 from nuspace.ext import space_registry
 from nuspace.ops.utils import atomic, atomic_state
 from nuspace.shapes import RECENTS_CAP, CellState, Reroot, Space, reroot
-from nuspace.system import home, settings
 from nuspace.system.devices.web.env import session_env
 from nuspace.system.devices.web.sidebar import rows
+from nuspace.system.info import versions, write_info
 from nuspace.system.kernel.body import Rewrites
+from nuspace.system.ui import home, settings
+from nuspace.system.ui.seed import seeded_id
 from nuspace.system.utils import redraws
 from nustd.ui import Session
 from nustd.ui.core import OP_NOTIFY, Frame, WsSession
@@ -42,13 +44,13 @@ async def test_home_is_seeded_once_and_left_alone_after_edits(store):
     assert row["meta"] == {"editable": True, "full_width": False, "icon": home.ICON}
     cells = await store.read(ops.cell_rows(home.PLANE))
     assert [(c["id"], c["name"], c["prog"]) for c in cells] == [
-        (home.seeded_id(home.PLANE, name), name, source) for name, source in home.CELLS
+        (seeded_id(home.PLANE, name), name, source) for name, source in home.CELLS
     ]
 
     # The owner edits it: a cell gone, one rewritten, the plane renamed.
     await store.run(
-        ops.remove_cell(home.seeded_id(home.PLANE, "start"))
-        >> ops.set_prog(home.seeded_id(home.PLANE, "header"), "def out():\n    return None\n")
+        ops.remove_cell(seeded_id(home.PLANE, "start"))
+        >> ops.set_prog(seeded_id(home.PLANE, "header"), "def out():\n    return None\n")
         >> ops.rename_plane(home.PLANE, "Mine")
     )
     await store.run(home.ensure_home())
@@ -69,20 +71,20 @@ async def test_home_is_first_in_the_sidebar_tree(store):
 
 async def test_write_info(store, tmp_path):
     before = time.time()
-    await store.run(home.write_info(str(tmp_path)))
+    await store.run(write_info(str(tmp_path)))
     info = await store.read(Space.state.info.extract())
     assert info["path"] == str(tmp_path)
     assert info["opened"] >= before
-    assert info["versions"] == home.versions()
+    assert info["versions"] == versions()
     assert "nuspace" in info["versions"]
     # Nothing of the content kinds: a reader takes them off the registry.
     assert set(info) == {"path", "opened", "versions"}
-    await store.run(home.write_info(None))
+    await store.run(write_info(None))
     assert await store.read(Space.state.info.path) == ""
 
 
 def test_versions_leaves_out_what_is_not_installed():
-    got = home.versions(("nuspace", "no-such-package-here"))
+    got = versions(("nuspace", "no-such-package-here"))
     assert list(got) == ["nuspace"]
 
 
@@ -220,7 +222,7 @@ async def _frames(store, source: str) -> dict:
 
 
 async def test_header_draws_the_space_line(store, tmp_path):
-    await store.run(home.write_info(str(tmp_path)))
+    await store.run(write_info(str(tmp_path)))
     info = Space.state.info
     await store.run(atomic(info.opened.set(nu.Float(time.time() - 3725.0))))
     (line,) = (await _frames(store, home.HEADER)).values()
