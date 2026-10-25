@@ -2,8 +2,8 @@
 
 ## Packages shipped from this repo
 
-- **nuspace** (the runtime, the `nuspace` command) — 0.5.6
-- **nuspace-ui** (the compiled web bundle) — 0.5.5
+- **nuspace** (the runtime, the `nuspace` command) — 0.5.7
+- **nuspace-ui** (the compiled web bundle) — 0.5.6
 
 Below is the changelog for **nuspace** - the full commit stream. Newest first.
 The `nuspace-ui` wheel is the same source tree's vite output and is not tracked
@@ -11,6 +11,9 @@ separately here.
 
 ## Unreleased
 
+## 0.5.7 — 2026-10-25
+
+- Release nuspace 0.5.7, built on nuspace-ui 0.5.6 and nuverse 0.3.4
 - Register planes, cells and content only through installed packages, named by package and name
 - Rename snippets to cells, so planes, cells and content are the three extension points
 - Add Content items, new and find, and drop snippet ops
