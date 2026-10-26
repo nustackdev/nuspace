@@ -72,7 +72,7 @@ function keepOpen<T>(byId: Record<string, T>, open: string[]): Record<string, T>
 
 /**
  * Apply one inbound payload to this node's props. Pure given `open`, the
- * Planes the URL names, so it is testable.
+ * Planes open on the desk, so it is testable.
  *
  * Every op is keyed by plane. A `set_plane` or `set_absent` for a Plane that is
  * no longer open is a reply to a pane already closed and is dropped, and every

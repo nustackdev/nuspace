@@ -13,7 +13,7 @@
 //
 // Every Cell write is here and every Plane write the sidebar makes is in
 // ../sidebar/ops.ts. That is the whole line between the two refs. `planes.open`
-// is on this side because what the URL names is a fact about what the Viewer
+// is on this side because which panes are open is a fact about what the Viewer
 // has open, and `plane.meta` because the settings are flipped from a pane.
 //
 // ## Ids are minted here
@@ -26,11 +26,13 @@
 /** Every op the Viewer sends, with its argument shape. */
 export type Ops = {
 	/**
-	 * The full ordered list of open panes, left to right, sent whenever it
-	 * changes and on load. No kv write: the answer is a `set_plane` plus a
-	 * `set_status` per Plane.
+	 * The full ordered list of open panes, left to right, and each one's
+	 * params by Plane, sent whenever either changes and on load. One way: the
+	 * server writes it as the connection's routes and params (data: nothing
+	 * runs again), and answers with a `set_plane` plus a `set_status` per
+	 * Plane.
 	 */
-	"planes.open": { plane_ids: string[] };
+	"planes.open": { plane_ids: string[]; params: Record<string, Record<string, string>> };
 	/**
 	 * Shallow-merge into the Plane's `meta`. The pane applies it optimistically
 	 * and the next `set_plane` confirms it.

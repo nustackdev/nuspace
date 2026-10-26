@@ -24,7 +24,11 @@ describe("deleting a plane", () => {
 	});
 
 	it("sends one op and closes the subtree, landing home when nothing is left", async () => {
-		window.history.replaceState({}, "", "/a+a1");
+		const panes = [
+			{ plane: "a", params: {} },
+			{ plane: "a1", params: {} },
+		];
+		window.history.replaceState({ panes, focus: 1 }, "", "/a1");
 		vi.mocked(confirm).mockResolvedValue(true);
 		const notify = vi.fn();
 		await deletePlane(notify, tree, "a", "A");

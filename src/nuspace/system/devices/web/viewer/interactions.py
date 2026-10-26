@@ -114,9 +114,10 @@ def set_status(viewer: Ref, plane_id: StrArg, statuses: ListArg[dict]) -> Nu:
 
 
 def on_open(viewer: Ref) -> Changed:
-    """The planes the browser has open, as panes. ``{plane_ids}``.
+    """The planes the browser has open, as panes, and their params. ``{plane_ids, params}``.
 
-    The full ordered list every time, left to right, not a delta.
+    The full ordered list every time, left to right, not a delta. ``params``
+    is plane id to ``{key: str}``, one entry per pane.
     """
     return event(viewer, "planes.open")
 

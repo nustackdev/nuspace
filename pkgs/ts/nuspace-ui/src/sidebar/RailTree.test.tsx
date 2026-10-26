@@ -9,10 +9,11 @@
 // hover would wait out the delay. jsdom lays nothing out, so every box reads
 // 0 wide and fits; a cut-off title is faked by stubbing its widths.
 
-import { TooltipProvider } from "@nustackdev/ui-kit";
+import { catchAnchors, TooltipProvider } from "@nustackdev/ui-kit";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { paneRule } from "../core/router";
 import { RailTree } from "./RailTree";
 import { visibleRows } from "./tree";
 import { childrenOf, coerceTree, ROOT_ID } from "./types";
@@ -35,6 +36,8 @@ const emojiTree = coerceTree([
 
 let host: HTMLDivElement;
 let root: Root;
+// The shell's anchor catcher, which is where a row's link goes.
+let release: () => void;
 const onToggle = vi.fn();
 const pins = { ids: ["a"], pin: vi.fn(), unpin: vi.fn(), move: vi.fn() };
 
@@ -79,6 +82,7 @@ beforeEach(() => {
 	window.history.replaceState({}, "", "/");
 	host = document.createElement("div");
 	document.body.append(host);
+	release = catchAnchors(host, paneRule);
 	root = createRoot(host);
 	onToggle.mockClear();
 	vi.clearAllMocks();
@@ -86,6 +90,7 @@ beforeEach(() => {
 
 afterEach(() => {
 	act(() => root.unmount());
+	release();
 	host.remove();
 });
 
@@ -198,6 +203,24 @@ describe("rail icon and chevron slot", () => {
 		expect(seen).toEqual([false, false, true]);
 		expect(linkOf("b")?.getAttribute("href")).toBe("/b");
 		expect(window.location.pathname).toBe("/b");
+	});
+
+	it("opens an Option-click on a row beside the focused pane", () => {
+		window.history.replaceState({ panes: [{ plane: "a", params: {} }], focus: 0 }, "", "/a");
+		render([]);
+		act(() => {
+			linkOf("b")?.dispatchEvent(
+				new MouseEvent("click", { bubbles: true, cancelable: true, altKey: true }),
+			);
+		});
+		expect(window.location.pathname).toBe("/b");
+		expect(window.history.state).toEqual({
+			panes: [
+				{ plane: "a", params: {} },
+				{ plane: "b", params: {} },
+			],
+			focus: 1,
+		});
 	});
 
 	it("folds on a chevron click and never navigates", () => {

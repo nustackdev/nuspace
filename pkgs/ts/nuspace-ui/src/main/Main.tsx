@@ -1,13 +1,16 @@
-// Main: the desk. Whichever Planes the URL names, drawn side by side as one
-// strip of panes that scrolls sideways.
+// Main: the desk. Whichever Planes the router has open, drawn side by side as
+// one strip of panes that scrolls sideways.
 //
 // One Viewer, and it never asks what kind of thing it is drawing. Each pane
 // renders one Plane's Cells and roots their refs, every Cell the same way.
 //
-// Selection is router-owned: the URL /<id1>+<id2>+... is the cursor, left to
-// right, the sidebar drives it, and the route effect here ships `planes.open`
-// with the full list whenever it changes. The bare "/" lands on home, the
-// Plane the host seeds, so there is always at least one pane.
+// Selection is router-owned (../core/router.ts): the History entry holds the
+// layout, the URL is the focused pane, the sidebar and links drive it, and the
+// effect here ships `planes.open` with every pane and its params whenever
+// either changes. One way: the server writes them, and a cell that follows its
+// params reads them again (`nuspace.ui.on_params`); nothing runs again. The
+// bare "/" lands on home, the Plane the host seeds, so there is always at least
+// one pane.
 //
 // Every pane is open at once, so this is a scrolling desk (niri, PaperWM,
 // stacked notes), not a set of tabs: each pane carries its own bar, and its
@@ -39,7 +42,7 @@ import {
 	ResizablePanelGroup,
 } from "@nustackdev/ui-kit";
 import { useCallback, useEffect, useRef } from "react";
-import { onReveal, useFocusedRoute, useRoutes } from "../core/router";
+import { onReveal, useFocusedRoute, useLayout, useRoutes } from "../core/router";
 import { useTypePath } from "../core/surfaces";
 import { notifyOp } from "../core/wire";
 import {
@@ -76,11 +79,13 @@ export function Main({ path }: NodeProps) {
 	const absent = useAbsent(path);
 	const cellSpecs = useCellSpecs(path);
 	const routes = useRoutes();
+	const layout = useLayout();
 	const focused = useFocusedRoute();
 	const sidebar = useTypePath("SidebarRef");
 	const tree = usePlaneTree(sidebar);
 	const key = pathKey(path);
 	const routesKey = routes.join("+");
+	const panesKey = JSON.stringify(layout.panes);
 	const stripRef = useRef<HTMLDivElement | null>(null);
 	const { target: dropTarget, dropProps } = useCanvasDrop(routes);
 
@@ -92,14 +97,16 @@ export function Main({ path }: NodeProps) {
 		[key],
 	);
 
-	// The full list, every time it changes and once on load -- an empty one
-	// included, so the server stops shipping a Plane nobody has open. Planes
-	// and editor state of panes that closed go at the same moment.
-	// biome-ignore lint/correctness/useExhaustiveDependencies: routes is compared by its joined key; path by value.
+	// The full list with its params, every time either changes and once on
+	// load -- an empty one included, so the server stops shipping a Plane
+	// nobody has open. Planes and editor state of panes that closed go at the
+	// same moment. A focus move changes neither, so it sends nothing.
+	// biome-ignore lint/correctness/useExhaustiveDependencies: the panes are compared by their key; path by value.
 	useEffect(() => {
-		notify("planes.open", { plane_ids: routes });
+		const params = Object.fromEntries(layout.panes.map((p) => [p.plane, p.params]));
+		notify("planes.open", { plane_ids: routes, params });
 		pruneViewer(path, routes);
-	}, [routesKey, notify]);
+	}, [panesKey, notify]);
 
 	// A pane that just opened may be off the edge of a scrolled strip: bring
 	// the focused one into view whenever the set of panes changes.

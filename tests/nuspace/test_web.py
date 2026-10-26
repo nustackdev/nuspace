@@ -22,7 +22,15 @@ from nu.lang import wire
 from nuspace import ops
 from nuspace.ext import space_registry
 from nuspace.ops.utils import atomic, atomic_state
-from nuspace.shapes import EXIT_FAILED, EXIT_INTERRUPTED, EXIT_KILLED, EXIT_OK, Space, States
+from nuspace.shapes import (
+    EXIT_FAILED,
+    EXIT_INTERRUPTED,
+    EXIT_KILLED,
+    EXIT_OK,
+    Space,
+    States,
+    reroot,
+)
 from nuspace.system.devices.web import CellRoot, SessionWrap, Shell, session_env
 from nuspace.system.devices.web.sidebar import create, move, pins, registered_entries, rows
 from nuspace.system.devices.web.viewer import plane_view, slash_entries, statuses
@@ -653,6 +661,54 @@ async def test_connection_panes(store):
     finally:
         task.cancel()
         await asyncio.gather(task, return_exceptions=True)
+
+
+async def test_connection_pane_params(store):
+    """``planes.open`` carries each pane's params: written beside the routes,
+    one way, and a pane whose params move is not run again: params are data."""
+    from nuspace.system.devices.web.device import connection
+
+    await _plane(store, "p1", "One", ui=True, made_by="plain")
+    await _plane(store, "p2", "Two", ui=True, made_by="plain")
+    session = FakeSession()
+    ctx = store.ctx.bind(Session, session)
+    task = asyncio.create_task(nu.arun(connection(nu.Str("s1"), registry=REGISTRY), ctx))
+    conns = Space.connections
+    restarts = reroot(nav.Panes.restarts, nav.PLANE, nav.CELL)
+
+    def opened(params: dict) -> None:
+        session.notify(
+            ("viewer", "ops", "planes.open"), {"plane_ids": ["p1", "p2"], "params": params}
+        )
+
+    try:
+        await _until(lambda: session.writes("set_tree"), BOOT_TIMEOUT)
+        assert await store.read(conns["s1"].params) == {}
+
+        # Values as str, a plane with none as {}, a plane not open dropped.
+        opened({"p1": {"id": 1, "drop": None}, "gone": {"x": "1"}})
+        await _until_async(
+            lambda: store.read(conns["s1"].params),
+            lambda got: got == {"p1": {"id": "1"}, "p2": {}},
+        )
+
+        # p1 moves to another item: stored, and nothing is asked to run again.
+        opened({"p1": {"id": "2"}, "p2": {}})
+        await _until_async(
+            lambda: store.read(conns["s1"].params),
+            lambda got: got == {"p1": {"id": "2"}, "p2": {}},
+        )
+        assert await store.read(nu.list(restarts.keys())) == []
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+
+
+async def _until_async(read, check, timeout: float = 3.0) -> None:
+    deadline = asyncio.get_running_loop().time() + timeout
+    while not check(await read()):
+        assert asyncio.get_running_loop().time() < deadline, "timed out"
+        await asyncio.sleep(0.01)
 
 
 async def test_connection_status_hears_its_own_pane_run_only(store):

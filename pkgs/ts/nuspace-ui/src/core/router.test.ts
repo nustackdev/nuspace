@@ -1,150 +1,269 @@
-// The router in jsdom: "/" is the one path override, and lands on /home.
-// Pane moves (a drop on the panes, a tab drag) and which clicks it leaves to
-// the browser.
+// The pane router in jsdom, on the kit's real History: every move is a push
+// or a replace with the layout as the entry's state, the URL is always the
+// focused pane, back brings a layout back, "/" lands on /home, and the
+// gesture rule sends plain and Option clicks to the right move and leaves
+// the rest native.
 
-import type * as React from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { catchAnchors, History } from "@nustackdev/ui-kit";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { Layout } from "./layout";
 import {
+	closePane,
 	closePanes,
+	currentLayout,
 	currentRoutes,
 	ensureLanding,
+	focusedRoute,
+	focusPane,
 	hrefFor,
 	movePane,
-	onNavClick,
+	onReveal,
+	openAt,
+	openBeside,
+	openHere,
 	openInNewTab,
-	openPaneAt,
-	redirected,
-	replacePane,
-	routeAnchorClick,
-	routesOfHref,
-	splitRoutes,
+	paneRule,
 } from "./router";
 
-function at(path: string) {
-	window.history.replaceState({}, "", path);
+const pane = (plane: string, params: Record<string, string> = {}) => ({ plane, params });
+
+/** Land on `path`, with `layout` as the entry's state (none when left out). */
+function at(path: string, layout: Layout | null = null) {
+	window.history.replaceState(layout, "", path);
 }
 
-describe("router", () => {
-	beforeEach(() => at("/"));
+const url = () => window.location.pathname + window.location.search;
 
-	it("routes home like any plane", () => {
-		expect(hrefFor("home")).toBe("/home");
-		expect(splitRoutes("/home")).toEqual(["home"]);
-		expect(hrefFor("settings")).toBe("/settings");
-		expect(splitRoutes("/settings")).toEqual(["settings"]);
+/** The next History move, once it lands (back and forward land later). */
+function nextMove(): Promise<void> {
+	return new Promise((resolve) => {
+		const off = History.subscribe(() => {
+			off();
+			resolve();
+		});
+	});
+}
+
+describe("landing", () => {
+	it("is one pane off a copied link, with its query", () => {
+		at("/movie?id=42");
+		expect(currentLayout()).toEqual({ panes: [pane("movie", { id: "42" })], focus: 0 });
+		expect(focusedRoute()).toBe("movie");
 	});
 
-	it("names no plane at /", () => {
-		expect(hrefFor([])).toBe("/");
-		expect(splitRoutes("/")).toEqual([]);
-		expect(splitRoutes("/a/b")).toEqual([]);
-		expect(routesOfHref("/")).toEqual([]);
-	});
-
-	it("redirects / and nothing else", () => {
-		expect(redirected("/")).toBe("/home");
-		expect(redirected("/home")).toBe("/home");
-		expect(redirected("/a+b")).toBe("/a+b");
-	});
-
-	it("lands / on /home, replacing the entry", () => {
+	it("replaces / and anything that names no plane with /home", () => {
+		at("/");
 		const before = window.history.length;
 		ensureLanding();
-		expect(window.location.pathname).toBe("/home");
+		expect(url()).toBe("/home");
 		expect(window.history.length).toBe(before);
 		at("/a/b");
 		ensureLanding();
-		expect(window.location.pathname).toBe("/home");
-		at("/a+a");
+		expect(url()).toBe("/home");
+		at("/a");
 		ensureLanding();
-		expect(window.location.pathname).toBe("/a");
+		expect(url()).toBe("/a");
 	});
 
-	it("closing the last pane lands home", () => {
-		at("/home");
-		replacePane("p1");
-		expect(window.location.pathname).toBe("/p1");
-		closePanes(["p1"], true);
-		expect(window.location.pathname).toBe("/home");
-		expect(currentRoutes()).toEqual(["home"]);
+	it("redirects a later entry on / too, after it lands", async () => {
+		at("/a");
+		ensureLanding();
+		History.push("/");
+		await Promise.resolve();
+		expect(url()).toBe("/home");
 	});
 
-	it("opens a dropped plane at an index, and only focuses one already open", () => {
-		at("/a+b");
-		openPaneAt("c", 1);
-		expect(currentRoutes()).toEqual(["a", "c", "b"]);
-		openPaneAt("d", 0);
-		expect(currentRoutes()).toEqual(["d", "a", "c", "b"]);
-		openPaneAt("e", 99);
-		expect(currentRoutes()).toEqual(["d", "a", "c", "b", "e"]);
+	it("brings a reloaded layout back from the entry's state", () => {
+		const layout = { panes: [pane("a"), pane("movie", { id: "1" })], focus: 1 };
+		at("/movie?id=1", layout);
+		expect(currentLayout()).toEqual(layout);
+	});
+});
+
+describe("moves", () => {
+	beforeEach(() => at("/a"));
+
+	it("pushes a link into the focused pane, the URL its target", () => {
 		const before = window.history.length;
-		openPaneAt("a", 0);
-		expect(currentRoutes()).toEqual(["d", "a", "c", "b", "e"]);
+		openHere(pane("movie", { id: "42" }));
+		expect(url()).toBe("/movie?id=42");
+		expect(window.history.length).toBe(before + 1);
+		expect(window.history.state).toEqual({ panes: [pane("movie", { id: "42" })], focus: 0 });
+	});
+
+	it("pushes Option beside the focused pane, focus and URL moving to it", () => {
+		at("/b", { panes: [pane("a"), pane("b"), pane("c")], focus: 1 });
+		openBeside(pane("x", { k: "v" }));
+		expect(currentRoutes()).toEqual(["a", "b", "x", "c"]);
+		expect(url()).toBe("/x?k=v");
+	});
+
+	it("replaces on focus: the URL follows, no entry", () => {
+		at("/a", { panes: [pane("a"), pane("movie", { id: "1" })], focus: 0 });
+		const before = window.history.length;
+		focusPane("movie");
+		expect(url()).toBe("/movie?id=1");
+		expect(window.history.length).toBe(before);
+		expect(currentRoutes()).toEqual(["a", "movie"]);
+	});
+
+	it("pushes a close, a reorder and a drop", () => {
+		at("/a", { panes: [pane("a"), pane("b"), pane("c")], focus: 0 });
+		const before = window.history.length;
+		openAt("d", 1);
+		expect(currentRoutes()).toEqual(["a", "d", "b", "c"]);
+		movePane("a", 3);
+		expect(currentRoutes()).toEqual(["d", "b", "c", "a"]);
+		closePane("b");
+		expect(currentRoutes()).toEqual(["d", "c", "a"]);
+		expect(window.history.length).toBe(before + 3);
+		expect(url()).toBe("/a");
+	});
+
+	it("replaces a close of a deleted plane, and lands home on the last", () => {
+		const before = window.history.length;
+		closePanes(["a"], true);
+		expect(url()).toBe("/home");
 		expect(window.history.length).toBe(before);
 	});
 
-	it("moves a pane to an index counted without it", () => {
-		at("/a+b+c");
-		movePane("a", 2);
-		expect(currentRoutes()).toEqual(["b", "c", "a"]);
-		movePane("a", 0);
-		expect(currentRoutes()).toEqual(["a", "b", "c"]);
-		movePane("x", 0);
-		expect(currentRoutes()).toEqual(["a", "b", "c"]);
+	it("reveals a pane asked for while open", () => {
+		at("/a", { panes: [pane("a"), pane("b")], focus: 0 });
+		const seen: string[] = [];
+		const off = onReveal((id) => seen.push(id));
+		openHere("b");
+		expect(seen).toEqual(["b"]);
+		expect(url()).toBe("/b");
+		off();
 	});
 
-	it("opens a plane in a new browser tab on its own URL", () => {
+	it("opens a program's push in the focused pane, every other pane kept", async () => {
+		at("/b", { panes: [pane("a"), pane("b")], focus: 1 });
+		ensureLanding();
+		// A program's HistoryRef.push: a URL and no layout.
+		History.push("/movie?id=7");
+		expect(currentLayout()).toEqual({ panes: [pane("a"), pane("movie", { id: "7" })], focus: 1 });
+		expect(url()).toBe("/movie?id=7");
+		// Landing writes the layout into that entry once the move is heard.
+		await Promise.resolve();
+		expect(History.current().state).toEqual(currentLayout());
+		// Back is the desk as it was.
+		const back = nextMove();
+		History.back();
+		await back;
+		expect(currentLayout()).toEqual({ panes: [pane("a"), pane("b")], focus: 1 });
+	});
+
+	it("focuses a pane a program pushes to when it is already open", () => {
+		at("/a", { panes: [pane("a"), pane("b")], focus: 0 });
+		History.push("/b?k=v");
+		expect(currentLayout()).toEqual({ panes: [pane("a"), pane("b", { k: "v" })], focus: 1 });
+	});
+
+	it("opens a plane in a new browser tab with its pane's params", () => {
+		at("/a b?k=v");
 		const open = vi.spyOn(window, "open").mockReturnValue(null);
 		openInNewTab("a b");
-		expect(open).toHaveBeenCalledWith("/a%20b", "_blank", "noopener");
+		expect(open).toHaveBeenCalledWith("/a%20b?k=v", "_blank", "noopener");
+		expect(hrefFor("x")).toBe("/x");
 		open.mockRestore();
 	});
 });
 
-describe("clicks", () => {
-	beforeEach(() => at("/a"));
+describe("back and forward", () => {
+	it("restores the layout the entry held", async () => {
+		at("/a");
+		openBeside("b");
+		openBeside("c");
+		expect(currentRoutes()).toEqual(["a", "b", "c"]);
+		const landed = nextMove();
+		History.back();
+		await landed;
+		expect(currentRoutes()).toEqual(["a", "b"]);
+		expect(url()).toBe("/b");
+		const again = nextMove();
+		History.forward();
+		await again;
+		expect(currentRoutes()).toEqual(["a", "b", "c"]);
+	});
+});
 
-	const click = (init: MouseEventInit) =>
-		({
-			button: 0,
-			preventDefault: vi.fn(),
-			defaultPrevented: false,
-			...init,
-		}) as unknown as React.MouseEvent<HTMLElement> & { preventDefault: ReturnType<typeof vi.fn> };
+describe("gestures", () => {
+	let root: HTMLDivElement;
+	let release: () => void;
 
-	it("routes a plain click and leaves a modified one to the browser", () => {
-		const plain = click({});
-		onNavClick("b")(plain);
-		expect(plain.preventDefault).toHaveBeenCalled();
-		expect(currentRoutes()).toEqual(["b"]);
-		for (const init of [
-			{ metaKey: true },
-			{ ctrlKey: true },
-			{ shiftKey: true },
-			{ altKey: true },
-			{ button: 1 },
-		]) {
-			const e = click(init);
-			onNavClick("c")(e);
-			expect(e.preventDefault).not.toHaveBeenCalled();
-		}
-		expect(currentRoutes()).toEqual(["b"]);
+	beforeEach(() => {
+		at("/a", { panes: [pane("a"), pane("b")], focus: 0 });
+		root = document.createElement("div");
+		document.body.append(root);
+		release = catchAnchors(root, paneRule);
 	});
 
-	it("leaves a cmd/ctrl-click on a link in a cell to the browser", () => {
+	afterEach(() => {
+		release();
+		root.remove();
+	});
+
+	function link(href: string, attrs: Record<string, string> = {}) {
 		const a = document.createElement("a");
-		a.href = "/b";
-		document.body.append(a);
-		for (const init of [{ metaKey: true }, { ctrlKey: true }]) {
-			const e = new MouseEvent("click", { bubbles: true, cancelable: true, ...init });
-			Object.defineProperty(e, "target", { value: a });
-			expect(routeAnchorClick(e)).toBe(false);
+		a.setAttribute("href", href);
+		for (const [k, v] of Object.entries(attrs)) a.setAttribute(k, v);
+		root.append(a);
+		return a;
+	}
+
+	function click(a: HTMLElement, init: MouseEventInit = {}) {
+		const e = new MouseEvent("click", { bubbles: true, cancelable: true, ...init });
+		a.dispatchEvent(e);
+		return e;
+	}
+
+	it("opens a plain click in the focused pane", () => {
+		const e = click(link("/movie?id=1"));
+		expect(e.defaultPrevented).toBe(true);
+		expect(currentRoutes()).toEqual(["movie", "b"]);
+		expect(url()).toBe("/movie?id=1");
+	});
+
+	it("opens an Option click beside", () => {
+		const e = click(link("/movie?id=1"), { altKey: true });
+		expect(e.defaultPrevented).toBe(true);
+		expect(currentRoutes()).toEqual(["a", "movie", "b"]);
+	});
+
+	it("opens Option+Enter beside", () => {
+		const a = link("/x");
+		const e = new KeyboardEvent("keydown", {
+			key: "Enter",
+			altKey: true,
+			bubbles: true,
+			cancelable: true,
+		});
+		a.dispatchEvent(e);
+		expect(e.defaultPrevented).toBe(true);
+		expect(currentRoutes()).toEqual(["a", "x", "b"]);
+	});
+
+	it("opens / as home", () => {
+		click(link("/"));
+		expect(url()).toBe("/home");
+	});
+
+	it("leaves the rest native", () => {
+		const cases: [HTMLElement, MouseEventInit][] = [
+			[link("/x"), { metaKey: true }],
+			[link("/x"), { ctrlKey: true }],
+			[link("/x"), { shiftKey: true }],
+			[link("/x/y"), {}],
+			[link("/x", { target: "_blank" }), {}],
+			[link("/x", { download: "" }), {}],
+			[link("https://example.com/x"), {}],
+		];
+		for (const [a, init] of cases) {
+			const e = click(a, init);
 			expect(e.defaultPrevented).toBe(false);
 		}
-		const plain = new MouseEvent("click", { bubbles: true, cancelable: true });
-		Object.defineProperty(plain, "target", { value: a });
-		expect(routeAnchorClick(plain)).toBe(true);
-		expect(currentRoutes()).toEqual(["b"]);
-		a.remove();
+		expect(currentRoutes()).toEqual(["a", "b"]);
+		expect(url()).toBe("/a");
 	});
 });

@@ -23,7 +23,7 @@ import {
 } from "@nustackdev/ui-kit";
 import { useState } from "react";
 import { mintId } from "../core/ids";
-import { focusPane, replacePane } from "../core/router";
+import { focusPane, openHere } from "../core/router";
 import { menuItem } from "../design";
 import { DEFAULT_ICON } from "../icon/parse";
 import { MenuEntry, MenuKeys } from "../menu/Entry";
@@ -75,7 +75,7 @@ export function AddPlane({
 		});
 		if (req.parent && req.parent !== ROOT_ID) reveal(req.parent);
 		if (req.pane) focusPane(req.pane);
-		replacePane(planeId);
+		openHere(planeId);
 	};
 
 	return (

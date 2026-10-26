@@ -4,10 +4,12 @@
 // Planes only. Cells are parts of a Plane, not navigable entities, so they
 // never appear here.
 //
-// Selection is router-owned: the URL /<id1>+<id2>+... is the cursor, one id
-// per pane, and the Viewer ships `planes.open` off the route. A plain row click
-// replaces the focused pane (or opens the first), cmd/ctrl-click opens it in a
-// browser tab, and the row's split item or a drag onto the panes adds a pane.
+// Selection is router-owned (../core/router.ts): the History entry holds the
+// panes and the URL is the focused one, and the Viewer ships `planes.open` off
+// it. A row is a real link, so the shell's anchor catcher takes its click: plain
+// replaces the focused pane (or opens the first), Option opens it beside,
+// cmd/ctrl-click opens it in a browser tab, and the row's split item or a drag
+// onto the panes adds a pane.
 // Every open Plane's row is washed, the focused pane's strongest. The rail
 // itself holds no selection state.
 //

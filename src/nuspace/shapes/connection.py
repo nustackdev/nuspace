@@ -14,9 +14,12 @@ class Connection(nu.Shape):
 
     ``routes`` is where the client is: the plane ids it has open, as panes
     left to right, written whole every time (D24). It is what nav watches
-    to decide what runs for it. Services on workers read it through the
-    store, since the device itself lives in the host.
+    to decide what runs for it. ``params`` is each open pane's params, plane
+    id to ``{key: str}``, written whole beside ``routes``: what a cell reads
+    as its own (:func:`nuspace.ui.params`). Services on workers read both
+    through the store, since the device itself lives in the host.
     """
 
     routes = nustd.kv.PrimitiveListRef.slot()
+    params = nustd.kv.PrimitiveDictRef.slot()
     opened = nustd.kv.FloatRef.slot()

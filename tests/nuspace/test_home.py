@@ -246,8 +246,9 @@ async def test_recent_links_the_planes_that_still_exist(store):
     )
     got = await _frames(store, home.RECENT)
     assert got[("title",)]["label"] == "Recent"
-    assert got[("r0",)] == {"href": "/b", "label": "b"}
-    assert got[("r1",)] == {"href": "/a", "label": "Alpha"}
+    # Page links: the plane's name (its id when unnamed) and its mark.
+    assert got[("r0",)] == {"href": "/b", "title": "b", "icon": ""}
+    assert got[("r1",)] == {"href": "/a", "title": "Alpha", "icon": ""}
     assert all(got[(f"r{i}",)] is None for i in range(2, home.RECENT_SHOWN))
     assert got[("none",)] is None
 
@@ -414,14 +415,14 @@ async def test_recent_redraws_on_an_open_and_not_while_idle(store):
         await store.run(atomic(Space.state.recents.set(nu.Literal(["a"]))))
         await asyncio.sleep(0.3)
         drawn = {f.ref: f.payload for f in session.frames[idle:] if f.op != "remove"}
-        assert drawn[("r0",)] == {"href": "/a", "label": "Alpha"}
+        assert drawn[("r0",)] == {"href": "/a", "title": "Alpha", "icon": ""}
         # A plane renamed that it does not show: woken, nothing drawn.
         seen = len(session.frames)
         await store.run(ops.rename_plane("b", "Bee"))
         assert await _quiet(session, 0.5) == seen
         await store.run(ops.rename_plane("a", "Ay"))
         await asyncio.sleep(0.3)
-        assert {"href": "/a", "label": "Ay"} in [f.payload for f in session.frames[seen:]]
+        assert {"href": "/a", "title": "Ay", "icon": ""} in [f.payload for f in session.frames[seen:]]
     finally:
         await _stop(task)
 

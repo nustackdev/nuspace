@@ -5,10 +5,11 @@
 // bits of dataTransfer the row reads, and an icon's box is stubbed so the
 // pointer's half of it is known.
 
-import { TooltipProvider } from "@nustackdev/ui-kit";
+import { catchAnchors, TooltipProvider } from "@nustackdev/ui-kit";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { paneRule } from "../core/router";
 import { PinnedRow } from "./PinnedRow";
 import { coerceTree, ROOT_ID } from "./types";
 import { PLANE_MIME } from "./useRailDrag";
@@ -31,6 +32,8 @@ const tree = coerceTree([
 
 let host: HTMLDivElement;
 let root: Root;
+// The shell's anchor catcher, which is where a row's link goes.
+let release: () => void;
 const pins = { ids: [] as string[], pin: vi.fn(), unpin: vi.fn(), move: vi.fn() };
 
 function render(ids: string[], selKey = "", routes: string[] = []) {
@@ -87,12 +90,14 @@ beforeEach(() => {
 	window.history.replaceState({}, "", "/");
 	host = document.createElement("div");
 	document.body.append(host);
+	release = catchAnchors(host, paneRule);
 	root = createRoot(host);
 	vi.clearAllMocks();
 });
 
 afterEach(() => {
 	act(() => root.unmount());
+	release();
 	host.remove();
 });
 

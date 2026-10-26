@@ -555,8 +555,7 @@ def hit(i, h):
 
     def head(place):
         plane, label = nu.str(place["plane"]), nu.str(place["label"])
-        title = ops.snapshot(ops.plane_title(plane))
-        linked = row.head.link.set(href=nu.Str("/") + plane, label=title)
+        linked = nuspace.ui.page_link(row.head.link, plane)
         return nu.IfDo(plane != "", linked, row.head.where.set("Space")) >> row.head.kind.set(label)
 
     # One draw of what the item holds now, read in a snapshot.

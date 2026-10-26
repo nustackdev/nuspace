@@ -5,9 +5,10 @@ the sidebar and the viewer. A ref's wire address is its chain and only its
 chain, so ``Shell.viewer`` resolves at ``("viewer",)`` and a cell drawn on it
 lands two levels below.
 
-There is no route slot. The routes live in the store
-(``connections[sid].routes``), written by the device from the viewer's
-``planes.open`` (D15); nothing reads them off the browser.
+There is no route slot. What a tab has open lives in the store
+(``connections[sid].routes`` and ``.params``), written by the device from the
+viewer's ``planes.open``, which the browser sends one way (D15, D35); nothing
+reads them off the browser.
 
 :class:`Boot` seeds one tab. The shell is a static class, because a worker
 unpickles cell chains rooted on it, so what varies per space (the viewer's

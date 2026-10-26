@@ -12,7 +12,7 @@
 
 import type * as React from "react";
 import { useEffect, useState } from "react";
-import { movePane, openPaneAt } from "../core/router";
+import { movePane, openAt } from "../core/router";
 import { PIN_MIME } from "../sidebar/PinnedRow";
 import { pinDropIndex } from "../sidebar/pin";
 import { PLANE_MIME } from "../sidebar/useRailDrag";
@@ -87,7 +87,7 @@ export function useCanvasDrop(routes: string[]) {
 			if (moving) {
 				const index = pinDropIndex(routes, moving, paneSlot(routes, to));
 				if (index !== null) movePane(moving, index);
-			} else if (id) openPaneAt(id, paneSlot(routes, to));
+			} else if (id) openAt(id, paneSlot(routes, to));
 		},
 		onDragLeave: (e: React.DragEvent) => {
 			if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setTarget(null);

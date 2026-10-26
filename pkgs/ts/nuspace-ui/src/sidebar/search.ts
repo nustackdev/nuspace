@@ -3,7 +3,7 @@
 // window, open it and put the keyboard in its form.
 
 import { useEffect } from "react";
-import { replacePane } from "../core/router";
+import { openHere } from "../core/router";
 
 /** The search Plane's id, fixed by the host. */
 export const SEARCH_PLANE = "search";
@@ -40,7 +40,7 @@ function focusForm(): void {
 
 /** Open the search Plane in the focused pane, or focus it where it is open, then its form. */
 export function openSearch(): void {
-	replacePane(SEARCH_PLANE);
+	openHere(SEARCH_PLANE);
 	focusForm();
 }
 

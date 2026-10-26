@@ -24,7 +24,7 @@
 import { cn, IconButton, Tooltip, TooltipContent, TooltipTrigger } from "@nustackdev/ui-kit";
 import type * as React from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { hrefFor, onNavClick, openPane } from "../core/router";
+import { hrefFor } from "../core/router";
 import { railDragging, railPin, railPinDropLine, railPins, railPinsFade } from "../design";
 import { PlaneIcon } from "../icon/PlaneIcon";
 import { planeIcon } from "../icon/parse";
@@ -171,7 +171,6 @@ function PinStrip({
 				const title = row.title || "Untitled";
 				const selected = id === selKey;
 				const aimed = target?.index === index ? target.edge : null;
-				const navClick = onNavClick(id);
 				return (
 					<Tooltip key={id}>
 						<TooltipTrigger asChild>
@@ -191,16 +190,11 @@ function PinStrip({
 									aria-current={selected ? "page" : undefined}
 									data-pin={id}
 									draggable
-									onClick={(e) => {
-										// The tree row's click: open it and reveal what is inside it,
-										// beside the others with Option, as a row does.
+									// The tree row's click, through the shell's anchor catcher:
+									// in the focused pane, beside the others with Option. Here
+									// it only reveals what is inside it.
+									onClick={() => {
 										if (row.children.length) reveal(id);
-										if (e.altKey && e.button === 0) {
-											e.preventDefault();
-											openPane(id);
-											return;
-										}
-										navClick(e);
 									}}
 									onDragStart={(e) => {
 										e.dataTransfer.effectAllowed = "move";

@@ -14,12 +14,14 @@ What a host and a program need, without knowing the layers:
   ``class Tick(nuspace.CellState)``, and :class:`States`, the tag of the
   store they land in, for a program bracketing its own state;
 - :mod:`ops`, and the few a host reaches for first: :func:`boot`,
-  :func:`unboot`, :func:`supervise`, :func:`enable_react`, :func:`env`.
+  :func:`unboot`, :func:`supervise`, :func:`enable_react`, :func:`env`;
+- :mod:`ui`, what a cell reads its params and links planes with:
+  ``ui.params()``, ``ui.href("results")``, ``ui.page_link(ref, plane_id)``.
 
 Workers import this package: nothing here may pull in a server.
 """
 
-from nuspace import content, ops, shapes
+from nuspace import content, ops, shapes, ui
 from nuspace.content import Content
 from nuspace.ext import TEXT_CELL, CellSpec, ContentSpec, Extension, PlaneSpec
 from nuspace.host import open_space
@@ -55,6 +57,7 @@ __all__ = [
     "ops",
     "shapes",
     "supervise",
+    "ui",
     "unboot",
     "unsupervise",
 ]

@@ -1,166 +1,160 @@
-// The router. A route is which Planes are open, left to right, and nothing
-// else.
+// The pane router: the desk's layout off the kit's History entry, and the
+// moves that change it.
 //
-// One segment: /<id1>+<id2>+... A Plane id never contains `+`, so the split
-// is unambiguous, and each id is URI-encoded on its own. Home is a Plane like
-// any other, at /home. Bare "/" names no Plane and is the one path override:
-// it always lands on /home, replacing the history entry (see `redirected`).
-// Anything that means "go home", closing the last pane included, goes to "/"
-// and lets that redirect decide. A Plane appears at most once: opening one
-// that is already open focuses its pane instead of drawing it twice.
+// The layout and its URL are ./layout.ts: the entry's state is the layout
+// `{panes: [{plane, params}], focus}`, the URL is the focused pane
+// (`/movie?id=42`), and an entry with no layout is one pane off its URL.
+// History is the only writer of browser history. This module listens to it,
+// once, and every move here is a pure layout move written back through it:
 //
-// Which pane has focus lives here too, beside the routes, because both the
-// sidebar (what a plain click replaces) and the Viewer (which pane is drawn as
-// focused) read it. It is not in the URL: back and forward move the panes,
-// and focus follows whatever is still open.
+//   a link followed, a sidebar click   push    openHere
+//   Option on a link or a row          push    openBeside
+//   a drop on the desk                 push    openAt
+//   close, drag or reorder a pane      push    close / move (back undoes it)
+//   focus another pane                 replace focus (the URL follows it)
+//
+// Anyone else's push or replace (a program's `HistoryRef.push`, a link the
+// kit pushes by default) carries no layout. The desk reads it as a place
+// opened in the focused pane, every other pane kept, and landing writes that
+// layout into the entry so back and reload bring it back. Nobody but the user closes
+// a pane; a program says where and never touches the desk.
+//
+// Back, forward and reload are the browser's: the entry comes back with its
+// state, and everything that reads the layout redraws. Nothing here keeps a
+// copy of it. Telling the server what is open is the viewer's
+// (../main/Main.tsx), one way, off the same reads.
+//
+// Links are the kit's AnchorCatcher on the shell with `paneRule` below: a
+// plain click or Enter opens in the focused pane, Option opens beside, and
+// anything that is not a pane URL (a deeper path, a hash) is left native.
+//
+// "/" is home: it reads as the home pane, and `ensureLanding` replaces it
+// with /home, at boot and whenever an entry lands on it.
 //
 // Not part of the nustd.ui bridge -- purely browser-side.
 
-import type React from "react";
+import { type AnchorRule, type Entry, History, type Move } from "@nustackdev/ui-kit";
 import { useSyncExternalStore } from "react";
+import type { Layout, Params, Target } from "./layout";
+import * as L from "./layout";
 
-const SEP = "+";
+export type { Layout, PaneEntry, Params, Target } from "./layout";
+export { HOME, layoutOf, targetOfHref, urlOf } from "./layout";
 
-/** The home Plane's id, fixed by the host. Only the redirect reads it. */
-const HOME = "home";
+// -- Reading -----------------------------------------------------------------
 
-/** The plane ids in `pathname`, left to right. Empty when it names none. */
-export function splitRoutes(pathname: string): string[] {
-	const parts = pathname.split("/").filter((s) => s.length > 0);
-	if (parts.length !== 1) return [];
-	const out: string[] = [];
-	for (const raw of parts[0].split(SEP)) {
-		if (!raw) continue;
-		let id: string;
-		try {
-			id = decodeURIComponent(raw);
-		} catch {
-			continue;
-		}
-		if (id && !out.includes(id)) out.push(id);
-	}
-	return out;
+// The layout of the entry the page is on, rebuilt only when the entry is a new
+// one. The plane list keeps its identity while the planes stay the same, so a
+// focus move or a params change re-renders nothing that only lists them.
+let read: { entry: Entry; layout: Layout; routes: string[] } | null = null;
+
+function snapshot() {
+	const entry = History.current();
+	if (read?.entry === entry) return read;
+	const layout = laid.get(entry) ?? L.layoutOf(entry);
+	const planes = L.planesOf(layout);
+	const routes =
+		read && read.routes.length === planes.length && read.routes.every((id, i) => id === planes[i])
+			? read.routes
+			: planes;
+	read = { entry, layout, routes };
+	return read;
 }
 
-/** The Planes the live URL names. Read directly: callable outside a render. */
+/**
+ * The layouts of entries pushed without one (a program's `HistoryRef.push`):
+ * the place opened in the focused pane of the desk the move left, every
+ * other pane kept. Worked out as the move is heard, so no reader ever sees
+ * the desk without its other panes; landing (`ensureLanding`) then writes it
+ * into the entry.
+ */
+const laid = new WeakMap<Entry, Layout>();
+
+function lay(move: Move): void {
+	const { entry, previous } = move;
+	if (move.kind === "pop" || L.stateLayout(entry.state) !== null) return;
+	const plane = L.planeOfPath(entry.path);
+	if (!plane) return;
+	const was = laid.get(previous) ?? L.layoutOf(previous);
+	laid.set(entry, L.openHere(was, { plane, params: { ...entry.query } }));
+}
+
+/** The desk's layout now. Callable outside a render. */
+export function currentLayout(): Layout {
+	return snapshot().layout;
+}
+
+/** The Planes open, left to right. Callable outside a render. */
 export function currentRoutes(): string[] {
-	return splitRoutes(window.location.pathname);
+	return snapshot().routes;
 }
 
-/**
- * The URL a list of Planes resolves to. Exported so the sidebar can render
- * real anchors (kit `NavLink` is an `<a>`): cmd/ctrl-click and middle-click
- * open a browser tab, the status bar previews it, and the click handler only
- * has to suppress the default navigation of a plain click.
- */
-export function hrefFor(planeIds: string | string[]): string {
-	const ids = (Array.isArray(planeIds) ? planeIds : [planeIds]).filter(Boolean);
-	return `/${ids.map(encodeURIComponent).join(SEP)}`;
+/** The focused pane's Plane, "" with none. Callable outside a render. */
+export function focusedRoute(): string {
+	const layout = currentLayout();
+	return layout.panes[layout.focus]?.plane ?? "";
 }
 
-/** The one path override: bare "/" lands on home. Every other URL is itself. */
-export function redirected(url: string): string {
-	return url === "/" ? `/${HOME}` : url;
+/** The params of the pane showing `plane`, {} when it is not open. */
+export function paramsOf(plane: string): Params {
+	return currentLayout().panes.find((p) => p.plane === plane)?.params ?? {};
 }
 
-/**
- * The routes a same-origin href names, or null when it is not a route: another
- * origin, more than one path segment, or anything after the path (a query or
- * a hash is left to the browser). Bare "/" is no Planes, which lands home.
- */
-export function routesOfHref(href: string): string[] | null {
-	let url: URL;
-	try {
-		url = new URL(href, window.location.href);
-	} catch {
-		return null;
-	}
-	if (url.origin !== window.location.origin || url.search || url.hash) return null;
-	if (url.pathname.split("/").filter(Boolean).length > 1) return null;
-	return splitRoutes(url.pathname);
-}
-
-// -- The store ---------------------------------------------------------------
-
-const subscribers = new Set<() => void>();
-
-function emit(): void {
-	for (const cb of subscribers) cb();
-}
+// One History subscription for the whole router, fanned out to every reader,
+// landing included (see `ensureLanding`). Held while anyone listens.
+const readers = new Set<() => void>();
+let unlisten: (() => void) | null = null;
 
 function subscribe(cb: () => void): () => void {
-	subscribers.add(cb);
-	const onPop = () => {
-		land();
-		cb();
-	};
-	window.addEventListener("popstate", onPop);
+	readers.add(cb);
+	unlisten ??= History.subscribe((move) => {
+		lay(move);
+		for (const fn of [...readers]) fn();
+	});
 	return () => {
-		subscribers.delete(cb);
-		window.removeEventListener("popstate", onPop);
+		readers.delete(cb);
+		if (readers.size === 0 && unlisten) {
+			unlisten();
+			unlisten = null;
+		}
 	};
 }
 
-/** The pathname is the snapshot: a string, so it is stable by value. */
-function getPath(): string {
-	return window.location.pathname;
+/** The desk's layout, re-rendering on every move that changes it. */
+export function useLayout(): Layout {
+	return useSyncExternalStore(subscribe, currentLayout, currentLayout);
 }
 
-/** The focused Plane as last set, which may since have been closed. */
-let focusedRaw = "";
-
-/** The focused pane, resolved against what is open: the last one when the
- *  remembered one is gone, "" when nothing is open. */
-function resolveFocus(routes: string[]): string {
-	if (focusedRaw && routes.includes(focusedRaw)) return focusedRaw;
-	return routes.length ? routes[routes.length - 1] : "";
-}
-
-function getFocus(): string {
-	return resolveFocus(currentRoutes());
-}
-
-// Memoised by pathname, so every caller in a render sees the same array.
-let memoPath: string | null = null;
-let memoRoutes: string[] = [];
-
-function routesOf(pathname: string): string[] {
-	if (pathname !== memoPath) {
-		memoPath = pathname;
-		memoRoutes = splitRoutes(pathname);
-	}
-	return memoRoutes;
-}
-
-/** The Planes this tab has open, left to right. */
+/** The Planes open, left to right. */
 export function useRoutes(): string[] {
-	return routesOf(useSyncExternalStore(subscribe, getPath, getPath));
-}
-
-/** The focused pane's Plane, or "" when nothing is open. Outside a render. */
-export function focusedRoute(): string {
-	return getFocus();
+	return useSyncExternalStore(subscribe, currentRoutes, currentRoutes);
 }
 
 /** The focused pane's Plane, or "" when nothing is open. */
 export function useFocusedRoute(): string {
-	return useSyncExternalStore(subscribe, getFocus, getFocus);
+	return useSyncExternalStore(subscribe, focusedRoute, focusedRoute);
 }
 
-// -- Moves -------------------------------------------------------------------
-
-function go(ids: string[], replace = false): void {
-	const url = redirected(hrefFor(ids));
-	if (window.location.pathname !== url) {
-		if (replace) window.history.replaceState({}, "", url);
-		else window.history.pushState({}, "", url);
-	}
-	emit();
+/** A pane's URL, for a real anchor: `/<plane>`, or `/<plane>?<params>`. */
+export function hrefFor(plane: string, params: Params = {}): string {
+	return L.hrefOf({ plane, params });
 }
 
-// A pane asked for by a plane that is already open (a sidebar click, "Open
-// on desk", a drop) takes focus and should come on screen. The routes do not
-// change, so nothing re-renders to notice: the desk listens here instead.
+// -- Moving ------------------------------------------------------------------
+
+/**
+ * Write `next` through History: its focused pane's URL, the layout as state.
+ * The layout the page already shows is no move, even on an entry that has no
+ * state yet (a copied link), so it never adds an entry nothing changed in.
+ */
+function commit(next: Layout, kind: "push" | "replace" = "push"): void {
+	if (JSON.stringify(next) === JSON.stringify(currentLayout())) return;
+	History[kind](L.urlOf(next), next);
+}
+
+// A pane asked for while it is already open (a sidebar click, "Open on desk",
+// a drop) takes focus and should come on screen. The planes may not change, so
+// nothing re-renders to notice: the desk listens here instead.
 const revealers = new Set<(planeId: string) => void>();
 
 /** Listen for an open pane being asked for again. Returns the unsubscribe. */
@@ -173,65 +167,44 @@ function reveal(planeId: string): void {
 	for (const fn of revealers) fn(planeId);
 }
 
-/** Mark a pane focused. No history entry: focus is not a place. */
-export function focusPane(planeId: string): void {
-	if (focusedRaw === planeId) return;
-	focusedRaw = planeId;
-	emit();
+function targetOf(to: string | Target): Target {
+	return typeof to === "string" ? { plane: to, params: {} } : to;
+}
+
+/** One open move: written, and the pane revealed if it was open already. */
+function opening(to: string | Target, move: (layout: Layout, target: Target) => Layout): void {
+	const target = targetOf(to);
+	if (!target.plane) return;
+	const layout = currentLayout();
+	const was = L.indexOf(layout, target.plane) >= 0;
+	commit(move(layout, target));
+	if (was) reveal(target.plane);
+}
+
+/** Open in the focused pane: a link, a sidebar click. A Plane id is that Plane with no params. */
+export function openHere(to: string | Target): void {
+	opening(to, L.openHere);
+}
+
+/** Open beside the focused pane, focused: Option on a link or a row, "Open on desk". */
+export function openBeside(to: string | Target): void {
+	opening(to, L.openBeside);
+}
+
+/** Open as a new pane at `index` (the end when out of range): a drop on the desk. */
+export function openAt(planeId: string, index: number): void {
+	opening(planeId, (layout, target) => L.openAt(layout, target, index));
 }
 
 /**
- * Put `planeId` in the focused pane, or open the first pane when none is. If
- * it is already open elsewhere, that pane just takes focus.
- */
-export function replacePane(planeId: string): void {
-	if (!planeId) return;
-	const routes = currentRoutes();
-	if (routes.includes(planeId)) {
-		focusPane(planeId);
-		reveal(planeId);
-		return;
-	}
-	const at = routes.indexOf(resolveFocus(routes));
-	const next = at < 0 ? [planeId] : routes.map((id, i) => (i === at ? planeId : id));
-	focusedRaw = planeId;
-	go(next);
-}
-
-/** Append a pane on the right and focus it. Already open: focus it. */
-export function openPane(planeId: string): void {
-	if (!planeId) return;
-	const routes = currentRoutes();
-	focusedRaw = planeId;
-	if (routes.includes(planeId)) {
-		emit();
-		reveal(planeId);
-		return;
-	}
-	go([...routes, planeId]);
-}
-
-/**
- * Close the panes showing any of `planeIds`. `replace` rewrites the current
- * history entry instead of pushing one, for a Plane that no longer exists and
- * that the back button should not bring back.
+ * Close the panes showing any of `planeIds`. `replace` rewrites the entry
+ * instead of pushing one, for a Plane that no longer exists and that the back
+ * button should not bring back.
  */
 export function closePanes(planeIds: string[], replace = false): void {
-	const gone = new Set(planeIds);
-	const routes = currentRoutes();
-	const next = routes.filter((id) => !gone.has(id));
-	if (next.length === routes.length) return;
-	if (gone.has(focusedRaw)) {
-		// Focus moves to the neighbour on the left of the first closed pane,
-		// or the new leftmost when that was the first.
-		const first = routes.findIndex((id) => gone.has(id));
-		const left = routes
-			.slice(0, first)
-			.reverse()
-			.find((id) => !gone.has(id));
-		focusedRaw = left ?? next[0] ?? "";
-	}
-	go(next, replace);
+	const layout = currentLayout();
+	const next = L.close(layout, planeIds);
+	if (next !== layout) commit(next, replace ? "replace" : "push");
 }
 
 /** Close one pane. */
@@ -239,113 +212,63 @@ export function closePane(planeId: string): void {
 	closePanes([planeId]);
 }
 
-/**
- * Open `planeId` as a new pane at `index` among the open ones, the end when out
- * of range, and focus it. Already open: focus it, as `openPane` does.
- */
-export function openPaneAt(planeId: string, index: number): void {
-	if (!planeId) return;
-	const routes = currentRoutes();
-	focusedRaw = planeId;
-	if (routes.includes(planeId)) {
-		emit();
-		reveal(planeId);
-		return;
-	}
-	const next = [...routes];
-	next.splice(index >= 0 && index < next.length ? index : next.length, 0, planeId);
-	go(next);
-}
-
-/**
- * Move an open pane to `index` among the others (counted without it), the end
- * when out of range, and focus it. A history entry, like any other pane move.
- */
+/** Move the pane showing `planeId` to `index` among the others, focused. */
 export function movePane(planeId: string, index: number): void {
-	const routes = currentRoutes();
-	if (!routes.includes(planeId)) return;
-	const next = routes.filter((id) => id !== planeId);
-	next.splice(index >= 0 && index < next.length ? index : next.length, 0, planeId);
-	focusedRaw = planeId;
-	go(next);
+	commit(L.move(currentLayout(), planeId, index));
 }
 
-/** Open a Plane in a new browser tab, on its own URL. */
+/** Focus the pane showing `planeId`. A replace: focus is not a place, the URL just follows it. */
+export function focusPane(planeId: string): void {
+	const layout = currentLayout();
+	const next = L.focus(layout, L.indexOf(layout, planeId));
+	if (next !== layout) commit(next, "replace");
+}
+
+/** Open a Plane in a new browser tab, on its own URL, with the params its pane has. */
 export function openInNewTab(planeId: string): void {
-	window.open(hrefFor(planeId), "_blank", "noopener");
+	window.open(hrefFor(planeId, paramsOf(planeId)), "_blank", "noopener");
 }
 
 /**
- * Follow a list of Planes the way the sidebar follows one: a single Plane goes
- * in the focused pane, a longer list replaces the panes.
+ * The gesture rule for in-app links, the AnchorCatcher's on the shell: plain
+ * opens in the focused pane, Option opens beside. False, so native, for
+ * anything that is not a pane URL.
  */
-export function followRoutes(ids: string[]): void {
-	if (ids.length === 1) {
-		replacePane(ids[0]);
-		return;
-	}
-	focusedRaw = ids[ids.length - 1] ?? "";
-	go(ids);
-}
-
-type Click = Pick<MouseEvent, "button" | "shiftKey" | "altKey" | "metaKey" | "ctrlKey">;
-
-/**
- * A plain primary click. Any modifier or another button is the browser's: a
- * new tab (cmd/ctrl, middle), a new window (shift), a download (alt).
- */
-export function isNavClick(e: Click): boolean {
-	return e.button === 0 && !e.shiftKey && !e.altKey && !e.metaKey && !e.ctrlKey;
-}
-
-/**
- * Route a click on an anchor inside a cell's ui through the router, so a
- * same-origin link to /<id> or /<a>+<b> switches panes instead of reloading
- * the plane. Returns whether it took the click; anything else (another origin,
- * `_blank`, a download, a modified click) is left to the browser.
- */
-export function routeAnchorClick(e: MouseEvent): boolean {
-	if (e.defaultPrevented || !isNavClick(e)) return false;
-	const target = e.target instanceof Element ? e.target : null;
-	const anchor = target?.closest("a[href]");
-	if (!(anchor instanceof HTMLAnchorElement)) return false;
-	if (anchor.hasAttribute("download")) return false;
-	const where = anchor.getAttribute("target");
-	if (where && where !== "_self") return false;
-	const ids = routesOfHref(anchor.href);
-	if (!ids) return false;
-	e.preventDefault();
-	followRoutes(ids);
+export const paneRule: AnchorRule = (href, gesture) => {
+	const target = L.targetOfHref(href);
+	if (!target) return false;
+	if (gesture === "alt") openBeside(target);
+	else openHere(target);
 	return true;
-}
+};
+
+// -- Landing -----------------------------------------------------------------
 
 /**
- * Click handler for an anchor that navigates inside nuspace. A plain click
- * replaces the focused pane. A modified click or another button is left to
- * the browser, so cmd/ctrl-click and the middle button open a new tab.
+ * Every entry the page lands on gets its layout written in, in place: "/" and
+ * anything else that names no Plane as /home, the tab's first entry as the
+ * one pane it names, and a push the desk did not make (a program's) as the
+ * place opened in the focused pane, the other panes kept. So back and reload
+ * always find a layout.
  */
-export function onNavClick(planeId: string) {
-	return (e: React.MouseEvent<HTMLElement>) => {
-		if (e.defaultPrevented || !isNavClick(e)) return;
-		e.preventDefault();
-		replacePane(planeId);
-	};
+function land(): void {
+	const entry = History.current();
+	if (L.planeOfPath(entry.path) !== null && L.stateLayout(entry.state) !== null) return;
+	const layout = currentLayout();
+	History.replace(L.urlOf(layout), layout);
 }
+
+let landing = false;
 
 /**
- * Rewrite the live URL to what it resolves to, in place: no history entry.
- * Anything deeper than one segment is not a route, so it becomes the bare "/"
- * rather than a guess at which of its segments was meant, and "/" lands home.
- * A duplicate or empty id in the list is normalised away. Whether it moved.
+ * Landing bootstrap: the URL the tab opened on, made a pane URL, and the same
+ * for every entry after it that names no Plane (a program pushing "/"). A
+ * reader on the router's one subscription, for the tab's whole life; after the
+ * move that landed there has been heard, not inside it.
  */
-function land(): boolean {
-	const url = redirected(hrefFor(currentRoutes()));
-	if (window.location.pathname === url) return false;
-	window.history.replaceState({}, "", url);
-	return true;
-}
-
-/** Landing bootstrap: the URL the tab opened on, rewritten by `land`. */
 export function ensureLanding(): void {
-	if (land()) emit();
+	land();
+	if (landing) return;
+	landing = true;
+	subscribe(() => queueMicrotask(land));
 }

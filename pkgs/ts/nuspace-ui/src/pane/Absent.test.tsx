@@ -15,8 +15,18 @@ import { ABSENT_TEXT, Pane } from "./Pane";
 let host: HTMLDivElement;
 let root: Root;
 
+/** Land on a desk of `path`'s planes, "/a+b", the last one focused. */
 function at(path: string) {
-	window.history.replaceState({}, "", path);
+	const panes = path
+		.slice(1)
+		.split("+")
+		.filter(Boolean)
+		.map((plane) => ({ plane, params: {} }));
+	window.history.replaceState(
+		{ panes, focus: panes.length - 1 },
+		"",
+		`/${panes.at(-1)?.plane ?? ""}`,
+	);
 }
 
 function render(planeId: string, absent: AbsentReason) {

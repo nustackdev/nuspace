@@ -4,12 +4,12 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { replacePane } from "../core/router";
+import { openHere } from "../core/router";
 import { AddPlane } from "./AddPlane";
 import { closeAddPlane, openAddPlane } from "./add";
 import { ROOT_ID } from "./types";
 
-vi.mock("../core/router", () => ({ focusPane: vi.fn(), replacePane: vi.fn() }));
+vi.mock("../core/router", () => ({ focusPane: vi.fn(), openHere: vi.fn() }));
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -38,7 +38,7 @@ const notify = vi.fn();
 
 beforeEach(() => {
 	notify.mockClear();
-	vi.mocked(replacePane).mockClear();
+	vi.mocked(openHere).mockClear();
 	host = document.createElement("div");
 	document.body.append(host);
 	root = createRoot(host);
@@ -69,7 +69,7 @@ describe("AddPlane", () => {
 			made_by: "nuverse.jobs",
 			title: "Jobs",
 		});
-		expect(replacePane).toHaveBeenCalledWith(args.plane_id);
+		expect(openHere).toHaveBeenCalledWith(args.plane_id);
 		expect(document.querySelector('[cmdk-item=""]')).toBeNull();
 	});
 

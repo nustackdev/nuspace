@@ -15,9 +15,9 @@
 //
 // ## What is NOT here
 //
-// Opening a Plane. The sidebar moves the browser's URL, and what the URL now
-// names is a fact about what the Viewer has open, so `planes.open` is the
-// Viewer's op.
+// Opening a Plane. The sidebar moves the desk through the router, and which
+// panes are open is a fact about what the Viewer has open, so `planes.open` is
+// the Viewer's op.
 
 /** Every op the sidebar sends, with its argument shape. */
 export type Ops = {

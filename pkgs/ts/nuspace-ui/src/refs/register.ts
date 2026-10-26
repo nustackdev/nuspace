@@ -16,16 +16,13 @@
 // socket can dispatch anything.
 
 import { type NodeEntry, register } from "@nustackdev/ui-kit";
-import { RouteRef } from "./route";
 import { SidebarRef } from "./sidebar";
 import { ViewerRef } from "./viewer";
 
 export const nuspaceEntries: Record<string, NodeEntry> = {
 	SidebarRef,
 	ViewerRef,
-	// Structural and pulled-only: the server reads the route out of it, and it
-	// renders nothing.
-	RouteRef,
+	// Structural and write-only: a cell moving its own pane. Renders nothing.
 };
 
 for (const [type, entry] of Object.entries(nuspaceEntries)) register(type, entry);

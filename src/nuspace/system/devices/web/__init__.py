@@ -5,6 +5,7 @@
   feed.
 - :mod:`.session`: how a worker reaches a connection, and the host's book.
 - :mod:`.env`: the session env factory (D17).
+- :mod:`.pane`: the pane a cell draws in, as a ref it moves.
 - :mod:`.device`: :func:`serve_web`, the term and the envs to register.
 
 Everything here but :mod:`.device` is safe for a worker to import: a

@@ -52,7 +52,7 @@ import {
 } from "lucide-react";
 import type * as React from "react";
 import { useCallback, useRef, useState } from "react";
-import { hrefFor, onNavClick, openInNewTab, openPane, replacePane } from "../core/router";
+import { hrefFor, openBeside, openHere, openInNewTab } from "../core/router";
 import {
 	railAction,
 	railChevron,
@@ -123,7 +123,6 @@ export function PlaneRow({
 	pins: Pins;
 }) {
 	const { key, id, depth, title, hasKids, open, pos, size } = row;
-	const navClick = onNavClick(id);
 
 	const remove = useCallback(
 		() => void deletePlane(notify, tree, id, title),
@@ -133,16 +132,16 @@ export function PlaneRow({
 
 	const openOnDesk = useCallback(() => {
 		if (hasKids) reveal(key);
-		openPane(id);
+		openBeside(id);
 	}, [hasKids, id, key, reveal]);
 
 	const newTab = useCallback(() => openInNewTab(id), [id]);
 
 	const add = useCallback(() => openAddPlane({ parent: id }), [id]);
 
-	const openHere = useCallback(() => {
+	const openRow = useCallback(() => {
 		if (hasKids) reveal(key);
-		replacePane(id);
+		openHere(id);
 	}, [hasKids, id, key, reveal]);
 
 	const pinned = pins.ids.includes(id);
@@ -170,7 +169,7 @@ export function PlaneRow({
 	);
 
 	const menu: PlaneMenuProps = {
-		open: openHere,
+		open: openRow,
 		openOnDesk,
 		newTab,
 		add,
@@ -259,19 +258,13 @@ export function PlaneRow({
 						href={hrefFor(id)}
 						label={title}
 						selected={selected}
-						onClick={(e) => {
-							// Option-click opens it beside the others, as Option+Enter
-							// does. Taken before the browser, whose Option-click on a
-							// link is a download.
-							if (e.altKey && e.button === 0) {
-								e.preventDefault();
-								openOnDesk();
-								return;
-							}
-							// Opening a Plane reveals what is inside it. It never folds
-							// it: a click that toggles is a click you cannot predict.
+						// Where it goes is the shell's anchor catcher: plain in the
+						// focused pane, Option beside the others (the browser's
+						// Option-click would download it). Opening a Plane reveals
+						// what is inside it. It never folds it: a click that toggles
+						// is a click you cannot predict.
+						onClick={() => {
 							if (hasKids) reveal(key);
-							navClick(e);
 						}}
 						onDoubleClick={() => onRename(row)}
 					/>

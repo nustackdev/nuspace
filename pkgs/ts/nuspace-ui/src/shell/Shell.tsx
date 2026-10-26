@@ -6,20 +6,20 @@
 // piece of chrome the shell draws itself is the button that brings a collapsed
 // sidebar back, over the main strip's top left corner, since the sidebar's own
 // is hidden with it. The sidebar lists every Plane that draws, under a cell per group,
-// and the main strip draws whichever ones the URL names, so navigation is
-// entirely the sidebar's and the shell only places the two.
+// and the main strip draws whichever ones the router has open, so navigation is
+// the sidebar's and the links', and the shell only places the two.
 //
 // Both are found BY TYPE (see core/surfaces.ts), not by a slot name. Where
 // python hangs them is python's call, and the wire type is the one thing about
 // a region both sides already agree on.
 //
-// Links a cell draws (the kit's LinkRef, a markdown link) are plain anchors.
-// One listener on the main strip routes a click on a same-origin one to /<id>
-// or /<a>+<b> through the router (core/router.ts `routeAnchorClick`), so it
-// switches panes instead of reloading the tab. A modified click is the
-// browser's, as in the sidebar. Native, not React: it has to see anchors the kit
-// renders without handlers of ours, and it runs before the browser follows
-// them.
+// Every link is a plain anchor whose href is where it goes: a cell's (the
+// kit's LinkRef, PageLinkRef, a markdown link) and the sidebar's rows and pins
+// alike. The kit's AnchorCatcher on the shell's root hands an in-app click or
+// Enter to the pane router's rule (core/router.ts `paneRule`): plain opens in
+// the focused pane, Option beside it, and anything that is not a pane URL is
+// left to the browser, as are Cmd, Shift and middle clicks. On the root, not
+// the strip, so a sidebar row and a link in a cell are one gesture.
 //
 // The two sit in the kit's split (`ResizablePanelGroup`): the rail is a
 // collapsible panel with the kit's sidebar bounds and a px default, so it
@@ -45,10 +45,11 @@ import {
 	type ResizablePanelGroupHandle,
 	SIDEBAR_WIDTH,
 	Spinner,
+	useAnchorCatcher,
 } from "@nustackdev/ui-kit";
-import { useEffect, useLayoutEffect, useRef } from "react";
+import { useLayoutEffect, useRef } from "react";
 import { BOOTING_DELAY_MS, useAfter } from "../core/delay";
-import { routeAnchorClick } from "../core/router";
+import { paneRule } from "../core/router";
 import { useBooted, useTypePath } from "../core/surfaces";
 import { useTab } from "../core/tab";
 import {
@@ -78,7 +79,7 @@ import { RailToggle } from "../sidebar/RailHeader";
 export function Shell() {
 	const sidebar = useTypePath("SidebarRef");
 	const viewer = useTypePath("ViewerRef");
-	const mainRef = useRef<HTMLElement | null>(null);
+	const rootRef = useRef<HTMLDivElement | null>(null);
 	const booted = useBooted();
 	const slow = useAfter(!booted, BOOTING_DELAY_MS);
 	const split = useRef<ResizablePanelGroupHandle | null>(null);
@@ -97,18 +98,10 @@ export function Shell() {
 		return () => bindRail(null);
 	}, []);
 
-	useEffect(() => {
-		const main = mainRef.current;
-		if (!main) return;
-		const onClick = (e: MouseEvent) => {
-			routeAnchorClick(e);
-		};
-		main.addEventListener("click", onClick);
-		return () => main.removeEventListener("click", onClick);
-	}, []);
+	useAnchorCatcher(rootRef, paneRule);
 
 	return (
-		<div className={shellRoot}>
+		<div ref={rootRef} className={shellRoot}>
 			<ResizablePanelGroup
 				ref={split}
 				elementRef={splitEl}
@@ -138,7 +131,7 @@ export function Shell() {
 						]
 					: null}
 				<ResizablePanel key="main" id="shell-main" className={shellSlot}>
-					<main ref={mainRef} className={shellMain} data-rail={collapsed ? "collapsed" : undefined}>
+					<main className={shellMain} data-rail={collapsed ? "collapsed" : undefined}>
 						{collapsed ? (
 							<div className={shellRailOpen}>
 								<RailToggle

@@ -56,8 +56,18 @@ function box(el: Element | null) {
 	if (el) el.getBoundingClientRect = () => ({ left: 0, width: 100 }) as DOMRect;
 }
 
+/** Land on a desk of `path`'s planes, "/a+b", the last one focused. */
 function at(path: string) {
-	window.history.replaceState({}, "", path);
+	const panes = path
+		.slice(1)
+		.split("+")
+		.filter(Boolean)
+		.map((plane) => ({ plane, params: {} }));
+	window.history.replaceState(
+		{ panes, focus: panes.length - 1 },
+		"",
+		`/${panes.at(-1)?.plane ?? ""}`,
+	);
 }
 
 beforeEach(() => {

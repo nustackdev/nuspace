@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Keep the whole desk in browser history; links open here, Option opens beside
 - Group the seeded ui planes apart from services, and split content into kind and search
 
 ## 0.5.7 — 2026-10-25

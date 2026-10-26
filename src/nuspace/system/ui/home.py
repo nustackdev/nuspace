@@ -119,11 +119,12 @@ SHOWN = {RECENT_SHOWN}
 
 
 def link(shown, i):
-    ref = nustd.ui.LinkRef("r" + str(i))
+    # A page link: the plane's mark and its name, one row of a list of pages.
+    ref = nustd.ui.PageLinkRef("r" + str(i))
     one = nu.Dict(shown[i])
     return nu.IfDo(
         nu.List(shown).len() > i,
-        ref.set(href=nu.Str("/") + nu.str(one["id"]), label=nu.str(one["title"])),
+        nuspace.ui.page_link(ref, nu.str(one["id"])),
         ref.erase(),
     )
 
@@ -202,7 +203,7 @@ def first(planes, made_by):
 
 def link(ref, planes, made_by, label):
     pid = first(planes, made_by)
-    return nu.IfDo(pid != "", ref.set(href=nu.Str("/") + pid, label=label), ref.erase())
+    return nu.IfDo(pid != "", ref.set(href=nuspace.ui.href(pid), label=label), ref.erase())
 
 
 def show_planes(planes):

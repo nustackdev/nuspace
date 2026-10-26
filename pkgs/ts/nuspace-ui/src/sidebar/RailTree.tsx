@@ -29,7 +29,7 @@
 import { EmptyState } from "@nustackdev/ui-kit";
 import type * as React from "react";
 import { Fragment, useCallback, useMemo } from "react";
-import { openPane, replacePane } from "../core/router";
+import { openBeside, openHere } from "../core/router";
 import {
 	railDragging,
 	railDropInto,
@@ -109,8 +109,8 @@ export function RailTree({
 					// Option-click.
 					e.preventDefault();
 					if (row.hasKids) reveal(row.key);
-					if (e.altKey && e.key === "Enter") openPane(row.id);
-					else replacePane(row.id);
+					if (e.altKey && e.key === "Enter") openBeside(row.id);
+					else openHere(row.id);
 					break;
 				case "F2":
 					e.preventDefault();

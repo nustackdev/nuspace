@@ -6,18 +6,22 @@ cell (D1): which plane runs for a tab is the nav service's call, made from
 
 Per connection, one arm:
 
-1. ``connections[sid] = {opened: now, routes: []}``;
+1. ``connections[sid] = {opened: now, routes: [], params: {}}``;
 2. in parallel: the route arm, and the shell boot followed by the sidebar
    and viewer feeds. The route arm subscribes beside the boot rather than
    after it, so the browser's first ``planes.open`` cannot land before
    anybody listens;
 3. on every way out, ``connections[sid]`` is deleted.
 
-The route arm (D15): the viewer's ``planes.open`` carries the full ordered
-list of open planes (its panes, left to right). Deduped with order kept and
-empty ids dropped, it is written whole as ``routes``. Every plane that left
-the list has its cells erased as drawn first. The planes newly in the list
-are pushed onto ``Space.state.recents`` in the same commit (:func:`remember`).
+The route arm (D15, D44): the viewer's ``planes.open`` carries the full
+ordered list of open planes (its panes, left to right) and each pane's
+params. Deduped with order kept and empty ids dropped, the list is written
+whole as ``routes``, and the params of the planes in it as ``params``, in one
+commit. Every plane that left the list has its cells erased as drawn first.
+The planes newly in the list are pushed onto ``Space.state.recents`` in the
+same commit (:func:`remember`). Params are data: a cell that follows them
+reads them (:func:`nuspace.ui.params`), and nothing here runs a plane again.
+One way: the browser reports, nothing here asks it.
 
 What a run needs to draw on a tab is the session env, returned beside the
 term for the host to register with the kernel.
@@ -30,6 +34,7 @@ never talks to PostHog and follows the same opt out.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import TYPE_CHECKING
 
 from starlette.responses import Response
@@ -89,7 +94,7 @@ _connections = Space.connections
 def open_connection(sid: nu.StrArg) -> nu.Nu:
     """Publish connection ``sid``: opened now, no plane open. One commit."""
     row = _connections[sid]
-    return atomic(row.opened.set(nustd.time.time()) >> row.routes.set([]))
+    return atomic(row.opened.set(nustd.time.time()) >> row.routes.set([]) >> row.params.set({}))
 
 
 def close_connection(sid: nu.StrArg) -> nu.Nu:
@@ -133,29 +138,51 @@ def remember(opened: nu.Nu) -> nu.Nu:
     return nu.let(nu.List(nu.Collect(wanted)), push)
 
 
-def route_arm(viewer: Ref, sid: nu.StrArg) -> nu.Nu:
-    """Route ``sid`` to the planes the viewer has open (D15). Never ends.
+@nu.host
+def _pane_params(planes: list, given: object) -> dict[str, dict[str, str]]:
+    """The params ``given`` holds for each of ``planes``, values as str. ``{}`` for one with none."""
+    raw = given if isinstance(given, Mapping) else {}
+    out: dict[str, dict[str, str]] = {}
+    for plane in planes:
+        held = raw.get(plane)
+        pairs = held if isinstance(held, Mapping) else {}
+        out[plane] = {str(k): str(v) for k, v in pairs.items() if v is not None}
+    return out
 
-    ``planes.open`` is the full list every time. The cells of every plane
-    leaving it are erased as drawn before ``routes`` is written, so nothing
-    of a closed pane stays on screen. The planes entering it are pushed onto
-    recents in the same commit as ``routes``.
+
+def route_arm(viewer: Ref, sid: nu.StrArg) -> nu.Nu:
+    """Route ``sid`` to the panes the viewer has open (D15, D44). Never ends.
+
+    ``planes.open`` is the full list every time, with each pane's params. The
+    cells of every plane leaving it are erased as drawn before ``routes`` and
+    ``params`` are written, so nothing of a closed pane stays on screen. The
+    planes entering it are pushed onto recents in the same commit.
     """
     row = _connections[sid]
     routes = row.routes.fallback([])
 
-    def routed(wanted: nu.ObjectRef) -> nu.Nu:
+    def routed(wanted: nu.ObjectRef, given: nu.Nu) -> nu.Nu:
         kept = nu.List(wanted)
-        closed = nu.Filter(snap(routes), lambda p: kept.contains(p).not_())
-        # Read inside the commit, so a burst of opens never pushes one twice.
-        opened = kept.iter().filter(lambda p: routes.contains(p).not_())
-        write = nu.let(opened.to_list(), remember) >> row.routes.set(kept)
-        erase = nu.ForEachDo(nu.List(nu.Collect(closed)), lambda p: _erase(viewer, nu.Str(p)))
-        return erase >> atomic(nu.IfDo(_connections.contains(sid), write))
+
+        def write_params(params: nu.ObjectRef) -> nu.Nu:
+            closed = nu.Filter(snap(routes), lambda p: kept.contains(p).not_())
+            # Read inside the commit, so a burst of opens never pushes one twice.
+            opened = kept.iter().filter(lambda p: routes.contains(p).not_())
+            write = (
+                nu.let(opened.to_list(), remember)
+                >> row.routes.set(kept)
+                >> row.params.set(nu.Dict(params))
+            )
+            erase = nu.ForEachDo(nu.List(nu.Collect(closed)), lambda p: _erase(viewer, nu.Str(p)))
+            return erase >> atomic(nu.IfDo(_connections.contains(sid), write))
+
+        return nu.let(_pane_params(kept, given), write_params)
 
     def route(event: nu.Attr) -> nu.Nu:
         ids = nu.Map(field_ids(event, "plane_ids"), lambda p: nu.str(p))
-        return nu.let(nu.List(nu.Collect(nu.Unique(nu.Filter(ids, lambda p: p != "")))), routed)
+        given = nu.Dict(event).get_item("params", nu.Dict.create())
+        kept = nu.List(nu.Collect(nu.Unique(nu.Filter(ids, lambda p: p != ""))))
+        return nu.let(kept, lambda wanted: routed(wanted, given))
 
     return _arms.event("route", on_open(viewer), route)
 
