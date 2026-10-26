@@ -2,15 +2,16 @@
 
 ## Packages shipped from this repo
 
-- **nuspace** (the runtime, the `nuspace` command) — 0.6.0
-- **nuspace-ui** (the compiled web bundle) — 0.5.7
+- **nuspace** (the runtime, the `nuspace` command) — 0.6.1
+- **nuspace-ui** (the compiled web bundle) — 0.5.8
 
 Below is the changelog for **nuspace** - the full commit stream. Newest first.
 The `nuspace-ui` wheel is the same source tree's vite output and is not tracked
 separately here.
 
-## Unreleased
+## 0.6.1 — 2026-10-27
 
+- Release nuspace 0.6.1, built on nuspace-ui 0.5.8 and ui-kit 0.3.6
 - Update sidebar and seed tests for the new rail layout
 - Restructure the sidebar into nav rows, pinned, planes and extensions, one keyboard stop
 - Pick plane icons from the whole lucide set, loaded on demand
