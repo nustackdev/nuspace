@@ -373,11 +373,11 @@ export const docProgram = "flex flex-col gap-1";
 export const docSourceDirty = "flex items-center gap-1 self-end text-xs text-text-muted";
 
 /**
- * The cell's mounted ui refs. The gap is what two cells put between their
- * contents (a pad, the gap between cells, a pad: 4 + 4 + 4), so two text
- * blocks sit the same distance apart whether they share a cell or not.
+ * The cell's mounted ui: a plain block around the cell's own root node, a
+ * Column the server roots every cell's refs under (`cell_ui`). That Column
+ * spaces the refs; this adds no flow and no gap of its own.
  */
-export const docProgramFields = "flex flex-col gap-3";
+export const docProgramFields = "block min-w-0";
 
 /**
  * The line a cell that mounts nothing keeps, one line high: a kit `Badge

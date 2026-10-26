@@ -1,7 +1,7 @@
 // The plane's icon, beside its title, and the way to change it.
 //
-// Always there: the plane's own `meta.icon`, else its registered Plane's, else
-// the page icon, the same line the rail follows. A click, or Enter on it,
+// Always there: the plane's own `meta.icon`, which every plane is made with,
+// the same one the rail shows. Removing it puts the default back. A click, or Enter on it,
 // opens the picker anchored on it; that is its only job. Every plane has
 // this, editable or not: like the title, the icon is not one of its cells.
 
@@ -16,18 +16,15 @@ import { useState } from "react";
 import { docPlaneIcon } from "../design";
 import { IconPickerContent } from "../icon/IconPicker";
 import { PlaneIcon } from "../icon/PlaneIcon";
-import { planeIcon } from "../icon/parse";
+import { DEFAULT_ICON, formatIcon, planeIcon } from "../icon/parse";
 
 export function TitleIcon({
 	value,
-	registered = "",
 	onChange,
 }: {
 	/** The plane's `meta.icon`. */
 	value: unknown;
-	/** Its registered Plane's icon, the fallback. "" for none. */
-	registered?: string;
-	/** A stored spelling, "" for none. */
+	/** A stored spelling. */
 	onChange: (icon: string) => void;
 }) {
 	const [open, setOpen] = useState(false);
@@ -42,7 +39,7 @@ export function TitleIcon({
 				<TooltipTrigger asChild>
 					<PopoverTrigger asChild>
 						<button type="button" aria-label="Change icon" className={docPlaneIcon}>
-							<PlaneIcon icon={planeIcon(value, registered)} size="lg" />
+							<PlaneIcon icon={planeIcon(value)} size="lg" />
 						</button>
 					</PopoverTrigger>
 				</TooltipTrigger>
@@ -51,7 +48,7 @@ export function TitleIcon({
 			<IconPickerContent
 				value={typeof value === "string" ? value : ""}
 				onPick={set}
-				onRemove={() => set("")}
+				onRemove={() => set(formatIcon(DEFAULT_ICON))}
 				side="bottom"
 				align="start"
 			/>

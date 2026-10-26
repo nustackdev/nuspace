@@ -46,7 +46,7 @@ import type { Notify } from "./ops";
 import { PlaneRow } from "./PlaneRow";
 import type { Pins } from "./pin";
 import { showsNoPlanes, type VisibleRow } from "./tree";
-import type { PlaneTree, Registered } from "./types";
+import type { PlaneTree } from "./types";
 import { useDraft } from "./useDraft";
 import { useRailDrag } from "./useRailDrag";
 import { useRailFocus } from "./useRailFocus";
@@ -54,7 +54,6 @@ import { useRailFocus } from "./useRailFocus";
 export function RailTree({
 	tree,
 	rows,
-	registered,
 	routes,
 	selKey,
 	onToggle,
@@ -64,7 +63,6 @@ export function RailTree({
 }: {
 	tree: PlaneTree;
 	rows: VisibleRow[];
-	registered: Registered[];
 	routes: string[];
 	/** The focused pane's Plane, which is the cursor. */
 	selKey: string;
@@ -136,7 +134,7 @@ export function RailTree({
 								<PlaneRow
 									row={row}
 									index={index}
-									icon={planeIcon(row.icon, registered.find((r) => r.name === row.made_by)?.icon)}
+									icon={planeIcon(row.icon)}
 									selected={row.key === selKey}
 									open={routes.includes(row.id)}
 									tabbable={row.key === tabKey}

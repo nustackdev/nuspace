@@ -245,18 +245,18 @@ async def test_recent_links_the_planes_that_still_exist(store):
         >> atomic(Space.state.recents.set(nu.Literal(["gone", "b", "a"])))
     )
     got = await _frames(store, home.RECENT)
-    assert got[("title",)]["label"] == "Recent"
+    assert got[("recent", "title")]["label"] == "Recent"
     # Page links: the plane's name (its id when unnamed) and its mark.
-    assert got[("r0",)] == {"href": "/b", "title": "b", "icon": ""}
-    assert got[("r1",)] == {"href": "/a", "title": "Alpha", "icon": ""}
-    assert all(got[(f"r{i}",)] is None for i in range(2, home.RECENT_SHOWN))
-    assert got[("none",)] is None
+    assert got[("recent", "links", "r0")] == {"href": "/b", "title": "b", "icon": "file-text"}
+    assert got[("recent", "links", "r1")] == {"href": "/a", "title": "Alpha", "icon": "file-text"}
+    assert all(got[("recent", "links", f"r{i}")] is None for i in range(2, home.RECENT_SHOWN))
+    assert got[("recent", "none")] is None
 
 
 async def test_recent_with_nothing_opened(store):
     got = await _frames(store, home.RECENT)
-    assert got[("none",)] == "Nothing opened yet."
-    assert all(got[(f"r{i}",)] is None for i in range(home.RECENT_SHOWN))
+    assert got[("recent", "none")] == "Nothing opened yet."
+    assert all(got[("recent", "links", f"r{i}")] is None for i in range(home.RECENT_SHOWN))
 
 
 async def test_recent_shows_at_most_eight(store):
@@ -266,7 +266,7 @@ async def test_recent_shows_at_most_eight(store):
         >> atomic(Space.state.recents.set(nu.Literal(ids)))
     )
     got = await _frames(store, home.RECENT)
-    links = [got[(f"r{i}",)]["href"] for i in range(home.RECENT_SHOWN)]
+    links = [got[("recent", "links", f"r{i}")]["href"] for i in range(home.RECENT_SHOWN)]
     assert links == [f"/{pid}" for pid in ids[: home.RECENT_SHOWN]]
 
 
@@ -287,7 +287,7 @@ def _seed_kernel() -> nu.Nu:
 
 
 def _tiles(got: dict) -> dict:
-    return {ref[-1]: got[ref]["value"] for ref in got if ref[:-1] == ("tiles",)}
+    return {ref[-1]: got[ref]["value"] for ref in got if ref[:-1] == ("glance", "tiles")}
 
 
 async def test_glance_draws_plain_tiles(store):
@@ -301,7 +301,7 @@ async def test_glance_draws_plain_tiles(store):
     )
     got = await _frames(store, home.GLANCE)
     assert _tiles(got) == {"planes": "2", "live": "2", "cells": "3", "workers": "1"}
-    assert [got[("links", name)] for name in ("runs", "workers", "planes")] == [None] * 3
+    assert [got[("glance", "links", name)] for name in ("runs", "workers", "planes")] == [None] * 3
 
 
 async def test_glance_links_the_live_planes_there_are(store):
@@ -311,9 +311,9 @@ async def test_glance_links_the_live_planes_there_are(store):
         >> ops.add_plane("pl", name="P", ui=True, made_by="nuverse.planes", backend="async")
     )
     got = await _frames(store, home.GLANCE)
-    assert got[("links", "runs")] == {"href": "/r1", "label": "Runs"}
-    assert got[("links", "workers")] is None
-    assert got[("links", "planes")] == {"href": "/pl", "label": "Planes"}
+    assert got[("glance", "links", "runs")] == {"href": "/r1", "label": "Runs"}
+    assert got[("glance", "links", "workers")] is None
+    assert got[("glance", "links", "planes")] == {"href": "/pl", "label": "Planes"}
     assert _tiles(got)["planes"] == "3"
 
 
@@ -415,14 +415,20 @@ async def test_recent_redraws_on_an_open_and_not_while_idle(store):
         await store.run(atomic(Space.state.recents.set(nu.Literal(["a"]))))
         await asyncio.sleep(0.3)
         drawn = {f.ref: f.payload for f in session.frames[idle:] if f.op != "remove"}
-        assert drawn[("r0",)] == {"href": "/a", "title": "Alpha", "icon": ""}
+        assert drawn[("recent", "links", "r0")] == {
+            "href": "/a",
+            "title": "Alpha",
+            "icon": "file-text",
+        }
         # A plane renamed that it does not show: woken, nothing drawn.
         seen = len(session.frames)
         await store.run(ops.rename_plane("b", "Bee"))
         assert await _quiet(session, 0.5) == seen
         await store.run(ops.rename_plane("a", "Ay"))
         await asyncio.sleep(0.3)
-        assert {"href": "/a", "title": "Ay", "icon": ""} in [f.payload for f in session.frames[seen:]]
+        assert {"href": "/a", "title": "Ay", "icon": "file-text"} in [
+            f.payload for f in session.frames[seen:]
+        ]
     finally:
         await _stop(task)
 

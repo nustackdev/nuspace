@@ -90,7 +90,7 @@ async def test_bootstrap_makes_the_services_and_is_idempotent(store):
             "made_by": "",
             "backend": "mp",
         }
-        assert rows[plane]["meta"] == {}
+        assert rows[plane]["meta"] == {"icon": "lucide:file-text"}
         assert await store.read(ops.cell_rows(plane)) == [
             {
                 "id": cell,

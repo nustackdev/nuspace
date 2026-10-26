@@ -11,6 +11,8 @@ separately here.
 
 ## Unreleased
 
+- Every plane keeps its own icon from creation, shown as stored everywhere
+- Cells add no spacing of their own, so each program lays out its view
 - Keep the whole desk in browser history; links open here, Option opens beside
 - Group the seeded ui planes apart from services, and split content into kind and search
 

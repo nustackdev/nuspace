@@ -24,8 +24,6 @@ describe("tab", () => {
 		expect(tabOf({ title: "a", icon: "lucide:folder" }).emoji).toBeNull();
 		expect(tabOf({ title: "a", icon: "folder" }).emoji).toBeNull();
 		expect(tabOf({ title: "a", icon: undefined }).emoji).toBeNull();
-		expect(tabOf({ title: "a", icon: "" }, "emoji:🌱").emoji).toBe("🌱");
-		expect(tabOf({ title: "a", icon: "lucide:folder" }, "emoji:🌱").emoji).toBeNull();
 	});
 
 	it("draws the emoji as one svg text", () => {

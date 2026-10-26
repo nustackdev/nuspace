@@ -240,7 +240,7 @@ async def test_create_plane_seeds_cells_and_nested_children(store):
     ]
     m, lone = await store.read(ops.children(made))
     assert [rows[m]["name"], rows[lone]["name"]] == ["Mid", "Leaf"]
-    assert rows[m]["meta"] == {"editable": True}
+    assert rows[m]["meta"] == {"editable": True, "icon": "lucide:file-text"}
     (deep,) = await store.read(ops.children(m))
     assert rows[deep]["props"]["made_by"] == "leaf"
     assert [c["name"] for c in await store.read(ops.cell_rows(deep))] == ["note"]

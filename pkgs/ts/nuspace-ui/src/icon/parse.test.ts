@@ -35,10 +35,10 @@ describe("icon spelling", () => {
 		expect(formatIcon(null)).toBe("");
 	});
 
-	it("falls back from the plane's own to its registered Plane's to the default", () => {
-		expect(planeIcon("emoji:🌱", "cpu")).toEqual({ kind: "emoji", char: "🌱" });
-		expect(planeIcon("", "cpu")).toEqual({ kind: "lucide", name: "cpu" });
-		expect(planeIcon("lucide:gone", "gone too")).toEqual(DEFAULT_ICON);
+	it("shows the plane's own icon, the default only for one that does not read", () => {
+		expect(planeIcon("emoji:🌱")).toEqual({ kind: "emoji", char: "🌱" });
+		expect(planeIcon("lucide:cpu")).toEqual({ kind: "lucide", name: "cpu" });
+		expect(planeIcon("lucide:gone")).toEqual(DEFAULT_ICON);
 		expect(planeIcon(undefined)).toEqual(DEFAULT_ICON);
 	});
 });

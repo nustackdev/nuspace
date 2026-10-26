@@ -49,7 +49,6 @@ function render(expanded: string[], on = tree) {
 				<RailTree
 					tree={on}
 					rows={rows}
-					registered={[]}
 					routes={[]}
 					selKey=""
 					onToggle={onToggle}

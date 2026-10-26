@@ -13,8 +13,8 @@
 // swap is pure CSS (`railIcon` / `railTwisty` in design/rail.ts). The chevron
 // only folds: it never opens the plane and never starts a drag.
 //
-// The icon is the plane's own (`meta.icon`), else its registered Plane's, else
-// the default. It is not a control, since the chevron takes its place under
+// The icon is the plane's own (`meta.icon`), which every plane is made with.
+// It is not a control, since the chevron takes its place under
 // the pointer: "Change icon" in both menus opens the picker, anchored on it.
 // "Pin" / "Unpin" in both menus puts it in the pinned row or takes it out.
 //
@@ -99,7 +99,7 @@ export function PlaneRow({
 }: {
 	row: VisibleRow;
 	index: number;
-	/** The row's icon, resolved: its own, its registered Plane's, or the default. */
+	/** The row's icon: the plane's own. */
 	icon: PlaneIconValue;
 	/** The focused pane's Plane. */
 	selected: boolean;

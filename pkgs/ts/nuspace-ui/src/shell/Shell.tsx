@@ -89,7 +89,7 @@ export function Shell() {
 	const collapsed = useRailCollapsed() && rail;
 	useRailShortcut();
 	useNewPlaneShortcut();
-	useTab(viewer, sidebar);
+	useTab(viewer);
 
 	// Before the first paint, so the reopen button is right from the start.
 	useLayoutEffect(() => {

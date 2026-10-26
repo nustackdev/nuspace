@@ -23,11 +23,11 @@ let host: HTMLDivElement;
 let root: Root;
 const onChange = vi.fn();
 
-function render(value: unknown, registered = "") {
+function render(value: unknown) {
 	act(() => {
 		root.render(
 			<TooltipProvider>
-				<TitleIcon value={value} registered={registered} onChange={onChange} />
+				<TitleIcon value={value} onChange={onChange} />
 			</TooltipProvider>,
 		);
 	});
@@ -79,13 +79,8 @@ describe("title icon", () => {
 		expect(drawn()).toContain("lucide-file-text");
 	});
 
-	it("falls back to the registered Plane's icon before the page icon", () => {
-		render("", "folder");
-		expect(drawn()).toContain("lucide-folder");
-	});
-
 	it("draws the plane's own icon, an emoji as text", () => {
-		render("emoji:🐱", "folder");
+		render("emoji:🐱");
 		expect(drawn()).toBe("🐱");
 	});
 
@@ -98,10 +93,10 @@ describe("title icon", () => {
 		expect(button().getAttribute("aria-expanded")).toBe("false");
 	});
 
-	it("sends an empty icon on remove", async () => {
+	it("puts the default icon back on remove", async () => {
 		render("lucide:cpu");
 		await open();
 		act(() => inPicker("Remove")?.click());
-		expect(onChange).toHaveBeenCalledWith("");
+		expect(onChange).toHaveBeenCalledWith("lucide:file-text");
 	});
 });

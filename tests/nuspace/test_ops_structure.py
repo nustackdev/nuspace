@@ -47,7 +47,7 @@ async def test_add_plane_writes_the_row_and_links_at_the_top(store):
             "id": p,
             "name": "notes",
             "props": {"system": False, "ui": True, "made_by": "plain", "backend": "async"},
-            "meta": {"editable": True},
+            "meta": {"editable": True, "icon": "lucide:file-text"},
             "parent": "",
         }
     ]
@@ -117,7 +117,13 @@ async def test_set_plane_meta_merges(store):
     p = await plane(store, made_by="plain", meta={"a": 1, "b": 2})
     await store.run(ops.set_plane_meta(p, {"b": 3, "c": {"d": 4}, "made_by": "x"}))
     (row,) = await store.read(ops.plane_rows())
-    assert row["meta"] == {"a": 1, "b": 3, "c": {"d": 4}, "made_by": "x"}
+    assert row["meta"] == {
+        "a": 1,
+        "b": 3,
+        "c": {"d": 4},
+        "made_by": "x",
+        "icon": "lucide:file-text",
+    }
     # A meta key named like a prop is only meta.
     assert row["props"] == {"system": False, "ui": False, "made_by": "plain", "backend": "async"}
 
@@ -127,7 +133,7 @@ async def test_add_plane_again_rewrites_props_and_merges_meta(store):
     await store.run(ops.add_plane(p, name="b", made_by="b", meta={"y": 2}, backend="async"))
     (row,) = await store.read(ops.plane_rows())
     assert row["props"] == {"system": False, "ui": False, "made_by": "b", "backend": "async"}
-    assert row["meta"] == {"x": 1, "y": 2}
+    assert row["meta"] == {"x": 1, "y": 2, "icon": "lucide:file-text"}
 
 
 async def test_remove_plane_drops_it_and_its_subtree(store):
@@ -502,8 +508,20 @@ async def test_structure_round_trips_through_sqlite(disk):
     cells = States.cells
     await disk.run(nustd.kv.Transaction(cells.set_item(c, {"n": {"deep": [3]}}), scope=States))
     assert await disk.read(ops.plane_rows()) == [
-        {"id": p, "name": "p", "props": NO_PROPS, "meta": {"a": {"b": 1}}, "parent": ""},
-        {"id": q, "name": "q", "props": NO_PROPS, "meta": {}, "parent": p},
+        {
+            "id": p,
+            "name": "p",
+            "props": NO_PROPS,
+            "meta": {"a": {"b": 1}, "icon": "lucide:file-text"},
+            "parent": "",
+        },
+        {
+            "id": q,
+            "name": "q",
+            "props": NO_PROPS,
+            "meta": {"icon": "lucide:file-text"},
+            "parent": p,
+        },
     ]
     assert await disk.read(ops.cell_rows(q)) == [
         {

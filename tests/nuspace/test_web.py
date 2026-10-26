@@ -131,7 +131,9 @@ async def _plane(store, pid, name, meta=None, backend="async", **props):
     await store.run(ops.add_plane(pid, name=name, meta=meta, backend=backend, **props))
 
 
-def _row(pid, title, parent="space", children=(), made_by="", icon="", system=False):
+def _row(
+    pid, title, parent="space", children=(), made_by="", icon="lucide:file-text", system=False
+):
     return {
         "id": pid,
         "kind": "plane",
@@ -240,7 +242,11 @@ async def test_create_makes_the_named_plane(store):
     assert by_id["px"]["props"]["backend"] == "async"
     # The registered Plane's icon is the new plane's.
     assert by_id["pj"]["meta"] == {"icon": "lucide:list"}
-    assert by_id["px"]["meta"] == {"editable": True, "full_width": False}
+    assert by_id["px"]["meta"] == {
+        "editable": True,
+        "full_width": False,
+        "icon": "lucide:file-text",
+    }
 
 
 async def test_create_makes_the_empty_plane_with_nothing_registered(store):
@@ -282,7 +288,7 @@ async def test_viewer_plane(store):
 
     assert got == {
         "title": "Notes",
-        "meta": {"editable": True, "full_width": False, "tone": "calm"},
+        "meta": {"editable": True, "full_width": False, "tone": "calm", "icon": "lucide:file-text"},
         "cells": [
             {"id": "c0", "name": "first", "source": "y = 2", "made_by": "", "has_ui": False},
             {"id": "c1", "name": "intro", "source": TEXT_SRC, "made_by": TEXT, "has_ui": False},
@@ -293,9 +299,11 @@ async def test_viewer_plane(store):
 
 async def test_viewer_plane_missing_and_meta_defaults(store):
     await _plane(store, "p1", "Plain")
-    plain = {"editable": False, "full_width": False}
+    plain = {"editable": False, "full_width": False, "icon": "lucide:file-text"}
     assert await store.read(plane_view("p1")) == {"title": "Plain", "meta": plain, "cells": []}
-    assert await store.read(plane_view("nope")) == {"title": "", "meta": plain, "cells": []}
+    # A plane that does not exist has no icon: only a made plane gets one.
+    missing = {"editable": False, "full_width": False}
+    assert await store.read(plane_view("nope")) == {"title": "", "meta": missing, "cells": []}
 
 
 # --- Viewer statuses ---------------------------------------------------------------
@@ -474,7 +482,7 @@ async def test_connection_live(store):
         assert session.writes("set_status")[-1]["plane_id"] == "p1"
         shown = session.writes("set_plane")[-1]
         assert shown["plane_id"] == "p1" and shown["title"] == "Notes"
-        assert shown["meta"] == {"editable": True, "full_width": False}
+        assert shown["meta"] == {"editable": True, "full_width": False, "icon": "lucide:file-text"}
         assert "editable" not in shown
         assert [c["id"] for c in shown["cells"]] == ["c1"]
         assert session.writes("set_status")[-1]["statuses"][0]["state"] == "idle"
@@ -513,6 +521,7 @@ async def test_connection_live(store):
             "full_width": True,
             "ui": False,
             "system": True,
+            "icon": "lucide:file-text",
         }
         (row,) = [r for r in await store.read(ops.plane_rows()) if r["id"] == "p1"]
         assert row["props"] == {

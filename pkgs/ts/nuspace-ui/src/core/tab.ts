@@ -20,7 +20,6 @@ import { useEffect } from "react";
 import { planeIcon } from "../icon/parse";
 import { TITLE_FALLBACK } from "../pane/Pane";
 import type { ActivePlane } from "../plane/types";
-import { useRegisteredIcon } from "../sidebar/state";
 import { useFocusedRoute } from "./router";
 
 /** The product name, the title with nothing open. */
@@ -36,12 +35,11 @@ export const DEFAULT_TAB: Tab = { title: DEFAULT_TITLE, emoji: null };
 
 /**
  * What the tab shows for the focused pane's plane, null when there is none
- * to show (nothing open, still loading, absent). `registered` is its
- * registered Plane's icon.
+ * to show (nothing open, still loading, absent).
  */
-export function tabOf(plane: { title: string; icon: unknown } | null, registered = ""): Tab {
+export function tabOf(plane: { title: string; icon: unknown } | null): Tab {
 	if (!plane) return DEFAULT_TAB;
-	const icon = planeIcon(plane.icon, registered);
+	const icon = planeIcon(plane.icon);
 	return {
 		title: plane.title || TITLE_FALLBACK,
 		emoji: icon.kind === "emoji" ? icon.char : null,
@@ -123,7 +121,7 @@ function focusedPlane(root: Parameters<typeof getNode>[0], viewer: Path | null, 
  * Keep the tab in step with the focused pane. Used once, by the shell.
  * Selects strings, so a cell edit re-renders nothing here.
  */
-export function useTab(viewer: Path | null, sidebar: Path | null): void {
+export function useTab(viewer: Path | null): void {
 	const focused = useFocusedRoute();
 	// undefined: still loading, leave the tab as it is. null: the defaults.
 	const title = useTree((s) => {
@@ -131,9 +129,8 @@ export function useTab(viewer: Path | null, sidebar: Path | null): void {
 		return plane === undefined ? undefined : (plane?.title ?? null);
 	});
 	const icon = useTree((s) => focusedPlane(s.root, viewer, focused)?.meta.icon ?? "");
-	const registered = useRegisteredIcon(sidebar, focused);
 	const loading = title === undefined;
-	const tab = tabOf(title == null ? null : { title, icon }, registered);
+	const tab = tabOf(title == null ? null : { title, icon });
 	const shownTitle = tab.title;
 	const emoji = tab.emoji;
 

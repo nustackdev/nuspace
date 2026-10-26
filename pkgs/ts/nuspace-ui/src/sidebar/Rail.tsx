@@ -112,7 +112,6 @@ export function Rail({
 				<PinnedRow
 					tree={tree}
 					pins={pins}
-					registered={registered}
 					routes={routes}
 					selKey={selKey}
 					reveal={reveal}
@@ -127,7 +126,6 @@ export function Rail({
 					<RailTree
 						tree={tree}
 						rows={rows}
-						registered={registered}
 						routes={routes}
 						selKey={selKey}
 						onToggle={onToggle}

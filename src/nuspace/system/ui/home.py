@@ -117,10 +117,14 @@ from nuspace.system.utils import redraws
 
 SHOWN = {RECENT_SHOWN}
 
+RECENT = nustd.ui.ColumnRef("recent", props={{"gap": 2}})
+# A list of pages: rows flush, the hover marking each one.
+LINKS = nustd.ui.ColumnRef("links", parent_ref=RECENT, props={{"gap": 0}})
+
 
 def link(shown, i):
     # A page link: the plane's mark and its name, one row of a list of pages.
-    ref = nustd.ui.PageLinkRef("r" + str(i))
+    ref = nustd.ui.PageLinkRef("r" + str(i), parent_ref=LINKS)
     one = nu.Dict(shown[i])
     return nu.IfDo(
         nu.List(shown).len() > i,
@@ -130,10 +134,11 @@ def link(shown, i):
 
 
 def show(shown):
-    none = nustd.ui.TextRef("none")
+    title = nustd.ui.HeadingRef("title", parent_ref=RECENT)
+    none = nustd.ui.TextRef("none", parent_ref=RECENT)
     empty = nu.IfDo(nu.List(shown).len() == 0, none.set("Nothing opened yet."), none.erase())
     links = nu.Sequential(*[link(shown, i) for i in range(SHOWN)])
-    return nustd.ui.HeadingRef("title").set("Recent", level=3) >> links >> empty
+    return title.set("Recent", level=3) >> links >> empty
 
 
 def recent():
@@ -182,6 +187,10 @@ class Glance(nustd.ui.Column):
     links = Links.slot(gap=4, wrap=True)
 
 
+class View(nu.Shape):
+    glance = Glance.slot(gap=4)
+
+
 def prop(p, name):
     return nu.Dict(p["props"])[name]
 
@@ -208,10 +217,10 @@ def link(ref, planes, made_by, label):
 
 def show_planes(planes):
     return (
-        Glance.tiles.planes.set(nu.str(drawn(planes)))
-        >> link(Glance.links.runs, planes, "nuverse.runs", "Runs")
-        >> link(Glance.links.workers, planes, "nuverse.workers", "Workers")
-        >> link(Glance.links.planes, planes, "nuverse.planes", "Planes")
+        View.glance.tiles.planes.set(nu.str(drawn(planes)))
+        >> link(View.glance.links.runs, planes, "nuverse.runs", "Runs")
+        >> link(View.glance.links.workers, planes, "nuverse.workers", "Workers")
+        >> link(View.glance.links.planes, planes, "nuverse.planes", "Planes")
     )
 
 
@@ -224,9 +233,9 @@ def live():
 
 def show_live(counts):
     return (
-        Glance.tiles.live.set(nu.str(counts[0]))
-        >> Glance.tiles.cells.set(nu.str(counts[1]))
-        >> Glance.tiles.workers.set(nu.str(counts[2]))
+        View.glance.tiles.live.set(nu.str(counts[0]))
+        >> View.glance.tiles.cells.set(nu.str(counts[1]))
+        >> View.glance.tiles.workers.set(nu.str(counts[2]))
     )
 
 

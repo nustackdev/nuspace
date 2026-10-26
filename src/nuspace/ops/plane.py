@@ -4,8 +4,10 @@ Its props (``system``, ``ui``, ``made_by``, ``backend``) are set when it is
 made. Its meta is free and merged into any time.
 
 A plane's icon is ``meta.icon``, a string: ``"lucide:<name>"`` for one of the
-shell's icon pack, ``"emoji:<char>"`` for an emoji, ``""`` or absent for the
-default. :func:`plane_icon` is the one place a spelling is read.
+shell's icon pack, ``"emoji:<char>"`` for an emoji. Every plane is made with
+one, :data:`DEFAULT_ICON` unless it is given its own, and what is stored is
+what shows: nothing works an icon out of anything else. ``""`` is no icon.
+:func:`plane_icon` is the one place a spelling is read.
 
 A plane is structure plus the one run setting, its ``backend``: nothing else
 here says how anything runs. Which
@@ -29,6 +31,7 @@ from .utils import MintId, atomic, atomic_state
 
 
 __all__ = [
+    "DEFAULT_ICON",
     "ICON_EMOJI",
     "ICON_LUCIDE",
     "add_plane",
@@ -45,6 +48,9 @@ ICON_LUCIDE = "lucide:"
 
 #: The prefix of an emoji icon, the emoji itself after it.
 ICON_EMOJI = "emoji:"
+
+#: The icon a plane is made with when it is given none.
+DEFAULT_ICON = ICON_LUCIDE + "file-text"
 
 #: What :func:`add_plane` says when it is given no backend.
 NO_BACKEND = "A plane needs a backend, eg mp or async: none was given"
@@ -88,7 +94,8 @@ def add_plane(
         ui: Prop, the shell draws it and nav brings it up when routed.
         made_by: Prop, the registered Plane it was created from. Nothing
             groups by it.
-        meta: Fields to merge into its meta.
+        meta: Fields to merge into its meta. A new plane's ``icon`` starts
+            as :data:`DEFAULT_ICON`; an ``icon`` here replaces it.
         into: Set to the plane id in the commit, for a caller that needs a
             minted one: the record does not say which plane this call made.
 
@@ -133,7 +140,12 @@ def plane_writes(
     row = Space.planes[plane_id]
     writes = (
         _refuse_empty(backend)
-        >> nu.IfDo(plane_exists(plane_id).not_(), row.cells.set([]) >> row.children.set([]))
+        >> nu.IfDo(
+            plane_exists(plane_id).not_(),
+            row.cells.set([])
+            >> row.children.set([])
+            >> row.meta.update(nu.Dict.of(icon=DEFAULT_ICON)),
+        )
         >> row.name.set(name)
         >> row.props.system.set(system)
         >> row.props.ui.set(ui)
@@ -252,7 +264,7 @@ def set_plane_icon(plane_id: nu.StrArg, icon: nu.StrArg) -> nu.Nu:
     Args:
         plane_id: The plane.
         icon: ``"lucide:<name>"``, ``"emoji:<char>"``, a bare lucide name,
-            or ``""`` for the default. A Python string is checked and
+            or ``""`` for none. A Python string is checked and
             spelled by :func:`plane_icon`; a term is stored as it evaluates.
     """
     value = nu.Str(plane_icon(icon)) if isinstance(icon, str) else icon

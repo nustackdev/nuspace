@@ -44,7 +44,6 @@ function render(ids: string[], selKey = "", routes: string[] = []) {
 				<PinnedRow
 					tree={tree}
 					pins={{ ...pins }}
-					registered={[]}
 					routes={routes}
 					selKey={selKey}
 					reveal={() => {}}

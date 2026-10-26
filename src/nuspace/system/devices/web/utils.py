@@ -120,13 +120,19 @@ def cells_ui(viewer: Ref) -> SectionRef:
 
 
 def cell_ui(viewer: Ref, cell: nu.StrArg) -> SectionRef:
-    """One cell's own node under ``viewer``.
+    """One cell's own node under ``viewer``: a Column with no gap.
+
+    It holds what the program draws, one ref under another, and adds no
+    spacing of its own: a program that wants air between its refs draws its
+    own Column (or Container) around them.
 
     Args:
         viewer: The ref cells are drawn on, bound to its place on the shell.
         cell: The cell id, any ``StrArg`` (eg ``ops.Here.cell``).
     """
-    return SectionRef(cell, section_cls=nustd.ui.Column, parent_ref=cells_ui(viewer))
+    return SectionRef(
+        cell, section_cls=nustd.ui.Column, parent_ref=cells_ui(viewer), props={"gap": 0}
+    )
 
 
 class CellRoot:

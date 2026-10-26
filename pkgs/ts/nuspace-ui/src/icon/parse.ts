@@ -53,9 +53,10 @@ export function formatIcon(icon: Icon | null): string {
 }
 
 /**
- * What a plane shows: its own `meta.icon`, else its registered Plane's icon,
- * else the default. Never null.
+ * What a plane shows: its own `meta.icon`, which every plane is made with.
+ * The default only guards a value that does not read as an icon, so a bad
+ * one never breaks a row. Never null.
  */
-export function planeIcon(own: unknown, registered = ""): Icon {
-	return parseIcon(own) ?? parseIcon(registered) ?? DEFAULT_ICON;
+export function planeIcon(own: unknown): Icon {
+	return parseIcon(own) ?? DEFAULT_ICON;
 }

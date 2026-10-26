@@ -134,3 +134,13 @@ async def test_page_link_fills_a_page_link(store):
         "icon": "📝",
         "description": "Daily notes",
     }
+
+
+async def test_a_cells_refs_land_in_a_column_with_no_gap(store):
+    """The cell's own node holds what it draws and adds no spacing of its own."""
+    session = KeptSession()
+    await _run(store, _as_cell(nustd.ui.TextRef("t").set("hi")), session)
+    (frame,) = session.frames
+    cell = next(step for step in frame.chain if step[0] == "c1")
+    assert cell[1] == "Column"
+    assert cell[2] == {"gap": 0}

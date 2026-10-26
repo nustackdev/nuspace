@@ -29,7 +29,7 @@ import { railDragging, railPin, railPinDropLine, railPins, railPinsFade } from "
 import { PlaneIcon } from "../icon/PlaneIcon";
 import { planeIcon } from "../icon/parse";
 import { type Pins, pinDropIndex } from "./pin";
-import type { PlaneTree, Registered } from "./types";
+import type { PlaneTree } from "./types";
 import { PLANE_MIME } from "./useRailDrag";
 
 /** What a pin's drag carries, apart from a tree row's so the tree ignores it. */
@@ -46,7 +46,6 @@ export function pinSlot(target: PinTarget): number {
 export function PinnedRow(props: {
 	tree: PlaneTree;
 	pins: Pins;
-	registered: Registered[];
 	routes: string[];
 	/** The focused pane's Plane. */
 	selKey: string;
@@ -66,7 +65,6 @@ export function PinnedRow(props: {
 function PinStrip({
 	tree,
 	pins,
-	registered,
 	routes,
 	selKey,
 	reveal,
@@ -74,7 +72,6 @@ function PinStrip({
 }: {
 	tree: PlaneTree;
 	pins: Pins;
-	registered: Registered[];
 	routes: string[];
 	selKey: string;
 	reveal: (key: string) => void;
@@ -215,7 +212,7 @@ function PinStrip({
 									}}
 								>
 									<PlaneIcon
-										icon={planeIcon(row.icon, registered.find((r) => r.name === row.made_by)?.icon)}
+										icon={planeIcon(row.icon)}
 									/>
 									{aimed ? <span className={railPinDropLine(aimed)} aria-hidden="true" /> : null}
 								</a>

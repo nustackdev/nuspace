@@ -17,7 +17,6 @@ import { Button, EmptyState } from "@nustackdev/ui-kit";
 import type * as React from "react";
 import { useCallback, useRef } from "react";
 import { closePane, focusPane } from "../core/router";
-import { useTypePath } from "../core/surfaces";
 import {
 	docContentTrack,
 	docPlaneAbsent,
@@ -30,7 +29,6 @@ import {
 import type { Notify } from "../plane/ops";
 import { Plane } from "../plane/Plane";
 import type { AbsentReason, ActivePlane, CellSpec } from "../plane/types";
-import { useRegisteredIcon } from "../sidebar/state";
 import { PaneBar } from "./PaneBar";
 import { Title } from "./Title";
 import { TitleIcon } from "./TitleIcon";
@@ -109,7 +107,6 @@ export function Pane({
 	const splitTitle = useRef<((tail: string) => boolean) | null>(null);
 	const selectBox = useRef<((e: React.PointerEvent) => void) | null>(null);
 	// The icon's fallback. The plane carries no `made_by`, the sidebar's row does.
-	const registeredIcon = useRegisteredIcon(useTypePath("SidebarRef"), planeId);
 
 	return (
 		<section
@@ -154,7 +151,6 @@ export function Pane({
 							<div className={docTitleRow(compact)}>
 								<TitleIcon
 									value={plane.meta.icon}
-									registered={registeredIcon}
 									onChange={(icon) => onIcon(planeId, icon)}
 								/>
 								<Title
