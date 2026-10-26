@@ -2,15 +2,16 @@
 
 ## Packages shipped from this repo
 
-- **nuspace** (the runtime, the `nuspace` command) — 0.5.7
-- **nuspace-ui** (the compiled web bundle) — 0.5.6
+- **nuspace** (the runtime, the `nuspace` command) — 0.6.0
+- **nuspace-ui** (the compiled web bundle) — 0.5.7
 
 Below is the changelog for **nuspace** - the full commit stream. Newest first.
 The `nuspace-ui` wheel is the same source tree's vite output and is not tracked
 separately here.
 
-## Unreleased
+## 0.6.0 — 2026-10-26
 
+- Release nuspace 0.6.0, built on nuspace-ui 0.5.7 and nu 0.6.7
 - Every plane keeps its own icon from creation, shown as stored everywhere
 - Cells add no spacing of their own, so each program lays out its view
 - Keep the whole desk in browser history; links open here, Option opens beside
