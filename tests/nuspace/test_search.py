@@ -238,7 +238,7 @@ async def test_the_viewer_is_seeded_once_unpinned(store):
 
 async def test_a_viewer_seeded_before_content_gets_its_form_and_new_results(store):
     old = (("pick", search.PICK), ("results", "def out():\n    return None\n"))
-    await store.run(seed(search.PLANE, search.NAME, search.ICON, old, backend="async", pin=False))
+    await store.run(seed(search.PLANE, search.NAME, search.ICON, old, backend="async"))
     await store.run(search.ensure_search())
     cells = await store.read(ops.cell_rows(search.PLANE))
     assert [c["name"] for c in cells] == ["form", "pick", "results"]

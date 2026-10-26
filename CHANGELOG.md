@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Update sidebar and seed tests for the new rail layout
 - Restructure the sidebar into nav rows, pinned, planes and extensions, one keyboard stop
 - Pick plane icons from the whole lucide set, loaded on demand
 

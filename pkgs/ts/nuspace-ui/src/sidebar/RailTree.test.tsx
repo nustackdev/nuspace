@@ -15,6 +15,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { paneRule } from "../core/router";
 import { RailTree } from "./RailTree";
+import { RailBody } from "./railHarness";
 import { visibleRows } from "./tree";
 import { childrenOf, coerceTree, ROOT_ID } from "./types";
 
@@ -46,16 +47,18 @@ function render(expanded: string[], on = tree) {
 	act(() => {
 		root.render(
 			<TooltipProvider>
-				<RailTree
-					tree={on}
-					rows={rows}
-					routes={[]}
-					selKey=""
-					onToggle={onToggle}
-					reveal={() => {}}
-					notify={() => {}}
-					pins={pins}
-				/>
+				<RailBody keys={rows.map((r) => r.key)}>
+					<RailTree
+						tree={on}
+						rows={rows}
+						routes={[]}
+						selKey=""
+						onToggle={onToggle}
+						reveal={() => {}}
+						notify={() => {}}
+						pins={pins}
+					/>
+				</RailBody>
 			</TooltipProvider>,
 		);
 	});
