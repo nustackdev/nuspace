@@ -17,8 +17,8 @@
 // no drop at all. Everything else moves, home and system Planes too. The
 // server is the one that holds that rule; this only keeps from asking.
 //
-// A row can also be dropped on the pinned row, which pins it and leaves it
-// here (./PinnedRow.tsx reads the drag's `PLANE_MIME`), or on the panes, which
+// A row can also be dropped on the pinned rows, which pins it and leaves it
+// here (./Pinned.tsx reads the drag's `PLANE_MIME`), or on the panes, which
 // opens it as a split (../main/useCanvasDrop.ts). A pin dragged over the
 // tree is not one of its rows, so nothing here takes it.
 
@@ -33,7 +33,7 @@ export type DropEdge = "before" | "after" | "into";
 /** Where the dragged row would land right now. `key` "" is below the rows. */
 export type DropTarget = { key: string; edge: DropEdge };
 
-/** What a row's drag carries: its id. The pinned row and the panes take it too. */
+/** What a row's drag carries: its id. The pinned rows and the panes take it too. */
 export const PLANE_MIME = "application/x-nuspace-plane";
 
 /** The edge a pointer at `clientY` picks on `el`. */
@@ -168,7 +168,7 @@ export function useRailDrag({
 		[dragKey, target, drop],
 	);
 
-	/** Handlers around the rows and the tail: leaving them, eg for the pins, drops the mark. */
+	/** Handlers around the rows and the tail: leaving them, eg for the pinned rows, drops the mark. */
 	const leaveProps = useMemo(
 		() => ({
 			onDragLeave: (e: React.DragEvent) => {

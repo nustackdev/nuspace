@@ -15,6 +15,7 @@ import { useEffect, useSyncExternalStore } from "react";
 import { NEW_INSIDE_KEYS, NEW_PLANE_KEYS } from "../sidebar/add";
 import { RAIL_KEYS } from "../sidebar/collapse";
 import { DESK_CLICK, DESK_KEYS, OPEN_KEYS } from "../sidebar/keys";
+import { SETTINGS_KEYS } from "../sidebar/nav";
 import { SEARCH_KEYS } from "../sidebar/search";
 
 /** The shortcut by key name; the kit `Shortcut` spells it. */
@@ -73,6 +74,7 @@ export const BINDINGS: BindingGroup[] = [
 		title: "Anywhere",
 		bindings: [
 			{ does: "Search", keys: [SEARCH_KEYS] },
+			{ does: "Settings", keys: [SETTINGS_KEYS] },
 			{ does: "New plane", keys: [NEW_PLANE_KEYS] },
 			{ does: "New plane inside the current one", keys: [NEW_INSIDE_KEYS] },
 			{ does: "Show or hide the sidebar", keys: [RAIL_KEYS] },

@@ -72,7 +72,7 @@
 	 * row's icon and a bottom bar button's glyph all sit 18px in.
 	 *   row:  inset 8 + row pad 8 + (lane 20 - icon 16) / 2 = 18
 	 *   bars: bar pad 12 + (button 28 - glyph 16) / 2      = 18
-	 * And one right edge, 18px in, for `new plane`, a row's `...` and the
+	 * And one right edge, 18px in, for a section's `+`, a row's `...` and the
 	 * theme flip:
 	 *   row:  inset 8 + row pad end 6 + (button 24 - glyph 16) / 2 = 18
 	 *   bars: bar pad 12 + 6                                       = 18
@@ -92,16 +92,12 @@
 	--rail-indent: 1.25rem; /* 20 per level: a child's icon clears its
 	                         * parent's by a whole lane                     */
 	--rail-bar-pad: 0.75rem; /* 12 top and bottom bar side padding          */
-	/* The header group's one step, 4: the top bar's buttons to search (the
-	 * bar's own 36 - 28 over two), search to pins, pin to pin, and once each
-	 * side of the divider, so the line sits centred between header and tree. */
+	/* The rail's one small step, 4: the top bar to the nav rows, and once
+	 * each side of the divider, so the line sits centred between them. */
 	--rail-top-gap: 0.25rem;
-	--rail-fade: 1rem; /* 16     the pinned row's fade over a clipped edge  */
-	/* A pinned plane's box, square: the search entry's lead around a 16px
-	 * glyph on every side. Its row pad 8 + the lane's 2 around the glyph = 10,
-	 * so 10 + 16 + 10 = 36. With the box on the search entry's edge, its glyph
-	 * lands on the search glyph's column and the rows' icon column. */
-	--rail-pin: calc(2 * var(--rail-row-pad) + var(--rail-lane)); /* 36 */
+	/* Air above a section header (Pinned, Planes), so each section reads
+	 * as its own group without a rule between them. */
+	--rail-section-gap: 0.75rem;
 
 	/* --- Plane grid -------------------------------------------------------
 	 * Every row of a plane (the title, each cell, a ghost, a draft, a drop
@@ -212,7 +208,7 @@
 	--spacing-rail-gap: var(--rail-gap);
 	--spacing-rail-bar-pad: var(--rail-bar-pad);
 	--spacing-rail-top-gap: var(--rail-top-gap);
-	--spacing-rail-pin: var(--rail-pin);
+	--spacing-rail-section-gap: var(--rail-section-gap);
 
 	/* --- Cell status --> text-cell-running, bg-cell-failed-wash --*/
 	--color-cell-invalid: var(--cell-invalid);

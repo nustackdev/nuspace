@@ -1,4 +1,4 @@
-// Pins: the Planes pinned to the row under the rail's top bar, in order.
+// Pins: the Planes pinned to the rail, in order, drawn by ./Pinned.tsx.
 //
 // The server's `Space.pinned` is the one source, shipped by `set_tree`. A pin
 // is a shortcut: the Plane stays in the tree. Pin, unpin and reorder go out as
@@ -13,6 +13,7 @@ import { nodeAt, pathKey, tree as store } from "@nustackdev/ui-kit";
 import { useMemo } from "react";
 import { useTypePath } from "../core/surfaces";
 import { notifyOp } from "../core/wire";
+import { NAV_PLANES } from "./nav";
 import type { Ops } from "./ops";
 import { usePinned, usePlaneTree } from "./state";
 import { KIND_PLANE } from "./types";
@@ -85,13 +86,14 @@ export function usePins(path: Path): Pins {
 
 /**
  * Pin or unpin one Plane, from outside the sidebar (a pane's `...`). Null
- * for a Plane the sidebar does not draw, which is one that cannot be pinned.
+ * for a Plane the sidebar does not draw, which is one that cannot be pinned,
+ * and for a nav row's plane (./nav.ts), which has its own row.
  */
 export function usePlanePin(planeId: string): { pinned: boolean; toggle: () => void } | null {
 	const sidebar = useTypePath("SidebarRef");
 	const tree = usePlaneTree(sidebar);
 	const pins = usePinsAt(sidebar);
-	if (!pins || tree[planeId]?.kind !== KIND_PLANE) return null;
+	if (!pins || tree[planeId]?.kind !== KIND_PLANE || NAV_PLANES.has(planeId)) return null;
 	const pinned = pins.ids.includes(planeId);
 	return { pinned, toggle: () => (pinned ? pins.unpin(planeId) : pins.pin(planeId)) };
 }

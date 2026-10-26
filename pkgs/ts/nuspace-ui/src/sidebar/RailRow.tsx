@@ -47,7 +47,10 @@ export function RailRow({
 	onFocus,
 	onKeyDown,
 	planeId,
-}: {
+	onClick,
+	ref,
+	...rest
+}: Omit<React.HTMLAttributes<HTMLDivElement>, "onClick" | "onFocus" | "onKeyDown"> & {
 	/** What `useRailFocus` addresses this row by. */
 	rowKey: string;
 	/** The row's Plane, for what acts on the Plane you are on (../sidebar/add.ts). */
@@ -69,9 +72,9 @@ export function RailRow({
 	lane: React.ReactNode;
 	/** The label lane: usually a `RailRowLink` or a `RailRowInput`. */
 	label: React.ReactNode;
-	/** The buttons of the hover-revealed action lane. */
+	/** The buttons of the hover-revealed action lane. Null for a row with none, which then takes no room for it. */
 	actions: React.ReactNode;
-	/** Items for the right-click menu. */
+	/** Items for the right-click menu. Null for a row with none. */
 	menu: React.ReactNode;
 	/** Where focus goes when the right-click menu closes. See the kit's menu. */
 	onMenuCloseAutoFocus?: (e: Event) => void;
@@ -79,11 +82,20 @@ export function RailRow({
 	drag?: React.HTMLAttributes<HTMLDivElement> & { draggable?: boolean };
 	/** Extra classes, eg while dragged or dropped into. */
 	className?: string;
-	onFocus: () => void;
+	onFocus: (e: React.FocusEvent<HTMLDivElement>) => void;
 	onKeyDown: (e: React.KeyboardEvent) => void;
+	/** A click anywhere on the row, for a row that is one button (eg an extension's). */
+	onClick?: (e: React.MouseEvent<HTMLDivElement>) => void;
+	/**
+	 * With `ref` and the rest, what a kit trigger (a tooltip's) hands the row
+	 * it wraps. The row takes them on its own box.
+	 */
+	ref?: React.Ref<HTMLDivElement>;
 }) {
 	const body = (
 		<div
+			{...rest}
+			ref={ref}
 			// A tree row takes its left offset from railIndent, so it needs no
 			// inset. A flat rail leaves indent off and pays for the offset
 			// itself, which is what the inset is.
@@ -100,14 +112,17 @@ export function RailRow({
 			aria-setsize={setsize}
 			onFocus={onFocus}
 			onKeyDown={onKeyDown}
-			onClick={focusOnClick}
+			// Focus on click is the body's (./useRailFocus.ts).
+			onClick={onClick}
 			{...drag}
 		>
 			<span className={railLane}>{lane}</span>
 			{label}
-			<div className={railActions}>{actions}</div>
+			{actions === null ? null : <div className={railActions}>{actions}</div>}
 		</div>
 	);
+
+	if (menu === null) return body;
 
 	return (
 		<ContextMenu>
@@ -117,18 +132,6 @@ export function RailRow({
 			</ContextMenuContent>
 		</ContextMenu>
 	);
-}
-
-/**
- * A click on the row's label leaves the keyboard on the row, so the arrows
- * work next. Safari and Firefox on macOS never focus a clicked link, so
- * without this a click leaves the focus on the page and the arrows go nowhere.
- * A click on one of the row's own controls keeps its focus.
- */
-function focusOnClick(e: React.MouseEvent<HTMLDivElement>): void {
-	const row = e.currentTarget;
-	if ((e.target as HTMLElement).closest("button, input")) return;
-	if (!row.contains(document.activeElement)) row.focus({ preventScroll: true });
 }
 
 /**
@@ -150,7 +153,8 @@ export function RailRowLink({
 	/** Override only to drop the title a tier, e.g. for a row with no name. */
 	titleClassName?: string;
 	onClick: (e: React.MouseEvent<HTMLElement>) => void;
-	onDoubleClick: () => void;
+	/** A tree row renames on it; a pinned row leaves it off. */
+	onDoubleClick?: () => void;
 }) {
 	return (
 		<NavLink

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { pinSlot } from "./PinnedRow";
+import { pinSlot } from "./Pinned";
 import { applySidebarWrite } from "./state";
 
 describe("the pins on the wire", () => {

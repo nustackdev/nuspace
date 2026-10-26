@@ -35,13 +35,9 @@ async def test_settings_is_seeded_once_with_home_header(store):
     assert all(p["system"] for p in planes)
 
 
-async def test_home_and_settings_are_pinned_on_first_seed_only(store):
+async def test_home_and_settings_are_not_pinned_when_seeded(store):
     await store.run(home.ensure_home() >> settings.ensure_settings())
-    assert await store.read(ops.pinned()) == [home.PLANE, settings.PLANE]
-    # Unpinned by the owner: seeding again leaves it that way.
-    await store.run(ops.unpin_plane(settings.PLANE) >> ops.move_pin(home.PLANE, 0))
-    await store.run(home.ensure_home() >> settings.ensure_settings())
-    assert await store.read(ops.pinned()) == [home.PLANE]
+    assert await store.read(ops.pinned()) == []
 
 
 @pytest.mark.parametrize("cell", settings.CELLS, ids=lambda c: c[0])

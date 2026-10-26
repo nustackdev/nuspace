@@ -2,8 +2,7 @@
 
 Like home (:mod:`nuspace.system.ui.home`): a system ui plane with a fixed id,
 seeded once by the same :func:`~nuspace.system.ui.seed.seed`, its cells the
-owner's after that. Pinned when seeded, after home: the sidebar's pin is the
-way to it. One cell so far, ``header``: home's header, the same source.
+owner's after that. The sidebar's nav row and Cmd+, are the way to it. One cell so far, ``header``: home's header, the same source.
 
 Only what belongs to the space lives here. What belongs to one device or
 browser, eg its theme, stays there, and what belongs to the user, eg

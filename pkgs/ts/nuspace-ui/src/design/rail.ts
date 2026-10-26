@@ -81,11 +81,14 @@ export const railAside = "relative flex min-w-0 flex-1 flex-col bg-nuspace-rail"
 
 /**
  * Top bar. `h-chrome`, like the pane bar and the tab bar, so the tops line up.
- * No rule under it: the search entry and the pins sit right under it, and
- * the header group ends where the body starts (`railScroll`). `rail-bar-pad` puts a button's
+ * No rule under it: the nav rows sit right under it, and the header group
+ * ends where the body starts (`railScroll`). `rail-bar-pad` puts a button's
  * glyph on the rows' icon edge.
  */
 export const railHeader = "flex h-chrome shrink-0 items-center gap-0.5 px-rail-bar-pad";
+
+/** A top bar button pushed to the bar's right end, its glyph on the rows' right edge. */
+export const railHeaderEnd = "ml-auto";
 
 /**
  * The wordmark beside the collapse button: NUSPACE, the "nu" in accent-text and
@@ -124,30 +127,24 @@ export const railStatus = cn(
 );
 
 /**
- * The body under the header group, the rail's one scroller: the tree, its
- * sticky New plane row first, which is what marks the edge rows pass under.
- * `rail-inset` keeps a row's fill off both rail edges. `rail-top-gap` above
- * and again inside, as pad rather than margin, so a focus ring at the top
- * is not clipped.
+ * The body under the top bar, the rail's one scroller: the nav rows, then
+ * the pinned, the planes and the extensions, each under its section header. `rail-inset` keeps a row's
+ * fill off both rail edges. `rail-top-gap` top and bottom alike, as pad
+ * rather than margin, so a focus ring at either end is not clipped.
  */
 export const railScroll = cn(
-	"mt-rail-top-gap flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden",
-	"px-rail-inset pt-rail-top-gap pb-1",
+	// No ring of its own: it holds the focus a click leaves, which shows nowhere.
+	"flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden outline-hidden",
+	"px-rail-inset py-rail-top-gap",
 );
 
 /**
- * New plane, at the top level: the tree's first row, shaped and spaced like
- * the rows under it, so it reads as the place the next plane goes. Sticky at
- * the top of the body, on the rail's own fill, so it stays at hand however
- * far the tree scrolls. The body pads its top (`railScroll`), and the strip
- * above the row covers that pad, so no row shows over it while they pass
- * under. Its own text one tier back, the `+` in the icon lane, the shortcut
- * on the actions' edge while it is hovered.
+ * New plane, at the top level: the tree's first row, under the Planes header,
+ * shaped and spaced like the rows under it, so it reads as the place the next
+ * plane goes. Its own text one tier back, the `+` in the icon lane, the
+ * shortcut on the actions' edge while it is hovered.
  */
-export const railNewPlaneBar = cn(
-	"sticky top-0 z-10 shrink-0 bg-nuspace-rail pb-rail-row-gap",
-	"before:absolute before:inset-x-0 before:bottom-full before:h-rail-top-gap before:bg-nuspace-rail",
-);
+export const railNewPlaneBar = "shrink-0 pb-rail-row-gap";
 
 export const railNewPlane = cn(railRow(false, true), "w-full cursor-default text-left");
 
@@ -250,6 +247,19 @@ export function railTwisty(swap: boolean): string {
 		railControlWash,
 		"opacity-0 transition-[opacity,background-color,color] duration-fast ease-out",
 		swap && CHEVRON_IN,
+	);
+}
+
+/**
+ * The fold chevron as a glyph rather than a control, for a row that is one
+ * button (an extension's group): swapped in for the icon like `railTwisty`,
+ * turned like `railChevron`.
+ */
+export function railLaneChevron(open: boolean): string {
+	return cn(
+		"size-4 text-text-muted opacity-0 transition-[opacity,transform] duration-fast ease-out",
+		CHEVRON_IN,
+		open && "rotate-90",
 	);
 }
 
@@ -382,107 +392,87 @@ export const railDropInto = "rounded-md ring-2 ring-accent ring-inset";
 /** The row being dragged, dimmed while it travels. */
 export const railDragging = "opacity-50";
 
-/** The space under the last row. A drop here moves the row to the top level, last. */
-export const railDropTail = "relative min-h-8 flex-1";
+/**
+ * The space under the last row, a section gap tall, which is also the air
+ * between the planes and the extensions under them. A drop here moves the
+ * row to the top level, last.
+ */
+export const railDropTail = "relative min-h-rail-section-gap shrink-0";
 
-/* ============================== Pinned ================================== */
+/* ================================ Nav ================================== */
 
 /*
- * The pinned row, the last strip of the header group under the search entry:
- * one tiled icon per pinned plane, in a strip that scrolls sideways with no
- * scrollbar, fixed while the tree scrolls under it. The first box starts on
- * the search entry's edge, and its size (`rail-pin`, tokens.css) is the
- * entry's lead around the glyph on every side, so header button, search
- * glyph, pins and row icons share one centre line with nothing to offset.
+ * The nav rows, the body's first: home, search and settings, the planes
+ * that always exist. Flat rows on the tree rows' geometry, so their glyphs
+ * sit on the rail's one left edge and their labels on the titles' edge. Not
+ * tree rows: they never move, nest or go. Their shortcuts always show.
  */
 
-/**
- * The shelf around the strip, on the rows' edges. `rail-top-gap` above it,
- * the header group's one step, the same as between two pins; below it the
- * divider's own step, so with no pins nothing is left over.
- */
-export const railPinShelf = "mt-rail-top-gap shrink-0 px-rail-inset";
+/** The strip holding them, the body's first, on its edges; it scrolls with the body. */
+export const railNav = "flex shrink-0 flex-col gap-rail-row-gap";
 
-/** The strip. Its mask is `railPinsFade`, inline, since which edges fade is data. */
-export const railPins = cn(
-	"flex shrink-0 items-center gap-rail-top-gap overflow-x-auto overflow-y-hidden",
-	"scrollbar-none",
-);
-
-/**
- * A soft fade on each edge with more behind it, as a mask so it works on any
- * surface in either theme. `--rail-fade` wide.
- */
-export function railPinsFade(start: boolean, end: boolean): { maskImage?: string } {
-	if (!start && !end) return {};
-	const from = start ? "transparent, black var(--rail-fade)" : "black";
-	const to = end ? "black calc(100% - var(--rail-fade)), transparent" : "black";
-	return { maskImage: `linear-gradient(to right, ${from}, ${to})` };
-}
-
-/**
- * One pinned plane: its icon on a kit `IconButton soft sm` with the inset
- * ring, a filled tile with no border like the rail's rows, sized to
- * `rail-pin` (36px square, tokens.css) with a 16px glyph. On the rail's
- * anchors (theme.css): a pin rests on a1, the header's surface, one open in
- * some other pane on a1 too, the focused pane's on a2, and each climbs a step on
- * hover and two on press.
- */
-export function railPin(selected: boolean, open: boolean): string {
+/** One nav row: a real link, washed like a tree row when its plane is open. */
+export function railNavRow(selected: boolean, open: boolean): string {
 	return cn(
-		"relative size-rail-pin shrink-0 [&_svg]:size-4",
-		"focus-visible:ring-offset-0",
-		selected
-			? "bg-rail-a2-fill text-text-primary hover:bg-rail-a2-hover active:bg-rail-a2-press"
-			: open
-				? "bg-rail-a1-fill text-text-primary hover:bg-rail-a1-hover active:bg-rail-a1-press"
-				: "bg-rail-a1-fill hover:bg-rail-a1-hover hover:text-text-primary active:bg-rail-a1-press",
+		railRow(selected, true, open),
+		"cursor-default text-lg text-text-secondary hover:text-text-primary",
+		selected && "text-text-primary",
 	);
 }
 
-/** Where a drop lands among the pins: a thin accent line on one side of an icon. */
-export function railPinDropLine(edge: "before" | "after"): string {
-	return cn(
-		"pointer-events-none absolute inset-y-1 w-0.5 rounded-full bg-accent",
-		edge === "before" ? "-left-0.5" : "-right-0.5",
-	);
-}
+/** The nav row's glyph, in the icon lane at a row icon's size. */
+export const railNavIcon = cn(railLane, "text-text-muted [&_svg]:size-4");
 
-/* ================================ Search ================================= */
+export const railNavLabel = "min-w-0 flex-1 truncate";
+
+/** The shortcut at the far end, inline, always shown: these keys are worth learning. */
+export const railNavKeys = "shrink-0";
+
+/* ============================== Sections ================================ */
 
 /*
- * The search entry, under the top bar: the two and the pins read as one
- * header group, which the body (`railScroll`) closes.
- *
- * It is a row, not an input. Same inset, height, radius and lanes as a flat
- * plane row, so its glyph sits on the rail's one left edge and its label on
- * the titles' edge. At rest it carries its own quiet fill (`nuspace-rail-search`), so it
- * reads as a place to type without a box around it; hover moves it to the hover
- * fill and the label up to the secondary text tier. No border in any state.
+ * A section of the body (Pinned, Planes, Extensions): a quiet header over its rows.
+ * The label one tier back and a size down, so it reads as a heading and not
+ * a row. An action (the Planes `+`) sits on the rows' right edge, shown while
+ * the header is hovered or holds the keyboard.
  */
 
-/** The strip holding the entry, on the rows' edges. */
-export const railSearch = "shrink-0 px-rail-inset";
-
-export const railSearchTrigger = cn(
-	"group/search flex h-rail-row w-full cursor-default items-center rounded-md",
+export const railSection = cn(
+	"group/section mt-rail-section-gap flex h-7 shrink-0 items-center first:mt-0",
+	// Right under the tree's drop tail, which is a section gap tall already.
+	"[[data-rail-tree]+&]:mt-0",
 	"pl-rail-row-pad pr-rail-row-pad-end",
-	"bg-nuspace-rail-search text-base text-text-muted",
-	"transition-colors duration-fast ease-out",
-	"hover:bg-rail-a1-hover hover:text-text-secondary active:bg-rail-a1-press",
-	"focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0",
 );
+
+export const railSectionLabel =
+	"min-w-0 flex-1 select-none truncate text-sm font-medium text-text-muted";
+
+/** The header's action, on a kit `IconButton ghost sm` with the inset ring. */
+export const railSectionAction = cn(
+	railControlWash,
+	"rounded-sm opacity-0 transition-opacity duration-fast ease-out [&_svg]:size-4",
+	"group-hover/section:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100",
+);
+
+/* ============================== Extensions ============================== */
+
+/**
+ * An extension row's label, a group's package name or an entry's: plain text
+ * on the label's tier where a plane row has its link, since the whole row is
+ * the button, folding or making a plane rather than opening one.
+ */
+export const railGroupLabel = cn(
+	"flex h-full min-w-0 flex-1 cursor-default select-none items-center truncate text-lg text-text-secondary",
+	"transition-colors duration-fast ease-out group-hover/row:text-text-primary",
+);
+
+/** A tooltip holding a sentence (an extension entry's description): wraps rather than runs on. */
+export const railTooltipWide = "max-w-64 text-pretty";
+
+/* ============================== Menus =================================== */
 
 /**
  * A plane's menu, off its `...` or a right-click: wide enough that a label and
  * its shortcut caps never crowd each other.
  */
 export const railMenu = "min-w-52";
-
-/** The search glyph, in a row's icon lane and at a row icon's size. */
-export const railSearchIcon = cn(railLane, "[&_svg]:size-4");
-
-export const railSearchText = "min-w-0 flex-1 truncate text-left";
-
-/** The shortcut at the far end: a kit `Shortcut` chip, apart from the label. */
-export const railSearchHint = "shrink-0";

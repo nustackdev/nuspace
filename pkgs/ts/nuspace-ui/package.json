@@ -18,7 +18,7 @@
 	},
 	"dependencies": {
 		"@nustackdev/ui-core": "^0.2.2",
-		"@nustackdev/ui-kit": "^0.3.5",
+		"@nustackdev/ui-kit": "^0.3.6",
 		"lucide-react": "^0.564.0",
 		"prosemirror-commands": "^1.7.2",
 		"prosemirror-history": "^1.5.0",

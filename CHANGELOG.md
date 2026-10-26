@@ -9,6 +9,11 @@ Below is the changelog for **nuspace** - the full commit stream. Newest first.
 The `nuspace-ui` wheel is the same source tree's vite output and is not tracked
 separately here.
 
+## Unreleased
+
+- Restructure the sidebar into nav rows, pinned, planes and extensions, one keyboard stop
+- Pick plane icons from the whole lucide set, loaded on demand
+
 ## 0.6.0 — 2026-10-26
 
 - Release nuspace 0.6.0, built on nuspace-ui 0.5.7 and nu 0.6.7

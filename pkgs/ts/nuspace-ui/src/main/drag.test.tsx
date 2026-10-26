@@ -12,7 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { currentRoutes } from "../core/router";
 import { PaneMenu } from "../pane/PaneMenu";
 import { coerceMeta } from "../plane/types";
-import { PIN_MIME } from "../sidebar/PinnedRow";
+import { PIN_MIME } from "../sidebar/Pinned";
 import { PLANE_MIME } from "../sidebar/useRailDrag";
 import { dockLayout } from "./Dock";
 import { PANE_MIME, paneSlot, useCanvasDrop } from "./useCanvasDrop";

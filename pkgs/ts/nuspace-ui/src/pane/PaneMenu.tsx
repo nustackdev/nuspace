@@ -12,8 +12,8 @@
 // for this pane, "Open in new tab" opens the Plane's URL in a
 // browser tab, "Add plane inside" opens the Add plane popup for a child of
 // this pane's Plane, opened in this pane, and "Pin" / "Unpin" puts the Plane
-// in the sidebar's pinned row or takes it out (a Plane the sidebar draws
-// only). "Delete plane" shows when `onDelete` is given, which it is not for a
+// in the sidebar's pinned rows or takes it out (a Plane the sidebar's tree
+// draws only). "Delete plane" shows when `onDelete` is given, which it is not for a
 // system Plane. A plane that has not landed (or is absent) gets the desk only.
 //
 // Under the next, one row per entry in ./settings.ts, each a label and a

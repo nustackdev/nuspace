@@ -22,13 +22,12 @@ import {
 	CommandPalette,
 } from "@nustackdev/ui-kit";
 import { useState } from "react";
-import { mintId } from "../core/ids";
 import { focusPane, openHere } from "../core/router";
 import { menuItem } from "../design";
 import { DEFAULT_ICON } from "../icon/parse";
 import { MenuEntry, MenuKeys } from "../menu/Entry";
 import { type MenuSection, menuScore, menuSections } from "../menu/rank";
-import { closeAddPlane, useAddRequest } from "./add";
+import { closeAddPlane, createPlane, useAddRequest } from "./add";
 import type { Notify } from "./ops";
 import { type Registered, ROOT_ID } from "./types";
 
@@ -66,13 +65,7 @@ export function AddPlane({
 		closeAddPlane();
 		setQuery("");
 		if (!req) return;
-		const planeId = mintId("p");
-		notify("plane.create", {
-			plane_id: planeId,
-			parent_id: req.parent || ROOT_ID,
-			made_by: entry.name,
-			title: entry === EMPTY ? "Untitled" : entry.label,
-		});
+		const planeId = createPlane(notify, entry, req.parent, entry === EMPTY);
 		if (req.parent && req.parent !== ROOT_ID) reveal(req.parent);
 		if (req.pane) focusPane(req.pane);
 		openHere(planeId);

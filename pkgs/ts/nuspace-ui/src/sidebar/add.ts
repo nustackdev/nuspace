@@ -9,8 +9,10 @@
 
 import { isMac } from "@nustackdev/ui-kit";
 import { useEffect, useSyncExternalStore } from "react";
+import { mintId } from "../core/ids";
 import { focusedRoute } from "../core/router";
-import { ROOT_ID } from "./types";
+import type { Notify } from "./ops";
+import { type Registered, ROOT_ID } from "./types";
 
 export type AddRequest = {
 	/** Where the new Plane hangs: a Plane id, or `ROOT_ID`. */
@@ -93,4 +95,26 @@ export function useAddRequest(): AddRequest | null {
 		() => request,
 		() => request,
 	);
+}
+
+/**
+ * Make a Plane from `entry` under `parent` and return its id. The id is
+ * minted here, so the caller can route to it at once: nav holds a route
+ * until its Plane exists. `empty` names the space's own empty plane, whose
+ * planes start as "Untitled" rather than taking its label.
+ */
+export function createPlane(
+	notify: Notify,
+	entry: Registered,
+	parent: string = ROOT_ID,
+	empty = false,
+): string {
+	const planeId = mintId("p");
+	notify("plane.create", {
+		plane_id: planeId,
+		parent_id: parent || ROOT_ID,
+		made_by: entry.name,
+		title: empty ? "Untitled" : entry.label,
+	});
+	return planeId;
 }

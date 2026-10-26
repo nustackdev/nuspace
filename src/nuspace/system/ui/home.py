@@ -1,9 +1,8 @@
 """Home: the plane ``/`` redirects to, seeded by the host at open when missing.
 
 A system ui plane with a fixed id: ``remove_plane`` refuses it, nav brings it
-up like any other drawn plane, and the sidebar lists it like one, first at the
-top level since it is made before anything else is. It is pinned when seeded,
-first for the same reason. Its cells are ordinary
+up like any other drawn plane, and the sidebar draws it first in its nav
+group, out of the tree. Its cells are ordinary
 cells, seeded once: after that they are the owner's to edit, and a store
 that has a home keeps it as it is.
 

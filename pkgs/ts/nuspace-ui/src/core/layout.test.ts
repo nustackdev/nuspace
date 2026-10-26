@@ -142,5 +142,4 @@ describe("moves", () => {
 		expect(focus(abc, 2)).toEqual({ panes: abc.panes, focus: 2 });
 		expect(focus(abc, 5)).toBe(abc);
 	});
-
 });

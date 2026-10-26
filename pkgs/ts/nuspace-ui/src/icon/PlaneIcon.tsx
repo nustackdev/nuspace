@@ -1,12 +1,13 @@
-// One plane icon, drawn: a pack glyph or an emoji, in the same box.
+// One plane icon, drawn: a lucide glyph (by the kit) or an emoji, in the same box.
 //
 // Decorative everywhere it is used (the title or the row beside it names the
 // plane), so it is hidden from a screen reader. The ref reaches the element,
 // so a popover can anchor on it.
 
+import { iconFor } from "@nustackdev/ui-kit";
 import type * as React from "react";
 import { type IconSize, iconEmoji, iconGlyph } from "../design";
-import { DEFAULT_ICON_NAME, packIcon } from "./pack";
+import { DEFAULT_ICON_NAME } from "./pack";
 import type { Icon } from "./parse";
 
 export function PlaneIcon({
@@ -27,7 +28,7 @@ export function PlaneIcon({
 			</span>
 		);
 	}
-	const Glyph = (packIcon(icon.name) ?? packIcon(DEFAULT_ICON_NAME))?.Icon;
+	const Glyph = iconFor(icon.name) ?? iconFor(DEFAULT_ICON_NAME);
 	if (!Glyph) return null;
 	return <Glyph ref={ref} aria-hidden="true" className={iconGlyph(size, className)} />;
 }

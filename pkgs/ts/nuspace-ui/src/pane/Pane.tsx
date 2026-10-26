@@ -149,10 +149,7 @@ export function Pane({
 					<>
 						<header className={docTitleHead(wide, compact)}>
 							<div className={docTitleRow(compact)}>
-								<TitleIcon
-									value={plane.meta.icon}
-									onChange={(icon) => onIcon(planeId, icon)}
-								/>
+								<TitleIcon value={plane.meta.icon} onChange={(icon) => onIcon(planeId, icon)} />
 								<Title
 									value={plane.title}
 									placeholder={TITLE_FALLBACK}

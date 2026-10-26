@@ -8,9 +8,9 @@
 // over a document you are writing in are two controls with nothing holding
 // them.
 //
-// The free middle stays free: settings is a Plane, reached through its pin up
-// top. That Plane holds the space's settings only; the theme is the window's,
-// so it stays down here and in the browser.
+// The free middle stays free: settings is a Plane, reached through its nav
+// row up top or cmd/ctrl+comma. That Plane holds the space's settings only;
+// the theme is the window's, so it stays down here and in the browser.
 
 import {
 	IconButton,

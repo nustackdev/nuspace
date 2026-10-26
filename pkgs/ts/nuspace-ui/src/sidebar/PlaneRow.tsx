@@ -16,7 +16,7 @@
 // The icon is the plane's own (`meta.icon`), which every plane is made with.
 // It is not a control, since the chevron takes its place under
 // the pointer: "Change icon" in both menus opens the picker, anchored on it.
-// "Pin" / "Unpin" in both menus puts it in the pinned row or takes it out.
+// "Pin" / "Unpin" in both menus puts it in the pinned rows or takes it out.
 //
 // The hover desk button opens the plane in a new pane beside the others, the same as
 // "Open on desk", Option+Enter, an Option-click and a drag of the row onto
@@ -271,57 +271,87 @@ export function PlaneRow({
 				)
 			}
 			actions={
-				<>
-					<Tooltip>
-						<TooltipTrigger asChild>
-							<IconButton
-								variant="ghost"
-								size="sm"
-								ring="inset"
-								tabIndex={-1}
-								aria-label={`Open ${title} on desk`}
-								onClick={openOnDesk}
-								className={railAction}
-							>
-								<Columns2 />
-							</IconButton>
-						</TooltipTrigger>
-						<TooltipContent side="bottom">
-							Open on desk
-							<Shortcut keys={DESK_KEYS} size="sm" className={railTooltipHint} />
-						</TooltipContent>
-					</Tooltip>
-					<Tooltip>
-						<TooltipTrigger asChild>
-							<IconButton
-								variant="ghost"
-								size="sm"
-								ring="inset"
-								tabIndex={-1}
-								aria-label={`Add plane in ${title}`}
-								onClick={add}
-								className={railAction}
-							>
-								<Plus />
-							</IconButton>
-						</TooltipTrigger>
-						<TooltipContent side="bottom">
-							Add plane inside
-							<Shortcut keys={NEW_INSIDE_KEYS} size="sm" className={railTooltipHint} />
-						</TooltipContent>
-					</Tooltip>
-					<MoreMenu
-						title={title}
-						tabbable={tabbable}
-						dragging={dragging}
-						onCloseAutoFocus={afterMenu}
-					>
-						<PlaneMenuItems parts={dropdownParts} {...menu} />
-					</MoreMenu>
-				</>
+				<PlaneRowActions
+					title={title}
+					tabbable={tabbable}
+					dragging={dragging}
+					menu={menu}
+					onCloseAutoFocus={afterMenu}
+				/>
 			}
 			menu={<PlaneMenuItems parts={contextParts} {...menu} />}
 		/>
+	);
+}
+
+/**
+ * A plane row's hover controls: open on desk, add inside, and the `...` with
+ * the plane's menu. The same on a tree row and a pinned one (./Pinned.tsx).
+ */
+export function PlaneRowActions({
+	title,
+	tabbable,
+	dragging,
+	menu,
+	onCloseAutoFocus,
+}: {
+	title: string;
+	tabbable: boolean;
+	/** Some row is being dragged, so no tooltip shows. */
+	dragging: boolean;
+	menu: PlaneMenuProps;
+	/** Where focus goes when the `...` menu closes. */
+	onCloseAutoFocus?: (e: Event) => void;
+}) {
+	return (
+		<>
+			<Tooltip>
+				<TooltipTrigger asChild>
+					<IconButton
+						variant="ghost"
+						size="sm"
+						ring="inset"
+						tabIndex={-1}
+						aria-label={`Open ${title} on desk`}
+						onClick={menu.openOnDesk}
+						className={railAction}
+					>
+						<Columns2 />
+					</IconButton>
+				</TooltipTrigger>
+				<TooltipContent side="bottom">
+					Open on desk
+					<Shortcut keys={DESK_KEYS} size="sm" className={railTooltipHint} />
+				</TooltipContent>
+			</Tooltip>
+			<Tooltip>
+				<TooltipTrigger asChild>
+					<IconButton
+						variant="ghost"
+						size="sm"
+						ring="inset"
+						tabIndex={-1}
+						aria-label={`Add plane in ${title}`}
+						onClick={menu.add}
+						className={railAction}
+					>
+						<Plus />
+					</IconButton>
+				</TooltipTrigger>
+				<TooltipContent side="bottom">
+					Add plane inside
+					<Shortcut keys={NEW_INSIDE_KEYS} size="sm" className={railTooltipHint} />
+				</TooltipContent>
+			</Tooltip>
+			<MoreMenu
+				title={title}
+				tabbable={tabbable}
+				dragging={dragging}
+				onCloseAutoFocus={onCloseAutoFocus}
+			>
+				<PlaneMenuItems parts={dropdownParts} {...menu} />
+			</MoreMenu>
+		</>
 	);
 }
 
@@ -394,13 +424,15 @@ function MoreMenu({
 	);
 }
 
-type PlaneMenuProps = {
+export type PlaneMenuProps = {
 	open: () => void;
 	openOnDesk: () => void;
 	newTab: () => void;
 	add: () => void;
-	rename: () => void;
-	changeIcon: () => void;
+	/** Left off where the row cannot rename in place (a pinned row). */
+	rename?: () => void;
+	/** Left off where the row has no picker to anchor (a pinned row). */
+	changeIcon?: () => void;
 	pinned: boolean;
 	togglePin: () => void;
 	/** Null for a Plane that cannot be deleted. */
@@ -412,7 +444,7 @@ type PlaneMenuProps = {
  * once against the menu parts (../shell/menu.ts) each trigger renders with.
  * An item with a key shows it on its right.
  */
-function PlaneMenuItems({ parts, ...a }: PlaneMenuProps & { parts: MenuParts }) {
+export function PlaneMenuItems({ parts, ...a }: PlaneMenuProps & { parts: MenuParts }) {
 	const { Item, Separator, Shortcut } = parts;
 	const PinIcon = a.pinned ? PinOff : Pin;
 	return (
@@ -437,14 +469,18 @@ function PlaneMenuItems({ parts, ...a }: PlaneMenuProps & { parts: MenuParts }) 
 				Add plane inside
 				<Shortcut keys={NEW_INSIDE_KEYS} />
 			</Item>
-			<Item onSelect={a.rename}>
-				<PenLine />
-				Rename
-			</Item>
-			<Item onSelect={a.changeIcon}>
-				<SmilePlus />
-				Change icon
-			</Item>
+			{a.rename ? (
+				<Item onSelect={a.rename}>
+					<PenLine />
+					Rename
+				</Item>
+			) : null}
+			{a.changeIcon ? (
+				<Item onSelect={a.changeIcon}>
+					<SmilePlus />
+					Change icon
+				</Item>
+			) : null}
 			<Item onSelect={a.togglePin}>
 				<PinIcon />
 				{a.pinned ? "Unpin" : "Pin"}

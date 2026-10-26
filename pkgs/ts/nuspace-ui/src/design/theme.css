@@ -46,8 +46,7 @@
 	/* --- Sidebar fills: two anchors and a step --------------------------- */
 	/* Every fill is ink over the rail, computed from three numbers (ink %), so
 	 * the rail tunes as a whole:
-	 *   a1  the rail's quiet fill: search and pins at rest, and a plane open
-	 *       in some other pane
+	 *   a1  the rail's quiet fill: a plane open in some other pane
 	 *   a2  the plane in hand: the focused pane's plane, and a row under the
 	 *       pointer
 	 *   d   one interaction step: hover is +d on whatever the thing rests on,
@@ -61,14 +60,29 @@
 	--rail-d: 3.5;
 	--rail-cd: 5;
 	--rail-a1-fill: color-mix(in oklab, var(--ink-1) calc(var(--rail-a1) * 1%), transparent);
-	--rail-a1-hover: color-mix(in oklab, var(--ink-1) calc((var(--rail-a1) + var(--rail-d)) * 1%), transparent);
-	--rail-a1-press: color-mix(in oklab, var(--ink-1) calc((var(--rail-a1) + 2 * var(--rail-d)) * 1%), transparent);
+	--rail-a1-hover: color-mix(
+		in oklab,
+		var(--ink-1) calc((var(--rail-a1) + var(--rail-d)) * 1%),
+		transparent
+	);
+	--rail-a1-press: color-mix(
+		in oklab,
+		var(--ink-1) calc((var(--rail-a1) + 2 * var(--rail-d)) * 1%),
+		transparent
+	);
 	--rail-a2-fill: color-mix(in oklab, var(--ink-1) calc(var(--rail-a2) * 1%), transparent);
-	--rail-a2-hover: color-mix(in oklab, var(--ink-1) calc((var(--rail-a2) + var(--rail-d)) * 1%), transparent);
-	--rail-a2-press: color-mix(in oklab, var(--ink-1) calc((var(--rail-a2) + 2 * var(--rail-d)) * 1%), transparent);
+	--rail-a2-hover: color-mix(
+		in oklab,
+		var(--ink-1) calc((var(--rail-a2) + var(--rail-d)) * 1%),
+		transparent
+	);
+	--rail-a2-press: color-mix(
+		in oklab,
+		var(--ink-1) calc((var(--rail-a2) + 2 * var(--rail-d)) * 1%),
+		transparent
+	);
 	--rail-cd1: color-mix(in oklab, var(--ink-1) calc(var(--rail-cd) * 1%), transparent);
 	--rail-cd2: color-mix(in oklab, var(--ink-1) calc(2 * var(--rail-cd) * 1%), transparent);
-	--nuspace-rail-search: var(--rail-a1-fill);
 }
 
 /* ============================== Tailwind v4 ==============================*/
@@ -78,7 +92,6 @@
 	--color-nuspace-edge: var(--nuspace-edge);
 
 	--color-nuspace-rail: var(--nuspace-rail);
-	--color-nuspace-rail-search: var(--nuspace-rail-search);
 	--color-rail-a1-fill: var(--rail-a1-fill);
 	--color-rail-a1-hover: var(--rail-a1-hover);
 	--color-rail-a1-press: var(--rail-a1-press);

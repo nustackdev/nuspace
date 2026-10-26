@@ -2,16 +2,17 @@
 //
 // The one place a spelling is read. `meta.icon` is a string:
 //
-//   "lucide:<name>"   one of our icon pack's glyphs (./pack.ts)
+//   "lucide:<name>"   any lucide glyph, by lucide's own name
 //   "emoji:<char>"    an emoji, drawn as text
 //   "" or absent      the default
 //
 // A bare name, no prefix, is a lucide one: that is how a registered Plane
-// names its icon. A lucide name the pack does not have, or any other prefix,
-// reads as no icon, so the caller falls back to the next one in line.
+// names its icon. A name lucide does not have, or any other prefix, reads as
+// no icon, so the caller falls back to the next one in line.
 // Mirrors `nuspace.ops.plane.plane_icon` on the server.
 
-import { DEFAULT_ICON_NAME, packIcon } from "./pack";
+import { isIconName } from "@nustackdev/ui-kit";
+import { DEFAULT_ICON_NAME } from "./pack";
 
 export const LUCIDE = "lucide:";
 export const EMOJI = "emoji:";
@@ -42,8 +43,8 @@ export function parseIcon(raw: unknown): Icon | null {
 	let name = value;
 	if (value.startsWith(LUCIDE)) name = value.slice(LUCIDE.length);
 	else if (value.includes(":")) return null;
-	const known = packIcon(kebab(name));
-	return known ? { kind: "lucide", name: known.name } : null;
+	name = kebab(name);
+	return isIconName(name) ? { kind: "lucide", name } : null;
 }
 
 /** The stored spelling of an icon, "" for none. */

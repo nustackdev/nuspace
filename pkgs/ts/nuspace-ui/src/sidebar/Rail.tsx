@@ -1,5 +1,6 @@
-// The sidebar rail: a header group (top bar, search, the pinned planes), a
-// body (the scrolling tree, its sticky New plane row first), a bottom bar.
+// The sidebar rail: a top bar, the one thing fixed up there, a body that
+// scrolls (the nav rows, then the pinned, the planes and the extensions,
+// each under a section header), a bottom bar.
 //
 // Planes only. Cells are parts of a Plane, not navigable entities, so they
 // never appear here.
@@ -18,15 +19,18 @@
 // Every Plane that draws, by parent, in sibling order. The server invents one
 // row for the Space, the tree's root, which is never drawn. Grouping is
 // nesting, and a Plane with no cells works as a folder. Rows move freely by
-// drag and drop.
+// drag and drop. Home, search and settings are the nav rows (./nav.ts), so
+// the tree skips them.
 //
 // ## Where the parts are
 //
 //   Rail.tsx          this: the aside and its strips
 //   RailHeader.tsx    the top bar: collapse, the wordmark
-//   NewPlaneRow.tsx   the tree's sticky first row, which makes a top-level plane
-//   SearchTrigger.tsx the search entry under it, opening the search Plane
-//   PinnedRow.tsx     the pinned planes, the header group's last strip
+//   NavRows.tsx       home, search and settings, the body's first rows; ./nav.ts for their keys
+//   RailSection.tsx   a section header in the body, and its action
+//   NewPlaneRow.tsx   the tree's first row, which makes a top-level plane
+//   Pinned.tsx        the pinned planes, under the nav rows
+//   Extensions.tsx    what each extension offers, folded by package; a click makes one
 //   RailFooter.tsx    the bottom bar: links, connection, theme
 //   pin.ts            the pins and their ops
 //   RailTree.tsx      the tree: keyboard, drop marks
@@ -47,26 +51,23 @@ import { Skeleton } from "@nustackdev/ui-kit";
 import { useMemo } from "react";
 import { useSkeleton } from "../core/delay";
 import { useFocusedRoute, useRoutes } from "../core/router";
-import {
-	railAside,
-	railIndent,
-	railPinShelf,
-	railScroll,
-	railSkeletonBar,
-	railSkeletonRow,
-} from "../design";
+import { railAside, railIndent, railScroll, railSkeletonBar, railSkeletonRow } from "../design";
 import { AddPlane } from "./AddPlane";
+import { Extensions, extensionGroups, extensionLines } from "./Extensions";
+import { NAV_ITEMS, NavRows } from "./NavRows";
 import { NewPlaneRow } from "./NewPlaneRow";
+import { NAV_PLANES, useSettingsShortcut } from "./nav";
 import type { Notify } from "./ops";
-import { PinnedRow } from "./PinnedRow";
+import { Pinned, shownPins } from "./Pinned";
 import type { Pins } from "./pin";
 import { RailFooter } from "./RailFooter";
 import { RailHeader } from "./RailHeader";
+import { RailSection } from "./RailSection";
 import { RailTree } from "./RailTree";
-import { SearchTrigger } from "./SearchTrigger";
 import { useSearchShortcut } from "./search";
 import { visibleRows } from "./tree";
 import { childrenOf, type PlaneTree, type Registered, rootId } from "./types";
+import { NEW_PLANE_KEY, navKey, pinKey, RailFocusContext, useRailFocus } from "./useRailFocus";
 import { useReveal } from "./useReveal";
 
 export function Rail({
@@ -95,46 +96,95 @@ export function Rail({
 	const loading = !loaded || !root;
 
 	const rows = useMemo(
-		() => visibleRows(tree, childrenOf(tree, rootId(tree)), expanded),
+		() => visibleRows(tree, childrenOf(tree, rootId(tree)), expanded, NAV_PLANES),
 		[tree, expanded],
 	);
 
 	const reveal = useReveal({ tree, root, routes, selKey, expanded, onToggle });
+
+	const groups = useMemo(() => extensionGroups(registered), [registered]);
+	const lines = useMemo(() => extensionLines(groups, expanded), [groups, expanded]);
+	const pinned = useMemo(() => shownPins(tree, pins.ids), [tree, pins.ids]);
+
+	// Every row of the body, in the order it is drawn: what the arrows walk.
+	const keys = useMemo(
+		() =>
+			loading
+				? NAV_KEYS
+				: [
+						...NAV_KEYS,
+						...pinned.map(pinKey),
+						NEW_PLANE_KEY,
+						...rows.map((r) => r.key),
+						...lines.map((l) => l.key),
+					],
+		[loading, pinned, rows, lines],
+	);
+	// The tab stop falls back to the open plane's row: its nav row, its tree
+	// row, or its pin.
+	const selRow = NAV_PLANES.has(selKey)
+		? navKey(selKey)
+		: rows.some((r) => r.key === selKey)
+			? selKey
+			: pinned.includes(selKey)
+				? pinKey(selKey)
+				: null;
+	const focus = useRailFocus(keys, selRow);
 	useSearchShortcut();
+	useSettingsShortcut();
 
 	return (
 		// Folded is inert, not unmounted: the Add plane popup lives here and a
-		// pane's `...` still opens it, and cmd/ctrl+K still opens search.
+		// pane's `...` still opens it, and cmd/ctrl+K and cmd/ctrl+comma still
+		// open search and settings.
 		<aside aria-label="Sidebar" className={railAside}>
 			<RailHeader />
-			<SearchTrigger />
-			{loading ? null : (
-				<PinnedRow
-					tree={tree}
-					pins={pins}
-					routes={routes}
-					selKey={selKey}
-					reveal={reveal}
-					className={railPinShelf}
-				/>
-			)}
-			<nav aria-label="Planes" className={railScroll}>
-				{loading ? null : <NewPlaneRow />}
-				{loading ? (
-					<RailSkeleton />
-				) : (
-					<RailTree
-						tree={tree}
-						rows={rows}
-						routes={routes}
-						selKey={selKey}
-						onToggle={onToggle}
-						reveal={reveal}
-						notify={notify}
-						pins={pins}
-					/>
-				)}
-			</nav>
+			<RailFocusContext value={focus}>
+				{/* The body takes the focus a click leaves, out of the tab order: see ./useRailFocus.ts. */}
+				<nav
+					aria-label="Planes"
+					ref={focus.containerRef}
+					className={railScroll}
+					tabIndex={-1}
+					onClick={focus.onClick}
+					onKeyDown={focus.onKeyDown}
+				>
+					<NavRows routes={routes} selKey={selKey} />
+					{loading ? (
+						<RailSkeleton />
+					) : (
+						<>
+							<Pinned
+								tree={tree}
+								pins={pins}
+								routes={routes}
+								selKey={selKey}
+								reveal={reveal}
+								notify={notify}
+							/>
+							<RailSection label="Planes" />
+							<NewPlaneRow />
+							<RailTree
+								tree={tree}
+								rows={rows}
+								routes={routes}
+								selKey={selKey}
+								onToggle={onToggle}
+								reveal={reveal}
+								notify={notify}
+								pins={pins}
+							/>
+							<Extensions
+								groups={groups}
+								lines={lines}
+								expanded={expanded}
+								onToggle={onToggle}
+								notify={notify}
+							/>
+						</>
+					)}
+				</nav>
+			</RailFocusContext>
 			<RailFooter />
 			<AddPlane registered={registered} notify={notify} reveal={reveal} />
 		</aside>
@@ -142,22 +192,39 @@ export function Rail({
 }
 
 /**
- * The rail before its node is on the tree, at boot: the aside, its two bars
- * and skeleton rows, at the width the real one will take. The rows hold off
+ * The rail before its node is on the tree, at boot: the aside, its two bars,
+ * the nav rows and skeleton rows, at the width the real one will take. The rows hold off
  * like the viewer skeleton does, so a fast boot never flashes them.
  */
 export function RailPlaceholder() {
 	const shown = useSkeleton();
+	const routes = useRoutes();
+	const selKey = useFocusedRoute();
+	const focus = useRailFocus(NAV_KEYS, NAV_PLANES.has(selKey) ? navKey(selKey) : null);
 	return (
 		<aside aria-label="Sidebar" className={railAside}>
 			<RailHeader />
-			<nav aria-label="Planes" className={railScroll}>
-				{shown ? <RailSkeleton /> : null}
-			</nav>
+			<RailFocusContext value={focus}>
+				{/* The body takes the focus a click leaves, out of the tab order: see ./useRailFocus.ts. */}
+				<nav
+					aria-label="Planes"
+					ref={focus.containerRef}
+					className={railScroll}
+					tabIndex={-1}
+					onClick={focus.onClick}
+					onKeyDown={focus.onKeyDown}
+				>
+					<NavRows routes={routes} selKey={selKey} />
+					{shown ? <RailSkeleton /> : null}
+				</nav>
+			</RailFocusContext>
 			<RailFooter />
 		</aside>
 	);
 }
+
+/** The nav rows' keys, the body's first. */
+const NAV_KEYS = NAV_ITEMS.map((item) => navKey(item.id));
 
 /** Row-shaped placeholders, so the rail does not resize when the list lands. */
 function RailSkeleton() {

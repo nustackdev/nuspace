@@ -6,7 +6,7 @@
 // was no keyboard model at all. Off a flat list it is a `role="tree"` with a
 // roving tabindex and the usual four arrows.
 
-import { childrenOf, type PlaneTree, type RowKind } from "./types";
+import { childrenOf, type PlaneTree, type RowKind, type TreeRow } from "./types";
 
 /** One visible line of the tree, in render order. */
 export type VisibleRow = {
@@ -39,6 +39,19 @@ export function showsNoPlanes(row: VisibleRow): boolean {
 	return row.open && !row.hasKids;
 }
 
+/**
+ * A row's children as the tree draws them: a hidden child is left out and its
+ * own children take its place, so nothing under it goes missing.
+ */
+export function shownChildren(tree: PlaneTree, id: string, hidden: ReadonlySet<string>): TreeRow[] {
+	const out: TreeRow[] = [];
+	for (const kid of childrenOf(tree, id)) {
+		if (hidden.has(kid.id)) out.push(...shownChildren(tree, kid.id, hidden));
+		else out.push(kid);
+	}
+	return out;
+}
+
 /** Walk the tree into the flat list of rows the current fold state shows. */
 function flatten(
 	tree: PlaneTree,
@@ -48,11 +61,12 @@ function flatten(
 	pos: number,
 	size: number,
 	expanded: Set<string>,
+	hidden: ReadonlySet<string>,
 	out: VisibleRow[],
 ): void {
 	const row = tree[id];
 	if (!row) return;
-	const kids = childrenOf(tree, id);
+	const kids = shownChildren(tree, id, hidden);
 	const open = expanded.has(id);
 	out.push({
 		key: id,
@@ -70,22 +84,28 @@ function flatten(
 	});
 	if (!open) return;
 	kids.forEach((kid, i) => {
-		flatten(tree, kid.id, depth + 1, id, i + 1, kids.length, expanded, out);
+		flatten(tree, kid.id, depth + 1, id, i + 1, kids.length, expanded, hidden, out);
 	});
 }
 
 /**
  * Every visible row under `top`, the root's children: the root is walked
  * through rather than drawn, since the header strip stands in for it.
+ * `hidden` rows are drawn elsewhere (the nav rows, ./nav.ts), so the tree
+ * skips them and draws their children in their place.
  */
 export function visibleRows(
 	tree: PlaneTree,
 	top: { id: string }[],
 	expanded: Set<string>,
+	hidden: ReadonlySet<string> = new Set(),
 ): VisibleRow[] {
+	const shown = top.flatMap((row) =>
+		hidden.has(row.id) ? shownChildren(tree, row.id, hidden) : [row],
+	);
 	const out: VisibleRow[] = [];
-	top.forEach((row, i) => {
-		flatten(tree, row.id, 0, null, i + 1, top.length, expanded, out);
+	shown.forEach((row, i) => {
+		flatten(tree, row.id, 0, null, i + 1, shown.length, expanded, hidden, out);
 	});
 	return out;
 }

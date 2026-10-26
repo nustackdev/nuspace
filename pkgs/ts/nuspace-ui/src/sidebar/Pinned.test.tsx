@@ -1,4 +1,4 @@
-// The pinned row, rendered in jsdom.
+// The pinned rows, rendered in jsdom.
 //
 // jsdom lays nothing out, so the fades and the wheel's sideways scroll are
 // checked in a real browser. Drops are faked with a plain event carrying the
@@ -10,7 +10,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { paneRule } from "../core/router";
-import { PinnedRow } from "./PinnedRow";
+import { Pinned as PinnedRow } from "./Pinned";
 import { coerceTree, ROOT_ID } from "./types";
 import { PLANE_MIME } from "./useRailDrag";
 
@@ -47,6 +47,7 @@ function render(ids: string[], selKey = "", routes: string[] = []) {
 					routes={routes}
 					selKey={selKey}
 					reveal={() => {}}
+					notify={vi.fn()}
 				/>
 			</TooltipProvider>,
 		);

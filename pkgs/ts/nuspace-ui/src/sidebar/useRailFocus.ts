@@ -1,14 +1,20 @@
-// Roving tabindex for a rail.
+// Roving tabindex for the rail's body.
 //
-// A rail is one tab stop and the arrows move inside it. A rail with fifty rows
-// is otherwise a hundred and fifty tab stops.
+// The body is one tab stop and the arrows move through every row in it, in
+// the order they are drawn: the nav rows, the pinned, New plane, the tree,
+// the extensions. Down off the last wraps to the first. A body with fifty
+// rows is otherwise a hundred and fifty tab stops. Section headers are not
+// rows: the arrows pass them by.
+//
+// Mounted once, in ./Rail.tsx, and handed to every section through
+// `RailFocusContext`; each row reads it with `useRailNav`.
 //
 // Rows are addressed by `data-rail-key` rather than a ref map: the kit's
 // `NavLink` is a plain function component and does not take one, and the key
 // query works the same whether the rows came out of a tree or a flat list.
 
 import type * as React from "react";
-import { useCallback, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useRef, useState } from "react";
 
 export type RailFocus = {
 	/** Goes on the `role="tree"` container the rows are queried inside. */
@@ -28,6 +34,19 @@ export type RailFocus = {
 	 * it took the event, so a caller can handle the keys it adds on top.
 	 */
 	handleArrows: (e: React.KeyboardEvent, index: number) => boolean;
+	/** `handleArrows` for the row at `key`. */
+	arrows: (e: React.KeyboardEvent, key: string) => boolean;
+	/**
+	 * The body's click: it moves the keyboard into the body without putting
+	 * it on a row, so nothing shows focused until a key is pressed. The body
+	 * itself takes the focus; a clicked row becomes the tab stop, so the next
+	 * arrow carries on from it (`onKeyDown`). A click on a row's own control
+	 * keeps that control's focus. Without this a click on empty space only
+	 * drops the focus, sending the next Tab to the bottom bar.
+	 */
+	onClick: (e: React.MouseEvent<HTMLElement>) => void;
+	/** The body's own keys, while it holds the focus itself: the arrows, as if on the tab stop. */
+	onKeyDown: (e: React.KeyboardEvent<HTMLElement>) => void;
 };
 
 /**
@@ -88,5 +107,55 @@ export function useRailFocus(keys: string[], selectedKey: string | null): RailFo
 		[keys.length, focusIndex],
 	);
 
-	return { containerRef, tabKey, setActiveKey, focusKey, focusIndex, handleArrows };
+	const arrows = useCallback(
+		(e: React.KeyboardEvent, key: string) => {
+			const index = keys.indexOf(key);
+			return index >= 0 && handleArrows(e, index);
+		},
+		[keys, handleArrows],
+	);
+
+	const onClick = useCallback((e: React.MouseEvent<HTMLElement>) => {
+		const target = e.target as HTMLElement;
+		const row = target.closest<HTMLElement>("[data-rail-key]");
+		const control = target.closest("button, input");
+		if (row && control && control !== row) return;
+		if (row?.dataset.railKey) setActiveKey(row.dataset.railKey);
+		e.currentTarget.focus({ preventScroll: true });
+	}, []);
+
+	const onKeyDown = useCallback(
+		(e: React.KeyboardEvent<HTMLElement>) => {
+			if (e.target !== e.currentTarget || tabKey === null) return;
+			handleArrows(e, keys.indexOf(tabKey));
+		},
+		[keys, tabKey, handleArrows],
+	);
+
+	return {
+		containerRef,
+		tabKey,
+		setActiveKey,
+		focusKey,
+		focusIndex,
+		handleArrows,
+		arrows,
+		onClick,
+		onKeyDown,
+	};
 }
+
+/** The body's one focus, from ./Rail.tsx. */
+export const RailFocusContext = createContext<RailFocus | null>(null);
+
+/** The rail body's focus, from a row inside it. */
+export function useRailNav(): RailFocus {
+	const nav = useContext(RailFocusContext);
+	if (!nav) throw new Error("useRailNav outside the rail body");
+	return nav;
+}
+
+/** The body's row keys that are not a tree row's plane id, so no two rows share one. */
+export const navKey = (id: string) => `nav:${id}`;
+export const pinKey = (id: string) => `pin:${id}`;
+export const NEW_PLANE_KEY = "new-plane";

@@ -20,15 +20,15 @@
 // No indent guides: the indent alone carries the depth, and a hairline per
 // level was the loudest thing in a quiet rail.
 //
-// The tree is one tab stop; `useRailFocus` owns the tab stop, the by-key
-// focus and the four moves. What this adds on top is the two arrows that fold
-// and open-and-reveal. Drag and drop is ./useRailDrag.ts; this draws its
+// The tree's rows are in the rail body's one tab stop (./useRailFocus.ts),
+// which owns the by-key focus and the four moves across every section. What
+// this adds on top is the two arrows that fold and open-and-reveal. Drag and drop is ./useRailDrag.ts; this draws its
 // insertion line and its target, and drops them once the drag leaves for the
-// pinned row.
+// pinned rows.
 
 import { EmptyState } from "@nustackdev/ui-kit";
 import type * as React from "react";
-import { Fragment, useCallback, useMemo } from "react";
+import { Fragment, useCallback } from "react";
 import { openBeside, openHere } from "../core/router";
 import {
 	railDragging,
@@ -49,7 +49,7 @@ import { showsNoPlanes, type VisibleRow } from "./tree";
 import type { PlaneTree } from "./types";
 import { useDraft } from "./useDraft";
 import { useRailDrag } from "./useRailDrag";
-import { useRailFocus } from "./useRailFocus";
+import { useRailNav } from "./useRailFocus";
 
 export function RailTree({
 	tree,
@@ -71,11 +71,7 @@ export function RailTree({
 	notify: Notify;
 	pins: Pins;
 }) {
-	const keys = useMemo(() => rows.map((r) => r.key), [rows]);
-	const { containerRef, tabKey, setActiveKey, focusKey, focusIndex, handleArrows } = useRailFocus(
-		keys,
-		selKey,
-	);
+	const { tabKey, setActiveKey, focusKey, arrows } = useRailNav();
 	const { draft, startRename, commitDraft, cancelDraft } = useDraft({ notify, focusKey });
 	const { dragKey, target, rowProps, tailProps, leaveProps } = useRailDrag({
 		tree,
@@ -86,13 +82,13 @@ export function RailTree({
 
 	const onKeyDown = useCallback(
 		(e: React.KeyboardEvent, row: VisibleRow, index: number) => {
-			if (handleArrows(e, index)) return;
+			if (arrows(e, row.key)) return;
 			switch (e.key) {
 				case "ArrowRight":
 					// Unfold a folded row; step into an open one's first child.
 					e.preventDefault();
 					if (!row.open) onToggle(row.key);
-					else if (row.hasKids) focusIndex(index + 1);
+					else if (row.hasKids && rows[index + 1]) focusKey(rows[index + 1].key);
 					break;
 				case "ArrowLeft":
 					// Fold an open row; otherwise climb to the parent.
@@ -110,22 +106,18 @@ export function RailTree({
 					if (e.altKey && e.key === "Enter") openBeside(row.id);
 					else openHere(row.id);
 					break;
-				case "F2":
-					e.preventDefault();
-					startRename(row);
-					break;
 				default:
 					break;
 			}
 		},
-		[handleArrows, focusIndex, focusKey, onToggle, reveal, startRename],
+		[arrows, rows, focusKey, onToggle, reveal],
 	);
 
 	return (
 		// `contents`: a box for the drag's leave only, the rows and the tail
 		// stay laid out by the rail's scroll body.
-		<div className="contents" {...leaveProps}>
-			<div role="tree" aria-label="Planes" ref={containerRef} className={railTreeList}>
+		<div className="contents" data-rail-tree="" {...leaveProps}>
+			<div role="tree" aria-label="Planes" className={railTreeList}>
 				{rows.map((row, index) => {
 					const aimed = target?.key === row.key ? target.edge : null;
 					return (

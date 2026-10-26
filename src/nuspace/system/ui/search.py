@@ -665,8 +665,8 @@ def _upgrade() -> nu.Nu:
 
 
 def ensure_search() -> nu.Nu:
-    """The viewer plane and its cells, seeded once, an older one given its form. Not pinned.
+    """The viewer plane and its cells, seeded once, an older one given its form.
 
-    The sidebar's search entry and Cmd+K open it.
+    The sidebar's nav row and Cmd+K open it.
     """
-    return seed(PLANE, NAME, ICON, CELLS, backend="async", pin=False) >> _upgrade()
+    return seed(PLANE, NAME, ICON, CELLS, backend="async") >> _upgrade()

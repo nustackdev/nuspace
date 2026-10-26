@@ -1,18 +1,28 @@
-// The rail's top bar: collapse and the wordmark. A new plane is the tree's
-// first row (./NewPlaneRow.tsx), next to what it makes.
-//
-// No way home up here: home is an ordinary row in the tree.
+// The rail's top bar: collapse, the wordmark, and a `+` on the right that
+// opens the Add plane popup for a top-level plane, the same as the New plane
+// row under the Planes header (./NewPlaneRow.tsx) and cmd/ctrl+alt+N. Home,
+// search and settings are the nav rows under it (./NavRows.tsx).
 
-import { IconButton, Shortcut, Tooltip, TooltipContent, TooltipTrigger } from "@nustackdev/ui-kit";
-import { PanelLeft } from "lucide-react";
+import {
+	cn,
+	IconButton,
+	Shortcut,
+	Tooltip,
+	TooltipContent,
+	TooltipTrigger,
+} from "@nustackdev/ui-kit";
+import { PanelLeft, Plus } from "lucide-react";
 import {
 	railChromeButton,
 	railHeader,
+	railHeaderEnd,
 	railTooltipHint,
 	railWordmark,
 	railWordmarkNu,
 } from "../design";
+import { NEW_PLANE_KEYS, openAddPlane } from "./add";
 import { focusRailToggle, RAIL_KEYS, setRailCollapsed } from "./collapse";
+import { ROOT_ID } from "./types";
 
 export function RailHeader() {
 	return (
@@ -27,6 +37,24 @@ export function RailHeader() {
 			<span className={railWordmark}>
 				<span className={railWordmarkNu}>nu</span>space
 			</span>
+			<Tooltip>
+				<TooltipTrigger asChild>
+					<IconButton
+						variant="ghost"
+						size="sm"
+						ring="inset"
+						aria-label="New plane"
+						onClick={() => openAddPlane({ parent: ROOT_ID })}
+						className={cn(railChromeButton, railHeaderEnd)}
+					>
+						<Plus />
+					</IconButton>
+				</TooltipTrigger>
+				<TooltipContent side="bottom">
+					New plane
+					<Shortcut keys={NEW_PLANE_KEYS} size="sm" className={railTooltipHint} />
+				</TooltipContent>
+			</Tooltip>
 		</div>
 	);
 }

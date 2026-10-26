@@ -1,11 +1,13 @@
+import { isIconName } from "@nustackdev/ui-kit";
 import { describe, expect, it } from "vitest";
 import { shapeEmoji } from "./emoji";
 import { PACK_GROUPS, PACK_ICONS } from "./pack";
 import { DEFAULT_ICON, formatIcon, parseIcon, planeIcon } from "./parse";
 
 describe("icon spelling", () => {
-	it("reads the pack, emoji, and a bare lucide name", () => {
+	it("reads any lucide name, emoji, and a bare lucide name", () => {
 		expect(parseIcon("lucide:folder")).toEqual({ kind: "lucide", name: "folder" });
+		expect(parseIcon("lucide:zap-off")).toEqual({ kind: "lucide", name: "zap-off" });
 		expect(parseIcon("folder")).toEqual({ kind: "lucide", name: "folder" });
 		expect(parseIcon("FileText")).toEqual({ kind: "lucide", name: "file-text" });
 		expect(parseIcon("Gamepad2")).toEqual({ kind: "lucide", name: "gamepad-2" });
@@ -53,6 +55,7 @@ describe("icon pack", () => {
 		expect(names.length).toBeGreaterThanOrEqual(60);
 		expect(names.length).toBeLessThanOrEqual(120);
 		for (const { id } of PACK_GROUPS) expect(PACK_ICONS.some((i) => i.group === id)).toBe(true);
+		expect(names.filter((n) => !isIconName(n))).toEqual([]);
 	});
 });
 

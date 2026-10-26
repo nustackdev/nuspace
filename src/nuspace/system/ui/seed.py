@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import nu
 from nuspace.ops.cell import HasUi, cell_writes
-from nuspace.ops.pin import pin as pin_last
 from nuspace.ops.plane import plane_writes
 from nuspace.ops.utils import atomic
 from nuspace.shapes import Space
@@ -45,14 +44,12 @@ def seed(
     cells: tuple[tuple[str, str], ...],
     *,
     backend: str,
-    pin: bool = True,
 ) -> nu.Nu:
-    """A system ui plane and its cells, pinned last, when the plane was never made. Idempotent.
+    """A system ui plane and its cells, when the plane was never made. Idempotent.
 
     Missing means ``add_plane`` never wrote it (no name), so a plane the owner
-    has edited since, cells removed or renamed included, is left as it is,
-    and so is a pin the owner has taken off. One commit: the plane, its
-    cells and its pin land together. Each cell's ``has_ui`` is worked out
+    has edited since, cells removed or renamed included, is left as it is.
+    One commit: the plane and its cells land together. Each cell's ``has_ui`` is worked out
     first, outside the bracket, and only when the plane is missing.
 
     Args:
@@ -62,7 +59,9 @@ def seed(
         cells: ``(name, source)`` in order. Each cell's id is
             :func:`seeded_id`.
         backend: The backend its runs execute on. Required: there is no default.
-        pin: Pin it, after the pins there are.
+
+    Never pinned: the sidebar draws home, search and settings in its own
+    nav group, above the favorites.
     """
     missing = Space.planes[plane].contains("name").not_()
     writes = plane_writes(
@@ -77,8 +76,6 @@ def seed(
     ids = [(seeded_id(plane, name), name, source) for name, source in cells]
     for cell, name, source in ids:
         writes = writes >> cell_writes(plane, cell, source, _Seeding.ui[cell], name=name)
-    if pin:
-        writes = writes >> pin_last(plane)
     uis = [_Seeding.ui[cell].set(HasUi(source, plane, cell)) for cell, _, source in ids]
     body = nu.Sequential(*uis, atomic(nu.IfDo(missing, writes)))
     return nu.IfDo(snap(missing), nu.Frame(_Seeding, body, ui={}))
