@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "nuspace"
-version = "0.5.7"
+version = "0.6.0"
 description = "Computational space for everything you work with: notes, data, tools, agents."
 readme = "README.md"
 license = "AGPL-3.0-or-later"
@@ -14,14 +14,14 @@ dependencies = [
     # The fabrics a space runs on, nothing more: kv for the store, valkey for
     # its change notifications, ui for the browser, mp_pool for the workers,
     # proxy (invisibles) for the worker's session.
-    "nucore>=0.6.6",
-    "nustd[kv,ui,valkey,mp_pool,proxy]>=0.6.6",
+    "nucore>=0.6.7",
+    "nustd[kv,ui,valkey,mp_pool,proxy]>=0.6.7",
     # The store's change notifications run over virtuals' redis backend.
     "virtuals-py[redis]>=0.1.10",
     # The compiled web bundle. A separate distribution only because PyPI caps
     # project size and a SPA rebuilt on every UI tweak would eat the quota --
     # not optional. `pip install nuspace` gives you the browser.
-    "nuspace-ui>=0.5.6",
+    "nuspace-ui>=0.5.7",
     # The everyday Planes and Cells. A plugin like any other, found through
     # its entry point, but every space ships with it.
     "nuverse>=0.3.4",
