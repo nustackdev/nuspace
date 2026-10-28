@@ -9,6 +9,10 @@ Below is the changelog for **nuspace** - the full commit stream. Newest first.
 The `nuspace-ui` wheel is the same source tree's vite output and is not tracked
 separately here.
 
+## Unreleased
+
+- Edit README and summary to match the new identity lines
+
 ## 0.6.1 — 2026-10-27
 
 - Release nuspace 0.6.1, built on nuspace-ui 0.5.8 and ui-kit 0.3.6

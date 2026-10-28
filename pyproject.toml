@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "nuspace"
 version = "0.6.1"
-description = "Computational space for everything you work with: notes, data, tools, agents."
+description = "Computational space for your data and tools."
 readme = "README.md"
 license = "AGPL-3.0-or-later"
 authors = [{ name = "Gor Arakelyan", email = "gorarkln@gmail.com" }]

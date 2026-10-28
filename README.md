@@ -1,7 +1,8 @@
 <div align="center">
   <img width="112" alt="nuspace" src="https://nustack.dev/brand/logo-square-512@2x.png" />
   <h1>nuspace</h1>
-  <p>Computational space for everything you work with: notes, data, tools, agents.</p>
+  <p>Computational space for your data and tools. Human-first. Agent-native.</p>
+  <p><sub>Open-source · Self-hosted · Pure Python</sub></p>
   
   [![Python](https://img.shields.io/badge/python-%3E%3D%203.10-blue)](https://pypi.org/project/nuspace/)
   [![PyPI](https://img.shields.io/pypi/v/nuspace?color=yellow)](https://pypi.org/project/nuspace/)
@@ -14,7 +15,7 @@
 </div>
 
 
-Elsewhere, a note is a dead document, data is scattered, tools are siloed and an agent's work is lost in chat. In nuspace, they're all connected cells: living programs that hold data, logic and look in one form.
+In nuspace, your data and tools live in cells: tiny reactive programs that manage data, run logic and render UI. From a reading list to a server dashboard, it's all cells. Cells are written in nu, a Python programming model with no glue code between layers, so a cell is a few lines, not a thousand. Humans get the space as UI, agents get it as code.
 
 **nuspace in action:**
 
@@ -270,8 +271,8 @@ Any agent that reads skills learns nu and nuspace from them, installs nuspace an
 | 01 | <code>the theory</code> <br/> [**interaction-model**](https://github.com/nustackdev/interaction-model) | A programming model where every resource is a Ref and Interactions are first-class, so you compose logic across systems. |
 | 02 | <code>the primitive</code> <br/> [**nu**](https://github.com/nustackdev/nu) | The interaction model, implemented in Python. |
 | 03 | <code>the std library</code> <br/> [**nustd**](https://github.com/nustackdev/nu/tree/main/pkgs/nustd) | Batteries for nu: storage, UI, workers and more, ready to use. |
-| 04 | <code>the space</code> <br/> [**nuspace**](https://github.com/nustackdev/nuspace) | A space that runs nu programs. Every cell is one. |
-| 05 | <code>the ecosystem</code> <br/> [**nuverse**](https://github.com/nustackdev/nuverse) | Ready-made spaces and extensions, one install away. |
+| 04 | <code>the space</code> <br/> [**nuspace**](https://github.com/nustackdev/nuspace) | A space that runs nu programs. |
+| 05 | <code>the ecosystem</code> <br/> [**nuverse**](https://github.com/nustackdev/nuverse) | Ready-made packages, one install away. |
 | + | **your space**, on top of it all | Everything below exists so your space can be anything. |
 
 ## Community
