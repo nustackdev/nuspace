@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Keep space data in .nuspace and find spaces like git, with a home default
 - Export usage tracking from ops so planes can count first-run steps
 - Package planes get their own id and reopen the same plane across runs
 - Bare plane names default to nuverse, so first runs need no package name

@@ -22,12 +22,16 @@ from .out import OUT_CAP
 from .reconcile import reconcile
 from .runs import end_run, outcome, run_arm, run_fold
 from .space import (
+    DATA_DIR,
     DEFAULT_NAME,
     DEFAULT_SPARES,
     KERNEL_FILE,
     STATE_FILE,
     VALKEY_DIR,
     NotASpace,
+    data_dir,
+    find_space,
+    is_space,
     navigator,
     open_kernel,
     space_dir,
@@ -38,6 +42,7 @@ from .space import (
 
 
 __all__ = [
+    "DATA_DIR",
     "DEFAULT_NAME",
     "DEFAULT_SPARES",
     "INIT_BY",
@@ -53,9 +58,12 @@ __all__ = [
     "RunCell",
     "UnknownEnvError",
     "build_body",
+    "data_dir",
     "end_cell_run",
     "end_run",
+    "find_space",
     "init_start",
+    "is_space",
     "kernel",
     "kernel_loop",
     "navigator",

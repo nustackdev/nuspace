@@ -6,15 +6,13 @@ you open. ``NUSPACE_TELEMETRY=0`` turns it off whatever the file says.
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import rich_click as click
 from rich.text import Text
 
 from nuspace import _telemetry
 from nuspace._branding import BLUE, PURPLE
 
-from .._meta import console
+from .._meta import console, tilde
 
 
 __all__ = ["telemetry"]
@@ -57,14 +55,6 @@ def _switch(on: bool) -> str:
     return "nuspace telemetry on"
 
 
-def _where(path: Path) -> str:
-    """``path`` as a person reads it, home as ``~``."""
-    try:
-        return str(Path("~") / path.relative_to(Path.home()))
-    except ValueError:
-        return str(path)
-
-
 def _print(*lines: Text | str) -> None:
     for line in lines:
         console.print(line, highlight=False, soft_wrap=True)
@@ -103,7 +93,7 @@ def status() -> None:
         "",
         _heading("Your settings"),
         _row("id", _telemetry.distinct_id(), BLUE),
-        _row("config", _where(_telemetry.config_path()), BLUE),
+        _row("config", tilde(_telemetry.config_path()), BLUE),
         _row("turn " + ("off" if on else "on"), _switch(on), BLUE),
         "",
         f"[dim]{_WHY}[/dim]",

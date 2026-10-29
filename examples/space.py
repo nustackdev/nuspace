@@ -2,7 +2,8 @@
 
 Every Plane, Cell and content kind comes from an installed extension, found
 through its entry point.
-The space is the directory ``examples/example.nuspace``, kept between runs.
+The space's root is ``examples/example.nuspace``, its data in ``.nuspace/``
+inside it, kept between runs.
 
 Run it::
 

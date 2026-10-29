@@ -157,10 +157,11 @@ Install from PyPI and run a space yourself. Python 3.10 or newer.
 2. **Run**
 
    ```bash
-   nuspace run my.nuspace
+   nuspace run
    ```
 
-   A browser opens on your space.
+   A browser opens on your space: the nearest one up from here, else your home space.
+   `nuspace init` makes the current directory a space of its own, data in `.nuspace/`.
 
 3. **Try a demo**
 
@@ -169,7 +170,7 @@ Install from PyPI and run a space yourself. Python 3.10 or newer.
    nuspace run --with nudemos.movies
    ```
 
-   A throwaway space with a full app in it.
+   A full app in your space. Add `--tmp` for a throwaway space instead.
 
 </details>
 

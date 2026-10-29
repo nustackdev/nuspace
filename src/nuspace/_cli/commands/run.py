@@ -2,9 +2,10 @@
 
 One flag, one :mod:`nuspace.host` preset: :func:`~nuspace.host.serve` by
 default, :func:`~nuspace.host.headless` with ``--headless``. Runs until
-interrupted, then the brackets reap the workers on the way out. PATH is the
-space directory, made if missing. With no path the space is a throwaway
-directory, gone at close.
+interrupted, then the brackets reap the workers on the way out. Which space
+is :func:`~nuspace._cli._meta.space_root`: PATH, made a space if it is not
+one, else the nearest space up from here, else home. ``--tmp`` is a
+throwaway one, gone at close. The header names the space's root either way.
 
 ``--with`` names a Plane an installed package adds, ``pkg.plane`` as
 ``nuspace verse`` lists them, or a bare name for a nuverse Plane: it is made
@@ -22,7 +23,7 @@ from nuspace.ext.registry import registered_name
 from nuspace.host import presets
 
 from .._installed import resolve
-from .._meta import STORE_ENV, announce, hold, opened, path_argument
+from .._meta import announce, hold, opened, path_argument, space_root, tmp_option
 
 
 __all__ = ["run"]
@@ -31,11 +32,13 @@ __all__ = ["run"]
 @click.command(
     short_help="Open a space, in a browser or headless.",
     help=(
-        "Open the space at PATH and serve it in a browser, or headless: kernel and"
-        f" services, nothing drawn. PATH from ${STORE_ENV}, a throwaway space without one."
+        "Open the space at PATH, made if missing, and serve it in a browser, or headless:"
+        " kernel and services, nothing drawn. Without PATH, the nearest space up from"
+        " here, else the home space at ~."
     ),
 )
 @path_argument
+@tmp_option
 @click.option(
     "--with",
     "plane",
@@ -52,9 +55,16 @@ __all__ = ["run"]
 @click.option("-p", "--port", default=8080, show_default=True, help="Port to bind.")
 @click.option("--no-browser", is_flag=True, help="Do not open a browser tab on the way up.")
 def run(
-    path: str | None, plane: str | None, headless: bool, host: str, port: int, no_browser: bool
+    path: str | None,
+    tmp: bool,
+    plane: str | None,
+    headless: bool,
+    host: str,
+    port: int,
+    no_browser: bool,
 ) -> None:
     """Run until Ctrl+C."""
+    path = space_root(path, tmp=tmp)
     web = {"host": host, "port": port, "open_browser": not no_browser}
     if plane is not None:
         spec = resolve(plane)

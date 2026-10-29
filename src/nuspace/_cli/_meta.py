@@ -1,4 +1,9 @@
-"""What the commands share: the console, the versions, and how a space is held open."""
+"""What the commands share: the console, the versions, which space, and how it is held open.
+
+Which space, the way ``git`` finds a repository: PATH when given, else the
+nearest space at or above the current directory, else the home space (root
+``~``, data in ``~/.nuspace``). ``--tmp`` is a throwaway one instead.
+"""
 
 from __future__ import annotations
 
@@ -14,22 +19,21 @@ from rich.text import Text
 import nu
 from nuspace import _telemetry
 from nuspace._branding import BLUE, header
-from nuspace.system.kernel import NotASpace
+from nuspace.system.kernel import DATA_DIR, NotASpace, find_space
 
 
 __all__ = [
-    "STORE_ENV",
     "announce",
     "console",
     "hold",
     "opened",
     "path_argument",
+    "space_root",
+    "tilde",
+    "tmp_option",
     "version_of",
 ]
 
-
-#: The environment variable naming the space directory when no path is given.
-STORE_ENV = "NUSPACE_STORE"
 
 console = Console()
 
@@ -45,17 +49,37 @@ def version_of(package: str) -> str:
 
 
 def path_argument(fn: _F) -> _F:
-    """The space directory a command takes, from :data:`STORE_ENV` when absent."""
-    return click.argument("path", required=False, envvar=STORE_ENV)(fn)
+    """The space's root a command takes, positional and optional: see :func:`space_root`."""
+    return click.argument("path", required=False)(fn)
 
 
-def _where(path: str | None) -> str:
-    """The space directory as a person reads it: absolute, home as ``~``."""
-    if path is None:
-        return "throwaway space, gone at close"
+def tmp_option(fn: _F) -> _F:
+    """``--tmp``: a throwaway space instead of one found, for the commands that open one."""
+    return click.option(
+        "--tmp", is_flag=True, help="A throwaway space in a temp dir, gone at close."
+    )(fn)
+
+
+def space_root(path: str | None, *, tmp: bool = False) -> str | None:
+    """The root of the space a command means, absolute. None with ``tmp``, a throwaway.
+
+    PATH when given, else the nearest space at or above the current
+    directory, else home.
+    """
+    if tmp:
+        if path is not None:
+            raise click.UsageError("Give PATH or --tmp, not both.")
+        return None
+    if path is not None:
+        return str(Path(path).expanduser().resolve())
+    return str(find_space(Path.cwd()) or Path.home())
+
+
+def tilde(path: str | Path) -> str:
+    """``path`` as a person reads it: absolute, home as ``~``."""
     root = Path(path).expanduser().resolve()
     try:
-        return str(Path("~") / root.relative_to(Path.home()))
+        return str(Path("~") / root.relative_to(Path.home().resolve()))
     except ValueError:
         return str(root)
 
@@ -67,7 +91,13 @@ def announce(path: str | None, *, headless: bool = False, plane: str | None = No
     the header leaves both to it.
     """
     console.print(
-        header("sm", version=version_of("nuspace"), where=_where(path)),
+        header(
+            "sm",
+            version=version_of("nuspace"),
+            where="throwaway space, gone at close"
+            if path is None
+            else f"Path: {tilde(Path(path) / DATA_DIR)}",
+        ),
         highlight=False,
         soft_wrap=True,
     )

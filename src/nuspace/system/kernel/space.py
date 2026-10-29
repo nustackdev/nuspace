@@ -1,11 +1,15 @@
 """The brackets a space is opened in: store, pool, spares, backends.
 
-A space is a directory::
+A space is a directory, any one, its data kept in ``.nuspace/`` the way a
+repository keeps ``.git/``::
 
-    <space dir>/
-      kernel.sqlite     the Space store: planes, cells, nesting, runs, devices
-      state.sqlite      the States store: what the programs remember
-      valkey/           the notification server's data dir (pid, log)
+    <space root>/
+      .nuspace/
+        kernel.sqlite   the Space store: planes, cells, nesting, runs, devices
+        state.sqlite    the States store: what the programs remember
+        valkey/         the notification server's data dir (pid, log)
+
+The brackets here take the root; :func:`data_dir` is where the files are.
 
 Each store is one SQLite file in WAL mode, which every process opens and
 writes on its own: readers never wait, writers take turns on the file's
@@ -46,6 +50,7 @@ import nustd.valkey
 from nuspace.shapes import Space, States
 from nuspace.system.backends import provided
 from nustd.mp_pool.presets import spares as spares_shelf
+from nustd.valkey.resources import ping
 
 from .envs import KernelConfig
 from .kernel import kernel_loop
@@ -62,6 +67,7 @@ if TYPE_CHECKING:
 
 
 __all__ = [
+    "DATA_DIR",
     "DEFAULT_NAME",
     "DEFAULT_SPARES",
     "KERNEL_FILE",
@@ -70,7 +76,10 @@ __all__ = [
     "NotASpace",
     "Throwaway",
     "Warmed",
+    "data_dir",
+    "find_space",
     "free_port",
+    "is_space",
     "navigator",
     "open_kernel",
     "space_dir",
@@ -87,18 +96,48 @@ DEFAULT_NAME = "nuspace"
 #: one for the tab beside it.
 DEFAULT_SPARES = 2
 
-#: The Space store's file inside a space directory.
+#: The directory inside a space's root holding its data, as ``.git/`` does a repository's.
+DATA_DIR = ".nuspace"
+
+#: The Space store's file inside :data:`DATA_DIR`.
 KERNEL_FILE = "kernel.sqlite"
 
-#: The States store's file inside a space directory, beside the Space one.
+#: The States store's file inside :data:`DATA_DIR`, beside the Space one.
 STATE_FILE = "state.sqlite"
 
-#: The notification server's data dir inside a space directory.
+#: The notification server's data dir inside :data:`DATA_DIR`.
 VALKEY_DIR = "valkey"
+
+#: What an older nuspace kept loose in the root, moved into :data:`DATA_DIR` on open.
+_FLAT = (
+    KERNEL_FILE,
+    f"{KERNEL_FILE}-wal",
+    f"{KERNEL_FILE}-shm",
+    STATE_FILE,
+    f"{STATE_FILE}-wal",
+    f"{STATE_FILE}-shm",
+    VALKEY_DIR,
+)
 
 
 class NotASpace(ValueError):  # noqa: N818 -- names what the path is not
     """Raised when a path holds something other than a space, eg an old RocksDB store."""
+
+
+def is_space(root: str | Path) -> bool:
+    """Whether ``root`` is a space: its :data:`DATA_DIR` holds a Space store, or, flat, the root does.
+
+    The store file is the mark, not the directory alone: ``~/.nuspace`` holds
+    the user's config whether or not home is a space.
+    """
+    root = Path(root)
+    return (root / DATA_DIR / KERNEL_FILE).is_file() or (root / KERNEL_FILE).is_file()
+
+
+def find_space(start: str | Path) -> Path | None:
+    """The nearest space at or above ``start``, as ``git`` finds a repository. None when there is none."""
+    here = Path(start).expanduser().resolve()
+    return next((d for d in (here, *here.parents) if is_space(d)), None)
 
 
 def space_dir(path: str) -> str:
@@ -111,13 +150,39 @@ def space_dir(path: str) -> str:
         NotASpace: ``path`` is a RocksDB store directory.
     """
     root = Path(path).expanduser().resolve()
-    if (root / "CURRENT").is_file() and not (root / KERNEL_FILE).exists():
+    if (root / "CURRENT").is_file() and not is_space(root):
         msg = (
             f"{root} is a store from an older nuspace (RocksDB). "
             "Spaces are SQLite now and there is no migration: open a fresh directory."
         )
         raise NotASpace(msg)
     return str(root)
+
+
+def data_dir(root: str) -> str:
+    """Where the space at ``root`` (absolute, see :func:`space_dir`) keeps its stores.
+
+    A space an older nuspace made keeps them loose in the root: they move
+    into :data:`DATA_DIR` here, once, each file renamed in place. Refused
+    while that older nuspace still holds the space open.
+
+    Raises:
+        NotASpace: an older nuspace has the flat space open.
+    """
+    data = Path(root) / DATA_DIR
+    if (data / KERNEL_FILE).is_file() or not (Path(root) / KERNEL_FILE).is_file():
+        return str(data)
+    if ping(nustd.valkey.socket_path_for(Path(root) / VALKEY_DIR)):
+        msg = (
+            f"{root} is open in an older nuspace, which kept its files loose in it. "
+            f"Stop it and open again: the files move into {DATA_DIR}/."
+        )
+        raise NotASpace(msg)
+    data.mkdir(exist_ok=True)
+    for name in _FLAT:
+        if (Path(root) / name).exists():
+            (Path(root) / name).rename(data / name)
+    return str(data)
 
 
 def free_port() -> int:
@@ -128,7 +193,7 @@ def free_port() -> int:
 
 
 class Throwaway:
-    """A space directory that goes when its bracket closes. Binds nothing anyone reads.
+    """A space's root that goes when its bracket closes. Binds nothing anyone reads.
 
     Outside the store's own brackets, so the file and the server are closed
     by the time the directory is removed.
@@ -179,19 +244,20 @@ def navigator(path: str) -> nu.With:
     its own.
 
     Args:
-        path: The space directory, absolute (see :func:`space_dir`).
+        path: The space's data dir, absolute (see :func:`data_dir`).
     """
     return nu.With(_sqlite(path, KERNEL_FILE, Space), _sqlite(path, STATE_FILE, States))
 
 
 def _owned(path: str | None) -> tuple[str, nu.With]:
-    """The space directory, absolute, and the brackets that own it. See :func:`store`."""
+    """The space's data dir, absolute, and the brackets that own it. See :func:`store`."""
     throwaway = path is None
     root = space_dir(tempfile.mkdtemp(prefix="nuspace-") if throwaway else path)
-    served = nu.With(nustd.valkey.server(Path(root) / VALKEY_DIR), navigator(root))
+    data = data_dir(root)
+    served = nu.With(nustd.valkey.server(Path(data) / VALKEY_DIR), navigator(data))
     if throwaway:
         served = nu.With(nu.Provide(Throwaway, {"path": root}), served)
-    return root, served
+    return data, served
 
 
 def store(path: str | None = None) -> nu.With:
@@ -201,11 +267,12 @@ def store(path: str | None = None) -> nu.With:
     ever talks to a server that is not there.
 
     Args:
-        path: The space directory, created if missing. None is a throwaway
-            directory, removed when the bracket closes.
+        path: The space's root, created if missing, its data in
+            :data:`DATA_DIR`. None is a throwaway one, removed when the
+            bracket closes.
 
     Raises:
-        NotASpace: ``path`` is an old RocksDB store.
+        NotASpace: ``path`` is an old RocksDB store, or a flat space still open.
     """
     return _owned(path)[1]
 
@@ -246,7 +313,7 @@ def worker_context(path: str) -> nu.With:
     rides in its body.
 
     Args:
-        path: The space directory, absolute.
+        path: The space's data dir, absolute (see :func:`data_dir`).
     """
     return nu.With(
         navigator(path),
@@ -259,7 +326,7 @@ def worker_pool(path: str, *, name: str = DEFAULT_NAME) -> nu.Provide:
     """The fleet, every worker holding :func:`worker_context`. Closing kills them all.
 
     Args:
-        path: The space directory, absolute.
+        path: The space's data dir, absolute (see :func:`data_dir`).
         name: Process name prefix.
     """
     return nu.Provide(
@@ -291,7 +358,7 @@ def open_kernel(
 
     Args:
         body: What runs in the host beside the kernel.
-        path: The space directory. None is a throwaway one, see :func:`store`.
+        path: The space's root. None is a throwaway one, see :func:`store`.
         spares: Idle workers to keep up. Zero is every take cold.
         envs: Env factories by name, see :mod:`nuspace.system.kernel.envs`.
         space_envs: Env specs applied to every run, outermost.
@@ -300,11 +367,11 @@ def open_kernel(
         init: A plane to run once reconciled, see :func:`~.kernel.kernel`.
         name: Process name prefix for workers.
     """
-    root, owned = _owned(path)
+    data, owned = _owned(path)
     return nu.With(
         owned,
         nu.Provide(dict, {}),
-        worker_pool(root, name=name),
+        worker_pool(data, name=name),
         spares_shelf(spares),
         provided(backends),
         nu.Provide(KernelConfig, {"envs": envs, "space_envs": space_envs}),
