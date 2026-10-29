@@ -2,15 +2,16 @@
 
 ## Packages shipped from this repo
 
-- **nuspace** (the runtime, the `nuspace` command) — 0.6.1
+- **nuspace** (the runtime, the `nuspace` command) — 0.6.2
 - **nuspace-ui** (the compiled web bundle) — 0.5.8
 
 Below is the changelog for **nuspace** - the full commit stream. Newest first.
 The `nuspace-ui` wheel is the same source tree's vite output and is not tracked
 separately here.
 
-## Unreleased
+## 0.6.2 — 2026-10-30
 
+- Release nuspace 0.6.2 on nu 0.6.8 and nuverse 0.3.5
 - Trim the README description to what nuspace is, dropping the example list
 - Keep space data in .nuspace and find spaces like git, with a home default
 - Export usage tracking from ops so planes can count first-run steps
