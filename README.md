@@ -15,7 +15,7 @@
 </div>
 
 
-In nuspace, your data and tools live in cells: tiny reactive programs that manage data, run logic and render UI. From a reading list to a server dashboard, it's all cells. Cells are written in nu, a Python programming model with no glue code between layers, so a cell is a few lines, not a thousand. Humans get the space as UI, agents get it as code.
+In nuspace, your data and tools live in cells: tiny reactive programs that manage data, run logic and render UI. Cells are written in nu, a Python programming model with no glue code between layers, so a cell is a few lines, not a thousand. Humans get the space as UI, agents get it as code.
 
 **nuspace in action:**
 

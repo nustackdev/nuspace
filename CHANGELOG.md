@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Trim the README description to what nuspace is, dropping the example list
 - Keep space data in .nuspace and find spaces like git, with a home default
 - Export usage tracking from ops so planes can count first-run steps
 - Package planes get their own id and reopen the same plane across runs
