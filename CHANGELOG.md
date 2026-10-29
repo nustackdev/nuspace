@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Restructure telemetry tracking
 - Edit README and summary to match the new identity lines
 
 ## 0.6.1 — 2026-10-27

@@ -15,7 +15,6 @@ import nu
 from nuspace import _telemetry
 from nuspace._branding import BLUE, header
 from nuspace.system.kernel import NotASpace
-from nuspace.system.usage import Usage
 
 
 __all__ = [
@@ -91,21 +90,15 @@ def opened(preset: Callable[..., nu.Nu], *args: object, **kwargs: object) -> nu.
 def hold(term: nu.Nu) -> None:
     """Run a space until interrupted, then let the brackets reap the fleet.
 
-    Telemetry starts here (see :mod:`nuspace._telemetry`): on opening a
-    space, never on import. The first run event and ``space_opened`` are
-    queued, the space runs with a :class:`~nuspace.system.usage.Usage` bound
-    so the host tracks what is made and removed in it, and what is still
-    queued at the end gets a short grace to go.
+    What is still queued for telemetry (see :mod:`nuspace._telemetry`) gets
+    a short grace to go at the end. The space tells it what happens itself,
+    from its open on, the same as when opened from code.
 
     Compiled and evaluated without law validation: the space program is ours
     and tested, and validating its whole tree costs seconds per start.
     """
-    _telemetry.first_run()
-    _telemetry.track("space_opened")
     try:
-        nu.eval_in_loop(
-            nu.compile(nu.Provide(Usage, {"sink": _telemetry.track}, term)), nu.Context()
-        )
+        nu.eval_in_loop(nu.compile(term), nu.Context())
     except KeyboardInterrupt:
         console.print("[dim]Stopped[/dim]")
     finally:

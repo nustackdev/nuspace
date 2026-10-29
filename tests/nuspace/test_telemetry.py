@@ -1,4 +1,4 @@
-"""Telemetry: the config, the opt out, the sender thread, the host's usage, the browser's route.
+"""Telemetry: the config, the opt out, the sender thread, the ops' Track, the browser's route.
 
 Nothing leaves the machine: the sender thread is real, the POST is a stub
 that records what it was handed, and each test flushes before it looks.
@@ -7,6 +7,7 @@ that records what it was handed, and each test flushes before it looks.
 from __future__ import annotations
 
 import json
+import pickle
 import threading
 import time
 
@@ -15,13 +16,19 @@ import pytest
 import nu
 from nuspace import _telemetry
 from nuspace._telemetry import config, send
-from nuspace.system.usage import Track, Usage
+from nuspace.ops.usage import opened, track
 
 
 @pytest.fixture(autouse=True)
 def _home(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(tmp_path))
-    for name in ("NUSPACE_TELEMETRY", "NUSPACE_POSTHOG_TOKEN", "NUSPACE_POSTHOG_HOST"):
+    for name in (
+        "NUSPACE_TELEMETRY",
+        "NUSPACE_POSTHOG_TOKEN",
+        "NUSPACE_POSTHOG_HOST",
+        "DO_NOT_TRACK",
+        "CI",
+    ):
         monkeypatch.delenv(name, raising=False)
 
 
@@ -106,8 +113,25 @@ def test_a_broken_config_is_remade(tmp_path):
 def test_the_environment_turns_it_off(monkeypatch, value):
     _telemetry.set_telemetry(True)
     monkeypatch.setenv("NUSPACE_TELEMETRY", value)
-    assert _telemetry.env_override() is True
+    assert _telemetry.env_override() == "NUSPACE_TELEMETRY"
     assert _telemetry.telemetry_enabled() is False
+
+
+@pytest.mark.parametrize("name", ["DO_NOT_TRACK", "CI"])
+@pytest.mark.parametrize("value", ["1", "true", "yes"])
+def test_do_not_track_and_ci_turn_it_off(monkeypatch, name, value):
+    _telemetry.set_telemetry(True)
+    monkeypatch.setenv(name, value)
+    assert _telemetry.env_override() == name
+    assert _telemetry.telemetry_enabled() is False
+
+
+@pytest.mark.parametrize("name", ["DO_NOT_TRACK", "CI"])
+@pytest.mark.parametrize("value", ["", "0", "false"])
+def test_do_not_track_and_ci_unset_or_off_leave_it_on(monkeypatch, name, value):
+    monkeypatch.setenv(name, value)
+    assert _telemetry.env_override() is None
+    assert _telemetry.telemetry_enabled() is True
 
 
 @pytest.mark.parametrize("value", ["1", "on", ""])
@@ -196,23 +220,46 @@ def test_nothing_is_sent_from_a_dev_install(monkeypatch, posted):
     assert posted.events() == []
 
 
-# --- The host's usage and the browser's route ------------------------------------
+def test_opened_writes_nothing_where_nothing_may_be_sent(tmp_path, monkeypatch, posted):
+    monkeypatch.setattr(config, "is_dev_install", lambda: True)
+    nu.run(opened())
+    assert posted.events() == []
+    assert not (tmp_path / ".nuspace").exists()
 
 
-def test_a_sink_that_raises_breaks_nothing():
-    def sink(event):
-        raise RuntimeError
-
-    Usage(sink=sink).track("x")
+# --- The ops' Track, the open, and the browser's route ----------------------------
 
 
-def test_track_tells_the_bound_usage_and_nobody_otherwise():
-    told = []
-    track = Track("plane_created") >> Track("cell_removed")
-    nu.run(track)
-    assert told == []
-    nu.run(nu.Provide(Usage, {"sink": told.append}, track))
-    assert told == ["plane_created", "cell_removed"]
+def test_track_queues_as_nuspace_and_drops_anything_but_a_str(posted):
+    term = track("plane_created") >> track("cell_removed")
+    nu.validate(nu.compile(term))
+    pickle.loads(pickle.dumps(term))  # noqa: S301 -- our own term
+    nu.run(term)
+    _telemetry.track(object())
+    assert [e["event"] for e in posted.events()] == [
+        "nuspace_plane_created",
+        "nuspace_cell_removed",
+    ]
+
+
+def test_opened_makes_the_id_first_then_queues_the_open(tmp_path, posted):
+    assert not (tmp_path / ".nuspace").exists()
+    nu.run(opened())
+    assert (tmp_path / ".nuspace" / "config.json").exists()
+    events = posted.events()
+    assert [e["event"] for e in events] == [send.FIRST_RUN_EVENT, "nuspace_space_opened"]
+    assert {e["distinct_id"] for e in events} == {_telemetry.distinct_id()}
+
+
+def test_opened_breaks_nothing_when_home_is_unwritable(monkeypatch, posted):
+    def broken() -> None:
+        raise OSError("read only")
+
+    monkeypatch.setattr(config, "ensure", broken)
+    monkeypatch.setattr(config, "distinct_id", lambda: "unwritable")
+    monkeypatch.setattr(config, "load", lambda: {"telemetry": True})
+    nu.run(opened())
+    assert [e["event"] for e in posted.events()] == [send.FIRST_RUN_EVENT, "nuspace_space_opened"]
 
 
 async def test_the_web_device_queues_space_loaded(posted):

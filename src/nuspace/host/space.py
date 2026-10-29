@@ -13,7 +13,8 @@ inside :func:`~nuspace.system.kernel.open_kernel` after reconcile:
    search planes, made where missing, so they exist before the web device
    serves;
 3. :func:`~nuspace.system.info.write_info`: ``Space.state.info`` for this
-   open (space path, when, versions);
+   open (space path, when, versions), then the open told to telemetry
+   (:func:`~nuspace.ops.usage.opened`), however the space was opened;
 4. :func:`~nuspace.system.services.nav.clear_connections`: tabs of a previous
    run dropped, so nav never brings a plane up for one (D34);
 5. init started by the kernel's own :func:`~nuspace.system.kernel.init_start`,
@@ -38,6 +39,7 @@ from typing import TYPE_CHECKING
 
 import nu
 from nuspace.ext import RegistryWarning, space_registry
+from nuspace.ops.usage import opened
 from nuspace.system.info import write_info
 from nuspace.system.kernel import DEFAULT_SPARES, init_start, open_kernel, store
 from nuspace.system.services import ensure_system
@@ -159,6 +161,7 @@ def open_space(
     return open_kernel(
         seed_space()
         >> write_info(path)
+        >> opened()
         >> clear_connections()
         >> init_start(init_service.PLANE)
         >> beside,

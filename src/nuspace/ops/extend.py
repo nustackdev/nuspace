@@ -15,6 +15,8 @@ from nuspace.ext.registry import registered_name, short_name
 
 from .cell import HasUi, add_cell, cell_writes
 from .plane import plane_icon, plane_writes
+from .read import plane_exists
+from .usage import track
 from .utils import MintId, atomic
 
 
@@ -56,14 +58,36 @@ def create_plane(
         into: Set to the new plane's id once the commit landed, for a caller
             that needs a minted one: the record does not say which plane
             this call made.
+
+    Once the commit lands, each plane and cell it made is tracked as
+    ``plane_created`` and ``cell_created``, unless the plane was there
+    already and only rewritten.
     """
     pid = _Seeding.ids["p0"]
     first: list[nu.Nu] = [pid.set(MintId("p") if plane_id is None else plane_id)]
     label = spec.label if name is None else name
-    writes = [atomic(_seeded(spec, pid, parent, label, first))]
-    if into is not None:
-        writes.append(into.set(nu.Str(pid)))
-    return nu.Frame(_Seeding, nu.Sequential(*first, *writes), ids={}, ui={})
+
+    def made(new: nu.Ref) -> nu.Nu:
+        seeded = new.set(plane_exists(pid).not_()) >> _seeded(spec, pid, parent, label, first)
+        writes = [atomic(seeded)]
+        if into is not None:
+            writes.append(into.set(nu.Str(pid)))
+        planes, cells = _sizes(spec)
+        told = [track("plane_created") for _ in range(planes)]
+        told += [track("cell_created") for _ in range(cells)]
+        writes.append(nu.IfDo(nu.bool(new), nu.Sequential(*told)))
+        return nu.Frame(_Seeding, nu.Sequential(*first, *writes), ids={}, ui={})
+
+    return nu.let(False, made)
+
+
+def _sizes(spec: PlaneSpec) -> tuple[int, int]:
+    """How many planes and cells ``spec`` makes, its children's included."""
+    planes, cells = 1, len(spec.cells)
+    for child in spec.children:
+        p, c = _sizes(child)
+        planes, cells = planes + p, cells + c
+    return planes, cells
 
 
 def _seeded(

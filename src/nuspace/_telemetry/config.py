@@ -5,8 +5,10 @@ and a stable anonymous ``distinct_id``. Made the first time anything asks
 for it. Paths are read from ``$HOME`` on every call, never cached, so a
 test or a sandbox pointing ``HOME`` elsewhere gets its own.
 
-``NUSPACE_TELEMETRY`` set to ``0``, ``false`` or ``off`` turns telemetry off
-whatever the file says. It only ever turns it off.
+The environment only ever turns telemetry off, whatever the file says:
+``NUSPACE_TELEMETRY`` set to ``0``, ``false`` or ``off``, ``DO_NOT_TRACK``
+set to anything but that (the cross tool convention), or ``CI`` set the same
+way, which every major CI does, so nobody's pipeline is counted as use.
 """
 
 from __future__ import annotations
@@ -39,6 +41,9 @@ ENV = "NUSPACE_TELEMETRY"
 
 #: What ``NUSPACE_TELEMETRY`` reads as off, case ignored.
 _OFF = frozenset({"0", "false", "off", "no"})
+
+#: Conventions that turn telemetry off when set to anything but empty or off.
+_OFF_WHEN_SET = ("DO_NOT_TRACK", "CI")
 
 
 def home() -> Path:
@@ -95,14 +100,19 @@ def distinct_id() -> str:
     return str(ensure()["distinct_id"])
 
 
-def env_override() -> bool:
-    """Whether ``NUSPACE_TELEMETRY`` turns telemetry off right now."""
-    return os.environ.get(ENV, "").strip().lower() in _OFF
+def env_override() -> str | None:
+    """The environment variable turning telemetry off right now, None when none does."""
+    if os.environ.get(ENV, "").strip().lower() in _OFF:
+        return ENV
+    for name in _OFF_WHEN_SET:
+        if os.environ.get(name, "").strip().lower() not in {"", *_OFF}:
+            return name
+    return None
 
 
 def telemetry_enabled() -> bool:
     """Telemetry as it stands: the config's flag, unless the environment turns it off."""
-    if env_override():
+    if env_override() is not None:
         return False
     return bool(load().get("telemetry", True))
 

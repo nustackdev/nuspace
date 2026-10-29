@@ -1,9 +1,8 @@
-"""The kernel term: reconcile, then the run fold, pid 1 and the usage watch.
+"""The kernel term: reconcile, then the run fold and pid 1.
 
 Everything the kernel does is in the host, reading the intents the ops
 wrote (D1) and making them true through the backends. Nothing else runs
-cells. The usage watch (:func:`~nuspace.system.usage.watch`) only runs
-while something binds a :class:`~nuspace.system.usage.Usage`.
+cells.
 """
 
 from __future__ import annotations
@@ -12,7 +11,6 @@ import nu
 import nustd.kv
 from nuspace.ops import plane_exists, plane_run
 from nuspace.shapes import Space
-from nuspace.system.usage import watch
 
 from .reconcile import reconcile
 from .runs import run_fold
@@ -33,11 +31,11 @@ def init_start(plane_id: str) -> nu.Nu:
 
 
 def kernel_loop(init: str | None = None) -> nu.Nu:
-    """The run fold, and ``init`` and the usage watch run beside it.
+    """The run fold, and ``init`` run beside it.
 
     Assumes reconciled. Never returns.
     """
-    arms = [run_fold(), watch()]
+    arms = [run_fold()]
     if init is not None:
         arms.append(init_start(init))
     return nu.ParallelAsync(*arms)

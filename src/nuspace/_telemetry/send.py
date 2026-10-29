@@ -9,8 +9,8 @@ and the JSON, and drains what is queued into one ``/batch/`` POST at a time. Eve
 breaks because of telemetry. At exit the thread gets a short grace to send
 what is left.
 
-Nothing is sent when telemetry is off (see :mod:`.config`), on a dev
-install, or with no token: the thread checks before each POST and drops the
+Nothing is sent when telemetry is off (see :mod:`.config`: the flag, or
+``NUSPACE_TELEMETRY``, ``DO_NOT_TRACK`` or ``CI``), on a dev install, or with no token: the thread checks before each POST and drops the
 batch. ``NUSPACE_POSTHOG_TOKEN`` and ``NUSPACE_POSTHOG_HOST`` point it at
 another PostHog project, eg to test.
 """
@@ -46,6 +46,7 @@ __all__ = [
     "capture",
     "first_run",
     "flush",
+    "opened",
     "posthog_host",
     "posthog_token",
     "track",
@@ -113,18 +114,22 @@ def base_properties() -> dict[str, Any]:
     }
 
 
+@cache
 def _ssl_context() -> ssl.SSLContext:
-    """The CA bundle from certifi when importable, the platform one otherwise.
+    """The platform's CAs and certifi's together, made once per process.
 
-    python.org's macOS builds ship no system CA bundle, so the default
-    context trusts nothing and every HTTPS POST fails verification.
+    python.org's macOS builds ship no system CA bundle, so the platform
+    alone trusts nothing there. certifi alone misses the roots a company
+    network adds to the system store. Both, so either one is enough.
     """
+    context = ssl.create_default_context()
     try:
         import certifi
 
-        return ssl.create_default_context(cafile=certifi.where())
-    except Exception:
-        return ssl.create_default_context()
+        context.load_verify_locations(cafile=certifi.where())
+    except Exception:  # noqa: S110 -- the platform's CAs still stand
+        pass
+    return context
 
 
 def _may_send() -> bool:
@@ -260,8 +265,9 @@ def capture(event: str) -> None:
 
 
 def track(event: str) -> None:
-    """:func:`capture` ``event`` as nuspace's own, eg ``plane_created``. The host's usage sink."""
-    capture(f"{PREFIX}{event}")
+    """:func:`capture` ``event`` as nuspace's own, eg ``plane_created``. Anything but a str is dropped."""
+    if isinstance(event, str):
+        capture(f"{PREFIX}{event}")
 
 
 def flush(timeout: float = _EXIT_GRACE_SECONDS) -> bool:
@@ -294,3 +300,21 @@ def first_run() -> None:
         _queue(FIRST_RUN_EVENT, _mark_first_run)
     except Exception:  # noqa: S110
         pass
+
+
+def opened() -> None:
+    """A space opened: the id made if missing, the first run event, ``space_opened``. Never raises.
+
+    The id is made here, in the opening process, before any worker can race
+    to make its own: two would split one user in two. Nothing at all where
+    nothing may be sent (off, a dev install), so a test or a source checkout
+    never writes ``~/.nuspace``.
+    """
+    try:
+        if not _may_send():
+            return
+        config.ensure()
+    except Exception:  # noqa: S110
+        pass
+    first_run()
+    track("space_opened")

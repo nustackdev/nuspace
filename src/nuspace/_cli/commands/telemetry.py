@@ -52,8 +52,8 @@ def _switch(on: bool) -> str:
     """How to flip it from here."""
     if on:
         return "nuspace telemetry off"
-    if _telemetry.env_override():
-        return f"unset ${_telemetry.ENV}"
+    if (name := _telemetry.env_override()) is not None:
+        return f"unset ${name}"
     return "nuspace telemetry on"
 
 
@@ -77,7 +77,7 @@ def _print(*lines: Text | str) -> None:
         "Anonymous usage telemetry, set once for you across every space. It sends a few usage"
         " events, never anything from inside your spaces. Status with no command. nuspace is"
         " still young, so we'd appreciate you keeping it on."
-        f" ${_telemetry.ENV}=0 turns it off whatever is set here."
+        f" ${_telemetry.ENV}=0, $DO_NOT_TRACK or $CI turns it off whatever is set here."
     ),
 )
 @click.pass_context
@@ -92,8 +92,8 @@ def status() -> None:
     """Print the state and why, what is sent and what never is, the id, the path, how to switch."""
     on = _telemetry.telemetry_enabled()
     _print(_state_line(on))
-    if _telemetry.env_override():
-        _print(f"[dim]off by ${_telemetry.ENV}, whatever the config says[/dim]")
+    if (name := _telemetry.env_override()) is not None:
+        _print(f"[dim]off by ${name}, whatever the config says[/dim]")
     if _telemetry.is_dev_install():
         _print("[dim]dev install: nothing is sent either way[/dim]")
     _print(
@@ -115,8 +115,8 @@ def on() -> None:
     """Set the flag on."""
     _telemetry.set_telemetry(True)
     _print(_state_line(True))
-    if _telemetry.env_override():
-        _print(f"[dim]still off while ${_telemetry.ENV} says so[/dim]")
+    if (name := _telemetry.env_override()) is not None:
+        _print(f"[dim]still off while ${name} says so[/dim]")
     else:
         _print("[dim]Thank you, it helps a lot while nuspace is young.[/dim]")
 

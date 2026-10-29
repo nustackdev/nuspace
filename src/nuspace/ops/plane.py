@@ -27,6 +27,7 @@ from .pin import unpin
 from .read import plane_exists
 from .state import drop_cell_state, drop_plane_state
 from .tree import link, subtree, unlink
+from .usage import track
 from .utils import MintId, atomic, atomic_state
 
 
@@ -100,7 +101,8 @@ def add_plane(
             minted one: the record does not say which plane this call made.
 
     The props are written every time, so an existing plane given again takes
-    the ones passed now.
+    the ones passed now. Tracked as ``plane_created`` once the commit lands,
+    only when the plane is new and not a system one.
 
     Raises:
         ValueError: ``backend`` is empty: at build when it is a ``str``, at
@@ -109,8 +111,8 @@ def add_plane(
     if isinstance(backend, str) and not backend:
         raise ValueError(NO_BACKEND)
 
-    def write(pid: nu.ObjectRef) -> nu.Nu:
-        writes = plane_writes(
+    def write(pid: nu.ObjectRef, made: nu.Ref) -> nu.Nu:
+        writes = made.set(_new_user_plane(nu.Str(pid), system)) >> plane_writes(
             nu.Str(pid),
             backend=backend,
             name=name,
@@ -122,7 +124,22 @@ def add_plane(
         )
         return writes if into is None else writes >> into.set(nu.Str(pid))
 
-    return atomic(nu.let(MintId("p") if plane_id is None else plane_id, write))
+    minted = MintId("p") if plane_id is None else plane_id
+    return nu.let(
+        False,
+        lambda made: (
+            atomic(nu.let(minted, lambda pid: write(pid, made)))
+            >> nu.IfDo(nu.bool(made), track("plane_created"))
+        ),
+    )
+
+
+def _new_user_plane(plane_id: nu.StrArg, system: nu.BoolArg) -> nu.Nu:
+    """Whether writing ``plane_id`` now makes a plane a user owns: none there yet, not a system one."""
+    if system is True:
+        return nu.bool(False)
+    new = plane_exists(plane_id).not_()
+    return new if system is False else new.and_(nu.bool(system).not_())
 
 
 def plane_writes(
@@ -170,18 +187,27 @@ def remove_plane(plane_id: nu.StrArg) -> nu.Nu:
     per plane and per cell, and one per kind holding items of theirs. The first writes which planes and cells went into slots
     of the op's own, where the second reads them. Rows first, as
     :func:`~nuspace.ops.cell.remove_cell` does, so no plane or cell still
-    there reads its state gone.
+    there reads its state gone. Once the rows are gone, each plane and each
+    cell that went is tracked as ``plane_removed`` and ``cell_removed``.
     """
 
     def dropped(gone: nu.Ref, cells: nu.Ref) -> nu.Nu:
         planes = nu.ForEachDo(nu.List(gone), lambda p: drop_plane_state(nu.Str(p)))
         return planes >> nu.ForEachDo(nu.List(cells), lambda c: drop_cell_state(nu.Str(c)))
 
+    def told(gone: nu.Ref, cells: nu.Ref) -> nu.Nu:
+        planes = nu.ForEachDo(nu.List(gone), lambda _: track("plane_removed"))
+        return planes >> nu.ForEachDo(nu.List(cells), lambda _: track("cell_removed"))
+
     return nu.let(
         [],
         lambda gone: nu.let(
             [],
-            lambda cells: _remove_rows(plane_id, gone, cells) >> atomic_state(dropped(gone, cells)),
+            lambda cells: (
+                _remove_rows(plane_id, gone, cells)
+                >> told(gone, cells)
+                >> atomic_state(dropped(gone, cells))
+            ),
         ),
     )
 

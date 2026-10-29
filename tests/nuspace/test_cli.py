@@ -29,8 +29,8 @@ from nuspace.system.utils import snap
 def _home(tmp_path, monkeypatch):
     """A HOME of its own, so no test touches the real ``~/.nuspace``."""
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
-    monkeypatch.delenv("NUSPACE_TELEMETRY", raising=False)
-    monkeypatch.delenv("NUSPACE_STORE", raising=False)
+    for name in ("NUSPACE_TELEMETRY", "DO_NOT_TRACK", "CI", "NUSPACE_STORE"):
+        monkeypatch.delenv(name, raising=False)
 
 
 def _invoke(*args: str, **kwargs):

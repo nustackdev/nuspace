@@ -5,15 +5,17 @@
 - :mod:`.send`: fire and forget PostHog capture through one sender thread,
   and the first run event.
 
-What is sent: ``first_run`` once per user, ``space_opened`` per open from
-the command line, ``space_loaded`` per page load in the browser (through the
-web device, never from the browser itself), and ``plane_created``,
-``plane_removed``, ``cell_created``, ``cell_removed`` as the host sees them
-(:mod:`nuspace.system.usage`). Each carries the versions and the machine's
+What is sent: ``first_run`` once per user and ``space_opened`` per open, by
+the host however the space is opened (:func:`.opened`), ``space_loaded`` per
+page load in the browser (through the web device, never from the browser
+itself), and ``plane_created``, ``plane_removed``, ``cell_created``,
+``cell_removed`` by the ops that do it, in whatever process runs them
+(:mod:`nuspace.ops.usage`). Each carries the versions and the machine's
 kind, nothing about the space.
 
-Stdlib only, silent on every failure, and imported only by the command line
-and the web device: importing :mod:`nuspace` never reaches it.
+Stdlib only and silent on every failure. Queuing is free and never sends:
+the sender drops everything when telemetry is off, on a dev install, under
+CI or ``DO_NOT_TRACK`` (see :mod:`.config`).
 """
 
 from .config import (
@@ -26,7 +28,7 @@ from .config import (
     set_telemetry,
     telemetry_enabled,
 )
-from .send import PREFIX, base_properties, capture, first_run, flush, track
+from .send import PREFIX, base_properties, capture, first_run, flush, opened, track
 
 
 __all__ = [
@@ -41,6 +43,7 @@ __all__ = [
     "flush",
     "home",
     "is_dev_install",
+    "opened",
     "set_telemetry",
     "telemetry_enabled",
     "track",

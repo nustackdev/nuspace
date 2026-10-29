@@ -17,7 +17,7 @@ import pytest
 from _support.kernel import SET_42, Kernel, _Hold, history
 
 import nu
-from nuspace import CellSpec, Extension, PlaneSpec, boot, open_space, ops
+from nuspace import CellSpec, Extension, PlaneSpec, _telemetry, boot, open_space, ops
 from nuspace.ext import (
     GROUP,
     Registry,
@@ -37,7 +37,6 @@ from nuspace.system.kernel.space import free_port
 from nuspace.system.services import BOOTED, SERVICES, ensure_system, init
 from nuspace.system.ui import home
 from nuspace.system.ui.seed import seeded_id
-from nuspace.system.usage import Usage
 
 
 def _plane(name: str, label: str = "") -> PlaneSpec:
@@ -278,53 +277,66 @@ async def test_open_space_headless_runs_a_booted_plane(tmp_path, monkeypatch):
         await space.close()
 
 
-async def test_open_space_tells_a_bound_usage_what_is_made_and_removed(tmp_path, monkeypatch):
-    """Each user plane and cell made or removed told once, the system's never, edits not at all."""
+async def test_the_ops_track_what_is_made_and_removed(tmp_path, monkeypatch):
+    """Each user plane and cell made or removed tracked once by its op, the system's never, edits not at all."""
     _points(monkeypatch, [])
+    told: list[str] = []
+    monkeypatch.setattr(_telemetry, "track", told.append)
+    monkeypatch.setattr(_telemetry, "opened", lambda: told.append("opened"))
     path = str(tmp_path / "space")
     await nu.arun(nu.With(store(path), body=ops.add_plane(USER, backend="async") >> boot(USER)))
+    assert told == ["plane_created"]
+    told.clear()
 
-    told: list[str] = []
     loop = asyncio.get_running_loop()
     ready, done = loop.create_future(), asyncio.Event()
     held = nu.let(_Hold(ready, done), lambda _: nu.Noop())
     term = open_space(path, web=False, spares=1, name="nuspace-host", body=held)
-    task = asyncio.create_task(nu.arun(nu.Provide(Usage, {"sink": told.append}, term)))
+    task = asyncio.create_task(nu.arun(term))
     space = Kernel(await asyncio.wait_for(asyncio.shield(ready), 20), done, task)
-
-    async def heard(event: str, n: int) -> None:
-        deadline = loop.time() + 4
-        while told.count(event) < n and loop.time() < deadline:
-            await asyncio.sleep(0.05)
-        assert told.count(event) == n, told
-
     try:
         # Booted: the services, home and settings made themselves, none of it told.
         for plane in BOOTED:
             await space.until(history(plane), lambda rs: any(r["started_at"] for r in rs))
-        assert told == []
+        assert told == ["opened"]
+        told.clear()
         await space.run(ops.add_plane("extra", backend="async"))
-        await heard("plane_created", 1)
+        await space.run(ops.add_plane("extra", backend="async", name="again"))
+        assert told == ["plane_created"]
         await space.run(ops.add_cell("extra", SET_42, cell_id="e1"))
         await space.run(ops.add_cell("extra", SET_42, cell_id="e2"))
-        await heard("cell_created", 2)
+        await space.run(ops.add_cell("extra", SET_42, cell_id="e1"))
+        await space.run(ops.add_cell("missing", SET_42, cell_id="e3"))
+        await space.run(ops.add_cell(home.PLANE, SET_42, cell_id="on-home"))
+        assert told == ["plane_created", "cell_created", "cell_created"]
         await space.run(ops.rename_plane("extra", "renamed") >> ops.set_prog("e1", SET_42))
-        await space.run(ops.remove_cell("e1"))
-        await heard("cell_removed", 1)
+        await space.run(ops.remove_cell("e1") >> ops.remove_cell("e1"))
+        await space.run(ops.remove_cell("on-home"))
         await space.run(ops.remove_plane("extra"))
-        await heard("plane_removed", 1)
-        await heard("cell_removed", 2)
-        await asyncio.sleep(0.3)
-        assert sorted(told) == [
-            "cell_created",
-            "cell_created",
-            "cell_removed",
-            "cell_removed",
+        await space.run(ops.remove_plane(home.PLANE))
+        assert told == [
             "plane_created",
+            "cell_created",
+            "cell_created",
+            "cell_removed",
             "plane_removed",
+            "cell_removed",
         ]
     finally:
         await space.close()
+
+
+def test_create_plane_tracks_each_plane_and_cell_it_makes(tmp_path, monkeypatch):
+    told: list[str] = []
+    monkeypatch.setattr(_telemetry, "track", told.append)
+    child = PlaneSpec("child", "Child", cells=(("c", "1"),), backend="async")
+    spec = PlaneSpec(
+        "parent", "Parent", cells=(("a", "1"), ("b", "2")), children=(child,), backend="async"
+    )
+    path = str(tmp_path / "space")
+    made = ops.create_plane(spec, plane_id="p") >> ops.create_plane(spec, plane_id="p")
+    asyncio.run(nu.arun(nu.With(store(path), body=made)))
+    assert sorted(told) == ["cell_created"] * 3 + ["plane_created"] * 2
 
 
 def test_open_space_with_web_compiles():

@@ -29,6 +29,9 @@ dependencies = [
     "click>=8.0",
     "rich>=10.7",
     "rich-click>=1.6",
+    # CA bundle for telemetry's HTTPS POST: python.org macOS builds ship none,
+    # so without it every send fails verification, silently.
+    "certifi>=2023.7.22",
 ]
 keywords = [
     "nu",

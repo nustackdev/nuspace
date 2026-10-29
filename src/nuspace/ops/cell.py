@@ -31,6 +31,7 @@ from nustd.ui.core import Ref as UiRef
 from .kernel import interrupt_cell
 from .read import cell_exists, cell_plane, plane_exists
 from .state import drop_cell_state
+from .usage import track
 from .utils import MintId, atomic, atomic_state, keep_order, snapshot
 
 
@@ -167,14 +168,15 @@ def add_cell(
 
     ``has_ui`` is worked out from ``prog`` (:class:`HasUi`). The props are
     written every time, so an existing cell given again takes
-    the ones passed now.
+    the ones passed now. Tracked as ``cell_created`` once the commit lands,
+    only when the cell is new and its plane not a system one.
     """
 
-    def knowing(minted: nu.ObjectRef) -> nu.Nu:
+    def knowing(minted: nu.ObjectRef, made: nu.Ref) -> nu.Nu:
         cid = nu.Str(minted)
 
         def commit(has_ui: nu.Nu) -> nu.Nu:
-            placed = cell_writes(
+            placed = made.set(_new_user_cell(plane_id, cid)) >> cell_writes(
                 plane_id, cid, prog, has_ui, name=name, index=index, made_by=made_by, meta=meta
             )
             if into is None:
@@ -185,7 +187,23 @@ def add_cell(
 
     # Minted ahead of the bracket, so has_ui is worked out outside it, and a
     # retried commit writes the same id again.
-    return nu.let(MintId("c") if cell_id is None else cell_id, knowing)
+    minted = MintId("c") if cell_id is None else cell_id
+    return nu.let(
+        False,
+        lambda made: (
+            nu.let(minted, lambda cid: knowing(cid, made))
+            >> nu.IfDo(nu.bool(made), track("cell_created"))
+        ),
+    )
+
+
+def _new_user_cell(plane_id: nu.StrArg, cell_id: nu.StrArg) -> nu.Bool:
+    """Whether writing ``cell_id`` onto the plane now makes a cell a user owns.
+
+    The plane there and not a system one, and no cell of this id yet.
+    """
+    on_user = nu.bool(Space.planes[plane_id].props.system.fallback(False)).not_()
+    return plane_exists(plane_id).and_(cell_exists(cell_id).not_()).and_(on_user)
 
 
 def cell_writes(
@@ -225,18 +243,25 @@ def remove_cell(cell_id: nu.StrArg) -> nu.Nu:
     with its state. The other way round, a cell still on the
     plane (and its runs, still live until the interrupt lands) would read
     its state gone. This way the worst a crash between them leaves is state
-    no cell points at.
+    no cell points at. Tracked as ``cell_removed`` once the row is gone,
+    unless it was on a system plane.
     """
-    row = atomic(
-        nu.IfDo(
-            cell_exists(cell_id),
-            interrupt_cell(cell_id)
-            >> Space.planes[cell_plane(cell_id)].cells.remove(cell_id, missing_ok=True)
-            >> _touch(cell_plane(cell_id))
-            >> Space.cells.del_item(cell_id),
-        )
-    )
-    return row >> atomic_state(drop_cell_state(cell_id))
+
+    def row(gone: nu.Ref) -> nu.Nu:
+        on_user = nu.bool(Space.planes[cell_plane(cell_id)].props.system.fallback(False)).not_()
+        return atomic(
+            gone.set(False)
+            >> nu.IfDo(
+                cell_exists(cell_id),
+                gone.set(on_user)
+                >> interrupt_cell(cell_id)
+                >> Space.planes[cell_plane(cell_id)].cells.remove(cell_id, missing_ok=True)
+                >> _touch(cell_plane(cell_id))
+                >> Space.cells.del_item(cell_id),
+            )
+        ) >> nu.IfDo(nu.bool(gone), track("cell_removed"))
+
+    return nu.let(False, row) >> atomic_state(drop_cell_state(cell_id))
 
 
 def rename_cell(cell_id: nu.StrArg, name: nu.StrArg) -> nu.Nu:
