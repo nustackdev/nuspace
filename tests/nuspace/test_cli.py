@@ -20,6 +20,7 @@ from nuspace._cli import _installed, cli
 from nuspace._cli.commands import run as run_command
 from nuspace.ext import CellSpec, ContentSpec, Extension, PlaneSpec
 from nuspace.host import presets
+from nuspace.shapes import Space
 from nuspace.system.kernel import KERNEL_FILE, store
 from nuspace.system.ui import home
 from nuspace.system.utils import snap
@@ -36,6 +37,11 @@ def _home(tmp_path, monkeypatch):
 def _invoke(*args: str, **kwargs):
     result = CliRunner().invoke(cli, list(args), **kwargs)
     return result
+
+
+def _said(result) -> str:
+    """The output with rich's box and wrapping taken out, one line of words."""
+    return " ".join(result.output.replace("│", " ").split())
 
 
 class _Recorder:
@@ -88,6 +94,14 @@ def verse(monkeypatch):
     ]
     monkeypatch.setattr(_installed, "entry_points", lambda *, group: points)
     return points
+
+
+@pytest.fixture
+def verse_default(verse):
+    """:func:`verse` with the default package too, adding a ``jobs`` plane as ``tools`` does."""
+    ext = Extension((_plane("jobs", "Queue."), _plane("runs")))
+    verse.append(_point(_installed.DEFAULT_PACKAGE, "0.3.4", lambda: ext))
+    return verse
 
 
 # --- Help and version ------------------------------------------------------------
@@ -179,7 +193,7 @@ def test_run_from_opens_the_named_plane(monkeypatch, held, verse):
     ((args, kwargs),) = opened.calls
     assert (args[0].name, args[1]) == ("agents.crew", None)
     assert kwargs == {"host": "127.0.0.1", "port": 9002, "open_browser": False}
-    assert "agents-crew" in result.output
+    assert "plane agents.crew" in result.output
     assert held == ["term"]
 
 
@@ -191,32 +205,123 @@ def test_run_from_tells_apart_two_packages_sharing_a_name(monkeypatch, held, ver
     ((args, kwargs),) = opened.calls
     assert (args[0].name, args[0].description, args[1]) == ("tools.chat", "Talk.", "/tmp/space")
     assert kwargs == {"web": False}
-    assert "tools-chat" in result.output
+    assert "plane tools.chat" in result.output
     assert "headless" in result.output
 
 
-@pytest.mark.parametrize(
-    "plane", ["chat", "crew", "tools:chat", "agents.jobs", "nobody.chat", ".chat", "agents."]
-)
-def test_run_from_refuses_anything_but_an_installed_pkg_plane(held, verse, plane):
+@pytest.mark.parametrize("plane", ["agents.jobs", "nobody.chat", ".chat", "agents."])
+def test_run_from_refuses_anything_but_an_installed_pkg_plane(held, verse_default, plane):
     result = _invoke("run", "--with", plane)
     assert result.exit_code == 1
+    assert "pkg.plane" in result.output
     assert "nuspace verse" in result.output
     assert held == []
 
 
-def test_run_from_makes_the_plane_once(tmp_path):
-    """The real thing, headless: the plane lands under its fixed id, once."""
-    spec = PlaneSpec("nudemos.counter", "Counter", cells=(("count", "1"),), backend="async")
-    path = str(tmp_path / "space")
-    for _ in range(2):
+def test_run_from_takes_a_bare_name_as_a_nuverse_plane(monkeypatch, held, verse_default):
+    opened = _Recorder()
+    monkeypatch.setattr(presets, "with_plane", opened)
+    result = _invoke("run", "--with", "jobs", "--headless")
+    assert result.exit_code == 0, result.output
+    ((args, _),) = opened.calls
+    assert (args[0].name, args[0].description) == ("nuverse.jobs", "Queue.")
+    assert _installed.resolve("jobs") == _installed.resolve("nuverse.jobs")
+    assert _installed.resolve("tools.jobs").name == "tools.jobs"
+
+
+@pytest.mark.parametrize("plane", ["chat", "crew", "tools:chat", ""])
+def test_run_from_refuses_a_bare_name_nuverse_lacks_listing_its_planes(held, verse_default, plane):
+    result = _invoke("run", "--with", plane)
+    assert result.exit_code == 1
+    said = _said(result)
+    assert f"No plane {plane!r} in nuverse, where a bare name is looked up" in said
+    assert "Its planes: jobs, runs." in said
+    assert "nuspace verse" in said
+    assert held == []
+
+
+def test_run_from_says_so_when_nuverse_is_missing(held, verse):
+    result = _invoke("run", "--with", "jobs")
+    assert result.exit_code == 1
+    assert "nuverse is not installed" in _said(result)
+    assert held == []
+
+
+def test_a_bare_name_resolves_against_the_real_nuverse():
+    """nuverse always comes with nuspace, so its planes resolve bare."""
+    for name in ("jobs", "runs", "workers", "planes"):
+        assert _installed.resolve(name) == _installed.resolve(f"nuverse.{name}")
+
+
+def _run_with(path: str, *specs: PlaneSpec) -> None:
+    """Open the space at ``path`` headless with each of ``specs`` in turn, for real."""
+    for spec in specs:
         term = presets.with_plane(spec, path, web=False, extensions=())
         nu.eval_in_loop(nu.compile(nu.Race(term, nu.Delay(3.0))), nu.Context())
-    plane = presets.plane_id(spec)
-    assert plane == "nudemos-counter"
-    seeded = nu.With(store(path), body=snap(ops.cells(plane)))
-    value, _ = asyncio.run(nu.arun(seeded))
-    assert len(value) == 1
+
+
+def _read(path: str, term: nu.Nu):
+    value, _ = asyncio.run(nu.arun(nu.With(store(path), body=snap(term))))
+    return value
+
+
+def _made(path: str) -> dict:
+    """What the space recorded: registered plane name to the plane id made for it."""
+    return dict(_read(path, nu.Dict(Space.state.made.extract())))
+
+
+def _made_by(path: str, name: str) -> list[str]:
+    """The ids of the planes made from the Plane registered as ``name``."""
+    planes = _read(path, nu.Dict(Space.planes.extract()))
+    return [pid for pid, row in planes.items() if row["props"]["made_by"] == name]
+
+
+_COUNTER = PlaneSpec("nudemos.counter", "Counter", cells=(("count", "1"),), backend="async")
+
+
+def test_run_from_makes_the_plane_once(tmp_path):
+    """The real thing, headless: the plane gets a minted id, recorded, and the second run reuses it."""
+    path = str(tmp_path / "space")
+    _run_with(path, _COUNTER)
+    (plane,) = _made_by(path, "nudemos.counter")
+    assert plane.startswith("p_")
+    assert _made(path) == {"nudemos.counter": plane}
+    _run_with(path, _COUNTER)
+    assert _made_by(path, "nudemos.counter") == [plane]
+    assert _made(path) == {"nudemos.counter": plane}
+    assert len(_read(path, ops.cells(plane))) == 1
+
+
+def test_run_from_makes_a_deleted_plane_again(tmp_path):
+    path = str(tmp_path / "space")
+    _run_with(path, _COUNTER)
+    gone = _made(path)["nudemos.counter"]
+    asyncio.run(nu.arun(nu.With(store(path), body=ops.remove_plane(gone))))
+    assert _made_by(path, "nudemos.counter") == []
+    _run_with(path, _COUNTER)
+    (plane,) = _made_by(path, "nudemos.counter")
+    assert plane != gone
+    assert _made(path) == {"nudemos.counter": plane}
+
+
+def test_run_from_keeps_one_record_per_plane(tmp_path):
+    other = PlaneSpec("nudemos.movies", "Movies", backend="async")
+    path = str(tmp_path / "space")
+    _run_with(path, _COUNTER, other, _COUNTER, other)
+    made = _made(path)
+    assert set(made) == {"nudemos.counter", "nudemos.movies"}
+    assert made["nudemos.counter"] != made["nudemos.movies"]
+    assert _made_by(path, "nudemos.counter") == [made["nudemos.counter"]]
+    assert _made_by(path, "nudemos.movies") == [made["nudemos.movies"]]
+
+
+def test_run_from_a_bare_nuverse_name_records_it_under_its_full_name(tmp_path):
+    path = str(tmp_path / "space")
+    jobs = _installed.resolve("jobs")
+    _run_with(path, jobs, jobs)
+    made = _made(path)
+    assert list(made) == ["nuverse.jobs"]
+    assert _made_by(path, "nuverse.jobs") == [made["nuverse.jobs"]]
 
 
 # --- init ------------------------------------------------------------------------

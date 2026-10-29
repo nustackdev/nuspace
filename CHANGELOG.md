@@ -11,6 +11,8 @@ separately here.
 
 ## Unreleased
 
+- Package planes get their own id and reopen the same plane across runs
+- Bare plane names default to nuverse, so first runs need no package name
 - Restructure telemetry tracking
 - Edit README and summary to match the new identity lines
 

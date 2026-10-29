@@ -7,14 +7,18 @@ space directory, made if missing. With no path the space is a throwaway
 directory, gone at close.
 
 ``--with`` names a Plane an installed package adds, ``pkg.plane`` as
-``nuspace verse`` lists them: it is made in the space once, through
-:func:`~nuspace.host.with_plane`, and the tab opens on it.
+``nuspace verse`` lists them, or a bare name for a nuverse Plane: it is made
+in the space once, through :func:`~nuspace.host.with_plane`, and the tab
+opens on it. The space remembers the plane it made, so the next run with
+the same name reopens it. The header names the Plane: its id is only known
+once the space is open.
 """
 
 from __future__ import annotations
 
 import rich_click as click
 
+from nuspace.ext.registry import registered_name
 from nuspace.host import presets
 
 from .._installed import resolve
@@ -37,7 +41,8 @@ __all__ = ["run"]
     "plane",
     metavar="PLANE",
     help=(
-        "Make this plane in the space once and open on it: pkg.plane, as nuspace verse lists them."
+        "Make this plane in the space once and open on it: pkg.plane, as nuspace verse"
+        " lists them, or a bare name for a nuverse plane (jobs is nuverse.jobs)."
     ),
 )
 @click.option(
@@ -53,7 +58,7 @@ def run(
     web = {"host": host, "port": port, "open_browser": not no_browser}
     if plane is not None:
         spec = resolve(plane)
-        made = presets.plane_id(spec)
+        made = registered_name(spec)
         if headless:
             term = opened(presets.with_plane, spec, path, web=False)
         else:

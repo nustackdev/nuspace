@@ -345,11 +345,9 @@ def test_open_space_with_web_compiles():
 
 
 @pytest.mark.parametrize(("web", "open_browser"), [(True, True), (True, False), (False, False)])
-def test_with_plane_compiles_and_names_its_plane(monkeypatch, web, open_browser):
+def test_with_plane_compiles(monkeypatch, web, open_browser):
     _points(monkeypatch, [])
     spec = _plane("nudemos.counter", "Counter")
-    assert presets.plane_id(spec) == "nudemos-counter"
-    assert presets.plane_id(_plane("plain")) == "plain"
     term = presets.with_plane(spec, web=web, open_browser=open_browser)
     nu.validate(nu.compile(term))
 
@@ -360,8 +358,8 @@ async def test_browse_opens_once_the_port_answers(monkeypatch):
     server = await asyncio.start_server(lambda r, w: w.close(), "127.0.0.1", 0)
     port = server.sockets[0].getsockname()[1]
     try:
-        url = f"http://127.0.0.1:{port}/nudemos-x"
-        await presets.Browse(url, "0.0.0.0", port).asetup(nu.Context())  # noqa: S104
+        url = f"http://127.0.0.1:{port}/p_x"
+        await presets.browse(url, "0.0.0.0", port)  # noqa: S104
     finally:
         server.close()
         await server.wait_closed()
@@ -371,9 +369,23 @@ async def test_browse_opens_once_the_port_answers(monkeypatch):
 async def test_browse_gives_up_quietly(monkeypatch):
     opened: list[str] = []
     monkeypatch.setattr(presets.webbrowser, "open", opened.append)
-    browse = presets.Browse("http://x", "127.0.0.1", free_port(), timeout=0.2)
-    await browse.asetup(nu.Context())
+    await presets.browse("http://x", "127.0.0.1", free_port(), timeout=0.2)
     assert opened == []
+
+
+async def test_browse_as_a_term_reads_its_url_at_run_time(monkeypatch):
+    opened: list[str] = []
+    monkeypatch.setattr(presets.webbrowser, "open", opened.append)
+    server = await asyncio.start_server(lambda r, w: w.close(), "127.0.0.1", 0)
+    port = server.sockets[0].getsockname()[1]
+    base = f"http://127.0.0.1:{port}/"
+    term = nu.let("p_x", lambda plane: presets.Browse(nu.Str(base) + nu.Str(plane), "", port))
+    try:
+        await nu.arun(term)
+    finally:
+        server.close()
+        await server.wait_closed()
+    assert opened == [base + "p_x"]
 
 
 # --- Imports ---------------------------------------------------------------------

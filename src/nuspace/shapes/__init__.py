@@ -29,6 +29,7 @@ Space, what the space is::
       state         SpaceState
         recents     [plane id], newest first
         info        path, opened, versions
+        made        registered plane name -> plane id, the plane made from it
       pinned        [plane id], in order
 
 States, what the programs remember, by the same ids::

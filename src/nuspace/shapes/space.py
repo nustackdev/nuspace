@@ -36,11 +36,15 @@ class SpaceState(nu.Shape):
 
     ``recents`` is the plane ids opened in a tab, newest first, deduped and
     capped at :data:`RECENTS_CAP`, written whole (D24) by the web device.
-    ``info`` is written by the host at open.
+    ``info`` is written by the host at open. ``made`` maps a registered
+    Plane's name (``nuverse.jobs``) to the id of the plane the host made
+    from it when the space was opened with it, so the next open with it
+    finds that plane in one lookup. Written by the host.
     """
 
     recents = nustd.kv.PrimitiveListRef.slot()
     info = nustd.kv.ShapeRef.slot(SpaceInfo)
+    made = nustd.kv.DictRef.slot(str)
 
 
 class Space(nu.Shape):
@@ -54,7 +58,8 @@ class Space(nu.Shape):
     One writer per subtree: people, cells and services write ``planes``,
     ``cells`` and ``top`` through ops, the ops write intents into ``kernel`` and the
     kernel and the backends its effects, the web device writes
-    ``connections`` and ``state.recents``, the host writes ``state.info``.
+    ``connections`` and ``state.recents``, the host writes ``state.info`` and
+    ``state.made``.
 
     ``pinned`` is the plane ids pinned to the top of the sidebar, in order,
     written through the pin ops. A pin is a shortcut: the plane stays where
