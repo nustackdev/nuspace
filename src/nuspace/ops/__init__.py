@@ -85,6 +85,7 @@ from .state import (
     sibling,
 )
 from .tree import move_plane
+from .usage import track
 from .utils import atomic, atomic_state, mint_ordered_id, snapshot
 
 
@@ -143,6 +144,7 @@ __all__ = [
     "set_prog",
     "sibling",
     "snapshot",
+    "track",
     "unpin_plane",
     "workers",
 ]
