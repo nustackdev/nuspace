@@ -24,7 +24,7 @@ import nustd.kv
 from nuspace.shapes import Space
 
 from .read import cell_plane, cells, plane_exists
-from .utils import MintId, atomic
+from .utils import MintId, atomic, listed
 
 
 if TYPE_CHECKING:
@@ -48,6 +48,7 @@ __all__ = [
     "off_running",
     "plane_interrupt",
     "plane_kill",
+    "plane_live",
     "plane_run",
     "plane_stop",
     "run",
@@ -74,6 +75,15 @@ class Here(nu.Shape):
 STOP_GRACE = 10.0
 
 _kernel = Space.kernel
+
+
+def plane_live(plane_id: nu.StrArg) -> nu.List:
+    """A plane's live plane run ids, ``[]`` when it has none. Bare read.
+
+    Its ``planes_running`` entry is there only while it has live runs (the
+    last run out takes it away), so a plane with none has no set to read.
+    """
+    return listed(_kernel.planes_running[plane_id].runs)
 
 
 def _snap(term: nu.Nu) -> nu.Nu:
@@ -292,7 +302,7 @@ def off_running(run_id: nu.StrArg) -> nu.Nu:
 
 def live_runs_of(plane_id: nu.StrArg, body: Callable[[nu.Str], nu.Nu]) -> nu.Nu:
     """``body(run_id)`` for every live plane run of the plane. No bracket."""
-    live = nu.list(_kernel.planes_running[plane_id].runs)
+    live = plane_live(plane_id)
     return nu.ForEachDo(live, lambda rid: body(nu.Str(rid)))
 
 
@@ -379,7 +389,7 @@ def runs(plane: nu.StrArg | None = None) -> nu.List:
     A run's cell runs are :func:`cell_runs`; an ended run is read by id with
     :func:`run`.
     """
-    live = _kernel.running if plane is None else _kernel.planes_running[plane].runs
+    live = _kernel.running if plane is None else plane_live(plane)
     return nu.sorted(live).iter().map(lambda rid: _run_row(nu.Str(rid))).to_list()
 
 

@@ -14,6 +14,8 @@ from __future__ import annotations
 import nu
 from nuspace.shapes import Space
 
+from .utils import listed
+
 
 __all__ = [
     "cell_exists",
@@ -53,7 +55,7 @@ def plane_title(plane_id: nu.StrArg) -> nu.Str:
 
 def cells(plane_id: nu.StrArg) -> nu.List:
     """A plane's cell ids, in order. ``[]`` for a plane never written."""
-    return nu.list(Space.planes[plane_id].cells)
+    return listed(Space.planes[plane_id].cells)
 
 
 def cell_exists(cell_id: nu.StrArg) -> nu.Bool:
@@ -79,7 +81,7 @@ def children(plane_id: nu.StrArg = "") -> nu.List:
 
     ``[]`` for a plane never written.
     """
-    under = nu.list(Space.planes[plane_id].children)
+    under = listed(Space.planes[plane_id].children)
     return nu.List(nu.If(nu.Str(plane_id) == "", nu.list(Space.top), under))
 
 

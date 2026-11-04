@@ -11,7 +11,7 @@ from __future__ import annotations
 import nu
 import nustd.kv
 from nuspace.ops import plane_exists, plane_run
-from nuspace.ops.utils import atomic_state
+from nuspace.ops.utils import atomic_state, listed
 from nuspace.shapes import CellState, reroot
 
 from ..utils import park, snap
@@ -78,21 +78,26 @@ def boot(plane_id: nu.StrArg) -> nu.Nu:
     A store with no list yet gets :data:`BOOTED` first. Takes effect at the
     next open: init reads its list once.
     """
-    listed = Boot.planes
+    planes = Boot.planes
     return atomic_state(
         seed(list(BOOTED))
-        >> _here(nu.IfDo(listed.contains(plane_id).not_(), listed.append(plane_id)))
+        >> _here(nu.IfDo(planes.contains(plane_id).not_(), planes.append(plane_id)))
     )
 
 
 def unboot(plane_id: nu.StrArg) -> nu.Nu:
-    """Take a plane off init's boot list. A no-op when it is not listed."""
-    return atomic_state(_here(Boot.planes.remove(plane_id, missing_ok=True)))
+    """Take a plane off init's boot list. A no-op when it is not listed, or there is no list yet.
+
+    The list is written by the first :func:`boot` or open, so a store that
+    had neither has none to take from.
+    """
+    planes = Boot.planes
+    return atomic_state(_here(nu.IfDo(planes.exists(), planes.remove(plane_id, missing_ok=True))))
 
 
 def booted() -> nu.List:
     """The boot list, from anywhere. Bare read, ``[]`` when there is none."""
-    return nu.list(_here(Boot.planes))
+    return nu.list(_here(listed(Boot.planes)))
 
 
 def program() -> nu.Nu:

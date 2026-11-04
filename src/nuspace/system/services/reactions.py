@@ -63,7 +63,7 @@ import nu
 import nu.prog
 import nustd.kv
 from nuspace.ops import add_cell, add_plane, cell_exists, cell_interrupt, latest, remove_cell
-from nuspace.ops.kernel import add_cell_run, add_plane_run
+from nuspace.ops.kernel import add_cell_run, add_plane_run, plane_live
 from nuspace.ops.state import plane_state
 from nuspace.ops.utils import MintId, atomic, atomic_state
 from nuspace.shapes import PlaneState, Space
@@ -117,7 +117,7 @@ def _here(term: nu.Nu) -> nu.Nu:
 
 def ensure_reactions() -> nu.Nu:
     """The plane, made when missing. No cells: each is a reaction. init's boot list runs it."""
-    missing = snap(Space.planes[PLANE].contains("name").not_())
+    missing = snap(Space.planes[PLANE].name.exists().not_())
     return nu.IfDo(missing, add_plane(PLANE, backend="async", name=PLANE, system=True))
 
 
@@ -154,7 +154,7 @@ def source(change: nu.StrArg, plane_id: nu.StrArg, imports: str = "") -> nu.Nu:
 
 def _live_of(plane_id: nu.StrArg, by: nu.StrArg | None = None) -> nu.Str:
     """A live plane run of the plane, ``by`` when given, ``""`` when none. O(k), k its live runs."""
-    live = nu.list(_kernel.planes_running[plane_id].runs).iter()
+    live = plane_live(plane_id).iter()
     if by is not None:
         live = live.filter(lambda rid: _kernel.runs[nu.Str(rid)].by == by)
     return nu.Str(live.first(default=""))

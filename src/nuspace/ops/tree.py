@@ -19,7 +19,7 @@ import nu
 from nuspace.shapes import Space
 
 from .read import plane_exists
-from .utils import atomic
+from .utils import atomic, listed
 
 
 if TYPE_CHECKING:
@@ -49,7 +49,7 @@ def subtree(plane_id: nu.StrArg, body: Callable[[nu.Nu], nu.Nu]) -> nu.Nu:
     cycle written by hand ends rather than going round forever.
     """
     going, edge = nu.List(_Walk.going), nu.List(_Walk.edge)
-    below = nu.Flatten(nu.Map(edge, lambda p: nu.list(Space.planes[nu.Str(p)].children)))
+    below = nu.Flatten(nu.Map(edge, lambda p: listed(Space.planes[nu.Str(p)].children)))
     step = nu.List(nu.Collect(nu.Filter(nu.Unique(below), lambda p: going.contains(p).not_())))
     walk = nu.WhileDo(edge.len() > 0, _Walk.going.set(going + edge) >> _Walk.edge.set(step))
     return nu.Frame(_Walk, walk >> body(_Walk.going), going=[], edge=nu.List.of(plane_id))

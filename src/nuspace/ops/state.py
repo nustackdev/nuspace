@@ -174,7 +174,8 @@ def drop_items(level: str, scope_id: nu.StrArg) -> nu.Nu:
 
     def drop(kind: nu.Attr) -> nu.Nu:
         held = getattr(States.contents[nu.Str(kind)], level)
-        return nu.IfDo(held.contains(scope_id), held.del_item(scope_id))
+        there = nu.IfDo(held.contains(scope_id), held.del_item(scope_id))
+        return nu.IfDo(held.exists(), there)
 
     return nu.ForEachDo(nu.list(States.contents.keys()), drop)
 

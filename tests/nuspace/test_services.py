@@ -73,7 +73,7 @@ def version(v: str) -> str:
 
 
 def boot_list() -> nu.Nu:
-    return nu.list(reroot(init.Boot.planes, init.PLANE, init.CELL))
+    return init.booted()
 
 
 # --- bootstrap, boot list: no workers ----------------------------------------------------

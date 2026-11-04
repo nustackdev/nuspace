@@ -53,6 +53,7 @@ __all__ = [
     "atomic_state",
     "field_str",
     "keep_order",
+    "listed",
     "mint_ordered_id",
     "snapshot",
 ]
@@ -156,6 +157,16 @@ def snapshot(term: nu.Nu) -> nu.Nu:
     one store costs nothing for the other.
     """
     return nustd.kv.Snapshot(nustd.kv.Snapshot(term, scope=States), scope=Space)
+
+
+def listed(ref: nu.Nu) -> nu.List:
+    """A list or set container's members as a list, ``[]`` when it was never written. Bare read.
+
+    For containers that may legitimately be absent, eg a plane's ``cells``
+    asked about a plane that is not there. A fixed container is made at open
+    instead (:func:`~nuspace.ops.init_stores`) and read as is.
+    """
+    return nu.list(nu.If(ref.exists(), nu.list(ref), []))
 
 
 def field_str(row: nu.Nu, field: str) -> nu.Str:

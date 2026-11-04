@@ -707,7 +707,7 @@ async def test_connection_pane_params(store):
             lambda: store.read(conns["s1"].params),
             lambda got: got == {"p1": {"id": "2"}, "p2": {}},
         )
-        assert await store.read(nu.list(restarts.keys())) == []
+        assert not await store.read(restarts.exists())
     finally:
         task.cancel()
         await asyncio.gather(task, return_exceptions=True)

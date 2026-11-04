@@ -304,7 +304,8 @@ class Content(Generic[S]):
         ``items(scope)[id]`` is :meth:`at`. The mapping is the store's own, so
         ``keys``, ``len``, ``contains`` and ``on_children_change`` read and
         watch storage, a write lands an item and ``items(scope)[id].erase()``
-        removes one. Not relative: name the running cell as
+        removes one. A scope no item ever landed in has no mapping yet:
+        ``exists()`` is False and ``len`` or ``keys`` raise. Not relative: name the running cell as
         ``(CELL, ops.Here.cell)``.
 
         Args:

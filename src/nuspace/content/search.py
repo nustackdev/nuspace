@@ -31,6 +31,15 @@ if TYPE_CHECKING:
 __all__ = ["asked", "matched", "scopes", "walk"]
 
 
+def _ids(held: nu.Nu) -> nu.List:
+    """A mapping's keys, ``[]`` when it was never written.
+
+    A kind's level, or one scope of it, exists only once an item landed
+    there: a kind never written in a plane has no ``planes`` to list.
+    """
+    return nu.list(nu.If(held.exists(), nu.list(held.keys()), []))
+
+
 def scopes(kind: type[Content[Any]], level: str) -> nu.List:
     """The ids of the scopes at ``level`` holding items of ``kind``: cells or planes. A bare read.
 
@@ -41,7 +50,8 @@ def scopes(kind: type[Content[Any]], level: str) -> nu.List:
     if level not in SLOTS:
         msg = f"scope level {level!r} is none of {tuple(SLOTS)}"
         raise ValueError(msg)
-    return nu.list(getattr(States.contents[kind_name(kind)], SLOTS[level]).keys())
+    held = getattr(States.contents[kind_name(kind)], SLOTS[level])
+    return _ids(held)
 
 
 def matched(
@@ -59,7 +69,7 @@ def matched(
     """
     held = kind.items(scope)
     return (
-        nu.list(held.keys())
+        _ids(held)
         .iter()
         .filter(lambda found: kind.match(kind.at(scope, nu.Str(found)), **question))
     )

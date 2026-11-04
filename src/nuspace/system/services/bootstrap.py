@@ -45,8 +45,8 @@ def _service(plane_id: str, cell_id: str, shim: str) -> nu.Nu:
     prog (eg written by hand). The cell's ``has_ui`` is worked out first,
     outside the bracket, and only when the cell is missing.
     """
-    no_plane = Space.planes[plane_id].contains("name").not_()
-    no_cell = Space.cells[cell_id].contains("prog").not_()
+    no_plane = Space.planes[plane_id].name.exists().not_()
+    no_cell = Space.cells[cell_id].prog.exists().not_()
     made = nu.IfDo(no_plane, plane_writes(plane_id, backend="mp", name=plane_id, system=True))
 
     def both(ui: nu.ObjectRef) -> nu.Nu:

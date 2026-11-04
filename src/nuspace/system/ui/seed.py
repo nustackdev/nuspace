@@ -63,7 +63,7 @@ def seed(
     Never pinned: the sidebar draws home, search and settings in its own
     nav group, above the favorites.
     """
-    missing = Space.planes[plane].contains("name").not_()
+    missing = Space.planes[plane].name.exists().not_()
     writes = plane_writes(
         plane,
         backend=backend,

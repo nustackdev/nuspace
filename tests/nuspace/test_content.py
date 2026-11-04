@@ -212,7 +212,7 @@ async def test_items_is_one_scopes_items_by_id_typed_as_the_kinds_shape(store):
     assert sorted(await store.read(nu.list(held.keys()))) == ["a", "b"]
     assert await store.read(held["b"].body) == "two"
     assert await store.read(nu.list(NoteContent.items((SPACE, "")).keys())) == ["s"]
-    assert await store.read(NoteContent.items((PLANE, "p")).len()) == 0
+    assert not await store.read(NoteContent.items((PLANE, "p")).exists())
     # An item removed through the mapping is gone from it.
     await store.run(ops.atomic_state(held["a"].erase()))
     assert await store.read(nu.list(held.keys())) == ["b"]

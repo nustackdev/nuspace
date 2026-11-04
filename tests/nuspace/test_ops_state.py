@@ -143,7 +143,7 @@ def test_bracketed_keeps_an_ops_own_bracket_and_brackets_a_loop_per_step():
 async def test_clear_state(store):
     p, a, b = await seeded(store)
     await store.run(ops.clear_cell_state(a))
-    assert await store.read(cell_state(a).extract()) == {}
+    assert not await store.read(States.cells.contains(a))
     assert await store.read(cell_state(b).extract()) == {"n": 2}
     assert await store.read(plane_state(p).extract()) == {"title": "t"}
     await store.run(ops.clear_plane_state(p))
