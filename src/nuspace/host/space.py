@@ -26,7 +26,8 @@ planes are sure to exist on a first open, so the start is sequenced here
 instead (the same term, same ``by``).
 
 :func:`init_space` is steps 1 and 2 alone, in the store's brackets only: the
-space directory made and seeded, and closed again, nothing run.
+space directory made, its containers created (as reconcile does at open)
+and seeded, and closed again, nothing run.
 
 Workers import :mod:`nuspace`, and so this module: the web device, which
 pulls in the web server, is imported only when a space serves.
@@ -39,6 +40,7 @@ from typing import TYPE_CHECKING
 
 import nu
 from nuspace.ext import RegistryWarning, space_registry
+from nuspace.ops import init_stores
 from nuspace.ops.usage import opened
 from nuspace.system.info import write_info
 from nuspace.system.kernel import DEFAULT_SPARES, init_start, open_kernel, store
@@ -92,7 +94,7 @@ def init_space(path: str) -> nu.With:
     Raises:
         NotASpace: ``path`` holds something other than a space.
     """
-    return nu.With(store(path), body=seed_space())
+    return nu.With(store(path), body=init_stores() >> seed_space())
 
 
 def open_space(

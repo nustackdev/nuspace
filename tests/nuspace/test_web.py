@@ -826,6 +826,7 @@ async def test_connection_new_plane_runs_on_the_real_store():
     held = asyncio.create_task(nu.arun(nu.With(space_store(), body=_Hold(ready, done))))
     ctx = await asyncio.wait_for(asyncio.shield(ready), 20)
     space = Kernel(ctx, done, held)
+    await space.run(ops.init_stores())
     session = FakeSession()
     task = asyncio.create_task(
         nu.arun(connection(nu.Str("s1"), registry=REGISTRY), ctx.bind(Session, session))

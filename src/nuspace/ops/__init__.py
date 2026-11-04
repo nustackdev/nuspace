@@ -84,6 +84,7 @@ from .state import (
     plane_state,
     sibling,
 )
+from .stores import init_stores
 from .tree import move_plane
 from .usage import track
 from .utils import atomic, atomic_state, mint_ordered_id, snapshot
@@ -114,6 +115,7 @@ __all__ = [
     "create_cell",
     "create_plane",
     "env",
+    "init_stores",
     "latest",
     "mint_ordered_id",
     "move_pin",

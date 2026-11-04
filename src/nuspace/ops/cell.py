@@ -229,6 +229,7 @@ def cell_writes(
         >> row.name.set(name)
         >> _write_prog(row, prog, has_ui)
         >> row.props.made_by.set(made_by)
+        >> row.meta.init(nu.Dict.create())
     )
     if meta is not None:
         writes = writes >> row.meta.update(meta)

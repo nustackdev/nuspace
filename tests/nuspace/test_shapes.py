@@ -78,7 +78,7 @@ def _store(tmp_path):
     """A space on disk, and the two calls that write it, bracketed by :func:`ops.bracketed`, and read it back."""
 
     async def write(term):
-        await nu.arun(nu.With(_stores(tmp_path), body=ops.bracketed(term)))
+        await nu.arun(nu.With(_stores(tmp_path), body=ops.init_stores() >> ops.bracketed(term)))
 
     async def read(term):
         value, _ = await nu.arun(nu.With(_stores(tmp_path), body=ops.snapshot(term)))

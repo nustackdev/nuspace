@@ -243,7 +243,7 @@ async def test_open_space_headless_runs_a_booted_plane(tmp_path, monkeypatch):
         >> ops.add_cell(TAB, SET_42, cell_id="t")
         >> atomic(stale.opened.set(nu.Float(0.0)) >> stale.routes.set(nu.Literal([TAB])))
     )
-    await nu.arun(nu.With(store(path), body=seed))
+    await nu.arun(nu.With(store(path), body=ops.init_stores() >> seed))
 
     loop = asyncio.get_running_loop()
     ready, done = loop.create_future(), asyncio.Event()
@@ -284,7 +284,12 @@ async def test_the_ops_track_what_is_made_and_removed(tmp_path, monkeypatch):
     monkeypatch.setattr(_telemetry, "track", told.append)
     monkeypatch.setattr(_telemetry, "opened", lambda: told.append("opened"))
     path = str(tmp_path / "space")
-    await nu.arun(nu.With(store(path), body=ops.add_plane(USER, backend="async") >> boot(USER)))
+    await nu.arun(
+        nu.With(
+            store(path),
+            body=ops.init_stores() >> ops.add_plane(USER, backend="async") >> boot(USER),
+        )
+    )
     assert told == ["plane_created"]
     told.clear()
 
@@ -334,7 +339,11 @@ def test_create_plane_tracks_each_plane_and_cell_it_makes(tmp_path, monkeypatch)
         "parent", "Parent", cells=(("a", "1"), ("b", "2")), children=(child,), backend="async"
     )
     path = str(tmp_path / "space")
-    made = ops.create_plane(spec, plane_id="p") >> ops.create_plane(spec, plane_id="p")
+    made = (
+        ops.init_stores()
+        >> ops.create_plane(spec, plane_id="p")
+        >> ops.create_plane(spec, plane_id="p")
+    )
     asyncio.run(nu.arun(nu.With(store(path), body=made)))
     assert sorted(told) == ["cell_created"] * 3 + ["plane_created"] * 2
 

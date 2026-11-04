@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- A space creates every fixed store container at open, so reads find them
 - Kernel, supervisor and boot list create their containers up front at open
 - Move onto nu's NULL model: absent reads checked by existence, safe defaults
 

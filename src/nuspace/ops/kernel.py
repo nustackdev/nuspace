@@ -134,10 +134,11 @@ def add_plane_run(
         >> row.by.set(by)
         >> row.envs.set(_envs(envs))
         >> row.termination_requested.set(False)
-        >> row.cells.init({})
-        >> row.cells_running.init(set())
-        >> row.latest.init({})
-        >> row.workers.init(set())
+        >> row.cells.init(nu.Dict.create())
+        >> row.cells_running.init(nu.Set.create())
+        >> row.latest.init(nu.Dict.create())
+        >> row.workers.init(nu.Set.create())
+        >> row.workers_running.init(nu.Set.create())
         >> nu.ForEachDo(
             cells(plane_id),
             lambda cell: nu.let(

@@ -156,7 +156,8 @@ async def test_unboot_without_a_list(store):
 async def space(tmp_path_factory):
     path = str(tmp_path_factory.mktemp("services") / "space")
     seed = (
-        ensure_system()
+        ops.init_stores()
+        >> ensure_system()
         >> ops.add_plane(BOOTED_PLANE, backend="async")
         >> ops.add_cell(BOOTED_PLANE, SET_42, cell_id="c")
         >> boot(BOOTED_PLANE)

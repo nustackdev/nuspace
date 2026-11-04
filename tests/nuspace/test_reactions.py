@@ -153,7 +153,7 @@ async def test_disable_removes_the_reaction_and_its_key(store):
 @pytest_asyncio.fixture(loop_scope="module", scope="module")
 async def space(tmp_path_factory):
     path = str(tmp_path_factory.mktemp("reactions") / "space")
-    await nu.arun(nu.With(store(path), body=ensure_system()))
+    await nu.arun(nu.With(store(path), body=ops.init_stores() >> ensure_system()))
     k = await opened(NAME, path=path, spares=2, init=init.PLANE)
     yield k
     await k.close()
@@ -291,7 +291,8 @@ async def test_a_change_while_the_space_was_closed_fires_at_the_next_open(tmp_pa
     """Each reaction fires as it starts: what landed between two opens is handled."""
     path = str(tmp_path / "space")
     seed = (
-        ensure_system()
+        ops.init_stores()
+        >> ensure_system()
         >> ops.add_plane("chat", ui=True, backend="async")
         >> ops.add_cell("chat", WORKS)
     )

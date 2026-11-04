@@ -100,7 +100,9 @@ async def store(request, tmp_path):
     navigators = _navigators(getattr(request, "param", "memory"), tmp_path / "space")
     held = asyncio.create_task(nu.arun(nu.With(*navigators, MADE_STORE, body=_Hold(opened, done))))
     ctx = await opened
-    yield Store(ctx)
+    held_store = Store(ctx)
+    await held_store.run(ops.init_stores())
+    yield held_store
     done.set()
     await held
 
@@ -122,4 +124,6 @@ class DiskStore(Store):
 
 @pytest_asyncio.fixture
 async def disk(tmp_path):
-    return DiskStore(ctx=None, path=str(tmp_path / "space"))
+    held = DiskStore(ctx=None, path=str(tmp_path / "space"))
+    await held.run(ops.init_stores())
+    return held
