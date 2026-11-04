@@ -157,7 +157,7 @@ def _live_of(plane_id: nu.StrArg, by: nu.StrArg | None = None) -> nu.Str:
     live = nu.list(_kernel.planes_running[plane_id].runs).iter()
     if by is not None:
         live = live.filter(lambda rid: _kernel.runs[nu.Str(rid)].by == by)
-    return nu.Str(live.first()).fallback("")
+    return nu.Str(live.first(default=""))
 
 
 def live_run() -> nu.Str:

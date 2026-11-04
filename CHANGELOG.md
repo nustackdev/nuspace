@@ -9,6 +9,10 @@ Below is the changelog for **nuspace** - the full commit stream. Newest first.
 The `nuspace-ui` wheel is the same source tree's vite output and is not tracked
 separately here.
 
+## Unreleased
+
+- Move onto nu's NULL model: absent reads checked by existence, safe defaults
+
 ## 0.6.2 — 2026-10-30
 
 - Release nuspace 0.6.2 on nu 0.6.8 and nuverse 0.3.5

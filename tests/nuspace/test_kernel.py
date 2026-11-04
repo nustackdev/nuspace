@@ -435,7 +435,7 @@ LISTENS = _SHARED.format("nu.React(Shared.ping.on_change(), Shared.pong.set(Shar
 
 #: Pings forever, every tenth of a second, so the listener hears one once it listens.
 PINGS = _SHARED.format(
-    "nu.ForeverDo(nu.IfDo(Shared.ping.missing(), Shared.ping.set(0))"
+    "nu.ForeverDo(nu.IfDo(Shared.ping.exists().not_(), Shared.ping.set(0))"
     " >> Shared.ping.set(Shared.ping + 1) >> nu.Delay(0.1))"
 )
 

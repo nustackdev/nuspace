@@ -33,8 +33,7 @@ import nu
 import nustd.time
 from nu.context import FabricRef
 from nu.engine.structure import Declared
-from nu.lang import ScalarAction
-from nu.lang.sentinels import EMPTY
+from nu.lang import ScalarAction, is_null
 from nuspace.ops.utils import atomic
 from nuspace.shapes import EXIT_FAILED, Space
 
@@ -165,7 +164,7 @@ def require_backend(value: object) -> Backend:
     if isinstance(value, Backend):
         return value
     name = value.name if isinstance(value, _Named) else value
-    if name is EMPTY or name == "":
+    if is_null(name) or name == "":
         msg = "The plane names no backend: every plane must name one, eg mp or async"
         raise UnknownBackendError(msg)
     msg = f"No backend registered as {name!r}"
@@ -268,7 +267,7 @@ def _made(backend: nu.StrArg, run_id: nu.StrArg, made: nu.Nu) -> nu.Nu:
             >> row.handle.set(nu.str(pair[1]))
             >> row.started_at.set(nustd.time.time())
             >> run.workers.add(wid)
-            >> nu.IfDo(row.terminated_at.missing(), live)
+            >> nu.IfDo(row.terminated_at.exists().not_(), live)
         )
 
     return nu.ForEachDo(nu.List(made), record)
@@ -283,7 +282,7 @@ def ended(worker_id: nu.StrArg, exit_: nu.StrArg, error: nu.StrArg = "") -> nu.N
     run = _kernel.runs[row.run.fallback("")]
     return (
         nu.IfDo(
-            row.terminated_at.missing(),
+            row.terminated_at.exists().not_(),
             row.terminated_at.set(nustd.time.time()) >> row.exit.set(exit_) >> row.error.set(error),
         )
         >> run.workers_running.remove(worker_id, missing_ok=True)

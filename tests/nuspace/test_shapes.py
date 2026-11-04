@@ -62,7 +62,7 @@ def n_of(plane: str, cell: str) -> nu.Nu:
 
 
 def bump() -> nu.Nu:
-    return nu.IfDo(Tick.n.missing(), Tick.n.set(0)) >> Tick.n.set(Tick.n + 1)
+    return nu.IfDo(Tick.n.exists().not_(), Tick.n.set(0)) >> Tick.n.set(Tick.n + 1)
 
 
 def _stores(tmp_path) -> nu.With:

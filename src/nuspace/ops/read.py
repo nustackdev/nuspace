@@ -66,7 +66,7 @@ def cell_named(plane_id: nu.StrArg, name: nu.StrArg) -> nu.Str:
     named = (
         cells(plane_id).iter().filter(lambda c: Space.cells[nu.Str(c)].name.fallback("") == name)
     )
-    return nu.str(nu.First(named)).fallback("")
+    return nu.str(nu.First(named, ""))
 
 
 def cell_plane(cell_id: nu.StrArg) -> nu.Str:
@@ -90,7 +90,7 @@ def parent(plane_id: nu.StrArg) -> nu.Str:
 
 def prog(cell_id: nu.StrArg) -> nu.Str:
     """A cell's source, ``""`` where there is none."""
-    return nu.str(Space.cells[cell_id].prog).fallback("")
+    return nu.str(Space.cells[cell_id].prog.fallback(""))
 
 
 def plane_rows() -> nu.List:
@@ -132,7 +132,7 @@ def cell_rows(plane_id: nu.StrArg) -> nu.List:
         return nu.Dict.of(
             id=at,
             name=cell.name.fallback(""),
-            prog=nu.str(cell.prog).fallback(""),
+            prog=nu.str(cell.prog.fallback("")),
             props=nu.Dict.of(
                 made_by=cell.props.made_by.fallback(""), has_ui=cell.props.has_ui.fallback(True)
             ),

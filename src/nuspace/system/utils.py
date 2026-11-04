@@ -27,7 +27,7 @@ def moved(ref: nu.Nu, seen: nu.StrArg) -> nu.Nu:
 
     An unwritten ref reads ``""``, so a deleted row counts as a move.
     """
-    return nu.WaitReactive(snap(ref.on_change()), snap(nu.str(ref).fallback("") != seen))
+    return nu.WaitReactive(snap(ref.on_change()), snap(nu.Str(ref).fallback("") != seen))
 
 
 def follows(ref: nu.Nu, body: Callable[[nu.Str], nu.Nu], *, alive: nu.Nu | None = None) -> nu.Nu:
@@ -52,7 +52,7 @@ def follows(ref: nu.Nu, body: Callable[[nu.Str], nu.Nu], *, alive: nu.Nu | None 
         raced = nu.Race(body(value) >> park(), moved(ref, value))
         return raced if alive is None else nu.IfDo(snap(alive), raced, park())
 
-    return nu.ForeverDo(nu.let(snap(nu.str(ref).fallback("")), turn))
+    return nu.ForeverDo(nu.let(snap(nu.Str(ref).fallback("")), turn))
 
 
 class _Drawn(nu.Shape):

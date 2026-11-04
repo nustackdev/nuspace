@@ -266,7 +266,7 @@ def _turn(sid: nu.Str, route: nu.Str) -> nu.Nu:
     # wait for the plane rather than giving up on the route; the routes will
     # not change again to retry.
     shown = nu.WaitReactive(snap(Space.planes[route].on_change()), snap(routable(route)))
-    return shown >> nu.let(snap(nu.str(token).fallback("")), turn)
+    return shown >> nu.let(snap(nu.Str(token).fallback("")), turn)
 
 
 def _open(sid: nu.Str, route: nu.Str) -> nu.Nu:

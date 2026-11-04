@@ -106,7 +106,7 @@ def end_cell_run(
     if out is not None:
         writes = cr.out.set(out) >> writes
     writes = writes >> cr.terminated_at.set(nustd.time.time())
-    return nu.IfDo(cr.terminated_at.missing(), writes) >> row.cells_running.remove(
+    return nu.IfDo(cr.terminated_at.exists().not_(), writes) >> row.cells_running.remove(
         cell_run_id, missing_ok=True
     )
 

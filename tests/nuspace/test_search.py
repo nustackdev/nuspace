@@ -193,7 +193,7 @@ class _Recording:
         self.frames.append(frame)
 
     async def aread(self, path: tuple[str, ...]) -> object:
-        return self.values.get(tuple(path), nu.lang.EMPTY)
+        return self.values.get(tuple(path), nu.lang.NULL)
 
 
 async def _frames(store, source: str, cell: str, build, values: dict | None = None) -> list[tuple]:

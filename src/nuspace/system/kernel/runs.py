@@ -89,7 +89,9 @@ def end_run(run_id: nu.StrArg, exit_: nu.StrArg, error: nu.StrArg | None = None)
             nu.list(row.cells_running),
             lambda cr: end_cell_run(run_id, nu.Str(cr), exit_, error),
         )
-        >> nu.IfDo(row.terminated_at.missing(), own >> row.terminated_at.set(nustd.time.time()))
+        >> nu.IfDo(
+            row.terminated_at.exists().not_(), own >> row.terminated_at.set(nustd.time.time())
+        )
         >> backends.released(run_id, workers)
         >> off_running(run_id)
     )
@@ -135,7 +137,7 @@ def _cell_arm(run_id: nu.StrArg, cell_run_id: nu.StrArg, backend: nu.StrArg) -> 
 
     run = nu.let(RunCell(backend, run_id, cell_run_id), lost)
     go = nu.IfDo(
-        snap(cr.worker.missing()),
+        snap(cr.worker.exists().not_()),
         nu.TryCatch(place >> run, catch=lambda err: nu.let(ErrorText(err), failed)),
         failed(_ORPHAN),
     )

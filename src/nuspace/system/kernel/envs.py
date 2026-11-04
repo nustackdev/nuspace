@@ -97,6 +97,6 @@ class KernelConfig:
 
 
 class KernelConfigRef(FabricRef):
-    """The :class:`KernelConfig` bound on the context. EMPTY when none is."""
+    """The :class:`KernelConfig` bound on the context. NULL when none is."""
 
     fabric = KernelConfig

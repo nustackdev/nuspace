@@ -37,8 +37,7 @@ from typing import TYPE_CHECKING
 
 import nu
 import nustd.kv
-from nu.lang import ScalarQuery
-from nu.lang.sentinels import EMPTY
+from nu.lang import ScalarQuery, is_null
 from nuspace.shapes import Space, States
 
 
@@ -87,7 +86,7 @@ class MintId(ScalarQuery):
         prefix: The id's prefix.
 
     Yields:
-        The id, a str. EMPTY when the prefix is EMPTY.
+        The id, a str. NULL when the prefix is NULL.
     """
 
     def _compile(self, nid: int, children: tuple[Callable, ...]) -> Callable:
@@ -95,8 +94,8 @@ class MintId(ScalarQuery):
 
         def thunk(rt: Runtime) -> object:
             p = prefix(rt)
-            if p is EMPTY:
-                return EMPTY
+            if is_null(p):
+                return p
             return mint_ordered_id(p)
 
         return thunk
@@ -106,8 +105,8 @@ class MintId(ScalarQuery):
 
         async def athunk(rt: Runtime) -> object:
             p = await prefix(rt)
-            if p is EMPTY:
-                return EMPTY
+            if is_null(p):
+                return p
             return mint_ordered_id(p)
 
         return athunk
@@ -162,7 +161,7 @@ def snapshot(term: nu.Nu) -> nu.Nu:
 def field_str(row: nu.Nu, field: str) -> nu.Str:
     """One string field off a dict, a row or a browser event: ``""`` when absent.
 
-    Total on purpose, so a field left out hands an op a string, not EMPTY.
+    Total on purpose, so a field left out hands an op a string, not NULL.
     """
     return nu.str(nu.Dict(row).get_item(field, ""))
 

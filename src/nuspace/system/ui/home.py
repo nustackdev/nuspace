@@ -206,7 +206,7 @@ def first(planes, made_by):
         return (nu.str(prop(p, "made_by")) == made_by).and_(nu.bool(prop(p, "ui")))
 
     ids = nu.Map(nu.Filter(nu.Iter(planes), made), lambda p: p["id"])
-    return nu.str(nu.First(ids)).fallback("")
+    return nu.str(nu.First(ids, ""))
 
 
 def link(ref, planes, made_by, label):

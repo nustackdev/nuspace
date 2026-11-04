@@ -384,8 +384,8 @@ def read_field(f):
     d = nu.Dict(f)
     name, given = nu.str(d["name"]), nu.str(d["input"])
     row, put = ask(name), Building.keywords[name]
-    text = nu.str(row.text).fallback("").strip()
-    number = nu.str(row.number).fallback("").strip()
+    text = nu.Str(row.text).fallback("").strip()
+    number = nu.Str(row.number).fallback("").strip()
     on = nu.bool(row.switch).fallback(False)
     return nu.IfDo(
         given == "number",
@@ -446,7 +446,7 @@ def newest_first():
 
 
 def first_of(ids):
-    return nu.str(nu.List(ids).first_elem()).fallback("")
+    return nu.str(nu.First(nu.Iter(ids), ""))
 
 
 def draw():

@@ -116,7 +116,7 @@ def _mark(icon: str) -> str:
 
 def _shown(plane_id: nu.StrArg, params: nu.DictArg[str, object] | None) -> nu.Dict:
     """What a link to a plane shows: ``{href, title, icon}``, off the store. Bare read."""
-    icon = nu.str(Space.planes[plane_id].meta["icon"]).fallback("")
+    icon = nu.str(Space.planes[plane_id].meta["icon"].fallback(""))
     return nu.Dict.of(href=href(plane_id, params), title=plane_title(plane_id), icon=_mark(icon))
 
 

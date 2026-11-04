@@ -30,8 +30,7 @@ from typing import TYPE_CHECKING
 from nu.context import FabricRef
 from nu.core.spans.bracket import _LifecycleBracket
 from nu.engine.structure import Declared
-from nu.lang import ScalarAction, ScalarQuery
-from nu.lang.sentinels import EMPTY
+from nu.lang import ScalarAction, ScalarQuery, is_null
 
 
 if TYPE_CHECKING:
@@ -117,7 +116,7 @@ class RunOut:
 
 
 class RunOutRef(FabricRef):
-    """The :class:`RunOut` bound on the context. EMPTY outside a run."""
+    """The :class:`RunOut` bound on the context. NULL outside a run."""
 
     fabric = RunOut
 
@@ -177,7 +176,7 @@ class Captured(_LifecycleBracket):
 
 
 def _value(v: object, default: object) -> object:
-    return default if v is EMPTY or v is None else v
+    return default if is_null(v) or v is None else v
 
 
 class _Pure(ScalarQuery):
@@ -214,7 +213,7 @@ class TakeOut(ScalarAction):
 
     Args:
         extra: Text appended first as one stderr entry, eg a traceback.
-            EMPTY or "" appends nothing.
+            NULL or "" appends nothing.
         final: Take unfinished lines too.
 
     Yields:

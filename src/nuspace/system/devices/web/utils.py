@@ -246,7 +246,7 @@ class Arms:
 # --- Reading one event's fields ---------------------------------------------
 #
 # Total on purpose: a field the browser left out reads as its default, not as
-# EMPTY, so an op is handed what it wants. A string field is
+# NULL, so an op is handed what it wants. A string field is
 # :func:`~nuspace.ops.utils.field_str`, shared with the rows the ops read.
 
 
