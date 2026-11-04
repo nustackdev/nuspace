@@ -2,15 +2,16 @@
 
 ## Packages shipped from this repo
 
-- **nuspace** (the runtime, the `nuspace` command) — 0.6.2
-- **nuspace-ui** (the compiled web bundle) — 0.5.8
+- **nuspace** (the runtime, the `nuspace` command) — 0.6.3
+- **nuspace-ui** (the compiled web bundle) — 0.6.3
 
 Below is the changelog for **nuspace** - the full commit stream. Newest first.
 The `nuspace-ui` wheel is the same source tree's vite output and is not tracked
 separately here.
 
-## Unreleased
+## 0.6.3 - 2026-11-05
 
+- Release nuspace and nuspace-ui 0.6.3 on nu 0.7.0 and virtuals 0.2.0
 - Reads of containers that may never exist give empty instead of failing
 - A space creates every fixed store container at open, so reads find them
 - Kernel, supervisor and boot list create their containers up front at open
