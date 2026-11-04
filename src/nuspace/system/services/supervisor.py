@@ -43,7 +43,7 @@ import nustd.kv
 from nuspace.ops import plane_exists, plane_stop
 from nuspace.ops.kernel import add_plane_run
 from nuspace.ops.utils import MintId, atomic, atomic_state
-from nuspace.shapes import EXIT_FAILED, EXIT_OK, CellState, Space, States, reroot
+from nuspace.shapes import EXIT_FAILED, EXIT_OK, CellState, Space, reroot
 
 from ..utils import moved, snap
 
@@ -132,20 +132,8 @@ def _here(term: nu.Nu) -> nu.Nu:
 
 
 def _made() -> nu.Nu:
-    """The policy dicts written empty if they never were, so a subscription on them resolves.
-
-    Asks the cell's state for the keys: a dict never written reads as there.
-    """
-    state = States.cells[CELL]
-    writes = [
-        nu.IfDo(state.contains(name).not_(), _here(ref.set({})))
-        for name, ref in (
-            ("planes", Policy.planes),
-            ("delays", Policy.delays),
-            ("runs", Policy.runs),
-        )
-    ]
-    return writes[0] >> writes[1] >> writes[2]
+    """The policy dicts written empty if they never were, so reads before the first write find them."""
+    return _here(Policy.planes.init({}) >> Policy.delays.init({}) >> Policy.runs.init({}))
 
 
 def _drop(ref: nu.Nu, key: nu.StrArg) -> nu.Nu:

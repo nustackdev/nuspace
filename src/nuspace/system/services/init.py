@@ -12,7 +12,7 @@ import nu
 import nustd.kv
 from nuspace.ops import plane_exists, plane_run
 from nuspace.ops.utils import atomic_state
-from nuspace.shapes import CellState, States, reroot
+from nuspace.shapes import CellState, reroot
 
 from ..utils import park, snap
 
@@ -68,13 +68,8 @@ def _here(term: nu.Nu) -> nu.Nu:
 
 
 def seed(planes: list[str]) -> nu.Nu:
-    """Set init's boot list to ``planes`` if it has none yet. Unbracketed.
-
-    Asks the cell's state for the key: a list that was never written reads
-    as there and empty.
-    """
-    listed = States.cells[CELL].contains("planes")
-    return nu.IfDo(listed.not_(), _here(Boot.planes.set(list(planes))))
+    """Set init's boot list to ``planes`` if it has none yet. Unbracketed."""
+    return _here(Boot.planes.init(list(planes)))
 
 
 def boot(plane_id: nu.StrArg) -> nu.Nu:

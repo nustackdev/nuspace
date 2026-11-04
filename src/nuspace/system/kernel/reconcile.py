@@ -5,8 +5,8 @@ process that is gone, since workers die with the host. Ending each
 ``killed``, its live cell runs with it, makes the records true again before
 anything else reads them, the narrower indexes (by plane, by run) emptied
 with them. Only the indexes are walked, never history. It also makes the
-kernel's containers real, since a fold subscribing to a container that is
-not there never hears anything.
+kernel's containers real up front, so every read after it (the walks here,
+``running.contains``, a run's lookups) finds a container, not NULL.
 """
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ _kernel = Space.kernel
 
 
 def _containers() -> nu.Nu:
-    """Every kernel container made real, so a subscription on it resolves."""
+    """Every kernel container made real, so reads before the first write find one."""
     return (
         _kernel.runs.init(nu.Dict.create())
         >> _kernel.running.init(nu.Set.create())

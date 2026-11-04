@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Kernel, supervisor and boot list create their containers up front at open
 - Move onto nu's NULL model: absent reads checked by existence, safe defaults
 
 ## 0.6.2 — 2026-10-30
