@@ -365,12 +365,16 @@ export const docBoxSelect = cn(
 export const docProgram = "flex flex-col gap-1";
 
 /**
- * "unsaved" plus its kit `Shortcut` (mod enter), parked under the open source editor.
+ * The open source editor's foot: what saving does, and where the buffer
+ * stands. One line under the editor for as long as it is open, whatever it
+ * says, so a change of state never moves the cells below.
  *
- * Quiet and right-aligned: it is a reminder about the buffer you are looking
- * at, and it says nothing once that buffer is closed.
+ * Quiet and left-aligned, where the eye already is: under the code's start.
  */
-export const docSourceDirty = "flex items-center gap-1 self-end text-xs text-text-muted";
+export const docSourceFoot = "flex h-5 items-center gap-1.5 text-xs text-text-muted";
+
+/** The dot in front of "unsaved". */
+export const docSourceDot = "size-1.5 rounded-full bg-current";
 
 /**
  * The cell's mounted ui: a plain block around the cell's own root node, a

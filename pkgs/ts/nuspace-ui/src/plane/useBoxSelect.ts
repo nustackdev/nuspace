@@ -10,6 +10,11 @@
 // What it selects is the plane's own cell selection (./state.ts), so the
 // keyboard that acts on a selection (./useCellKeys.ts) acts on it too. It
 // works on read-only planes, where that keyboard only copies.
+//
+// A text selection dragged out of its text cell spills over the same way
+// (`startSpill`, the text sugar's R9): once the pointer leaves the cell's
+// row, the text selection goes and the cells from that one to the one under
+// the pointer are selected instead, for as long as the drag lasts.
 
 import { CLICK_SLOP } from "@nustackdev/ui-kit";
 import type * as React from "react";
@@ -75,5 +80,46 @@ export function useBoxSelect({ cells, patch, rootRef, elRefs }: PlaneModel) {
 		[cells, elRefs, patch, rootRef],
 	);
 
-	return { box, startBox };
+	const startSpill = useCallback(
+		(e: React.PointerEvent, id: string) => {
+			if (e.button !== 0 || e.shiftKey) return;
+			const body = document.body.style;
+			const prevSelect = body.userSelect;
+			let on = false;
+
+			const move = (ev: PointerEvent) => {
+				const own = elRefs.current.get(id)?.getBoundingClientRect();
+				if (!own) return;
+				if (!on) {
+					if (ev.clientY >= own.top && ev.clientY <= own.bottom) return;
+					on = true;
+					body.userSelect = "none";
+					document.getSelection()?.removeAllRanges();
+					// The plane takes the keyboard, so the selection's keys reach it.
+					rootRef.current?.focus({ preventScroll: true });
+				}
+				const top = Math.min(own.top, ev.clientY);
+				const bottom = Math.max(own.bottom, ev.clientY);
+				const hit = cells
+					.filter((c) => {
+						const r = elRefs.current.get(c.id)?.getBoundingClientRect();
+						return r && r.top < bottom && r.bottom > top;
+					})
+					.map((c) => c.id);
+				patch((ed) => (ed.selected.join() === hit.join() ? {} : { selected: hit, anchor: id }));
+			};
+			const up = () => {
+				window.removeEventListener("pointermove", move);
+				window.removeEventListener("pointerup", up);
+				window.removeEventListener("pointercancel", up);
+				if (on) body.userSelect = prevSelect;
+			};
+			window.addEventListener("pointermove", move);
+			window.addEventListener("pointerup", up);
+			window.addEventListener("pointercancel", up);
+		},
+		[cells, elRefs, patch, rootRef],
+	);
+
+	return { box, startBox, startSpill };
 }

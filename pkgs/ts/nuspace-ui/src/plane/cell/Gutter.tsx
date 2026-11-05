@@ -28,9 +28,10 @@ import {
 	TooltipContent,
 	TooltipTrigger,
 } from "@nustackdev/ui-kit";
-import { Code, Ellipsis, GripVertical, Hash, Plus, RotateCw, Trash2 } from "lucide-react";
+import { Check, Code, Ellipsis, GripVertical, Hash, Plus, RotateCw, Trash2 } from "lucide-react";
 import type * as React from "react";
 import { useRef, useState } from "react";
+import { useCopyRow } from "../../core/clipboard";
 import {
 	CELL_STATUS,
 	docDragHandle,
@@ -90,9 +91,7 @@ export function LeftGutter({
 
 	// The bare cell id, not the `cells.<id>` mount prefix: the id is what every
 	// op on the wire is keyed by. See ./address.ts for the prefix.
-	const copyId = () => {
-		navigator.clipboard?.writeText(cellId).catch(() => {});
-	};
+	const copy = useCopyRow(cellId);
 
 	const label = editable ? "Drag to reorder, click for options" : "Cell options";
 	return (
@@ -150,9 +149,9 @@ export function LeftGutter({
 							<RotateCw />
 							Restart cell
 						</DropdownMenuItem>
-						<DropdownMenuItem onSelect={copyId}>
-							<Hash />
-							Copy cell id
+						<DropdownMenuItem onSelect={copy.onSelect}>
+							{copy.copied ? <Check /> : <Hash />}
+							{copy.copied ? "Copied" : "Copy cell id"}
 						</DropdownMenuItem>
 						{editable ? (
 							<>

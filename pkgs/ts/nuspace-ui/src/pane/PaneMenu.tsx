@@ -9,9 +9,10 @@
 // from pane to pane. A lone pane has nothing to close it to: no desk items.
 //
 // Under the separator, the plane: "Restart plane" runs it again, a fresh run
-// for this pane, "Open in new tab" opens the Plane's URL in a
-// browser tab, "Add plane inside" opens the Add plane popup for a child of
-// this pane's Plane, opened in this pane, and "Pin" / "Unpin" puts the Plane
+// for this pane, "Open in new tab" opens the Plane's URL in a browser tab,
+// "Copy plane id" copies it and reads "Copied" for a moment, "Add plane
+// inside" opens the Add plane popup for a child of this pane's Plane, opened
+// in this pane, and "Pin" / "Unpin" puts the Plane
 // in the sidebar's pinned rows or takes it out (a Plane the sidebar's tree
 // draws only). "Delete plane" shows when `onDelete` is given, which it is not for a
 // system Plane. A plane that has not landed (or is absent) gets the desk only.
@@ -31,6 +32,7 @@ import {
 } from "@nustackdev/ui-kit";
 import { Ellipsis } from "lucide-react";
 import { useState } from "react";
+import { useCopyRow } from "../core/clipboard";
 import { closePane, closePanes, openInNewTab, useRoutes } from "../core/router";
 import {
 	paneMenu,
@@ -115,6 +117,7 @@ export function PaneMenuItems({
 	const { Item, Separator, Shortcut } = parts;
 	const many = useRoutes().length > 1;
 	const pin = usePlanePin(planeId);
+	const copy = useCopyRow(planeId);
 	return (
 		<>
 			<DeskMenuItems parts={parts} planeId={planeId} />
@@ -123,6 +126,7 @@ export function PaneMenuItems({
 					{many ? <Separator /> : null}
 					{onRestart ? <Item onSelect={onRestart}>Restart plane</Item> : null}
 					<Item onSelect={() => openInNewTab(planeId)}>Open in new tab</Item>
+					<Item onSelect={copy.onSelect}>{copy.copied ? "Copied" : "Copy plane id"}</Item>
 					<Item onSelect={() => openAddPlane({ parent: planeId, pane: planeId })}>
 						Add plane inside
 						<Shortcut keys={NEW_INSIDE_KEYS} />

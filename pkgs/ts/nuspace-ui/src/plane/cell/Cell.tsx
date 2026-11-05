@@ -16,8 +16,9 @@
 // The controls are always mounted. Whether they show is the row's own CSS
 // (`docGutterLane`): `data-selected` marks it as the one selected cell.
 //
-// A text cell's keys (../useTextCells.ts) are caught on the row, before the
-// editor inside it sees them.
+// A text cell's keys (../sugar/useTextSugar.ts) are caught on the row, before
+// the editor inside it sees them. `data-text-cell` marks the row for the
+// sugar's hints (../../index.css).
 
 import type { Path } from "@nustackdev/ui-core";
 import type * as React from "react";
@@ -46,6 +47,7 @@ export function Cell({
 	onDelete,
 	onRestart,
 	onTextKey,
+	onTextPress,
 	onSelect,
 	onFocusConsumed,
 	onCommit,
@@ -55,7 +57,7 @@ export function Cell({
 	/** Where this cell's own refs live in the tree. */
 	uiPath: Path;
 	editable: boolean;
-	/** Drawn but not shown: a draft stands in for it (../Draft.tsx). */
+	/** Drawn but not shown: a draft or a ghost stands in for it (../sugar/Draft.tsx, ../state.ts). */
 	hidden?: boolean;
 	selected: boolean;
 	/** Part of a multi-cell selection. */
@@ -78,6 +80,8 @@ export function Cell({
 	onRestart: () => void;
 	/** Set on a text cell of an editable plane. */
 	onTextKey?: (e: React.KeyboardEvent) => void;
+	/** A press in a text cell: a drag out of it spills into cell selection. */
+	onTextPress?: (e: React.PointerEvent) => void;
 	onSelect: () => void;
 	onFocusConsumed: () => void;
 	onCommit: (source: string) => void;
@@ -91,7 +95,9 @@ export function Cell({
 			hidden={hidden}
 			data-selected={selected && !selectedStrong ? "" : undefined}
 			className={docCellRow({ dragging })}
+			data-text-cell={onTextKey ? "" : undefined}
 			onKeyDownCapture={onTextKey}
+			onPointerDown={onTextPress}
 			onMouseDown={(e) => {
 				// A plain click inside a cell leaves cell-selection mode;
 				// the cell's own editor takes over from here.

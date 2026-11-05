@@ -15,11 +15,10 @@
 //     moment it lets go.
 //
 // Enter goes on writing below, the way a document does, when the plane below
-// can take it. At the end of the title it opens a line at the top (`onOpen`),
-// and Escape there brings the caret back to the title's end. Anywhere else it
-// splits (`onSplit`): what follows the caret leaves the title and opens a text
-// cell at the top, or with the caret at the start the title stays whole and
-// the cell opens empty. The rename is saved as the caret leaves.
+// can take it: an empty text cell at the top (`onOpen`), the title left whole
+// wherever the caret was. Backspace in that cell while it is still empty
+// comes back to the title's end (`endRef`). The rename is saved as the caret
+// leaves.
 
 import type * as React from "react";
 import { useCallback, useEffect, useRef } from "react";
@@ -28,22 +27,6 @@ import { docTitle } from "../design";
 /** A title is one line: newlines and runs of space collapse. */
 function clean(text: string | null): string {
 	return (text ?? "").replace(/\s+/g, " ").trim();
-}
-
-/** `el`'s text either side of the caret, a selection dropped. */
-function splitAtCaret(el: HTMLElement): [string, string] {
-	const all = el.textContent ?? "";
-	const sel = el.ownerDocument.getSelection();
-	if (!sel || sel.rangeCount === 0) return [all, ""];
-	const at = sel.getRangeAt(0);
-	if (!el.contains(at.startContainer) || !el.contains(at.endContainer)) return [all, ""];
-	const head = el.ownerDocument.createRange();
-	head.selectNodeContents(el);
-	head.setEnd(at.startContainer, at.startOffset);
-	const tail = el.ownerDocument.createRange();
-	tail.selectNodeContents(el);
-	tail.setStart(at.endContainer, at.endOffset);
-	return [head.toString(), tail.toString()];
 }
 
 /** The caret is collapsed at the very end of `el`'s text. */
@@ -64,7 +47,7 @@ export function Title({
 	onCommit,
 	onExit,
 	onOpen,
-	onSplit,
+	endRef,
 }: {
 	/** The server's title. */
 	value: string;
@@ -74,12 +57,11 @@ export function Title({
 	/** Down or Enter at the end: hand the caret to the cells. False when there
 	 *  is nowhere to go. */
 	onExit?: () => boolean;
-	/** Enter at the end: open a line at the top, Escape there calling `home`.
-	 *  False when there is nowhere to open one. */
-	onOpen?: (home: () => void) => boolean;
-	/** Enter elsewhere: open a text cell at the top holding `tail`. False when
-	 *  there is nowhere to open one, and Enter leaves as it always did. */
-	onSplit?: (tail: string) => boolean;
+	/** Enter: open an empty text cell at the top. False when there is
+	 *  nowhere to open one, and Enter leaves as it always did. */
+	onOpen?: () => boolean;
+	/** Set to "put the caret at the title's end". */
+	endRef?: React.RefObject<(() => void) | null>;
 }) {
 	const ref = useRef<HTMLHeadingElement | null>(null);
 	const server = useRef(value);
@@ -92,6 +74,20 @@ export function Title({
 		if (!el || el.ownerDocument.activeElement === el) return;
 		if (el.textContent !== value) el.textContent = value;
 	}, [value]);
+
+	useEffect(() => {
+		if (!endRef) return;
+		endRef.current = () => {
+			const el = ref.current;
+			if (!el) return;
+			el.focus();
+			el.ownerDocument.getSelection()?.selectAllChildren(el);
+			el.ownerDocument.getSelection()?.collapseToEnd();
+		};
+		return () => {
+			endRef.current = null;
+		};
+	}, [endRef]);
 
 	const commit = useCallback(() => {
 		const el = ref.current;
@@ -114,18 +110,7 @@ export function Title({
 			if (e.key === "Enter") {
 				// Never a newline. Leaving commits, through the blur.
 				e.preventDefault();
-				const [head, tail] = splitAtCaret(el);
-				const home = () => {
-					el.focus();
-					el.ownerDocument.getSelection()?.selectAllChildren(el);
-					el.ownerDocument.getSelection()?.collapseToEnd();
-				};
-				if (clean(tail) === "" && onOpen?.(home)) return;
-				const kept = clean(head) !== "";
-				if (onSplit?.(kept ? clean(tail) : "")) {
-					if (kept) el.textContent = head;
-					return;
-				}
+				if (onOpen?.()) return;
 				if (caretAtEnd(el) && onExit?.()) return;
 				el.blur();
 				return;
@@ -136,9 +121,11 @@ export function Title({
 				el.blur();
 				return;
 			}
-			if (e.key === "ArrowDown" && caretAtEnd(el) && onExit?.()) e.preventDefault();
+			// Down or Right off the end: on into the cells, as Up and Left come back.
+			if ((e.key === "ArrowDown" || e.key === "ArrowRight") && caretAtEnd(el) && onExit?.())
+				e.preventDefault();
 		},
-		[onExit, onOpen, onSplit],
+		[onExit, onOpen],
 	);
 
 	return (

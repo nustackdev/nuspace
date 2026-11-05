@@ -25,7 +25,7 @@ export type Cell = {
 	/** The Nu program this cell stores. */
 	source: string;
 	/** The Cell it was made from, "" when none. A cell made from the text
-	 *  Cell is a text cell (see ./useTextCells.ts). */
+	 *  Cell is a text cell (see ./sugar/useTextSugar.ts). */
 	made_by: string;
 	/** Whether its program draws, as the server worked out from the source.
 	 *  Null when it never said (an older cell): it may draw. */
@@ -83,7 +83,7 @@ export type CellSpec = {
 };
 
 /** The `nuverse.text` Cell, as `nuspace.TEXT_CELL`: document editing works on
- *  its cells, the text cells (see ./Draft.tsx and ./useTextCells.ts). */
+ *  its cells, the text cells (see ./sugar/useTextSugar.ts). */
 export const TEXT = "nuverse.text";
 
 /** Whether the text Cell is registered: without it, the text sugar is off. */

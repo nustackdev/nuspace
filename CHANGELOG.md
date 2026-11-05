@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Writing in a plane: honest hints, slash in empty text, arrows across text cells
 - Move onto the new reactive flows; failing arms now restart, isolate or fail their run
 - Workers come from the hardened pool: one stop grace, no orphans, clean exit causes
 

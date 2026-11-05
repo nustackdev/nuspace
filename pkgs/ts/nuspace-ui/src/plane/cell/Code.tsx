@@ -14,7 +14,7 @@
 
 import { Code, type CodeProps, Shortcut } from "@nustackdev/ui-kit";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { docSourceDirty } from "../../design";
+import { docSourceDot, docSourceFoot } from "../../design";
 import type { FocusReq } from "../state";
 import type { ExitDir } from "../types";
 
@@ -128,9 +128,13 @@ export function CodeBox(props: CodeBoxProps) {
 	);
 }
 
+/** How long "saved" stays before the foot goes back to its hint. */
+const SAVED_MS = 1500;
+
 /**
- * A cell's source as the document shows it: the editor and the one reminder
- * that goes with it.
+ * A cell's source as the document shows it: the editor and its foot, which
+ * says how to save, then "unsaved" while the buffer differs, then "saved" for
+ * a moment once it went. A save reruns the cell, which its status shows.
  *
  * Dirty is a fact about the open buffer and about nothing else, so it is held
  * here rather than lifted into the cell.
@@ -138,24 +142,57 @@ export function CodeBox(props: CodeBoxProps) {
 export function SourceEditor(props: Omit<CodeBoxProps, "onDirty">) {
 	const { onCommit } = props;
 	const [dirty, setDirty] = useState(false);
+	const [saved, setSaved] = useState(false);
+
+	useEffect(() => {
+		if (!saved) return;
+		const t = window.setTimeout(() => setSaved(false), SAVED_MS);
+		return () => window.clearTimeout(t);
+	}, [saved]);
+
+	// Read at commit time: a commit with nothing changed says nothing.
+	const wasDirty = useRef(false);
 
 	const commit = useCallback(
 		(next: string) => {
+			if (wasDirty.current) setSaved(true);
+			wasDirty.current = false;
 			setDirty(false);
 			onCommit(next);
 		},
 		[onCommit],
 	);
 
+	const onDirty = useCallback((d: boolean) => {
+		wasDirty.current = d;
+		setDirty(d);
+		if (d) setSaved(false);
+	}, []);
+
 	return (
 		<>
-			<CodeBox {...props} onCommit={commit} onDirty={setDirty} />
-			{dirty && !props.readOnly ? (
-				<span className={docSourceDirty}>
-					unsaved
-					<Shortcut keys={["mod", "enter"]} size="sm" />
+			<CodeBox {...props} onCommit={commit} onDirty={onDirty} />
+			{props.readOnly ? null : (
+				<span className={docSourceFoot} data-source-foot="">
+					{dirty ? (
+						<>
+							<span className={docSourceDot} aria-hidden="true" />
+							unsaved
+							<Shortcut keys={["mod", "enter"]} size="sm" />
+							save
+						</>
+					) : saved ? (
+						"saved"
+					) : (
+						<>
+							<Shortcut keys={["mod", "enter"]} size="sm" />
+							save
+							<Shortcut keys={["esc"]} size="sm" />
+							close
+						</>
+					)}
 				</span>
-			) : null}
+			)}
 		</>
 	);
 }

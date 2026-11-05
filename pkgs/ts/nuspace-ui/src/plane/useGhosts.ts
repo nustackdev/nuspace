@@ -9,10 +9,11 @@
 // them has an id of its own.
 //
 // A ghost opened from somewhere the caret was writing (Cmd+Enter in a text
-// cell, Enter at the end of the title) keeps the way back there, and Escape
-// takes it: the caret goes home and a summoned ghost goes with it.
+// cell, `/` in an empty one) keeps the way back there, and Escape takes it:
+// the caret goes home and a summoned ghost goes with it.
 
 import { useCallback, useRef } from "react";
+import { flushSync } from "react-dom";
 import type { GhostProps } from "./Ghost";
 import type { PlaneModel } from "./model";
 import type { FocusReq } from "./state";
@@ -22,14 +23,15 @@ export function useGhosts(
 	{ cells, editor, patch, index, rootRef, endGhost, plusGhost }: PlaneModel,
 	{
 		focusCell,
-		createAfter,
 		slashKey,
 		startDraft,
+		hint,
 	}: {
 		focusCell: (cell: Cell, req: Omit<FocusReq, "cellId">, editing: string[]) => void;
-		createAfter: (afterId: string | null, name: string) => void;
 		slashKey: (key: string) => boolean;
-		startDraft: ((after: string | null, text: string) => void) | null;
+		startDraft: ((after: string | null, text: string) => boolean) | null;
+		/** The placeholder, from the sugar. Undefined: the core's own. */
+		hint?: string;
 	},
 ) {
 	/** The way back from the ghost that is after `after`, while it holds the caret. */
@@ -53,6 +55,25 @@ export function useGhosts(
 			patch({ ghost: { after }, slash: null, selected: [], anchor: null, focus: null });
 		},
 		[cells, endGhost, patch],
+	);
+
+	/**
+	 * Stand in for cell `id` with the menu open: the cell hides, the ghost
+	 * takes its place, and a pick replaces it. `home` is where the caret goes
+	 * back to when nothing is picked.
+	 */
+	const standIn = useCallback(
+		(id: string, home: () => void) => {
+			back.current = { after: id, to: home };
+			patch({
+				ghost: { after: id, replace: id },
+				slash: null,
+				selected: [],
+				anchor: null,
+				focus: null,
+			});
+		},
+		[patch],
 	);
 
 	/** Nothing was picked. Close the menu, and take the offer back. */
@@ -84,7 +105,8 @@ export function useGhosts(
 			const home = back.current?.after === after ? back.current.to : null;
 			if (home) {
 				back.current = null;
-				patch((e) => ({ slash: null, ghost: transient ? null : e.ghost }));
+				// Drawn now: a stand-in's cell has to be back before its caret.
+				flushSync(() => patch((e) => ({ slash: null, ghost: transient ? null : e.ghost })));
 				home();
 				return;
 			}
@@ -107,33 +129,55 @@ export function useGhosts(
 	 * A plain function rather than a memo: it takes arguments that only the
 	 * render knows, and what it returns goes straight into an element.
 	 */
-	const ghostProps = (after: string | null, transient: boolean): GhostProps => ({
-		hostRef: transient ? plusGhost : endGhost,
-		autoFocus: transient,
-		query: editor.slash && editor.slash.cellId === after ? editor.slash.query : null,
-		onWake: () => {
-			// Clicking a ghost leaves cell-selection mode, exactly as
-			// clicking into a cell does.
-			patch((e) => (e.selected.length ? { selected: [], anchor: null } : {}));
-		},
-		onBlank: () => {
-			patch({ slash: null, ghost: null });
-			createAfter(after, "");
-		},
-		onOpenSlash: (anchor, query) =>
-			patch({
-				slash: { cellId: after, query, anchor, index: 0 },
-				selected: [],
-				anchor: null,
-			}),
-		onType: startDraft && ((text) => startDraft(after, text)),
-		onQuery: (query) => patch((e) => (e.slash ? { slash: { ...e.slash, query, index: 0 } } : {})),
-		onKey: slashKey,
-		onCloseSlash: () => patch({ slash: null }),
-		onEscape: () => escapeGhost(after, transient),
-		onLeave: (dir) => leaveGhost(after, dir, transient),
-		onDismiss: () => dismissGhost(after, transient),
-	});
+	const ghostProps = (after: string | null, transient: boolean): GhostProps => {
+		const standing = transient && editor.ghost?.replace != null;
+		return {
+			hostRef: transient ? plusGhost : endGhost,
+			autoFocus: transient,
+			openMenu: standing,
+			hint,
+			// The summoned ghost owns the menu over the end one sitting after the same cell.
+			query:
+				editor.slash &&
+				editor.slash.cellId === after &&
+				(transient || editor.ghost?.after !== after)
+					? editor.slash.query
+					: null,
+			onWake: () => {
+				// Clicking a ghost leaves cell-selection mode, exactly as
+				// clicking into a cell does.
+				patch((e) => (e.selected.length ? { selected: [], anchor: null } : {}));
+			},
+			onOpenSlash: (anchor, query) =>
+				patch({
+					slash: { cellId: after, query, anchor, index: 0 },
+					selected: [],
+					anchor: null,
+				}),
+			onType: startDraft && ((text) => startDraft(after, text)),
+			onQuery: (query) => patch((e) => (e.slash ? { slash: { ...e.slash, query, index: 0 } } : {})),
+			// A stand-in is there for the menu: putting the menu away puts it away.
+			onKey: (key) => {
+				if (standing && key === "Escape") {
+					escapeGhost(after, transient);
+					return true;
+				}
+				return slashKey(key);
+			},
+			onCloseSlash: () => (standing ? escapeGhost(after, transient) : patch({ slash: null })),
+			onEscape: () => escapeGhost(after, transient),
+			onLeave: (dir) => leaveGhost(after, dir, transient),
+			onDismiss: () => dismissGhost(after, transient),
+		};
+	};
 
-	return { ghostProps, openGhost };
+	/** The menu was put away from outside (a press past it): a stand-in goes
+	 *  with it, its cell coming back. */
+	const putAway = useCallback(() => {
+		const g = editor.ghost;
+		if (g?.replace) escapeGhost(g.after, true);
+		else patch((e) => (e.slash ? { slash: null } : {}));
+	}, [editor.ghost, escapeGhost, patch]);
+
+	return { ghostProps, openGhost, standIn, putAway };
 }

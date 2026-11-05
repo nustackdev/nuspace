@@ -17,8 +17,7 @@
 //   useBoxSelect.ts      selecting cells by dragging a box around them
 //   useSlash.ts          the `/` menu's behaviour (SlashMenu.tsx draws it)
 //   useGhosts.ts         the ghost inputs' wiring (Ghost.tsx draws one)
-//   Draft.tsx            typing into a ghost, carried into a new text cell
-//   useTextCells.ts      text cells: Cmd+Enter, Backspace, Enter in the title
+//   sugar/               the text sugar, a closed list (sugar/useTextSugar.ts)
 //   cell/               one cell: its row, gutter, program, source editor
 
 import type { Path } from "@nustackdev/ui-core";
@@ -34,13 +33,15 @@ import {
 } from "../design";
 import { cellUiPath } from "./cell/address";
 import { Cell } from "./cell/Cell";
-import { Draft, useDraft } from "./Draft";
 import { Ghost } from "./Ghost";
 import type { PlaneModel } from "./model";
 import type { Notify } from "./ops";
 import { SlashMenu } from "./SlashMenu";
 import { type EditorPatch, patchEditor, useEditorState } from "./state";
-import type { ActivePlane, CellSpec } from "./types";
+import { Draft, useDraft } from "./sugar/Draft";
+import { cellSurface } from "./sugar/surface";
+import { NEW_CELL_HINT, useTextSugar, WRITE_HINT } from "./sugar/useTextSugar";
+import { type ActivePlane, type CellSpec, hasText } from "./types";
 import { useBoxSelect } from "./useBoxSelect";
 import { useCellDrag } from "./useCellDrag";
 import { useCellKeys } from "./useCellKeys";
@@ -48,7 +49,6 @@ import { useFocusRouting } from "./useFocusRouting";
 import { useGhosts } from "./useGhosts";
 import { useSlash } from "./useSlash";
 import { useStructure } from "./useStructure";
-import { useTextCells } from "./useTextCells";
 
 const NO_CELL_SPECS: CellSpec[] = [];
 
@@ -61,8 +61,8 @@ export function Plane({
 	compact,
 	notify,
 	entryRef,
-	splitRef,
 	openRef,
+	titleEndRef,
 	selectRef,
 }: {
 	/** The ViewerRef node, which holds every pane's editor state and roots
@@ -81,12 +81,12 @@ export function Plane({
 	/** Set to "take the caret from the title above", null while the plane is
 	 *  read-only and has nowhere to put one. */
 	entryRef?: React.RefObject<(() => boolean) | null>;
-	/** Set to "start a text cell at the top holding this", from Enter in the
-	 *  title above. Null while there is no such thing to start. */
-	splitRef?: React.RefObject<((tail: string) => boolean) | null>;
-	/** Set to "open a ghost at the top, Escape going to `home`", from Enter
-	 *  at the end of the title. Null while there is no such thing to open. */
-	openRef?: React.RefObject<((home: () => void) => boolean) | null>;
+	/** Set to "start an empty text cell at the top", from Enter in the title
+	 *  above. Null while there is no such thing to start. */
+	openRef?: React.RefObject<(() => boolean) | null>;
+	/** Set by the title: the caret to its end, where Backspace in an empty
+	 *  top text cell goes. */
+	titleEndRef?: React.RefObject<(() => void) | null>;
 	/** Set to "a press landed in the pane": where box selection starts, so
 	 *  the margins beside the plane count. */
 	selectRef?: React.RefObject<((e: React.PointerEvent) => void) | null>;
@@ -132,48 +132,38 @@ export function Plane({
 		moveSelected,
 	});
 	const startDrag = useCellDrag(model);
-	const { box, startBox } = useBoxSelect(model);
-	const { slash, pickSlash, slashKey, moveSlash, closeSlash } = useSlash(
-		model,
-		cellSpecs,
-		createAfter,
-	);
+	const { box, startBox, startSpill } = useBoxSelect(model);
+	const { slash, pickSlash, slashKey, moveSlash } = useSlash(model, cellSpecs, createAfter);
 	const { draft, boxRef, startDraft } = useDraft(model, viewerPath, cellSpecs, createAfter);
-	const { ghostProps, openGhost } = useGhosts(model, {
+	const { ghostProps, openGhost, standIn, putAway } = useGhosts(model, {
 		focusCell,
-		createAfter,
 		slashKey,
 		startDraft,
+		hint: hasText(cellSpecs) ? WRITE_HINT : undefined,
 	});
-	const { isText, textKey, splitTitle, openTop } = useTextCells(model, cellSpecs, {
+	const { isText, textKey, titleEnter, titleDown } = useTextSugar(model, cellSpecs, {
 		focusCell,
 		startDraft,
 		openGhost,
+		standIn,
+		titleEnd: titleEndRef,
 	});
 
 	useEffect(() => {
 		if (!entryRef) return;
-		entryRef.current = editable ? enterTop : null;
+		entryRef.current = editable ? () => titleDown() || enterTop() : null;
 		return () => {
 			entryRef.current = null;
 		};
-	}, [entryRef, editable, enterTop]);
-
-	useEffect(() => {
-		if (!splitRef) return;
-		splitRef.current = editable ? splitTitle : null;
-		return () => {
-			splitRef.current = null;
-		};
-	}, [splitRef, editable, splitTitle]);
+	}, [entryRef, editable, enterTop, titleDown]);
 
 	useEffect(() => {
 		if (!openRef) return;
-		openRef.current = editable ? openTop : null;
+		openRef.current = editable ? titleEnter : null;
 		return () => {
 			openRef.current = null;
 		};
-	}, [openRef, editable, openTop]);
+	}, [openRef, editable, titleEnter]);
 
 	useEffect(() => {
 		if (!selectRef) return;
@@ -205,6 +195,8 @@ export function Plane({
 			tabIndex={-1}
 			onKeyDown={onCellKeys}
 			className={`${docColumn(wide, compact)} outline-none`}
+			// The text sugar's hint, drawn by CSS on a text cell's empty last line.
+			style={{ "--sugar-new-cell": JSON.stringify(NEW_CELL_HINT) } as React.CSSProperties}
 		>
 			{/* A draft at the top: Enter in the title, or the first line of an
 			    empty plane. It stays above its cell once that arrives. */}
@@ -227,7 +219,11 @@ export function Plane({
 							cell={cell}
 							uiPath={cellUiPath(viewerPath, cell.id)}
 							editable={editable}
-							hidden={draft?.id === cell.id}
+							hidden={
+								draft?.id === cell.id ||
+								editor.ghost?.replace === cell.id ||
+								editor.leaving.includes(cell.id)
+							}
 							selected={selected}
 							selectedStrong={selected && multi}
 							editing={editing}
@@ -247,6 +243,15 @@ export function Plane({
 							}}
 							onRestart={() => notify("cell.restart", { cell_id: cell.id })}
 							onTextKey={editable && isText(cell) ? (e) => textKey(e, cell.id) : undefined}
+							onTextPress={
+								editable && isText(cell)
+									? (e) => {
+											// Only a press in the text itself: the grip has its own drag.
+											if (cellSurface(rootRef.current, cell.id)?.contains(e.target as Node))
+												startSpill(e, cell.id);
+										}
+									: undefined
+							}
 							// Make room, do not make a cell. What goes here is
 							// whatever gets picked next.
 							onPlus={() => openGhost(cell.id, null)}
@@ -281,7 +286,8 @@ export function Plane({
 			{/* The permanent ghost is how an empty Plane is written on without
 			    hunting for a control, so it goes with the rest of the authoring
 			    affordances. */}
-			{editable ? (
+			{/* Not while a stand-in holds the last cell's place: one line there, not two. */}
+			{editable && !(lastId && editor.ghost?.replace === lastId) ? (
 				<div className={docRow}>
 					<Ghost {...ghostProps(lastId, false)} hinted={cells.length === 0 && !draft} />
 				</div>
@@ -314,7 +320,7 @@ export function Plane({
 					anchor={slash.anchor}
 					onPick={pickSlash}
 					onMove={moveSlash}
-					onClose={closeSlash}
+					onClose={putAway}
 				/>
 			) : null}
 		</div>

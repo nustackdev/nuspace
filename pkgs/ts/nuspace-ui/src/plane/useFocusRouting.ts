@@ -8,10 +8,14 @@
 //     column
 //   - Otherwise the cell gets *selected* and the plane takes keyboard focus
 //   - Down or Enter at the end of the plane's title lands on the first cell
+//   - Enter on a selected cell goes into what it draws: its first field or
+//     control, the caret at a text's end. With none, the selection goes.
 
 import { useCallback } from "react";
+import { FOCUSABLE } from "./focusable";
 import type { PlaneModel } from "./model";
 import type { FocusReq } from "./state";
+import { EDITABLE, placeCaret } from "./sugar/surface";
 import type { Cell, ExitDir } from "./types";
 
 export function useFocusRouting({
@@ -83,15 +87,16 @@ export function useFocusRouting({
 	);
 
 	const enterCell = useCallback(
-		(cell: Cell, place: "start" | "end" = "end") => {
-			patch((e) => ({
-				editing: e.editing.includes(cell.id) ? e.editing : [...e.editing, cell.id],
-				focus: { cellId: cell.id, place },
-				selected: [],
-				anchor: null,
-			}));
+		(cell: Cell) => {
+			patch({ selected: [], anchor: null });
+			const el = rootRef.current?.querySelector<HTMLElement>(
+				`[data-cell="${cell.id}"] [data-cell-ui] :is(${FOCUSABLE})`,
+			);
+			if (!el) rootRef.current?.blur();
+			else if (el.matches(EDITABLE)) placeCaret(el, "end");
+			else el.focus();
 		},
-		[patch],
+		[patch, rootRef],
 	);
 
 	/** Open or close a cell's source editor. The caret follows it open. */

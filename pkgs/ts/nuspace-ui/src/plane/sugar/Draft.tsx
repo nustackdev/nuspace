@@ -7,8 +7,8 @@
 // normal change path is what saves it, and the draft goes. The caret lands
 // where it stood in the draft.
 //
-// Enter mid-title comes through here too: a draft at the top, holding the
-// title's tail, caret at its start. See ./useTextCells.ts.
+// Enter in the input line and Enter in the title come through here too, as
+// a draft holding nothing. See ./useTextSugar.ts.
 //
 // Ready is two real signals, never a timer:
 //
@@ -29,75 +29,11 @@ import { nodeAt, pathKey, tree } from "@nustackdev/ui-kit";
 import type * as React from "react";
 import { useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
-import { docDraft } from "../design";
-import { cellUiPath } from "./cell/address";
-import type { PlaneModel } from "./model";
-import { type CellSpec, hasText, TEXT } from "./types";
-
-/** What counts as a cell's editable text surface. The first one wins. */
-export const EDITABLE = '[contenteditable="true"], textarea, input';
-
-/**
- * A cell's editable text surface: the first one its program drew. Only the
- * drawn part counts, so an open source editor above it never does.
- */
-export function cellSurface(root: HTMLElement | null, id: string): HTMLElement | null {
-	return (
-		root?.querySelector<HTMLElement>(`[data-cell="${id}"] [data-cell-ui] :is(${EDITABLE})`) ?? null
-	);
-}
-
-function isField(el: HTMLElement): el is HTMLInputElement | HTMLTextAreaElement {
-	return el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement;
-}
-
-/** The surface holds no text at all. */
-export function surfaceEmpty(el: HTMLElement): boolean {
-	return (isField(el) ? el.value : (el.textContent ?? "")) === "";
-}
-
-/** Focus a surface with the caret collapsed at its start or its end. */
-export function placeCaret(el: HTMLElement, at: "start" | "end"): void {
-	el.focus();
-	if (isField(el)) {
-		const n = at === "start" ? 0 : el.value.length;
-		el.setSelectionRange(n, n);
-		return;
-	}
-	const sel = el.ownerDocument.getSelection();
-	if (!sel) return;
-	sel.selectAllChildren(el);
-	if (at === "start") sel.collapseToStart();
-	else sel.collapseToEnd();
-}
-
-/**
- * The caret as it stands in cell `id`'s surface, as a way back to it. The
- * exact spot when the text around it is still there, else the surface's end.
- */
-export function keepCaret(root: HTMLElement | null, id: string): () => void {
-	const el = cellSurface(root, id);
-	const field = el && isField(el) ? [el.selectionStart, el.selectionEnd] : null;
-	const sel = el?.ownerDocument.getSelection();
-	const range = sel?.rangeCount ? sel.getRangeAt(0).cloneRange() : null;
-	return () => {
-		const now = cellSurface(root, id);
-		if (!now) return;
-		if (isField(now) && field) {
-			now.focus();
-			now.setSelectionRange(field[0], field[1]);
-			return;
-		}
-		if (!range || !now.contains(range.startContainer) || !now.contains(range.endContainer)) {
-			placeCaret(now, "end");
-			return;
-		}
-		now.focus();
-		const at = now.ownerDocument.getSelection();
-		at?.removeAllRanges();
-		at?.addRange(range);
-	};
-}
+import { docDraft } from "../../design";
+import { cellUiPath } from "../cell/address";
+import type { PlaneModel } from "../model";
+import { type CellSpec, hasText, TEXT } from "../types";
+import { cellSurface, placeCaret } from "./surface";
 
 export type DraftState = {
 	/** The cell it is waiting for, minted when the draft started. */
@@ -128,17 +64,17 @@ export function useDraft(
 	const boxRef = useRef<HTMLTextAreaElement | null>(null);
 
 	/**
-	 * Start a text cell after `after`, holding `text` with the caret at
-	 * `caret` (its end by default). False when one is already on its way.
+	 * Start a text cell after `after`, holding `text` with the caret at its
+	 * end. False when one is already on its way.
 	 * Null with no text Cell: the ghost opens the menu as before.
 	 */
 	const startDraft = !hasText(cellSpecs)
 		? null
-		: (after: string | null, text: string, caret = text.length): boolean => {
+		: (after: string | null, text: string): boolean => {
 				patch({ ghost: null, slash: null });
 				if (draft) return false;
 				// The draft owns the caret, so the cell is not landed on.
-				setDraft({ id: createAfter(after, TEXT, false), after, text, caret });
+				setDraft({ id: createAfter(after, TEXT, false), after, text, caret: text.length });
 				return true;
 			};
 

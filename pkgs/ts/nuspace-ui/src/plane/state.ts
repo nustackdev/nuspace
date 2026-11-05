@@ -57,16 +57,25 @@ export type EditorState = {
 	 * The transient ghost input, as the id of the cell it sits after, null
 	 * at the top of the plane.
 	 *
-	 * Summoned by a gutter `+`, Cmd+Enter in a text cell, or Enter at the end
-	 * of the title; it resolves into a cell or it goes away the moment it
-	 * loses focus with nothing in it. At most one exists, because it is one
+	 * Summoned by a gutter `+`, Cmd+Enter in a text cell, or `/` in a blank
+	 * one; it resolves into a cell or it goes away the moment it loses focus
+	 * with nothing in it. At most one exists, because it is one
 	 * slot and not a set -- summoning a second while a first is open blurs the
 	 * first, which is what dismisses it.
 	 *
 	 * The end-of-plane ghost is NOT here. It is always there, so there is
 	 * nothing about it to remember.
+	 *
+	 * `replace` makes it a stand-in: it sits in place of that cell, which
+	 * hides while it is up, opens with the menu open, and a pick replaces the
+	 * cell. Put away with nothing picked, the cell comes back as it was.
 	 */
-	ghost: { after: string | null } | null;
+	ghost: { after: string | null; replace?: string } | null;
+	/**
+	 * Cells deleted from here that the server has not dropped yet: hidden
+	 * until it does, so a replaced cell never flashes back for a round trip.
+	 */
+	leaving: string[];
 	drag: DragState | null;
 	/**
 	 * Desired column, parked while the caret is "between" editors -- i.e.
@@ -83,6 +92,7 @@ export const EMPTY_EDITOR: EditorState = {
 	editing: [],
 	slash: null,
 	ghost: null,
+	leaving: [],
 	drag: null,
 	column: null,
 };
@@ -101,6 +111,7 @@ export function pruneEditor(local: EditorState, live: Set<string>): EditorState 
 		selected: local.selected.filter((id) => live.has(id)),
 		anchor: local.anchor && live.has(local.anchor) ? local.anchor : null,
 		editing: local.editing.filter((id) => live.has(id)),
+		leaving: (local.leaving ?? []).filter((id) => live.has(id)),
 		// A null `cellId` is a ghost at the top of an empty plane, which no
 		// cell list can invalidate.
 		slash:

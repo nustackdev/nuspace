@@ -1,6 +1,7 @@
 // The slash menu's behaviour: what it lists, what a key does to it, and what
 // a pick makes. The menu itself only draws (./SlashMenu.tsx); the ghost that
-// opened it forwards the keys here.
+// opened it forwards the keys here. A pick inserts after the ghost, or on a
+// stand-in (`replace`, ./state.ts) takes the place of the cell it stood for.
 
 import { useCallback, useMemo } from "react";
 import type { PlaneModel } from "./model";
@@ -8,7 +9,7 @@ import { slashItems as listed } from "./slash";
 import type { CellSpec } from "./types";
 
 export function useSlash(
-	{ editor, patch }: PlaneModel,
+	{ editor, patch, notify }: PlaneModel,
 	cellSpecs: CellSpec[],
 	createAfter: (afterId: string | null, name: string) => void,
 ) {
@@ -22,10 +23,17 @@ export function useSlash(
 		(item: CellSpec) => {
 			const s = editor.slash;
 			if (!s) return;
-			patch({ slash: null, ghost: null });
+			const replace = editor.ghost?.replace;
+			patch((e) => ({
+				slash: null,
+				ghost: null,
+				editing: replace ? e.editing.filter((id) => id !== replace) : e.editing,
+				leaving: replace ? [...e.leaving, replace] : e.leaving,
+			}));
 			createAfter(s.cellId, item.name);
+			if (replace) notify("cell.delete", { cell_id: replace });
 		},
-		[createAfter, editor.slash, patch],
+		[createAfter, editor.ghost, editor.slash, notify, patch],
 	);
 
 	/** Returns true when the menu consumed the key. */
@@ -65,8 +73,5 @@ export function useSlash(
 		[patch, slashItems.length],
 	);
 
-	/** Put the menu away, the ghost left standing. */
-	const closeSlash = useCallback(() => patch((e) => (e.slash ? { slash: null } : {})), [patch]);
-
-	return { slash, slashItems, pickSlash, slashKey, moveSlash, closeSlash };
+	return { slash, slashItems, pickSlash, slashKey, moveSlash };
 }

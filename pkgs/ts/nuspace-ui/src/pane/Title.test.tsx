@@ -14,10 +14,10 @@ let host: HTMLDivElement;
 let root: Root;
 const onCommit = vi.fn();
 const onExit = vi.fn(() => true);
-const onSplit = vi.fn((_tail: string) => true);
-const onOpen = vi.fn((_home: () => void) => true);
+const onOpen = vi.fn(() => true);
+const endRef: { current: (() => void) | null } = { current: null };
 
-function render(value: string, split = false) {
+function render(value: string, open = false) {
 	act(() => {
 		root.render(
 			<Title
@@ -25,8 +25,8 @@ function render(value: string, split = false) {
 				placeholder="Untitled"
 				onCommit={onCommit}
 				onExit={onExit}
-				onOpen={split ? onOpen : undefined}
-				onSplit={split ? onSplit : undefined}
+				onOpen={open ? onOpen : undefined}
+				endRef={endRef}
 			/>,
 		);
 	});
@@ -70,7 +70,6 @@ beforeEach(() => {
 	root = createRoot(host);
 	onCommit.mockClear();
 	onExit.mockClear();
-	onSplit.mockClear();
 	onOpen.mockClear();
 });
 
@@ -149,39 +148,31 @@ describe("Title", () => {
 		caret(5);
 		key("Enter");
 		expect(onExit).toHaveBeenCalledTimes(2);
+		key("ArrowRight");
+		expect(onExit).toHaveBeenCalledTimes(3);
+		caret(2);
+		key("ArrowRight");
+		expect(onExit).toHaveBeenCalledTimes(3);
 	});
 
-	it("splits on Enter: the tail opens a text cell, the head is the rename", () => {
+	it("opens a text cell on Enter anywhere, and keeps the title whole", () => {
 		render("Notes", true);
 		type("Plans today");
 		caret(5);
 		key("Enter");
-		expect(onSplit).toHaveBeenCalledExactlyOnceWith("today");
-		expect(onExit).not.toHaveBeenCalled();
-		act(() => title().blur());
-		expect(onCommit).toHaveBeenCalledExactlyOnceWith("Plans");
-	});
-
-	it("keeps the title whole on Enter at its start, and the cell opens empty", () => {
-		render("Notes", true);
-		type("Notes");
-		caret(0);
-		key("Enter");
-		expect(onSplit).toHaveBeenCalledExactlyOnceWith("");
-		expect(title().textContent).toBe("Notes");
-	});
-
-	it("opens a line on Enter at the end, and its way back lands at the end", () => {
-		render("Notes", true);
-		type("Notes");
-		caret(5);
-		key("Enter");
 		expect(onOpen).toHaveBeenCalledTimes(1);
-		expect(onSplit).not.toHaveBeenCalled();
 		expect(onExit).not.toHaveBeenCalled();
+		expect(title().textContent).toBe("Plans today");
+		act(() => title().blur());
+		expect(onCommit).toHaveBeenCalledExactlyOnceWith("Plans today");
+	});
+
+	it("sets its way back, which lands the caret at the end", () => {
+		render("Notes", true);
+		type("Notes");
 		act(() => title().blur());
 		caret(0);
-		act(() => onOpen.mock.calls[0][0]());
+		act(() => endRef.current?.());
 		expect(document.activeElement).toBe(title());
 		const sel = document.getSelection() as Selection;
 		expect(sel.isCollapsed).toBe(true);
@@ -191,9 +182,8 @@ describe("Title", () => {
 		expect(rest.toString()).toBe("");
 	});
 
-	it("leaves as before when there is nothing to split into", () => {
+	it("leaves as before when there is nothing to open", () => {
 		onOpen.mockReturnValueOnce(false);
-		onSplit.mockReturnValueOnce(false);
 		render("Notes", true);
 		type("Notes");
 		caret(5);

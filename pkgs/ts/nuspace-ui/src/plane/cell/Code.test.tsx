@@ -56,6 +56,11 @@ function press(el: HTMLElement, key: string, mod = false) {
 }
 
 describe("a read-only source", () => {
+	it("has no foot: there is nothing to save", async () => {
+		await mount(true);
+		expect(host.querySelector("[data-source-foot]")).toBeNull();
+	});
+
 	it("is built read-only", async () => {
 		const { content } = await mount(true);
 		expect(content.getAttribute("contenteditable")).toBe("false");
@@ -113,6 +118,13 @@ describe("an editable source", () => {
 		const { content, onExit } = await mount(false, { cellId: "c", place: "start" });
 		press(content, "ArrowUp", true);
 		expect(onExit).not.toHaveBeenCalled();
+	});
+
+	it("keeps one foot line under it, saying how to save and close", async () => {
+		await mount(false);
+		const foot = host.querySelector("[data-source-foot]");
+		expect(foot?.textContent).toContain("save");
+		expect(foot?.textContent).toContain("close");
 	});
 
 	it("Escape hands back without a save when nothing changed", async () => {
