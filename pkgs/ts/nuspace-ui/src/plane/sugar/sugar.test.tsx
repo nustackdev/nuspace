@@ -78,6 +78,7 @@ function cell(id: string, made_by = TEXT): Cell {
 		source: "",
 		made_by,
 		has_ui: null,
+		classes: made_by === TEXT ? ["prose"] : [],
 		status: { cell_id: id, state: "running", error: null, started_at: null },
 	};
 }

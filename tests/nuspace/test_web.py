@@ -20,7 +20,7 @@ import nu
 import nustd.ui
 from nu.lang import wire
 from nuspace import ops
-from nuspace.ext import space_registry
+from nuspace.ext import CellSpec, space_registry
 from nuspace.ops.utils import atomic, atomic_state
 from nuspace.shapes import (
     EXIT_FAILED,
@@ -283,18 +283,29 @@ async def test_viewer_plane(store):
     await store.run(ops.rename_cell("c1", "intro"))
     await store.run(ops.add_cell("p1", "x = 1", cell_id="c2", name="code"))
     await store.run(ops.add_cell("p1", "y = 2", cell_id="c0", name="first", index=0))
+    await store.run(ops.add_cell("p1", "z = 3", cell_id="c3", name="gone", made_by="old.text"))
 
-    got = await store.read(plane_view("p1"))
+    got = await store.read(plane_view("p1", CELLS))
+
+    # Classes come off the installed spec made_by names: none for a cell
+    # made from no spec, none for one whose spec is no longer installed.
+    def cell(cid, name, source, made_by="", classes=()):
+        row = {"id": cid, "name": name, "source": source, "made_by": made_by, "has_ui": False}
+        return {**row, "classes": list(classes)}
 
     assert got == {
         "title": "Notes",
         "meta": {"editable": True, "full_width": False, "tone": "calm", "icon": "lucide:file-text"},
         "cells": [
-            {"id": "c0", "name": "first", "source": "y = 2", "made_by": "", "has_ui": False},
-            {"id": "c1", "name": "intro", "source": TEXT_SRC, "made_by": TEXT, "has_ui": False},
-            {"id": "c2", "name": "code", "source": "x = 1", "made_by": "", "has_ui": False},
+            cell("c0", "first", "y = 2"),
+            cell("c1", "intro", TEXT_SRC, TEXT, ["prose"]),
+            cell("c2", "code", "x = 1"),
+            cell("c3", "gone", "z = 3", "old.text"),
         ],
     }
+    # No specs given, no classes: the read knows only what it is handed.
+    bare = await store.read(plane_view("p1"))
+    assert [c["classes"] for c in bare["cells"]] == [[], [], [], []]
 
 
 async def test_viewer_plane_missing_and_meta_defaults(store):
@@ -304,6 +315,19 @@ async def test_viewer_plane_missing_and_meta_defaults(store):
     # A plane that does not exist has no icon: only a made plane gets one.
     missing = {"editable": False, "full_width": False}
     assert await store.read(plane_view("nope")) == {"title": "", "meta": missing, "cells": []}
+
+
+def test_slash_entries_ship_classes_and_one_default_per_class():
+    first = CellSpec("a.text", "Text", "", classes=("prose",), default_for=("prose",))
+    second = CellSpec("b.note", "Note", "", classes=("prose", "x"), default_for=("prose", "x"))
+    plain = CellSpec("c.code", "Code", "")
+    got = slash_entries([first, second, plain])
+    assert [(e["name"], e["classes"], e["default_for"]) for e in got] == [
+        ("a.text", ["prose"], ["prose"]),
+        # prose is claimed above it, first in registry order wins; x is still its own.
+        ("b.note", ["prose", "x"], ["x"]),
+        ("c.code", [], []),
+    ]
 
 
 # --- Viewer statuses ---------------------------------------------------------------
@@ -487,6 +511,8 @@ async def test_connection_live(store):
             "group": "",
             "icon": "",
             "description": "",
+            "classes": ["prose"],
+            "default_for": ["prose"],
         }
         sidebar_init = next(f for f in session.frames if f.ref == ("sidebar",))
         assert sidebar_init.chain[0][2]["registered"] == registered_entries(PLANES)
@@ -562,14 +588,14 @@ async def test_connection_live(store):
         await _until(lambda: session.writes("set_plane")[-1]["cells"][0]["id"] == "c3")
         made = session.writes("set_plane")[-1]["cells"][0]
         assert made["name"] == "text" and made["source"] == TEXT_SRC
-        assert made["made_by"] == TEXT
+        assert made["made_by"] == TEXT and made["classes"] == ["prose"]
         session.notify(
             ("viewer", "ops", "cell.create"),
             {"plane_id": "p1", "cell_id": "c4", "name": "nope", "index": 0},
         )
         await _until(lambda: session.writes("set_plane")[-1]["cells"][0]["id"] == "c4")
         blank = session.writes("set_plane")[-1]["cells"][0]
-        assert blank["source"] == PROGRAM and blank["made_by"] == ""
+        assert blank["source"] == PROGRAM and blank["made_by"] == "" and blank["classes"] == []
         session.notify(
             ("sidebar", "ops", "plane.create"),
             {"plane_id": "p2", "parent_id": "p1", "made_by": "testing.jobs", "title": "Two"},

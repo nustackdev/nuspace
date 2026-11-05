@@ -222,12 +222,15 @@ export function useCellSpecs(path: Path): CellSpec[] {
 			if (!name) continue;
 			const label = typeof o.label === "string" && o.label ? o.label : name;
 			const text = (k: string) => (typeof o[k] === "string" ? (o[k] as string) : "");
+			const names = (k: string) => (Array.isArray(o[k]) ? (o[k] as unknown[]).map(String) : []);
 			out.push({
 				name,
 				label,
 				group: text("group"),
 				icon: text("icon"),
 				description: text("description"),
+				classes: names("classes"),
+				default_for: names("default_for"),
 			});
 		}
 		return out.length ? out : EMPTY_CELL_SPECS;

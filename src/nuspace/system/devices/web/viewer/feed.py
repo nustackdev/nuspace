@@ -35,6 +35,11 @@ the connection keep going.
 ``plane.meta`` event merges keys into it. A plane's props never reach the
 browser, a cell's ship as a flat ``made_by`` and ``has_ui``, and neither is written from it.
 
+**A cell's classes are read off its spec, here.** Each shipped cell carries
+the classes of the installed Cell spec its ``made_by`` names, so the browser
+binds behaviour to a class and never to who made a cell. A cell made from no
+spec, or from one no longer installed, ships none.
+
 **Statuses come from records, never stored.** A pane shows the plane run
 nav made for it (:func:`~nuspace.system.services.nav.pane_run`), so two tabs
 on one plane each see their own. Per cell: its live cell run in that run if
@@ -95,30 +100,36 @@ out = nustd.ui.TextRef("out").set("Hello, cell!")
 # --- What the browser is handed: bare reads ----------------------------------
 
 
-def plane_cells(plane_id: nu.StrArg) -> nu.List:
-    """A plane's cells as ``{id, name, source, made_by, has_ui}``, in order. Bare read.
+def plane_cells(plane_id: nu.StrArg, specs: Iterable[CellSpec] = ()) -> nu.List:
+    """A plane's cells as ``{id, name, source, made_by, has_ui, classes}``, in order. Bare read.
 
     ``made_by`` is the Cell spec the cell was made from, ``""`` when none.
     ``has_ui`` is whether its program draws, True where never worked out.
+    ``classes`` are those of the spec in ``specs`` that ``made_by`` names,
+    ``[]`` when none does.
     """
+    classes = {s.name: list(s.classes) for s in specs}
 
     def cell(row: nu.Attr) -> nu.Dict:
         props = nu.Dict(nu.Dict(row).get_item("props", nu.Dict.of()))
+        made_by = field_str(props, "made_by")
         return nu.Dict.of(
             id=field_str(row, "id"),
             name=field_str(row, "name"),
             source=field_str(row, "prog"),
-            made_by=field_str(props, "made_by"),
+            made_by=made_by,
             has_ui=nu.bool(props.get_item("has_ui", True)),
+            classes=nu.Switch(made_by, classes, default=[]),
         )
 
     return ops.cell_rows(plane_id).iter().map(cell).to_list()
 
 
-def plane_view(plane_id: nu.StrArg) -> nu.Nu:
+def plane_view(plane_id: nu.StrArg, specs: Iterable[CellSpec] = ()) -> nu.Nu:
     """``{title, meta, cells}`` for a plane. Bare read.
 
-    ``meta`` is the plane's whole meta over :data:`PLANE_META`. A plane that
+    ``meta`` is the plane's whole meta over :data:`PLANE_META`, ``cells``
+    its :func:`plane_cells` with the classes ``specs`` give them. A plane that
     is not there reads as an empty untitled one, so a pane open on it is
     still answered.
     """
@@ -128,7 +139,7 @@ def plane_view(plane_id: nu.StrArg) -> nu.Nu:
         nu.Dict.of(
             title=row.name.fallback(""),
             meta=nu.Dict(PLANE_META).merge(row.meta.extract()),
-            cells=plane_cells(plane_id),
+            cells=plane_cells(plane_id, specs),
         ),
         nu.Dict.of(title="", meta=PLANE_META, cells=[]),
     )
@@ -194,7 +205,7 @@ def statuses(plane_id: nu.StrArg, run_id: nu.StrArg) -> nu.Nu:
 # --- Shipping ------------------------------------------------------------------
 
 
-def _plane(viewer: Ref, plane: nu.Nu) -> nu.Nu:
+def _plane(viewer: Ref, plane: nu.Nu, specs: Sequence[CellSpec]) -> nu.Nu:
     """The plane, shipped again when anything under its row changes, its cells included.
 
     Its ``version`` counts every write to its cells, so one watch on the row
@@ -217,7 +228,7 @@ def _plane(viewer: Ref, plane: nu.Nu) -> nu.Nu:
         )
         return nu.IfDo(why == "", shown, interactions.set_absent(viewer, plane, why))
 
-    ship = nu.let(snap(nu.Dict.of(absent=absence, view=plane_view(plane))), show)
+    ship = nu.let(snap(nu.Dict.of(absent=absence, view=plane_view(plane, specs))), show)
     return _arms.state("plane", snap(Space.planes[plane].on_change()), ship)
 
 
@@ -326,14 +337,15 @@ def viewer_feed(viewer: Ref, sid: nu.StrArg, specs: Iterable[CellSpec] = ()) -> 
         viewer: The shell's viewer ref.
         sid: The connection id, whose ``connections[sid].routes`` says which
             planes are open. The row must exist before this runs.
-        specs: The registered Cells, what a created cell stores.
+        specs: The registered Cells, what a created cell stores and the
+            classes a shipped cell carries.
     """
     specs = list(specs)
     routes = Space.connections[sid].routes
 
     def shown(at: nu.Attr) -> nu.Nu:
         plane = nu.Str(at)
-        return nu.ParallelAsync(_plane(viewer, plane), _status(viewer, sid, plane))
+        return nu.ParallelAsync(_plane(viewer, plane, specs), _status(viewer, sid, plane))
 
     # One arm per open plane: a plane opened gets itself and its statuses
     # shipped, a plane closed has its subscriptions torn down, and the other

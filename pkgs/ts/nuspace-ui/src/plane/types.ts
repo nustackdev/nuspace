@@ -30,6 +30,9 @@ export type Cell = {
 	/** Whether its program draws, as the server worked out from the source.
 	 *  Null when it never said (an older cell): it may draw. */
 	has_ui: boolean | null;
+	/** The protocols it keeps, read Nu side off the spec it was made from:
+	 *  `["prose"]`. Empty for a cell made from no spec. */
+	classes: string[];
 	/** Never null. Every cell compiles, runs and is supervised. */
 	status: CellStatus;
 };
@@ -80,10 +83,15 @@ export type CellSpec = {
 	group?: string;
 	icon?: string;
 	description?: string;
+	/** The protocols its cells keep. */
+	classes?: string[];
+	/** The classes it is the default of, resolved Nu side: one spec each. */
+	default_for?: string[];
 };
 
-/** The `nuverse.text` Cell, as `nuspace.TEXT_CELL`: document editing works on
- *  its cells, the text cells (see ./sugar/useTextSugar.ts). */
+/** The `nuverse.text` Cell: document editing works on its cells, the text
+ *  cells (see ./sugar/useTextSugar.ts). Until the sugar binds to the `prose`
+ *  class each cell now carries. */
 export const TEXT = "nuverse.text";
 
 /** Whether the text Cell is registered: without it, the text sugar is off. */
@@ -142,6 +150,7 @@ export function coerceCells(raw: unknown): Cell[] {
 			source: String(r.source ?? ""),
 			made_by: String(r.made_by ?? ""),
 			has_ui: typeof r.has_ui === "boolean" ? r.has_ui : null,
+			classes: Array.isArray(r.classes) ? r.classes.map(String) : [],
 			status: coerceStatus(r.status) ?? {
 				cell_id: id,
 				state: "idle",

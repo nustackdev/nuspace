@@ -35,6 +35,7 @@ function render(
 						source: "",
 						made_by: "",
 						has_ui,
+						classes: [],
 						status: { cell_id: "c1", state, error, started_at: 0 },
 					}}
 					uiPath={["viewer", "cells", "c1"]}

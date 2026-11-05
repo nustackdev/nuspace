@@ -22,7 +22,7 @@ PLANES = (
 )
 
 CELLS = (
-    CellSpec("text", "Text", TEXT_SRC),
+    CellSpec("text", "Text", TEXT_SRC, classes=("prose",), default_for=("prose",)),
     CellSpec("program", "Program", "def out():\n    return nu.Noop()\n"),
 )
 
