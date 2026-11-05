@@ -33,6 +33,7 @@ function cell(id: string): Cell {
 		source: "",
 		made_by: TEXT,
 		has_ui: true,
+		classes: ["prose"],
 		status: { cell_id: id, state: "running", error: null, started_at: null },
 	};
 }

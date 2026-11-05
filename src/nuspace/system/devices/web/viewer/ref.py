@@ -7,7 +7,9 @@ its meta (``editable``, ``full_width``), which arrives with the plane like
 anything else, and goes back through ``plane.meta``.
 
 It is mounted with one prop off the registered Cells (D19):
-``cell_specs``, the ``/`` menu's entries in order. Seeded when the shell boots,
+``cell_specs``, the ``/`` menu's entries in order, each with its classes and
+the classes it is the default of, which is how the input line finds what
+typing creates. Seeded when the shell boots,
 since the Cells are the host's registry and the shell is a static class.
 """
 
@@ -33,17 +35,29 @@ __all__ = ["ViewerRef", "slash_entries"]
 
 
 def slash_entries(cells: Iterable[CellSpec]) -> list[dict]:
-    """The ``/`` menu's entries, ``{name, label, group, icon, description}`` in registry order."""
-    return [
-        {
-            "name": s.name,
-            "label": s.label,
-            "group": s.group,
-            "icon": s.icon,
-            "description": s.description,
-        }
-        for s in cells
-    ]
+    """The ``/`` menu's entries, ``{name, label, group, icon, description, classes, default_for}`` in registry order.
+
+    ``classes`` are the spec's own. ``default_for`` is resolved here, so the
+    browser finds a class's default by looking, never by choosing: a class
+    two specs claim is listed only under the first in registry order.
+    """
+    claimed: set[str] = set()
+    entries = []
+    for s in cells:
+        default_for = [c for c in s.default_for if c not in claimed]
+        claimed.update(default_for)
+        entries.append(
+            {
+                "name": s.name,
+                "label": s.label,
+                "group": s.group,
+                "icon": s.icon,
+                "description": s.description,
+                "classes": list(s.classes),
+                "default_for": default_for,
+            }
+        )
+    return entries
 
 
 class ViewerRef(SpaceRef):

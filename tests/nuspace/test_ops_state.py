@@ -288,6 +288,19 @@ def test_plane_spec_requires_a_backend():
         PlaneSpec("x", "X", backend="")
 
 
+def test_cell_spec_default_is_one_of_its_classes():
+    spec = CellSpec("text", "Text", "", classes=("prose",), default_for=("prose",))
+    assert spec.classes == ("prose",) and spec.default_for == ("prose",)
+    assert CellSpec("x", "X", "").classes == ()
+    with pytest.raises(ValueError, match="default_for"):
+        CellSpec("x", "X", "", default_for=("prose",))
+    with pytest.raises(ValueError, match="default_for"):
+        CellSpec("x", "X", "", classes=("prose",), default_for=("code",))
+    # A bare string would read as one class per letter.
+    with pytest.raises(TypeError, match="tuples"):
+        CellSpec("x", "X", "", classes="prose")  # type: ignore[arg-type]
+
+
 async def test_add_plane_refuses_an_empty_backend(store):
     with pytest.raises(ValueError, match="needs a backend"):
         ops.add_plane("p", backend="")

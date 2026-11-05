@@ -27,13 +27,12 @@ from .registry import (
     short_name,
     space_registry,
 )
-from .specs import EMPTY_PLANE, TEXT_CELL, CellSpec, ContentSpec, PlaneSpec
+from .specs import EMPTY_PLANE, CellSpec, ContentSpec, PlaneSpec
 
 
 __all__ = [
     "EMPTY_PLANE",
     "GROUP",
-    "TEXT_CELL",
     "CellSpec",
     "ContentSpec",
     "Extension",

@@ -20,12 +20,7 @@ if TYPE_CHECKING:
     from nuspace.content import Content
 
 
-__all__ = ["EMPTY_PLANE", "TEXT_CELL", "CellSpec", "ContentSpec", "PlaneSpec"]
-
-
-#: The ``nuverse.text`` Cell: nuspace's document editing works on its cells.
-#: See :class:`CellSpec`.
-TEXT_CELL = "nuverse.text"
+__all__ = ["EMPTY_PLANE", "CellSpec", "ContentSpec", "PlaneSpec"]
 
 
 @dataclass(frozen=True)
@@ -91,12 +86,18 @@ EMPTY_PLANE = PlaneSpec(
 class CellSpec:
     """Source for one cell, offered from the ``/`` menu.
 
-    nuspace's document editing works on the cells of the ``nuverse.text``
-    Cell (:data:`TEXT_CELL`), the plane's text cells, written like a
-    document: typing on an empty line starts one, Enter in the title starts
-    one at the top with the text after the caret, Cmd+Enter in one starts
-    the next below, and Backspace in an empty one removes it. With no Cell
-    under that name, typing opens the ``/`` menu and the rest is off.
+    A cell made from it keeps the spec's classes: the protocols it promises,
+    which the browser's sugar binds to, never to which spec made a cell. A
+    class is a name, its promise written here. ``prose``: the cell draws
+    exactly one document that registers a kit document handle (a kit
+    ``MarkdownRef`` does on its own), and its value is markdown. Any spec
+    whose cell keeps that promise declares it, whoever wrote it. A cell made
+    from no spec, or from one no longer installed, has no classes and gets
+    the plane's core behaviour only.
+
+    One spec per class is its default, what typing on the input line
+    creates: a spec claims it with ``default_for``. When two installed specs
+    claim the same class, the first in registration order wins, no error.
 
     Args:
         name: The new cell's name. Installed by a package, it registers
@@ -111,6 +112,13 @@ class CellSpec:
             come last, under no heading.
         icon: What the menu draws beside it, spelled as :class:`PlaneSpec`'s
             ``icon``. ``""`` for the default.
+        classes: The protocols its cells keep, ``("prose",)``.
+        default_for: The classes it is the default of, each one of
+            ``classes``.
+
+    Raises:
+        TypeError: ``classes`` or ``default_for`` is a bare string.
+        ValueError: ``default_for`` names a class not in ``classes``.
     """
 
     name: str
@@ -119,6 +127,17 @@ class CellSpec:
     description: str = ""
     group: str = ""
     icon: str = ""
+    classes: tuple[str, ...] = ()
+    default_for: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if isinstance(self.classes, str) or isinstance(self.default_for, str):
+            msg = f"CellSpec {self.name!r}: classes and default_for are tuples, eg ('prose',)"
+            raise TypeError(msg)
+        stray = [c for c in self.default_for if c not in self.classes]
+        if stray:
+            msg = f"CellSpec {self.name!r}: default_for {stray} not among classes {self.classes}"
+            raise ValueError(msg)
 
 
 @dataclass(frozen=True)

@@ -112,7 +112,8 @@ class Shell(nu.Shape):
 
         Args:
             cell_specs: The ``/`` menu's entries, the registered Cells as ``{name,
-                label, group, icon, description}`` in order, mounted on the viewer.
+                label, group, icon, description, classes, default_for}`` in order,
+                mounted on the viewer.
             registered: The add plane popup's entries, ``{name, label, icon,
                 description}`` in order, mounted on the sidebar.
         """
