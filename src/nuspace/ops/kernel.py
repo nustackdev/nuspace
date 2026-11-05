@@ -20,11 +20,10 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import nu
-import nustd.kv
 from nuspace.shapes import Space
 
 from .read import cell_plane, cells, plane_exists
-from .utils import MintId, atomic, listed
+from .utils import MintId, atomic, listed, snapshot
 
 
 if TYPE_CHECKING:
@@ -84,10 +83,6 @@ def plane_live(plane_id: nu.StrArg) -> nu.List:
     last run out takes it away), so a plane with none has no set to read.
     """
     return listed(_kernel.planes_running[plane_id].runs)
-
-
-def _snap(term: nu.Nu) -> nu.Nu:
-    return nustd.kv.Snapshot(term, scope=Space)
 
 
 # --- Running -------------------------------------------------------------------
@@ -266,8 +261,8 @@ def _until_ended(run_id: nu.StrArg) -> nu.Nu:
     Woken by its plane's live runs, which it leaves in the same commit.
     """
     live = _kernel.planes_running[_kernel.runs[run_id].plane.fallback("")].runs
-    return nu.WaitReactive(
-        _snap(live.on_children_change()), _snap(_kernel.running.contains(run_id).not_())
+    return nu.WaitUntil(
+        snapshot(live.on_children_change()), snapshot(_kernel.running.contains(run_id).not_())
     )
 
 

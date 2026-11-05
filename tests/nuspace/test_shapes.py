@@ -15,7 +15,6 @@ import pytest
 import nu
 import nustd.kv
 import nustd.ui
-from nu.core.reactive import React
 from nuspace import ops
 from nuspace.shapes import (
     EXITS,
@@ -158,14 +157,16 @@ def watched(watch: nu.Nu, change: nu.Nu, plane: str = "p", cell: str = "c") -> n
 async def test_on_change_fires_on_a_rerooted_cell_ref(tmp_path):
     write, read = _store(tmp_path)
     seen = Space.planes["p"].name
-    await write(watched(React(Tick.n.on_change(), seen.set("fired")), bump()))
+    await write(watched(nu.ReactOnce(Tick.n.on_change(), seen.set("fired")), bump()))
     assert await read(nu.List.of(seen, n_of("p", "c"))) == ["fired", 1]
 
 
 async def test_on_change_fires_on_a_rerooted_plane_ref(tmp_path):
     write, read = _store(tmp_path)
     seen = Space.planes["p"].name
-    await write(watched(React(Chat.title.on_change(), seen.set(Chat.title)), Chat.title.set("t")))
+    await write(
+        watched(nu.ReactOnce(Chat.title.on_change(), seen.set(Chat.title)), Chat.title.set("t"))
+    )
     assert await read(seen) == "t"
 
 
@@ -177,7 +178,7 @@ async def test_a_cell_does_not_hear_its_siblings_cell_state(tmp_path, target, ex
     """
     write, read = _store(tmp_path)
     seen = Space.planes["p"].name
-    heard = React(Tick.n.on_change(), seen.set("wrong"))
+    heard = nu.ReactOnce(Tick.n.on_change(), seen.set("wrong"))
     other = nu.Delay(0.05) >> reroot(bump(), "p", target)
     # Bracketed by hand: left to the pass, a write in ``on_timeout`` puts the
     # whole Timeout in one write transaction, held across the wait, and the

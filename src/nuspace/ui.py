@@ -20,7 +20,7 @@ data: a pane moving to other params runs nothing again. A cell that follows
 them listens with :func:`on_params` and reads them again::
 
     movie = nuspace.ui.params()["id"]
-    nu.ReactLatest(nuspace.ui.on_params(), lambda _: draw(nuspace.ui.params()), initial=True)
+    nu.Reconcile(nuspace.ui.on_params(), draw(nuspace.ui.params()))
 
 Safe for a worker to import: it pulls in no server.
 """
@@ -83,7 +83,7 @@ def params() -> nu.Dict:
 def on_params() -> nu.Nu:
     """Hear the tab's params move, any pane's: read :func:`params` again on it.
 
-    A change subscription, for ``nu.ReactLatest`` and the like. It hears
+    A change subscription, for ``nu.Reconcile`` and the like. It hears
     every pane of the tab, so a cell reading its own params again may find
     them as they were.
     """

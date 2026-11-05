@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Move onto the new reactive flows; failing arms now restart, isolate or fail their run
 - Workers come from the hardened pool: one stop grace, no orphans, clean exit causes
 
 ## 0.6.3 - 2026-11-05

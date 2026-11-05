@@ -34,6 +34,13 @@ run is what the supervisor restarts, once it has ended.
 
 Every read is a point read: a policy, a run id, a run's ``exit``. Nothing
 walks ``runs``, ``running`` or a run's cell runs.
+
+Each plane's arm is one level pass, held on one subscription for the arm's
+life: the plane's policy, its remembered run, its live runs and its row. A
+pass reads them and does what the table says; a pass with nothing to do
+does nothing. An arm that raises is reported and runs again after a short
+delay (:func:`~nuspace.system.utils.restarting`), apart from the restart
+policy above, which is about plane runs, not the arm.
 """
 
 from __future__ import annotations
@@ -45,7 +52,7 @@ from nuspace.ops.kernel import add_plane_run
 from nuspace.ops.utils import MintId, atomic, atomic_state
 from nuspace.shapes import EXIT_FAILED, EXIT_OK, CellState, Space, reroot
 
-from ..utils import moved, snap
+from ..utils import restarting, snap
 
 
 __all__ = [
@@ -223,13 +230,13 @@ def _start(plane: nu.Str, mine: nu.Str) -> nu.Nu:
 
     Written only while the plane is still supervised and its remembered run
     is still ``mine``: an unsupervise or a supervise landing first wins, so
-    nothing is started that nobody tracks. A plane not there yet is waited
-    for.
+    nothing is started that nobody tracks.
 
     The run is a Space commit and remembering it a States one, run first so
     the remembered id always names a run. The check is made again in the
     second: one of them landing in between refuses it, and the run just
-    started, now tracked by nobody, is stopped.
+    started, now tracked by nobody, is stopped. A plane gone refuses the
+    first: the arm's next pass, on the plane's row coming back, tries again.
     """
     still = nu.And(
         Policy.planes.get_item(plane, "") != "",
@@ -247,11 +254,7 @@ def _start(plane: nu.Str, mine: nu.Str) -> nu.Nu:
             >> nu.IfDo(snap(orphan), plane_stop(new))
         )
 
-    return nu.IfDo(
-        snap(plane_exists(plane)),
-        nu.let(MintId("r"), write),
-        nu.WaitReactive(snap(Space.planes[plane].on_change()), snap(plane_exists(plane))),
-    )
+    return nu.let(MintId("r"), write)
 
 
 def _covered(plane: nu.Str, exit_: nu.Str) -> nu.Bool:
@@ -272,52 +275,50 @@ def _wait(plane: nu.Str) -> nu.Nu:
     return nu.let(snap(Policy.delays.get_item(plane, -1.0)), wait)
 
 
-def _ended(plane: nu.Str, mine: nu.Str) -> nu.Nu:
-    """Its run is over: restarted after the wait when the policy covers the exit.
+def _pass(plane: nu.Str) -> nu.Nu:
+    """One look at the plane's own run: start one, leave a live one, or act on how it ended.
 
-    Otherwise left down, until its remembered run moves (supervised again).
-    """
-    exit_ = _kernel.runs[mine].exit.fallback("")
-    again = (
-        nu.IfDo(snap(exit_ == EXIT_OK), _Arm.delay.set(BACKOFF_START))
-        >> _wait(plane)
-        >> _start(plane, mine)
-    )
-    return nu.IfDo(snap(_covered(plane, exit_)), again, moved(Policy.runs[plane], mine))
-
-
-def _turn(plane: nu.Str) -> nu.Nu:
-    """One look at the plane's own run: start one, wait for it to end, or act on how it ended.
-
-    A plane no longer supervised waits to be supervised again, or for the
-    fold to cancel the arm, so the loop never spins on a start its commit
-    refuses.
+    A level pass: what it does follows from the state alone, so running it
+    again with nothing changed does nothing. Nothing for a plane not
+    supervised, or not there. None of its runs yet: one started. Its run
+    ended under a policy that covers the exit: started again after the wait
+    (the backoff back to its start after an ``ok`` exit). Otherwise left as
+    it is: a live run until it ends, an ended one until it is supervised
+    again (its remembered run moves).
     """
     running = _kernel.running
-    policy = Policy.planes.get_item(plane, "")
+    up = (Policy.planes.get_item(plane, "") != "").and_(plane_exists(plane))
 
     def look(held: nu.ObjectRef) -> nu.Nu:
         mine = nu.Str(held)
-        # Its run leaves the plane's live runs in the commit that ends it.
-        live = _kernel.planes_running[plane].runs.on_children_change()
-        ending = nu.WaitReactive(snap(live), snap(running.contains(mine).not_()))
-        return nu.IfDo(
-            mine == "",
-            _start(plane, mine),
-            nu.IfDo(snap(running.contains(mine)), ending, _ended(plane, mine)),
+        exit_ = _kernel.runs[mine].exit.fallback("")
+        ended = running.contains(mine).not_().and_(_covered(plane, exit_))
+        again = (
+            nu.IfDo(snap(exit_ == EXIT_OK), _Arm.delay.set(BACKOFF_START))
+            >> _wait(plane)
+            >> _start(plane, mine)
         )
+        return nu.IfDo(mine == "", _start(plane, mine), nu.IfDo(snap(ended), again))
 
-    supervised = nu.WaitReactive(snap(Policy.planes.on_child_change(plane)), snap(policy != ""))
-    return nu.IfDo(
-        snap(policy == ""),
-        supervised,
-        nu.let(snap(Policy.runs.get_item(plane, "")), look),
-    )
+    return nu.IfDo(snap(up), nu.let(snap(Policy.runs.get_item(plane, "")), look))
 
 
 def _arm(plane: nu.Str) -> nu.Nu:
-    """One supervised plane, kept up for as long as it is listed."""
-    return nu.Frame(_Arm, nu.ForeverDo(_turn(plane)), delay=BACKOFF_START)
+    """One supervised plane, kept up for as long as it is listed.
+
+    One subscription for the arm's life over what a pass reads: the policy,
+    the remembered run, the plane's live runs (a run leaves them in the
+    commit that ends it), and the plane's row (for a plane not there yet).
+    The backoff lives across passes and across restarts of the arm.
+    """
+    changes = nu.OnAny(
+        Policy.planes.on_child_change(plane),
+        Policy.runs.on_child_change(plane),
+        _kernel.planes_running[plane].runs.on_children_change(),
+        Space.planes[plane].on_change(),
+    )
+    held = restarting(nu.Reconcile(snap(changes), _pass(plane)), PLANE, plane)
+    return nu.Frame(_Arm, held, delay=BACKOFF_START)
 
 
 def _forget_ended() -> nu.Nu:
@@ -342,7 +343,7 @@ def _forget_ended() -> nu.Nu:
 def program() -> nu.Nu:
     """One arm per supervised plane, births and deaths included. Never returns."""
     planes = Policy.planes
-    return atomic_state(_made() >> _forget_ended()) >> nu.ForEachParReactive(
+    return atomic_state(_made() >> _forget_ended()) >> nu.ReconcileLatestEach(
         snap(nu.list(planes.keys())),
         snap(planes.on_children_change()),
         lambda plane: _arm(nu.Str(plane)),

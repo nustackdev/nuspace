@@ -74,7 +74,7 @@ async def test_params_move_without_a_rerun_and_on_params_hears_it(store):
             >> tab.params.set({"movie": {"id": "42"}})
         )
     )
-    seen = nu.WaitReactive(nuspace.ui.on_params(), nuspace.ui.params() == {"id": "43"})
+    seen = nu.WaitUntil(nuspace.ui.on_params(), nuspace.ui.params() == {"id": "43"})
     waiting = asyncio.create_task(_run(store, _as_cell(seen, plane="movie")))
     await asyncio.sleep(0.05)
     assert not waiting.done()

@@ -5,12 +5,17 @@ key. The space is one for the module, bootstrapped the way a host opens one,
 so init brings the reactions plane up at boot, with no cells. Every test
 makes its own target plane and watches its own state, and polls the store
 until the reactions have acted.
+
+A reaction is an event flow: it runs its plane once per change notified,
+never on enable, with no re-checks. A burst of changes merges in
+:func:`reactions.up_plane`.
 """
 
 from __future__ import annotations
 
 import asyncio
 import itertools
+import time
 
 import pytest
 import pytest_asyncio
@@ -104,6 +109,9 @@ async def test_enable_writes_the_change_as_source_and_is_idempotent(store):
     assert "PLANE = 'chat'" in source
     assert on("chat") in source
     assert "up_plane(PLANE)" in source
+    # An event flow, every fire under the services policy.
+    assert "nu.ReactLatest(" in source
+    assert "restarting(" in source
     assert list((await store.read(index())).values()) == [cid]
     assert await store.read(reactions.reaction_of(on("chat"), "chat")) == cid
     # No kernel here: the run it asked for is written, by react.
@@ -173,26 +181,54 @@ def _cell(row: dict, cell: str) -> dict:
     return found[-1] if found else {}
 
 
-async def reacting(space: Kernel, change: str, plane: str) -> str:
-    """Enable a reaction, wait for its cell run to be live, and for its first fire to end."""
-    before = len(mine(await space.read(history(plane))))
-    cid = await enabled(space, change, plane)
-    rid = await space.until(reactions.live_run(), bool, SLOW)
-    await space.run_row(rid, lambda r: live(_cell(r, cid)), SLOW)
-    await fired(space, plane, lambda rs: len(rs) > before and all(ended(r) for r in rs))
-    return cid
-
-
 def all_ended(rows: list[dict]) -> bool:
     return all(ended(r) for r in rows)
 
 
+async def settled(space: Kernel, plane: str, quiet: float = 1.5) -> list[dict]:
+    """The plane's runs by reactions once they settle: all ended, none new for ``quiet`` seconds."""
+    deadline = time.monotonic() + SLOW
+    rows = mine(await space.read(history(plane)))
+    while True:
+        await asyncio.sleep(quiet)
+        now = mine(await space.read(history(plane)))
+        if len(now) == len(rows) and all_ended(now):
+            return now
+        if time.monotonic() > deadline:
+            msg = f"reaction runs never settled: {now!r}"
+            raise AssertionError(msg)
+        rows = now
+
+
+async def reacting(space: Kernel, change: str, plane: str) -> str:
+    """Enable a reaction and wait for its cell run to be live, its subscription bound."""
+    cid = await enabled(space, change, plane)
+    rid = await space.until(reactions.live_run(), bool, SLOW)
+    await space.run_row(rid, lambda r: live(_cell(r, cid)), SLOW)
+    # The cell run is live a moment before its subscription binds.
+    await asyncio.sleep(0.3)
+    return cid
+
+
 @module_loop
 async def test_the_plane_boots_with_no_cells_and_comes_up_on_enable(space):
+    """init runs the plane at boot, and the run ends at once: no cells.
+
+    Unless a test before this one enabled a reaction before init reached the
+    plane: then it was up already, and init left it alone.
+    """
     assert reactions.PLANE in BOOTED
-    (row,) = await space.until(history(reactions.PLANE), lambda rs: rs and ended(rs[0]), SLOW)
-    assert (row["by"], row["exit"], row["cells"]) == (init.BY, EXIT_OK, [])
-    assert await space.read(reactions.live_run()) == ""
+
+    def booted(rows: list[dict]) -> bool:
+        by_init = [r for r in rows if r["by"] == init.BY]
+        return any(ended(r) for r in by_init) or (not by_init and bool(mine(rows)))
+
+    rows = await space.until(history(reactions.PLANE), booted, SLOW)
+    for row in rows:
+        if row["by"] == init.BY:
+            assert (row["exit"], row["cells"]) == (EXIT_OK, [])
+    if not mine(rows):
+        assert await space.read(reactions.live_run()) == ""
     p, _ = await space.plane(WORKS)
     await reacting(space, on(p), p)
     rid = await space.read(reactions.live_run())
@@ -200,19 +236,36 @@ async def test_the_plane_boots_with_no_cells_and_comes_up_on_enable(space):
 
 
 @module_loop
+async def test_enabling_does_not_run_the_plane(space):
+    p, _ = await space.plane(WORKS)
+    await reacting(space, on(p), p)
+    await asyncio.sleep(1.5)
+    assert await space.read(history(p)) == []
+
+
+@module_loop
 async def test_a_change_runs_the_plane_once(space):
     p, (c,) = await space.plane(WORKS)
     await reacting(space, on(p), p)
-    (first,) = mine(await space.read(history(p)))
-    await asyncio.sleep(1.0)
-    assert len(await space.read(history(p))) == 1
     await space.run(bump(p, 1))
-    rows = await fired(space, p, lambda rs: len(rs) == 2 and all_ended(rs))
-    assert rows[1]["exit"] == EXIT_OK
-    assert rows[0]["id"] == first["id"]
+    rows = await fired(space, p, lambda rs: len(rs) == 1 and all_ended(rs))
+    assert rows[0]["exit"] == EXIT_OK
     assert (await space.read(States.cells[c].extract()))["n"] == 1
-    await asyncio.sleep(1.5)
-    assert len(await space.read(history(p))) == 2
+    await asyncio.sleep(2.0)
+    assert len(await space.read(history(p))) == 1
+
+
+@module_loop
+async def test_a_burst_merges(space):
+    """A burst of changes while idle: one run for the first, at most one after it."""
+    p, _ = await space.plane(WORKS)
+    await reacting(space, on(p), p)
+    for n in range(1, 13):
+        await space.run(bump(p, n))
+    rows = await fired(space, p, lambda rs: len(rs) >= 1 and all_ended(rs))
+    rows = await settled(space, p)
+    assert 1 <= len(rows) <= 2, rows
+    assert no_overlap(rows), rows
 
 
 def no_overlap(rows: list[dict]) -> bool:
@@ -223,27 +276,25 @@ def no_overlap(rows: list[dict]) -> bool:
 @module_loop
 @pytest.mark.parametrize("changes", [1, 12])
 async def test_changes_during_a_live_run_fire_after_it(space, changes):
-    """Changes landing mid run: at least one run follows it, never two at once.
-
-    Notifications queued while a reaction waits may give a few serial runs:
-    accepted, so the count is not pinned.
-    """
+    """Changes landing mid run: one run follows it, never two at once."""
     p, _ = await space.plane(WORKS)
     await reacting(space, on(p), p)
+    base = len(mine(await space.read(history(p))))
     await space.run(bump(p, 1))
-    (_, mid) = await fired(space, p, lambda rs: len(rs) == 2 and rs[1]["started_at"])
+    rows = await fired(space, p, lambda rs: len(rs) == base + 1 and rs[-1]["started_at"])
+    mid = rows[-1]
     for n in range(changes):
         await space.run(bump(p, 100 + n))
         await asyncio.sleep(0.02)
-    rows = await fired(space, p, lambda rs: len(rs) >= 3 and all_ended(rs))
+    rows = await fired(space, p, lambda rs: len(rs) >= base + 2 and all_ended(rs))
     await asyncio.sleep(2.0)
     rows = mine(await space.read(history(p)))
     assert all_ended(rows)
     assert no_overlap(rows), rows
     (ended_mid,) = [r for r in rows if r["id"] == mid["id"]]
     after = [r for r in rows if r["started_at"] >= ended_mid["terminated_at"]]
-    assert after
-    assert len(rows) <= 3 + changes
+    assert len(after) == 1, rows
+    assert len(rows) == base + 2
 
 
 @module_loop
@@ -268,14 +319,21 @@ async def test_a_cell_state_change_fires(space):
     _, (c,) = await space.plane(prog("return ops.atomic_state(Tick.n.set(0))"))
     p, _ = await space.plane(WORKS)
     await reacting(space, f'States.cells.on_descendants_change("{c}", "n")', p)
+    base = len(mine(await space.read(history(p))))
+    at = time.time()
     await space.run(atomic_state(ops.cell_state(c, Tick.n.set(5))))
-    await fired(space, p, lambda rs: len(rs) == 2 and all_ended(rs))
+    # At least one run after the write: a late start up fire or a split
+    # notification may add one, which the contract makes harmless.
+    rows = await fired(space, p, lambda rs: len(rs) > base and all_ended(rs))
+    assert rows[-1]["started_at"] >= at
+    assert rows[-1]["exit"] == EXIT_OK
 
 
 @module_loop
 async def test_disable_stops_the_fires_and_removes_the_cell(space):
     p, _ = await space.plane(WORKS)
     cid = await reacting(space, on(p), p)
+    base = len(await space.read(history(p)))
     rid = await space.read(reactions.live_run())
     await space.run(disable_react(on(p), p))
     assert cid not in await space.read(ops.cells(reactions.PLANE))
@@ -284,11 +342,15 @@ async def test_disable_stops_the_fires_and_removes_the_cell(space):
     assert _cell(row, cid)["exit"] == EXIT_INTERRUPTED
     await space.run(bump(p, 2))
     await asyncio.sleep(2.0)
-    assert len(await space.read(history(p))) == 1
+    assert len(await space.read(history(p))) == base
 
 
-async def test_a_change_while_the_space_was_closed_fires_at_the_next_open(tmp_path):
-    """Each reaction fires as it starts: what landed between two opens is handled."""
+async def test_a_reaction_comes_back_at_the_next_open(tmp_path):
+    """A reaction outlives its open: init runs it at boot, and the next change fires.
+
+    A change made while the space was closed is not one: event flows are best
+    effort, and no run comes of it.
+    """
     path = str(tmp_path / "space")
     seed = (
         ops.init_stores()
@@ -299,16 +361,20 @@ async def test_a_change_while_the_space_was_closed_fires_at_the_next_open(tmp_pa
     await nu.arun(nu.With(store(path), body=seed))
     k = await opened(f"{NAME}-reopen", path=path, spares=1, init=init.PLANE)
     try:
-        await reacting(k, on("chat"), "chat")
+        cid = await reacting(k, on("chat"), "chat")
     finally:
         await k.close()
     await nu.arun(nu.With(store(path), body=bump("chat", 1)))
     k = await opened(f"{NAME}-reopen", path=path, spares=1, init=init.PLANE)
     try:
-        rows = await fired(k, "chat", lambda rs: len(rs) == 2 and all_ended(rs))
-        assert rows[1]["exit"] == EXIT_OK
         # The reactions plane came back at boot, by init, with the reaction in it.
-        row = await k.run_row(await k.until(reactions.live_run(), bool, SLOW), bool)
+        rid = await k.until(reactions.live_run(), bool, SLOW)
+        row = await k.run_row(rid, lambda r: live(_cell(r, cid)), SLOW)
         assert row["by"] == init.BY
+        await asyncio.sleep(0.3)
+        assert mine(await k.read(history("chat"))) == []
+        await k.run(bump("chat", 2))
+        rows = await fired(k, "chat", lambda rs: len(rs) == 1 and all_ended(rs))
+        assert rows[0]["exit"] == EXIT_OK
     finally:
         await k.close()

@@ -50,7 +50,6 @@ from nuspace.system.services.nav import clear_connections
 from nuspace.system.ui.home import ensure_home
 from nuspace.system.ui.search import ensure_search
 from nuspace.system.ui.settings import ensure_settings
-from nuspace.system.utils import park
 
 
 if TYPE_CHECKING:
@@ -157,7 +156,7 @@ def open_space(
         )
         factories = _with_session(factories, web_envs)
         arms.append(served)
-    arms.append(park() if body is None else body)
+    arms.append(nu.Park() if body is None else body)
     beside = arms[0] if len(arms) == 1 else nu.Race(*arms)
     kwargs = {} if name is None else {"name": name}
     return open_kernel(

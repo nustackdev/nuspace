@@ -447,6 +447,25 @@ async def _until(check, timeout: float = 3.0) -> None:
         await asyncio.sleep(0.01)
 
 
+async def _settled(session, *writes: str, quiet: float = 1.0, timeout: float = 6.0) -> None:
+    """Until no write of ``writes`` has shipped for ``quiet`` seconds: the arms' early re-checks spent.
+
+    ``quiet`` is longer than the widest gap between the default early
+    re-checks (0.3s to 1.0s), so a pause between two of them never passes for quiet.
+    """
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + timeout
+    counts, since = None, loop.time()
+    while True:
+        now = tuple(len(session.writes(op)) for op in writes)
+        if now != counts:
+            counts, since = now, loop.time()
+        elif loop.time() - since >= quiet:
+            return
+        assert loop.time() < deadline, "never settled"
+        await asyncio.sleep(0.02)
+
+
 async def test_connection_live(store):
     from nuspace.system.devices.web.device import connection
 
@@ -498,7 +517,9 @@ async def test_connection_live(store):
         await store.run(atomic(cr.started_at.set(STARTED)))
         await _until(lambda: session.writes("set_status")[-1]["statuses"][0]["state"] == "running")
 
-        # State and output writes wake nothing.
+        # State and output writes wake nothing. Every wake ships, so first let
+        # the arms' early re-checks pass.
+        await _settled(session, "set_plane", "set_status", "set_tree")
         shipped, stats = len(session.writes("set_plane")), len(session.writes("set_status"))
         trees = len(session.writes("set_tree"))
         await store.run(atomic_state(States.planes["p1"].state.set_item("text", nu.Str("hi"))))
@@ -630,6 +651,8 @@ async def test_connection_panes(store):
         assert (got["p2"]["title"], [c["id"] for c in got["p2"]["cells"]]) == ("Two", ["b1"])
 
         # A change on one plane reships only its pane: its row, or a cell on it.
+        # Every wake ships, so first let the arms' early re-checks pass.
+        await _settled(session, "set_plane", "set_status")
         before = len(session.writes("set_plane"))
         await store.run(ops.add_cell("p1", "z = 3", cell_id="a2"))
         await _until(lambda: len(shown()["p1"]["cells"]) == 2)

@@ -403,8 +403,8 @@ def go():
 
 def out():
     return draw() >> nu.ParallelAsync(
-        nu.ReactForever(View.head.kind.on_change(), pick()),
-        nu.ReactForever(View.head.go.on_click(), go()),
+        nu.ReactEvery(View.head.kind.on_change(), pick()),
+        nu.ReactEvery(View.head.go.on_click(), go()),
     )
 """
 
@@ -433,11 +433,6 @@ class Pick(nustd.ui.Field):
 
 class View(nustd.ui.Column):
     pick = Pick.slot(label="Searches")
-
-
-class Seen(nu.Shape):
-    # The searches last drawn, to tell when the list changed.
-    ids = nu.ObjectRef.slot()
 
 
 def newest_first():
@@ -469,7 +464,6 @@ def draw_ids(ids):
             View.pick.search.set_options(ops.snapshot(options))
             >> View.pick.search.set(shown)
             >> nustd.kv.Transaction(write, scope=nuspace.States)
-            >> Seen.ids.set(ids)
         )
 
     return nu.let(ops.snapshot(nu.If(held, picked, newest)), show)
@@ -482,14 +476,12 @@ def pick():
 
 
 def out():
-    # Searches are made anywhere: redraw when the list of them changed.
+    # Searches are made anywhere: redraw when the list of them may have changed.
     made = nuspace.Space.planes[search.SEARCHES].children.on_change()
-    changed = Seen.ids != ops.snapshot(newest_first())
-    body = draw() >> nu.ParallelAsync(
-        nu.ReactForever(View.pick.search.on_change(), pick()),
-        nu.ReconcileReactive(ops.snapshot(made), nu.IfDo(changed, draw())),
+    return nu.ParallelAsync(
+        nu.ReactEvery(View.pick.search.on_change(), pick()),
+        nu.Reconcile(ops.snapshot(made), draw()),
     )
-    return nu.Frame(Seen, body, ids=[])
 """
 
 
@@ -501,7 +493,6 @@ import nuspace
 from nuspace import ops
 from nuspace.content import Drawing
 from nuspace.system.ui import search
-from nuspace.system.utils import follows
 
 #: Hits drawn at most. The rest are counted.
 SHOWN = 200
@@ -596,13 +587,24 @@ def look(sel, drawn):
     return nu.let(ops.snapshot(read), show)
 
 
+def landed(sel):
+    # Hits appended, or the search stamped done.
+    hits = of(sel, search.Search.hits)
+    return nu.OnAny(
+        hits.on_change(),
+        hits.on_children_change(),
+        of(sel, search.Search.finished_at).on_change(),
+    )
+
+
 def shown(sel):
     said = ops.snapshot(ops.plane_title(sel))
-    # Hits land while it runs: look twice a second until it is done, then once more.
+    # Hits land while it runs: look on each that lands until it is done, then once more.
     done = ops.snapshot(of(sel, search.Search.finished_at).exists())
 
     def watch(drawn):
-        return nu.WhileDo(nu.Not(done), look(sel, drawn) >> nu.Delay(0.5)) >> look(sel, drawn)
+        looking = nu.ReconcileWhile(ops.snapshot(landed(sel)), nu.Not(done), look(sel, drawn))
+        return looking >> look(sel, drawn)
 
     return (
         Results.hits.erase()
@@ -629,7 +631,9 @@ def showing(sel):
 
 
 def out():
-    return follows(Chosen.shown, showing)
+    # "" is a search of its own: none chosen, drawn as such.
+    shown = ops.snapshot(Chosen.shown.fallback(""))
+    return nu.ReconcileLatest(shown, ops.snapshot(Chosen.shown.on_change()), showing)
 """
 
 

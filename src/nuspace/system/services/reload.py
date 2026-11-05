@@ -22,7 +22,7 @@ from nuspace.ops.read import cells
 from nuspace.ops.utils import MintId, atomic
 from nuspace.shapes import Space
 
-from ..utils import snap
+from ..utils import restarting, snap
 
 
 __all__ = ["BY", "CELL", "PLANE", "SHIM", "behind", "program"]
@@ -91,14 +91,17 @@ def _arm(run_id: nu.Str) -> nu.Nu:
     plane only, and :func:`behind` tells a rewritten prog apart.
     """
     edits = Space.planes[_kernel.runs[run_id].plane.fallback("")].version.on_change()
-    return nu.ReconcileReactive(snap(edits), _replace(run_id))
+    return nu.Reconcile(snap(edits), _replace(run_id))
 
 
 def program() -> nu.Nu:
-    """One arm per live plane run, births and deaths included. Never returns."""
+    """One arm per live plane run, births and deaths included. Never returns.
+
+    An arm that raises is reported and runs again after a short delay (:func:`restarting`).
+    """
     running = _kernel.running
-    return nu.ForEachParReactive(
+    return nu.ReconcileLatestEach(
         snap(nu.list(running)),
         snap(running.on_children_change()),
-        lambda rid: _arm(nu.Str(rid)),
+        lambda rid: restarting(_arm(nu.Str(rid)), PLANE, nu.Str(rid)),
     )

@@ -28,8 +28,8 @@ from typing import TYPE_CHECKING
 
 import nu
 import nustd.ui
-from nu.core.io import STDOUT
 from nuspace.ops.utils import field_str
+from nuspace.system.utils import isolated, report
 from nustd.ui.core import Changed, Ref, SectionRef, Write
 
 
@@ -42,7 +42,6 @@ if TYPE_CHECKING:
 __all__ = [
     "CELLS",
     "OPS",
-    "PARK_SECONDS",
     "Arms",
     "CellRoot",
     "ChannelRef",
@@ -52,9 +51,7 @@ __all__ = [
     "event",
     "field_ids",
     "field_index",
-    "park",
     "rooted",
-    "watch",
     "write",
 ]
 
@@ -67,9 +64,6 @@ OPS = "ops"
 #: browser's spelling (``pkgs/ts/nuspace-ui/src/plane/cell/address.ts``):
 #: moving it here without moving it there breaks drawing.
 CELLS = "cells"
-
-#: How long a parked branch sleeps between doing nothing.
-PARK_SECONDS = 3600.0
 
 
 class SpaceRef(Ref):
@@ -159,36 +153,6 @@ class CellRoot:
 # --- Arms ----------------------------------------------------------------------
 
 
-def park() -> nu.Nu:
-    """Sit until cancelled. What a branch with nothing left to do does instead of ending."""
-    return nu.ForeverDo(nu.Delay(nu.Float(PARK_SECONDS)))
-
-
-def watch(changes: Sequence[nu.Nu], ship: nu.Nu) -> nu.Nu:
-    """Ship now, and again after any of ``changes`` fires. Forever.
-
-    Each turn opens fresh subscriptions beside the ship and races them: the
-    first notification cancels the turn and the next one reads the store
-    again. A commit fires many keys at once, all into the turn being torn
-    down, so a burst reships once rather than once per key.
-
-    **Opened is not heard.** The race starts its branches in order and
-    opening a subscription never waits, so each is bound before the ship
-    reads. But on the space's store a filter no one held before reaches the
-    publishers a moment later, and a write in that moment wakes nothing.
-    So a filter here is one the space already holds: the same every turn,
-    never named by something just read (a run id, a new plane's id).
-
-    Args:
-        changes: Subscriptions, each built fresh (two positions holding one
-            node hold one handle). Opened before the ship reads.
-        ship: Reads the store and writes the browser. Should be guarded: a
-            raise ends the race.
-    """
-    heard = [nu.React(change) for change in changes]
-    return nu.ForeverDo(nu.Race(*heard, ship >> park()))
-
-
 class Arms:
     """Arm factory for one feed. Holds the label its failures print under."""
 
@@ -198,26 +162,26 @@ class Arms:
         self.label = label
 
     def report(self, what: str, error: nu.Nu) -> nu.Nu:
-        """Say ``error`` went wrong, on this process's stdout."""
-        return nu.Print(STDOUT, nu.Str(f"nuspace web {self.label}: {what}: "), nu.str(error))
+        """Say ``error`` went wrong in ``what``, one line on this process's stdout."""
+        return report(f"web {self.label}", what, error)
 
     def guard(self, term: nu.Nu, what: str) -> nu.Nu:
-        """Run ``term``, and survive it raising."""
-        return nu.TryCatch(term, catch=lambda err: self.report(what, err))
+        """Run ``term``, and survive it raising: the web policy, report and end the arm."""
+        return isolated(term, f"web {self.label}", what)
 
     def event(self, name: str, change: nu.Nu, body: Callable[[nu.Attr], nu.Nu]) -> nu.Nu:
-        """One browser subscription, forever, twice guarded.
+        """One browser subscription, every event, twice guarded.
 
-        The inner guard keeps the loop alive across a bad frame, the outer
-        turns a dead arm into a completed one rather than a raise that takes
-        the tab's other arms with it.
+        The inner guard keeps the arm alive across a bad frame, the outer
+        turns a dead subscription into a completed arm rather than a raise
+        that takes the tab's other arms with it.
 
         Args:
             name: What failures say.
             change: The subscription, built fresh per arm.
             body: Builds what runs per event from the event's ref.
         """
-        return self.guard(nu.ReactForever(change, lambda ev: self.guard(body(ev), name)), name)
+        return self.guard(nu.ReactEvery(change, lambda ev: self.guard(body(ev), name)), name)
 
     def plane_event(
         self, name: str, change: nu.Nu, op: Callable[[nu.Str, nu.Attr], nu.Nu]
@@ -236,11 +200,17 @@ class Arms:
         ``ship`` reads the store as it is now, so a change the subscription
         missed ships on the next re-check.
         """
-        return self.guard(nu.ReconcileReactive(change, self.guard(ship, name)), name)
+        return self.guard(nu.Reconcile(change, self.guard(ship, name)), name)
 
     def states(self, name: str, changes: Sequence[nu.Nu], ship: nu.Nu) -> nu.Nu:
-        """:func:`watch`, guarded: ship now and on every change of any of several filters."""
-        return self.guard(watch(changes, self.guard(ship, name)), name)
+        """:meth:`state` over several subscriptions: ship on a change of any of them.
+
+        Args:
+            name: What failures say.
+            changes: Subscriptions, each built fresh, heard as one.
+            ship: Reads the store and writes the browser.
+        """
+        return self.guard(nu.Reconcile(nu.OnAny(*changes), self.guard(ship, name)), name)
 
 
 # --- Reading one event's fields ---------------------------------------------

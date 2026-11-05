@@ -12,15 +12,14 @@ import nustd.kv
 import nustd.ui
 from nuspace import ops
 from nuspace.ext import space_registry
-from nuspace.ops.utils import atomic, atomic_state
-from nuspace.shapes import RECENTS_CAP, CellState, Reroot, Space, reroot
+from nuspace.ops.utils import atomic
+from nuspace.shapes import RECENTS_CAP, Reroot, Space
 from nuspace.system.devices.web.env import session_env
 from nuspace.system.devices.web.sidebar import rows
 from nuspace.system.info import versions, write_info
 from nuspace.system.kernel.body import Rewrites
 from nuspace.system.ui import home, settings
 from nuspace.system.ui.seed import seeded_id
-from nuspace.system.utils import redraws
 from nustd.ui import Session
 from nustd.ui.core import OP_NOTIFY, Frame, WsSession
 
@@ -326,21 +325,6 @@ async def test_start_draws_its_text(store):
 # --- Kept live -------------------------------------------------------------------
 
 
-class Tick(CellState):
-    """Two refs a test writes, so a watch can be on one while the view reads the other."""
-
-    heard = nustd.kv.IntRef.slot()
-    shown = nustd.kv.IntRef.slot()
-
-
-def _at(term: nu.Nu) -> nu.Nu:
-    return reroot(term, "p", "c")
-
-
-def _bump(ref: nu.Nu) -> nu.Nu:
-    return atomic_state(_at(ref.set(ref.fallback(0) + 1)))
-
-
 def _out(source: str) -> nu.Nu:
     """A cell's ``out``, called if it is a function, as the kernel loads it."""
     namespace: dict = {}
@@ -368,43 +352,6 @@ async def _quiet(session: _Recording, seconds: float = 1.5) -> int:
     return len(session.frames)
 
 
-def _shows(n: nu.Nu) -> nu.Nu:
-    return nustd.ui.TextRef("n").set(nu.str(n))
-
-
-async def test_a_redraw_catches_a_change_it_was_not_told_about(store):
-    """Watching one ref and showing another: only a re-check can see the write."""
-    term = redraws([_at(Tick.heard.on_change())], _at(Tick.shown.fallback(0)), _shows, every=0.3)
-    session, task = await _live(store, term)
-    try:
-        await _quiet(session, 0.5)
-        assert [f.payload for f in session.frames] == ["0"]
-        await store.run(_bump(Tick.shown))
-        await asyncio.sleep(0.8)
-        assert [f.payload for f in session.frames] == ["0", "1"]
-    finally:
-        await _stop(task)
-
-
-async def test_a_redraw_draws_on_a_change_and_never_while_idle(store):
-    term = redraws(
-        [_at(Tick.shown.on_change()), _at(Tick.heard.on_change())],
-        _at(Tick.shown.fallback(0)),
-        _shows,
-    )
-    session, task = await _live(store, term)
-    try:
-        assert await _quiet(session) == 1
-        await store.run(_bump(Tick.shown))
-        await asyncio.sleep(0.3)
-        assert [f.payload for f in session.frames] == ["0", "1"]
-        # Heard, but nothing it shows moved: no frame.
-        await store.run(_bump(Tick.heard))
-        assert await _quiet(session) == 2
-    finally:
-        await _stop(task)
-
-
 async def test_recent_redraws_on_an_open_and_not_while_idle(store):
     await store.run(_drawn("a", "Alpha") >> _drawn("b", "Beta"))
     session, task = await _live(store, _out(home.RECENT))
@@ -420,10 +367,14 @@ async def test_recent_redraws_on_an_open_and_not_while_idle(store):
             "title": "Alpha",
             "icon": "file-text",
         }
-        # A plane renamed that it does not show: woken, nothing drawn.
+        # A plane renamed that it does not show: woken, drawn again as it was.
         seen = len(session.frames)
         await store.run(ops.rename_plane("b", "Bee"))
-        assert await _quiet(session, 0.5) == seen
+        await asyncio.sleep(0.5)
+        again = [f.payload for f in session.frames[seen:]]
+        assert {"href": "/a", "title": "Alpha", "icon": "file-text"} in again
+        assert not any("Bee" in str(payload) for payload in again)
+        seen = len(session.frames)
         await store.run(ops.rename_plane("a", "Ay"))
         await asyncio.sleep(0.3)
         assert {"href": "/a", "title": "Ay", "icon": "file-text"} in [

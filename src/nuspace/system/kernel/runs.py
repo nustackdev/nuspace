@@ -18,6 +18,13 @@ returns when the body has ended, and says why when the worker died under
 it, which ends the cell run ``failed`` here. With ``async`` one death fails
 every cell run on the worker, with ``mp`` the one.
 
+Both folds run each arm once per appearance of its id, and an arm that
+raises would end its whole fold. So every arm catches its own: a raise is
+reported on stdout and ends that run or cell run ``failed`` with the error
+text on its row (unless it has ended already: an end is written once), the
+cleanup in ``finally`` still runs, and nothing else dies. Should even that end fail
+(the store gone), the arm reports the error on stdout and finishes.
+
 The arm never asks what backend it holds: every call goes through
 :mod:`nuspace.system.backends` by the name on the record. Ending is a write
 of ``terminated_at`` and ``exit`` plus a delete from the index, in one
@@ -26,6 +33,8 @@ commit; the fold sees the run leave ``running`` and cancels the arm.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import nu
 import nustd.time
 from nuspace.ops.kernel import off_running
@@ -33,11 +42,16 @@ from nuspace.ops.utils import atomic
 from nuspace.shapes import EXIT_FAILED, EXIT_INTERRUPTED, EXIT_KILLED, EXIT_OK, Space
 from nuspace.system import backends
 from nuspace.system.backends import BackendRef, PlaceCell
+from nuspace.system.utils import report
 
 from .body import end_cell_run
 from .dispatch import RunCell
 from .out import ErrorText
-from .utils import park, snap
+from .utils import snap
+
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 
 __all__ = ["end_run", "outcome", "run_arm", "run_fold"]
@@ -46,6 +60,37 @@ __all__ = ["end_run", "outcome", "run_arm", "run_fold"]
 _kernel = Space.kernel
 
 _ORPHAN = "Cell run lost its host arm"
+
+_UNENDED = "Cell run's body returned without writing its end"
+
+
+def _contained(arm: nu.Nu, fail: Callable[[nu.StrArg], nu.Nu], name: str, id: nu.StrArg) -> nu.Nu:
+    """``arm``, a raise out of it reported and its record ended ``failed`` with the error text.
+
+    The kernel policy, for what the arm's own catch does not cover: its
+    cleanup raising, or the end it writes. The raise is reported on stdout,
+    since the record may have ended already (an end is written once), then
+    ``fail`` gets the error text and writes the end. A raise out of ``fail``
+    is reported too, so the arm always finishes and its fold keeps going.
+    """
+    return nu.TryCatch(
+        arm,
+        catch=lambda err: (
+            report(name, id, ErrorText(err))
+            >> nu.TryCatch(
+                nu.let(ErrorText(err), fail), catch=lambda again: report(name, id, ErrorText(again))
+            )
+        ),
+    )
+
+
+def _reported(err: nu.Nu, fail: Callable[[nu.StrArg], nu.Nu], name: str, id: nu.StrArg) -> nu.Nu:
+    """``err`` reported on stdout, then ``fail`` given its text to write the end.
+
+    Reported first, since the record may have ended already (a kill writes
+    its end before the backend tears down) and the end would drop the text.
+    """
+    return nu.let(ErrorText(err), lambda why: report(name, id, why) >> fail(why))
 
 
 def outcome(run_id: nu.StrArg) -> nu.Str:
@@ -119,6 +164,9 @@ def _cell_arm(run_id: nu.StrArg, cell_run_id: nu.StrArg, backend: nu.StrArg) -> 
 
     A cell run with a ``worker`` was placed by an arm that is gone (it
     raised past its own end), so nothing runs it: it ends ``failed``.
+
+    Any other raise, the backend's let go included, ends it ``failed`` too
+    (:func:`_contained`): the arm finishes, its siblings and the run go on.
     """
     cr = _kernel.runs[run_id].cells[cell_run_id]
     place = nu.let(
@@ -132,16 +180,21 @@ def _cell_arm(run_id: nu.StrArg, cell_run_id: nu.StrArg, backend: nu.StrArg) -> 
         )
         return nu.IfDo(nu.Str(why) != "", atomic(ended))
 
-    def failed(why: nu.Nu) -> nu.Nu:
+    def failed(why: nu.StrArg) -> nu.Nu:
         return atomic(end_cell_run(run_id, cell_run_id, EXIT_FAILED, why))
 
     run = nu.let(RunCell(backend, run_id, cell_run_id), lost)
-    go = nu.IfDo(
-        snap(cr.worker.exists().not_()),
-        nu.TryCatch(place >> run, catch=lambda err: nu.let(ErrorText(err), failed)),
-        failed(_ORPHAN),
+    # The arm runs once: a cell run still live once its body is back is
+    # ended here, or it would hold its plane run open for good.
+    unended = nu.IfDo(
+        snap(_kernel.runs[run_id].cells_running.contains(cell_run_id)), failed(_UNENDED)
     )
-    return nu.TryCatch(go, finally_=backends.end_cell(backend, run_id, cell_run_id, EXIT_OK))
+    go = nu.IfDo(snap(cr.worker.exists().not_()), place >> run >> unended, failed(_ORPHAN))
+    held = nu.TryCatch(
+        nu.TryCatch(go, catch=lambda err: _reported(err, failed, "kernel cell run", cell_run_id)),
+        finally_=backends.end_cell(backend, run_id, cell_run_id, EXIT_OK),
+    )
+    return _contained(held, failed, "kernel cell run", cell_run_id)
 
 
 def _killed(run_id: nu.StrArg, backend: nu.StrArg) -> nu.Nu:
@@ -153,7 +206,7 @@ def _killed(run_id: nu.StrArg, backend: nu.StrArg) -> nu.Nu:
     """
     asked = _kernel.runs[run_id].termination_requested
     return (
-        nu.WaitReactive(snap(asked.on_change()), snap(asked.fallback(False)))
+        nu.WaitUntil(snap(asked.on_change()), snap(asked.fallback(False)))
         >> atomic(end_run(run_id, EXIT_KILLED))
         >> backends.kill(backend, run_id, EXIT_KILLED)
     )
@@ -162,7 +215,7 @@ def _killed(run_id: nu.StrArg, backend: nu.StrArg) -> nu.Nu:
 def _cells(run_id: nu.StrArg, backend: nu.StrArg) -> nu.Nu:
     """:func:`_cell_arm` for every cell run in ``cells_running``, births and deaths included."""
     live = _kernel.runs[run_id].cells_running
-    return nu.ForEachParReactive(
+    return nu.ReconcileLatestEach(
         snap(nu.list(live)),
         snap(live.on_children_change()),
         lambda cr: _cell_arm(run_id, nu.Str(cr), backend),
@@ -170,17 +223,30 @@ def _cells(run_id: nu.StrArg, backend: nu.StrArg) -> nu.Nu:
 
 
 def _done(run_id: nu.StrArg) -> nu.Nu:
-    """Wait for ``cells_running`` to empty, then end the run. Returns once it has ended."""
+    """End the run once ``cells_running`` is empty. Returns at the first wake after it ended.
+
+    One subscription for the run's whole life: a wake that reads no cell run
+    live is one :func:`_end_if_done`, which checks again inside its commit
+    and ends the run only when nothing of it runs. Wakes with cell runs
+    live open no write. In practice the fold cancels the arm first, as the
+    run leaves ``running``.
+    """
     live = _kernel.runs[run_id].cells_running
-    return nu.WhileDo(
+    return nu.ReconcileWhile(
+        snap(live.on_children_change()),
         snap(_kernel.running.contains(run_id)),
-        nu.WaitReactive(snap(live.on_children_change()), snap(live.len() == 0))
-        >> _end_if_done(run_id),
+        nu.IfDo(snap(live.len() == 0), _end_if_done(run_id)),
     )
 
 
 def run_arm(run_id: nu.StrArg) -> nu.Nu:
-    """One plane run's whole life in the host. Ends only by the fold cancelling it."""
+    """One plane run's whole life in the host. Runs once per appearance in ``running``.
+
+    It finishes once the run has ended, or the fold cancels it as the run
+    leaves ``running``. A raise anywhere in it is reported and ends the run
+    ``failed`` with the error text, the end written before the backend kills, as with a
+    kill; the backend still lets go.
+    """
     row = _kernel.runs[run_id]
 
     def life(held: nu.ObjectRef) -> nu.Nu:
@@ -197,9 +263,13 @@ def run_arm(run_id: nu.StrArg) -> nu.Nu:
         # Its workers go when the run is over, or the arm is cancelled: killed
         # when somebody asked for it, let go otherwise.
         let_go = nu.If(row.termination_requested.fallback(False), EXIT_KILLED, EXIT_OK)
-        return nu.TryCatch(lived, finally_=backends.kill(backend, run_id, let_go)) >> park()
+        ended = nu.TryCatch(lived, catch=lambda err: _reported(err, failed, "kernel run", run_id))
+        return nu.TryCatch(ended, finally_=backends.kill(backend, run_id, let_go))
 
-    return nu.let(snap(row.backend.fallback("")), life)
+    def failed(why: nu.StrArg) -> nu.Nu:
+        return atomic(end_run(run_id, EXIT_FAILED, why))
+
+    return _contained(nu.let(snap(row.backend.fallback("")), life), failed, "kernel run", run_id)
 
 
 def run_fold() -> nu.Nu:
@@ -208,7 +278,7 @@ def run_fold() -> nu.Nu:
     The index must exist before this subscribes (reconcile makes it).
     """
     running = _kernel.running
-    return nu.ForEachParReactive(
+    return nu.ReconcileLatestEach(
         snap(nu.list(running)),
         snap(running.on_children_change()),
         lambda rid: run_arm(nu.Str(rid)),

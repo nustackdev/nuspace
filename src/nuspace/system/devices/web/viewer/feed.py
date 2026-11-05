@@ -23,8 +23,13 @@ statuses when the pane's plane run or the plane's cells change, or a cell
 run of the pane's run starts, begins or ends. Nothing of another plane or
 run wakes either, and neither does a cell writing its state or a cell run
 writing its output. Both are level: each ship reads the store as it is, so
-a change a fresh subscription missed ships on the next re-check, and only
-what reads otherwise than it last shipped is sent.
+a change a fresh subscription missed ships on the next re-check. Every wake
+ships, the same view included: the browser takes a repeat as is.
+
+**A failing arm ends alone.** Every arm is guarded
+(:meth:`~nuspace.system.devices.web.utils.Arms.guard`): a raise is reported
+on stdout and ends that arm, while the plane's other arms and the rest of
+the connection keep going.
 
 **Meta goes both ways.** A shipped plane carries its whole meta, and a
 ``plane.meta`` event merges keys into it. A plane's props never reach the
@@ -62,7 +67,6 @@ from nuspace.system.devices.web.viewer.interactions import (
 from nuspace.system.kernel.utils import snap
 from nuspace.system.services import nav
 from nuspace.system.services.nav import pane_key, panes, routable
-from nuspace.system.utils import drawing, follows, redraw
 
 
 if TYPE_CHECKING:
@@ -213,37 +217,37 @@ def _plane(viewer: Ref, plane: nu.Nu) -> nu.Nu:
         )
         return nu.IfDo(why == "", shown, interactions.set_absent(viewer, plane, why))
 
-    read = nu.Dict.of(absent=absence, view=plane_view(plane))
-    ship = redraw(read, show)
-    return drawing(_arms.state("plane", snap(Space.planes[plane].on_change()), ship))
+    ship = nu.let(snap(nu.Dict.of(absent=absence, view=plane_view(plane))), show)
+    return _arms.state("plane", snap(Space.planes[plane].on_change()), ship)
 
 
 def _status(viewer: Ref, sid: nu.StrArg, plane: nu.Nu) -> nu.Nu:
     """The statuses, following the pane's run, shipped again on what changes them.
 
-    The pane's run changes when nav makes a new one, and the watch moves to
-    it. The plane's cells, on its ``version``. One of the run's cell runs
-    added or ended (``cells_running``), one starting (``started_at``); exit
-    and error land with the end. Nothing of another run or plane is heard.
+    The pane's run changes when nav makes a new one, and the arm moves to it.
+    The plane's cells, on its ``version``. One of the run's cell runs added
+    or ended (``cells_running``), one starting (``started_at``); exit and
+    error land with the end. Nothing of another run or plane is heard.
+
+    No run yet reads as ``""``, an id of its own: its arm ships every cell
+    idle, so a pane nav has not brought up is still answered.
     """
 
-    def watch(run: nu.Str) -> nu.Nu:
+    def watch(at: nu.Attr) -> nu.Nu:
+        run = nu.Str(at)
         row = _runs[run]
         read = nu.If(ops.plane_exists(plane), statuses(plane, run), [])
+        changes = [
+            snap(Space.planes[plane].version.on_change()),
+            snap(row.cells_running.on_children_change()),
+            snap(row.cells.on_descendants_change("*", "started_at")),
+        ]
+        ship = nu.let(snap(read), lambda held: interactions.set_status(viewer, plane, held))
+        return _arms.states("status", changes, ship)
 
-        def on(change: nu.Nu) -> nu.Nu:
-            ship = redraw(read, lambda held: interactions.set_status(viewer, plane, held))
-            return _arms.state("status", snap(change), ship)
-
-        return drawing(
-            nu.ParallelAsync(
-                on(Space.planes[plane].version.on_change()),
-                on(row.cells_running.on_children_change()),
-                on(row.cells.on_descendants_change("*", "started_at")),
-            )
-        )
-
-    return follows(panes()[pane_key(sid, plane)], watch)
+    pane = panes()[pane_key(sid, plane)]
+    followed = nu.ReconcileLatest(snap(nu.Str(pane).fallback("")), snap(pane.on_change()), watch)
+    return _arms.guard(followed, "status")
 
 
 # --- The composition -------------------------------------------------------------
@@ -334,5 +338,5 @@ def viewer_feed(viewer: Ref, sid: nu.StrArg, specs: Iterable[CellSpec] = ()) -> 
     # One arm per open plane: a plane opened gets itself and its statuses
     # shipped, a plane closed has its subscriptions torn down, and the other
     # panes' arms are untouched.
-    routed = nu.ForEachParReactive(snap(routes.fallback([])), snap(routes.on_change()), shown)
+    routed = nu.ReconcileLatestEach(snap(routes.fallback([])), snap(routes.on_change()), shown)
     return nu.ParallelAsync(_arms.guard(routed, "routes"), *_events(viewer, sid, specs))

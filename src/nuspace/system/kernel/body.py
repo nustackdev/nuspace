@@ -166,7 +166,7 @@ def build_body(
     program = nu.ParallelAsync(nu.prog.Eval(load))
     cr = _kernel.runs[run_id].cells[cell_run_id]
     asked = cr.interrupt_requested.fallback(False)
-    interrupted = nu.WaitReactive(snap(cr.interrupt_requested.on_change()), snap(asked))
+    interrupted = nu.WaitUntil(snap(cr.interrupt_requested.on_change()), snap(asked))
     flusher = nu.ForeverDo(nu.Delay(FLUSH_SECONDS) >> _flush(run_id, cell_run_id))
     # The record says why the race ended: an asked interrupt, or the program
     # finishing. The flusher never wins.

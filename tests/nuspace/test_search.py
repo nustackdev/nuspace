@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 from _support.contents import NoteContent, PlainContent, write
 from _support.kernel import ended, opened
@@ -9,7 +11,8 @@ from _support.kernel import ended, opened
 import nu
 import nustd.kv
 from nuspace import ops
-from nuspace.content import CELL, PLANE, SPACE
+from nuspace.content import CELL, PLANE, SPACE, address
+from nuspace.ops.utils import atomic_state
 from nuspace.shapes import PlaneState, Reroot, Space, States
 from nuspace.system.devices.web.env import session_env
 from nuspace.system.kernel.body import Rewrites
@@ -182,18 +185,38 @@ async def test_items_of_a_removed_cell_are_no_longer_found(store):
 # --- The viewer ------------------------------------------------------------------------------
 
 
+class _Notify:
+    """A browser notify the test could fire by hand; none of these tests fire it."""
+
+    def __init__(self) -> None:
+        self.callbacks: list = []
+
+    def bind(self, cb) -> None:
+        self.callbacks.append(cb)
+
+    def unbind(self, cb) -> None:
+        self.callbacks = [c for c in self.callbacks if c is not cb]
+
+    def close(self) -> None:
+        self.callbacks = []
+
+
 class _Recording:
-    """A session that keeps the frames it is sent instead of sending them, and answers reads."""
+    """A session that keeps the frames it is sent instead of sending them, answers reads and subscribes."""
 
     def __init__(self, values: dict | None = None) -> None:
         self.frames: list = []
         self.values = values or {}
+        self.notifies: dict = {}
 
     async def send(self, frame: object) -> None:
         self.frames.append(frame)
 
     async def aread(self, path: tuple[str, ...]) -> object:
         return self.values.get(tuple(path), nu.lang.NULL)
+
+    def subscribe(self, path: tuple[str, ...]) -> _Notify:
+        return self.notifies.setdefault(tuple(path), _Notify())
 
 
 async def _frames(store, source: str, cell: str, build, values: dict | None = None) -> list[tuple]:
@@ -326,9 +349,7 @@ async def test_pick_lists_searches_newest_first_and_shows_the_newest(store):
     await store.run(search.ensure_search())
     old = await _searched(store, {NOTE: {}}, name="old")
     new = await _searched(store, {NOTE: {}}, name="new")
-    got = await _frames(
-        store, search.PICK, "pick", lambda ns: nu.Frame(ns["Seen"], ns["draw"](), ids=[])
-    )
+    got = await _frames(store, search.PICK, "pick", lambda ns: ns["draw"]())
     select = [payload for ref, payload in got if ref == ("pick", "search")]
     assert select == [
         {"options": [{"value": new, "label": "new"}, {"value": old, "label": "old"}]},
@@ -362,6 +383,38 @@ async def test_results_draw_each_hit_with_its_kinds_render_hit(store):
     assert got[("empty",)] is None
 
 
+async def test_results_follow_hits_as_they_land_and_end_once_done(store):
+    await _garden(store)
+    pid = await _searched(store, {NOTE: {"text": "tomato"}})
+    namespace: dict = {}
+    exec(compile(search.RESULTS, "results", "exec"), namespace)  # noqa: S102
+    cell = seeded_id(search.PLANE, "results")
+    term = Rewrites(Reroot(search.PLANE, cell))(namespace["shown"](nu.Str(pid)))
+    session = _Recording()
+    task = asyncio.create_task(nu.arun(term, store.ctx.bind(Session, session)))
+    try:
+        # Past the early re-checks: what follows is heard, not polled.
+        await asyncio.sleep(1.2)
+        assert not task.done()
+
+        def status() -> list:
+            return [f.payload for f in session.frames if f.ref == ("status",)]
+
+        assert status()[-1] == "Searching: 0 hits"
+        hit = address(NOTE, (CELL, "c1"), "a")
+        await store.run(atomic_state(_state(pid, S.hits.append(hit))))
+        await asyncio.sleep(0.3)
+        assert status()[-1] == "Searching: 1 hit"
+        await store.run(atomic_state(_state(pid, S.finished_at.set(1.0))))
+        await asyncio.wait_for(task, 0.5)
+        assert status()[-1] == "Done: 1 hit"
+        drawn = {f.ref: f.payload for f in session.frames}
+        assert drawn[("hits", "h0", "item", "body")] == "Tomato needs sun"
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+
+
 async def test_results_say_when_nothing_was_found_or_searched(store):
     pid = await _searched(store, {NOTE: {"text": "zzz"}})
     await _run_search(store, pid)
@@ -370,6 +423,92 @@ async def test_results_say_when_nothing_was_found_or_searched(store):
     assert got[("empty",)]["label"] == "Nothing found"
     none = await _draw(store, search.RESULTS, "results", lambda ns: ns["none"]())
     assert none[("empty",)]["label"] == "No searches yet"
+
+
+async def _live(store, source: str, cell: str) -> tuple[_Recording, asyncio.Task]:
+    """A viewer cell's ``out()`` running against the store, as the kernel would run it there."""
+    namespace: dict = {}
+    exec(compile(source, cell, "exec"), namespace)  # noqa: S102
+    term = Rewrites(Reroot(search.PLANE, seeded_id(search.PLANE, cell)))(namespace["out"]())
+    session = _Recording()
+    task = asyncio.create_task(nu.arun(term, store.ctx.bind(Session, session)))
+    await asyncio.sleep(0)
+    return session, task
+
+
+async def _until(check, timeout: float = 3.0) -> None:
+    deadline = asyncio.get_running_loop().time() + timeout
+    while not check():
+        assert asyncio.get_running_loop().time() < deadline, "timed out"
+        await asyncio.sleep(0.01)
+
+
+def _choose(pid: str) -> nu.Nu:
+    return atomic_state(ops.plane_state(search.PLANE, _Chosen.shown.set(pid)))
+
+
+async def test_results_out_follows_the_chosen_search(store):
+    await store.run(search.ensure_search())
+    a = await _searched(store, {NOTE: {}}, name="Alpha")
+    b = await _searched(store, {NOTE: {}}, name="Beta")
+    session, task = await _live(store, search.RESULTS, "results")
+
+    def last(ref: tuple) -> object:
+        return next((f.payload for f in reversed(session.frames) if f.ref == ref), None)
+
+    def titled(name: str) -> bool:
+        return (last(("title",)) or {}).get("label") == f"Results for \u201c{name}\u201d"
+
+    try:
+        # None chosen: drawn as such.
+        await _until(lambda: (last(("empty",)) or {}).get("label") == "No searches yet")
+        await store.run(_choose(a))
+        await _until(lambda: titled("Alpha"))
+        await _until(lambda: last(("status",)) == "Searching: 0 hits")
+        await store.run(_choose(b))
+        await _until(lambda: titled("Beta"))
+
+        # Alpha's arm is gone: its hits and its end draw nothing.
+        seen = len(session.frames)
+        hit = address(NOTE, (CELL, "c1"), "a")
+        await store.run(atomic_state(_state(a, S.hits.append(hit))))
+        await store.run(atomic_state(_state(a, S.finished_at.set(1.0))))
+        await asyncio.sleep(0.4)
+        later = [f.payload for f in session.frames[seen:] if f.ref == ("status",)]
+        assert all(said == "Searching: 0 hits" for said in later)
+        assert titled("Beta")
+
+        await store.run(_choose(""))
+        await _until(lambda: last(("title",)) is None)
+        assert last(("empty",))["label"] == "No searches yet"
+        assert not task.done()
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+
+
+async def test_pick_out_lists_a_search_made_while_it_runs(store):
+    await store.run(search.ensure_search())
+    old = await _searched(store, {NOTE: {}}, name="old")
+    session, task = await _live(store, search.PICK, "pick")
+
+    def select() -> list:
+        return [f.payload for f in session.frames if f.ref == ("pick", "search")]
+
+    def options() -> list:
+        return [p["options"] for p in select() if isinstance(p, dict)]
+
+    try:
+        await _until(lambda: options() and options()[-1] == [{"value": old, "label": "old"}])
+        assert not task.done()
+        new = await _searched(store, {NOTE: {}}, name="new")
+        await _until(lambda: [o["value"] for o in options()[-1]] == [new, old])
+        await _until(lambda: select()[-1] == new)
+        assert not task.done()
+        assert await store.read(ops.plane_state(search.PLANE, _Chosen.shown)) == new
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
 
 
 # --- On a worker ---------------------------------------------------------------------------

@@ -23,7 +23,7 @@ from nuspace import ops
 from nuspace.ext.registry import registered_name
 from nuspace.ops.utils import atomic
 from nuspace.shapes import Space
-from nuspace.system.utils import park, snap
+from nuspace.system.utils import snap
 
 from .space import open_space
 
@@ -165,7 +165,7 @@ def with_plane(
         ]
         if web and open_browser:
             steps.append(Browse(nu.Str(f"http://{host}:{port}/") + pid, host, port))
-        return nu.Sequential(*steps, park())
+        return nu.Sequential(*steps, nu.Park())
 
     body = nu.let("", opened)
     if not web:

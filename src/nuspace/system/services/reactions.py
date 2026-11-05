@@ -13,17 +13,28 @@ A reaction is an ordinary cell. Its prog is Python source like any other,
 so the change it waits on is written into it as source, nothing serialized::
 
     def out():
-        return nu.ReconcileReactive(
-            ops.snapshot(States.planes["chat"].state["messages"].on_change()),
-            up_plane("chat"),
-            after=(),
-            every=None,
+        return restarting(
+            nu.ReactLatest(
+                ops.snapshot(States.planes["chat"].state["messages"].on_change()),
+                up_plane("chat"),
+            ),
+            "reactions",
+            "chat",
         )
 
-The reaction fires once as it starts, after its subscription is bound,
-which covers changes made while the space was closed, and then on every
-notification. A fire is a plane run, so it has no re-checks: it runs on
-changes only.
+A reaction is an event flow: "this changed, run that plane". Each
+notification starts one plane run (:func:`up_plane`), and nothing else does:
+not enabling it, not a boot, no re-check. It cannot tell "nothing new" from
+the change it watches (any subscription, no value to compare), so a level
+re-check would only add whole plane runs. The key is not read. A newer
+notification restarts an :func:`up_plane` still waiting, so a burst merges
+into one run after the one live (see Dedupe below).
+
+Best effort, as event flows are: a notification dropped, or a write landing
+before the subscription binds or while the space is closed, is a reaction
+missed. A plane that must not miss one runs on a level flow of its own.
+A fire that raises is reported on the reaction's stdout and the reaction
+runs again after a short delay (:func:`~nuspace.system.utils.restarting`).
 
 :func:`enable_react` loads the source before it writes the cell, the way
 the kernel will: source that does not construct, a bad import included,
@@ -41,16 +52,17 @@ own cell. A shape declared in another cell's prog cannot be imported.
 Dedupe is :func:`up_plane`'s. It starts a run of the plane ``by``
 :data:`BY` in a commit that finds none live (a filter of the plane's live
 runs, O(k)), so two never run at once, even from two reactions on one
-plane. One live already may or may not have seen the change, so it waits for
-that run's ``terminated_at`` (a point read) and fires once more after it.
-Notifications landing while one fire waits merge into one more fire, so a
-burst of changes is one run after the one live, never two at once.
+plane. One live already may or may not have seen the change, so it waits
+until none by :data:`BY` is live (one subscription on the plane's live runs,
+held for the whole wait) and starts one then. A notification landing while
+one fire waits restarts it (``ReactLatest``), so a burst of changes is one
+run after the one live, never two at once.
 
 Contract for the planes run. A plane a reaction runs runs to completion: it
 keeps a cursor in its plane state (the last item it handled), handles
-everything past it, and returns. An extra fire is then harmless, the first
-one included. A plane writing the ref it reacts to fires itself once more:
-its cursor makes that run a no-op. This is a convention, not checked here.
+everything past it, and returns. An extra fire is then harmless. A plane
+writing the ref it reacts to fires itself once more: its cursor makes that
+run a no-op. This is a convention, not checked here.
 
 A reaction is known by its change and plane: the plane's own state
 (:class:`Registry`) maps their key to the reaction cell, so both ops are
@@ -99,6 +111,7 @@ import nuspace
 from nuspace import ops
 from nuspace.shapes import Space, States
 from nuspace.system.services.reactions import up_plane
+from nuspace.system.utils import restarting
 """
 
 _kernel = Space.kernel
@@ -143,9 +156,11 @@ def source(change: nu.StrArg, plane_id: nu.StrArg, imports: str = "") -> nu.Nu:
     return (
         nu.Str(head + "\n#: The plane this reaction runs.\nPLANE = ")
         + nu.Repr(plane_id)
-        + nu.Str("\n\n\ndef out():\n    return nu.ReconcileReactive(\n        ops.snapshot(")
+        + nu.Str("\n\n\ndef out():\n    return restarting(\n        nu.ReactLatest(\n")
+        + nu.Str("            ops.snapshot(")
         + nu.Str(change)
-        + nu.Str("),\n        up_plane(PLANE),\n        after=(),\n        every=None,\n    )\n")
+        + nu.Str("),\n            up_plane(PLANE),\n        ),\n")
+        + nu.Str('        "reactions",\n        PLANE,\n    )\n')
     )
 
 
@@ -192,8 +207,9 @@ def up_plane(plane_id: nu.StrArg, by: nu.StrArg = BY) -> nu.Nu:
     """Run a plane that runs to completion once more, never two at once. Returns once started.
 
     With no live run of the plane ``by`` ``by``, one is started. With one
-    live, it may or may not see whatever asked for this, so this waits for
-    it to end (its ``terminated_at``, a point read) and then starts one.
+    live, it may or may not see whatever asked for this, so this waits until
+    none is live (one subscription on the plane's live runs, held for the
+    whole wait, a run started meanwhile waited out too) and then starts one.
     The start is one commit that finds none live, so callers racing on one
     plane start one run between them. Nothing when the plane is gone.
 
@@ -203,19 +219,15 @@ def up_plane(plane_id: nu.StrArg, by: nu.StrArg = BY) -> nu.Nu:
         plane_id: The plane.
         by: Who asked, what the run is recorded as, and whose live runs count.
     """
-
-    def settle(live: nu.ObjectRef) -> nu.Nu:
-        rid = nu.Str(live)
-        over = _kernel.runs[rid].terminated_at
-        ended = nu.WaitReactive(snap(over.on_change()), snap(over.exists()))
-        return nu.WhileDo(rid != "", ended >> live.set(snap(react_run(plane_id, by))))
-
     none = react_run(plane_id, by) == ""
+    # A run leaves the plane's live runs in the commit that ends it.
+    lives = _kernel.planes_running[plane_id].runs.on_children_change()
+    settled = nu.WaitUntil(snap(lives), snap(none))
 
     def start(new: nu.ObjectRef) -> nu.Nu:
         return atomic(nu.IfDo(none, add_plane_run(nu.Str(new), plane_id, by=by)))
 
-    return nu.let(snap(react_run(plane_id, by)), settle) >> nu.let(MintId("r"), start)
+    return settled >> nu.let(MintId("r"), start)
 
 
 # --- The ops ------------------------------------------------------------------------

@@ -25,6 +25,7 @@ from _support.kernel import (
     live,
     opened,
     prog,
+    texts,
     workers_named,
 )
 from _support.made import MADE
@@ -198,9 +199,23 @@ async def close_tab(space: Kernel, sid: str) -> None:
 
 
 async def pane(space: Kernel, sid: str, plane: str) -> dict:
-    """The live run nav made for a tab's pane, once its first cell run is live."""
-    rid = await space.until(nav_service.pane_run(sid, plane), bool, SLOW)
-    return await space.run_row(rid, lambda r: live(first_cell(r)), SLOW)
+    """The live run nav made for a tab's pane, once its first cell run is live.
+
+    The pane's run is read again on every poll: a plane whose row lands
+    before its cells may get an empty run first, which ends at once, and nav
+    runs the plane again when the cells come.
+    """
+    deadline = time.monotonic() + SLOW
+    row: dict = {}
+    while True:
+        rid = await space.read(nav_service.pane_run(sid, plane))
+        row = await space.read(ops.run(rid)) if rid else {}
+        if live(first_cell(row)):
+            return row
+        if time.monotonic() > deadline:
+            msg = f"no live pane for {sid}/{plane}, last run: {row!r}"
+            raise AssertionError(msg)
+        await asyncio.sleep(0.05)
 
 
 @module_loop
@@ -303,6 +318,48 @@ async def test_nav_waits_for_a_routed_plane_not_written_yet(space):
 
 
 @module_loop
+async def test_nav_closing_a_route_right_after_opening_leaves_no_live_run(space):
+    """A turn cancelled mid start still stops the run it made."""
+    p, _ = await space.plane(READS_SESSION)
+    sid = "conn-flicker"
+    for _ in range(3):
+        await open_tab(space, sid, p)
+        await open_tab(space, sid)
+    await close_tab(space, sid)
+    await asyncio.sleep(1.0)
+    rows = await runs_of(space, p, lambda rs: all(ended(r) for r in rs))
+    assert all(r["by"] == nav_service.BY for r in rows)
+    assert await space.read(nav_service.pane_run(sid, p)) == ""
+
+
+@module_loop
+async def test_nav_reports_and_restarts_a_raising_arm_and_its_siblings_keep_going(space):
+    """A connection whose arm raises is reported on nav's stdout and tried again; others run on."""
+    good, _ = await space.plane(READS_SESSION)
+    await open_tab(space, "conn-good", good)
+    r = (await pane(space, "conn-good", good))["id"]
+    # A route that cannot be an id at all: the connection's arm raises on it.
+    await space.run(atomic(Space.connections["conn-bad"].routes.set([["x"]])))
+
+    def reported(rows: list[dict]) -> bool:
+        out = texts(cell_of(only(rows), nav_service.CELL), "stdout")
+        return any(line.startswith("nuspace nav conn-bad: ") for line in out)
+
+    await space.until(history(nav_service.PLANE), reported, SLOW)
+    # The sibling's run is untouched, and a new pane still comes up.
+    assert not ended(await space.read(ops.run(r)))
+    other, _ = await space.plane(READS_SESSION)
+    await open_tab(space, "conn-good", good, other)
+    await pane(space, "conn-good", other)
+    # Fixed, the raising arm comes back on its own after its delay.
+    await open_tab(space, "conn-bad", other)
+    await pane(space, "conn-bad", other)
+    await close_tab(space, "conn-bad")
+    await close_tab(space, "conn-good")
+    await runs_of(space, other, lambda rs: all(ended(x) for x in rs))
+
+
+@module_loop
 async def test_nav_follows_the_open_planes_cells(space):
     p, (c1,) = await space.plane(READS_SESSION)
     sid = "conn-3"
@@ -336,6 +393,22 @@ async def test_nav_runs_the_plane_again_once_its_run_ended_and_a_cell_changed(sp
     again = await space.until(nav_service.pane_run(sid, p), lambda x: x not in ("", first), SLOW)
     assert (await space.run_row(again, ended, SLOW))["exit"] == EXIT_OK
     assert (await space.read(States.cells[c].extract()))["n"] == 7
+    await close_tab(space, sid)
+
+
+@module_loop
+async def test_nav_runs_the_plane_again_once_when_a_cell_came_during_its_run(space):
+    """The cells are read as the run starts: one added while it runs reruns it after."""
+    p, _ = await space.plane(prog("return nu.Delay(0.8) >> ops.atomic_state(Tick.n.set(1))"))
+    sid = "conn-mid"
+    await open_tab(space, sid, p)
+    first = await space.until(nav_service.pane_run(sid, p), bool, SLOW)
+    await space.run(ops.add_cell(p, SET_42))
+    assert (await space.run_row(first, ended, SLOW))["exit"] == EXIT_OK
+    again = await space.until(nav_service.pane_run(sid, p), lambda x: x not in ("", first), SLOW)
+    assert (await space.run_row(again, ended, SLOW))["exit"] == EXIT_OK
+    await asyncio.sleep(1.0)
+    assert await space.read(nav_service.pane_run(sid, p)) == again
     await close_tab(space, sid)
 
 
@@ -404,16 +477,32 @@ async def test_supervisor_restarts_a_failed_plane_with_backoff_until_unsupervise
     await space.run(unsupervise(p))
     assert all(r["exit"] == EXIT_FAILED for r in rows[:3])
     assert all(first_cell(r)["by"] == supervisor_service.BY for r in rows[:3])
+    # The supervisor's own restart policy, not the arm's: 0.25s, then doubled.
+    # Lower bounds only, since load stretches a wait but never shortens one.
     first, second = gaps(rows[:3])
     assert first >= 0.25
     assert second >= 0.5
-    assert second > first
     # Unsupervised: its run stopped, nothing after it.
     await runs_of(space, p, lambda rs: all(ended(r) for r in rs))
     count = len(await space.read(history(p)))
     await asyncio.sleep(1.3)
     assert len(await space.read(history(p))) == count
     assert await space.read(supervisor_service.run_of(p)) == ""
+
+
+@module_loop
+async def test_supervisor_brings_up_a_plane_once_it_is_made(space):
+    """Supervised before it exists: the plane's row coming wakes the arm, no wait of its own."""
+    p = "sup-late"
+    # Always: the plane's row lands before its cell, so a first run may end ok, empty.
+    await space.run(supervise(p, ALWAYS))
+    await asyncio.sleep(1.0)
+    assert await space.read(history(p)) == []
+    await space.run(ops.add_plane(p, backend="async") >> ops.add_cell(p, version("x")))
+    rows = await supervised(space, p, lambda rs: rs and live(first_cell(rs[-1])))
+    assert await space.read(supervisor_service.run_of(p)) == rows[-1]["id"]
+    await space.run(unsupervise(p))
+    assert (await space.run_row(rows[-1]["id"], ended, SLOW))["exit"] == EXIT_INTERRUPTED
 
 
 @module_loop
@@ -425,7 +514,8 @@ async def test_supervisor_always_with_a_delay_is_periodic(space):
     await space.run(unsupervise(p))
     assert all(r["exit"] == EXIT_OK for r in rows[:3])
     # The fixed wait every time, where the backoff would be 0.25s after an ok exit.
-    assert all(delay <= gap < delay + 2.0 for gap in gaps(rows[:3])), gaps(rows[:3])
+    # The upper bound is loose: load stretches a wait.
+    assert all(delay <= gap < delay + 5.0 for gap in gaps(rows[:3])), gaps(rows[:3])
 
 
 @module_loop

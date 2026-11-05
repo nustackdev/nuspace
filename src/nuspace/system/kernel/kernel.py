@@ -11,6 +11,7 @@ import nu
 import nustd.kv
 from nuspace.ops import plane_exists, plane_run
 from nuspace.shapes import Space
+from nuspace.system.utils import restarting
 
 from .reconcile import reconcile
 from .runs import run_fold
@@ -33,11 +34,14 @@ def init_start(plane_id: str) -> nu.Nu:
 def kernel_loop(init: str | None = None) -> nu.Nu:
     """The run fold, and ``init`` run beside it.
 
-    Assumes reconciled. Never returns.
+    Assumes reconciled. Never returns. A raise starting ``init`` is reported
+    on stdout and the start runs again after a short delay (the services
+    policy: init brings up the boot planes, and its start is one commit, so
+    running it again is safe); the fold runs on.
     """
     arms = [run_fold()]
     if init is not None:
-        arms.append(init_start(init))
+        arms.append(restarting(init_start(init), "kernel init", init))
     return nu.ParallelAsync(*arms)
 
 

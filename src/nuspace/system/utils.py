@@ -1,106 +1,67 @@
-"""Small things services and system cells share: waiting on the store, following it.
+"""Small things services and system cells share: the store snapshot and the error policies.
 
-Every wait here is a level one: it reads the store after subscribing, again
-on every change and on re-checks, so a change its subscription did not
-hear is late, never lost. Every read and every subscription carries its own
-snapshot, so nothing here holds a bracket open across a wait.
+**Snapshot.** :func:`snap` reads a term in a snapshot of both stores, each
+opened only if read. One implementation (:func:`nuspace.ops.utils.snapshot`);
+this is its public path.
+
+**Error policies.** An unhandled raise in a fold arm ends the whole fold, so
+every arm says what happens on one. Each policy reports through
+:func:`report`, one line on the cell run's stdout:
+
+- :func:`restarting`, services (supervisor, nav, reload, reactions) and the
+  kernel's init start: the arm runs again after a short delay, every
+  failure reported.
+- :func:`isolated`, web arms: the arm ends, reported, the rest keeps going.
+- kernel arms end their run or cell run as failed, in the kernel itself.
 """
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 import nu
-
-from .kernel.utils import park, snap
-
-
-if TYPE_CHECKING:
-    from collections.abc import Callable, Sequence
+from nu.core.io import STDOUT
+from nuspace.ops.utils import snapshot as snap
 
 
-__all__ = ["drawing", "follows", "moved", "park", "redraw", "redraws", "snap"]
+__all__ = ["isolated", "report", "restarting", "snap"]
 
 
-def moved(ref: nu.Nu, seen: nu.StrArg) -> nu.Nu:
-    """Wait until the str at ``ref`` no longer reads ``seen``. Returns at once if it does not.
-
-    An unwritten ref reads ``""``, so a deleted row counts as a move.
-    """
-    return nu.WaitReactive(snap(ref.on_change()), snap(nu.Str(ref).fallback("") != seen))
-
-
-def follows(ref: nu.Nu, body: Callable[[nu.Str], nu.Nu], *, alive: nu.Nu | None = None) -> nu.Nu:
-    """``body(value)`` with the str at ``ref`` read into a frame, run again whenever it changes.
-
-    The value is read, held, and raced against :func:`moved`: a change
-    cancels the body (its ``finally_`` runs) and the loop comes round with
-    the new value. A body that ends early waits for the change parked.
-    Never returns.
+def report(name: str, id: nu.StrArg | None, error: nu.Nu) -> nu.Nu:
+    """One line on stdout: ``nuspace <name> <id>: <error>``.
 
     Args:
-        ref: A str leaf in the store.
-        body: Builds what runs while the value holds, from the value read
-            this turn.
-        alive: Whether ``ref``'s row is still there, read per turn. Once it
-            reads False the turn parks rather than subscribing to a row that
-            is gone, and waits to be cancelled (eg by the fold over the rows).
+        name: The fold or plane that failed, eg ``"supervisor"`` or ``"web viewer"``.
+        id: The arm's id (a plane, a run, an op name), any ``StrArg``, or
+            None for an arm with no id.
+        error: The error, as a policy hands it.
     """
-
-    def turn(held: nu.ObjectRef) -> nu.Nu:
-        value = nu.Str(held)
-        raced = nu.Race(body(value) >> park(), moved(ref, value))
-        return raced if alive is None else nu.IfDo(snap(alive), raced, park())
-
-    return nu.ForeverDo(nu.let(snap(nu.Str(ref).fallback("")), turn))
+    head = nu.Str(f"nuspace {name}")
+    if id is not None:
+        head = head + " " + nu.str(id)
+    return nu.Print(STDOUT, head, ": ", nu.str(error), sep="")
 
 
-class _Drawn(nu.Shape):
-    """What a view last drew, to tell a change that shows from one that does not."""
-
-    view = nu.ObjectRef.slot()
-
-
-def drawing(body: nu.Nu) -> nu.Nu:
-    """``body`` with a place to keep what it last drew, for every :func:`redraw` inside it."""
-    return nu.Frame(_Drawn, body, view=None)
-
-
-def redraw(read: nu.Nu, draw: Callable[[nu.ObjectRef], nu.Nu]) -> nu.Nu:
-    """``draw(view)`` of what ``read`` reads now, only when it reads otherwise than last drawn.
-
-    A level pass: run it as often as anything might have moved, and an idle
-    store draws nothing. Inside :func:`drawing`.
-
-    Args:
-        read: The view, one value. Unbracketed: read in a snapshot here.
-        draw: Builds the drawing from the view read.
-    """
-
-    def look(now: nu.ObjectRef) -> nu.Nu:
-        return nu.IfDo(_Drawn.view != now, draw(now) >> _Drawn.view.set(now))
-
-    return nu.let(snap(read), look)
-
-
-def redraws(
-    changes: Sequence[nu.Nu],
-    read: nu.Nu,
-    draw: Callable[[nu.ObjectRef], nu.Nu],
-    *,
-    every: float = 30.0,
+def restarting(
+    arm: nu.Nu, name: str, id: nu.StrArg | None = None, *, delay: nu.FloatArg = 0.1
 ) -> nu.Nu:
-    """:func:`redraw` after subscribing, on every change of any of ``changes``, and on re-checks. Never returns.
+    """``arm``, run again ``delay`` seconds after every raise, each failure reported.
 
-    Args:
-        changes: Subscriptions that say ``read`` may have moved. Unbracketed:
-            each is snapshotted here.
-        read: The view, as :func:`redraw` reads it.
-        draw: Builds the drawing from the view read.
-        every: Seconds between re-checks. A view that moves with the clock
-            sets how often it is read again.
+    The services policy. An arm error is reported and the arm runs again
+    after ``delay``, the same wait every time. Backoff is for external
+    services that need room to recover, not for these: a service arm reads
+    the store, and a raise there is a bug to see, not load to shed. Never
+    gives up: it ends when the arm returns or the caller cancels.
     """
-    kept = [
-        nu.ReconcileReactive(snap(change), redraw(read, draw), every=every) for change in changes
-    ]
-    return drawing(nu.ParallelAsync(*kept))
+    return nu.Retry(
+        arm,
+        max_attempts=None,
+        delay=delay,
+        on_attempt_fail=lambda err, attempt: report(name, id, err),
+    )
+
+
+def isolated(arm: nu.Nu, name: str, id: nu.StrArg | None = None) -> nu.Nu:
+    """``arm``, its raise reported and swallowed: the arm ends, its siblings keep going.
+
+    The web policy.
+    """
+    return nu.TryCatch(arm, catch=lambda err: report(name, id, err))

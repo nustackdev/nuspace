@@ -3,18 +3,21 @@
 The kernel starts this and nothing else. What else runs at boot is data, in
 this cell's own state (:class:`Boot`), edited with :func:`boot` and
 :func:`unboot` from anywhere. Each plane gets a plane run of its own,
-``by`` init, on the backend the plane names.
+``by`` init, on the backend the plane names, unless it is live already:
+something may bring a plane up before init reaches it (``enable_react``
+starts the reactions plane when it finds it down), and a second run would
+run its cells twice. The check and the start are one commit.
 """
 
 from __future__ import annotations
 
 import nu
 import nustd.kv
-from nuspace.ops import plane_exists, plane_run
-from nuspace.ops.utils import atomic_state, listed
-from nuspace.shapes import CellState, reroot
+from nuspace.ops.kernel import add_plane_run
+from nuspace.ops.utils import MintId, atomic, atomic_state, listed
+from nuspace.shapes import CellState, Space, reroot
 
-from ..utils import park, snap
+from ..utils import snap
 
 
 __all__ = [
@@ -101,10 +104,16 @@ def booted() -> nu.List:
 
 
 def program() -> nu.Nu:
-    """Every listed plane that exists, run. Then parked."""
+    """Every listed plane that exists and is down, run. Then parked: pid 1 never returns."""
+    running = Space.kernel.planes_running
 
     def up(at: nu.Attr) -> nu.Nu:
         plane = nu.Str(at)
-        return nu.IfDo(snap(plane_exists(plane)), plane_run(plane, by=BY))
+        # A plane's entry is there only while it has live runs. No run is
+        # written for a plane that does not exist.
+        down = running.contains(plane).not_()
+        return nu.let(
+            MintId("r"), lambda rid: atomic(nu.IfDo(down, add_plane_run(nu.Str(rid), plane, by=BY)))
+        )
 
-    return nu.ForEachDo(snap(nu.list(Boot.planes)), up) >> park()
+    return nu.ForEachDo(snap(nu.list(Boot.planes)), up) >> nu.Park()

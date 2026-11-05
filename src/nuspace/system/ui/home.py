@@ -7,7 +7,7 @@ cells, seeded once: after that they are the owner's to edit, and a store
 that has a home keeps it as it is.
 
 Four cells, read only. All but ``start`` are drawn again when what they
-show changes, and only then:
+show changes, and on the flow's re-checks:
 
 - ``header``: the space, its directory, versions and uptime, off
   ``Space.state.info``;
@@ -16,7 +16,7 @@ show changes, and only then:
 - ``glance``: planes, live runs, live cells and workers up, read off the
   live indexes, with links to the first Runs, Workers and Planes planes
   there are;
-- ``start``: how the shell works, static.
+- ``start``: how the shell works, static: drawn once, then its run ends.
 
 Core only: the cells import ``nu``, ``nustd`` and ``nuspace``, never an
 extension, so home works with none installed. The versions are read here, in the host, when the
@@ -66,7 +66,6 @@ import nustd.time
 import nustd.ui
 import nuspace
 from nuspace import ops
-from nuspace.system.utils import redraws
 
 
 def uptime(seconds):
@@ -103,7 +102,7 @@ def draw():
 
 def out():
     # Uptime moves with the clock, in minutes: read again every minute.
-    return redraws([nuspace.Space.state.info.on_change()], line(), show, every=60.0)
+    return nu.Reconcile(ops.snapshot(nuspace.Space.state.info.on_change()), draw(), every=60.0)
 """
 
 
@@ -112,7 +111,6 @@ import nu
 import nustd.ui
 import nuspace
 from nuspace import ops
-from nuspace.system.utils import redraws
 
 SHOWN = {RECENT_SHOWN}
 
@@ -152,11 +150,11 @@ def draw():
 
 def out():
     # Opened, or a plane made, removed or renamed.
-    changes = [
+    changes = nu.OnAny(
         nuspace.Space.state.recents.on_change(),
         nuspace.Space.planes.on_descendants_change("*", "name"),
-    ]
-    return redraws(changes, recent(), show)
+    )
+    return nu.Reconcile(ops.snapshot(changes), draw())
 """
 
 
@@ -165,7 +163,6 @@ import nu
 import nustd.ui
 import nuspace
 from nuspace import ops
-from nuspace.system.utils import redraws
 
 
 class Tiles(nustd.ui.Row):
@@ -238,29 +235,36 @@ def show_live(counts):
     )
 
 
+def draw_planes():
+    return nu.let(ops.snapshot(ops.plane_rows()), show_planes)
+
+
+def draw_live():
+    return nu.let(ops.snapshot(live()), show_live)
+
+
 def draw():
-    planes = nu.let(ops.snapshot(ops.plane_rows()), show_planes)
-    return planes >> nu.let(ops.snapshot(live()), show_live)
+    return draw_planes() >> draw_live()
 
 
 def out():
     kernel = nuspace.Space.kernel
     # Planes come and go with their names; live runs, their cell runs and
     # workers with the live indexes.
-    named = [nuspace.Space.planes.on_descendants_change("*", "name")]
-    lives = [
+    named = nuspace.Space.planes.on_descendants_change("*", "name")
+    lives = nu.OnAny(
         kernel.running.on_children_change(),
         kernel.runs.on_descendants_change("*", "cells_running", "*"),
         kernel.workers_running.on_children_change(),
-    ]
+    )
     return nu.ParallelAsync(
-        redraws(named, ops.plane_rows(), show_planes), redraws(lives, live(), show_live)
+        nu.Reconcile(ops.snapshot(named), draw_planes()),
+        nu.Reconcile(ops.snapshot(lives), draw_live()),
     )
 """
 
 
 START = '''\
-import nu
 import nustd.ui
 
 TEXT = """\\
@@ -280,7 +284,7 @@ def draw():
 
 
 def out():
-    return draw() >> nu.ForeverDo(nu.Delay(3600.0))
+    return draw()
 '''
 
 
