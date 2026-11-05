@@ -7,7 +7,7 @@
 import { CLICK_SLOP } from "@nustackdev/ui-kit";
 import type * as React from "react";
 import { useCallback, useRef } from "react";
-import type { PlaneModel } from "./model";
+import type { PlaneModel } from "../model";
 
 export function useCellDrag({ planeId, cells, patch, notify, index, elRefs }: PlaneModel) {
 	const dragRef = useRef<{ id: string; at: number } | null>(null);

@@ -10,14 +10,11 @@
 // lifecycle. No library supplies any of it, because no library knows what a
 // running Nu cell is. This file wires it together and draws the list:
 //
-//   useFocusRouting.ts   where the caret goes, across cell boundaries
-//   useStructure.ts      save, create, delete, move
-//   useCellKeys.ts      the cell-selection keyboard
-//   useCellDrag.ts      drag reorder
-//   useBoxSelect.ts      selecting cells by dragging a box around them
-//   useSlash.ts          the `/` menu's behaviour (SlashMenu.tsx draws it)
-//   useGhosts.ts         the ghost inputs' wiring (Ghost.tsx draws one)
-//   sugar/               the text sugar, a closed list (sugar/useTextSugar.ts)
+//   focus/              where the caret goes, across cell boundaries
+//   structure/          save, create, delete, move, drag reorder
+//   selection/          the cell-selection keyboard, box selection
+//   input/              the input lines and the `/` menu
+//   sugar/              the text sugar, a closed list (sugar/useTextSugar.ts)
 //   cell/               one cell: its row, gutter, program, source editor
 
 import type { Path } from "@nustackdev/ui-core";
@@ -33,22 +30,22 @@ import {
 } from "../design";
 import { cellUiPath } from "./cell/address";
 import { Cell } from "./cell/Cell";
-import { Ghost } from "./Ghost";
+import { useFocusRouting } from "./focus/useFocusRouting";
+import { Ghost } from "./input/Ghost";
+import { SlashMenu } from "./input/SlashMenu";
+import { useGhosts } from "./input/useGhosts";
+import { useSlash } from "./input/useSlash";
 import type { PlaneModel } from "./model";
 import type { Notify } from "./ops";
-import { SlashMenu } from "./SlashMenu";
+import { useBoxSelect } from "./selection/useBoxSelect";
+import { useCellKeys } from "./selection/useCellKeys";
 import { type EditorPatch, patchEditor, useEditorState } from "./state";
+import { useCellDrag } from "./structure/useCellDrag";
+import { useStructure } from "./structure/useStructure";
 import { Draft, useDraft } from "./sugar/Draft";
 import { cellSurface } from "./sugar/surface";
 import { NEW_CELL_HINT, useTextSugar, WRITE_HINT } from "./sugar/useTextSugar";
 import { type ActivePlane, type CellSpec, hasText } from "./types";
-import { useBoxSelect } from "./useBoxSelect";
-import { useCellDrag } from "./useCellDrag";
-import { useCellKeys } from "./useCellKeys";
-import { useFocusRouting } from "./useFocusRouting";
-import { useGhosts } from "./useGhosts";
-import { useSlash } from "./useSlash";
-import { useStructure } from "./useStructure";
 
 const NO_CELL_SPECS: CellSpec[] = [];
 

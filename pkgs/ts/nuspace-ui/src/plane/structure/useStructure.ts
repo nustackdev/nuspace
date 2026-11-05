@@ -13,10 +13,10 @@
 // nothing to focus by then stays selected, which it already is.
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { mintId } from "../core/ids";
-import { FOCUSABLE } from "./focusable";
-import type { PlaneModel } from "./model";
-import { EDITABLE, placeCaret } from "./sugar/surface";
+import { mintId } from "../../core/ids";
+import { FOCUSABLE } from "../focus/focusable";
+import type { PlaneModel } from "../model";
+import { EDITABLE, placeCaret } from "../sugar/surface";
 
 /** How long a landed cell is watched for something to focus, in ms. */
 const HAND_WAIT = 1500;

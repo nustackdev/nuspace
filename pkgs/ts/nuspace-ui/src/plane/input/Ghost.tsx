@@ -19,9 +19,9 @@
 
 import type * as React from "react";
 import { useEffect } from "react";
-import { docGhost } from "../design";
-import type { SlashAnchor } from "./state";
-import type { ExitDir } from "./types";
+import { docGhost } from "../../design";
+import type { SlashAnchor } from "../state";
+import type { ExitDir } from "../types";
 
 /** What a ghost offers before anything has happened in it, sugar off. */
 const GHOST_HINT = "Press / for cells";

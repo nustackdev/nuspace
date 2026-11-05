@@ -8,10 +8,10 @@
 
 import type * as React from "react";
 import { useCallback } from "react";
-import { tabStop } from "./focusable";
-import type { PlaneModel } from "./model";
-import type { FocusReq } from "./state";
-import type { Cell } from "./types";
+import { tabStop } from "../focus/focusable";
+import type { PlaneModel } from "../model";
+import type { FocusReq } from "../state";
+import type { Cell } from "../types";
 
 /**
  * Put the selected cells on the clipboard, in plane order: what each one

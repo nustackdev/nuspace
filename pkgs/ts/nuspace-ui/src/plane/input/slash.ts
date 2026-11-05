@@ -7,8 +7,8 @@
 // filters with the query like any row, so a query it misses never puts it
 // under the caret.
 
-import { type MenuSection, menuScore, menuSections } from "../menu/rank";
-import type { CellSpec } from "./types";
+import { type MenuSection, menuScore, menuSections } from "../../menu/rank";
+import type { CellSpec } from "../types";
 
 /** The empty program. Its name is no Cell's, so the cell stores the server's starter program. */
 export const PROGRAM: CellSpec = {

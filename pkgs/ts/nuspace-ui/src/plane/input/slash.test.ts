@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
+import type { CellSpec } from "../types";
 import { PROGRAM, slashItems } from "./slash";
-import type { CellSpec } from "./types";
 
 const CELL_SPECS: CellSpec[] = [
 	{ name: "nuverse.text", label: "Text", group: "Content" },

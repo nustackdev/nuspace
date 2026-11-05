@@ -11,11 +11,11 @@
 
 import { EmptyState, Popover, PopoverAnchor, PopoverContent } from "@nustackdev/ui-kit";
 import { useEffect, useRef } from "react";
-import { docSlashList, docSlashMenu, menuHeading, menuItem } from "../design";
-import { MenuEntry, MenuKeys } from "../menu/Entry";
+import { docSlashList, docSlashMenu, menuHeading, menuItem } from "../../design";
+import { MenuEntry, MenuKeys } from "../../menu/Entry";
+import type { SlashAnchor } from "../state";
+import type { CellSpec } from "../types";
 import { slashSections } from "./slash";
-import type { SlashAnchor } from "./state";
-import type { CellSpec } from "./types";
 
 /** The glyph a Cell that names none shows. */
 const CELL_ICON = { kind: "lucide", name: "square-terminal" } as const;
