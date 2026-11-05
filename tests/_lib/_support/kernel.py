@@ -193,7 +193,8 @@ def history(plane: str | None = None) -> nu.Nu:
 
 
 def workers_named(prefix: str) -> list:
-    return [p for p in multiprocessing.active_children() if p.name.startswith(prefix)]
+    """Pool workers still up under ``prefix``: each one runs titled ``nu:{prefix}-{wid}``."""
+    return [p for p in multiprocessing.active_children() if p.name.startswith(f"nu:{prefix}")]
 
 
 async def opened(name: str = "nuspace-test", **kwargs: object) -> Kernel:

@@ -9,6 +9,10 @@ Below is the changelog for **nuspace** - the full commit stream. Newest first.
 The `nuspace-ui` wheel is the same source tree's vite output and is not tracked
 separately here.
 
+## Unreleased
+
+- Workers come from the hardened pool: one stop grace, no orphans, clean exit causes
+
 ## 0.6.3 - 2026-11-05
 
 - Release nuspace and nuspace-ui 0.6.3 on nu 0.7.0 and virtuals 0.2.0

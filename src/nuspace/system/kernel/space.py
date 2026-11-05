@@ -1,4 +1,4 @@
-"""The brackets a space is opened in: store, pool, spares, backends.
+"""The brackets a space is opened in: store, pool, backends.
 
 A space is a directory, any one, its data kept in ``.nuspace/`` the way a
 repository keeps ``.git/``::
@@ -31,7 +31,7 @@ hears the other. Everything here follows from that:
 :func:`worker_context` is the other side: what every worker comes up
 holding, pickled to the child and entered there. Nothing here writes, and
 nothing here knows about runs. :func:`open_kernel` stacks it all, the
-backends on top of the pool and its spares, and runs the kernel beside a
+backends on top of the pool (and the spares it keeps warm), and runs the kernel beside a
 body.
 """
 
@@ -49,7 +49,6 @@ import nustd.mp_pool
 import nustd.valkey
 from nuspace.shapes import Space, States
 from nuspace.system.backends import provided
-from nustd.mp_pool.presets import spares as spares_shelf
 from nustd.valkey.resources import ping
 
 from .envs import KernelConfig
@@ -68,6 +67,7 @@ if TYPE_CHECKING:
 
 __all__ = [
     "DATA_DIR",
+    "DEFAULT_GRACE",
     "DEFAULT_NAME",
     "DEFAULT_SPARES",
     "KERNEL_FILE",
@@ -92,9 +92,13 @@ __all__ = [
 #: Process name prefix for the pool's workers, so a space shows in a process list.
 DEFAULT_NAME = "nuspace"
 
-#: How many idle workers the shelf keeps up. One for the plane being opened,
+#: How many idle workers the pool keeps up. One for the plane being opened,
 #: one for the tab beside it.
 DEFAULT_SPARES = 2
+
+#: Seconds a worker gets to end once the backend lets it go, or the space
+#: closes: torn down politely, killed past it. Same for every worker.
+DEFAULT_GRACE = 2.0
 
 #: The directory inside a space's root holding its data, as ``.git/`` does a repository's.
 DATA_DIR = ".nuspace"
@@ -322,17 +326,22 @@ def worker_context(path: str) -> nu.With:
     )
 
 
-def worker_pool(path: str, *, name: str = DEFAULT_NAME) -> nu.Provide:
-    """The fleet, every worker holding :func:`worker_context`. Closing kills them all.
+def worker_pool(
+    path: str,
+    *,
+    name: str = DEFAULT_NAME,
+    spares: int = 0,
+    grace: float = DEFAULT_GRACE,
+) -> nu.Provide:
+    """The fleet, every worker holding :func:`worker_context`. Closing stops them all.
 
     Args:
         path: The space's data dir, absolute (see :func:`data_dir`).
         name: Process name prefix.
+        spares: Idle workers to keep up, so a take does not wait for a spawn.
+        grace: Seconds a worker gets to end, polite first, killed past it.
     """
-    return nu.Provide(
-        nustd.mp_pool.WorkerPool,
-        {"name": name, "init": worker_context(path)},
-    )
+    return nustd.mp_pool.pool(name=name, init=worker_context(path), spares=spares, grace=grace)
 
 
 def open_kernel(
@@ -350,8 +359,8 @@ def open_kernel(
 
     The brackets, in the order each needs the last (teardown runs the other
     way, so the fleet dies before the server it publishes through): the
-    stores (the notification server, then both navigators), a dict, the pool,
-    the shelf of spares, the backends, the kernel's config. Inside: reconcile first, so
+    stores (the notification server, then both navigators), a dict, the pool
+    with its spares, the backends, the kernel's config. Inside: reconcile first, so
     leftovers have ended before ``body`` asks for anything, then the kernel and
     ``body`` race. The space closes when ``body`` returns; a server's body
     never does.
@@ -371,8 +380,7 @@ def open_kernel(
     return nu.With(
         owned,
         nu.Provide(dict, {}),
-        worker_pool(data, name=name),
-        spares_shelf(spares),
+        worker_pool(data, name=name, spares=spares),
         provided(backends),
         nu.Provide(KernelConfig, {"envs": envs, "space_envs": space_envs}),
         body=reconcile() >> nu.Race(kernel_loop(init), body),

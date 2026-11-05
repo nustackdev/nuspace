@@ -12,6 +12,7 @@ import contextlib
 import os
 import signal
 import time
+from typing import ClassVar
 
 import pytest
 import pytest_asyncio
@@ -42,6 +43,7 @@ from nuspace.ops.utils import atomic
 from nuspace.shapes import EXIT_FAILED, EXIT_INTERRUPTED, EXIT_KILLED, EXIT_OK, Space, States
 from nuspace.system.backends import AsyncBackend, Backend, MpBackend
 from nuspace.system.kernel import INIT_BY, reconcile
+from nuspace.system.kernel.runs import _UNENDED
 from nustd.mp_pool import WorkerPool
 
 
@@ -378,7 +380,7 @@ async def test_cancelling_a_cell_run_cancels_its_body_on_the_worker(cls):
             await arm
         # The body's own cleanup ran where it was, and the worker lives on.
         assert await _cleaned(pool, wid, want=True)
-        assert pool.alive(wid)
+        assert pool.status(wid).state != "exited"
 
 
 @pytest.mark.parametrize(("cls", "shared"), [(AsyncBackend, True), (MpBackend, False)])
@@ -392,7 +394,7 @@ async def test_a_worker_dying_under_a_body_is_its_loss(cls, shared):
             for cell in ("a", "b")
         }
         await asyncio.sleep(0.3)
-        os.kill(pool._workers[backend._holding("r", "a").wid].proc.pid, signal.SIGKILL)
+        os.kill(pool.status(backend._holding("r", "a").wid).pid, signal.SIGKILL)
         assert await asyncio.wait_for(arms["a"], SLOW) == "Worker exited: -9"
         assert backend._holding("r", "a") is None
         if shared:
@@ -431,7 +433,7 @@ def out():
 """
 
 #: Wakes on the first ping it hears, and copies what it reads.
-LISTENS = _SHARED.format("nu.React(Shared.ping.on_change(), Shared.pong.set(Shared.ping))")
+LISTENS = _SHARED.format("nu.ReactOnce(Shared.ping.on_change(), Shared.pong.set(Shared.ping))")
 
 #: Pings forever, every tenth of a second, so the listener hears one once it listens.
 PINGS = _SHARED.format(
@@ -479,6 +481,132 @@ async def test_closing_leaves_no_workers(space):
     while workers_named("nuspace-test") and time.monotonic() < deadline:
         await asyncio.sleep(0.05)
     assert workers_named("nuspace-test") == []
+
+
+# --- Error policy -----------------------------------------------------------------------
+
+
+class _Brittle(AsyncBackend):
+    """Lets go as ``async`` does, then raises: in a cell run's cleanup and in the run's kill."""
+
+    async def aend_cell(self, run_id: str, cell_run_id: str) -> list[str]:
+        await super().aend_cell(run_id, cell_run_id)
+        msg = "end_cell boom"
+        raise RuntimeError(msg)
+
+    async def akill(self, run_id: str) -> list[str]:
+        await super().akill(run_id)
+        msg = "kill boom"
+        raise RuntimeError(msg)
+
+
+async def test_a_raising_arm_is_reported_and_the_folds_go_on(capfd):
+    """A raise in a cell run's cleanup or a run's kill is reported; its end stands, later runs run."""
+    k = await opened("nuspace-brittle", spares=1, backends={"brittle": _Brittle})
+    try:
+        p, _ = await k.plane(SET_42, backend="brittle")
+        r = await k.made(ops.plane_run(p, into=MADE))
+        row = await k.run_row(r, ended, SLOW)
+        assert (row["exit"], only_cell(row)["exit"]) == (EXIT_OK, EXIT_OK)
+        cr = only_cell(row)["id"]
+        deadline = time.monotonic() + SLOW
+        out = ""
+        while time.monotonic() < deadline:
+            out += capfd.readouterr().out
+            if "kill boom" in out and "end_cell boom" in out:
+                break
+            await asyncio.sleep(0.05)
+        assert f"nuspace kernel cell run {cr}: " in out
+        assert "end_cell boom" in out
+        assert f"nuspace kernel run {r}: " in out
+        assert "kill boom" in out
+        # Both folds are still up: the next run, on a sound backend, runs to its end.
+        q, _ = await k.plane(SET_42)
+        again = await k.run_row(await k.made(ops.plane_run(q, into=MADE)), ended, SLOW)
+        assert (again["exit"], only_cell(again)["exit"]) == (EXIT_OK, EXIT_OK)
+    finally:
+        await k.close()
+
+
+class _KillsLate(AsyncBackend):
+    """Its first kill raises before letting go: the one a kill request makes, in the race."""
+
+    kills: ClassVar[list[str]] = []
+
+    async def akill(self, run_id: str) -> list[str]:
+        self.kills.append(run_id)
+        if len(self.kills) == 1:
+            msg = "kill boom"
+            raise RuntimeError(msg)
+        return await super().akill(run_id)
+
+
+async def test_a_kill_raising_in_the_race_leaves_the_end_and_the_backend_lets_go():
+    """A kill raising in the race: the run's end stays ``killed``, the final kill still runs.
+
+    The end is written before that kill, so the fold cancels the arm as the
+    run leaves ``running``, most often before the raise reaches the arm's
+    catch: the raise is not asserted on stdout, only that nothing is lost.
+    """
+    _KillsLate.kills = []
+    k = await opened("nuspace-killslate", spares=1, backends={"late": _KillsLate})
+    try:
+        p, (c,) = await k.plane(FOREVER, backend="late")
+        r = await k.made(ops.plane_run(p, into=MADE))
+        await live_cell(k, r, c)
+        await k.run(ops.plane_kill(r))
+        row = await k.run_row(r, ended, SLOW)
+        assert (row["exit"], only_cell(row)["exit"]) == (EXIT_KILLED, EXIT_KILLED)
+        assert row["error"] == ""
+        deadline = time.monotonic() + SLOW
+        while len(_KillsLate.kills) < 2 and time.monotonic() < deadline:
+            await asyncio.sleep(0.05)
+        assert _KillsLate.kills == [r, r]
+        q, _ = await k.plane(SET_42)
+        again = await k.run_row(await k.made(ops.plane_run(q, into=MADE)), ended, SLOW)
+        assert (again["exit"], only_cell(again)["exit"]) == (EXIT_OK, EXIT_OK)
+    finally:
+        await k.close()
+
+
+class _RunRaises(AsyncBackend):
+    """Places a cell run, then raises instead of running it."""
+
+    async def arun(self, run_id: str, cell_run_id: str, body: nu.Nu) -> str:
+        msg = "run boom"
+        raise RuntimeError(msg)
+
+
+class _Unending(AsyncBackend):
+    """Says the body ended without running it, so its end is never written."""
+
+    async def arun(self, run_id: str, cell_run_id: str, body: nu.Nu) -> str:
+        return ""
+
+
+async def test_a_raising_cell_run_ends_failed_with_the_error():
+    k = await opened("nuspace-runraises", spares=1, backends={"raises": _RunRaises})
+    try:
+        p, _ = await k.plane(SET_42, backend="raises")
+        row = await k.run_row(await k.made(ops.plane_run(p, into=MADE)), ended, SLOW)
+        cr = only_cell(row)
+        assert (row["exit"], cr["exit"]) == (EXIT_FAILED, EXIT_FAILED)
+        assert "run boom" in cr["error"]
+    finally:
+        await k.close()
+
+
+async def test_a_cell_run_left_live_by_its_body_ends_failed_and_the_run_ends():
+    """A body back without its end would hold the plane run open for good: the arm ends it."""
+    k = await opened("nuspace-unending", spares=1, backends={"unending": _Unending})
+    try:
+        p, _ = await k.plane(SET_42, backend="unending")
+        row = await k.run_row(await k.made(ops.plane_run(p, into=MADE)), ended, SLOW)
+        cr = only_cell(row)
+        assert (row["exit"], cr["exit"], cr["error"]) == (EXIT_FAILED, EXIT_FAILED, _UNENDED)
+        assert row["cells_running"] == []
+    finally:
+        await k.close()
 
 
 # --- reconcile ------------------------------------------------------------------------
