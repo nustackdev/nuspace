@@ -19,7 +19,7 @@
 import { CLICK_SLOP } from "@nustackdev/ui-kit";
 import type * as React from "react";
 import { useCallback, useState } from "react";
-import type { PlaneModel } from "./model";
+import type { PlaneModel } from "../model";
 
 /** Where a press never starts a box: inside a cell's box, or on a control. */
 const NO_BOX =

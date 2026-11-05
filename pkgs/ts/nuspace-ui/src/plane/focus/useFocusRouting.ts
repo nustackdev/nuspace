@@ -12,11 +12,11 @@
 //     control, the caret at a text's end. With none, the selection goes.
 
 import { useCallback } from "react";
+import type { PlaneModel } from "../model";
+import type { FocusReq } from "../state";
+import { EDITABLE, placeCaret } from "../sugar/surface";
+import type { Cell, ExitDir } from "../types";
 import { FOCUSABLE } from "./focusable";
-import type { PlaneModel } from "./model";
-import type { FocusReq } from "./state";
-import { EDITABLE, placeCaret } from "./sugar/surface";
-import type { Cell, ExitDir } from "./types";
 
 export function useFocusRouting({
 	cells,

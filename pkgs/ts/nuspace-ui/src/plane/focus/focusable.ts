@@ -2,7 +2,7 @@
 // by hand: landing on a new cell (./useStructure.ts), and Tab off a selected
 // cell (./useCellKeys.ts). Everywhere else the browser's own tab order rules.
 
-import { EDITABLE } from "./sugar/surface";
+import { EDITABLE } from "../sugar/surface";
 
 /** What a drawn cell can hand the keyboard to. */
 export const FOCUSABLE = [

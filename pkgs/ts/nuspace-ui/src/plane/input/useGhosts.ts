@@ -14,10 +14,10 @@
 
 import { useCallback, useRef } from "react";
 import { flushSync } from "react-dom";
+import type { PlaneModel } from "../model";
+import type { FocusReq } from "../state";
+import type { Cell, ExitDir } from "../types";
 import type { GhostProps } from "./Ghost";
-import type { PlaneModel } from "./model";
-import type { FocusReq } from "./state";
-import type { Cell, ExitDir } from "./types";
 
 export function useGhosts(
 	{ cells, editor, patch, index, rootRef, endGhost, plusGhost }: PlaneModel,

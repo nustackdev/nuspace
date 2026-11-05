@@ -4,9 +4,9 @@
 // stand-in (`replace`, ./state.ts) takes the place of the cell it stood for.
 
 import { useCallback, useMemo } from "react";
-import type { PlaneModel } from "./model";
+import type { PlaneModel } from "../model";
+import type { CellSpec } from "../types";
 import { slashItems as listed } from "./slash";
-import type { CellSpec } from "./types";
 
 export function useSlash(
 	{ editor, patch, notify }: PlaneModel,
