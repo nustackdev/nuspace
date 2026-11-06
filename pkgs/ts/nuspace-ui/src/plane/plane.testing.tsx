@@ -12,11 +12,14 @@ import {
 	type DocIntent,
 	type DocumentHandle,
 	type IntentListener,
+	pathKey,
+	register,
 	registerDocument,
+	registerPresence,
 	TooltipProvider,
 	tree,
 } from "@nustackdev/ui-kit";
-import { act } from "react";
+import { act, useEffect } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, vi } from "vitest";
 import type { PlaneHandle } from "./api";
@@ -173,6 +176,29 @@ export function mountDoc<D extends ReturnType<typeof fakeDoc>>(id: string, given
 		leaves.push(registerDocument([...VIEWER, "cells", id, "text"], d.doc));
 	});
 	return d;
+}
+
+/**
+ * A document drawn the way a program opens one, in two frames: mounted
+ * read-only first (present, not registered: it takes no commands yet),
+ * then open for editing (`mountDoc` registers its handle, later).
+ */
+register("TestPresent", {
+	component: ({ path }: { path: string[] }) => {
+		// biome-ignore lint/correctness/useExhaustiveDependencies: path is compared by value, as a MarkdownRef's.
+		useEffect(() => registerPresence(path), [pathKey(path)]);
+		return <div />;
+	},
+});
+
+/** The first frame: cell `id` draws a document, read-only for now. */
+export const drawReadOnly = (id: string) => draw(id, "TestPresent");
+
+/** What cell `id` draws goes away, document and all. */
+export function undraw(id: string) {
+	act(() => {
+		tree.getState().remove([...VIEWER, "cells", id, "view"]);
+	});
 }
 
 /** The program's first write: a view node of `type` under the cell. */

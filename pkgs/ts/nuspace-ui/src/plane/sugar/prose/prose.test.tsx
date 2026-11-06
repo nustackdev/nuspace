@@ -14,6 +14,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
 	cell,
 	draw,
+	drawReadOnly,
 	endLine,
 	fakeDoc,
 	lines,
@@ -30,6 +31,7 @@ import {
 	selected,
 	title,
 	typeInto,
+	undraw,
 	VIEWER,
 	WITH_DEFAULT,
 } from "../../plane.testing";
@@ -855,6 +857,91 @@ describe("K. split", () => {
 		expect(b.say({ kind: "erase", dir: "back" })).toBe(true);
 		expect(a.doc.markdown()).toBe(before);
 		expect(ops().at(-1)).toEqual(["cell.delete", id]);
+	});
+});
+
+describe("a document opened in two frames: read-only first, editing later", () => {
+	it("split lands once the new cell's document opens", async () => {
+		plane([cell("a"), cell("z")]);
+		const a = mountDoc("a", paper(["one", "two"], 1));
+		a.say({ kind: "break", at: "mid" });
+		const id = created()[0].cell_id as string;
+		plane([cell("a"), cell(id), cell("z")]);
+		await drawReadOnly(id);
+		// Drawn, read-only: it shows, the request waits, nothing cut.
+		expect(row(id).hidden).toBe(false);
+		expect(readEditor(VIEWER, "p1").requests).toHaveLength(1);
+		expect(a.doc.split).not.toHaveBeenCalled();
+		const into = mountDoc(id, paper([]));
+		expect(into.at.blocks).toEqual(["two"]);
+		expect(into.doc.focus).toHaveBeenCalledWith("start");
+		expect(a.at.blocks).toEqual(["one"]);
+	});
+
+	it("R1's text lands once the new cell's document opens", async () => {
+		plane([]);
+		act(() => endLine().focus());
+		typeInto(endLine(), "hi");
+		const id = created()[0].cell_id as string;
+		plane([cell(id)]);
+		await drawReadOnly(id);
+		expect(readEditor(VIEWER, "p1").requests).toHaveLength(1);
+		expect(endLine().value).toBe("hi");
+		const d = mountDoc(id);
+		expect(d.doc.focus).toHaveBeenCalledWith("end");
+		expect(d.doc.type).toHaveBeenCalledExactlyOnceWith("hi");
+		expect(endLine().value).toBe("");
+	});
+
+	it("a create that asks for the caret gets it once the document opens (R5)", async () => {
+		plane([cell("a")]);
+		title({ kind: "enter", end: true });
+		const id = created()[0].cell_id as string;
+		plane([cell(id), cell("a")]);
+		await drawReadOnly(id);
+		const d = mountDoc(id);
+		expect(d.doc.focus).toHaveBeenCalledWith("start");
+	});
+
+	it("a document that goes without ever opening lets the request go, the text back in the line", async () => {
+		plane([]);
+		act(() => endLine().focus());
+		typeInto(endLine(), "hi");
+		const id = created()[0].cell_id as string;
+		plane([cell(id)]);
+		await drawReadOnly(id);
+		undraw(id);
+		expect(readEditor(VIEWER, "p1").requests).toEqual([]);
+		expect(endLine().value).toBe("hi");
+		expect(row(id).hidden).toBe(false);
+	});
+});
+
+describe("the receiver written while the move is being stored", () => {
+	it("merge leaves both when the cell above no longer holds the text", () => {
+		plane([cell("a"), cell("b")]);
+		const a = mountDoc("a", paper(["one"]));
+		const b = mountDoc("b", paper(["two"]));
+		a.hold();
+		b.say({ kind: "erase", dir: "back" });
+		a.at.blocks = ["one"];
+		a.stored();
+		expect(notify).not.toHaveBeenCalled();
+	});
+
+	it("split leaves both when the new cell no longer holds the tail", () => {
+		plane([cell("a"), cell("z")]);
+		const a = mountDoc("a", paper(["one", "two"], 1));
+		a.say({ kind: "break", at: "mid" });
+		const id = created()[0].cell_id as string;
+		plane([cell("a"), cell(id), cell("z")]);
+		const into = paper([]);
+		into.hold();
+		mountDoc(id, into);
+		into.at.blocks = ["something else"];
+		into.stored();
+		expect(a.doc.split).not.toHaveBeenCalled();
+		expect(a.at.blocks).toEqual(["one", "two"]);
 	});
 });
 
