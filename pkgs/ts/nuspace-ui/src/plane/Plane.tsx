@@ -284,12 +284,14 @@ export function Plane({
 				const editing = editingIds.includes(cell.id);
 				const source =
 					editor.requests.find((r) => r.cellId === cell.id && r.to === "source") ?? null;
-				// An input line is showing what this cell is waiting to take, so
-				// the cell stays out of sight until it has it. One that died
-				// shows its error instead.
+				// An input line is showing what this cell is waiting to take, or
+				// another cell still holds the markdown it will be handed (a
+				// split's tail), so the cell stays out of sight until it has it
+				// rather than flash empty. One that died shows its error instead,
+				// and one that will never take it is let go (the exits above).
 				const fed =
 					!cell.status.error &&
-					editor.requests.some((r) => r.cellId === cell.id && r.line && !r.ready);
+					editor.requests.some((r) => r.cellId === cell.id && (r.line || r.markdown) && !r.ready);
 				return (
 					<Fragment key={cell.id}>
 						<Cell
