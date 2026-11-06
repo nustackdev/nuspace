@@ -28,22 +28,3 @@ body,
 #root {
 	height: 100%;
 }
-
-/* The text sugar's hints, on a text cell's own lines (plane/sugar). Hints
- * show only in the cell the caret is in, on a line that is already there,
- * so nothing ever moves to make room for one. The kit draws the empty
- * cell's hint; here it waits for the caret, as the input line's does. */
-[data-text-cell] .nu-prose-editor:not(:focus) [data-nu-placeholder]::before {
-	content: none;
-}
-
-/* An empty last line, the one Enter leaves you on: the way out of the cell. */
-[data-text-cell]
-	.nu-prose-editor:focus
-	> p:last-child:not(:first-child):has(> br:only-child)::before {
-	content: var(--sugar-new-cell);
-	color: var(--text-muted);
-	pointer-events: none;
-	float: left;
-	height: 0;
-}

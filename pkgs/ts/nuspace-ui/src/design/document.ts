@@ -45,7 +45,7 @@ function docPlaneWidth(wide: boolean): string {
 /**
  * One row of a plane: the three tracks every row shares, left gutter,
  * content, right gutter (`--doc-grid`, tokens.css). The title, each cell,
- * a ghost, a draft and the drop line are each one of these, so the same
+ * a ghost and the drop line are each one of these, so the same
  * edges run through all of them without a row knowing about the others.
  */
 export const docRow = "grid w-full grid-cols-(--doc-grid)";
@@ -116,21 +116,6 @@ export const docGhost = (hinted: boolean) =>
 			? "placeholder:text-text-muted"
 			: "placeholder:text-transparent focus:placeholder:text-text-muted",
 	);
-
-/**
- * A draft: what was typed into a ghost while its text cell is on the way.
- *
- * Plain text set where and how a text cell's first paragraph sits (the
- * cell's pad plus the prose box's, see `--spacing-doc-line`; the first
- * paragraph has no margin of its own there), so the handoff to the real
- * editor moves nothing. Like a ghost, in a `docRow`'s content track.
- */
-export const docDraft = cn(
-	docContentTrack,
-	"w-full resize-none rounded-sm border-0 bg-transparent outline-none [field-sizing:content]",
-	"px-doc-cell py-doc-line",
-	"font-display text-lg text-text-primary",
-);
 
 /**
  * The run-off under the last cell, and the click target that opens it.
