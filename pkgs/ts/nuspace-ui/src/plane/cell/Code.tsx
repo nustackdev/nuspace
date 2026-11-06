@@ -104,9 +104,14 @@ export function CodeBox(props: CodeBoxProps) {
 		return () => view.dom.removeEventListener("keydown", onKey, true);
 	}, [view, readOnly]);
 
-	// A focus request, consumed once there is a view to take it.
+	// A focus request, consumed once there is a view to take it. One that no
+	// longer pulls (the caret went elsewhere meanwhile) is consumed in place.
 	useEffect(() => {
 		if (!view || !focusReq) return;
+		if (!focusReq.pull) {
+			onFocusConsumed();
+			return;
+		}
 		const edge = sourceEdge(focusReq.at);
 		if (edge !== "kept") {
 			const doc = view.state.doc;

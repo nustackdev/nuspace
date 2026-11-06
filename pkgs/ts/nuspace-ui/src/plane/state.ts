@@ -125,6 +125,12 @@ export type EditorState = {
 	 * time vertical travel hops over a cell.
 	 */
 	column: number | null;
+	/**
+	 * Text an input line holds again, by line: what it had fed a new cell
+	 * that turned out never to take it (no document, or a program that died).
+	 * Plain typing in the line from here; the next key goes on from it.
+	 */
+	held: Partial<Record<InputLine, string>>;
 };
 
 export const EMPTY_EDITOR: EditorState = {
@@ -137,6 +143,7 @@ export const EMPTY_EDITOR: EditorState = {
 	leaving: [],
 	drag: null,
 	column: null,
+	held: {},
 };
 
 export type EditorPatch = Partial<EditorState> | ((e: EditorState) => Partial<EditorState>);

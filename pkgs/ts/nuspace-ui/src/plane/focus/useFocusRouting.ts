@@ -21,19 +21,24 @@
 // clears it: its document the moment it registers with the kit registry
 // (./useDocuments.ts), its open source editor once it has a view
 // (../cell/Code.tsx). Nothing guesses when a cell might be ready, so there
-// is no timer and no watching the DOM, and a request whose cell never draws
-// a document simply stays parked until something drops it.
+// is no timer and no watching the DOM. What ends a wait is an event too: the
+// cell ships saying it draws nothing, its program dies or stops, or it draws
+// and no document registered under it. Then the cell's requests are
+// abandoned, and text an input line fed it goes back into that line
+// (`held`, ../state.ts) rather than waiting for a document that will not
+// come. A create the server never answers has no such event (there is no
+// error reply for a cell op); Escape in the line drops that one.
 //
 // At most one request pulls the caret: the newest. Asking again, selecting
-// cells, or pressing somewhere else settles the older ones. A settled
-// request that carries something (text, markdown, a hook) still lands
-// there, without the caret; one that carries nothing has nothing left to do
-// and goes.
+// cells, pressing somewhere else, or the caret arriving in an input line
+// settles the older ones. A settled request that carries something (text,
+// markdown, a hook) still lands there, without the caret; one that carries
+// nothing has nothing left to do and goes.
 
 import type { DocumentHandle } from "@nustackdev/ui-kit";
 import { useCallback, useLayoutEffect, useRef } from "react";
 import type { FocusRequest, FocusTarget, PlaneModel } from "../api";
-import type { FocusReq } from "../state";
+import type { FocusReq, InputLine } from "../state";
 import type { Cell, ExitDir } from "../types";
 import { FOCUSABLE } from "./focusable";
 
@@ -92,6 +97,42 @@ export function useFocusRouting(
 	const release = useCallback(() => {
 		patch((e) => (e.requests.some((r) => r.pull) ? { requests: settle(e.requests) } : {}));
 	}, [patch, settle]);
+
+	/**
+	 * Cell `cellId` will not take its document requests: they go, and text
+	 * an input line was feeding it goes back into that line, one line of it.
+	 */
+	const abandon = useCallback(
+		(cellId: string) => {
+			patch((e) => {
+				const gone = e.requests.filter((r) => r.cellId === cellId && r.to === "document");
+				if (gone.length === 0) return {};
+				const held = { ...e.held };
+				for (const r of gone) {
+					hooks.current.delete(r.id);
+					const text = (r.text ?? "").replace(/\n+/g, " ").trim();
+					if (r.line && text) held[r.line] = text;
+				}
+				return { requests: e.requests.filter((r) => !gone.includes(r)), held };
+			});
+		},
+		[patch],
+	);
+
+	/** The caret arrived in input line `line`: what it feeds pulls, nothing else does. */
+	const wake = useCallback(
+		(line: InputLine) => {
+			patch((e) => {
+				if (!e.requests.some((r) => r.pull || r.line === line)) return {};
+				return {
+					requests: settle(e.requests, (r) => r.line === line).map((r) =>
+						r.line === line ? { ...r, pull: true } : r,
+					),
+				};
+			});
+		},
+		[patch, settle],
+	);
 
 	/** A document registered for `cellId`: its requests are ready. */
 	const registered = useCallback(
@@ -284,6 +325,8 @@ export function useFocusRouting(
 		drop,
 		release,
 		registered,
+		abandon,
+		wake,
 		focus,
 		select,
 		focusCell,

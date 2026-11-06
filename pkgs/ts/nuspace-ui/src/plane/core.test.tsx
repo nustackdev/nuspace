@@ -13,11 +13,12 @@ import {
 	type DocIntent,
 	type DocumentHandle,
 	type IntentListener,
+	register,
 	registerDocument,
 	TooltipProvider,
 	tree,
 } from "@nustackdev/ui-kit";
-import { act } from "react";
+import { act, useEffect } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PlaneApi, PlaneHandle } from "./api";
@@ -40,6 +41,24 @@ Range.prototype.getClientRects = () => [] as unknown as DOMRectList;
 Range.prototype.getBoundingClientRect = () => new DOMRect();
 
 const VIEWER = ["viewer"];
+
+/** A program's view that is no document: drawn, never registered. */
+register("TestPlain", { component: () => <div /> });
+/** A view that is a document: it registers `drawnDoc` at its own path on mount, as a MarkdownRef does. */
+let drawnDoc: DocumentHandle | null = null;
+register("TestDoc", {
+	component: ({ path }: { path: string[] }) => {
+		useEffect(() => (drawnDoc ? registerDocument(path, drawnDoc) : undefined), [path]);
+		return <div />;
+	},
+});
+
+/** The program's first write: a view node of `type` under the cell. */
+async function draw(id: string, type: string) {
+	await act(async () => {
+		tree.getState().write([["viewer"], ["cells"], [id], ["view", type]], {});
+	});
+}
 /** A prose spec, installed but no class default. */
 const PLAIN: CellSpec[] = [
 	{ name: "program", label: "Program" },
@@ -97,7 +116,6 @@ function cell(id: string, classes: string[] = ["prose"], error: string | null = 
 		id,
 		name: id,
 		source: "",
-		made_by: classes.length ? "text" : "",
 		has_ui: null,
 		classes,
 		status: { cell_id: id, state: error ? "failed" : "running", error, started_at: null },
@@ -716,19 +734,101 @@ describe("a create fed by the input line", () => {
 		expect(d.doc.focus).not.toHaveBeenCalled();
 	});
 
-	it("stays parked when no document registers, and Escape drops it (r1_no_register_keeps_text)", () => {
+	it("gives the text back to the line when the program dies (r1_no_register_keeps_text)", () => {
 		render([], { sugars: [write], specs: WITH_DEFAULT });
 		act(() => endLine().focus());
 		typeInto(endLine(), "hi");
 		const id = notify.mock.calls[0][1].cell_id as string;
 		render([cell(id, ["prose"], "boom")], { sugars: [write], specs: WITH_DEFAULT });
-		// Its error shows; the line keeps the text.
+		// Its error shows; the line holds the text again, plain, no longer pending.
 		expect(row(id).hidden).toBe(false);
+		expect(readEditor(VIEWER, "p1").requests).toEqual([]);
 		expect(endLine().value).toBe("hi");
 		press(endLine(), "Escape");
 		expect(endLine().value).toBe("");
 		const d = mountDoc(id);
 		expect(d.doc.type).not.toHaveBeenCalled();
+	});
+
+	it("gives the text back when the cell ships saying it draws nothing", () => {
+		render([], { sugars: [write], specs: WITH_DEFAULT });
+		act(() => endLine().focus());
+		typeInto(endLine(), "hi");
+		const id = notify.mock.calls[0][1].cell_id as string;
+		render([{ ...cell(id), has_ui: false }], { sugars: [write], specs: WITH_DEFAULT });
+		expect(row(id).hidden).toBe(false);
+		expect(endLine().value).toBe("hi");
+		// Typing on goes on from it, offered afresh: the sugar makes another cell.
+		typeInto(endLine(), "hi!");
+		expect(notify).toHaveBeenCalledTimes(2);
+		expect(endLine().value).toBe("hi!");
+	});
+
+	it("gives the text back when the cell draws and no document comes with it", async () => {
+		render([], { sugars: [write], specs: WITH_DEFAULT });
+		act(() => endLine().focus());
+		typeInto(endLine(), "hello");
+		press(endLine(), "Enter");
+		typeInto(endLine(), "there");
+		const id = notify.mock.calls[0][1].cell_id as string;
+		render([cell(id)], { sugars: [write], specs: WITH_DEFAULT });
+		expect(row(id).hidden).toBe(true);
+		await draw(id, "TestPlain");
+		expect(row(id).hidden).toBe(false);
+		expect(readEditor(VIEWER, "p1").requests).toEqual([]);
+		expect(endLine().value).toBe("hello there");
+	});
+
+	it("is consumed, not given back, when what the cell draws is its document", async () => {
+		const d = fakeDoc();
+		drawnDoc = d.doc;
+		render([], { sugars: [write], specs: WITH_DEFAULT });
+		act(() => endLine().focus());
+		typeInto(endLine(), "hi");
+		const id = notify.mock.calls[0][1].cell_id as string;
+		render([cell(id)], { sugars: [write], specs: WITH_DEFAULT });
+		await draw(id, "TestDoc");
+		drawnDoc = null;
+		expect(d.doc.type).toHaveBeenCalledExactlyOnceWith("hi");
+		expect(endLine().value).toBe("");
+		expect(row(id).hidden).toBe(false);
+	});
+});
+
+describe("one request pulls", () => {
+	it("the caret arriving in an input line settles a landing cell's request", () => {
+		render([cell("a")]);
+		press(endLine(), "/");
+		typeInto(endLine(), "text");
+		press(endLine(), "Enter");
+		const id = notify.mock.calls[0][1].cell_id as string;
+		render([cell("a"), cell(id)]);
+		expect(selected()).toEqual([id]);
+		// Tab from the selection into the end line: nothing else settles it.
+		expect(readEditor(VIEWER, "p1").requests.some((r) => r.pull)).toBe(true);
+		act(() => endLine().focus());
+		expect(readEditor(VIEWER, "p1").requests.some((r) => r.pull)).toBe(false);
+		const doc = mountDoc(id);
+		expect(doc.doc.focus).not.toHaveBeenCalled();
+		expect(document.activeElement).toBe(endLine());
+	});
+
+	it("waking the line that feeds a request makes it the only one that pulls", () => {
+		const write: Sugar = {
+			class: "prose",
+			onInput: (after, i, api) => {
+				api.create({ after }, "text", { at: "end", text: i.kind === "text" ? i.text : "" });
+				return true;
+			},
+		};
+		render([cell("a")], { sugars: [write], specs: WITH_DEFAULT });
+		act(() => endLine().focus());
+		typeInto(endLine(), "hi");
+		act(() => endLine().blur());
+		expect(readEditor(VIEWER, "p1").requests.map((r) => r.pull)).toEqual([false]);
+		act(() => endLine().focus());
+		const pulls = readEditor(VIEWER, "p1").requests.filter((r) => r.pull);
+		expect(pulls.map((r) => r.line)).toEqual(["end"]);
 	});
 });
 
