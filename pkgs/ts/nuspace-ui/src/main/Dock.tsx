@@ -58,7 +58,7 @@ import { paneTitle } from "../pane/Pane";
 import { PANE_MIME } from "../pane/PaneBar";
 import { DeskMenuItems } from "../pane/PaneMenu";
 import type { AbsentReason, ActivePlane } from "../plane/types";
-import { pinDropIndex } from "../sidebar/pin";
+import { pinDropIndex } from "../sidebar/api";
 import { edgeAt, type PaneEdge } from "./useCanvasDrop";
 
 /** Where the desk is: its scroll, its visible width, its full width, its panes. */
