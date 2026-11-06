@@ -1,23 +1,12 @@
-// A pane's menu off the `...` on its bar, a kit dropdown. Its desk items also
-// make the whole of a dock chip's right-click menu (a kit context menu,
-// ../main/Dock.tsx), so they are written once against the menu parts
-// (../menu/parts.ts).
+// A pane's menu off the `...` on its bar, a kit dropdown: a plane's menu
+// (../menu/PlaneMenuItems.tsx), the same groups as the rail row's, with what a
+// pane adds. Its close group closes this pane, the others,
+// or the ones to its right; "Restart plane" runs it again, a fresh run for this
+// pane; "Add plane inside" opens the child in this pane; "Delete plane" shows
+// when `onDelete` is given, which it is not for a system Plane. A plane that
+// has not landed (or is absent) gets the close group only.
 //
-// On top, the desk: "Close" takes this pane off it, "Close others" leaves
-// only this one, "Close to the right" takes off every pane after it, and
-// stays in the menu, disabled, on the last pane, so the menu keeps its shape
-// from pane to pane. A lone pane has nothing to close it to: no desk items.
-//
-// Under the separator, the plane: "Restart plane" runs it again, a fresh run
-// for this pane, "Open in new tab" opens the Plane's URL in a browser tab,
-// "Copy plane id" copies it and reads "Copied" for a moment, "Add plane
-// inside" opens the Add plane popup for a child of this pane's Plane, opened
-// in this pane, and "Pin" / "Unpin" puts the Plane
-// in the sidebar's pinned rows or takes it out (a Plane the sidebar's tree
-// draws only). "Delete plane" shows when `onDelete` is given, which it is not for a
-// system Plane. A plane that has not landed (or is absent) gets the desk only.
-//
-// Under the next, one row per entry in ./settings.ts, each a label and a
+// Its settings group is one row per entry in ./settings.ts, each a label and a
 // switch. The whole row is the item, so the arrows reach it and Enter, Space
 // or a click anywhere on it flips the switch, and the menu stays open for the
 // next one. The switch only shows the state; the row carries it for a screen
@@ -32,19 +21,18 @@ import {
 } from "@nustackdev/ui-kit";
 import { Ellipsis } from "lucide-react";
 import { useState } from "react";
-import { useCopyRow } from "../core/clipboard";
-import { closePane, closePanes, openInNewTab, useRoutes } from "../core/router";
 import {
-	paneMenu,
 	paneMenuHint,
 	paneMenuLabel,
 	paneMenuRow,
 	paneMenuSwitch,
 	paneMenuText,
+	planeMenu,
 } from "../design";
+import { DeskMenuItems, PlaneMenuItems } from "../menu/PlaneMenuItems";
 import { dropdownParts, type MenuParts } from "../menu/parts";
 import type { PlaneMeta } from "../plane/types";
-import { NEW_INSIDE_KEYS, openAddPlane } from "../sidebar/add";
+import { openAddPlane } from "../sidebar/add";
 import { usePlanePin } from "../sidebar/pin";
 import { PLANE_SETTINGS, type PlaneSetting } from "./settings";
 
@@ -79,29 +67,10 @@ export function PaneMenu({
 					<Ellipsis />
 				</IconButton>
 			</DropdownMenuTrigger>
-			<DropdownMenuContent align="end" className={paneMenu}>
+			<DropdownMenuContent align="end" className={planeMenu}>
 				<PaneMenuItems parts={dropdownParts} {...props} />
 			</DropdownMenuContent>
 		</DropdownMenu>
-	);
-}
-
-/** The desk items: close this pane, the others, the ones to its right. */
-export function DeskMenuItems({ parts, planeId }: { parts: MenuParts; planeId: string }) {
-	const { Item } = parts;
-	const routes = useRoutes();
-	const at = routes.indexOf(planeId);
-	const others = routes.filter((id) => id !== planeId);
-	const right = at < 0 ? [] : routes.slice(at + 1);
-	if (others.length === 0) return null;
-	return (
-		<>
-			<Item onSelect={() => closePane(planeId)}>Close</Item>
-			<Item onSelect={() => closePanes(others)}>Close others</Item>
-			<Item disabled={right.length === 0} onSelect={() => closePanes(right)}>
-				Close to the right
-			</Item>
-		</>
 	);
 }
 
@@ -114,36 +83,21 @@ export function PaneMenuItems({
 	onDelete,
 	onRestart,
 }: PaneMenuProps & { parts: MenuParts }) {
-	const { Item, Separator, Shortcut } = parts;
-	const many = useRoutes().length > 1;
 	const pin = usePlanePin(planeId);
-	const copy = useCopyRow(planeId);
+	if (!meta) return <DeskMenuItems parts={parts} planeId={planeId} />;
 	return (
-		<>
-			<DeskMenuItems parts={parts} planeId={planeId} />
-			{meta ? (
-				<>
-					{many ? <Separator /> : null}
-					{onRestart ? <Item onSelect={onRestart}>Restart plane</Item> : null}
-					<Item onSelect={() => openInNewTab(planeId)}>Open in new tab</Item>
-					<Item onSelect={copy.onSelect}>{copy.copied ? "Copied" : "Copy plane id"}</Item>
-					<Item onSelect={() => openAddPlane({ parent: planeId, pane: planeId })}>
-						Add plane inside
-						<Shortcut keys={NEW_INSIDE_KEYS} />
-					</Item>
-					{pin ? <Item onSelect={pin.toggle}>{pin.pinned ? "Unpin" : "Pin"}</Item> : null}
-					{onDelete ? (
-						<Item variant="danger" onSelect={onDelete}>
-							Delete plane
-						</Item>
-					) : null}
-					<Separator />
-					{PLANE_SETTINGS.map((s) => (
-						<SettingRow key={s.key} parts={parts} setting={s} meta={meta} onChange={onChange} />
-					))}
-				</>
-			) : null}
-		</>
+		<PlaneMenuItems
+			parts={parts}
+			planeId={planeId}
+			add={() => openAddPlane({ parent: planeId, pane: planeId })}
+			pin={pin}
+			restart={onRestart}
+			desk
+			settings={PLANE_SETTINGS.map((s) => (
+				<SettingRow key={s.key} parts={parts} setting={s} meta={meta} onChange={onChange} />
+			))}
+			remove={onDelete}
+		/>
 	);
 }
 

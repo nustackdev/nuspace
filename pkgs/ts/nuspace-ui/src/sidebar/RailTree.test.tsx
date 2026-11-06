@@ -160,6 +160,36 @@ describe("rail icon and chevron slot", () => {
 		expect(pins.pin).toHaveBeenCalledWith("b");
 	});
 
+	it("offers the close items while the plane is in one of several panes", () => {
+		const labels = (key: string) => {
+			act(() => {
+				moreOf(key)?.dispatchEvent(
+					new PointerEvent("pointerdown", { bubbles: true, button: 0, pointerType: "mouse" }),
+				);
+			});
+			return [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].map(itemLabel);
+		};
+		window.history.replaceState(
+			{
+				panes: [
+					{ plane: "a", params: {} },
+					{ plane: "b", params: {} },
+				],
+				focus: 1,
+			},
+			"",
+			"/b",
+		);
+		render([]);
+		expect(labels("a")).toContain("Close others");
+		act(() =>
+			document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })),
+		);
+		window.history.replaceState({ panes: [{ plane: "b", params: {} }], focus: 0 }, "", "/b");
+		render([]);
+		expect(labels("b")).not.toContain("Close");
+	});
+
 	it("opens a plane in a new browser tab from both menus", () => {
 		const open = vi.spyOn(window, "open").mockReturnValue(null);
 		render([]);

@@ -20,8 +20,9 @@
 //
 // The hover desk button opens the plane in a new pane beside the others, the same as
 // "Open on desk", Option+Enter, an Option-click and a drag of the row onto
-// the panes. The `...` and a right-click open the same menu (`PlaneMenuItems`). "Open in new
-// tab" in both menus is the browser's tab, the same as a cmd-click. The hover `+` adds a Plane under this one,
+// the panes. The `...` and a right-click open the same menu, the plane's menu
+// every pane menu shares (../menu/PlaneMenuItems.tsx). "Open in new tab" in
+// both is the browser's tab, the same as a cmd-click. The hover `+` adds a Plane under this one,
 // through the one Add plane popup. All three actions carry a kit tooltip; the
 // title carries none.
 
@@ -37,36 +38,25 @@ import {
 	TooltipContent,
 	TooltipTrigger,
 } from "@nustackdev/ui-kit";
-import {
-	ChevronRight,
-	Columns2,
-	Ellipsis,
-	ExternalLink,
-	FileText,
-	PenLine,
-	Pin,
-	PinOff,
-	Plus,
-	SmilePlus,
-	Trash2,
-} from "lucide-react";
+import { ChevronRight, Columns2, Ellipsis, Plus } from "lucide-react";
 import type * as React from "react";
 import { useCallback, useRef, useState } from "react";
-import { hrefFor, openBeside, openHere, openInNewTab } from "../core/router";
+import { hrefFor, openBeside, openHere } from "../core/router";
 import {
+	planeMenu,
 	railAction,
 	railChevron,
 	railIcon,
-	railMenu,
 	railTooltipHint,
 	railTwisty,
 } from "../design";
 import { IconPickerContent } from "../icon/IconPicker";
 import { PlaneIcon } from "../icon/PlaneIcon";
 import type { Icon as PlaneIconValue } from "../icon/parse";
-import { contextParts, dropdownParts, type MenuParts } from "../menu/parts";
+import { type PlaneActions, PlaneMenuItems } from "../menu/PlaneMenuItems";
+import { contextParts, dropdownParts } from "../menu/parts";
 import { NEW_INSIDE_KEYS, openAddPlane } from "./add";
-import { DESK_KEYS, OPEN_KEYS } from "./keys";
+import { DESK_KEYS } from "./keys";
 import type { Notify } from "./ops";
 import type { Pins } from "./pin";
 import { RailRow, RailRowLink } from "./RailRow";
@@ -135,8 +125,6 @@ export function PlaneRow({
 		openBeside(id);
 	}, [hasKids, id, key, reveal]);
 
-	const newTab = useCallback(() => openInNewTab(id), [id]);
-
 	const add = useCallback(() => openAddPlane({ parent: id }), [id]);
 
 	const openRow = useCallback(() => {
@@ -169,14 +157,14 @@ export function PlaneRow({
 	);
 
 	const menu: PlaneMenuProps = {
+		planeId: id,
 		open: openRow,
+		desk: true,
 		openOnDesk,
-		newTab,
 		add,
 		rename: () => onRename(row),
 		changeIcon,
-		pinned,
-		togglePin,
+		pin: { pinned, toggle: togglePin },
 		remove: removable ? remove : null,
 	};
 
@@ -417,83 +405,12 @@ function MoreMenu({
 				</DropdownMenuTrigger>
 				<TooltipContent side="bottom">More</TooltipContent>
 			</Tooltip>
-			<DropdownMenuContent align="start" className={railMenu} onCloseAutoFocus={onCloseAutoFocus}>
+			<DropdownMenuContent align="start" className={planeMenu} onCloseAutoFocus={onCloseAutoFocus}>
 				{children}
 			</DropdownMenuContent>
 		</DropdownMenu>
 	);
 }
 
-export type PlaneMenuProps = {
-	open: () => void;
-	openOnDesk: () => void;
-	newTab: () => void;
-	add: () => void;
-	/** Left off where the row cannot rename in place (a pinned row). */
-	rename?: () => void;
-	/** Left off where the row has no picker to anchor (a pinned row). */
-	changeIcon?: () => void;
-	pinned: boolean;
-	togglePin: () => void;
-	/** Null for a Plane that cannot be deleted. */
-	remove: (() => void) | null;
-};
-
-/**
- * A plane's actions, the same off the `...` and off a right-click: written
- * once against the menu parts (../menu/parts.ts) each trigger renders with.
- * An item with a key shows it on its right.
- */
-export function PlaneMenuItems({ parts, ...a }: PlaneMenuProps & { parts: MenuParts }) {
-	const { Item, Separator, Shortcut } = parts;
-	const PinIcon = a.pinned ? PinOff : Pin;
-	return (
-		<>
-			<Item onSelect={a.open}>
-				<FileText />
-				Open
-				<Shortcut keys={OPEN_KEYS} />
-			</Item>
-			<Item onSelect={a.openOnDesk}>
-				<Columns2 />
-				Open on desk
-				<Shortcut keys={DESK_KEYS} />
-			</Item>
-			<Item onSelect={a.newTab}>
-				<ExternalLink />
-				Open in new tab
-			</Item>
-			<Separator />
-			<Item onSelect={a.add}>
-				<Plus />
-				Add plane inside
-				<Shortcut keys={NEW_INSIDE_KEYS} />
-			</Item>
-			{a.rename ? (
-				<Item onSelect={a.rename}>
-					<PenLine />
-					Rename
-				</Item>
-			) : null}
-			{a.changeIcon ? (
-				<Item onSelect={a.changeIcon}>
-					<SmilePlus />
-					Change icon
-				</Item>
-			) : null}
-			<Item onSelect={a.togglePin}>
-				<PinIcon />
-				{a.pinned ? "Unpin" : "Pin"}
-			</Item>
-			{a.remove ? (
-				<>
-					<Separator />
-					<Item variant="danger" onSelect={a.remove}>
-						<Trash2 />
-						Delete
-					</Item>
-				</>
-			) : null}
-		</>
-	);
-}
+/** A rail row's plane menu: the hover controls need its open on desk and add. */
+export type PlaneMenuProps = PlaneActions & { openOnDesk: () => void; add: () => void };

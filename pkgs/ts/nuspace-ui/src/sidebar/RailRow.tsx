@@ -18,11 +18,11 @@ import {
 } from "@nustackdev/ui-kit";
 import type * as React from "react";
 import {
+	planeMenu,
 	railActions,
 	railIndent,
 	railLabel,
 	railLane,
-	railMenu,
 	railRow,
 	railTitle,
 } from "../design";
@@ -127,7 +127,7 @@ export function RailRow({
 	return (
 		<ContextMenu>
 			<ContextMenuTrigger asChild>{body}</ContextMenuTrigger>
-			<ContextMenuContent className={railMenu} onCloseAutoFocus={onMenuCloseAutoFocus}>
+			<ContextMenuContent className={planeMenu} onCloseAutoFocus={onMenuCloseAutoFocus}>
 				{menu}
 			</ContextMenuContent>
 		</ContextMenu>

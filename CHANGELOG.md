@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Plane menus share one layout; sidebar menu gains copy id and close items
 - Text cells read as one document: arrows cross seams, Backspace merges, Cmd+Enter splits
 - Writing in a plane: honest hints, slash in empty text, arrows across text cells
 - Move onto the new reactive flows; failing arms now restart, isolate or fail their run

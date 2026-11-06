@@ -6,8 +6,18 @@
 // The rows wear the kit's command palette recipes. A row is lit by
 // `data-selected="true"`, whoever sets it (cmdk, or the slash menu itself),
 // and carries `group` so what is inside it can follow.
+//
+// Plus the one width every plane's menu shares.
 
 import { cn, commandHeadingClasses, commandItemClasses } from "@nustackdev/ui-kit";
+
+/**
+ * A plane's menu (../menu/PlaneMenuItems.tsx), off a rail row, a pane's bar or
+ * a dock chip: one width for all three, wide enough that a label and its
+ * shortcut caps never crowd each other, and narrow enough that a pane
+ * setting's hint wraps under its label.
+ */
+export const planeMenu = "w-64";
 
 /** A section heading. */
 export const menuHeading = cn(commandHeadingClasses, "pt-2 first:pt-1");

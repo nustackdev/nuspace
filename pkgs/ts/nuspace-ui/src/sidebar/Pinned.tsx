@@ -21,7 +21,7 @@
 
 import type * as React from "react";
 import { useCallback, useMemo, useState } from "react";
-import { hrefFor, openBeside, openHere, openInNewTab } from "../core/router";
+import { hrefFor, openBeside, openHere } from "../core/router";
 import {
 	railDragging,
 	railDropLine,
@@ -32,11 +32,12 @@ import {
 } from "../design";
 import { PlaneIcon } from "../icon/PlaneIcon";
 import { planeIcon } from "../icon/parse";
+import { PlaneMenuItems } from "../menu/PlaneMenuItems";
 import { contextParts } from "../menu/parts";
 import { openAddPlane } from "./add";
 import { NAV_PLANES } from "./nav";
 import type { Notify } from "./ops";
-import { PlaneMenuItems, type PlaneMenuProps, PlaneRowActions } from "./PlaneRow";
+import { type PlaneMenuProps, PlaneRowActions } from "./PlaneRow";
 import { type Pins, pinDropIndex } from "./pin";
 import { RailRow, RailRowLink } from "./RailRow";
 import { RailSection } from "./RailSection";
@@ -147,15 +148,15 @@ function PinList({
 					openHere(id);
 				};
 				const menu: PlaneMenuProps = {
+					planeId: id,
 					open,
+					desk: true,
 					openOnDesk: () => {
 						if (row.children.length) reveal(id);
 						openBeside(id);
 					},
-					newTab: () => openInNewTab(id),
 					add: () => openAddPlane({ parent: id }),
-					pinned: true,
-					togglePin: () => pins.unpin(id),
+					pin: { pinned: true, toggle: () => pins.unpin(id) },
 					remove: canDelete(tree, id) ? () => void deletePlane(notify, tree, id, title) : null,
 				};
 				return (

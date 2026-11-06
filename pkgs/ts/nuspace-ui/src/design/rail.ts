@@ -468,11 +468,3 @@ export const railGroupLabel = cn(
 
 /** A tooltip holding a sentence (an extension entry's description): wraps rather than runs on. */
 export const railTooltipWide = "max-w-64 text-pretty";
-
-/* ============================== Menus =================================== */
-
-/**
- * A plane's menu, off its `...` or a right-click: wide enough that a label and
- * its shortcut caps never crowd each other.
- */
-export const railMenu = "min-w-52";

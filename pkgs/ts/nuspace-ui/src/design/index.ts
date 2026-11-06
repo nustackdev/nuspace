@@ -17,7 +17,7 @@
 //   document.ts        class recipes for the document surface, title included
 //   rail.ts            the sidebar rail
 //   icon.ts            plane icons: the glyph at each size, and the picker
-//   menu.ts            the registry menus' rows: the / menu, Add plane
+//   menu.ts            a plane's menu, and the registry menus' rows: the / menu, Add plane
 //   cell-status.ts  the six-state vocabulary
 //
 // Two rules hold this directory together:

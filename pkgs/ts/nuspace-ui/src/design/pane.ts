@@ -38,9 +38,6 @@ export function paneBarTitle(lit: boolean): string {
 	);
 }
 
-/** The settings menu. Narrow, so a setting's hint wraps under its label. */
-export const paneMenu = "w-64";
-
 /** A setting's row, on a kit menu item: label on the left, its switch on the right. */
 export const paneMenuRow = "gap-3";
 

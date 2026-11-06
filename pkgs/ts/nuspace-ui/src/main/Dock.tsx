@@ -18,7 +18,7 @@
 //   click                 focus its pane and scroll it into view
 //   drag along the dock   move the pane; drop on a pane's bar works too
 //   right-click           close it, the others, or the ones to its right, at
-//                         the pointer; the plane's own settings stay on the
+//                         the pointer; the plane's own items stay on the
 //                         `...` on its bar (../pane/PaneMenu.tsx)
 //
 // The window's bottom third is the thumb, an 8px fill along its edge: it drags the desk, the way a
@@ -49,14 +49,14 @@ import {
 	dockDropLine,
 	dockTrack,
 	dockWindow,
-	paneMenu,
+	planeMenu,
 } from "../design";
 import { PlaneIcon } from "../icon/PlaneIcon";
 import { parseIcon } from "../icon/parse";
+import { DeskMenuItems } from "../menu/PlaneMenuItems";
 import { contextParts } from "../menu/parts";
 import { paneTitle } from "../pane/Pane";
 import { PANE_MIME } from "../pane/PaneBar";
-import { DeskMenuItems } from "../pane/PaneMenu";
 import type { AbsentReason, ActivePlane } from "../plane/types";
 import { pinDropIndex } from "../sidebar/api";
 import { edgeAt, type PaneEdge } from "./useCanvasDrop";
@@ -334,7 +334,7 @@ export function Dock({
 									{aimed ? <span className={dockDropLine(aimed)} aria-hidden="true" /> : null}
 								</div>
 							</ContextMenuTrigger>
-							<ContextMenuContent className={paneMenu}>
+							<ContextMenuContent className={planeMenu}>
 								<DeskMenuItems parts={contextParts} planeId={id} />
 							</ContextMenuContent>
 						</ContextMenu>
