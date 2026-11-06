@@ -413,6 +413,18 @@ describe("C. a blank prose cell", () => {
 		expect(document.activeElement).toBe(lines()[0]);
 	});
 
+	it("row 52 r7_drops_trailing_empty_lines: the empty lines after the text go, a blank cell is left alone", () => {
+		plane([cell("a"), cell("b")]);
+		const a = mountDoc("a", fakeDoc(false));
+		a.say({ kind: "break", at: "end" });
+		expect(a.doc.split).toHaveBeenCalledOnce();
+		expect(document.activeElement).toBe(lines()[0]);
+		plane([cell("a"), cell("b")]);
+		const b = mountDoc("b");
+		b.say({ kind: "break", at: "end" });
+		expect(b.doc.split).not.toHaveBeenCalled();
+	});
+
 	it("row 6 r7_esc_returns_caret: Escape there puts the caret back where it was", () => {
 		plane([cell("a"), cell("b")]);
 		const a = mountDoc("a");

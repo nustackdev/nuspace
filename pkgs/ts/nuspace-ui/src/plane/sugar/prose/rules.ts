@@ -229,13 +229,19 @@ export const editorRules: Rule<MarkdownIntent, string>[] = [
 	}),
 
 	// R7. Cmd+Enter with nothing but empty lines after the caret opens an
-	// input line below, remembering the caret. Back: Escape there puts the
-	// caret back where it was.
+	// input line below, remembering the caret. The empty lines go first (the
+	// handle's split, which at the end cuts only those), so the Enter that
+	// led here leaves nothing behind. Back: Escape there puts the caret back,
+	// at the end of the text.
 	doc({
 		rule: "R7",
 		on: "break",
 		when: ({ i }) => i.at === "end",
-		run: ({ at, api }) => api.openInput(at, { cell: at, at: "kept" }),
+		run: ({ at, api }) => {
+			const here = api.editor(at);
+			if (here && !here.blank()) here.split();
+			api.openInput(at, { cell: at, at: "kept" });
+		},
 		back: "Escape",
 	}),
 	// Split. Cmd+Enter with text after the caret (at the very start that is

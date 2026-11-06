@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Cmd+Enter at the end of text leaves no empty line behind
 - Writing keeps to prose islands: arrows stop at other cells, input lines join in
 - Plane menus share one layout; sidebar menu gains copy id and close items
 - Text cells read as one document: arrows cross seams, Backspace merges, Cmd+Enter splits
