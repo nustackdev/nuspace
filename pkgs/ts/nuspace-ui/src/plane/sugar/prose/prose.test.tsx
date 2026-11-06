@@ -133,6 +133,48 @@ describe("A. the input line", () => {
 		expect(notify).not.toHaveBeenCalled();
 	});
 
+	it("row 10 r8_line_up_into_prose: Up, Left or Backspace from the line lands at the prose cell's end", () => {
+		for (const key of ["ArrowUp", "ArrowLeft", "Backspace"]) {
+			plane([cell("a")]);
+			const a = mountDoc("a");
+			press(endLine(), key);
+			expect(a.doc.focus, key).toHaveBeenCalledWith("end");
+			expect(selected(), key).toEqual([]);
+		}
+	});
+
+	it("row 10 island_edge_line_up: another class above, or Backspace there, the caret stays in the line", () => {
+		for (const key of ["ArrowUp", "ArrowLeft", "Backspace"]) {
+			plane([cell("a", [])]);
+			act(() => endLine().focus());
+			press(endLine(), key);
+			expect(selected(), key).toEqual([]);
+			expect(document.activeElement, key).toBe(endLine());
+		}
+	});
+
+	it("row 11 r8_line_down_into_prose: Down or Right from a summoned line lands at the start below", () => {
+		for (const key of ["ArrowDown", "ArrowRight"]) {
+			plane([cell("a"), cell("b")]);
+			mountDoc("a");
+			const b = mountDoc("b");
+			plus("a");
+			press(lines()[0], key);
+			expect(b.doc.focus, key).toHaveBeenCalledWith("start");
+			expect(selected(), key).toEqual([]);
+			expect(lines(), key).toHaveLength(1);
+		}
+	});
+
+	it("row 11 island_edge_line_down: another class below, the summoned line stays with the caret", () => {
+		plane([cell("a"), cell("b", [])]);
+		plus("a");
+		press(lines()[0], "ArrowDown");
+		expect(selected()).toEqual([]);
+		expect(lines()).toHaveLength(2);
+		expect(document.activeElement).toBe(lines()[0]);
+	});
+
 	it("row 13 top_line_up_to_title: Up or Backspace from the line on an empty plane goes to the title end", () => {
 		plane([]);
 		press(endLine(), "ArrowUp");
@@ -255,10 +297,11 @@ describe("B. the title", () => {
 		expect(a.doc.focus).toHaveBeenCalledWith("start");
 	});
 
-	it("row 31 title_leave_into_non_prose: another class on top, the core selects it", () => {
+	it("row 31 island_edge_title: another class on top, the caret stays in the title", () => {
 		plane([cell("a", []), cell("b")]);
 		expect(title({ kind: "leave", dir: "down" })).toBe(true);
-		expect(selected()).toEqual(["a"]);
+		expect(selected()).toEqual([]);
+		expect(onTitle).not.toHaveBeenCalled();
 	});
 
 	it("row 32 title_leave_empty_plane: nothing on top, the end line", () => {
@@ -458,10 +501,35 @@ describe("D. arrows across prose cells", () => {
 		expect(selected()).toEqual([]);
 	});
 
-	it("row 65 leave_up_into_non_prose: another class above, the core steps into it", () => {
+	it("row 65 island_edge_up: another class above, the caret stays", () => {
 		plane([cell("a", []), cell("b")]);
 		expect(mountDoc("b").say(leave("up", 40))).toBe(true);
-		expect(selected()).toEqual(["a"]);
+		expect(selected()).toEqual([]);
+	});
+
+	it("row 65/68 island_edge_keys: past another class the key is spent, nothing selected", () => {
+		for (const [key, dir] of [
+			["ArrowUp", "up"],
+			["ArrowDown", "down"],
+		] as const) {
+			plane([cell("a"), cell("b", []), cell("c"), cell("d", []), cell("e")]);
+			const c = mountDoc("c");
+			// As the kit's editor does: a key it answers is consumed there and
+			// bubbles on, default prevented, the plane drawn anew by the time
+			// it arrives (the browser runs what the intent changed in between).
+			const el = row("c");
+			const off = (e: Event) => {
+				let took = false;
+				act(() => {
+					took = c.say(leave(dir));
+				});
+				if (took) e.preventDefault();
+			};
+			el.addEventListener("keydown", off);
+			el.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
+			el.removeEventListener("keydown", off);
+			expect(selected(), key).toEqual([]);
+		}
 	});
 
 	it("row 66 leave_up_into_line: a summoned line above is landed in first", () => {
@@ -482,10 +550,10 @@ describe("D. arrows across prose cells", () => {
 		expect(b.doc.focus).toHaveBeenCalledWith({ x: 40, edge: "first" });
 	});
 
-	it("row 68 leave_down_into_non_prose: another class below, the core steps into it", () => {
+	it("row 68 island_edge_down: another class below, the caret stays", () => {
 		plane([cell("a"), cell("b", [])]);
 		expect(mountDoc("a").say(leave("down"))).toBe(true);
-		expect(selected()).toEqual(["b"]);
+		expect(selected()).toEqual([]);
 	});
 
 	it("row 69 leave_down_into_end_line: down from the last cell, the end line", () => {
@@ -511,10 +579,10 @@ describe("D. arrows across prose cells", () => {
 		expect(a.doc.focus).toHaveBeenCalledWith("end");
 	});
 
-	it("row 72 leave_left_into_non_prose: the core steps", () => {
+	it("row 72 island_edge_left: the caret stays", () => {
 		plane([cell("a", []), cell("b")]);
 		expect(mountDoc("b").say(leave("left"))).toBe(true);
-		expect(selected()).toEqual(["a"]);
+		expect(selected()).toEqual([]);
 	});
 
 	it("row 73 r8_right_to_start: Right at the end lands at the start below", () => {
@@ -524,11 +592,11 @@ describe("D. arrows across prose cells", () => {
 		expect(b.doc.focus).toHaveBeenCalledWith("start");
 	});
 
-	it("row 74 leave_right_into_non_prose: the core steps, or the end line under the last", () => {
+	it("row 74 island_edge_right: the caret stays, or the end line under the last", () => {
 		plane([cell("a"), cell("b", [])]);
 		const a = mountDoc("a");
 		expect(a.say(leave("right"))).toBe(true);
-		expect(selected()).toEqual(["b"]);
+		expect(selected()).toEqual([]);
 		plane([cell("a")]);
 		expect(a.say(leave("right"))).toBe(true);
 		expect(document.activeElement).toBe(endLine());
@@ -541,7 +609,7 @@ describe("D. arrows across prose cells", () => {
 		plane([cell("a"), cell("n", []), cell("b")]);
 		expect(b.say(leave("up"))).toBe(true);
 		expect(a.doc.focus).not.toHaveBeenCalled();
-		expect(selected()).toEqual(["n"]);
+		expect(selected()).toEqual([]);
 	});
 });
 
@@ -558,6 +626,32 @@ describe("E. Shift+arrows spill into cell selection", () => {
 		expect(b.say(leave("left", 0, true))).toBe(true);
 		expect(selected()).toEqual(["a", "b"]);
 		expect(b.say(leave("right", 0, true))).toBe(true);
+		expect(selected()).toEqual(["b", "c"]);
+	});
+
+	it("rows 92-93 r10_spill_once: the key the editor spilt with does not extend the selection again", () => {
+		plane([cell("a"), cell("b"), cell("c"), cell("d")]);
+		const b = mountDoc("b");
+		// The kit's editor takes the key, default prevented, and it bubbles on
+		// to a plane already drawn with the spill.
+		const el = row("b");
+		const off = (e: Event) => {
+			let took = false;
+			act(() => {
+				took = b.say(leave("down", 0, true));
+			});
+			if (took) e.preventDefault();
+		};
+		el.addEventListener("keydown", off);
+		el.dispatchEvent(
+			new KeyboardEvent("keydown", {
+				key: "ArrowDown",
+				shiftKey: true,
+				bubbles: true,
+				cancelable: true,
+			}),
+		);
+		el.removeEventListener("keydown", off);
 		expect(selected()).toEqual(["b", "c"]);
 	});
 

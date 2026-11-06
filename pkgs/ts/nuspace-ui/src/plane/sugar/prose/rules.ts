@@ -17,7 +17,8 @@
 //   R5  Enter in the title makes a prose cell at the top
 //   R6  `/` in a blank prose cell stands the menu in for it
 //   R7  Cmd+Enter at the end of the text opens an input line below
-//   R8  the arrows cross into the prose cell that way, or the title
+//   R8  the arrows cross into the prose cell that way, or the title, from
+//       a prose cell or an empty input line, and stop at the island's edge
 //   R10 Shift+arrow at the edge spills into cell selection
 //   merge  Backspace at the very start of a prose cell with text joins it
 //          onto the end of the prose cell above
@@ -32,6 +33,12 @@
 //
 // R9, a text drag out of a cell, is the core's range select: a pointer
 // press is not an intent a markdown editor reports.
+//
+// The arrows keep to an island: a run of the title, prose cells and input
+// lines with nothing else in between, read as one document. Leaving it is
+// not an arrow's to do. At its edge, a cell of another class that way, the
+// caret stays, as at the end of a document; Shift+arrow (R10) is the way
+// out into cell selection, Escape and a click the others.
 
 import type { FocusAt, LeaveDir, MarkdownIntent } from "@nustackdev/ui-kit";
 import type { FocusTarget, PlaneApi } from "../../api";
@@ -104,16 +111,34 @@ function landing(dir: LeaveDir, x: number): FocusAt {
 }
 
 /**
- * Where R8 takes the caret leaving `cell` that way: the prose cell there,
- * or the title above the top one. Null when it is not R8's to say: an
- * input line in between, a cell of another class, or nothing at all. The
- * core's step goes into the line or the cell, as it always has.
+ * What R8 meets leaving `cell` that way: the prose cell there or the title
+ * above the top one (a target), a cell of another class (`edge`, the
+ * island ends), or null when it is not R8's to say: an input line in
+ * between, which the core's step goes into, or nothing at all.
  */
-function across(api: PlaneApi, cell: string, dir: LeaveDir, x: number): FocusTarget | null {
+function across(
+	api: PlaneApi,
+	cell: string,
+	dir: LeaveDir,
+	x: number,
+): FocusTarget | "edge" | null {
 	const b = api.beside(cell, backward(dir) ? "up" : "down");
 	if (b.line) return null;
-	if (b.cell) return prose(api, b.cell) ? { cell: b.cell, at: landing(dir, x) } : null;
+	if (b.cell) return prose(api, b.cell) ? { cell: b.cell, at: landing(dir, x) } : "edge";
 	return b.title ? { title: "end" } : null;
+}
+
+/**
+ * The cell an input line after `after` (null: the top) meets that way: the
+ * cell it hangs off going up, the next one going down. Its id when it is
+ * prose, `edge` when it is of another class, null when there is none.
+ */
+function toward(api: PlaneApi, after: string | null, dir: "up" | "down"): string | "edge" | null {
+	const i = after === null ? -1 : api.index(after);
+	if (after !== null && i < 0) return null;
+	const id = dir === "up" ? after : api.cells[i + 1]?.id;
+	if (!id) return null;
+	return prose(api, id) ? id : "edge";
 }
 
 /** Where the caret goes when `cell` is removed from under it: the end of the cell above, else the title. */
@@ -261,7 +286,8 @@ export const editorRules: Rule<MarkdownIntent, string>[] = [
 	}),
 
 	// R8. An arrow out of the text lands in the prose cell that way, under
-	// the caret going up or down, or in the title above the top cell. Back:
+	// the caret going up or down, or in the title above the top cell. A cell
+	// of another class that way is the island's edge: the caret stays. Back:
 	// the opposite arrow, which is R8 again from the other side.
 	doc({
 		rule: "R8",
@@ -269,7 +295,7 @@ export const editorRules: Rule<MarkdownIntent, string>[] = [
 		when: ({ at, i, api }) => !i.extend && across(api, at, i.dir, i.x) !== null,
 		run: ({ at, i, api }) => {
 			const to = across(api, at, i.dir, i.x);
-			if (to) api.focus(to);
+			if (to && to !== "edge") api.focus(to);
 		},
 		back: "R8",
 	}),
@@ -316,6 +342,23 @@ export const inputRules: Rule<InputIntent, string | null>[] = [
 		},
 		back: "R2",
 	}),
+	// R8 from the line: leaving it empty (Up, Left or Backspace up, Down or
+	// Right down) puts the caret in the prose cell that way, at its end above
+	// and its start below, so the line sits in the writing flow. A cell of
+	// another class that way is the island's edge: the caret stays. No cell,
+	// the core's: the title above the top, nothing below the end. Back: the
+	// opposite arrow, R8 from that cell, into the end line; a summoned line
+	// went as the caret left it.
+	line({
+		rule: "R8",
+		on: "leave",
+		when: ({ at, i, api }) => toward(api, at, i.dir) !== null,
+		run: ({ at, i, api }) => {
+			const to = toward(api, at, i.dir);
+			if (to && to !== "edge") api.focus({ cell: to, at: i.dir === "up" ? "end" : "start" });
+		},
+		back: "R8",
+	}),
 ];
 
 /** Enter in the title, or leaving it at its end. */
@@ -333,17 +376,21 @@ export const titleRules: Rule<TitleIntent, null>[] = [
 		back: "R2",
 	}),
 	// R8 from the title: Down or Right at its end goes to the start of a prose
-	// cell on top (the title has no x to land under). Anything else on top,
-	// or an input line summoned above it, the core goes into that. Back: R8,
-	// Up or Left at that cell's start.
+	// cell on top (the title has no x to land under). A cell of another class
+	// on top is the island's edge: the caret stays. An input line summoned
+	// above the top cell, or an empty plane's end line, the core goes into.
+	// Back: R8, Up or Left at that cell's start.
 	head({
 		rule: "R8",
 		on: "leave",
 		when: ({ api }) => {
 			const top = api.cells[0];
-			return top !== undefined && prose(api, top.id) && !api.beside(top.id, "up").line;
+			return top !== undefined && !api.beside(top.id, "up").line;
 		},
-		run: ({ api }) => api.focus({ cell: api.cells[0].id, at: "start" }),
+		run: ({ api }) => {
+			const top = api.cells[0];
+			if (top && prose(api, top.id)) api.focus({ cell: top.id, at: "start" });
+		},
 		back: "R8",
 	}),
 ];

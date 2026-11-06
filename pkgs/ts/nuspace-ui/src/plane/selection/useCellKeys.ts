@@ -3,7 +3,8 @@
 // Only live while at least one cell is selected. A focused editor (a source, a
 // ghost) owns its keys outright and stops them before they reach the plane. So
 // does a popup: a cell's menu is portaled out of the plane, but React still
-// bubbles its keys up here, and a popup always owns the keyboard.
+// bubbles its keys up here, and a popup always owns the keyboard. A markdown
+// editor lets the keys it takes bubble on, default prevented: spent all the same.
 // On a read-only plane only Escape, Tab and copy do anything.
 
 import type * as React from "react";
@@ -57,6 +58,10 @@ export function useCellKeys(
 ) {
 	return useCallback(
 		(e: React.KeyboardEvent) => {
+			// A key an editor took is spent. It bubbles here all the same, and
+			// may have just made the selection (Shift+arrow spilling out of a
+			// markdown editor): extending it again would take one cell too many.
+			if (e.defaultPrevented) return;
 			const sel = editor.selected;
 			if (sel.length === 0) return;
 			if (!e.currentTarget.contains(e.target as Node)) return;

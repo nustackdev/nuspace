@@ -3,7 +3,8 @@
 // Lower layers report intents, upper layers decide. A cell's markdown editor
 // (the kit's markdown handle) reports a `MarkdownIntent`: the caret tried to leave
 // it, Backspace on blank, `/` into a blank one, Cmd+Enter. The input line
-// reports an `InputIntent`: text typed with the menu closed, or Enter. The
+// reports an `InputIntent`: text typed with the menu closed, Enter, or
+// leaving it empty (an arrow, or Backspace going up). The
 // title above the plane reports a `TitleIntent`: Enter, or leaving it down
 // or right at its end. Nothing reports more than that, and nothing above
 // reads a lower layer's internals to find out.
@@ -21,6 +22,9 @@
 //   anything else, editor  nothing, the editor goes on as if no host existed
 //   input text             the menu opens, the text its query (the line's)
 //   input Enter            nothing
+//   input leave            the line's own step: the neighbour's open source
+//                          takes the caret, else the neighbour is selected;
+//                          up from the top, the title end
 //   title Enter at end,    into the cells: the top cell's open source, else
 //   title leave            it is selected; the end line on an empty plane
 //   title Enter mid-text   nothing, the title blurs
@@ -40,8 +44,11 @@ import type { CellSpec, ExitDir } from "./types";
 
 export type { MarkdownIntent };
 
-/** On the input line, menu closed: text typed into it, or Enter. */
-export type InputIntent = { kind: "text"; text: string } | { kind: "enter" };
+/** On the input line, menu closed: text typed into it, Enter, or leaving it empty that way. */
+export type InputIntent =
+	| { kind: "text"; text: string }
+	| { kind: "enter" }
+	| { kind: "leave"; dir: ExitDir };
 
 /** In the title: Enter (`end`: the caret at the end), or leaving it at its end. */
 export type TitleIntent =

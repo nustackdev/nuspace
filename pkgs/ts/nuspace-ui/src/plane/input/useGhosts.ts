@@ -13,9 +13,9 @@
 // it: the caret goes home as a focus request and a summoned ghost goes with
 // it. Without one, Escape selects the cell the ghost hangs off.
 //
-// Typed text and Enter with the menu closed are offered to the sugar first
-// (`route`, ../intents.ts). Unclaimed, text opens the menu with it as the
-// query, and Enter does nothing. A claim that made a cell with a focus
+// Typed text, Enter and leaving with the menu closed are offered to the
+// sugar first (`route`, ../intents.ts). Unclaimed, text opens the menu with
+// it as the query, Enter does nothing, and leaving steps to the neighbour. A claim that made a cell with a focus
 // request leaves the request fed by this line (`line` on it, ../state.ts):
 // the line shows its text and adds what is typed meanwhile, until the cell's
 // document takes it.
@@ -121,17 +121,19 @@ export function useGhosts(
 		[feed, patch],
 	);
 
-	/** Arrow out of a ghost into whichever cell is that way, if any. Up from
-	 *  the top, into the title. */
+	/** Arrow out of a ghost into whichever cell is that way, if any, offered
+	 *  to the sugar first (a summoned ghost goes once the sugar moves the
+	 *  caret, see `lineApi` in ../Plane.tsx). Up from the top, into the title. */
 	const leaveGhost = useCallback(
 		(after: string | null, dir: ExitDir, transient: boolean) => {
+			if (route(after, { kind: "leave", dir }, transient ? "summoned" : "end")) return;
 			if (transient) patch({ ghost: null });
 			const i = after ? index(after) : -1;
 			const target = dir === "up" ? cells[i] : cells[i + 1];
 			if (target) focusCell(target, dir === "up" ? "end" : "start");
 			else if (dir === "up") focus({ title: "end" });
 		},
-		[cells, focus, focusCell, index, patch],
+		[cells, focus, focusCell, index, patch, route],
 	);
 
 	/** Escape with no menu open goes back where the ghost was opened from,

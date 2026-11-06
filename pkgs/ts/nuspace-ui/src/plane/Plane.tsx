@@ -203,10 +203,15 @@ export function Plane({
 	};
 	// What a sugar gets for an intent from an input line: the same api, with
 	// a create that asks for focus fed by that line until it lands, so the
-	// keys typed meanwhile stay in the line and go along with the request.
+	// keys typed meanwhile stay in the line and go along with the request,
+	// and a focus that takes a summoned line away as the caret leaves it.
 	line.current = (l) => ({
 		...api,
 		create: (at, spec, want?: FocusRequest) => create(at, spec, want, want ? l : undefined),
+		focus: (target) => {
+			if (l === "summoned") patch({ ghost: null });
+			focus(target);
+		},
 	});
 	routing.current = router({
 		sugars,
