@@ -9,15 +9,9 @@
 // the prose set (./sugar): this file is the core with the sugar layer
 // removed, and it passing is what says the core works without it.
 //
-// The documents are the shared harness's fakes (./plane.testing.tsx).
+// The markdown editors are the shared harness's fakes (./plane.testing.tsx).
 
-import {
-	type DocIntent,
-	type DocumentHandle,
-	pathKey,
-	register,
-	registerDocument,
-} from "@nustackdev/ui-kit";
+import { type MarkdownHandle, type MarkdownIntent, pathKey, register } from "@nustackdev/ui-kit";
 import { act, useEffect } from "react";
 import { describe, expect, it, vi } from "vitest";
 import type { PlaneApi } from "./api";
@@ -36,6 +30,7 @@ import {
 	ops,
 	planeRoot,
 	press,
+	registerEditable,
 	render,
 	root,
 	row,
@@ -48,14 +43,14 @@ import {
 import { readEditor } from "./state";
 import { sugars as SUGARS, type Sugar } from "./sugar";
 
-/** A program's view that is no document: drawn, never registered. */
+/** A program's view that is no markdown editor: drawn, never registered. */
 register("TestPlain", { component: () => <div /> });
-/** A view that is a document: it registers `drawnDoc` at its own path on mount, as a MarkdownRef does. */
-let drawnDoc: DocumentHandle | null = null;
+/** A view that is a markdown editor: it registers `drawnDoc` at its own path on mount, as a MarkdownRef does. */
+let drawnDoc: MarkdownHandle | null = null;
 register("TestDoc", {
 	component: ({ path }: { path: string[] }) => {
 		// biome-ignore lint/correctness/useExhaustiveDependencies: path is compared by value, as a MarkdownRef's.
-		useEffect(() => (drawnDoc ? registerDocument(path, drawnDoc) : undefined), [pathKey(path)]);
+		useEffect(() => (drawnDoc ? registerEditable(path, drawnDoc) : undefined), [pathKey(path)]);
 		return <div />;
 	},
 });
@@ -66,7 +61,7 @@ function spy(cls = "prose", claim = false) {
 	let api: PlaneApi | null = null;
 	const sugar: Sugar = {
 		class: cls,
-		onDocument: (c, i, a) => {
+		onEditor: (c, i, a) => {
 			api = a;
 			seen.push({ on: "document", args: [c, i] });
 			return claim;
@@ -371,7 +366,7 @@ describe("routing to a sugar", () => {
 		const claim = spy("prose", true);
 		render([cell("a"), cell("b")], { sugars: [claim.sugar] });
 		const b = mountDoc("b");
-		const i: DocIntent = { kind: "leave", dir: "up", extend: false, x: 4 };
+		const i: MarkdownIntent = { kind: "leave", dir: "up", extend: false, x: 4 };
 		expect(b.say(i)).toBe(true);
 		expect(claim.seen).toEqual([{ on: "document", args: ["b", i] }]);
 		expect(selected()).toEqual([]);
@@ -421,7 +416,7 @@ describe("the plane api, from a sugar", () => {
 	function on(run: (cell: string, api: PlaneApi) => void): Sugar {
 		return {
 			class: "prose",
-			onDocument: (c, _i, api) => {
+			onEditor: (c, _i, api) => {
 				run(c, api);
 				return true;
 			},
@@ -448,6 +443,37 @@ describe("the plane api, from a sugar", () => {
 		render([cell("b")], { sugars: [sugar], title: false });
 		poke(mountDoc("b"));
 		expect(document.activeElement).toBe(planeRoot());
+	});
+
+	it("withdraw: out of sight now, the delete only on remove; restore brings it back; either, once", () => {
+		const outs: ReturnType<PlaneApi["withdraw"]>[] = [];
+		render([cell("a"), cell("b"), cell("c")], {
+			sugars: [on((c, api) => outs.push(api.withdraw([c])))],
+		});
+		const a = mountDoc("a");
+		poke(mountDoc("b"));
+		poke(mountDoc("c"));
+		const [b, c] = outs as [(typeof outs)[0], (typeof outs)[0]];
+		// Hidden at once, nothing sent, focus left alone.
+		expect(row("b").hidden).toBe(true);
+		expect(row("c").hidden).toBe(true);
+		expect(notify).not.toHaveBeenCalled();
+		expect(a.doc.focus).not.toHaveBeenCalled();
+		act(() => b.remove());
+		expect(ops()).toEqual([["cell.delete", "b"]]);
+		expect(row("b").hidden).toBe(true);
+		act(() => c.restore());
+		expect(row("c").hidden).toBe(false);
+		// Each ended once: a second call either way does nothing.
+		act(() => {
+			b.remove();
+			b.restore();
+			c.remove();
+			c.restore();
+		});
+		expect(ops()).toEqual([["cell.delete", "b"]]);
+		expect(row("b").hidden).toBe(true);
+		expect(row("c").hidden).toBe(false);
 	});
 
 	it("a focus request waits for the document, then is consumed and cleared (focus_request_waits_for_register)", () => {

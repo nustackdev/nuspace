@@ -4,11 +4,11 @@
 // in the row, or leaves it (../cell/Cell.tsx). That is the row's own focus,
 // heard the way any element hears it; nothing is read out of an editor.
 //
-// Hints. The document of a cell whose class has a sugar set with document
-// hints (../sugar) draws them while the caret is in it, and stops as the
+// Hints. The markdown editor of a cell whose class has a sugar set with
+// editor hints (../sugar) draws them while the caret is in it, and stops as the
 // caret leaves, so a hint is only ever on the line you are on. The set says
 // what they read; setting and clearing them is the host's, here, through
-// the document's own `hint`.
+// the handle's own `hint`.
 //
 // A cell removed from under the caret, by another tab, a program or an
 // agent: the caret goes to the end of the cell that was above it, else the
@@ -24,12 +24,12 @@
 
 import { useCallback, useEffect, useRef } from "react";
 import type { FocusTarget, PlaneModel } from "../api";
-import { documentHint } from "../intents";
+import { editorHint } from "../intents";
 import type { Sugar } from "../sugar";
 import type { Cell } from "../types";
 
 export function useCaret(
-	{ planeId, cells, read, document, rootRef }: PlaneModel,
+	{ planeId, cells, read, editorOf, rootRef }: PlaneModel,
 	{
 		sugars,
 		editable,
@@ -51,14 +51,14 @@ export function useCaret(
 	 */
 	const caret = useCallback(
 		(cell: Cell, where: "ui" | "row" | null, nowhere = false) => {
-			const hint = where === "ui" && editable ? documentHint(sugars, cell.classes) : undefined;
-			const doc = document(cell.id);
+			const hint = where === "ui" && editable ? editorHint(sugars, cell.classes) : undefined;
+			const doc = editorOf(cell.id);
 			doc?.hint(hint?.blank ?? null, "blank");
 			doc?.hint(hint?.tail ?? null, "tail");
 			if (where) at.current = cell.id;
 			else if (at.current === cell.id && !nowhere) at.current = null;
 		},
-		[document, editable, sugars],
+		[editorOf, editable, sugars],
 	);
 
 	useEffect(() => {

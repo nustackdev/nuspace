@@ -11,21 +11,21 @@
 //     column
 //   - Otherwise the cell gets *selected* and the plane takes keyboard focus
 //   - Down or Enter at the end of the plane's title lands on the first cell
-//   - Enter on a selected cell goes into what it draws: its document, the
+//   - Enter on a selected cell goes into what it draws: its markdown editor, the
 //     caret at its end, else its first field or control. With none, the
 //     selection goes.
 //
 // Focus requests are how anything else asks for the caret: a sugar rule,
 // the way back from an input line, a cell just created. A request parks in
 // local state (../state.ts) and the cell consumes it when it can, then
-// clears it: its document the moment it registers with the kit registry
-// (./useDocuments.ts), its open source editor once it has a view
+// clears it: its markdown editor the moment the kit hands its handle
+// (./useEditors.ts), its open source editor once it has a view
 // (../cell/Code.tsx). Nothing guesses when a cell might be ready, so there
 // is no timer and no watching the DOM. What ends a wait is an event too: the
 // cell ships saying it draws nothing, its program dies or stops, or it draws
-// and no document registered under it. Then the cell's requests are
+// and no markdown editor is there under it. Then the cell's requests are
 // abandoned, and text an input line fed it goes back into that line
-// (`held`, ../state.ts) rather than waiting for a document that will not
+// (`held`, ../state.ts) rather than waiting for an editor that will not
 // come. A create the server never answers has no such event (there is no
 // error reply for a cell op); Escape in the line drops that one.
 //
@@ -35,7 +35,7 @@
 // markdown, a hook) still lands there, without the caret; one that carries
 // nothing has nothing left to do and goes.
 
-import type { DocumentHandle } from "@nustackdev/ui-kit";
+import type { MarkdownHandle } from "@nustackdev/ui-kit";
 import { useCallback, useLayoutEffect, useRef } from "react";
 import type { Beside, FocusRequest, FocusTarget, PlaneModel } from "../api";
 import type { FocusReq, InputLine } from "../state";
@@ -49,11 +49,11 @@ export type Ask = Omit<FocusReq, "id" | "cellId" | "pull" | "ready">;
 let seq = 0;
 
 export function useFocusRouting(
-	{ cells, editor, patch, read, index, document, rootRef, elRefs, endGhost, plusGhost }: PlaneModel,
+	{ cells, editor, patch, read, index, editorOf, rootRef, elRefs, endGhost, plusGhost }: PlaneModel,
 	{ onTitle }: { onTitle?: (at: "start" | "end") => void },
 ) {
 	/** What a request's caller wants to hear once it lands, by request id. */
-	const hooks = useRef(new Map<number, (doc: DocumentHandle) => void>());
+	const hooks = useRef(new Map<number, (doc: MarkdownHandle) => void>());
 
 	/** Older requests, settled: they keep what they carry and stop pulling. */
 	const settle = useCallback((requests: FocusReq[], keep?: (r: FocusReq) => boolean) => {
@@ -68,16 +68,16 @@ export function useFocusRouting(
 
 	/** Park a request for cell `cellId`; the newest one pulls. Returns its id. */
 	const request = useCallback(
-		(cellId: string, ask: Ask, landed?: (doc: DocumentHandle) => void): number => {
+		(cellId: string, ask: Ask, landed?: (doc: MarkdownHandle) => void): number => {
 			const id = ++seq;
 			if (landed) hooks.current.set(id, landed);
-			const ready = ask.to === "document" && document(cellId) !== null;
+			const ready = ask.to === "document" && editorOf(cellId) !== null;
 			patch((e) => ({
 				requests: [...settle(e.requests), { ...ask, id, cellId, pull: true, ready }],
 			}));
 			return id;
 		},
-		[document, patch, settle],
+		[editorOf, patch, settle],
 	);
 
 	/** Drop requests for good, hooks and all. */
@@ -99,7 +99,7 @@ export function useFocusRouting(
 	}, [patch, settle]);
 
 	/**
-	 * Cell `cellId` will not take its document requests: they go, and text
+	 * Cell `cellId` will not take its markdown editor requests: they go, and text
 	 * an input line was feeding it goes back into that line, one line of it.
 	 */
 	const abandon = useCallback(
@@ -134,7 +134,7 @@ export function useFocusRouting(
 		[patch, settle],
 	);
 
-	/** A document registered for `cellId`: its requests are ready. */
+	/** `cellId`'s markdown editor takes commands: its requests are ready. */
 	const registered = useCallback(
 		(cellId: string) => {
 			patch((e) =>
@@ -157,7 +157,7 @@ export function useFocusRouting(
 		const ready = editor.requests.filter((r) => r.to === "document" && r.ready);
 		if (ready.length === 0) return;
 		// Gone again between registering and now: it waits for the next one.
-		const docs = new Map(ready.map((r) => [r.id, document(r.cellId)]));
+		const docs = new Map(ready.map((r) => [r.id, editorOf(r.cellId)]));
 		patch((e) => ({
 			requests: e.requests.flatMap((r) =>
 				!docs.has(r.id) ? [r] : docs.get(r.id) ? [] : [{ ...r, ready: false }],
@@ -176,7 +176,7 @@ export function useFocusRouting(
 			if (r.text) doc.type(r.text);
 			landed?.(doc);
 		}
-	}, [editor.requests, document, patch]);
+	}, [editor.requests, editorOf, patch]);
 
 	/** Select these cells and hand the keyboard to the plane. */
 	const select = useCallback(
@@ -194,9 +194,9 @@ export function useFocusRouting(
 	/**
 	 * A focus request. The title has no request to park: it takes the caret
 	 * now, or the plane does where there is no title above it. A cell's goes
-	 * to its document, or to its open source when it has no document. A cell
+	 * to its markdown editor, or to its open source when it has none. A cell
 	 * with neither right now is landed on the way a new one is: selected, the
-	 * request parked for a document that may still come, so the caret has
+	 * request parked for an editor that may still come, so the caret has
 	 * somewhere to be either way.
 	 */
 	const focus = useCallback(
@@ -208,7 +208,7 @@ export function useFocusRouting(
 				return;
 			}
 			const id = target.cell;
-			const none = document(id) === null;
+			const none = editorOf(id) === null;
 			const toSource = none && read().editing.includes(id);
 			if (none && !toSource && index(id) >= 0) select([id]);
 			request(
@@ -222,7 +222,7 @@ export function useFocusRouting(
 				carry?.landed,
 			);
 		},
-		[document, index, onTitle, read, release, request, rootRef, select],
+		[editorOf, index, onTitle, read, release, request, rootRef, select],
 	);
 
 	/** Navigation: into the cell's open source, else the cell is selected. */
@@ -306,11 +306,11 @@ export function useFocusRouting(
 		[cells, index, read, onTitle, endGhost, plusGhost],
 	);
 
-	/** Enter on a selected cell: its document, else what it draws first. */
+	/** Enter on a selected cell: its markdown editor, else what it draws first. */
 	const enterCell = useCallback(
 		(cell: Cell) => {
 			patch({ selected: [], anchor: null });
-			if (document(cell.id)) {
+			if (editorOf(cell.id)) {
 				focus({ cell: cell.id, at: "end" });
 				return;
 			}
@@ -320,7 +320,7 @@ export function useFocusRouting(
 			if (el) el.focus();
 			else rootRef.current?.blur();
 		},
-		[document, focus, patch, rootRef],
+		[editorOf, focus, patch, rootRef],
 	);
 
 	/** Open or close a cell's source editor. The caret follows it open. */

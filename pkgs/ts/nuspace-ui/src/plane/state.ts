@@ -17,24 +17,25 @@ import { LOCAL, patchLocal, useLocalSlot } from "../core/local";
 /**
  * Where the caret should land next, parked until the cell can take it.
  *
- * A request names a cell and who in it consumes it: the cell's document
- * (the kit registry's handle, see ./focus/useDocuments.ts) or its open
- * source editor (./cell/Code.tsx). The consumer takes it when it is ready,
- * a document when it registers and an editor when it has a view, and clears
+ * A request names a cell and who in it consumes it: the cell's markdown
+ * editor (the kit's handle, see ./focus/useEditors.ts) or its open source
+ * editor (./cell/Code.tsx). The consumer takes it when it is ready, the
+ * markdown editor when it hands its handle and the source editor when it
+ * has a view, and clears
  * it. A cell created a moment ago has neither yet, so the request simply
  * waits: there is no timeout, and Escape in the line that fed it drops it.
  *
  * Text and markdown ride along. `markdown` is appended to the document
  * before it is focused, `text` is typed in after, as the person's own
  * keystrokes, so it saves like any edit. What else the caller wants to hear
- * (the document that took it) is not serialisable, so it is kept beside
+ * (the handle that took it) is not serialisable, so it is kept beside
  * this state by `id` (./focus/useFocusRouting.ts), never in it.
  */
 export type FocusReq = {
 	/** Names the request, and the hook kept beside it, if any. */
 	id: number;
 	cellId: string;
-	/** Who consumes it: the cell's document, or its open source editor. */
+	/** Who consumes it: the cell's markdown editor ("document"), or its open source editor. */
 	to: "document" | "source";
 	at: FocusAt;
 	/**
@@ -53,7 +54,7 @@ export type FocusReq = {
 	 * caret stays where they put it.
 	 */
 	pull: boolean;
-	/** Its document registered: it is consumed once the cell is drawn. */
+	/** Its markdown editor takes commands: it is consumed once the cell is drawn. */
 	ready?: boolean;
 	/** For a cell asked for and not shipped back yet, which pruning keeps. */
 	fresh?: boolean;

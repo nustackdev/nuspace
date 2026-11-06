@@ -2,7 +2,7 @@
 //
 // A hint says what a gesture does on the line where it applies, and nowhere
 // else. The input line's is its placeholder (../../input/Ghost.tsx). A prose
-// cell's are drawn by its own editor (the kit's `DocumentHandle.hint`), only
+// cell's are drawn by its own editor (the kit's `MarkdownHandle.hint`), only
 // while the caret is in it: on a blank one, where typing writes and `/`
 // stands the menu in for it (R6), and on the empty last line Enter leaves
 // you on, where Cmd+Enter opens a line below (R7). Nothing here reaches into

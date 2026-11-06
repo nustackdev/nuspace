@@ -1,21 +1,21 @@
-// A plane in jsdom with fake documents: the harness the plane's tests share.
+// A plane in jsdom with fake markdown editors: the harness the plane's tests share.
 //
-// A document is a fake `DocumentHandle` registered through the kit registry
-// at the cell's address, as a MarkdownRef would: the plane never sees an
-// editor, only the handle and the intents it reports, which a test says by
-// hand (`say`). Everything else is the real plane: its local state, its
+// An editor is a fake `MarkdownHandle` registered with the kit at the cell's
+// address, as a MarkdownRef would: the plane never sees an editor's DOM,
+// only the handle and the intents it reports, which a test says by hand
+// (`say`). Everything else is the real plane: its local state, its
 // input lines, its menu, the ops it sends (`notify`).
 //
 // Import it from a test file and the setup and teardown come with it.
 
+import type { Path } from "@nustackdev/ui-core";
 import {
-	type DocIntent,
-	type DocumentHandle,
 	type IntentListener,
+	type MarkdownHandle,
+	type MarkdownIntent,
 	pathKey,
 	register,
-	registerDocument,
-	registerPresence,
+	registerMarkdown,
 	TooltipProvider,
 	tree,
 } from "@nustackdev/ui-kit";
@@ -107,34 +107,36 @@ export function cell(id: string, classes: string[] = ["prose"], error: string | 
 }
 
 /**
- * A document as the kit hands one over: commands spied, intents said by
- * hand. Only an editable document registers, as the kit's does, so a fake
- * is always one that takes commands. `saved` answers at once, as the kit's
+ * A markdown editor's handle as the kit hands one over: commands spied,
+ * intents said by hand. The kit hands out a handle only while its editor is
+ * editable, so a fake is always one that takes commands. `saved` answers at once, as the kit's
  * does with nothing unsaved; `hold()` makes it wait for `stored()`, the read
- * coming back from Nu.
+ * coming back from Nu, or `lose()`, the editor or its node gone first.
  */
 export function fakeDoc(blank = true) {
 	const listeners = new Set<IntentListener>();
-	const waiting: (() => void)[] = [];
+	const waiting: { fn: () => void; lost?: () => void }[] = [];
 	const store = { held: false };
-	const doc: DocumentHandle = {
+	const doc: MarkdownHandle = {
 		focus: vi.fn(),
 		blank: vi.fn(() => blank),
 		markdown: vi.fn(() => ""),
 		tail: vi.fn(() => ""),
 		split: vi.fn(() => ""),
+		cut: vi.fn(() => ({ tail: "", keep: vi.fn(), undo: vi.fn() })),
 		append: vi.fn(),
 		type: vi.fn(),
 		commit: vi.fn(),
 		hint: vi.fn(),
-		saved: vi.fn((fn: () => void) => {
+		saved: vi.fn((fn: () => void, lost?: () => void) => {
 			if (!store.held) {
 				fn();
 				return () => {};
 			}
-			waiting.push(fn);
+			const w = { fn, lost };
+			waiting.push(w);
 			return () => {
-				const i = waiting.indexOf(fn);
+				const i = waiting.indexOf(w);
 				if (i >= 0) waiting.splice(i, 1);
 			};
 		}),
@@ -146,7 +148,7 @@ export function fakeDoc(blank = true) {
 		},
 	};
 	/** Report an intent, as the editor's intents plugin would. True when the host acted. */
-	const say = (i: DocIntent) => {
+	const say = (i: MarkdownIntent) => {
 		let acted = false;
 		act(() => {
 			for (const fn of listeners) if (fn(i)) acted = true;
@@ -161,40 +163,57 @@ export function fakeDoc(blank = true) {
 	const stored = () => {
 		store.held = false;
 		act(() => {
-			for (const fn of waiting.splice(0)) fn();
+			for (const w of waiting.splice(0)) w.fn();
 		});
 	};
-	return { doc, say, listeners, hold, stored };
+	/** Gone before the store answered: what waited hears `lost` instead. */
+	const lose = () => {
+		store.held = false;
+		act(() => {
+			for (const w of waiting.splice(0)) w.lost?.();
+		});
+	};
+	return { doc, say, listeners, hold, stored, lose };
 }
 
 export const leaves: (() => void)[] = [];
 
-/** Register `d` as cell `id`'s document, at the path a MarkdownRef inside it would. */
+/** An editable markdown editor at `path` with `handle`, as a MarkdownRef registers one. Returns the leave. */
+export function registerEditable(path: Path, handle: MarkdownHandle): () => void {
+	const reg = registerMarkdown(path);
+	reg.editable(handle);
+	return () => reg.leave();
+}
+
+/** Register `d` as cell `id`'s editor, at the path a MarkdownRef inside it would. */
 export function mountDoc<D extends ReturnType<typeof fakeDoc>>(id: string, given?: D): D {
 	const d = given ?? (fakeDoc() as D);
 	act(() => {
-		leaves.push(registerDocument([...VIEWER, "cells", id, "text"], d.doc));
+		leaves.push(registerEditable([...VIEWER, "cells", id, "text"], d.doc));
 	});
 	return d;
 }
 
 /**
- * A document drawn the way a program opens one, in two frames: mounted
- * read-only first (present, not registered: it takes no commands yet),
+ * A markdown editor drawn the way a program opens one, in two frames:
+ * mounted read-only first (there, no handle: it takes no commands yet),
  * then open for editing (`mountDoc` registers its handle, later).
  */
 register("TestPresent", {
 	component: ({ path }: { path: string[] }) => {
 		// biome-ignore lint/correctness/useExhaustiveDependencies: path is compared by value, as a MarkdownRef's.
-		useEffect(() => registerPresence(path), [pathKey(path)]);
+		useEffect(() => {
+			const reg = registerMarkdown(path);
+			return () => reg.leave();
+		}, [pathKey(path)]);
 		return <div />;
 	},
 });
 
-/** The first frame: cell `id` draws a document, read-only for now. */
+/** The first frame: cell `id` draws a markdown editor, read-only for now. */
 export const drawReadOnly = (id: string) => draw(id, "TestPresent");
 
-/** What cell `id` draws goes away, document and all. */
+/** What cell `id` draws goes away, editor and all. */
 export function undraw(id: string) {
 	act(() => {
 		tree.getState().remove([...VIEWER, "cells", id, "view"]);

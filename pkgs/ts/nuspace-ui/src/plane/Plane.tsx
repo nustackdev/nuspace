@@ -21,12 +21,12 @@
 //
 // The core is kind-blind and works with no sugar at all: the input line
 // opens the menu, cells are created, selected, moved and deleted, and the
-// caret travels as it always has. A cell's document is found through the
-// kit registry by the cell's address and talks back only in intents, so
+// caret travels as it always has. A cell's markdown editor is found through
+// the kit by the cell's address and talks back only in intents, so
 // nothing here reads an editor's DOM or moves its caret from outside.
 
 import type { Path } from "@nustackdev/ui-core";
-import { documentPresent, documentUnder, pathKey } from "@nustackdev/ui-kit";
+import { markdownAt, pathKey } from "@nustackdev/ui-kit";
 import type * as React from "react";
 import { Fragment, useCallback, useEffect, useRef } from "react";
 import {
@@ -41,7 +41,7 @@ import type { FocusRequest, PlaneApi, PlaneHandle, PlaneModel } from "./api";
 import { cellUiPath } from "./cell/address";
 import { Cell } from "./cell/Cell";
 import { useCaret } from "./focus/useCaret";
-import { useDocuments } from "./focus/useDocuments";
+import { useEditors } from "./focus/useEditors";
 import { useFocusRouting } from "./focus/useFocusRouting";
 import { Ghost } from "./input/Ghost";
 import { SlashMenu } from "./input/SlashMenu";
@@ -113,8 +113,8 @@ export function Plane({
 	// biome-ignore lint/correctness/useExhaustiveDependencies: path is compared by value.
 	const read = useCallback(() => readEditor(viewerPath, planeId), [viewerKey, planeId]);
 	// biome-ignore lint/correctness/useExhaustiveDependencies: path is compared by value.
-	const document = useCallback(
-		(id: string) => documentUnder(cellUiPath(viewerPath, id)),
+	const editorOf = useCallback(
+		(id: string) => markdownAt(cellUiPath(viewerPath, id))?.handle ?? null,
 		[viewerKey],
 	);
 
@@ -126,7 +126,7 @@ export function Plane({
 		read,
 		notify,
 		index,
-		document,
+		editorOf,
 		rootRef,
 		elRefs,
 		endGhost,
@@ -149,7 +149,7 @@ export function Plane({
 		setEditing,
 		enterTop,
 	} = useFocusRouting(model, { onTitle });
-	const { commitSource, create, remove, reorder, moveSelected } = useStructure(model, {
+	const { commitSource, create, remove, withdraw, reorder, moveSelected } = useStructure(model, {
 		request,
 		drop,
 		focus,
@@ -167,7 +167,7 @@ export function Plane({
 	const { slash, pickSlash, slashKey, moveSlash } = useSlash(model, cellSpecs, { create, remove });
 
 	// Intents are heard at event time, from the input lines and the cells'
-	// documents: they reach this render's routing through a ref.
+	// markdown editors: they reach this render's routing through a ref.
 	const routing = useRef<Router | null>(null);
 	const line = useRef<((l: InputLine) => PlaneApi) | null>(null);
 	const route = useCallback((after: string | null, i: InputIntent, l: InputLine) => {
@@ -189,11 +189,12 @@ export function Plane({
 	const api: PlaneApi = {
 		cells,
 		index,
-		document,
+		editor: editorOf,
 		defaultSpec: (cls) => defaultSpecOf(cellSpecs, cls),
 		beside,
 		create: (at, spec, want) => create(at, spec, want),
 		remove,
+		withdraw,
 		reorder,
 		focus: (target) => focus(target),
 		select,
@@ -218,22 +219,22 @@ export function Plane({
 
 	const { caret } = useCaret(model, { sugars, editable, focus });
 
-	const { present } = useDocuments(viewerPath, cells, {
-		intent: (cell, i) => routing.current?.document(cell, i) ?? false,
+	useEditors(viewerPath, cells, {
+		intent: (cell, i) => routing.current?.editor(cell, i) ?? false,
 		registered,
 		vanished: abandon,
 	});
 
 	// A cell that ships saying it draws nothing, or whose program died or
-	// stopped, will never register a document: what waits for one is let go,
+	// stopped, will never draw a markdown editor: what waits for one is let go,
 	// and text an input line fed it goes back into the line.
 	useEffect(() => {
 		for (const c of cells) {
 			const over = c.has_ui === false || isBad(c.status.state) || c.status.state === "stopped";
-			if (!over || document(c.id)) continue;
+			if (!over || editorOf(c.id)) continue;
 			if (editor.requests.some((r) => r.cellId === c.id && r.to === "document")) abandon(c.id);
 		}
-	}, [cells, editor.requests, document, abandon]);
+	}, [cells, editor.requests, editorOf, abandon]);
 
 	// What the pane holds: the title's intents, and a press anywhere in it.
 	const pressRef = useRef(startBox);
@@ -290,12 +291,14 @@ export function Plane({
 				// split's tail), so the cell stays out of sight until it has it
 				// rather than flash empty. One that died shows its error instead,
 				// and one that will never take it is let go (the exits above).
-				// Once its document is drawn it shows, open for editing or not:
-				// one that stays read-only must not stay hidden with it, and
-				// the request goes on waiting (Escape in the line drops it).
+				// An editor drawn but not yet open for editing is still waiting:
+				// the cell shows in the render that readies its request, and the
+				// text lands in it before that render paints (./focus/useFocusRouting.ts),
+				// so the line hands over to the cell in place, in one frame. Until
+				// then the text stays in sight where it is, in the line or in the
+				// cell it is cut from, and Escape in the line lets it go.
 				const fed =
 					!cell.status.error &&
-					!present.has(cell.id) &&
 					editor.requests.some((r) => r.cellId === cell.id && (r.line || r.markdown) && !r.ready);
 				return (
 					<Fragment key={cell.id}>
@@ -324,7 +327,7 @@ export function Plane({
 								editable
 									? (e) => {
 											const inUi = (e.target as Element).closest?.("[data-cell-ui]");
-											if (inUi && document(cell.id)) startRange(e, cell.id);
+											if (inUi && editorOf(cell.id)) startRange(e, cell.id);
 										}
 									: undefined
 							}
@@ -332,11 +335,11 @@ export function Plane({
 							// whatever gets picked next.
 							onPlus={() => openInput(cell.id)}
 							onSelect={() => select([cell.id])}
-							// Drawn, and its document (if it has one) mounted in the same
+							// Drawn, and its markdown editor (if it has one) mounted in the same
 							// commit, before this hears it: none, open for editing or
 							// not, means none is coming. One mounted read-only waits.
 							onDrawn={() => {
-								if (!document(cell.id) && !documentPresent(cellUiPath(viewerPath, cell.id))) {
+								if (markdownAt(cellUiPath(viewerPath, cell.id)) === null) {
 									abandon(cell.id);
 								}
 							}}
