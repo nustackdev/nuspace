@@ -1,0 +1,762 @@
+// The core plane with no sugar, rendered in jsdom: what the interaction table
+// (task-162) marks `core`, and the machinery every sugar acts through. The
+// input line opens the menu, cells are created, selected, moved and deleted
+// through the one remove path, the title's intents get the core defaults,
+// and a focus request waits for its cell's document and is consumed when
+// that registers. Then routing: a fake sugar claiming and declining.
+//
+// A document is a fake `DocumentHandle` registered through the kit registry
+// at the cell's address, as a MarkdownRef would: the plane never sees an
+// editor, only the handle and the intents it reports.
+
+import {
+	type DocIntent,
+	type DocumentHandle,
+	type IntentListener,
+	registerDocument,
+	TooltipProvider,
+	tree,
+} from "@nustackdev/ui-kit";
+import { act } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { PlaneApi, PlaneHandle } from "./api";
+import type { TitleIntent } from "./intents";
+import { Plane } from "./Plane";
+import { readEditor } from "./state";
+import type { Sugar } from "./sugar";
+import type { ActivePlane, Cell, CellSpec } from "./types";
+
+(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+// The slash menu's popover sizes itself with a ResizeObserver, which jsdom
+// lacks, and jsdom lays nothing out.
+globalThis.ResizeObserver ??= class {
+	observe() {}
+	unobserve() {}
+	disconnect() {}
+} as unknown as typeof ResizeObserver;
+Element.prototype.scrollIntoView = () => {};
+Range.prototype.getClientRects = () => [] as unknown as DOMRectList;
+Range.prototype.getBoundingClientRect = () => new DOMRect();
+
+const VIEWER = ["viewer"];
+/** A prose spec, installed but no class default. */
+const PLAIN: CellSpec[] = [
+	{ name: "program", label: "Program" },
+	{ name: "text", label: "Text", classes: ["prose"] },
+];
+/** The same, with the text spec the prose default. */
+const WITH_DEFAULT: CellSpec[] = [
+	{ name: "program", label: "Program" },
+	{ name: "text", label: "Text", classes: ["prose"], default_for: ["prose"] },
+];
+
+let host: HTMLDivElement;
+let root: Root;
+const notify = vi.fn();
+const onTitle = vi.fn();
+const handle: { current: PlaneHandle | null } = { current: null };
+
+function render(
+	cells: Cell[],
+	{
+		specs = PLAIN,
+		editable = true,
+		sugars = [],
+		title = true,
+	}: { specs?: CellSpec[]; editable?: boolean; sugars?: Sugar[]; title?: boolean } = {},
+) {
+	const plane: ActivePlane = {
+		plane_id: "p1",
+		title: "",
+		meta: { editable, full_width: false, compact: false },
+		cells,
+	};
+	act(() => {
+		root.render(
+			<TooltipProvider>
+				<Plane
+					viewerPath={VIEWER}
+					plane={plane}
+					cellSpecs={specs}
+					editable={editable}
+					wide={false}
+					compact={false}
+					notify={notify}
+					handleRef={handle}
+					onTitle={title ? onTitle : undefined}
+					sugars={sugars}
+				/>
+			</TooltipProvider>,
+		);
+	});
+}
+
+function cell(id: string, classes: string[] = ["prose"], error: string | null = null): Cell {
+	return {
+		id,
+		name: id,
+		source: "",
+		made_by: classes.length ? "text" : "",
+		has_ui: null,
+		classes,
+		status: { cell_id: id, state: error ? "failed" : "running", error, started_at: null },
+	};
+}
+
+/** A document as the kit hands one over: commands spied, intents said by hand. */
+function fakeDoc(blank = true) {
+	const listeners = new Set<IntentListener>();
+	const doc: DocumentHandle = {
+		focus: vi.fn(),
+		blank: vi.fn(() => blank),
+		markdown: vi.fn(() => ""),
+		tail: vi.fn(() => ""),
+		split: vi.fn(() => ""),
+		append: vi.fn(),
+		type: vi.fn(),
+		commit: vi.fn(),
+		onIntent(fn) {
+			listeners.add(fn);
+			return () => {
+				listeners.delete(fn);
+			};
+		},
+	};
+	/** Report an intent, as the editor's intents plugin would. True when the host acted. */
+	const say = (i: DocIntent) => {
+		let acted = false;
+		act(() => {
+			for (const fn of listeners) if (fn(i)) acted = true;
+		});
+		return acted;
+	};
+	return { doc, say, listeners };
+}
+
+const leaves: (() => void)[] = [];
+
+/** Register `d` as cell `id`'s document, at the path a MarkdownRef inside it would. */
+function mountDoc(id: string, d = fakeDoc()) {
+	act(() => {
+		leaves.push(registerDocument([...VIEWER, "cells", id, "text"], d.doc));
+	});
+	return d;
+}
+
+function press(el: Element, key: string, init: KeyboardEventInit = {}) {
+	act(() => {
+		el.dispatchEvent(
+			new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...init }),
+		);
+	});
+}
+
+/** Type into a field the way React hears it: native setter, then `input`. */
+function typeInto(el: HTMLInputElement, value: string) {
+	const proto = Object.getPrototypeOf(el);
+	act(() => {
+		Object.getOwnPropertyDescriptor(proto, "value")?.set?.call(el, value);
+		el.dispatchEvent(new Event("input", { bubbles: true }));
+	});
+}
+
+const lines = () => [...host.querySelectorAll<HTMLInputElement>("input[aria-label='New cell']")];
+const endLine = () => lines().at(-1) as HTMLInputElement;
+const planeRoot = () => endLine().parentElement?.parentElement as HTMLElement;
+const row = (id: string) => host.querySelector<HTMLElement>(`[data-cell="${id}"]`) as HTMLElement;
+const menu = () => document.querySelector("[role='listbox'][aria-label='Insert a cell']");
+const selected = () => readEditor(VIEWER, "p1").selected;
+const ops = () => notify.mock.calls.map(([op, args]) => [op, args.cell_id ?? args.cell_ids]);
+
+/** A sugar that only listens: it records what it is offered and claims nothing. */
+function spy(cls = "prose", claim = false) {
+	const seen: { on: string; args: unknown[] }[] = [];
+	let api: PlaneApi | null = null;
+	const sugar: Sugar = {
+		class: cls,
+		onDocument: (c, i, a) => {
+			api = a;
+			seen.push({ on: "document", args: [c, i] });
+			return claim;
+		},
+		onInput: (after, i, a) => {
+			api = a;
+			seen.push({ on: "input", args: [after, i] });
+			return claim;
+		},
+		onTitle: (i, a) => {
+			api = a;
+			seen.push({ on: "title", args: [i] });
+			return claim;
+		},
+	};
+	return { sugar, seen, api: () => api as PlaneApi | null };
+}
+
+const title = (i: TitleIntent) => {
+	let acted = false;
+	act(() => {
+		acted = handle.current?.title(i) ?? false;
+	});
+	return acted;
+};
+
+beforeEach(() => {
+	tree.getState().write([["viewer"]], {});
+	host = document.createElement("div");
+	document.body.appendChild(host);
+	root = createRoot(host);
+	notify.mockClear();
+	onTitle.mockClear();
+});
+
+afterEach(() => {
+	act(() => {
+		for (const leave of leaves.splice(0)) leave();
+		root.unmount();
+	});
+	host.remove();
+	tree.getState().remove(VIEWER);
+});
+
+describe("the input line, with no sugar", () => {
+	it("opens the menu with a typed character as its query (input_char_searches_without_default)", () => {
+		render([]);
+		typeInto(endLine(), "h");
+		expect(notify).not.toHaveBeenCalled();
+		expect(endLine().value).toBe("h");
+		expect(endLine().placeholder).toBe("Type to search");
+		expect(menu()).not.toBeNull();
+	});
+
+	it("does nothing on Enter (input_enter_noop_without_default)", () => {
+		render([], { specs: WITH_DEFAULT });
+		press(endLine(), "Enter");
+		expect(notify).not.toHaveBeenCalled();
+		expect(menu()).toBeNull();
+	});
+
+	it("opens the menu on `/`, which is consumed (input_slash_opens_menu)", () => {
+		render([]);
+		press(endLine(), "/");
+		expect(menu()).not.toBeNull();
+		expect(endLine().value).toBe("");
+	});
+
+	it("says what it does (input_hint_by_default)", () => {
+		render([], { specs: WITH_DEFAULT });
+		expect(endLine().placeholder).toBe("Press / for cells");
+	});
+
+	it("filters on typing with the menu open, Escape closes it, Backspace on empty too (menu_*)", () => {
+		render([]);
+		press(endLine(), "/");
+		typeInto(endLine(), "pro");
+		expect(endLine().value).toBe("pro");
+		press(endLine(), "Escape");
+		expect(menu()).toBeNull();
+		press(endLine(), "/");
+		press(endLine(), "Backspace");
+		expect(menu()).toBeNull();
+		expect(lines()).toHaveLength(1);
+	});
+
+	it("creates the pick after the line's cell (menu_pick_creates_after)", () => {
+		render([cell("a"), cell("b")]);
+		press(endLine(), "/");
+		press(endLine(), "Enter");
+		expect(notify).toHaveBeenCalledWith(
+			"cell.create",
+			expect.objectContaining({ plane_id: "p1", name: "", index: 2 }),
+		);
+		expect(menu()).toBeNull();
+	});
+
+	it("goes up into the cell above, selected, and into the title from an empty plane", () => {
+		render([cell("a", []), cell("b", [])]);
+		press(endLine(), "ArrowUp");
+		expect(selected()).toEqual(["b"]);
+		expect(document.activeElement).toBe(planeRoot());
+		render([]);
+		press(endLine(), "ArrowUp");
+		expect(onTitle).toHaveBeenCalledWith("end");
+	});
+
+	it("does nothing going down from the end line (end_line_down_noop)", () => {
+		render([cell("a")]);
+		act(() => endLine().focus());
+		press(endLine(), "ArrowDown");
+		expect(selected()).toEqual([]);
+		expect(document.activeElement).toBe(endLine());
+	});
+
+	it("selects the last cell on Escape, or gives the plane the keyboard (end_line_esc_*)", () => {
+		render([cell("a"), cell("b")]);
+		press(endLine(), "Escape");
+		expect(selected()).toEqual(["b"]);
+		expect(lines()).toHaveLength(1);
+		render([]);
+		press(endLine(), "Escape");
+		expect(document.activeElement).toBe(planeRoot());
+	});
+
+	it("summons a line with the gutter `+`, which Escape and blur take away (plus_esc_selects_cell)", () => {
+		render([cell("a"), cell("b")]);
+		const plus = row("a").querySelector<HTMLButtonElement>("button[aria-label='Add a line below']");
+		act(() => plus?.click());
+		expect(lines()).toHaveLength(2);
+		expect(document.activeElement).toBe(lines()[0]);
+		press(lines()[0], "Escape");
+		expect(lines()).toHaveLength(1);
+		expect(selected()).toEqual(["a"]);
+
+		act(() => plus?.click());
+		expect(lines()).toHaveLength(2);
+		act(() => lines()[0].blur());
+		expect(lines()).toHaveLength(1);
+	});
+
+	it("goes down from a summoned line into the cell below (input_leave_down)", () => {
+		render([cell("a", []), cell("b", [])]);
+		act(() =>
+			row("a").querySelector<HTMLButtonElement>("button[aria-label='Add a line below']")?.click(),
+		);
+		press(lines()[0], "ArrowDown");
+		expect(selected()).toEqual(["b"]);
+		expect(lines()).toHaveLength(1);
+	});
+
+	it("draws no lines on a read-only plane (read_only_no_sugar)", () => {
+		render([cell("a")], { editable: false });
+		expect(lines()).toHaveLength(0);
+	});
+});
+
+describe("the title's intents, core defaults", () => {
+	it("Enter at the end goes into the cells: the top one selected (title_enter_core_at_end)", () => {
+		render([cell("a", []), cell("b", [])]);
+		expect(title({ kind: "enter", end: true })).toBe(true);
+		expect(selected()).toEqual(["a"]);
+	});
+
+	it("Enter mid-title is the title's own (title_enter_core_blurs)", () => {
+		render([cell("a")]);
+		expect(title({ kind: "enter", end: false })).toBe(false);
+		expect(selected()).toEqual([]);
+	});
+
+	it("leaving lands on the top cell, or the end line on an empty plane (title_leave_*)", () => {
+		render([cell("a", [])]);
+		expect(title({ kind: "leave", dir: "right" })).toBe(true);
+		expect(selected()).toEqual(["a"]);
+		render([]);
+		expect(title({ kind: "leave", dir: "down" })).toBe(true);
+		expect(document.activeElement).toBe(endLine());
+	});
+
+	it("stays the title's on a read-only plane (title_read_only_stays)", () => {
+		render([cell("a")], { editable: false });
+		expect(title({ kind: "leave", dir: "down" })).toBe(false);
+		expect(title({ kind: "enter", end: true })).toBe(false);
+	});
+});
+
+describe("a document's intents, core defaults", () => {
+	it("a leave steps to the neighbour, anything else is the editor's (no_sugar_for_classless_doc)", () => {
+		render([cell("a", []), cell("b", [])]);
+		const b = mountDoc("b");
+		expect(b.say({ kind: "erase", dir: "back" })).toBe(false);
+		expect(b.say({ kind: "slash" })).toBe(false);
+		expect(b.say({ kind: "break", at: "end" })).toBe(false);
+		expect(b.say({ kind: "leave", dir: "up", extend: true, x: 0 })).toBe(false);
+		expect(notify).not.toHaveBeenCalled();
+		// Up out of b: a is selected, as today's step does (leave_up_into_non_prose).
+		expect(b.say({ kind: "leave", dir: "up", extend: false, x: 10 })).toBe(true);
+		expect(selected()).toEqual(["a"]);
+	});
+
+	it("leaving the last cell down lands in the end line; the top one up has nowhere to go", () => {
+		render([cell("a"), cell("b")]);
+		const a = mountDoc("a");
+		const b = mountDoc("b");
+		expect(b.say({ kind: "leave", dir: "right", extend: false, x: 0 })).toBe(true);
+		expect(document.activeElement).toBe(endLine());
+		expect(a.say({ kind: "leave", dir: "left", extend: false, x: 0 })).toBe(false);
+	});
+
+	it("routes nothing on a read-only plane", () => {
+		render([cell("a"), cell("b")], { editable: false });
+		const b = mountDoc("b");
+		expect(b.say({ kind: "leave", dir: "up", extend: false, x: 0 })).toBe(false);
+	});
+
+	it("stops hearing a document once it leaves, and hears the next one", () => {
+		render([cell("a"), cell("b")]);
+		const first = mountDoc("b");
+		expect(first.listeners.size).toBe(1);
+		act(() => leaves.pop()?.());
+		expect(first.listeners.size).toBe(0);
+		const second = mountDoc("b");
+		expect(second.listeners.size).toBe(1);
+	});
+});
+
+describe("cell selection", () => {
+	it("walks, extends and reorders from the keyboard", () => {
+		render([cell("a", []), cell("b", []), cell("c", [])]);
+		title({ kind: "enter", end: true });
+		const plane = planeRoot();
+		press(plane, "ArrowDown");
+		expect(selected()).toEqual(["b"]);
+		press(plane, "ArrowDown", { shiftKey: true });
+		expect(selected()).toEqual(["b", "c"]);
+		press(plane, "ArrowUp", { metaKey: true });
+		expect(notify).toHaveBeenLastCalledWith("cell.reorder", {
+			plane_id: "p1",
+			cell_ids: ["b", "c", "a"],
+		});
+		press(plane, "Escape");
+		expect(selected()).toEqual([]);
+	});
+
+	it("deletes through the one remove path: hidden at once, the cell above selected (remove_selected_one_path)", () => {
+		render([cell("a", []), cell("b", []), cell("c", [])]);
+		title({ kind: "enter", end: true });
+		const plane = planeRoot();
+		press(plane, "ArrowDown");
+		press(plane, "ArrowDown", { shiftKey: true });
+		press(plane, "Backspace");
+		expect(ops()).toEqual([
+			["cell.delete", "b"],
+			["cell.delete", "c"],
+		]);
+		expect(row("b").hidden).toBe(true);
+		expect(row("c").hidden).toBe(true);
+		expect(selected()).toEqual(["a"]);
+		// The server drops them: gone.
+		render([cell("a", [])]);
+		expect(row("b")).toBeNull();
+	});
+
+	it("Enter on a selected cell with a document focuses its end (enter_selected_prose)", () => {
+		render([cell("a")]);
+		const a = mountDoc("a");
+		title({ kind: "enter", end: true });
+		press(planeRoot(), "Enter");
+		expect(a.doc.focus).toHaveBeenCalledWith("end");
+		expect(selected()).toEqual([]);
+	});
+});
+
+describe("focus requests", () => {
+	it("a code cell's source takes the request once it has a view", async () => {
+		render([]);
+		press(endLine(), "/");
+		press(endLine(), "Enter");
+		const [, args] = notify.mock.calls[0];
+		expect(args).toMatchObject({ name: "" });
+		const id = args.cell_id as string;
+		await act(async () => render([cell(id, [])]));
+		const content = row(id).querySelector<HTMLElement>(".cm-content");
+		expect(content).not.toBeNull();
+		expect(row(id).contains(document.activeElement)).toBe(true);
+	});
+
+	it("a cell from a spec is landed on selected, and its document takes the caret when it registers", () => {
+		render([cell("a")]);
+		press(endLine(), "/");
+		typeInto(endLine(), "text");
+		press(endLine(), "Enter");
+		const id = notify.mock.calls[0][1].cell_id as string;
+		render([cell("a"), cell(id)]);
+		expect(selected()).toEqual([id]);
+		const doc = mountDoc(id);
+		expect(doc.doc.focus).toHaveBeenCalledWith("end");
+		expect(selected()).toEqual([]);
+	});
+
+	it("settles once the person goes elsewhere: a later register does not pull the caret", () => {
+		render([cell("a", [])]);
+		press(endLine(), "/");
+		typeInto(endLine(), "text");
+		press(endLine(), "Enter");
+		const id = notify.mock.calls[0][1].cell_id as string;
+		render([cell("a", []), cell(id)]);
+		press(planeRoot(), "ArrowUp");
+		expect(selected()).toEqual(["a"]);
+		const doc = mountDoc(id);
+		expect(doc.doc.focus).not.toHaveBeenCalled();
+	});
+});
+
+describe("routing to a sugar", () => {
+	it("offers a document intent to the set bound to the cell's class, and its claim stops the core", () => {
+		const claim = spy("prose", true);
+		render([cell("a"), cell("b")], { sugars: [claim.sugar] });
+		const b = mountDoc("b");
+		const i: DocIntent = { kind: "leave", dir: "up", extend: false, x: 4 };
+		expect(b.say(i)).toBe(true);
+		expect(claim.seen).toEqual([{ on: "document", args: ["b", i] }]);
+		expect(selected()).toEqual([]);
+	});
+
+	it("falls back to the core default when the set declines", () => {
+		const decline = spy("prose", false);
+		render([cell("a", []), cell("b")], { sugars: [decline.sugar] });
+		const b = mountDoc("b");
+		expect(b.say({ kind: "leave", dir: "up", extend: false, x: 0 })).toBe(true);
+		expect(decline.seen).toHaveLength(1);
+		expect(selected()).toEqual(["a"]);
+	});
+
+	it("never offers a classless cell's document to it", () => {
+		const s = spy("prose", true);
+		render([cell("a", []), cell("b", [])], { sugars: [s.sugar] });
+		mountDoc("b").say({ kind: "erase", dir: "back" });
+		expect(s.seen).toEqual([]);
+	});
+
+	it("offers the input line and the title only with a default spec for its class installed", () => {
+		const s = spy("prose", false);
+		render([cell("a")], { sugars: [s.sugar] });
+		press(endLine(), "Enter");
+		title({ kind: "enter", end: false });
+		expect(s.seen).toEqual([]);
+		render([cell("a")], { sugars: [s.sugar], specs: WITH_DEFAULT });
+		press(endLine(), "Enter");
+		title({ kind: "enter", end: false });
+		expect(s.seen.map((x) => x.on)).toEqual(["input", "title"]);
+		expect(s.api()?.defaultSpec("prose")).toBe("text");
+		expect(s.api()?.defaultSpec("other")).toBeNull();
+	});
+
+	it("draws the set's hint on the input line while it has it", () => {
+		const s = { ...spy().sugar, inputHint: "Write, or press / for cells" };
+		render([], { sugars: [s] });
+		expect(endLine().placeholder).toBe("Press / for cells");
+		render([], { sugars: [s], specs: WITH_DEFAULT });
+		expect(endLine().placeholder).toBe("Write, or press / for cells");
+	});
+});
+
+describe("the plane api, from a sugar", () => {
+	/** A sugar that runs `act` on its first document intent, with the api. */
+	function on(run: (cell: string, api: PlaneApi) => void): Sugar {
+		return {
+			class: "prose",
+			onDocument: (c, _i, api) => {
+				run(c, api);
+				return true;
+			},
+		};
+	}
+	const poke = (d: ReturnType<typeof fakeDoc>) => d.say({ kind: "erase", dir: "back" });
+
+	it("remove with a focus target: the cell goes, the caret goes there (r2-shaped)", () => {
+		render([cell("a"), cell("b")], {
+			sugars: [on((c, api) => api.remove([c], { cell: "a", at: "end" }))],
+		});
+		const a = mountDoc("a");
+		poke(mountDoc("b"));
+		expect(ops()).toEqual([["cell.delete", "b"]]);
+		expect(row("b").hidden).toBe(true);
+		expect(a.doc.focus).toHaveBeenCalledWith("end");
+	});
+
+	it("remove to the title, or to the plane where there is none (r2_top_*)", () => {
+		const sugar = on((c, api) => api.remove([c], { title: "end" }));
+		render([cell("a")], { sugars: [sugar] });
+		poke(mountDoc("a"));
+		expect(onTitle).toHaveBeenCalledWith("end");
+		render([cell("b")], { sugars: [sugar], title: false });
+		poke(mountDoc("b"));
+		expect(document.activeElement).toBe(planeRoot());
+	});
+
+	it("a focus request waits for the document, then is consumed and cleared (focus_request_waits_for_register)", () => {
+		render([cell("a"), cell("b")], {
+			sugars: [on((_c, api) => api.focus({ cell: "b", at: { x: 40, edge: "first" } }))],
+		});
+		poke(mountDoc("a"));
+		const b = mountDoc("b");
+		expect(b.doc.focus).toHaveBeenCalledExactlyOnceWith({ x: 40, edge: "first" });
+		// Consumed means cleared: a second registration takes nothing.
+		act(() => leaves.pop()?.());
+		const again = mountDoc("b");
+		expect(again.doc.focus).not.toHaveBeenCalled();
+	});
+
+	it("create with markdown and a hook: appended, focused, and the caller hears the document (split-shaped)", () => {
+		const then = vi.fn();
+		let made = "";
+		render([cell("a"), cell("z")], {
+			sugars: [
+				on((c, api) => {
+					made = api.create({ after: c }, "text", { at: "start", markdown: "tail", then });
+				}),
+			],
+		});
+		poke(mountDoc("a"));
+		expect(notify).toHaveBeenCalledWith(
+			"cell.create",
+			expect.objectContaining({ cell_id: made, index: 1 }),
+		);
+		// A set_plane without the new cell yet must not drop its request.
+		render([cell("a"), cell("z")], { sugars: [] });
+		render([cell("a"), cell(made), cell("z")], { sugars: [] });
+		const d = mountDoc(made);
+		expect(d.doc.append).toHaveBeenCalledWith("tail");
+		expect(d.doc.focus).toHaveBeenCalledWith("start");
+		expect(then).toHaveBeenCalledExactlyOnceWith(d.doc);
+	});
+
+	it("openInput with a home: Escape there sends the caret back, kept (r7_esc_returns_caret)", () => {
+		render([cell("a"), cell("b")], {
+			sugars: [on((c, api) => api.openInput(c, { cell: c, at: "kept" }))],
+		});
+		const a = mountDoc("a");
+		a.say({ kind: "break", at: "end" });
+		expect(lines()).toHaveLength(2);
+		expect(document.activeElement).toBe(lines()[0]);
+		press(lines()[0], "Escape");
+		expect(lines()).toHaveLength(1);
+		expect(a.doc.focus).toHaveBeenCalledWith("kept");
+	});
+
+	it("standIn: the menu in the cell's place; Escape brings it back, a pick replaces it (r6_*)", () => {
+		render([cell("a"), cell("b")], { sugars: [on((c, api) => api.standIn(c))] });
+		const a = mountDoc("a");
+		a.say({ kind: "slash" });
+		expect(row("a").hidden).toBe(true);
+		expect(menu()).not.toBeNull();
+		press(lines()[0], "Escape");
+		expect(row("a").hidden).toBe(false);
+		expect(a.doc.focus).toHaveBeenCalledWith("start");
+
+		a.say({ kind: "slash" });
+		press(lines()[0], "Enter");
+		expect(ops().map(([op]) => op)).toEqual(["cell.create", "cell.delete"]);
+		expect(notify.mock.calls[0][1]).toMatchObject({ index: 1 });
+		expect(notify.mock.calls[1][1]).toEqual({ cell_id: "a" });
+		expect(row("a").hidden).toBe(true);
+	});
+
+	it("select with an anchor, then the plane's Shift extends from it (r10-shaped)", () => {
+		render([cell("a"), cell("b"), cell("c")], {
+			sugars: [on((c, api) => api.select([c, "c"], c))],
+		});
+		mountDoc("b").say({ kind: "leave", dir: "down", extend: true, x: 0 });
+		expect(selected()).toEqual(["b", "c"]);
+		expect(document.activeElement).toBe(planeRoot());
+		press(planeRoot(), "Backspace");
+		expect(ops()).toEqual([
+			["cell.delete", "b"],
+			["cell.delete", "c"],
+		]);
+	});
+});
+
+describe("a create fed by the input line", () => {
+	/** R1's shape: typing or Enter on the line creates from the default spec. */
+	const write: Sugar = {
+		class: "prose",
+		onInput: (after, i, api) => {
+			const spec = api.defaultSpec("prose");
+			if (!spec) return false;
+			api.create({ after }, spec, { at: "end", text: i.kind === "text" ? i.text : "" });
+			return true;
+		},
+	};
+
+	it("keeps the keys typed meanwhile in the line, then the document takes them all (r1_keys_while_pending_go_along)", () => {
+		render([], { sugars: [write], specs: WITH_DEFAULT });
+		act(() => endLine().focus());
+		typeInto(endLine(), "h");
+		const [op, args] = notify.mock.calls[0];
+		expect(op).toBe("cell.create");
+		expect(args).toMatchObject({ name: "text", index: 0 });
+		expect(endLine().value).toBe("h");
+		expect(menu()).toBeNull();
+		typeInto(endLine(), "hello");
+		// Enter is a new line in what the cell will take: the line shows the one being typed.
+		press(endLine(), "Enter");
+		expect(endLine().value).toBe("");
+		typeInto(endLine(), "w");
+
+		const id = args.cell_id as string;
+		render([cell(id)], { sugars: [write], specs: WITH_DEFAULT });
+		// The line stands in for it until its document has the text.
+		expect(row(id).hidden).toBe(true);
+		const d = mountDoc(id);
+		expect(d.doc.focus).toHaveBeenCalledWith("end");
+		expect(d.doc.type).toHaveBeenCalledExactlyOnceWith("hello\nw");
+		expect(row(id).hidden).toBe(false);
+		expect(endLine().value).toBe("");
+		expect(notify).toHaveBeenCalledTimes(1);
+	});
+
+	it("filters with the menu open, never creates (menu_typing_filters)", () => {
+		render([], { sugars: [write], specs: WITH_DEFAULT });
+		press(endLine(), "/");
+		typeInto(endLine(), "te");
+		expect(notify).not.toHaveBeenCalled();
+		expect(endLine().value).toBe("te");
+	});
+
+	it("lands the text without the caret when the person went elsewhere (r1_text_lands_caret_stays_away)", () => {
+		render([], { sugars: [write], specs: WITH_DEFAULT });
+		act(() => endLine().focus());
+		typeInto(endLine(), "hi");
+		act(() => endLine().blur());
+		const id = notify.mock.calls[0][1].cell_id as string;
+		render([cell(id)], { sugars: [write], specs: WITH_DEFAULT });
+		const d = mountDoc(id);
+		expect(d.doc.type).toHaveBeenCalledWith("hi");
+		expect(d.doc.focus).not.toHaveBeenCalled();
+	});
+
+	it("stays parked when no document registers, and Escape drops it (r1_no_register_keeps_text)", () => {
+		render([], { sugars: [write], specs: WITH_DEFAULT });
+		act(() => endLine().focus());
+		typeInto(endLine(), "hi");
+		const id = notify.mock.calls[0][1].cell_id as string;
+		render([cell(id, ["prose"], "boom")], { sugars: [write], specs: WITH_DEFAULT });
+		// Its error shows; the line keeps the text.
+		expect(row(id).hidden).toBe(false);
+		expect(endLine().value).toBe("hi");
+		press(endLine(), "Escape");
+		expect(endLine().value).toBe("");
+		const d = mountDoc(id);
+		expect(d.doc.type).not.toHaveBeenCalled();
+	});
+});
+
+describe("the plane handle", () => {
+	it("starts a box selection from a press in the pane", () => {
+		render([cell("a"), cell("b"), cell("c")]);
+		["a", "b", "c"].forEach((id, i) => {
+			row(id).getBoundingClientRect = () => new DOMRect(0, i * 40, 600, 40);
+		});
+		act(() =>
+			handle.current?.press({
+				button: 0,
+				target: planeRoot(),
+				clientX: 700,
+				clientY: 10,
+			} as unknown as React.PointerEvent),
+		);
+		act(() => {
+			window.dispatchEvent(new MouseEvent("pointermove", { clientX: 500, clientY: 50 }));
+			window.dispatchEvent(new MouseEvent("pointerup", { clientX: 500, clientY: 50 }));
+		});
+		expect(selected()).toEqual(["a", "b"]);
+	});
+
+	it("is cleared when the plane goes", () => {
+		render([]);
+		expect(handle.current).not.toBeNull();
+		act(() => root.render(null));
+		expect(handle.current).toBeNull();
+	});
+});
