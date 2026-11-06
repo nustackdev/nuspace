@@ -10,7 +10,9 @@
 // in it. Unclaimed, the typing searches the Cells and Enter does nothing.
 // While a cell it made is on its way, the line keeps showing what was typed
 // and takes the keys typed meanwhile (`pending`), until the new cell's
-// document takes them all.
+// document takes them all. A cell that turns out never to take them gives
+// them back (`held`): plain text in the line again, offered anew on the next
+// key.
 //
 // There is always one at the end of the plane, which is what makes an empty
 // plane writeable without hunting for a control, and a second one can be
@@ -51,6 +53,10 @@ export type GhostProps = {
 	pending: string | null;
 	/** That line as it reads now. */
 	onPending: (text: string) => void;
+	/** Text handed back by a cell that never took it. Null when none. */
+	held: string | null;
+	/** The line lets go of the held text: edited, offered again, or Escaped. */
+	onHeld: () => void;
 	/** Enter while one is waiting: a new line in what it will take. */
 	onBreak: () => void;
 	/** Escape while one is waiting: the cell keeps none of it. */
@@ -88,6 +94,8 @@ export function Ghost({
 	onOpenSlash,
 	onInput,
 	pending,
+	held,
+	onHeld,
 	onPending,
 	onBreak,
 	onDrop,
@@ -116,7 +124,7 @@ export function Ghost({
 			aria-label="New cell"
 			className={docGhost(hinted)}
 			placeholder={open ? GHOST_SEARCH : hint}
-			value={pending ?? query ?? ""}
+			value={pending ?? query ?? held ?? ""}
 			onFocus={onWake}
 			onChange={(e) => {
 				const next = e.currentTarget.value;
@@ -128,6 +136,7 @@ export function Ghost({
 					onQuery(next);
 					return;
 				}
+				if (held !== null) onHeld();
 				if (next) onInput({ kind: "text", text: next }, e.currentTarget);
 			}}
 			onKeyDown={(e) => {
@@ -142,6 +151,18 @@ export function Ghost({
 					} else if (e.key === "Escape") {
 						e.preventDefault();
 						onDrop();
+					}
+					return;
+				}
+				// Text given back: editing keys are the text's, Enter offers it again.
+				if (held !== null && !open) {
+					if (e.key === "Enter") {
+						e.preventDefault();
+						onHeld();
+						onInput({ kind: "text", text: held }, e.currentTarget);
+					} else if (e.key === "Escape") {
+						e.preventDefault();
+						onHeld();
 					}
 					return;
 				}

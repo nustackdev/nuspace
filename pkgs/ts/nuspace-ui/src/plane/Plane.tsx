@@ -54,7 +54,7 @@ import { type EditorPatch, type InputLine, patchEditor, readEditor, useEditorSta
 import { useCellDrag } from "./structure/useCellDrag";
 import { useStructure } from "./structure/useStructure";
 import { sugars as SUGARS, type Sugar } from "./sugar";
-import type { ActivePlane, CellSpec } from "./types";
+import { type ActivePlane, type CellSpec, isBad } from "./types";
 
 const NO_CELL_SPECS: CellSpec[] = [];
 
@@ -137,6 +137,8 @@ export function Plane({
 		drop,
 		release,
 		registered,
+		abandon,
+		wake,
 		focus,
 		select,
 		focusCell,
@@ -176,6 +178,7 @@ export function Plane({
 		focus,
 		select,
 		drop,
+		wake,
 		slashKey,
 		route,
 		hint: editable ? inputHint(sugars, cellSpecs) : undefined,
@@ -214,6 +217,17 @@ export function Plane({
 		intent: (cell, i) => routing.current?.document(cell, i) ?? false,
 		registered,
 	});
+
+	// A cell that ships saying it draws nothing, or whose program died or
+	// stopped, will never register a document: what waits for one is let go,
+	// and text an input line fed it goes back into the line.
+	useEffect(() => {
+		for (const c of cells) {
+			const over = c.has_ui === false || isBad(c.status.state) || c.status.state === "stopped";
+			if (!over || document(c.id)) continue;
+			if (editor.requests.some((r) => r.cellId === c.id && r.to === "document")) abandon(c.id);
+		}
+	}, [cells, editor.requests, document, abandon]);
 
 	// What the pane holds: the title's intents, and a press anywhere in it.
 	const pressRef = useRef(startBox);
@@ -306,6 +320,11 @@ export function Plane({
 							// whatever gets picked next.
 							onPlus={() => openInput(cell.id)}
 							onSelect={() => select([cell.id])}
+							// Drawn, and its document (if it has one) registered in the
+							// same commit, before this hears it: none means none is coming.
+							onDrawn={() => {
+								if (!document(cell.id)) abandon(cell.id);
+							}}
 							onFocusConsumed={() => {
 								if (source) drop((r) => r.id === source.id);
 							}}

@@ -34,6 +34,7 @@ export function useGhosts(
 		focus,
 		select,
 		drop,
+		wake,
 		slashKey,
 		route,
 		hint,
@@ -42,6 +43,8 @@ export function useGhosts(
 		focus: (target: FocusTarget) => void;
 		select: (ids: string[]) => void;
 		drop: (gone: (r: FocusReq) => boolean) => void;
+		/** The caret arrived in this line: what it feeds pulls, nothing else. */
+		wake: (line: InputLine) => void;
 		slashKey: (key: string) => boolean;
 		/** Offer an intent from line `line` after `after`. True when a sugar claimed it. */
 		route: (after: string | null, i: InputIntent, line: InputLine) => boolean;
@@ -106,7 +109,11 @@ export function useGhosts(
 	const dismissGhost = useCallback(
 		(after: string | null, transient: boolean) => {
 			if (back.current?.after === after) back.current = null;
-			patch(transient ? { ghost: null, slash: null } : { slash: null });
+			patch((e) =>
+				transient
+					? { ghost: null, slash: null, held: { ...e.held, summoned: undefined } }
+					: { slash: null },
+			);
 			feed(transient ? "summoned" : "end", (r) =>
 				transient ? { ...r, pull: false, line: undefined } : { ...r, pull: false },
 			);
@@ -174,9 +181,9 @@ export function useGhosts(
 			onWake: () => {
 				// Clicking a ghost leaves cell-selection mode, exactly as
 				// clicking into a cell does. The cell it feeds takes the caret
-				// again when it lands.
+				// again when it lands, and nothing else will.
 				patch((e) => (e.selected.length ? { selected: [], anchor: null } : {}));
-				feed(line, (r) => ({ ...r, pull: true }));
+				wake(line);
 			},
 			onOpenSlash: (anchor, query) =>
 				patch({
@@ -194,6 +201,8 @@ export function useGhosts(
 					});
 				}
 			},
+			held: editor.held?.[line] ?? null,
+			onHeld: () => patch((e) => ({ held: { ...e.held, [line]: undefined } })),
 			onPending: (text) =>
 				feed(line, (r) => {
 					const was = r.text ?? "";

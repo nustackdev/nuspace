@@ -50,6 +50,7 @@ export function Cell({
 	onPress,
 	onSelect,
 	onFocusConsumed,
+	onDrawn,
 	onCommit,
 	onExit,
 }: {
@@ -82,6 +83,8 @@ export function Cell({
 	onPress?: (e: React.PointerEvent) => void;
 	onSelect: () => void;
 	onFocusConsumed: () => void;
+	/** What the program draws has mounted. */
+	onDrawn?: () => void;
 	onCommit: (source: string) => void;
 	onExit: (dir: ExitDir, column: number | undefined) => void;
 }) {
@@ -125,6 +128,7 @@ export function Cell({
 					editing={editing}
 					focusReq={focusReq}
 					onFocusConsumed={onFocusConsumed}
+					onDrawn={onDrawn}
 					onCommit={onCommit}
 					onExit={onExit}
 					onSelectSelf={onSelect}

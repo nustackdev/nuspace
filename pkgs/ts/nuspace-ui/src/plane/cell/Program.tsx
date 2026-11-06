@@ -41,7 +41,7 @@ import {
 	TooltipContent,
 	TooltipTrigger,
 } from "@nustackdev/ui-kit";
-import { useCallback } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { useAfter } from "../../core/delay";
 import {
 	CELL_STATUS,
@@ -72,6 +72,11 @@ export type ProgramProps = {
 	editing: boolean;
 	focusReq: FocusReq | null;
 	onFocusConsumed: () => void;
+	/**
+	 * What the program draws has mounted. Heard after everything inside it
+	 * mounted in the same commit, so a document drawn there has registered.
+	 */
+	onDrawn?: () => void;
 	onCommit: (source: string) => void;
 	onExit: (dir: ExitDir, column: number | undefined) => void;
 	onSelectSelf: () => void;
@@ -89,6 +94,7 @@ export function ProgramCell(props: ProgramProps) {
 		editing,
 		focusReq,
 		onFocusConsumed,
+		onDrawn,
 		onCommit,
 		onExit,
 		onSelectSelf,
@@ -102,6 +108,13 @@ export function ProgramCell(props: ProgramProps) {
 	// No view mounted, nothing else in its place, and one may still come.
 	const waiting = !hasUi && !editing && !status?.error && draws !== false;
 	const loader = useAfter(waiting, VIEW_LOADER_DELAY_MS);
+
+	// Once, when the view arrives: the callback changes every render.
+	const drawn = useRef(onDrawn);
+	drawn.current = onDrawn;
+	useEffect(() => {
+		if (hasUi) drawn.current?.();
+	}, [hasUi]);
 
 	const leaveEditor = useCallback(() => {
 		onSetEditing(false);
