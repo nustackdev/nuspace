@@ -2,8 +2,8 @@
 //
 // The server refuses a system Plane's delete, so neither place offers one.
 
+import { confirm } from "../core/confirm";
 import { closePanes } from "../core/router";
-import { confirm } from "../shell/confirm";
 import type { Notify } from "./ops";
 import { subtreeOf } from "./tree";
 import type { PlaneTree } from "./types";

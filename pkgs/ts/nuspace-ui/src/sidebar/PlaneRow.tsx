@@ -64,7 +64,7 @@ import {
 import { IconPickerContent } from "../icon/IconPicker";
 import { PlaneIcon } from "../icon/PlaneIcon";
 import type { Icon as PlaneIconValue } from "../icon/parse";
-import { contextParts, dropdownParts, type MenuParts } from "../shell/menu";
+import { contextParts, dropdownParts, type MenuParts } from "../menu/parts";
 import { NEW_INSIDE_KEYS, openAddPlane } from "./add";
 import { DESK_KEYS, OPEN_KEYS } from "./keys";
 import type { Notify } from "./ops";
@@ -441,7 +441,7 @@ export type PlaneMenuProps = {
 
 /**
  * A plane's actions, the same off the `...` and off a right-click: written
- * once against the menu parts (../shell/menu.ts) each trigger renders with.
+ * once against the menu parts (../menu/parts.ts) each trigger renders with.
  * An item with a key shows it on its right.
  */
 export function PlaneMenuItems({ parts, ...a }: PlaneMenuProps & { parts: MenuParts }) {

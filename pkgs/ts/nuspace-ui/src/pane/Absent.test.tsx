@@ -1,12 +1,12 @@
-// A pane with no Plane to draw, rendered in jsdom: the viewer's `set_absent`
-// landing in the node's props, the empty state per reason, and its close.
+// A pane with no Plane to draw, rendered in jsdom: the empty state per reason,
+// and its close. The viewer's `set_absent` landing in the node's props is
+// ../main/state.test.ts.
 
 import { TooltipProvider } from "@nustackdev/ui-kit";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { currentRoutes } from "../core/router";
-import { applyViewerWrite } from "../main/state";
 import type { AbsentReason } from "../plane/types";
 import { ABSENT_TEXT, Pane } from "./Pane";
 
@@ -89,27 +89,5 @@ describe("absent pane", () => {
 		render("gone", "missing");
 		act(() => closeButton()?.click());
 		expect(currentRoutes()).toEqual(["a"]);
-	});
-});
-
-describe("set_absent", () => {
-	const plane = { op: "set_plane", plane_id: "p", title: "P", meta: {}, cells: [] };
-
-	it("stands in for the plane, and a set_plane replaces it", () => {
-		const props: Record<string, unknown> = {};
-		applyViewerWrite(props, plane, ["p"]);
-		applyViewerWrite(props, { op: "set_absent", plane_id: "p", reason: "missing" }, ["p"]);
-		expect(props.absent).toEqual({ p: "missing" });
-		expect(props.planes).toEqual({});
-		applyViewerWrite(props, plane, ["p"]);
-		expect(props.absent).toEqual({});
-		expect(Object.keys(props.planes as object)).toEqual(["p"]);
-	});
-
-	it("drops an unknown reason and a pane no longer open", () => {
-		const props: Record<string, unknown> = {};
-		applyViewerWrite(props, { op: "set_absent", plane_id: "p", reason: "odd" }, ["p"]);
-		applyViewerWrite(props, { op: "set_absent", plane_id: "q", reason: "headless" }, ["p"]);
-		expect(props.absent ?? {}).toEqual({});
 	});
 });

@@ -10,12 +10,13 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { currentRoutes } from "../core/router";
+import { PANE_MIME } from "../pane/PaneBar";
 import { PaneMenu } from "../pane/PaneMenu";
 import { coerceMeta } from "../plane/types";
 import { PIN_MIME } from "../sidebar/Pinned";
 import { PLANE_MIME } from "../sidebar/useRailDrag";
 import { dockLayout } from "./Dock";
-import { PANE_MIME, paneSlot, useCanvasDrop } from "./useCanvasDrop";
+import { paneSlot, useCanvasDrop } from "./useCanvasDrop";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 

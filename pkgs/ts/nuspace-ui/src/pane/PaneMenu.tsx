@@ -1,7 +1,7 @@
 // A pane's menu off the `...` on its bar, a kit dropdown. Its desk items also
 // make the whole of a dock chip's right-click menu (a kit context menu,
 // ../main/Dock.tsx), so they are written once against the menu parts
-// (../shell/menu.ts).
+// (../menu/parts.ts).
 //
 // On top, the desk: "Close" takes this pane off it, "Close others" leaves
 // only this one, "Close to the right" takes off every pane after it, and
@@ -42,8 +42,8 @@ import {
 	paneMenuSwitch,
 	paneMenuText,
 } from "../design";
+import { dropdownParts, type MenuParts } from "../menu/parts";
 import type { PlaneMeta } from "../plane/types";
-import { dropdownParts, type MenuParts } from "../shell/menu";
 import { NEW_INSIDE_KEYS, openAddPlane } from "../sidebar/add";
 import { usePlanePin } from "../sidebar/pin";
 import { PLANE_SETTINGS, type PlaneSetting } from "./settings";

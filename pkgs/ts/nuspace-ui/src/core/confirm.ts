@@ -2,8 +2,11 @@
 //
 // Anything can ask, from a menu item or a plain function, so the question is
 // a module level store like ../sidebar/add.ts rather than a prop, and the one
-// dialog that draws it (./ConfirmDialog.tsx) is mounted once, at the root. Asking
+// dialog that draws it (../shell/ConfirmDialog.tsx) is mounted once, at the root. Asking
 // again while a question is open answers the first one no.
+//
+// In core, under everything that asks: the rail asks, and the shell that
+// mounts the dialog sits above the rail.
 
 import { useSyncExternalStore } from "react";
 

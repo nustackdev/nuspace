@@ -17,10 +17,10 @@
 import { getNode, type Path } from "@nustackdev/ui-core";
 import { useTree } from "@nustackdev/ui-kit";
 import { useEffect } from "react";
+import { useFocusedRoute } from "../core/router";
 import { planeIcon } from "../icon/parse";
 import { TITLE_FALLBACK } from "../pane/Pane";
 import type { ActivePlane } from "../plane/types";
-import { useFocusedRoute } from "./router";
 
 /** The product name, the title with nothing open. */
 export const DEFAULT_TITLE = "nuspace";

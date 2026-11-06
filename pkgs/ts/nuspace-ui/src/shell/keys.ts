@@ -1,9 +1,5 @@
-// The keyboard shortcuts sheet: whether it is open, the key that opens it, and
-// what it lists.
-//
-// Opened from the rail's bottom bar or with cmd/ctrl+/, from anywhere, so its
-// state is a module level store like ./confirm.ts, and the one dialog that
-// draws it (./KeysDialog.tsx) is mounted once, at the root.
+// The keyboard shortcuts sheet: what it lists. Whether it is open, and the
+// key that opens it, are ../core/keys.ts.
 //
 // The list is written by hand, beside the handlers it describes rather than
 // read off them: a binding is a few lines in a keydown handler, scattered
@@ -11,54 +7,12 @@
 // the focus has to be, what the key does there) is not in the code at all.
 // Change a binding and change its line here.
 
-import { useEffect, useSyncExternalStore } from "react";
+import { KEYS_KEYS } from "../core/keys";
 import { NEW_INSIDE_KEYS, NEW_PLANE_KEYS } from "../sidebar/add";
 import { RAIL_KEYS } from "../sidebar/collapse";
 import { DESK_CLICK, DESK_KEYS, OPEN_KEYS } from "../sidebar/keys";
 import { SETTINGS_KEYS } from "../sidebar/nav";
 import { SEARCH_KEYS } from "../sidebar/search";
-
-/** The shortcut by key name; the kit `Shortcut` spells it. */
-export const KEYS_KEYS = ["mod", "/"] as const;
-
-let open = false;
-const subscribers = new Set<() => void>();
-
-function emit(): void {
-	for (const cb of subscribers) cb();
-}
-
-function subscribe(cb: () => void): () => void {
-	subscribers.add(cb);
-	return () => subscribers.delete(cb);
-}
-
-export function setKeysOpen(next: boolean): void {
-	if (open === next) return;
-	open = next;
-	emit();
-}
-
-export function useKeysOpen(): boolean {
-	return useSyncExternalStore(
-		subscribe,
-		() => open,
-		() => open,
-	);
-}
-
-/** Cmd/ctrl+/ flips the sheet from anywhere in the window. Mount it once. */
-export function useKeysShortcut(): void {
-	useEffect(() => {
-		const onKey = (e: KeyboardEvent) => {
-			if (e.key !== "/" || !(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey) return;
-			e.preventDefault();
-			setKeysOpen(!open);
-		};
-		window.addEventListener("keydown", onKey);
-		return () => window.removeEventListener("keydown", onKey);
-	}, []);
-}
 
 /**
  * One line of the sheet: what it does, and its keys. More than one entry in
