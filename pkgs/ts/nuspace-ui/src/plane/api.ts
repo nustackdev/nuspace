@@ -38,6 +38,19 @@ export type Place = { after: string | null };
  */
 export type FocusTarget = { cell: string; at: FocusAt } | { title: "start" | "end" };
 
+/**
+ * What the caret meets leaving a cell one way, as the plane is now. Kind
+ * blind: which classes the cell there keeps is the asker's to look up.
+ */
+export type Beside = {
+	/** The next cell that way, past any being deleted. Null when there is none. */
+	cell: string | null;
+	/** An input line sits in between: the summoned one, or the end line under the last cell. */
+	line: boolean;
+	/** Up from the top cell, with nothing in between: the title, where the host has one. */
+	title: boolean;
+};
+
 /** A focus request for a cell being created, and what it carries. */
 export type FocusRequest = {
 	at: FocusAt;
@@ -59,6 +72,8 @@ export interface PlaneApi {
 	document(id: string): DocumentHandle | null;
 	/** The installed spec that is `cls`'s default, null when none is. */
 	defaultSpec(cls: string): string | null;
+	/** What is next to cell `id` that way: a cell, an input line, the title. */
+	beside(id: string, dir: "up" | "down"): Beside;
 
 	// -- structure: every write is an op
 	/**

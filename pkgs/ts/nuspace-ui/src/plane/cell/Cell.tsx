@@ -19,7 +19,10 @@
 // Nothing here knows what the cell draws. A press inside it is reported
 // (`onPress`) and the plane decides what a drag from there means; the keys
 // of what it draws are that editor's own, and its document reports what it
-// had no use for through the kit registry, never through this row.
+// had no use for through the kit registry, never through this row. Where
+// the caret is, it does say (`onCaret`): in what the cell draws, elsewhere
+// in its row, or gone from it. That is the row's own focus, nothing read
+// out of the editor.
 
 import type { Path } from "@nustackdev/ui-core";
 import type * as React from "react";
@@ -53,6 +56,7 @@ export function Cell({
 	onDrawn,
 	onCommit,
 	onExit,
+	onCaret,
 }: {
 	cell: CellValue;
 	/** Where this cell's own refs live in the tree. */
@@ -87,6 +91,8 @@ export function Cell({
 	onDrawn?: () => void;
 	onCommit: (source: string) => void;
 	onExit: (dir: ExitDir, column: number | undefined) => void;
+	/** The caret arrived in what the cell draws ("ui") or elsewhere in its row, or left it (null). */
+	onCaret?: (where: "ui" | "row" | null) => void;
 }) {
 	return (
 		// biome-ignore lint/a11y/noStaticElementInteractions: a mousedown anywhere in a cell hands control to that cell's own editor
@@ -101,6 +107,11 @@ export function Cell({
 				// A plain click inside a cell leaves cell-selection mode;
 				// the cell's own editor takes over from here.
 				if (e.button === 0) onPointerIn();
+			}}
+			onFocus={(e) => onCaret?.((e.target as Element).closest?.("[data-cell-ui]") ? "ui" : "row")}
+			onBlur={(e) => {
+				// Within the row, the focus that follows says where it went.
+				if (!e.currentTarget.contains(e.relatedTarget as Node | null)) onCaret?.(null);
 			}}
 		>
 			<LeftGutter

@@ -37,7 +37,7 @@
 
 import type { DocumentHandle } from "@nustackdev/ui-kit";
 import { useCallback, useLayoutEffect, useRef } from "react";
-import type { FocusRequest, FocusTarget, PlaneModel } from "../api";
+import type { Beside, FocusRequest, FocusTarget, PlaneModel } from "../api";
 import type { FocusReq, InputLine } from "../state";
 import type { Cell, ExitDir } from "../types";
 import { FOCUSABLE } from "./focusable";
@@ -194,7 +194,10 @@ export function useFocusRouting(
 	/**
 	 * A focus request. The title has no request to park: it takes the caret
 	 * now, or the plane does where there is no title above it. A cell's goes
-	 * to its document, or to its open source when it has no document.
+	 * to its document, or to its open source when it has no document. A cell
+	 * with neither right now is landed on the way a new one is: selected, the
+	 * request parked for a document that may still come, so the caret has
+	 * somewhere to be either way.
 	 */
 	const focus = useCallback(
 		(target: FocusTarget, carry?: Omit<FocusRequest, "at">) => {
@@ -205,7 +208,9 @@ export function useFocusRouting(
 				return;
 			}
 			const id = target.cell;
-			const toSource = document(id) === null && read().editing.includes(id);
+			const none = document(id) === null;
+			const toSource = none && read().editing.includes(id);
+			if (none && !toSource && index(id) >= 0) select([id]);
 			request(
 				id,
 				{
@@ -217,7 +222,7 @@ export function useFocusRouting(
 				carry?.then,
 			);
 		},
-		[document, onTitle, read, release, request, rootRef],
+		[document, index, onTitle, read, release, request, rootRef, select],
 	);
 
 	/** Navigation: into the cell's open source, else the cell is selected. */
@@ -271,6 +276,34 @@ export function useFocusRouting(
 			return true;
 		},
 		[cells, focusCell, index, read, endGhost, plusGhost],
+	);
+
+	/**
+	 * What the caret meets leaving cell `id` that way, the same picture
+	 * `step` travels by: an input line first, then the next cell, and above
+	 * the top cell the title. Cells being deleted are already gone from it.
+	 */
+	const beside = useCallback(
+		(id: string, dir: ExitDir): Beside => {
+			const i = index(id);
+			if (i < 0) return { cell: null, line: false, title: false };
+			const { ghost, leaving } = read();
+			const d = dir === "up" ? -1 : 1;
+			let j = i + d;
+			while (cells[j] && leaving.includes(cells[j].id)) j += d;
+			const cell = cells[j]?.id ?? null;
+			const summoned =
+				ghost !== null &&
+				plusGhost.current !== null &&
+				ghost.after === (dir === "down" ? id : i > 0 ? cells[i - 1].id : null);
+			const end = dir === "down" && cell === null && endGhost.current !== null;
+			return {
+				cell,
+				line: summoned || end,
+				title: dir === "up" && cell === null && !summoned && onTitle !== undefined,
+			};
+		},
+		[cells, index, read, onTitle, endGhost, plusGhost],
 	);
 
 	/** Enter on a selected cell: its document, else what it draws first. */
@@ -331,6 +364,7 @@ export function useFocusRouting(
 		select,
 		focusCell,
 		step,
+		beside,
 		enterCell,
 		setEditing,
 		enterTop,
