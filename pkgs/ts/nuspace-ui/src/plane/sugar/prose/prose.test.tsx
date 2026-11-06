@@ -666,6 +666,50 @@ describe("J. merge", () => {
 		expect(a.doc.focus).toHaveBeenCalledWith("end");
 	});
 
+	it("removes nothing until the joined text is in the store", () => {
+		plane([cell("a"), cell("b")]);
+		const a = mountDoc("a", paper(["one"]));
+		const b = mountDoc("b", paper(["two"]));
+		a.hold();
+		b.say({ kind: "erase", dir: "back" });
+		expect(a.at.blocks).toEqual(["one", "two"]);
+		expect(a.doc.focus).toHaveBeenCalledWith("kept");
+		expect(notify).not.toHaveBeenCalled();
+		a.stored();
+		expect(ops()).toEqual([["cell.delete", "b"]]);
+	});
+
+	it("never removes when the cell above did not take the text", () => {
+		plane([cell("a"), cell("b")]);
+		const a = mountDoc("a", paper(["one"]));
+		vi.mocked(a.doc.append).mockImplementation(() => {});
+		mountDoc("b", paper(["two"])).say({ kind: "erase", dir: "back" });
+		expect(a.doc.commit).not.toHaveBeenCalled();
+		expect(notify).not.toHaveBeenCalled();
+	});
+
+	it("leaves both when this cell is written while the join is being stored", () => {
+		plane([cell("a"), cell("b")]);
+		const a = mountDoc("a", paper(["one"]));
+		const b = mountDoc("b", paper(["two"]));
+		a.hold();
+		b.say({ kind: "erase", dir: "back" });
+		b.at.blocks = ["two, and more"];
+		a.stored();
+		expect(notify).not.toHaveBeenCalled();
+		expect(row("b").hidden).toBe(false);
+	});
+
+	it("declines past a summoned input line, as R8 does", () => {
+		plane([cell("a"), cell("b")]);
+		const a = mountDoc("a", paper(["one"]));
+		const b = mountDoc("b", paper(["two"]));
+		plus("a");
+		expect(b.say({ kind: "erase", dir: "back" })).toBe(false);
+		expect(a.doc.append).not.toHaveBeenCalled();
+		expect(notify).not.toHaveBeenCalled();
+	});
+
 	it("row 162 erase_forward_noop: Delete at the end does nothing", () => {
 		plane([cell("a"), cell("b")]);
 		expect(mountDoc("a", paper(["one"])).say({ kind: "erase", dir: "forward" })).toBe(false);
@@ -744,6 +788,46 @@ describe("K. split", () => {
 		expect(readEditor(VIEWER, "p1").requests).toEqual([]);
 		expect(a.doc.split).not.toHaveBeenCalled();
 		expect(a.at.blocks).toEqual(["one", "two"]);
+	});
+
+	it("cuts nothing until the new cell's text is in the store", () => {
+		plane([cell("a"), cell("z")]);
+		const a = mountDoc("a", paper(["one", "two"], 1));
+		const into = paper([]);
+		into.hold();
+		const { id } = splitA(a, into);
+		mountDoc(id, into);
+		expect(into.at.blocks).toEqual(["two"]);
+		expect(into.doc.commit).toHaveBeenCalled();
+		expect(a.doc.split).not.toHaveBeenCalled();
+		into.stored();
+		expect(a.at.blocks).toEqual(["one"]);
+	});
+
+	it("never cuts when the new cell did not take the tail", () => {
+		plane([cell("a"), cell("z")]);
+		const a = mountDoc("a", paper(["one", "two"], 1));
+		const into = paper([]);
+		vi.mocked(into.doc.append).mockImplementation(() => {});
+		const { id } = splitA(a, into);
+		mountDoc(id, into);
+		expect(into.doc.saved).not.toHaveBeenCalled();
+		expect(a.doc.split).not.toHaveBeenCalled();
+		expect(a.at.blocks).toEqual(["one", "two"]);
+	});
+
+	it("leaves both when this cell is written while the tail is being stored", () => {
+		plane([cell("a"), cell("z")]);
+		const a = mountDoc("a", paper(["one", "two"], 1));
+		const into = paper([]);
+		into.hold();
+		const { id } = splitA(a, into);
+		mountDoc(id, into);
+		a.at.blocks = ["one", "two, edited"];
+		into.stored();
+		expect(a.doc.split).not.toHaveBeenCalled();
+		expect(a.at.blocks).toEqual(["one", "two, edited"]);
+		expect(into.at.blocks).toEqual(["two"]);
 	});
 
 	it("row 168: at the end it is R7, never a split", () => {

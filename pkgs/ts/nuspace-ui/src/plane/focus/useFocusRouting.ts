@@ -68,9 +68,9 @@ export function useFocusRouting(
 
 	/** Park a request for cell `cellId`; the newest one pulls. Returns its id. */
 	const request = useCallback(
-		(cellId: string, ask: Ask, then?: (doc: DocumentHandle) => void): number => {
+		(cellId: string, ask: Ask, landed?: (doc: DocumentHandle) => void): number => {
 			const id = ++seq;
-			if (then) hooks.current.set(id, then);
+			if (landed) hooks.current.set(id, landed);
 			const ready = ask.to === "document" && document(cellId) !== null;
 			patch((e) => ({
 				requests: [...settle(e.requests), { ...ask, id, cellId, pull: true, ready }],
@@ -166,7 +166,7 @@ export function useFocusRouting(
 		for (const r of ready) {
 			const doc = docs.get(r.id);
 			if (!doc) continue;
-			const then = hooks.current.get(r.id);
+			const landed = hooks.current.get(r.id);
 			hooks.current.delete(r.id);
 			if (r.markdown) doc.append(r.markdown);
 			if (r.pull) {
@@ -174,7 +174,7 @@ export function useFocusRouting(
 				patch((e) => (e.selected.length ? { selected: [], anchor: null } : {}));
 			}
 			if (r.text) doc.type(r.text);
-			then?.(doc);
+			landed?.(doc);
 		}
 	}, [editor.requests, document, patch]);
 
@@ -219,7 +219,7 @@ export function useFocusRouting(
 					text: carry?.text,
 					markdown: carry?.markdown,
 				},
-				carry?.then,
+				carry?.landed,
 			);
 		},
 		[document, index, onTitle, read, release, request, rootRef, select],

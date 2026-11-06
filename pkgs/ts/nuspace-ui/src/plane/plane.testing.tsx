@@ -103,9 +103,17 @@ export function cell(id: string, classes: string[] = ["prose"], error: string | 
 	};
 }
 
-/** A document as the kit hands one over: commands spied, intents said by hand. */
+/**
+ * A document as the kit hands one over: commands spied, intents said by
+ * hand. Only an editable document registers, as the kit's does, so a fake
+ * is always one that takes commands. `saved` answers at once, as the kit's
+ * does with nothing unsaved; `hold()` makes it wait for `stored()`, the read
+ * coming back from Nu.
+ */
 export function fakeDoc(blank = true) {
 	const listeners = new Set<IntentListener>();
+	const waiting: (() => void)[] = [];
+	const store = { held: false };
 	const doc: DocumentHandle = {
 		focus: vi.fn(),
 		blank: vi.fn(() => blank),
@@ -116,6 +124,17 @@ export function fakeDoc(blank = true) {
 		type: vi.fn(),
 		commit: vi.fn(),
 		hint: vi.fn(),
+		saved: vi.fn((fn: () => void) => {
+			if (!store.held) {
+				fn();
+				return () => {};
+			}
+			waiting.push(fn);
+			return () => {
+				const i = waiting.indexOf(fn);
+				if (i >= 0) waiting.splice(i, 1);
+			};
+		}),
 		onIntent(fn) {
 			listeners.add(fn);
 			return () => {
@@ -131,7 +150,18 @@ export function fakeDoc(blank = true) {
 		});
 		return acted;
 	};
-	return { doc, say, listeners };
+	/** `saved` waits from here on, until the store answers. */
+	const hold = () => {
+		store.held = true;
+	};
+	/** The store read the latest text back: what waited for it runs. */
+	const stored = () => {
+		store.held = false;
+		act(() => {
+			for (const fn of waiting.splice(0)) fn();
+		});
+	};
+	return { doc, say, listeners, hold, stored };
 }
 
 export const leaves: (() => void)[] = [];
