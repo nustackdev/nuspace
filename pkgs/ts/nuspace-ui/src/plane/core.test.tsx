@@ -5,6 +5,10 @@
 // and a focus request waits for its cell's document and is consumed when
 // that registers. Then routing: a fake sugar claiming and declining.
 //
+// Every plane here is handed an empty sugar list, while the registry names
+// the prose set (./sugar): this file is the core with the sugar layer
+// removed, and it passing is what says the core works without it.
+//
 // The documents are the shared harness's fakes (./plane.testing.tsx).
 
 import {
@@ -42,7 +46,7 @@ import {
 	WITH_DEFAULT,
 } from "./plane.testing";
 import { readEditor } from "./state";
-import type { Sugar } from "./sugar";
+import { sugars as SUGARS, type Sugar } from "./sugar";
 
 /** A program's view that is no document: drawn, never registered. */
 register("TestPlain", { component: () => <div /> });
@@ -80,6 +84,17 @@ function spy(cls = "prose", claim = false) {
 	};
 	return { sugar, seen, api: () => api as PlaneApi | null };
 }
+
+describe("the sugar layer removed", () => {
+	it("is what every test here runs: the registry has sets, these planes get none", () => {
+		expect(SUGARS.length).toBeGreaterThan(0);
+		render([cell("a")], { specs: WITH_DEFAULT });
+		// With a prose default installed and no set, typing searches.
+		typeInto(endLine(), "h");
+		expect(notify).not.toHaveBeenCalled();
+		expect(menu()).not.toBeNull();
+	});
+});
 
 describe("the input line, with no sugar", () => {
 	it("opens the menu with a typed character as its query (input_char_searches_without_default)", () => {

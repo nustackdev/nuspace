@@ -21,6 +21,7 @@
 import type { DocIntent } from "@nustackdev/ui-kit";
 import type { PlaneApi } from "../api";
 import type { InputIntent, TitleIntent } from "../intents";
+import { prose } from "./prose";
 
 export interface Sugar {
 	/** The class it is bound to: "prose". */
@@ -42,5 +43,5 @@ export interface Sugar {
 	documentHint?: { blank?: string; tail?: string };
 }
 
-/** The sets, in the order they are offered an intent. None yet. */
-export const sugars: Sugar[] = [];
+/** The sets, in the order they are offered an intent. */
+export const sugars: Sugar[] = [prose];
