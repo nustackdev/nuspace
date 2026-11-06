@@ -28,9 +28,6 @@ export type Cell = {
 	name: string;
 	/** The Nu program this cell stores. */
 	source: string;
-	/** The Cell it was made from, "" when none. Nothing here decides by it:
-	 *  what a cell keeps is its `classes`. */
-	made_by: string;
 	/** Whether its program draws, as the server worked out from the source.
 	 *  Null when it never said (an older cell): it may draw. */
 	has_ui: boolean | null;
@@ -143,7 +140,6 @@ export function coerceCells(raw: unknown): Cell[] {
 			id,
 			name: String(r.name ?? id),
 			source: String(r.source ?? ""),
-			made_by: String(r.made_by ?? ""),
 			has_ui: typeof r.has_ui === "boolean" ? r.has_ui : null,
 			classes: Array.isArray(r.classes) ? r.classes.map(String) : [],
 			status: coerceStatus(r.status) ?? {

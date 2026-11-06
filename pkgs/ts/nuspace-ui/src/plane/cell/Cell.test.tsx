@@ -33,7 +33,6 @@ function render(
 						id: "c1",
 						name: "",
 						source: "",
-						made_by: "",
 						has_ui,
 						classes: [],
 						status: { cell_id: "c1", state, error, started_at: 0 },
