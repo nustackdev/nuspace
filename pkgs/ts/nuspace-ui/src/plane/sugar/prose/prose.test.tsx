@@ -225,6 +225,25 @@ describe("B. the title", () => {
 		expect(selected()).toEqual([]);
 	});
 
+	it("row 29, decision B: a line summoned at the top is landed in first", () => {
+		const opener: Sugar = {
+			class: "prose",
+			onDocument: (_c, i, api) => {
+				if (i.kind !== "slash") return false;
+				api.openInput(null);
+				return true;
+			},
+		};
+		plane([cell("a"), cell("b")], { sugars: [opener, prose] });
+		const a = mountDoc("a");
+		mountDoc("b").say({ kind: "slash" });
+		expect(lines()).toHaveLength(2);
+		expect(title({ kind: "leave", dir: "down" })).toBe(true);
+		expect(a.doc.focus).not.toHaveBeenCalled();
+		expect(selected()).toEqual([]);
+		expect(document.activeElement).toBe(lines()[0]);
+	});
+
 	it("row 30 r8_title_right_into_prose: Right at the end too", () => {
 		plane([cell("a")]);
 		const a = mountDoc("a");
@@ -603,6 +622,39 @@ describe("M. live writes", () => {
 		act(() => row("b").querySelector<HTMLElement>("[data-focus-doc]")?.focus());
 		plane([cell("a")]);
 		expect(a.doc.focus).toHaveBeenCalledWith("end");
+	});
+
+	it("row 192, Chrome's order: a blur to nowhere before the cell goes still lands the caret", async () => {
+		plane([cell("a"), cell("b")]);
+		const a = mountDoc("a");
+		focusDoc = fakeDoc(false);
+		await draw("b", "TestFocusDoc");
+		focusDoc = null;
+		const drawn = row("b").querySelector<HTMLElement>("[data-focus-doc]") as HTMLElement;
+		act(() => drawn.focus());
+		act(() => {
+			drawn.dispatchEvent(new FocusEvent("focusout", { bubbles: true, relatedTarget: null }));
+			drawn.blur();
+		});
+		plane([cell("a")]);
+		expect(a.doc.focus).toHaveBeenCalledWith("end");
+	});
+
+	it("row 192, focus elsewhere in the plane meanwhile: the caret stays there", async () => {
+		plane([cell("a"), cell("b")]);
+		const a = mountDoc("a");
+		focusDoc = fakeDoc(false);
+		await draw("b", "TestFocusDoc");
+		focusDoc = null;
+		const drawn = row("b").querySelector<HTMLElement>("[data-focus-doc]") as HTMLElement;
+		act(() => drawn.focus());
+		act(() => {
+			drawn.dispatchEvent(new FocusEvent("focusout", { bubbles: true, relatedTarget: null }));
+		});
+		act(() => endLine().focus());
+		plane([cell("a")]);
+		expect(a.doc.focus).not.toHaveBeenCalled();
+		expect(document.activeElement).toBe(endLine());
 	});
 
 	it("row 192, top: the title end", async () => {
