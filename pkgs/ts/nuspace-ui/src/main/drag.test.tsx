@@ -13,8 +13,7 @@ import { currentRoutes } from "../core/router";
 import { PANE_MIME } from "../pane/PaneBar";
 import { PaneMenu } from "../pane/PaneMenu";
 import { coerceMeta } from "../plane/types";
-import { PIN_MIME } from "../sidebar/Pinned";
-import { PLANE_MIME } from "../sidebar/useRailDrag";
+import { PIN_MIME, PLANE_MIME } from "../sidebar/api";
 import { dockLayout } from "./Dock";
 import { paneSlot, useCanvasDrop } from "./useCanvasDrop";
 

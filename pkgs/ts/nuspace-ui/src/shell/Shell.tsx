@@ -61,19 +61,19 @@ import {
 	shellSplitHandle,
 } from "../design";
 import { ViewerSkeleton } from "../pane/ViewerSkeleton";
-import { useNewPlaneShortcut } from "../sidebar/add";
 import {
 	bindRail,
 	focusRailToggle,
 	migrateRail,
 	publishRail,
 	RAIL_LAYOUT_KEY,
+	RailPlaceholder,
+	RailToggle,
 	setRailCollapsed,
+	useNewPlaneShortcut,
 	useRailCollapsed,
 	useRailShortcut,
-} from "../sidebar/collapse";
-import { RailPlaceholder } from "../sidebar/Rail";
-import { RailToggle } from "../sidebar/RailHeader";
+} from "../sidebar/api";
 import { useTab } from "./tab";
 
 export function Shell() {

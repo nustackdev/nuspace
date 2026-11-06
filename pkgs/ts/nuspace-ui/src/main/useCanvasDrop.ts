@@ -14,9 +14,7 @@ import type * as React from "react";
 import { useEffect, useState } from "react";
 import { movePane, openAt } from "../core/router";
 import { PANE_MIME } from "../pane/PaneBar";
-import { PIN_MIME } from "../sidebar/Pinned";
-import { pinDropIndex } from "../sidebar/pin";
-import { PLANE_MIME } from "../sidebar/useRailDrag";
+import { PIN_MIME, PLANE_MIME, pinDropIndex } from "../sidebar/api";
 
 export type PaneEdge = "before" | "after";
 

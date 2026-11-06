@@ -56,9 +56,13 @@ import {
 } from "../design";
 import { Pane } from "../pane/Pane";
 import type { Ops } from "../plane/ops";
-import type { Notify as SidebarNotify, Ops as SidebarOps } from "../sidebar/ops";
-import { canDelete, deletePlane } from "../sidebar/remove";
-import { usePlaneTree } from "../sidebar/state";
+import {
+	canDelete,
+	deletePlane,
+	type Notify as SidebarNotify,
+	type Ops as SidebarOps,
+	usePlaneTree,
+} from "../sidebar/api";
 import { Dock } from "./Dock";
 import {
 	patchPlaneMeta,

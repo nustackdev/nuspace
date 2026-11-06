@@ -8,11 +8,16 @@
 // Change a binding and change its line here.
 
 import { KEYS_KEYS } from "../core/keys";
-import { NEW_INSIDE_KEYS, NEW_PLANE_KEYS } from "../sidebar/add";
-import { RAIL_KEYS } from "../sidebar/collapse";
-import { DESK_CLICK, DESK_KEYS, OPEN_KEYS } from "../sidebar/keys";
-import { SETTINGS_KEYS } from "../sidebar/nav";
-import { SEARCH_KEYS } from "../sidebar/search";
+import {
+	DESK_CLICK,
+	DESK_KEYS,
+	NEW_INSIDE_KEYS,
+	NEW_PLANE_KEYS,
+	OPEN_KEYS,
+	RAIL_KEYS,
+	SEARCH_KEYS,
+	SETTINGS_KEYS,
+} from "../sidebar/api";
 
 /**
  * One line of the sheet: what it does, and its keys. More than one entry in
