@@ -29,6 +29,11 @@ afterEach(() => {
 	host.remove();
 });
 
+/** A request for this source, at its start or end. */
+function req(at: "start" | "end", column?: number): FocusReq {
+	return { id: 1, cellId: "c", to: "source", at, column, pull: true };
+}
+
 async function mount(readOnly: boolean, focusReq: FocusReq | null = null) {
 	const calls = { onCommit: vi.fn(), onExit: vi.fn(), onEscape: vi.fn() };
 	await act(async () => {
@@ -94,28 +99,28 @@ describe("an editable source", () => {
 	});
 
 	it("leaves from its last line downward, carrying the column", async () => {
-		const { content, onExit } = await mount(false, { cellId: "c", place: "end" });
+		const { content, onExit } = await mount(false, req("end"));
 		press(content, "ArrowDown");
 		expect(onExit).toHaveBeenCalledWith("down", 5);
 	});
 
 	it("leaves from its first line upward, carrying the column", async () => {
-		const { content, onExit } = await mount(false, { cellId: "c", place: "start", column: 2 });
+		const { content, onExit } = await mount(false, req("start", 2));
 		press(content, "ArrowUp");
 		expect(onExit).toHaveBeenCalledWith("up", 2);
 	});
 
 	it("stays put on an arrow toward its inside", async () => {
-		const top = await mount(false, { cellId: "c", place: "start" });
+		const top = await mount(false, req("start"));
 		press(top.content, "ArrowDown");
 		expect(top.onExit).not.toHaveBeenCalled();
-		const bottom = await mount(false, { cellId: "c", place: "end" });
+		const bottom = await mount(false, req("end"));
 		press(bottom.content, "ArrowUp");
 		expect(bottom.onExit).not.toHaveBeenCalled();
 	});
 
 	it("a modified arrow never leaves", async () => {
-		const { content, onExit } = await mount(false, { cellId: "c", place: "start" });
+		const { content, onExit } = await mount(false, req("start"));
 		press(content, "ArrowUp", true);
 		expect(onExit).not.toHaveBeenCalled();
 	});

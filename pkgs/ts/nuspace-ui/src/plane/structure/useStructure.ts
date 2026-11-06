@@ -1,115 +1,66 @@
-// The structural ops: save a cell's source, create, delete, move.
+// The structural ops: save a cell's source, create, remove, reorder.
 //
 // A create round-trips through the server. The id does not: the browser mints
 // it and sends it, so focus is aimed at a known id rather than guessed at from
 // a position once `set_plane` comes back.
 //
-// A cell made from a Cell is landed on selected, and then handed what it draws: the
-// first focusable thing its program puts up takes the keyboard, a text
-// surface with the caret at its end. Drawing takes a run, so the cell is
-// watched until something arrives. The watch ends when the hand off happens,
-// the moment the person does anything else (another cell selected, the caret
-// somewhere, focus gone from the plane), or after HAND_WAIT. A cell that draws
-// nothing to focus by then stays selected, which it already is.
+// A create that asks for focus parks its request at once (../focus), and
+// the new cell's document takes it, and whatever text it carries, when it
+// registers. One that does not is landed on when the server confirms it: an
+// empty program opens its source for typing, a cell from a spec is selected
+// with a request for its document, so a cell that draws one gets the caret
+// and one that does not stays selected, Enter away from what it draws.
+//
+// `remove` is the one delete path. Every gesture that deletes cells goes
+// through it, so they all hide the cells until the server drops them, close
+// their sources, drop their requests, and send the caret where the caller
+// says.
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import type { DocumentHandle } from "@nustackdev/ui-kit";
+import { useCallback, useEffect, useRef } from "react";
 import { mintId } from "../../core/ids";
-import { FOCUSABLE } from "../focus/focusable";
-import type { PlaneModel } from "../model";
-import { EDITABLE, placeCaret } from "../sugar/surface";
+import type { FocusRequest, FocusTarget, Place, PlaneModel } from "../api";
+import type { Ask } from "../focus/useFocusRouting";
+import type { FocusReq, InputLine } from "../state";
 
-/** How long a landed cell is watched for something to focus, in ms. */
-const HAND_WAIT = 1500;
+export function useStructure(
+	{ planeId, cells, patch, read, notify, index, rootRef, elRefs }: PlaneModel,
+	{
+		request,
+		drop,
+		focus,
+		select,
+	}: {
+		request: (cellId: string, ask: Ask, then?: (doc: DocumentHandle) => void) => number;
+		drop: (gone: (r: FocusReq) => boolean) => void;
+		focus: (target: FocusTarget) => void;
+		select: (ids: string[], anchor?: string) => void;
+	},
+) {
+	/** A cell created with nothing asked for, landed on once it arrives.
+	 *  `set_plane` prunes selection naming a cell it does not carry, so this
+	 *  waits here rather than in the editor state. */
+	const landing = useRef<{ id: string; open: boolean } | null>(null);
 
-export function useStructure({
-	planeId,
-	cells,
-	editor,
-	patch,
-	notify,
-	index,
-	rootRef,
-	elRefs,
-}: PlaneModel) {
-	/** A cell that has been asked for but not shipped back yet. `set_plane`
-	 *  prunes focus pointing at a cell it does not carry, so the intent is
-	 *  parked here until the cell actually arrives. */
-	const pendingFocus = useRef<{ id: string; open: boolean } | null>(null);
-	/** A landed cell waiting to hand the keyboard to what it draws. */
-	const [handing, setHanding] = useState<string | null>(null);
-	/** When the watch on `handing` gives up, fixed at landing so a re-run keeps it. */
-	const handUntil = useRef(0);
-
-	// Land on a newly created cell once the server confirms it. A cell made
-	// from a Cell is selected with its source closed: what it draws is the
-	// point. A plain program is there to be written, so its source opens for
-	// typing.
 	useEffect(() => {
-		const want = pendingFocus.current;
-		if (!want) return;
-		if (!cells.some((b) => b.id === want.id)) return;
-		pendingFocus.current = null;
+		const want = landing.current;
+		if (!want || !cells.some((b) => b.id === want.id)) return;
+		landing.current = null;
 		const id = want.id;
 		if (want.open) {
 			patch((e) => ({
 				editing: e.editing.includes(id) ? e.editing : [...e.editing, id],
-				focus: { cellId: id, place: "start" },
 				selected: [],
+				anchor: null,
 			}));
+			request(id, { to: "source", at: "start" });
 			return;
 		}
-		patch({ focus: null, selected: [id], anchor: id, column: null });
-		rootRef.current?.focus({ preventScroll: true });
+		select([id]);
+		patch({ column: null });
 		elRefs.current.get(id)?.scrollIntoView({ block: "nearest" });
-		handUntil.current = performance.now() + HAND_WAIT;
-		setHanding(id);
-	}, [cells, patch, rootRef, elRefs]);
-
-	// Hand a landed cell's keyboard to what it draws, once it draws it.
-	useEffect(() => {
-		if (!handing) return;
-		const id = handing;
-		const root = rootRef.current;
-		const still =
-			editor.selected.length === 1 && editor.selected[0] === id && editor.focus === null;
-		if (!root || !still) {
-			setHanding(null);
-			return;
-		}
-		const handoff = (): boolean => {
-			if (document.activeElement !== root) {
-				setHanding(null);
-				return true;
-			}
-			const el = root.querySelector<HTMLElement>(
-				`[data-cell="${id}"] [data-cell-ui] :is(${FOCUSABLE})`,
-			);
-			if (!el) return false;
-			if (el.matches(EDITABLE)) placeCaret(el, "end");
-			else el.focus();
-			patch({ selected: [], anchor: null });
-			setHanding(null);
-			return true;
-		};
-		if (handoff()) return;
-		const seen = new MutationObserver(() => {
-			if (handoff()) seen.disconnect();
-		});
-		const done = window.setTimeout(() => {
-			seen.disconnect();
-			setHanding(null);
-		}, handUntil.current - performance.now());
-		seen.observe(root, {
-			childList: true,
-			subtree: true,
-			attributes: true,
-			attributeFilter: ["tabindex", "contenteditable", "disabled"],
-		});
-		return () => {
-			seen.disconnect();
-			window.clearTimeout(done);
-		};
-	}, [handing, editor.selected, editor.focus, patch, rootRef]);
+		request(id, { to: "document", at: "end" });
+	}, [cells, patch, request, select, elRefs]);
 
 	const commitSource = useCallback(
 		(id: string, source: string) => {
@@ -119,48 +70,67 @@ export function useStructure({
 	);
 
 	/**
-	 * Add a cell made from the Cell `name` after `afterId` (at the top when
-	 * null, or last when `afterId` is gone), and land on it unless `land` is
-	 * off. The server stores the Cell's program; a name no Cell has
-	 * makes the starter program. Returns the new id.
+	 * A cell made from the Cell `spec` at `at` (last when its `after` is
+	 * gone). The server stores the Cell's program; a name no Cell has makes
+	 * the starter program. `line` is the input line feeding the request.
+	 * Returns the new id.
 	 */
-	const createAfter = useCallback(
-		(afterId: string | null, name: string, land = true): string => {
+	const create = useCallback(
+		(at: Place, spec: string, want?: FocusRequest, line?: InputLine): string => {
 			const id = mintId("c");
-			const at = afterId ? index(afterId) : -1;
+			const i = at.after === null ? -1 : index(at.after);
 			notify("cell.create", {
 				plane_id: planeId,
 				cell_id: id,
-				name,
-				index: afterId === null ? 0 : at < 0 ? cells.length : at + 1,
+				name: spec,
+				index: at.after === null ? 0 : i < 0 ? cells.length : i + 1,
 			});
-			if (land) pendingFocus.current = { id, open: name === "" };
+			if (want) {
+				const { then, ...carry } = want;
+				request(id, { ...carry, to: "document", fresh: true, line }, then);
+			} else {
+				landing.current = { id, open: spec === "" };
+			}
 			return id;
 		},
-		[cells.length, index, notify, planeId],
+		[cells.length, index, notify, planeId, request],
 	);
 
-	const deleteCells = useCallback(
-		(ids: string[]) => {
+	const remove = useCallback(
+		(ids: string[], target?: FocusTarget | null) => {
 			if (ids.length === 0) return;
-			const first = index(ids[0]);
-			const prev = first > 0 ? cells[first - 1] : null;
-			for (const cell_id of ids) {
-				notify("cell.delete", { cell_id });
+			const gone = new Set(ids);
+			const first = Math.min(...ids.map(index).filter((i) => i >= 0));
+			const above = Number.isFinite(first) ? cells[first - 1] : undefined;
+			for (const cell_id of ids) notify("cell.delete", { cell_id });
+			drop((r) => gone.has(r.cellId));
+			patch((e) => ({
+				editing: e.editing.filter((x) => !gone.has(x)),
+				leaving: [...e.leaving, ...ids.filter((x) => !e.leaving.includes(x))],
+				selected: e.selected.filter((x) => !gone.has(x)),
+				anchor: e.anchor && gone.has(e.anchor) ? null : e.anchor,
+			}));
+			if (target === null) return;
+			if (target) {
+				focus(target);
+				return;
 			}
-			patch({
-				selected: prev ? [prev.id] : [],
-				anchor: prev ? prev.id : null,
-				focus: null,
-				editing: editor.editing.filter((e) => !ids.includes(e)),
-			});
+			// The cell above takes the selection, and the plane the keyboard.
+			select(above ? [above.id] : []);
+			rootRef.current?.focus({ preventScroll: true });
 		},
-		[cells, editor.editing, index, notify, patch],
+		[cells, drop, focus, index, notify, patch, rootRef, select],
 	);
 
+	const reorder = useCallback(
+		(ids: string[]) => notify("cell.reorder", { plane_id: planeId, cell_ids: ids }),
+		[notify, planeId],
+	);
+
+	/** The selected cells one step up or down, as a block. */
 	const moveSelected = useCallback(
 		(dir: -1 | 1) => {
-			const sel = new Set(editor.selected);
+			const sel = new Set(read().selected);
 			if (sel.size === 0) return;
 			const ids = cells.map((b) => b.id);
 			const picked = ids.filter((i) => sel.has(i));
@@ -173,10 +143,10 @@ export function useStructure({
 			const anchorId = ids[anchorIdx];
 			const at = rest.indexOf(anchorId) + (dir < 0 ? 0 : 1);
 			rest.splice(at, 0, ...picked);
-			notify("cell.reorder", { plane_id: planeId, cell_ids: rest });
+			reorder(rest);
 		},
-		[cells, editor.selected, notify, planeId],
+		[cells, read, reorder],
 	);
 
-	return { commitSource, createAfter, deleteCells, moveSelected };
+	return { commitSource, create, remove, reorder, moveSelected };
 }

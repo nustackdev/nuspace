@@ -3,6 +3,10 @@
 // msgpack payloads arrive untyped, so every field is narrowed here and nowhere
 // else. Everything downstream can assume these shapes.
 //
+// A cell carries its classes, the protocols it keeps, resolved Nu side. The
+// core only routes by them (./intents.ts); what a class means is the sugar
+// layer's (./sugar), the one place that knows any.
+//
 // Cell order is list position in the Plane's `order` on the server, so cells
 // arrive already in order and carry no `order` field to renormalise.
 
@@ -24,14 +28,15 @@ export type Cell = {
 	name: string;
 	/** The Nu program this cell stores. */
 	source: string;
-	/** The Cell it was made from, "" when none. A cell made from the text
-	 *  Cell is a text cell (see ./sugar/useTextSugar.ts). */
+	/** The Cell it was made from, "" when none. Nothing here decides by it:
+	 *  what a cell keeps is its `classes`. */
 	made_by: string;
 	/** Whether its program draws, as the server worked out from the source.
 	 *  Null when it never said (an older cell): it may draw. */
 	has_ui: boolean | null;
 	/** The protocols it keeps, read Nu side off the spec it was made from:
-	 *  `["prose"]`. Empty for a cell made from no spec. */
+	 *  `["prose"]`. Empty for a cell made from no spec. The only thing a
+	 *  sugar (./sugar) binds to. */
 	classes: string[];
 	/** Never null. Every cell compiles, runs and is supervised. */
 	status: CellStatus;
@@ -88,16 +93,6 @@ export type CellSpec = {
 	/** The classes it is the default of, resolved Nu side: one spec each. */
 	default_for?: string[];
 };
-
-/** The `nuverse.text` Cell: document editing works on its cells, the text
- *  cells (see ./sugar/useTextSugar.ts). Until the sugar binds to the `prose`
- *  class each cell now carries. */
-export const TEXT = "nuverse.text";
-
-/** Whether the text Cell is registered: without it, the text sugar is off. */
-export function hasText(cellSpecs: CellSpec[]): boolean {
-	return cellSpecs.some((s) => s.name === TEXT);
-}
 
 /** `invalid` never compiled; `failed` ran and died. They read differently. */
 export function isBad(s: CellState): boolean {

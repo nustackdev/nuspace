@@ -14,7 +14,6 @@
 
 import type { Path } from "@nustackdev/ui-core";
 import { Button, EmptyState } from "@nustackdev/ui-kit";
-import type * as React from "react";
 import { useCallback, useRef } from "react";
 import { closePane, focusPane } from "../core/router";
 import {
@@ -26,11 +25,12 @@ import {
 	shellPaneDrop,
 	shellPanePlane,
 } from "../design";
+import type { PlaneHandle } from "../plane/api";
 import type { Notify } from "../plane/ops";
 import { Plane } from "../plane/Plane";
 import type { AbsentReason, ActivePlane, CellSpec } from "../plane/types";
 import { PaneBar } from "./PaneBar";
-import { Title } from "./Title";
+import { focusTitle, Title } from "./Title";
 import { TitleIcon } from "./TitleIcon";
 import { ViewerSkeleton } from "./ViewerSkeleton";
 
@@ -99,13 +99,15 @@ export function Pane({
 	const title = paneTitle(planeId, plane, absent);
 	const wide = plane?.meta.full_width === true;
 	const compact = plane?.meta.compact === true;
-	// The plane fills these in, so the title can hand the caret down to it or
-	// open a text cell in it, and a press anywhere in the pane can start a box
-	// selection over its cells. The title fills `titleEnd`, the way back up.
-	const enterCells = useRef<(() => boolean) | null>(null);
-	const openTop = useRef<(() => boolean) | null>(null);
-	const titleEnd = useRef<(() => void) | null>(null);
-	const selectBox = useRef<((e: React.PointerEvent) => void) | null>(null);
+	// The plane fills this in: the title reports its intents to it, and a
+	// press anywhere in the pane can start a box selection over its cells.
+	// The way back up is the title's own heading, which the plane puts the
+	// caret in.
+	const planeHandle = useRef<PlaneHandle | null>(null);
+	const head = useRef<HTMLHeadingElement | null>(null);
+	const toTitle = useCallback((at: "start" | "end") => {
+		if (head.current) focusTitle(head.current, at);
+	}, []);
 	// The icon's fallback. The plane carries no `made_by`, the sidebar's row does.
 
 	return (
@@ -129,7 +131,7 @@ export function Pane({
 				lit={many && focused}
 			/>
 			{/* A press off the cells starts a box selection over them. */}
-			<div className={shellPanePlane} onPointerDown={(e) => selectBox.current?.(e)}>
+			<div className={shellPanePlane} onPointerDown={(e) => planeHandle.current?.press(e)}>
 				{absent ? (
 					<div className={docPlaneAbsent}>
 						<EmptyState
@@ -154,9 +156,8 @@ export function Pane({
 									value={plane.title}
 									placeholder={TITLE_FALLBACK}
 									onCommit={(next) => onRename(planeId, next)}
-									onExit={() => enterCells.current?.() ?? false}
-									onOpen={() => openTop.current?.() ?? false}
-									endRef={titleEnd}
+									onIntent={(i) => planeHandle.current?.title(i) ?? false}
+									headRef={head}
 								/>
 							</div>
 						</header>
@@ -168,10 +169,8 @@ export function Pane({
 							wide={wide}
 							compact={compact}
 							notify={notify}
-							entryRef={enterCells}
-							openRef={openTop}
-							titleEndRef={titleEnd}
-							selectRef={selectBox}
+							handleRef={planeHandle}
+							onTitle={toTitle}
 						/>
 					</>
 				)}

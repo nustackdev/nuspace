@@ -6,19 +6,28 @@
 // and keep a reduced gutter: copy the id, and read the source. `wide` is the full-width setting.
 //
 // Everything structural lives in this directory and nowhere else: ordering,
-// keyboard, selection, focus routing, the slash menu, drag reorder, cell
-// lifecycle. No library supplies any of it, because no library knows what a
-// running Nu cell is. This file wires it together and draws the list:
+// keyboard, selection, focus, the input lines and the slash menu, drag
+// reorder, cell lifecycle. No library supplies any of it, because no library
+// knows what a running Nu cell is. This file is the composition root: it
+// builds the plane's one API (./api.ts) out of the concern folders, renders
+// the cells, and routes intents (./intents.ts):
 //
-//   focus/              where the caret goes, across cell boundaries
-//   structure/          save, create, delete, move, drag reorder
-//   selection/          the cell-selection keyboard, box selection
-//   input/              the input lines and the `/` menu
-//   sugar/              the text sugar, a closed list (sugar/useTextSugar.ts)
-//   cell/               one cell: its row, gutter, program, source editor
+//   structure/   create, the one remove, reorder, drag
+//   selection/   the cell-selection keyboard, box and range select
+//   focus/       focus requests, navigation, the cells' documents
+//   input/       the input lines and the `/` menu
+//   cell/        one cell: its row, gutter, program, source editor
+//   sugar/       the sets of rules bound to a class, the only class-aware code
+//
+// The core is kind-blind and works with no sugar at all: the input line
+// opens the menu, cells are created, selected, moved and deleted, and the
+// caret travels as it always has. A cell's document is found through the
+// kit registry by the cell's address and talks back only in intents, so
+// nothing here reads an editor's DOM or moves its caret from outside.
 
 import type { Path } from "@nustackdev/ui-core";
-import { pathKey } from "@nustackdev/ui-kit";
+import { documentUnder, pathKey } from "@nustackdev/ui-kit";
+import type * as React from "react";
 import { Fragment, useCallback, useEffect, useRef } from "react";
 import {
 	docBoxSelect,
@@ -28,24 +37,24 @@ import {
 	docRow,
 	docTail,
 } from "../design";
+import type { FocusRequest, PlaneApi, PlaneHandle, PlaneModel } from "./api";
 import { cellUiPath } from "./cell/address";
 import { Cell } from "./cell/Cell";
+import { useDocuments } from "./focus/useDocuments";
 import { useFocusRouting } from "./focus/useFocusRouting";
 import { Ghost } from "./input/Ghost";
 import { SlashMenu } from "./input/SlashMenu";
 import { useGhosts } from "./input/useGhosts";
 import { useSlash } from "./input/useSlash";
-import type { PlaneModel } from "./model";
+import { defaultSpecOf, type InputIntent, inputHint, type Router, router } from "./intents";
 import type { Notify } from "./ops";
 import { useBoxSelect } from "./selection/useBoxSelect";
 import { useCellKeys } from "./selection/useCellKeys";
-import { type EditorPatch, patchEditor, useEditorState } from "./state";
+import { type EditorPatch, type InputLine, patchEditor, readEditor, useEditorState } from "./state";
 import { useCellDrag } from "./structure/useCellDrag";
 import { useStructure } from "./structure/useStructure";
-import { Draft, useDraft } from "./sugar/Draft";
-import { cellSurface } from "./sugar/surface";
-import { NEW_CELL_HINT, useTextSugar, WRITE_HINT } from "./sugar/useTextSugar";
-import { type ActivePlane, type CellSpec, hasText } from "./types";
+import { sugars as SUGARS, type Sugar } from "./sugar";
+import type { ActivePlane, CellSpec } from "./types";
 
 const NO_CELL_SPECS: CellSpec[] = [];
 
@@ -57,10 +66,9 @@ export function Plane({
 	wide,
 	compact,
 	notify,
-	entryRef,
-	openRef,
-	titleEndRef,
-	selectRef,
+	handleRef,
+	onTitle,
+	sugars = SUGARS,
 }: {
 	/** The ViewerRef node, which holds every pane's editor state and roots
 	 *  every cell's refs. */
@@ -75,18 +83,13 @@ export function Plane({
 	/** The plane's compact setting: no run-off under the last cell. */
 	compact: boolean;
 	notify: Notify;
-	/** Set to "take the caret from the title above", null while the plane is
-	 *  read-only and has nowhere to put one. */
-	entryRef?: React.RefObject<(() => boolean) | null>;
-	/** Set to "start an empty text cell at the top", from Enter in the title
-	 *  above. Null while there is no such thing to start. */
-	openRef?: React.RefObject<(() => boolean) | null>;
-	/** Set by the title: the caret to its end, where Backspace in an empty
-	 *  top text cell goes. */
-	titleEndRef?: React.RefObject<(() => void) | null>;
-	/** Set to "a press landed in the pane": where box selection starts, so
-	 *  the margins beside the plane count. */
-	selectRef?: React.RefObject<((e: React.PointerEvent) => void) | null>;
+	/** Filled with what the pane above holds of this plane (./api.ts). */
+	handleRef?: React.RefObject<PlaneHandle | null>;
+	/** The caret into the title above, at its start or end. Left out for a
+	 *  host with no title, and the plane takes the keyboard instead. */
+	onTitle?: (at: "start" | "end") => void;
+	/** The sugar sets. The registry's (./sugar) unless a test hands its own. */
+	sugars?: readonly Sugar[];
 }) {
 	const cells = plane.cells;
 	const planeId = plane.plane_id;
@@ -106,69 +109,128 @@ export function Plane({
 		(p: EditorPatch) => patchEditor(viewerPath, planeId, p),
 		[viewerKey, planeId],
 	);
+	// biome-ignore lint/correctness/useExhaustiveDependencies: path is compared by value.
+	const read = useCallback(() => readEditor(viewerPath, planeId), [viewerKey, planeId]);
+	// biome-ignore lint/correctness/useExhaustiveDependencies: path is compared by value.
+	const document = useCallback(
+		(id: string) => documentUnder(cellUiPath(viewerPath, id)),
+		[viewerKey],
+	);
 
 	const model: PlaneModel = {
 		planeId,
 		cells,
 		editor,
 		patch,
+		read,
 		notify,
 		index,
+		document,
 		rootRef,
 		elRefs,
 		endGhost,
 		plusGhost,
 	};
 
-	const { focusCell, step, enterCell, setEditing, selectCell, enterTop } = useFocusRouting(model);
-	const { commitSource, createAfter, deleteCells, moveSelected } = useStructure(model);
+	const {
+		request,
+		drop,
+		release,
+		registered,
+		focus,
+		select,
+		focusCell,
+		step,
+		enterCell,
+		setEditing,
+		enterTop,
+	} = useFocusRouting(model, { onTitle });
+	const { commitSource, create, remove, reorder, moveSelected } = useStructure(model, {
+		request,
+		drop,
+		focus,
+		select,
+	});
 	const onCellKeys = useCellKeys(model, editable, {
 		focusCell,
 		enterCell,
-		deleteCells,
+		remove,
 		moveSelected,
+		release,
 	});
-	const startDrag = useCellDrag(model);
-	const { box, startBox, startSpill } = useBoxSelect(model);
-	const { slash, pickSlash, slashKey, moveSlash } = useSlash(model, cellSpecs, createAfter);
-	const { draft, boxRef, startDraft } = useDraft(model, viewerPath, cellSpecs, createAfter);
-	const { ghostProps, openGhost, standIn, putAway } = useGhosts(model, {
+	const startDrag = useCellDrag(model, reorder);
+	const { box, startBox, startRange } = useBoxSelect(model);
+	const { slash, pickSlash, slashKey, moveSlash } = useSlash(model, cellSpecs, { create, remove });
+
+	// Intents are heard at event time, from the input lines and the cells'
+	// documents: they reach this render's routing through a ref.
+	const routing = useRef<Router | null>(null);
+	const line = useRef<((l: InputLine) => PlaneApi) | null>(null);
+	const route = useCallback((after: string | null, i: InputIntent, l: InputLine) => {
+		const lineApi = line.current?.(l);
+		return lineApi ? (routing.current?.input(after, i, lineApi) ?? false) : false;
+	}, []);
+
+	const { ghostProps, openInput, standIn, putAway } = useGhosts(model, {
 		focusCell,
+		focus,
+		select,
+		drop,
 		slashKey,
-		startDraft,
-		hint: hasText(cellSpecs) ? WRITE_HINT : undefined,
+		route,
+		hint: editable ? inputHint(sugars, cellSpecs) : undefined,
 	});
-	const { isText, textKey, titleEnter, titleDown } = useTextSugar(model, cellSpecs, {
-		focusCell,
-		startDraft,
-		openGhost,
+
+	const api: PlaneApi = {
+		cells,
+		index,
+		document,
+		defaultSpec: (cls) => defaultSpecOf(cellSpecs, cls),
+		create: (at, spec, want) => create(at, spec, want),
+		remove,
+		reorder,
+		focus: (target) => focus(target),
+		select,
+		openInput,
 		standIn,
-		titleEnd: titleEndRef,
+	};
+	// What a sugar gets for an intent from an input line: the same api, with
+	// a create that asks for focus fed by that line until it lands, so the
+	// keys typed meanwhile stay in the line and go along with the request.
+	line.current = (l) => ({
+		...api,
+		create: (at, spec, want?: FocusRequest) => create(at, spec, want, want ? l : undefined),
+	});
+	routing.current = router({
+		sugars,
+		cellSpecs,
+		editable,
+		cells,
+		api,
+		core: { step: (c, dir) => step(c, dir), enterTop },
 	});
 
-	useEffect(() => {
-		if (!entryRef) return;
-		entryRef.current = editable ? () => titleDown() || enterTop() : null;
-		return () => {
-			entryRef.current = null;
-		};
-	}, [entryRef, editable, enterTop, titleDown]);
+	useDocuments(viewerPath, cells, {
+		intent: (cell, i) => routing.current?.document(cell, i) ?? false,
+		registered,
+	});
 
+	// What the pane holds: the title's intents, and a press anywhere in it.
+	const pressRef = useRef(startBox);
+	pressRef.current = startBox;
 	useEffect(() => {
-		if (!openRef) return;
-		openRef.current = editable ? titleEnter : null;
-		return () => {
-			openRef.current = null;
+		if (!handleRef) return;
+		handleRef.current = {
+			title: (i) => routing.current?.title(i) ?? false,
+			press: (e) => {
+				release();
+				pressRef.current(e);
+			},
 		};
-	}, [openRef, editable, titleEnter]);
-
-	useEffect(() => {
-		if (!selectRef) return;
-		selectRef.current = startBox;
 		return () => {
-			selectRef.current = null;
+			handleRef.current = null;
 		};
-	}, [selectRef, startBox]);
+	}, [handleRef, release]);
 
 	// -- Render ---------------------------------------------------------------
 
@@ -192,16 +254,7 @@ export function Plane({
 			tabIndex={-1}
 			onKeyDown={onCellKeys}
 			className={`${docColumn(wide, compact)} outline-none`}
-			// The text sugar's hint, drawn by CSS on a text cell's empty last line.
-			style={{ "--sugar-new-cell": JSON.stringify(NEW_CELL_HINT) } as React.CSSProperties}
 		>
-			{/* A draft at the top: Enter in the title, or the first line of an
-			    empty plane. It stays above its cell once that arrives. */}
-			{editable && draft && draft.after === null ? (
-				<div className={docRow}>
-					<Draft boxRef={boxRef} text={draft.text} caret={draft.caret} />
-				</div>
-			) : null}
 			{editable && editor.ghost?.after === null ? (
 				<div className={docRow}>
 					<Ghost {...ghostProps(null, true)} />
@@ -210,21 +263,25 @@ export function Plane({
 			{cells.map((cell, i) => {
 				const selected = selectedIds.includes(cell.id);
 				const editing = editingIds.includes(cell.id);
+				const source =
+					editor.requests.find((r) => r.cellId === cell.id && r.to === "source") ?? null;
+				// An input line is showing what this cell is waiting to take, so
+				// the cell stays out of sight until it has it. One that died
+				// shows its error instead.
+				const fed =
+					!cell.status.error &&
+					editor.requests.some((r) => r.cellId === cell.id && r.line && !r.ready);
 				return (
 					<Fragment key={cell.id}>
 						<Cell
 							cell={cell}
 							uiPath={cellUiPath(viewerPath, cell.id)}
 							editable={editable}
-							hidden={
-								draft?.id === cell.id ||
-								editor.ghost?.replace === cell.id ||
-								editor.leaving.includes(cell.id)
-							}
+							hidden={fed || editor.ghost?.replace === cell.id || editor.leaving.includes(cell.id)}
 							selected={selected}
 							selectedStrong={selected && multi}
 							editing={editing}
-							focusReq={editor.focus?.cellId === cell.id ? editor.focus : null}
+							focusReq={source}
 							dragging={drag?.id === cell.id}
 							dropAbove={drag != null && drag.at === i}
 							setEl={(el) => setEl(cell.id, el)}
@@ -233,37 +290,28 @@ export function Plane({
 							}}
 							onSetEditing={(on) => setEditing(cell.id, on)}
 							onDrag={(e, onClick) => startDrag(e, cell.id, onClick)}
-							onDelete={() => {
-								// The cell above takes the selection, and the keyboard with it.
-								deleteCells([cell.id]);
-								rootRef.current?.focus({ preventScroll: true });
-							}}
+							onDelete={() => remove([cell.id])}
 							onRestart={() => notify("cell.restart", { cell_id: cell.id })}
-							onTextKey={editable && isText(cell) ? (e) => textKey(e, cell.id) : undefined}
-							onTextPress={
-								editable && isText(cell)
+							// A text selection dragged out of what a document draws
+							// becomes a cell selection. The grip has its own drag.
+							onPress={
+								editable
 									? (e) => {
-											// Only a press in the text itself: the grip has its own drag.
-											if (cellSurface(rootRef.current, cell.id)?.contains(e.target as Node))
-												startSpill(e, cell.id);
+											const inUi = (e.target as Element).closest?.("[data-cell-ui]");
+											if (inUi && document(cell.id)) startRange(e, cell.id);
 										}
 									: undefined
 							}
 							// Make room, do not make a cell. What goes here is
 							// whatever gets picked next.
-							onPlus={() => openGhost(cell.id, null)}
-							onSelect={() => selectCell(cell.id)}
-							onFocusConsumed={() => patch({ focus: null })}
+							onPlus={() => openInput(cell.id)}
+							onSelect={() => select([cell.id])}
+							onFocusConsumed={() => {
+								if (source) drop((r) => r.id === source.id);
+							}}
 							onCommit={(src) => commitSource(cell.id, src)}
 							onExit={(dir, column) => step(cell.id, dir, column)}
 						/>
-						{/* A draft stays where its ghost was, which is right above its
-						    cell once that arrives. */}
-						{editable && draft?.after === cell.id ? (
-							<div className={docRow}>
-								<Draft boxRef={boxRef} text={draft.text} caret={draft.caret} />
-							</div>
-						) : null}
 						{editable && editor.ghost?.after === cell.id ? (
 							<div className={docRow}>
 								<Ghost {...ghostProps(cell.id, true)} />
@@ -286,7 +334,7 @@ export function Plane({
 			{/* Not while a stand-in holds the last cell's place: one line there, not two. */}
 			{editable && !(lastId && editor.ghost?.replace === lastId) ? (
 				<div className={docRow}>
-					<Ghost {...ghostProps(lastId, false)} hinted={cells.length === 0 && !draft} />
+					<Ghost {...ghostProps(lastId, false)} hinted={cells.length === 0} />
 				</div>
 			) : null}
 			{/* The run-off under the last cell is the plane's compact setting, not

@@ -16,9 +16,10 @@
 // The controls are always mounted. Whether they show is the row's own CSS
 // (`docGutterLane`): `data-selected` marks it as the one selected cell.
 //
-// A text cell's keys (../sugar/useTextSugar.ts) are caught on the row, before
-// the editor inside it sees them. `data-text-cell` marks the row for the
-// sugar's hints (../../index.css).
+// Nothing here knows what the cell draws. A press inside it is reported
+// (`onPress`) and the plane decides what a drag from there means; the keys
+// of what it draws are that editor's own, and its document reports what it
+// had no use for through the kit registry, never through this row.
 
 import type { Path } from "@nustackdev/ui-core";
 import type * as React from "react";
@@ -46,8 +47,7 @@ export function Cell({
 	onPlus,
 	onDelete,
 	onRestart,
-	onTextKey,
-	onTextPress,
+	onPress,
 	onSelect,
 	onFocusConsumed,
 	onCommit,
@@ -57,7 +57,7 @@ export function Cell({
 	/** Where this cell's own refs live in the tree. */
 	uiPath: Path;
 	editable: boolean;
-	/** Drawn but not shown: a draft or a ghost stands in for it (../sugar/Draft.tsx, ../state.ts). */
+	/** Drawn but not shown: an input line stands in for it, or it is leaving (../state.ts). */
 	hidden?: boolean;
 	selected: boolean;
 	/** Part of a multi-cell selection. */
@@ -78,10 +78,8 @@ export function Cell({
 	onDelete: () => void;
 	/** Run the cell again. */
 	onRestart: () => void;
-	/** Set on a text cell of an editable plane. */
-	onTextKey?: (e: React.KeyboardEvent) => void;
-	/** A press in a text cell: a drag out of it spills into cell selection. */
-	onTextPress?: (e: React.PointerEvent) => void;
+	/** A press anywhere in the row: the plane may start a range select from it. */
+	onPress?: (e: React.PointerEvent) => void;
 	onSelect: () => void;
 	onFocusConsumed: () => void;
 	onCommit: (source: string) => void;
@@ -95,9 +93,7 @@ export function Cell({
 			hidden={hidden}
 			data-selected={selected && !selectedStrong ? "" : undefined}
 			className={docCellRow({ dragging })}
-			data-text-cell={onTextKey ? "" : undefined}
-			onKeyDownCapture={onTextKey}
-			onPointerDown={onTextPress}
+			onPointerDown={onPress}
 			onMouseDown={(e) => {
 				// A plain click inside a cell leaves cell-selection mode;
 				// the cell's own editor takes over from here.

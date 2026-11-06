@@ -72,6 +72,9 @@ export function SlashMenu({
 				collisionPadding={EDGE}
 				className={docSlashMenu}
 				onOpenAutoFocus={(e) => e.preventDefault()}
+				// Escape is the line's, like every other key here: the line knows
+				// whether it closes the menu or takes a stand-in back home.
+				onEscapeKeyDown={(e) => e.preventDefault()}
 				onCloseAutoFocus={(e) => e.preventDefault()}
 				onInteractOutside={(e) => {
 					if (e.target instanceof Node && anchor.contains(e.target)) e.preventDefault();

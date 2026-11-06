@@ -1,5 +1,5 @@
 // Drag reorder, off a cell's grip. The drop index is found against the live
-// cell rows, and one `cell.reorder` goes out on release if it moved.
+// cell rows, and one reorder (./useStructure.ts) goes out on release if it moved.
 //
 // The grip is a button too: a press that never travels past the kit's
 // `CLICK_SLOP` moves nothing and calls `onClick` instead.
@@ -7,9 +7,12 @@
 import { CLICK_SLOP } from "@nustackdev/ui-kit";
 import type * as React from "react";
 import { useCallback, useRef } from "react";
-import type { PlaneModel } from "../model";
+import type { PlaneModel } from "../api";
 
-export function useCellDrag({ planeId, cells, patch, notify, index, elRefs }: PlaneModel) {
+export function useCellDrag(
+	{ cells, patch, index, elRefs }: PlaneModel,
+	reorder: (ids: string[]) => void,
+) {
 	const dragRef = useRef<{ id: string; at: number } | null>(null);
 
 	const dropIndexFor = useCallback(
@@ -68,12 +71,12 @@ export function useCellDrag({ planeId, cells, patch, notify, index, elRefs }: Pl
 				const rest = ids.filter((i) => i !== cur.id);
 				const at = cur.at > from ? cur.at - 1 : cur.at;
 				rest.splice(at, 0, cur.id);
-				notify("cell.reorder", { plane_id: planeId, cell_ids: rest });
+				reorder(rest);
 			};
 			window.addEventListener("pointermove", move);
 			window.addEventListener("pointerup", up);
 			window.addEventListener("pointercancel", up);
 		},
-		[cells, dropIndexFor, index, notify, planeId, patch],
+		[cells, dropIndexFor, index, patch, reorder],
 	);
 }

@@ -11,15 +11,17 @@
 // keyboard that acts on a selection (./useCellKeys.ts) acts on it too. It
 // works on read-only planes, where that keyboard only copies.
 //
-// A text selection dragged out of its text cell spills over the same way
-// (`startSpill`, the text sugar's R9): once the pointer leaves the cell's
-// row, the text selection goes and the cells from that one to the one under
-// the pointer are selected instead, for as long as the drag lasts.
+// A range select starts inside a cell instead (`startRange`): once the
+// pointer leaves that cell's row, any text selection goes and the cells from
+// that one to the one under the pointer are selected, for as long as the
+// drag lasts. The plane starts one from a press in what a cell with a
+// document draws, so a text selection dragged out of its document becomes a
+// cell selection: a text selection never spans cells.
 
 import { CLICK_SLOP } from "@nustackdev/ui-kit";
 import type * as React from "react";
 import { useCallback, useState } from "react";
-import type { PlaneModel } from "../model";
+import type { PlaneModel } from "../api";
 
 /** Where a press never starts a box: inside a cell's box, or on a control. */
 const NO_BOX =
@@ -80,7 +82,7 @@ export function useBoxSelect({ cells, patch, rootRef, elRefs }: PlaneModel) {
 		[cells, elRefs, patch, rootRef],
 	);
 
-	const startSpill = useCallback(
+	const startRange = useCallback(
 		(e: React.PointerEvent, id: string) => {
 			if (e.button !== 0 || e.shiftKey) return;
 			const body = document.body.style;
@@ -121,5 +123,5 @@ export function useBoxSelect({ cells, patch, rootRef, elRefs }: PlaneModel) {
 		[cells, elRefs, patch, rootRef],
 	);
 
-	return { box, startBox, startSpill };
+	return { box, startBox, startRange };
 }
