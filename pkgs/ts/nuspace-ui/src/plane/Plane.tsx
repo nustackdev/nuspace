@@ -26,7 +26,7 @@
 // nothing here reads an editor's DOM or moves its caret from outside.
 
 import type { Path } from "@nustackdev/ui-core";
-import { documentUnder, pathKey } from "@nustackdev/ui-kit";
+import { documentPresent, documentUnder, pathKey } from "@nustackdev/ui-kit";
 import type * as React from "react";
 import { Fragment, useCallback, useEffect, useRef } from "react";
 import {
@@ -218,9 +218,10 @@ export function Plane({
 
 	const { caret } = useCaret(model, { sugars, editable, focus });
 
-	useDocuments(viewerPath, cells, {
+	const { present } = useDocuments(viewerPath, cells, {
 		intent: (cell, i) => routing.current?.document(cell, i) ?? false,
 		registered,
+		vanished: abandon,
 	});
 
 	// A cell that ships saying it draws nothing, or whose program died or
@@ -289,8 +290,12 @@ export function Plane({
 				// split's tail), so the cell stays out of sight until it has it
 				// rather than flash empty. One that died shows its error instead,
 				// and one that will never take it is let go (the exits above).
+				// Once its document is drawn it shows, open for editing or not:
+				// one that stays read-only must not stay hidden with it, and
+				// the request goes on waiting (Escape in the line drops it).
 				const fed =
 					!cell.status.error &&
+					!present.has(cell.id) &&
 					editor.requests.some((r) => r.cellId === cell.id && (r.line || r.markdown) && !r.ready);
 				return (
 					<Fragment key={cell.id}>
@@ -327,10 +332,13 @@ export function Plane({
 							// whatever gets picked next.
 							onPlus={() => openInput(cell.id)}
 							onSelect={() => select([cell.id])}
-							// Drawn, and its document (if it has one) registered in the
-							// same commit, before this hears it: none means none is coming.
+							// Drawn, and its document (if it has one) mounted in the same
+							// commit, before this hears it: none, open for editing or
+							// not, means none is coming. One mounted read-only waits.
 							onDrawn={() => {
-								if (!document(cell.id)) abandon(cell.id);
+								if (!document(cell.id) && !documentPresent(cellUiPath(viewerPath, cell.id))) {
+									abandon(cell.id);
+								}
 							}}
 							onFocusConsumed={() => {
 								if (source) drop((r) => r.id === source.id);

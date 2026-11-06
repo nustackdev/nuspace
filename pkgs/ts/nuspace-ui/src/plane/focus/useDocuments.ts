@@ -11,6 +11,13 @@
 // are heard (and routed, ../intents.ts), and its arrival is told, so a focus
 // request parked for the cell is consumed (./useFocusRouting.ts).
 //
+// A document is present before it is registered: a program opens one in
+// steps, the text first and editing a frame later, and the kit registers a
+// handle only while it takes commands. Presence is heard too (the kit's
+// `subscribePresence`), so the plane can tell "a document is here, not yet
+// open for editing" (a parked request keeps waiting) from "nothing here"
+// (it is let go), and `present` is what the plane draws by.
+//
 // Registration happens in the editor's own mount, which runs before this
 // plane's effects on the first render. So the subscription is followed by a
 // sweep over the cells for documents already there, and the sweep runs again
@@ -20,11 +27,13 @@ import type { Path } from "@nustackdev/ui-core";
 import {
 	type DocIntent,
 	type DocumentHandle,
+	documentPresent,
 	documentUnder,
 	pathKey,
 	subscribeDocuments,
+	subscribePresence,
 } from "@nustackdev/ui-kit";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { CELLS, cellUiPath } from "../cell/address";
 import type { Cell } from "../types";
 
@@ -36,8 +45,10 @@ export function useDocuments(
 		intent: (cell: string, i: DocIntent) => boolean;
 		/** A cell's document registered. */
 		registered: (cell: string) => void;
+		/** A cell's document left without ever taking commands, and none is there now. */
+		vanished: (cell: string) => void;
 	},
-) {
+): { present: ReadonlySet<string> } {
 	const cb = useRef(on);
 	cb.current = on;
 	const at = useRef({ viewerPath, live: new Set<string>() });
@@ -45,6 +56,21 @@ export function useDocuments(
 	/** The handle each cell's intents are heard on, and how to stop. */
 	const heard = useRef(new Map<string, { doc: DocumentHandle; off: () => void }>());
 	const viewerKey = pathKey(viewerPath);
+	/** Cells with a document mounted, open for editing or not. */
+	const [present, setPresent] = useState<ReadonlySet<string>>(() => new Set());
+
+	/** Whether cell `id` has a document mounted now, as a set the render reads. */
+	const sense = useRef((id: string) => {
+		const here = documentPresent(cellUiPath(at.current.viewerPath, id));
+		setPresent((was) => {
+			if (was.has(id) === here) return was;
+			const next = new Set(was);
+			if (here) next.add(id);
+			else next.delete(id);
+			return next;
+		});
+		return here;
+	}).current;
 
 	/** Hear cell `id`'s document as the registry has it now, or none. */
 	const sync = useRef((id: string) => {
@@ -68,16 +94,31 @@ export function useDocuments(
 			const id = path[base.length];
 			if (id) sync(id);
 		});
-		for (const id of at.current.live) sync(id);
+		const offPresence = subscribePresence(base, (path) => {
+			const id = path[base.length];
+			if (!id) return;
+			const here = sense(id);
+			if (!here && at.current.live.has(id) && !documentUnder(cellUiPath(viewerPath, id))) {
+				cb.current.vanished(id);
+			}
+		});
+		for (const id of at.current.live) {
+			sync(id);
+			sense(id);
+		}
 		return () => {
 			off();
+			offPresence();
 			for (const h of map.values()) h.off();
 			map.clear();
 		};
-	}, [viewerKey, sync]);
+	}, [viewerKey, sync, sense]);
 
 	// Cells come and go: hear the new ones' documents, stop hearing the gone.
 	useEffect(() => {
 		for (const id of [...heard.current.keys(), ...cells.map((c) => c.id)]) sync(id);
-	}, [cells, sync]);
+		for (const c of cells) sense(c.id);
+	}, [cells, sync, sense]);
+
+	return { present };
 }

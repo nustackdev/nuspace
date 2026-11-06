@@ -176,8 +176,11 @@ export const documentRules: Rule<DocIntent, string>[] = [
 			into.commit();
 			api.focus({ cell: up, at: "kept" });
 			into.saved(() => {
+				// Either side written meanwhile: this cell no longer what was
+				// appended, or the one above no longer holding it. Leave both.
 				const here = api.document(at);
 				if (!here || here.markdown() !== text) return;
+				if (!into.markdown().includes(text.trim())) return;
 				api.remove([at], null);
 			});
 		},
@@ -235,6 +238,9 @@ export const documentRules: Rule<DocIntent, string>[] = [
 					if (into.blank() || into.markdown().trim() !== tail.trim()) return;
 					into.commit();
 					into.saved(() => {
+						// The new cell no longer holding the tail (its text deleted
+						// or rewritten meanwhile), or this one written: leave both.
+						if (!into.markdown().includes(tail.trim())) return;
 						const here = api.document(at);
 						if (!here || here.tail() !== tail) return;
 						here.split();
