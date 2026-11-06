@@ -14,7 +14,7 @@ import type { CellSpec } from "../types";
 import { slashItems as listed } from "./slash";
 
 export function useSlash(
-	{ editor, patch, document }: PlaneModel,
+	{ editor, patch, editorOf }: PlaneModel,
 	cellSpecs: CellSpec[],
 	{
 		create,
@@ -38,9 +38,9 @@ export function useSlash(
 			patch({ slash: null, ghost: null });
 			create({ after: s.cellId }, item.name);
 			// The new cell is landed on, so the replaced one leaves the caret alone.
-			if (replace && document(replace)?.blank() === true) remove([replace], null);
+			if (replace && editorOf(replace)?.blank() === true) remove([replace], null);
 		},
-		[create, document, editor.ghost, editor.slash, patch, remove],
+		[create, editorOf, editor.ghost, editor.slash, patch, remove],
 	);
 
 	/** Returns true when the menu consumed the key. */

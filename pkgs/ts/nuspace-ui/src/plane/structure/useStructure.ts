@@ -5,18 +5,20 @@
 // a position once `set_plane` comes back.
 //
 // A create that asks for focus parks its request at once (../focus), and
-// the new cell's document takes it, and whatever text it carries, when it
-// registers. One that does not is landed on when the server confirms it: an
+// the new cell's markdown editor takes it, and whatever text it carries,
+// when it takes commands. One that does not is landed on when the server confirms it: an
 // empty program opens its source for typing, a cell from a spec is selected
-// with a request for its document, so a cell that draws one gets the caret
+// with a request for its markdown editor, so a cell that draws one gets the caret
 // and one that does not stays selected, Enter away from what it draws.
 //
 // `remove` is the one delete path. Every gesture that deletes cells goes
 // through it, so they all hide the cells until the server drops them, close
 // their sources, drop their requests, and send the caret where the caller
-// says.
+// says. `withdraw` is the same path in two steps: the cells go out of sight
+// now and the delete is sent later, or they come back, for a caller whose
+// delete must wait on something else landing first.
 
-import type { DocumentHandle } from "@nustackdev/ui-kit";
+import type { MarkdownHandle } from "@nustackdev/ui-kit";
 import { useCallback, useEffect, useRef } from "react";
 import { mintId } from "../../core/ids";
 import type { FocusRequest, FocusTarget, Place, PlaneModel } from "../api";
@@ -31,7 +33,7 @@ export function useStructure(
 		focus,
 		select,
 	}: {
-		request: (cellId: string, ask: Ask, landed?: (doc: DocumentHandle) => void) => number;
+		request: (cellId: string, ask: Ask, landed?: (doc: MarkdownHandle) => void) => number;
 		drop: (gone: (r: FocusReq) => boolean) => void;
 		focus: (target: FocusTarget) => void;
 		select: (ids: string[], anchor?: string) => void;
@@ -96,20 +98,37 @@ export function useStructure(
 		[cells.length, index, notify, planeId, request],
 	);
 
-	const remove = useCallback(
-		(ids: string[], target?: FocusTarget | null) => {
-			if (ids.length === 0) return;
+	/** The cells out of sight: hidden, their sources closed, out of the selection. */
+	const hide = useCallback(
+		(ids: string[]) => {
 			const gone = new Set(ids);
-			const first = Math.min(...ids.map(index).filter((i) => i >= 0));
-			const above = Number.isFinite(first) ? cells[first - 1] : undefined;
-			for (const cell_id of ids) notify("cell.delete", { cell_id });
-			drop((r) => gone.has(r.cellId));
 			patch((e) => ({
 				editing: e.editing.filter((x) => !gone.has(x)),
 				leaving: [...e.leaving, ...ids.filter((x) => !e.leaving.includes(x))],
 				selected: e.selected.filter((x) => !gone.has(x)),
 				anchor: e.anchor && gone.has(e.anchor) ? null : e.anchor,
 			}));
+		},
+		[patch],
+	);
+
+	/** The delete itself: sent, and what waited on the cells let go. */
+	const send = useCallback(
+		(ids: string[]) => {
+			const gone = new Set(ids);
+			for (const cell_id of ids) notify("cell.delete", { cell_id });
+			drop((r) => gone.has(r.cellId));
+		},
+		[drop, notify],
+	);
+
+	const remove = useCallback(
+		(ids: string[], target?: FocusTarget | null) => {
+			if (ids.length === 0) return;
+			const first = Math.min(...ids.map(index).filter((i) => i >= 0));
+			const above = Number.isFinite(first) ? cells[first - 1] : undefined;
+			send(ids);
+			hide(ids);
 			if (target === null) return;
 			if (target) {
 				focus(target);
@@ -119,7 +138,28 @@ export function useStructure(
 			select(above ? [above.id] : []);
 			rootRef.current?.focus({ preventScroll: true });
 		},
-		[cells, drop, focus, index, notify, patch, rootRef, select],
+		[cells, focus, hide, index, rootRef, select, send],
+	);
+
+	/** Out of sight now; `remove` sends the delete, `restore` shows them again. Either, once. */
+	const withdraw = useCallback(
+		(ids: string[]) => {
+			hide(ids);
+			let open = true;
+			return {
+				remove() {
+					if (!open) return;
+					open = false;
+					send(ids);
+				},
+				restore() {
+					if (!open) return;
+					open = false;
+					patch((e) => ({ leaving: e.leaving.filter((x) => !ids.includes(x)) }));
+				},
+			};
+		},
+		[hide, patch, send],
 	);
 
 	const reorder = useCallback(
@@ -148,5 +188,5 @@ export function useStructure(
 		[cells, read, reorder],
 	);
 
-	return { commitSource, create, remove, reorder, moveSelected };
+	return { commitSource, create, remove, withdraw, reorder, moveSelected };
 }

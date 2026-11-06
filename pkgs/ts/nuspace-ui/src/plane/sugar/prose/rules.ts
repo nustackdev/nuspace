@@ -1,7 +1,7 @@
 // The prose set's rules: one table per place an intent comes from.
 //
 // A rule answers one kind of intent. `when` asks whether it applies, of the
-// plane API and the cell's document only, never of the DOM, the caret or
+// plane API and the cell's markdown handle only, never of the DOM, the caret or
 // which spec made a cell. `run` acts through the same two. The first rule of
 // the intent's kind whose `when` holds runs, and the set answers true; none
 // does and the core does its own default (../../intents.ts). So declining is
@@ -25,15 +25,15 @@
 //          prose cell below
 //
 // Merge and split are each other's way back. Both are composed from the
-// document's own commands (append, tail, split) and the plane's create and
+// handle's own commands (append, tail, cut) and the plane's create and
 // remove, ordered so that the text is always in at least one cell: merge
 // appends and saves above before it removes, split hands the tail to the
-// new cell and cuts it here only once that cell holds it.
+// new cell and saves the cut here only once that cell has stored it.
 //
 // R9, a text drag out of a cell, is the core's range select: a pointer
-// press is not an intent a document reports.
+// press is not an intent a markdown editor reports.
 
-import type { DocIntent, FocusAt, LeaveDir } from "@nustackdev/ui-kit";
+import type { FocusAt, LeaveDir, MarkdownIntent } from "@nustackdev/ui-kit";
 import type { FocusTarget, PlaneApi } from "../../api";
 import type { InputIntent, TitleIntent } from "../../intents";
 
@@ -50,7 +50,7 @@ export interface Rule<I extends { kind: string }, At> {
 	rule: string;
 	/** The kind of intent it answers. */
 	on: I["kind"];
-	/** Whether it applies, asked of the plane and the document only. */
+	/** Whether it applies, asked of the plane and the handle only. */
 	when(x: Ctx<I, At>): boolean;
 	run(x: Ctx<I, At>): void;
 	/** Its way back: the rule or gesture that undoes it. */
@@ -70,7 +70,7 @@ const rule =
 	<K extends I["kind"]>(r: One<I, At, K>): Rule<I, At> =>
 		r;
 
-const doc = rule<DocIntent, string>();
+const doc = rule<MarkdownIntent, string>();
 const line = rule<InputIntent, string | null>();
 const head = rule<TitleIntent, null>();
 
@@ -124,15 +124,15 @@ export function above(api: PlaneApi, cell: string): FocusTarget {
 
 /* ============================== the tables =============================== */
 
-/** Intents from a prose cell's document, the cell's id at `at`. */
-export const documentRules: Rule<DocIntent, string>[] = [
+/** Intents from a prose cell's markdown editor, the cell's id at `at`. */
+export const editorRules: Rule<MarkdownIntent, string>[] = [
 	// R2. Backspace with nothing written removes the cell, the caret going to
 	// the end of whatever cell is above, or the title for the top one. Back:
 	// R7 at the end of the cell above opens a line, and typing there is R1.
 	doc({
 		rule: "R2",
 		on: "erase",
-		when: ({ at, i, api }) => i.dir === "back" && api.document(at)?.blank() === true,
+		when: ({ at, i, api }) => i.dir === "back" && api.editor(at)?.blank() === true,
 		run: ({ at, api }) => api.remove([at], above(api, at)),
 		back: "R7 + R1",
 	}),
@@ -145,11 +145,14 @@ export const documentRules: Rule<DocIntent, string>[] = [
 	// caret is at the text's start. The top cell, or another class above,
 	// and Backspace does nothing. Back: split at the join.
 	//
-	// The text must never end up in neither cell, so this cell is removed
-	// only once the one above provably took the text (its markdown changed)
-	// and Nu has read that back into the store (`saved`). Typed into in the
-	// meantime, this cell is no longer what was appended, so it is left
-	// standing: the text in both rather than an edit lost with the remove.
+	// One move on screen: the text joins above and this cell goes out of
+	// sight in the same frame (`withdraw`). In the store it is two, in order:
+	// the delete is sent only once the one above provably took the text (its
+	// markdown changed) and Nu has read that back (`saved`), so the text is
+	// never in neither cell. Written to in the meantime, this cell is no
+	// longer what was appended, or the one above no longer holds it, or the
+	// one above went: this cell comes back, the text in both rather than an
+	// edit lost with the delete.
 	doc({
 		rule: "merge",
 		on: "erase",
@@ -160,13 +163,13 @@ export const documentRules: Rule<DocIntent, string>[] = [
 				!b.line &&
 				b.cell !== null &&
 				prose(api, b.cell) &&
-				api.document(b.cell) !== null
+				api.editor(b.cell) !== null
 			);
 		},
 		run: ({ at, api }) => {
 			const up = api.beside(at, "up").cell;
-			const into = up ? api.document(up) : null;
-			const from = api.document(at);
+			const into = up ? api.editor(up) : null;
+			const from = api.editor(at);
 			if (!up || !into || !from) return;
 			const text = from.markdown();
 			const before = into.markdown();
@@ -175,14 +178,16 @@ export const documentRules: Rule<DocIntent, string>[] = [
 			if (into.markdown() === before) return;
 			into.commit();
 			api.focus({ cell: up, at: "kept" });
-			into.saved(() => {
-				// Either side written meanwhile: this cell no longer what was
-				// appended, or the one above no longer holding it. Leave both.
-				const here = api.document(at);
-				if (!here || here.markdown() !== text) return;
-				if (!into.markdown().includes(text.trim())) return;
-				api.remove([at], null);
-			});
+			const out = api.withdraw([at]);
+			into.saved(
+				() => {
+					const here = api.editor(at);
+					const moved = here?.markdown() === text && into.markdown().includes(text.trim());
+					if (moved) out.remove();
+					else out.restore();
+				},
+				() => out.restore(),
+			);
 		},
 		back: "split",
 	}),
@@ -193,7 +198,7 @@ export const documentRules: Rule<DocIntent, string>[] = [
 	doc({
 		rule: "R6",
 		on: "slash",
-		when: ({ at, api }) => api.document(at)?.blank() === true,
+		when: ({ at, api }) => api.editor(at)?.blank() === true,
 		run: ({ at, api }) => api.standIn(at),
 		back: "Escape",
 	}),
@@ -213,19 +218,22 @@ export const documentRules: Rule<DocIntent, string>[] = [
 	// from the prose default below, handed the text after the caret, the
 	// caret at its start. Back: merge, Backspace at the new cell's start.
 	//
-	// The tail is cut from here only once the new cell's document provably
-	// holds it and Nu has read it back into the store (`saved`), so it is
-	// never in neither. A cell that never takes it, or holds something else,
-	// leaves it here. And written here meanwhile (another tab, a program),
-	// what follows the caret is no longer what was handed over, so nothing
-	// is cut: the text in both cells rather than in neither.
+	// One move on screen: the new cell shows holding the tail in the same
+	// frame the tail leaves here (the handle's held `cut`). In the store it
+	// is two, in order: this cell saves the cut only once the new cell's
+	// text is in (`saved`), so the tail is never in neither. The new cell
+	// gone or rewritten before then, the cut is undone. A cell that never
+	// takes the tail, or holds something else, leaves it here uncut. And
+	// written here meanwhile (another tab, a program), what follows the
+	// caret is no longer what was handed over, so nothing is cut: the text
+	// in both cells rather than in neither.
 	doc({
 		rule: "split",
 		on: "break",
 		when: ({ i, api }) => i.at === "mid" && api.defaultSpec(PROSE) !== null,
 		run: ({ at, api }) => {
 			const spec = api.defaultSpec(PROSE);
-			const from = api.document(at);
+			const from = api.editor(at);
 			if (!spec || !from) return;
 			const tail = from.tail();
 			api.create({ after: at }, spec, {
@@ -236,16 +244,16 @@ export const documentRules: Rule<DocIntent, string>[] = [
 					// the cut only in trailing blank lines. Any other difference
 					// leaves both: a text in two cells is a nuisance, in none a loss.
 					if (into.blank() || into.markdown().trim() !== tail.trim()) return;
+					const here = api.editor(at);
+					if (!here || here.tail() !== tail) return;
 					into.commit();
-					into.saved(() => {
-						// The new cell no longer holding the tail (its text deleted
-						// or rewritten meanwhile), or this one written: leave both.
-						if (!into.markdown().includes(tail.trim())) return;
-						const here = api.document(at);
-						if (!here || here.tail() !== tail) return;
-						here.split();
-						here.commit();
-					});
+					const cut = here.cut();
+					into.saved(
+						// The new cell no longer holding the tail (its text deleted or
+						// rewritten meanwhile): the tail comes back here.
+						() => (into.markdown().includes(tail.trim()) ? cut.keep() : cut.undo()),
+						() => cut.undo(),
+					);
 				},
 			});
 		},
@@ -285,7 +293,7 @@ export const documentRules: Rule<DocIntent, string>[] = [
 /** Typed text or Enter on the input line, the cell it sits after at `at`. */
 export const inputRules: Rule<InputIntent, string | null>[] = [
 	// R1. Typing writes: a cell from the prose default, the text typed into it
-	// as the person's own keys once its document is there, the keys typed
+	// as the person's own keys once its editor is there, the keys typed
 	// meanwhile going along. Back: delete the text, then R2.
 	line({
 		rule: "R1",

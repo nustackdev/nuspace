@@ -1,7 +1,7 @@
 // What the person tried to do, and who decides what it means.
 //
-// Lower layers report intents, upper layers decide. A cell's document (the
-// kit's document contract) reports a `DocIntent`: the caret tried to leave
+// Lower layers report intents, upper layers decide. A cell's markdown editor
+// (the kit's markdown handle) reports a `MarkdownIntent`: the caret tried to leave
 // it, Backspace on blank, `/` into a blank one, Cmd+Enter. The input line
 // reports an `InputIntent`: text typed with the menu closed, or Enter. The
 // title above the plane reports a `TitleIntent`: Enter, or leaving it down
@@ -10,7 +10,7 @@
 //
 // Routing is the same for all three:
 //
-//   document intent -> the sets bound to one of the cell's classes
+//   editor intent   -> the sets bound to one of the cell's classes
 //   input / title   -> the sets whose class has a default spec installed
 //   each in list order until one answers true; none does: the core default
 //
@@ -18,7 +18,7 @@
 //
 //   leave, not extending   today's step: the neighbour's open source takes
 //                          the caret, else the neighbour is selected
-//   anything else a doc    nothing, the editor goes on as if no host existed
+//   anything else, editor  nothing, the editor goes on as if no host existed
 //   input text             the menu opens, the text its query (the line's)
 //   input Enter            nothing
 //   title Enter at end,    into the cells: the top cell's open source, else
@@ -28,17 +28,17 @@
 // A read-only plane routes nothing: no sugar, and the editor keeps every key.
 //
 // Hints are bound the same way. The input line shows the placeholder of the
-// first set it would offer an intent to; a cell's document draws the hints
+// first set it would offer an intent to; a cell's markdown editor draws the hints
 // of the first set bound to one of its classes, while the caret is in it
 // (./focus/useCaret.ts). With none, the line says "Press / for cells" and
-// a document draws only its own placeholder.
+// an editor draws only its own placeholder.
 
-import type { DocIntent } from "@nustackdev/ui-kit";
+import type { MarkdownIntent } from "@nustackdev/ui-kit";
 import type { PlaneApi } from "./api";
 import type { Sugar } from "./sugar";
 import type { CellSpec, ExitDir } from "./types";
 
-export type { DocIntent };
+export type { MarkdownIntent };
 
 /** On the input line, menu closed: text typed into it, or Enter. */
 export type InputIntent = { kind: "text"; text: string } | { kind: "enter" };
@@ -66,12 +66,12 @@ export function inputHint(
 	return writingSugars(sugars, cellSpecs).find((s) => s.inputHint)?.inputHint;
 }
 
-/** The hints a cell's document draws while it has the caret: the first bound set's that has any. */
-export function documentHint(
+/** The hints a cell's markdown editor draws while it has the caret: the first bound set's that has any. */
+export function editorHint(
 	sugars: readonly Sugar[],
 	classes: readonly string[],
 ): { blank?: string; tail?: string } | undefined {
-	return sugars.find((s) => s.documentHint && classes.includes(s.class))?.documentHint;
+	return sugars.find((s) => s.editorHint && classes.includes(s.class))?.editorHint;
 }
 
 /** What the core does when no sugar claims an intent. The plane supplies it. */
@@ -83,7 +83,7 @@ export type CoreDefaults = {
 };
 
 export type Router = {
-	document: (cell: string, i: DocIntent) => boolean;
+	editor: (cell: string, i: MarkdownIntent) => boolean;
 	input: (after: string | null, i: InputIntent, api: PlaneApi) => boolean;
 	title: (i: TitleIntent) => boolean;
 };
@@ -107,11 +107,11 @@ export function router({
 	const writing = writingSugars(sugars, cellSpecs);
 
 	return {
-		document(cell, i) {
+		editor(cell, i) {
 			if (!editable) return false;
 			const classes = cells.find((c) => c.id === cell)?.classes ?? [];
 			for (const s of sugars) {
-				if (s.onDocument && classes.includes(s.class) && s.onDocument(cell, i, api)) return true;
+				if (s.onEditor && classes.includes(s.class) && s.onEditor(cell, i, api)) return true;
 			}
 			if (i.kind === "leave" && !i.extend) {
 				return core.step(cell, i.dir === "up" || i.dir === "left" ? "up" : "down");

@@ -21,7 +21,7 @@
 // `PlaneModel` is what the core's own hooks share. Not part of the surface:
 // sugar never sees it.
 
-import type { DocumentHandle, FocusAt } from "@nustackdev/ui-kit";
+import type { FocusAt, MarkdownHandle } from "@nustackdev/ui-kit";
 import type * as React from "react";
 import type { TitleIntent } from "./intents";
 import type { Notify } from "./ops";
@@ -32,7 +32,7 @@ import type { Cell } from "./types";
 export type Place = { after: string | null };
 
 /**
- * Where the caret goes. A cell's document (or its open source) at an edge,
+ * Where the caret goes. A cell's markdown editor (or its open source) at an edge,
  * under a screen x on its first or last line, or where its own caret already
  * is ("kept"); or the title above the plane.
  */
@@ -54,13 +54,16 @@ export type Beside = {
 /** A focus request for a cell being created, and what it carries. */
 export type FocusRequest = {
 	at: FocusAt;
-	/** Typed in once the document has the caret, as the person's own keys. */
+	/** Typed in once the editor has the caret, as the person's own keys. */
 	text?: string;
 	/** Appended to the document before it is focused. */
 	markdown?: string;
-	/** Hears the request consumed, with the document that took it. */
-	landed?: (doc: DocumentHandle) => void;
+	/** Hears the request consumed, with the handle that took it. */
+	landed?: (doc: MarkdownHandle) => void;
 };
+
+/** Cells out of sight, waiting on their delete (`PlaneApi.withdraw`). */
+export type Withdrawal = { remove(): void; restore(): void };
 
 export interface PlaneApi {
 	// -- read
@@ -68,8 +71,8 @@ export interface PlaneApi {
 	readonly cells: readonly { id: string; classes: readonly string[] }[];
 	/** A cell's position, -1 when it is not there. */
 	index(id: string): number;
-	/** The cell's document, from the kit registry. Null while it has none. */
-	document(id: string): DocumentHandle | null;
+	/** The cell's markdown editor's handle, from the kit. Null while it takes no commands. */
+	editor(id: string): MarkdownHandle | null;
 	/** The installed spec that is `cls`'s default, null when none is. */
 	defaultSpec(cls: string): string | null;
 	/** What is next to cell `id` that way: a cell, an input line, the title. */
@@ -78,7 +81,7 @@ export interface PlaneApi {
 	// -- structure: every write is an op
 	/**
 	 * A cell made from `spec` at `at`. Returns its minted id. With `focus`,
-	 * the request (and what it carries) waits for its document; without, a
+	 * the request (and what it carries) waits for its markdown editor; without, a
 	 * cell from a spec is landed on selected, an empty program opens its source.
 	 */
 	create(at: Place, spec: string, focus?: FocusRequest): string;
@@ -88,6 +91,13 @@ export interface PlaneApi {
 	 * is selected; null leaves focus and selection where they are.
 	 */
 	remove(ids: string[], focus?: FocusTarget | null): void;
+	/**
+	 * `remove` in two steps, for a delete that must wait on something else
+	 * landing first. The cells go out of sight now, focus and selection left
+	 * where they are; then `remove` sends the delete, or `restore` brings them
+	 * back as they were. Either, once.
+	 */
+	withdraw(ids: string[]): Withdrawal;
 	/** The whole new order of the plane's cells. */
 	reorder(ids: string[]): void;
 
@@ -128,8 +138,8 @@ export type PlaneModel = {
 	notify: Notify;
 	/** A cell's position in `cells`, -1 when it is not there. */
 	index: (id: string) => number;
-	/** The cell's document, from the kit registry. */
-	document: (id: string) => DocumentHandle | null;
+	/** The cell's markdown editor's handle, from the kit (`PlaneApi.editor`). */
+	editorOf: (id: string) => MarkdownHandle | null;
 	/** The plane root, which takes keyboard focus in cell-selection mode. */
 	rootRef: React.RefObject<HTMLDivElement | null>;
 	/** Every cell's row element, by id, for scrolling and drop targeting. */

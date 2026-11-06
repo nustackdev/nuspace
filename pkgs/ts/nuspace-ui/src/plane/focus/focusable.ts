@@ -1,9 +1,9 @@
 // What on a plane can take the keyboard, shared by the two places that move it
-// by hand: Enter into a selected cell that draws no document
+// by hand: Enter into a selected cell that draws no markdown editor
 // (./useFocusRouting.ts), and Tab off a selected cell
 // (../selection/useCellKeys.ts). Everywhere else the browser's own tab order
-// rules. A cell's document is never found this way: the kit registry hands
-// it over (./useDocuments.ts).
+// rules. A cell's markdown editor is never found this way: the kit hands
+// its handle over (./useEditors.ts).
 
 /** What a drawn cell can hand the keyboard to. */
 export const FOCUSABLE = [

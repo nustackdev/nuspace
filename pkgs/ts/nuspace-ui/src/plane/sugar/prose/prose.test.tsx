@@ -1,14 +1,13 @@
 // The prose set on a real plane in jsdom, one test per interaction table row
 // (task-162) the set decides, named `row N` with the table's test name. The
-// documents are fakes registered in the kit registry (../../plane.testing),
-// so what is checked is what the set asks of the plane and the documents,
+// markdown editors are fakes registered with the kit (../../plane.testing),
+// so what is checked is what the set asks of the plane and the editors,
 // not what an editor does with it: that half is the kit's browser tests.
 //
 // Rows the set declines are here too, where declining is the rule: the
-// core's default runs, or nothing does. Merge and split are not built yet,
-// so their keys must fall through harmlessly.
+// core's default runs, or nothing does.
 
-import { pathKey, register, registerDocument } from "@nustackdev/ui-kit";
+import { type Cut, pathKey, register } from "@nustackdev/ui-kit";
 import { act, useEffect } from "react";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -26,6 +25,7 @@ import {
 	PLAIN,
 	planeRoot,
 	press,
+	registerEditable,
 	render,
 	row,
 	selected,
@@ -40,14 +40,14 @@ import type { Cell } from "../../types";
 import { type Sugar, sugars } from "..";
 import { prose } from ".";
 import { NEW_CELL_HINT, WRITE_HINT } from "./hints";
-import { documentRules, inputRules, type Rule, titleRules } from "./rules";
+import { editorRules, inputRules, type Rule, titleRules } from "./rules";
 
-/** A view that is a document with something to focus, as an editor is. */
+/** A view that is a markdown editor with something to focus, as one is. */
 let focusDoc: ReturnType<typeof fakeDoc> | null = null;
 register("TestFocusDoc", {
 	component: ({ path }: { path: string[] }) => {
 		// biome-ignore lint/correctness/useExhaustiveDependencies: path is compared by value.
-		useEffect(() => (focusDoc ? registerDocument(path, focusDoc.doc) : undefined), [pathKey(path)]);
+		useEffect(() => (focusDoc ? registerEditable(path, focusDoc.doc) : undefined), [pathKey(path)]);
 		// biome-ignore lint/a11y/noNoninteractiveTabindex: it stands for an editor, which takes focus.
 		return <div tabIndex={0} data-focus-doc="" />;
 	},
@@ -76,7 +76,7 @@ describe("the registry", () => {
 });
 
 describe("the rule table", () => {
-	const all = [...documentRules, ...inputRules, ...titleRules] as Rule<{ kind: string }, unknown>[];
+	const all = [...editorRules, ...inputRules, ...titleRules] as Rule<{ kind: string }, unknown>[];
 
 	it("names its way back for every rule, and every rule it names is one", () => {
 		const names = new Set(all.map((r) => r.rule));
@@ -232,7 +232,7 @@ describe("B. the title", () => {
 	it("row 29, decision B: a line summoned at the top is landed in first", () => {
 		const opener: Sugar = {
 			class: "prose",
-			onDocument: (_c, i, api) => {
+			onEditor: (_c, i, api) => {
 				if (i.kind !== "slash") return false;
 				api.openInput(null);
 				return true;
@@ -586,14 +586,22 @@ describe("E. Shift+arrows spill into cell selection", () => {
 /**
  * A document as paragraphs, the caret between two of them: enough of the
  * kit's commands to see text move between cells. `markdown`, `tail`,
- * `split` and `append` keep the kit's rules: paragraphs join at a blank
- * line, a cut takes everything after the caret, append into a blank one
- * replaces it and leaves the caret at the join.
+ * `split`, `cut` and `append` keep the kit's rules: paragraphs join at a
+ * blank line, a cut takes everything after the caret, append into a blank
+ * one replaces it and leaves the caret at the join. A held cut (`cuts`,
+ * each one handed out) shows at once; `undo` puts the document back as it
+ * was when untouched since, else appends the tail; either end, once.
  */
 function paper(blocks: string[], caret = 0) {
 	const d = fakeDoc();
 	const at = { blocks: [...blocks], caret };
+	const cuts: Cut[] = [];
 	const md = (bs: string[]) => bs.join("\n\n");
+	const add = (text: string) => {
+		const more = text ? text.split("\n\n") : [];
+		at.caret = at.blocks.length;
+		at.blocks = [...at.blocks, ...more];
+	};
 	vi.mocked(d.doc.blank).mockImplementation(() => at.blocks.length === 0);
 	vi.mocked(d.doc.markdown).mockImplementation(() => md(at.blocks));
 	vi.mocked(d.doc.tail).mockImplementation(() => md(at.blocks.slice(at.caret)));
@@ -602,12 +610,35 @@ function paper(blocks: string[], caret = 0) {
 		at.blocks = at.blocks.slice(0, at.caret);
 		return tail;
 	});
-	vi.mocked(d.doc.append).mockImplementation((text: string) => {
-		const more = text ? text.split("\n\n") : [];
-		at.caret = at.blocks.length;
-		at.blocks = [...at.blocks, ...more];
+	vi.mocked(d.doc.cut).mockImplementation(() => {
+		const whole = [...at.blocks];
+		const tail = md(whole.slice(at.caret));
+		at.blocks = whole.slice(0, at.caret);
+		const head = md(at.blocks);
+		let open = true;
+		const c: Cut = {
+			tail,
+			keep: vi.fn(() => {
+				open = false;
+			}),
+			undo: vi.fn(() => {
+				if (!open) return;
+				open = false;
+				if (md(at.blocks) === head) at.blocks = whole;
+				else add(tail);
+			}),
+		};
+		cuts.push(c);
+		return c;
 	});
-	return { ...d, at };
+	vi.mocked(d.doc.append).mockImplementation(add);
+	return { ...d, at, cuts };
+}
+
+/** The one held cut `p` handed out. */
+function onlyCut(p: ReturnType<typeof paper>): Cut {
+	expect(p.cuts).toHaveLength(1);
+	return p.cuts[0] as Cut;
 }
 
 describe("J. merge", () => {
@@ -681,6 +712,33 @@ describe("J. merge", () => {
 		expect(ops()).toEqual([["cell.delete", "b"]]);
 	});
 
+	it("hides this cell at once, in the frame the text joins above, and deletes it once stored", () => {
+		plane([cell("a"), cell("b")]);
+		const a = mountDoc("a", paper(["one"]));
+		const b = mountDoc("b", paper(["two"]));
+		a.hold();
+		b.say({ kind: "erase", dir: "back" });
+		expect(a.at.blocks).toEqual(["one", "two"]);
+		expect(row("b").hidden).toBe(true);
+		expect(notify).not.toHaveBeenCalled();
+		a.stored();
+		expect(ops()).toEqual([["cell.delete", "b"]]);
+		expect(row("b").hidden).toBe(true);
+	});
+
+	it("brings this cell back, nothing deleted, when the cell above is lost before the join is stored", () => {
+		plane([cell("a"), cell("b")]);
+		const a = mountDoc("a", paper(["one"]));
+		const b = mountDoc("b", paper(["two"]));
+		a.hold();
+		b.say({ kind: "erase", dir: "back" });
+		expect(row("b").hidden).toBe(true);
+		a.lose();
+		expect(notify).not.toHaveBeenCalled();
+		expect(row("b").hidden).toBe(false);
+		expect(b.at.blocks).toEqual(["two"]);
+	});
+
 	it("never removes when the cell above did not take the text", () => {
 		plane([cell("a"), cell("b")]);
 		const a = mountDoc("a", paper(["one"]));
@@ -696,6 +754,7 @@ describe("J. merge", () => {
 		const b = mountDoc("b", paper(["two"]));
 		a.hold();
 		b.say({ kind: "erase", dir: "back" });
+		expect(row("b").hidden).toBe(true);
 		b.at.blocks = ["two, and more"];
 		a.stored();
 		expect(notify).not.toHaveBeenCalled();
@@ -735,18 +794,23 @@ describe("K. split", () => {
 		const { id, into } = splitA(a);
 		// Shipped, no document yet: hidden rather than empty, and nothing cut.
 		expect(row(id).hidden).toBe(true);
-		expect(a.doc.split).not.toHaveBeenCalled();
+		expect(a.doc.cut).not.toHaveBeenCalled();
 		mountDoc(id, into);
 		expect(into.doc.append).toHaveBeenCalledWith("two");
 		expect(into.doc.focus).toHaveBeenCalledWith("start");
-		expect(a.doc.split).toHaveBeenCalledOnce();
-		expect(vi.mocked(into.doc.append).mock.invocationCallOrder[0]).toBeLessThan(
-			vi.mocked(a.doc.split).mock.invocationCallOrder[0],
-		);
+		// The new cell holds the tail and saves it, then it is cut here.
+		expect(a.doc.cut).toHaveBeenCalledOnce();
+		const order = (f: unknown) => vi.mocked(f as () => void).mock.invocationCallOrder[0] as number;
+		expect(order(into.doc.append)).toBeLessThan(order(into.doc.commit));
+		expect(order(into.doc.commit)).toBeLessThan(order(a.doc.cut));
+		expect(a.doc.split).not.toHaveBeenCalled();
 		expect(a.at.blocks).toEqual(["one"]);
 		expect(into.at.blocks).toEqual(["two"]);
-		expect(into.doc.commit).toHaveBeenCalled();
-		expect(a.doc.commit).toHaveBeenCalled();
+		// Stored at once here: the cut is kept, never undone.
+		const cut = onlyCut(a);
+		expect(cut.tail).toBe("two");
+		expect(cut.keep).toHaveBeenCalledOnce();
+		expect(cut.undo).not.toHaveBeenCalled();
 		expect(row(id).hidden).toBe(false);
 	});
 
@@ -757,6 +821,7 @@ describe("K. split", () => {
 		mountDoc(id, into);
 		expect(a.at.blocks).toEqual([]);
 		expect(into.at.blocks).toEqual(["one", "two"]);
+		expect(onlyCut(a).keep).toHaveBeenCalledOnce();
 	});
 
 	it("row 116 split_in_list: allowed, the tail is whatever the editor cuts", () => {
@@ -766,6 +831,7 @@ describe("K. split", () => {
 		mountDoc(id, into);
 		expect(into.at.blocks).toEqual(["- two"]);
 		expect(a.at.blocks).toEqual(["- one"]);
+		expect(onlyCut(a).keep).toHaveBeenCalledOnce();
 	});
 
 	it("row 174 split_concurrent_write: written here meanwhile, the cut is not made and both keep the text", () => {
@@ -776,7 +842,7 @@ describe("K. split", () => {
 		a.at.blocks = ["one", "two, edited"];
 		mountDoc(id, into);
 		expect(into.at.blocks).toEqual(["two"]);
-		expect(a.doc.split).not.toHaveBeenCalled();
+		expect(a.doc.cut).not.toHaveBeenCalled();
 		expect(a.at.blocks).toEqual(["one", "two, edited"]);
 	});
 
@@ -788,7 +854,7 @@ describe("K. split", () => {
 		plane([cell("a"), { ...cell(id), has_ui: false }, cell("z")]);
 		expect(row(id).hidden).toBe(false);
 		expect(readEditor(VIEWER, "p1").requests).toEqual([]);
-		expect(a.doc.split).not.toHaveBeenCalled();
+		expect(a.doc.cut).not.toHaveBeenCalled();
 		expect(a.at.blocks).toEqual(["one", "two"]);
 	});
 
@@ -801,9 +867,31 @@ describe("K. split", () => {
 		mountDoc(id, into);
 		expect(into.at.blocks).toEqual(["two"]);
 		expect(into.doc.commit).toHaveBeenCalled();
-		expect(a.doc.split).not.toHaveBeenCalled();
-		into.stored();
+		// On screen the tail left in the same frame; in the store it is still
+		// here, the cut held, neither kept nor undone.
 		expect(a.at.blocks).toEqual(["one"]);
+		const cut = onlyCut(a);
+		expect(cut.keep).not.toHaveBeenCalled();
+		expect(cut.undo).not.toHaveBeenCalled();
+		into.stored();
+		expect(cut.keep).toHaveBeenCalledOnce();
+		expect(cut.undo).not.toHaveBeenCalled();
+		expect(a.at.blocks).toEqual(["one"]);
+	});
+
+	it("undoes the cut when the new cell is lost before its text is stored", () => {
+		plane([cell("a"), cell("z")]);
+		const a = mountDoc("a", paper(["one", "two"], 1));
+		const into = paper([]);
+		into.hold();
+		const { id } = splitA(a, into);
+		mountDoc(id, into);
+		expect(a.at.blocks).toEqual(["one"]);
+		into.lose();
+		const cut = onlyCut(a);
+		expect(cut.undo).toHaveBeenCalledOnce();
+		expect(cut.keep).not.toHaveBeenCalled();
+		expect(a.at.blocks).toEqual(["one", "two"]);
 	});
 
 	it("never cuts when the new cell did not take the tail", () => {
@@ -814,21 +902,23 @@ describe("K. split", () => {
 		const { id } = splitA(a, into);
 		mountDoc(id, into);
 		expect(into.doc.saved).not.toHaveBeenCalled();
-		expect(a.doc.split).not.toHaveBeenCalled();
+		expect(a.doc.cut).not.toHaveBeenCalled();
 		expect(a.at.blocks).toEqual(["one", "two"]);
 	});
 
-	it("leaves both when this cell is written while the tail is being stored", () => {
+	it("keeps what this cell is written while the tail is being stored", () => {
 		plane([cell("a"), cell("z")]);
 		const a = mountDoc("a", paper(["one", "two"], 1));
 		const into = paper([]);
 		into.hold();
 		const { id } = splitA(a, into);
 		mountDoc(id, into);
-		a.at.blocks = ["one", "two, edited"];
+		// Typed into the head while the cut is held: the keep saves it along.
+		a.at.blocks = ["one, edited"];
 		into.stored();
-		expect(a.doc.split).not.toHaveBeenCalled();
-		expect(a.at.blocks).toEqual(["one", "two, edited"]);
+		expect(onlyCut(a).keep).toHaveBeenCalledOnce();
+		expect(onlyCut(a).undo).not.toHaveBeenCalled();
+		expect(a.at.blocks).toEqual(["one, edited"]);
 		expect(into.at.blocks).toEqual(["two"]);
 	});
 
@@ -853,6 +943,7 @@ describe("K. split", () => {
 		const { id, into } = splitA(a);
 		const b = mountDoc(id, into);
 		expect(a.doc.markdown()).toBe("one");
+		expect(onlyCut(a).keep).toHaveBeenCalledOnce();
 		// The caret is at the new cell's start: Backspace there merges.
 		expect(b.say({ kind: "erase", dir: "back" })).toBe(true);
 		expect(a.doc.markdown()).toBe(before);
@@ -868,14 +959,18 @@ describe("a document opened in two frames: read-only first, editing later", () =
 		const id = created()[0].cell_id as string;
 		plane([cell("a"), cell(id), cell("z")]);
 		await drawReadOnly(id);
-		// Drawn, read-only: it shows, the request waits, nothing cut.
-		expect(row(id).hidden).toBe(false);
+		// Drawn, read-only: the request waits, nothing cut, and the cell stays
+		// out of sight, the tail still in sight in the cell it is cut from.
+		expect(row(id).hidden).toBe(true);
 		expect(readEditor(VIEWER, "p1").requests).toHaveLength(1);
-		expect(a.doc.split).not.toHaveBeenCalled();
+		expect(a.doc.cut).not.toHaveBeenCalled();
+		expect(a.at.blocks).toEqual(["one", "two"]);
 		const into = mountDoc(id, paper([]));
 		expect(into.at.blocks).toEqual(["two"]);
 		expect(into.doc.focus).toHaveBeenCalledWith("start");
 		expect(a.at.blocks).toEqual(["one"]);
+		expect(onlyCut(a).keep).toHaveBeenCalledOnce();
+		expect(row(id).hidden).toBe(false);
 	});
 
 	it("R1's text lands once the new cell's document opens", async () => {
@@ -924,9 +1019,11 @@ describe("the receiver written while the move is being stored", () => {
 		const b = mountDoc("b", paper(["two"]));
 		a.hold();
 		b.say({ kind: "erase", dir: "back" });
+		expect(row("b").hidden).toBe(true);
 		a.at.blocks = ["one"];
 		a.stored();
 		expect(notify).not.toHaveBeenCalled();
+		expect(row("b").hidden).toBe(false);
 	});
 
 	it("split leaves both when the new cell no longer holds the tail", () => {
@@ -938,9 +1035,14 @@ describe("the receiver written while the move is being stored", () => {
 		const into = paper([]);
 		into.hold();
 		mountDoc(id, into);
+		// Cut at once, then the new cell rewritten before its read came back.
+		expect(a.at.blocks).toEqual(["one"]);
 		into.at.blocks = ["something else"];
 		into.stored();
-		expect(a.doc.split).not.toHaveBeenCalled();
+		const cut = onlyCut(a);
+		expect(cut.undo).toHaveBeenCalledOnce();
+		expect(cut.keep).not.toHaveBeenCalled();
+		// Untouched here since the cut: back exactly as it was.
 		expect(a.at.blocks).toEqual(["one", "two"]);
 	});
 });
