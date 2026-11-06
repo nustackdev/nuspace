@@ -59,7 +59,7 @@ export type FocusRequest = {
 	/** Appended to the document before it is focused. */
 	markdown?: string;
 	/** Hears the request consumed, with the document that took it. */
-	then?: (doc: DocumentHandle) => void;
+	landed?: (doc: DocumentHandle) => void;
 };
 
 export interface PlaneApi {

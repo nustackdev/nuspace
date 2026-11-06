@@ -137,29 +137,49 @@ export const documentRules: Rule<DocIntent, string>[] = [
 		back: "R7 + R1",
 	}),
 	// Merge. Backspace at the very start of a cell with text (the editor
-	// reports it only there), with a prose cell above: its text goes onto the
-	// end of that one, joined at a paragraph break, the only join markdown
-	// can store, and this cell goes. The text is added and saved above before
-	// the remove is sent, so it is never in neither. The caret stays at the
-	// join, where append left the selection; into a blank cell above, append
-	// replaces its empty paragraph and the caret is at the text's start. The
-	// top cell, or another class above, and Backspace does nothing. Back:
-	// split at the join.
+	// reports it only there), with a prose cell right above (no input line
+	// in between): its text goes onto the end of that one, joined at a
+	// paragraph break, the only join markdown can store, and this cell goes.
+	// The caret goes to the join at once, where append left the selection;
+	// into a blank cell above, append replaces its empty paragraph and the
+	// caret is at the text's start. The top cell, or another class above,
+	// and Backspace does nothing. Back: split at the join.
+	//
+	// The text must never end up in neither cell, so this cell is removed
+	// only once the one above provably took the text (its markdown changed)
+	// and Nu has read that back into the store (`saved`). Typed into in the
+	// meantime, this cell is no longer what was appended, so it is left
+	// standing: the text in both rather than an edit lost with the remove.
 	doc({
 		rule: "merge",
 		on: "erase",
 		when: ({ at, i, api }) => {
-			const up = api.beside(at, "up").cell;
-			return i.dir === "back" && up !== null && prose(api, up) && api.document(up) !== null;
+			const b = api.beside(at, "up");
+			return (
+				i.dir === "back" &&
+				!b.line &&
+				b.cell !== null &&
+				prose(api, b.cell) &&
+				api.document(b.cell) !== null
+			);
 		},
 		run: ({ at, api }) => {
 			const up = api.beside(at, "up").cell;
 			const into = up ? api.document(up) : null;
 			const from = api.document(at);
 			if (!up || !into || !from) return;
-			into.append(from.markdown());
+			const text = from.markdown();
+			const before = into.markdown();
+			into.append(text);
+			// It took nothing (read-only meanwhile, or nothing to add): stop here.
+			if (into.markdown() === before) return;
 			into.commit();
-			api.remove([at], { cell: up, at: "kept" });
+			api.focus({ cell: up, at: "kept" });
+			into.saved(() => {
+				const here = api.document(at);
+				if (!here || here.markdown() !== text) return;
+				api.remove([at], null);
+			});
 		},
 		back: "split",
 	}),
@@ -188,9 +208,14 @@ export const documentRules: Rule<DocIntent, string>[] = [
 	// Split. Cmd+Enter with text after the caret (at the very start that is
 	// all of it, leaving this cell blank; in a list it cuts the list): a cell
 	// from the prose default below, handed the text after the caret, the
-	// caret at its start. The tail is cut from here only once the new cell's
-	// document holds it, so it is never in neither; a cell that never takes
-	// it leaves it here. Back: merge, Backspace at the new cell's start.
+	// caret at its start. Back: merge, Backspace at the new cell's start.
+	//
+	// The tail is cut from here only once the new cell's document provably
+	// holds it and Nu has read it back into the store (`saved`), so it is
+	// never in neither. A cell that never takes it, or holds something else,
+	// leaves it here. And written here meanwhile (another tab, a program),
+	// what follows the caret is no longer what was handed over, so nothing
+	// is cut: the text in both cells rather than in neither.
 	doc({
 		rule: "split",
 		on: "break",
@@ -203,16 +228,18 @@ export const documentRules: Rule<DocIntent, string>[] = [
 			api.create({ after: at }, spec, {
 				at: "start",
 				markdown: tail,
-				// biome-ignore lint/suspicious/noThenProperty: the focus request's hook (FocusRequest), never awaited.
-				then: (into) => {
+				landed: (into) => {
+					// Compared as the editor writes it back, which may differ from
+					// the cut only in trailing blank lines. Any other difference
+					// leaves both: a text in two cells is a nuisance, in none a loss.
+					if (into.blank() || into.markdown().trim() !== tail.trim()) return;
 					into.commit();
-					// Written here meanwhile (another tab, a program), what follows
-					// the caret is no longer what was handed over: both are left as
-					// they are, the text in both cells rather than in neither.
-					const here = api.document(at);
-					if (!here || here.tail() !== tail) return;
-					here.split();
-					here.commit();
+					into.saved(() => {
+						const here = api.document(at);
+						if (!here || here.tail() !== tail) return;
+						here.split();
+						here.commit();
+					});
 				},
 			});
 		},

@@ -31,7 +31,7 @@ export function useStructure(
 		focus,
 		select,
 	}: {
-		request: (cellId: string, ask: Ask, then?: (doc: DocumentHandle) => void) => number;
+		request: (cellId: string, ask: Ask, landed?: (doc: DocumentHandle) => void) => number;
 		drop: (gone: (r: FocusReq) => boolean) => void;
 		focus: (target: FocusTarget) => void;
 		select: (ids: string[], anchor?: string) => void;
@@ -86,8 +86,8 @@ export function useStructure(
 				index: at.after === null ? 0 : i < 0 ? cells.length : i + 1,
 			});
 			if (want) {
-				const { then, ...carry } = want;
-				request(id, { ...carry, to: "document", fresh: true, line }, then);
+				const { landed, ...carry } = want;
+				request(id, { ...carry, to: "document", fresh: true, line }, landed);
 			} else {
 				landing.current = { id, open: spec === "" };
 			}

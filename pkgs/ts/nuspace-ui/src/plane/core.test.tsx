@@ -469,7 +469,7 @@ describe("the plane api, from a sugar", () => {
 		render([cell("a"), cell("z")], {
 			sugars: [
 				on((c, api) => {
-					made = api.create({ after: c }, "text", { at: "start", markdown: "tail", then });
+					made = api.create({ after: c }, "text", { at: "start", markdown: "tail", landed: then });
 				}),
 			],
 		});
