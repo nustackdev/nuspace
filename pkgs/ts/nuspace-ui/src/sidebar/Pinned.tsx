@@ -32,7 +32,7 @@ import {
 } from "../design";
 import { PlaneIcon } from "../icon/PlaneIcon";
 import { planeIcon } from "../icon/parse";
-import { contextParts } from "../shell/menu";
+import { contextParts } from "../menu/parts";
 import { openAddPlane } from "./add";
 import { NAV_PLANES } from "./nav";
 import type { Notify } from "./ops";

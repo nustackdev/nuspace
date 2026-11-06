@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { confirm } from "../shell/confirm";
+import { confirm } from "../core/confirm";
 import { canDelete, deletePlane } from "./remove";
 import { coerceTree, ROOT_ID } from "./types";
 
-vi.mock("../shell/confirm", () => ({ confirm: vi.fn() }));
+vi.mock("../core/confirm", () => ({ confirm: vi.fn() }));
 
 const tree = coerceTree([
 	{ id: ROOT_ID, kind: "space", title: "", parent: ROOT_ID, children: ["home", "a"] },

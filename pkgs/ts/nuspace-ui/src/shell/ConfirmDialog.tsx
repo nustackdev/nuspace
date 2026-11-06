@@ -1,4 +1,4 @@
-// The one confirm dialog: whatever ./confirm.ts was last asked, as a kit
+// The one confirm dialog: whatever ../core/confirm.ts was last asked, as a kit
 // `Dialog` with the destructive action and a way back. Cancel has the focus
 // when it opens, so a stray Enter keeps things as they were.
 
@@ -13,7 +13,7 @@ import {
 	DialogTitle,
 } from "@nustackdev/ui-kit";
 import { useRef } from "react";
-import { answer, type Question, useQuestion } from "./confirm";
+import { answer, type Question, useQuestion } from "../core/confirm";
 
 export function ConfirmDialog() {
 	const open = useQuestion();

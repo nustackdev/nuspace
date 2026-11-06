@@ -53,12 +53,13 @@ import {
 } from "../design";
 import { PlaneIcon } from "../icon/PlaneIcon";
 import { parseIcon } from "../icon/parse";
+import { contextParts } from "../menu/parts";
 import { paneTitle } from "../pane/Pane";
+import { PANE_MIME } from "../pane/PaneBar";
 import { DeskMenuItems } from "../pane/PaneMenu";
 import type { AbsentReason, ActivePlane } from "../plane/types";
-import { contextParts } from "../shell/menu";
 import { pinDropIndex } from "../sidebar/pin";
-import { edgeAt, PANE_MIME, type PaneEdge } from "./useCanvasDrop";
+import { edgeAt, type PaneEdge } from "./useCanvasDrop";
 
 /** Where the desk is: its scroll, its visible width, its full width, its panes. */
 export type DeskGeometry = {

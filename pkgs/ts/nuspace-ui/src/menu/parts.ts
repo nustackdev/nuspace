@@ -3,6 +3,9 @@
 // are written once against these parts and rendered with whichever set its
 // trigger needs. The kit's two families take the same props, so swapping the
 // set is all it takes.
+//
+// Down here with the menus, not in the shell: the rail, a pane and the dock
+// all draw menus, and none of them may import the frame they sit in.
 
 import {
 	ContextMenuItem,

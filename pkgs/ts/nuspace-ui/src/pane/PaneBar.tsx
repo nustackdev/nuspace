@@ -9,9 +9,11 @@
 import { IconButton, OverflowTooltip } from "@nustackdev/ui-kit";
 import { X } from "lucide-react";
 import { paneBar, paneBarTitle } from "../design";
-import { PANE_MIME } from "../main/useCanvasDrop";
 import type { PlaneMeta } from "../plane/types";
 import { PaneMenu } from "./PaneMenu";
+
+/** What a pane's drag by its bar carries: its plane id. */
+export const PANE_MIME = "application/x-nuspace-pane";
 
 export function PaneBar({
 	planeId,

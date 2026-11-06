@@ -51,7 +51,6 @@ import { useLayoutEffect, useRef } from "react";
 import { BOOTING_DELAY_MS, useAfter } from "../core/delay";
 import { paneRule } from "../core/router";
 import { useBooted, useTypePath } from "../core/surfaces";
-import { useTab } from "../core/tab";
 import {
 	shellMain,
 	shellMissing,
@@ -75,6 +74,7 @@ import {
 } from "../sidebar/collapse";
 import { RailPlaceholder } from "../sidebar/Rail";
 import { RailToggle } from "../sidebar/RailHeader";
+import { useTab } from "./tab";
 
 export function Shell() {
 	const sidebar = useTypePath("SidebarRef");

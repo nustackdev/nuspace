@@ -23,6 +23,7 @@ import {
 import type { LucideIcon } from "lucide-react";
 import { BookOpen, Github, Keyboard, Moon, Sun } from "lucide-react";
 import { useConnectionStatus } from "../core/connection";
+import { KEYS_KEYS, setKeysOpen } from "../core/keys";
 import { toggleTheme, useTheme } from "../core/theme";
 import {
 	railChromeButton,
@@ -31,7 +32,6 @@ import {
 	railStatus,
 	railTooltipHint,
 } from "../design";
-import { KEYS_KEYS, setKeysOpen } from "../shell/keys";
 
 const GITHUB_URL = "https://github.com/nustackdev/nuspace";
 const DOCS_URL = "https://nustack.dev/docs";

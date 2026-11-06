@@ -11,6 +11,7 @@ import {
 	Shortcut,
 } from "@nustackdev/ui-kit";
 import { Fragment } from "react";
+import { setKeysOpen, useKeysOpen, useKeysShortcut } from "../core/keys";
 import {
 	keysBody,
 	keysDialog,
@@ -21,7 +22,7 @@ import {
 	keysOr,
 	keysRow,
 } from "../design";
-import { BINDINGS, setKeysOpen, useKeysOpen, useKeysShortcut } from "./keys";
+import { BINDINGS } from "./keys";
 
 export function KeysDialog() {
 	const open = useKeysOpen();
