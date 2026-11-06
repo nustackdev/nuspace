@@ -335,7 +335,7 @@ export function Plane({
 							}}
 							onCommit={(src) => commitSource(cell.id, src)}
 							onExit={(dir, column) => step(cell.id, dir, column)}
-							onCaret={(where) => caret(cell, where)}
+							onCaret={(where, nowhere) => caret(cell, where, nowhere)}
 						/>
 						{editable && editor.ghost?.after === cell.id ? (
 							<div className={docRow}>

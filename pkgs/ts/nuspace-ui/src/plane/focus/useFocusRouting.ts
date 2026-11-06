@@ -349,9 +349,14 @@ export function useFocusRouting(
 			ghost.focus();
 			return true;
 		}
+		// A line summoned at the top sits between the title and the cells.
+		if (read().ghost?.after === null && plusGhost.current) {
+			plusGhost.current.focus();
+			return true;
+		}
 		focusCell(cells[0], "start");
 		return true;
-	}, [cells, focusCell, endGhost]);
+	}, [cells, focusCell, endGhost, plusGhost, read]);
 
 	return {
 		request,

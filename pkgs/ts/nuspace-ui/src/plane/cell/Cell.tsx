@@ -91,8 +91,11 @@ export function Cell({
 	onDrawn?: () => void;
 	onCommit: (source: string) => void;
 	onExit: (dir: ExitDir, column: number | undefined) => void;
-	/** The caret arrived in what the cell draws ("ui") or elsewhere in its row, or left it (null). */
-	onCaret?: (where: "ui" | "row" | null) => void;
+	/**
+	 * The caret arrived in what the cell draws ("ui") or elsewhere in its
+	 * row, or left it (null); `nowhere` when it left for no other element.
+	 */
+	onCaret?: (where: "ui" | "row" | null, nowhere?: boolean) => void;
 }) {
 	return (
 		// biome-ignore lint/a11y/noStaticElementInteractions: a mousedown anywhere in a cell hands control to that cell's own editor
@@ -111,7 +114,10 @@ export function Cell({
 			onFocus={(e) => onCaret?.((e.target as Element).closest?.("[data-cell-ui]") ? "ui" : "row")}
 			onBlur={(e) => {
 				// Within the row, the focus that follows says where it went.
-				if (!e.currentTarget.contains(e.relatedTarget as Node | null)) onCaret?.(null);
+				// Nowhere at all (the window lost focus, or the row is being
+				// removed and the browser says so first) is told apart.
+				const to = e.relatedTarget as Node | null;
+				if (!e.currentTarget.contains(to)) onCaret?.(null, to === null);
 			}}
 		>
 			<LeftGutter

@@ -228,13 +228,14 @@ export const titleRules: Rule<TitleIntent, null>[] = [
 	}),
 	// R8 from the title: Down or Right at its end goes to the start of a prose
 	// cell on top (the title has no x to land under). Anything else on top,
-	// the core goes into it. Back: R8, Up or Left at that cell's start.
+	// or an input line summoned above it, the core goes into that. Back: R8,
+	// Up or Left at that cell's start.
 	head({
 		rule: "R8",
 		on: "leave",
 		when: ({ api }) => {
 			const top = api.cells[0];
-			return top !== undefined && prose(api, top.id);
+			return top !== undefined && prose(api, top.id) && !api.beside(top.id, "up").line;
 		},
 		run: ({ api }) => api.focus({ cell: api.cells[0].id, at: "start" }),
 		back: "R8",
