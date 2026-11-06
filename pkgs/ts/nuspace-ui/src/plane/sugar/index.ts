@@ -33,6 +33,13 @@ export interface Sugar {
 	onTitle?(i: TitleIntent, api: PlaneApi): boolean;
 	/** The input line's placeholder while this set has it. */
 	inputHint?: string;
+	/**
+	 * What the document of a cell in the class draws while it has the caret
+	 * (the kit's `DocumentHandle.hint`): on it blank, and on the empty last
+	 * line of one with text. The core sets them as the caret arrives and
+	 * clears them as it leaves; a set only says what they read.
+	 */
+	documentHint?: { blank?: string; tail?: string };
 }
 
 /** The sets, in the order they are offered an intent. None yet. */

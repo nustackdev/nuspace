@@ -26,6 +26,12 @@
 //   title Enter mid-text   nothing, the title blurs
 //
 // A read-only plane routes nothing: no sugar, and the editor keeps every key.
+//
+// Hints are bound the same way. The input line shows the placeholder of the
+// first set it would offer an intent to; a cell's document draws the hints
+// of the first set bound to one of its classes, while the caret is in it
+// (./focus/useCaret.ts). With none, the line says "Press / for cells" and
+// a document draws only its own placeholder.
 
 import type { DocIntent } from "@nustackdev/ui-kit";
 import type { PlaneApi } from "./api";
@@ -58,6 +64,14 @@ export function inputHint(
 	cellSpecs: readonly CellSpec[],
 ): string | undefined {
 	return writingSugars(sugars, cellSpecs).find((s) => s.inputHint)?.inputHint;
+}
+
+/** The hints a cell's document draws while it has the caret: the first bound set's that has any. */
+export function documentHint(
+	sugars: readonly Sugar[],
+	classes: readonly string[],
+): { blank?: string; tail?: string } | undefined {
+	return sugars.find((s) => s.documentHint && classes.includes(s.class))?.documentHint;
 }
 
 /** What the core does when no sugar claims an intent. The plane supplies it. */

@@ -5,42 +5,44 @@
 // and a focus request waits for its cell's document and is consumed when
 // that registers. Then routing: a fake sugar claiming and declining.
 //
-// A document is a fake `DocumentHandle` registered through the kit registry
-// at the cell's address, as a MarkdownRef would: the plane never sees an
-// editor, only the handle and the intents it reports.
+// The documents are the shared harness's fakes (./plane.testing.tsx).
 
 import {
 	type DocIntent,
 	type DocumentHandle,
-	type IntentListener,
+	pathKey,
 	register,
 	registerDocument,
-	TooltipProvider,
-	tree,
 } from "@nustackdev/ui-kit";
 import { act, useEffect } from "react";
-import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { PlaneApi, PlaneHandle } from "./api";
-import type { TitleIntent } from "./intents";
-import { Plane } from "./Plane";
+import { describe, expect, it, vi } from "vitest";
+import type { PlaneApi } from "./api";
+import {
+	cell,
+	draw,
+	endLine,
+	fakeDoc,
+	handle,
+	leaves,
+	lines,
+	menu,
+	mountDoc,
+	notify,
+	onTitle,
+	ops,
+	planeRoot,
+	press,
+	render,
+	root,
+	row,
+	selected,
+	title,
+	typeInto,
+	VIEWER,
+	WITH_DEFAULT,
+} from "./plane.testing";
 import { readEditor } from "./state";
 import type { Sugar } from "./sugar";
-import type { ActivePlane, Cell, CellSpec } from "./types";
-
-(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-// The slash menu's popover sizes itself with a ResizeObserver, which jsdom
-// lacks, and jsdom lays nothing out.
-globalThis.ResizeObserver ??= class {
-	observe() {}
-	unobserve() {}
-	disconnect() {}
-} as unknown as typeof ResizeObserver;
-Element.prototype.scrollIntoView = () => {};
-Range.prototype.getClientRects = () => [] as unknown as DOMRectList;
-Range.prototype.getBoundingClientRect = () => new DOMRect();
-
-const VIEWER = ["viewer"];
 
 /** A program's view that is no document: drawn, never registered. */
 register("TestPlain", { component: () => <div /> });
@@ -48,144 +50,11 @@ register("TestPlain", { component: () => <div /> });
 let drawnDoc: DocumentHandle | null = null;
 register("TestDoc", {
 	component: ({ path }: { path: string[] }) => {
-		useEffect(() => (drawnDoc ? registerDocument(path, drawnDoc) : undefined), [path]);
+		// biome-ignore lint/correctness/useExhaustiveDependencies: path is compared by value, as a MarkdownRef's.
+		useEffect(() => (drawnDoc ? registerDocument(path, drawnDoc) : undefined), [pathKey(path)]);
 		return <div />;
 	},
 });
-
-/** The program's first write: a view node of `type` under the cell. */
-async function draw(id: string, type: string) {
-	await act(async () => {
-		tree.getState().write([["viewer"], ["cells"], [id], ["view", type]], {});
-	});
-}
-/** A prose spec, installed but no class default. */
-const PLAIN: CellSpec[] = [
-	{ name: "program", label: "Program" },
-	{ name: "text", label: "Text", classes: ["prose"] },
-];
-/** The same, with the text spec the prose default. */
-const WITH_DEFAULT: CellSpec[] = [
-	{ name: "program", label: "Program" },
-	{ name: "text", label: "Text", classes: ["prose"], default_for: ["prose"] },
-];
-
-let host: HTMLDivElement;
-let root: Root;
-const notify = vi.fn();
-const onTitle = vi.fn();
-const handle: { current: PlaneHandle | null } = { current: null };
-
-function render(
-	cells: Cell[],
-	{
-		specs = PLAIN,
-		editable = true,
-		sugars = [],
-		title = true,
-	}: { specs?: CellSpec[]; editable?: boolean; sugars?: Sugar[]; title?: boolean } = {},
-) {
-	const plane: ActivePlane = {
-		plane_id: "p1",
-		title: "",
-		meta: { editable, full_width: false, compact: false },
-		cells,
-	};
-	act(() => {
-		root.render(
-			<TooltipProvider>
-				<Plane
-					viewerPath={VIEWER}
-					plane={plane}
-					cellSpecs={specs}
-					editable={editable}
-					wide={false}
-					compact={false}
-					notify={notify}
-					handleRef={handle}
-					onTitle={title ? onTitle : undefined}
-					sugars={sugars}
-				/>
-			</TooltipProvider>,
-		);
-	});
-}
-
-function cell(id: string, classes: string[] = ["prose"], error: string | null = null): Cell {
-	return {
-		id,
-		name: id,
-		source: "",
-		has_ui: null,
-		classes,
-		status: { cell_id: id, state: error ? "failed" : "running", error, started_at: null },
-	};
-}
-
-/** A document as the kit hands one over: commands spied, intents said by hand. */
-function fakeDoc(blank = true) {
-	const listeners = new Set<IntentListener>();
-	const doc: DocumentHandle = {
-		focus: vi.fn(),
-		blank: vi.fn(() => blank),
-		markdown: vi.fn(() => ""),
-		tail: vi.fn(() => ""),
-		split: vi.fn(() => ""),
-		append: vi.fn(),
-		type: vi.fn(),
-		commit: vi.fn(),
-		onIntent(fn) {
-			listeners.add(fn);
-			return () => {
-				listeners.delete(fn);
-			};
-		},
-	};
-	/** Report an intent, as the editor's intents plugin would. True when the host acted. */
-	const say = (i: DocIntent) => {
-		let acted = false;
-		act(() => {
-			for (const fn of listeners) if (fn(i)) acted = true;
-		});
-		return acted;
-	};
-	return { doc, say, listeners };
-}
-
-const leaves: (() => void)[] = [];
-
-/** Register `d` as cell `id`'s document, at the path a MarkdownRef inside it would. */
-function mountDoc(id: string, d = fakeDoc()) {
-	act(() => {
-		leaves.push(registerDocument([...VIEWER, "cells", id, "text"], d.doc));
-	});
-	return d;
-}
-
-function press(el: Element, key: string, init: KeyboardEventInit = {}) {
-	act(() => {
-		el.dispatchEvent(
-			new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...init }),
-		);
-	});
-}
-
-/** Type into a field the way React hears it: native setter, then `input`. */
-function typeInto(el: HTMLInputElement, value: string) {
-	const proto = Object.getPrototypeOf(el);
-	act(() => {
-		Object.getOwnPropertyDescriptor(proto, "value")?.set?.call(el, value);
-		el.dispatchEvent(new Event("input", { bubbles: true }));
-	});
-}
-
-const lines = () => [...host.querySelectorAll<HTMLInputElement>("input[aria-label='New cell']")];
-const endLine = () => lines().at(-1) as HTMLInputElement;
-const planeRoot = () => endLine().parentElement?.parentElement as HTMLElement;
-const row = (id: string) => host.querySelector<HTMLElement>(`[data-cell="${id}"]`) as HTMLElement;
-const menu = () => document.querySelector("[role='listbox'][aria-label='Insert a cell']");
-const selected = () => readEditor(VIEWER, "p1").selected;
-const ops = () => notify.mock.calls.map(([op, args]) => [op, args.cell_id ?? args.cell_ids]);
 
 /** A sugar that only listens: it records what it is offered and claims nothing. */
 function spy(cls = "prose", claim = false) {
@@ -211,32 +80,6 @@ function spy(cls = "prose", claim = false) {
 	};
 	return { sugar, seen, api: () => api as PlaneApi | null };
 }
-
-const title = (i: TitleIntent) => {
-	let acted = false;
-	act(() => {
-		acted = handle.current?.title(i) ?? false;
-	});
-	return acted;
-};
-
-beforeEach(() => {
-	tree.getState().write([["viewer"]], {});
-	host = document.createElement("div");
-	document.body.appendChild(host);
-	root = createRoot(host);
-	notify.mockClear();
-	onTitle.mockClear();
-});
-
-afterEach(() => {
-	act(() => {
-		for (const leave of leaves.splice(0)) leave();
-		root.unmount();
-	});
-	host.remove();
-	tree.getState().remove(VIEWER);
-});
 
 describe("the input line, with no sugar", () => {
 	it("opens the menu with a typed character as its query (input_char_searches_without_default)", () => {

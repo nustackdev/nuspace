@@ -40,6 +40,7 @@ import {
 import type { FocusRequest, PlaneApi, PlaneHandle, PlaneModel } from "./api";
 import { cellUiPath } from "./cell/address";
 import { Cell } from "./cell/Cell";
+import { useCaret } from "./focus/useCaret";
 import { useDocuments } from "./focus/useDocuments";
 import { useFocusRouting } from "./focus/useFocusRouting";
 import { Ghost } from "./input/Ghost";
@@ -143,6 +144,7 @@ export function Plane({
 		select,
 		focusCell,
 		step,
+		beside,
 		enterCell,
 		setEditing,
 		enterTop,
@@ -189,6 +191,7 @@ export function Plane({
 		index,
 		document,
 		defaultSpec: (cls) => defaultSpecOf(cellSpecs, cls),
+		beside,
 		create: (at, spec, want) => create(at, spec, want),
 		remove,
 		reorder,
@@ -212,6 +215,8 @@ export function Plane({
 		api,
 		core: { step: (c, dir) => step(c, dir), enterTop },
 	});
+
+	const { caret } = useCaret(model, { sugars, editable, focus });
 
 	useDocuments(viewerPath, cells, {
 		intent: (cell, i) => routing.current?.document(cell, i) ?? false,
@@ -330,6 +335,7 @@ export function Plane({
 							}}
 							onCommit={(src) => commitSource(cell.id, src)}
 							onExit={(dir, column) => step(cell.id, dir, column)}
+							onCaret={(where) => caret(cell, where)}
 						/>
 						{editable && editor.ghost?.after === cell.id ? (
 							<div className={docRow}>

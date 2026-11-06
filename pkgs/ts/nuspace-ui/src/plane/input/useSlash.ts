@@ -2,6 +2,11 @@
 // a pick makes. The menu itself only draws (./SlashMenu.tsx); the ghost that
 // opened it forwards the keys here. A pick inserts after the ghost, or on a
 // stand-in (`replace`, ../state.ts) takes the place of the cell it stood for.
+// A stand-in is only ever for a blank cell, and the cell may have been
+// written meanwhile (another tab, a program): so whether to replace it is
+// asked again as the pick lands. Its document still blank, the pick replaces
+// it; anything in it, the pick goes in after and the cell comes back as it
+// is now. Text is never lost to a pick.
 
 import { useCallback, useMemo } from "react";
 import type { Place, PlaneModel } from "../api";
@@ -9,7 +14,7 @@ import type { CellSpec } from "../types";
 import { slashItems as listed } from "./slash";
 
 export function useSlash(
-	{ editor, patch }: PlaneModel,
+	{ editor, patch, document }: PlaneModel,
 	cellSpecs: CellSpec[],
 	{
 		create,
@@ -33,9 +38,9 @@ export function useSlash(
 			patch({ slash: null, ghost: null });
 			create({ after: s.cellId }, item.name);
 			// The new cell is landed on, so the replaced one leaves the caret alone.
-			if (replace) remove([replace], null);
+			if (replace && document(replace)?.blank() === true) remove([replace], null);
 		},
-		[create, editor.ghost, editor.slash, patch, remove],
+		[create, document, editor.ghost, editor.slash, patch, remove],
 	);
 
 	/** Returns true when the menu consumed the key. */
