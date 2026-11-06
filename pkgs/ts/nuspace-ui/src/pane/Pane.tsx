@@ -108,7 +108,6 @@ export function Pane({
 	const toTitle = useCallback((at: "start" | "end") => {
 		if (head.current) focusTitle(head.current, at);
 	}, []);
-	// The icon's fallback. The plane carries no `made_by`, the sidebar's row does.
 
 	return (
 		<section
