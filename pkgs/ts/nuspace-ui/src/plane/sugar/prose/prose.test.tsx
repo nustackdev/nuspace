@@ -84,10 +84,12 @@ describe("the rule table", () => {
 		}
 	});
 
-	it("is R1 to R10, merge and split left for the next phase", () => {
+	it("is R1 to R10, merge and split, each the other's way back", () => {
 		expect([...new Set(all.map((r) => r.rule))].sort()).toEqual(
-			["R1", "R10", "R2", "R5", "R6", "R7", "R8"].sort(),
+			["R1", "R10", "R2", "R5", "R6", "R7", "R8", "merge", "split"].sort(),
 		);
+		expect(all.find((r) => r.rule === "merge")?.back).toBe("split");
+		expect(all.find((r) => r.rule === "split")?.back).toBe("merge");
 	});
 });
 
@@ -579,35 +581,196 @@ describe("E. Shift+arrows spill into cell selection", () => {
 	});
 });
 
-describe("J, K. merge and split, not built: they fall through", () => {
-	it("row 154: Backspace at the start of a cell with text, prose above, does nothing yet", () => {
+/**
+ * A document as paragraphs, the caret between two of them: enough of the
+ * kit's commands to see text move between cells. `markdown`, `tail`,
+ * `split` and `append` keep the kit's rules: paragraphs join at a blank
+ * line, a cut takes everything after the caret, append into a blank one
+ * replaces it and leaves the caret at the join.
+ */
+function paper(blocks: string[], caret = 0) {
+	const d = fakeDoc();
+	const at = { blocks: [...blocks], caret };
+	const md = (bs: string[]) => bs.join("\n\n");
+	vi.mocked(d.doc.blank).mockImplementation(() => at.blocks.length === 0);
+	vi.mocked(d.doc.markdown).mockImplementation(() => md(at.blocks));
+	vi.mocked(d.doc.tail).mockImplementation(() => md(at.blocks.slice(at.caret)));
+	vi.mocked(d.doc.split).mockImplementation(() => {
+		const tail = md(at.blocks.slice(at.caret));
+		at.blocks = at.blocks.slice(0, at.caret);
+		return tail;
+	});
+	vi.mocked(d.doc.append).mockImplementation((text: string) => {
+		const more = text ? text.split("\n\n") : [];
+		at.caret = at.blocks.length;
+		at.blocks = [...at.blocks, ...more];
+	});
+	return { ...d, at };
+}
+
+describe("J. merge", () => {
+	it("row 154 merge_into_prose_above: the text goes onto the end above, saved, then this cell goes, caret at the join", () => {
 		plane([cell("a"), cell("b")]);
-		const a = mountDoc("a", fakeDoc(false));
-		expect(mountDoc("b", fakeDoc(false)).say({ kind: "erase", dir: "back" })).toBe(false);
-		expect(notify).not.toHaveBeenCalled();
-		expect(a.doc.append).not.toHaveBeenCalled();
+		const a = mountDoc("a", paper(["one"]));
+		const b = mountDoc("b", paper(["two"]));
+		expect(b.say({ kind: "erase", dir: "back" })).toBe(true);
+		expect(a.doc.append).toHaveBeenCalledWith("two");
+		expect(a.at.blocks).toEqual(["one", "two"]);
+		expect(a.doc.commit).toHaveBeenCalled();
+		// The text was in `a` and saved before the remove was sent.
+		const appended = vi.mocked(a.doc.commit).mock.invocationCallOrder[0];
+		const removed = notify.mock.invocationCallOrder[0];
+		expect(appended).toBeLessThan(removed);
+		expect(ops()).toEqual([["cell.delete", "b"]]);
+		expect(row("b").hidden).toBe(true);
+		expect(a.doc.focus).toHaveBeenCalledWith("kept");
 	});
 
-	it("rows 156-157 merge_not_into_*: nor into another class or the title", () => {
+	it("row 155 merge_into_blank: into a blank cell above the text replaces it", () => {
+		plane([cell("a"), cell("b")]);
+		const a = mountDoc("a", paper([]));
+		const b = mountDoc("b", paper(["two"]));
+		// Blank above is not blank here: this is merge, not R2.
+		expect(b.say({ kind: "erase", dir: "back" })).toBe(true);
+		expect(a.at.blocks).toEqual(["two"]);
+		expect(ops()).toEqual([["cell.delete", "b"]]);
+	});
+
+	it("row 156 merge_not_into_non_prose: another class above, nothing happens", () => {
 		plane([cell("a", []), cell("b")]);
-		expect(mountDoc("a").say({ kind: "erase", dir: "back" })).toBe(false);
-		expect(mountDoc("b", fakeDoc(false)).say({ kind: "erase", dir: "back" })).toBe(false);
+		const a = mountDoc("a", paper(["one"]));
+		expect(mountDoc("b", paper(["two"])).say({ kind: "erase", dir: "back" })).toBe(false);
+		expect(a.doc.append).not.toHaveBeenCalled();
 		expect(notify).not.toHaveBeenCalled();
 	});
 
-	it("row 164: Cmd+Enter mid-text does nothing yet; row 175 no_split_classless", () => {
-		plane([cell("a"), cell("b", [])]);
-		const a = mountDoc("a", fakeDoc(false));
-		expect(a.say({ kind: "break", at: "mid" })).toBe(false);
-		expect(mountDoc("b").say({ kind: "break", at: "mid" })).toBe(false);
+	it("row 157 merge_not_into_title: the top cell, nothing happens", () => {
+		plane([cell("a"), cell("b")]);
+		expect(mountDoc("a", paper(["one"])).say({ kind: "erase", dir: "back" })).toBe(false);
 		expect(notify).not.toHaveBeenCalled();
-		expect(a.doc.split).not.toHaveBeenCalled();
-		expect(lines()).toHaveLength(1);
+		expect(onTitle).not.toHaveBeenCalled();
+	});
+
+	it("row 158 merge_heading: a heading arrives as the markdown it is", () => {
+		plane([cell("a"), cell("b")]);
+		const a = mountDoc("a", paper(["one"]));
+		mountDoc("b", paper(["# Two", "three"])).say({ kind: "erase", dir: "back" });
+		expect(a.doc.append).toHaveBeenCalledWith("# Two\n\nthree");
+	});
+
+	it("row 41 still wins: a blank cell is removed by R2, not merged", () => {
+		plane([cell("a"), cell("b")]);
+		const a = mountDoc("a", paper(["one"]));
+		mountDoc("b", paper([])).say({ kind: "erase", dir: "back" });
+		expect(a.doc.append).not.toHaveBeenCalled();
+		expect(a.doc.focus).toHaveBeenCalledWith("end");
 	});
 
 	it("row 162 erase_forward_noop: Delete at the end does nothing", () => {
 		plane([cell("a"), cell("b")]);
-		expect(mountDoc("a", fakeDoc(false)).say({ kind: "erase", dir: "forward" })).toBe(false);
+		expect(mountDoc("a", paper(["one"])).say({ kind: "erase", dir: "forward" })).toBe(false);
+		expect(notify).not.toHaveBeenCalled();
+	});
+});
+
+describe("K. split", () => {
+	/** Split `a` and ship the new cell: its id and its document, once registered. */
+	function splitA(a: ReturnType<typeof paper>, into = paper([])) {
+		expect(a.say({ kind: "break", at: "mid" })).toBe(true);
+		const id = created()[0].cell_id as string;
+		expect(created()[0]).toMatchObject({ name: "text", index: 1 });
+		plane([cell("a"), cell(id), cell("z")]);
+		return { id, into };
+	}
+
+	it("row 164 split_moves_tail_after_append: the tail is handed over, then cut here, caret at its start", () => {
+		plane([cell("a"), cell("z")]);
+		const a = mountDoc("a", paper(["one", "two"], 1));
+		const { id, into } = splitA(a);
+		// Shipped, no document yet: hidden rather than empty, and nothing cut.
+		expect(row(id).hidden).toBe(true);
+		expect(a.doc.split).not.toHaveBeenCalled();
+		mountDoc(id, into);
+		expect(into.doc.append).toHaveBeenCalledWith("two");
+		expect(into.doc.focus).toHaveBeenCalledWith("start");
+		expect(a.doc.split).toHaveBeenCalledOnce();
+		expect(vi.mocked(into.doc.append).mock.invocationCallOrder[0]).toBeLessThan(
+			vi.mocked(a.doc.split).mock.invocationCallOrder[0],
+		);
+		expect(a.at.blocks).toEqual(["one"]);
+		expect(into.at.blocks).toEqual(["two"]);
+		expect(into.doc.commit).toHaveBeenCalled();
+		expect(a.doc.commit).toHaveBeenCalled();
+		expect(row(id).hidden).toBe(false);
+	});
+
+	it("row 167 split_at_start: everything goes below, this cell left blank", () => {
+		plane([cell("a"), cell("z")]);
+		const a = mountDoc("a", paper(["one", "two"], 0));
+		const { id, into } = splitA(a);
+		mountDoc(id, into);
+		expect(a.at.blocks).toEqual([]);
+		expect(into.at.blocks).toEqual(["one", "two"]);
+	});
+
+	it("row 116 split_in_list: allowed, the tail is whatever the editor cuts", () => {
+		plane([cell("a"), cell("z")]);
+		const a = mountDoc("a", paper(["- one", "- two"], 1));
+		const { id, into } = splitA(a);
+		mountDoc(id, into);
+		expect(into.at.blocks).toEqual(["- two"]);
+		expect(a.at.blocks).toEqual(["- one"]);
+	});
+
+	it("row 174 split_concurrent_write: written here meanwhile, the cut is not made and both keep the text", () => {
+		plane([cell("a"), cell("z")]);
+		const a = mountDoc("a", paper(["one", "two"], 1));
+		const { id, into } = splitA(a);
+		// Another tab writes into `a` before the new cell's document arrives.
+		a.at.blocks = ["one", "two, edited"];
+		mountDoc(id, into);
+		expect(into.at.blocks).toEqual(["two"]);
+		expect(a.doc.split).not.toHaveBeenCalled();
+		expect(a.at.blocks).toEqual(["one", "two, edited"]);
+	});
+
+	it("row 173 split_no_register_keeps_text: a cell that never takes it leaves the tail here, and shows", () => {
+		plane([cell("a"), cell("z")]);
+		const a = mountDoc("a", paper(["one", "two"], 1));
+		const { id } = splitA(a);
+		expect(row(id).hidden).toBe(true);
+		plane([cell("a"), { ...cell(id), has_ui: false }, cell("z")]);
+		expect(row(id).hidden).toBe(false);
+		expect(readEditor(VIEWER, "p1").requests).toEqual([]);
+		expect(a.doc.split).not.toHaveBeenCalled();
+		expect(a.at.blocks).toEqual(["one", "two"]);
+	});
+
+	it("row 168: at the end it is R7, never a split", () => {
+		plane([cell("a"), cell("z")]);
+		const a = mountDoc("a", paper(["one"], 1));
+		a.say({ kind: "break", at: "end" });
+		expect(created()).toEqual([]);
+		expect(lines()).toHaveLength(2);
+	});
+
+	it("row 175 no_split_classless: a classless cell's document, nothing", () => {
+		plane([cell("a", []), cell("z")]);
+		expect(mountDoc("a", paper(["one", "two"], 1)).say({ kind: "break", at: "mid" })).toBe(false);
+		expect(notify).not.toHaveBeenCalled();
+	});
+
+	it("rows 164 + 154: split, then merge back, is the original markdown", () => {
+		plane([cell("a"), cell("z")]);
+		const a = mountDoc("a", paper(["one", "two"], 1));
+		const before = a.doc.markdown();
+		const { id, into } = splitA(a);
+		const b = mountDoc(id, into);
+		expect(a.doc.markdown()).toBe("one");
+		// The caret is at the new cell's start: Backspace there merges.
+		expect(b.say({ kind: "erase", dir: "back" })).toBe(true);
+		expect(a.doc.markdown()).toBe(before);
+		expect(ops().at(-1)).toEqual(["cell.delete", id]);
 	});
 });
 

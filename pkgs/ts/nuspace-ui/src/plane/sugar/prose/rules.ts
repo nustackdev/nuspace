@@ -19,12 +19,19 @@
 //   R7  Cmd+Enter at the end of the text opens an input line below
 //   R8  the arrows cross into the prose cell that way, or the title
 //   R10 Shift+arrow at the edge spills into cell selection
+//   merge  Backspace at the very start of a prose cell with text joins it
+//          onto the end of the prose cell above
+//   split  Cmd+Enter with text after the caret moves that text into a new
+//          prose cell below
+//
+// Merge and split are each other's way back. Both are composed from the
+// document's own commands (append, tail, split) and the plane's create and
+// remove, ordered so that the text is always in at least one cell: merge
+// appends and saves above before it removes, split hands the tail to the
+// new cell and cuts it here only once that cell holds it.
 //
 // R9, a text drag out of a cell, is the core's range select: a pointer
-// press is not an intent a document reports. Merge and split are the next
-// two rows (task-162 phase 5); until they land, Backspace at the start of a
-// prose cell with text and Cmd+Enter mid-text fall through to the core,
-// which does nothing with either.
+// press is not an intent a document reports.
 
 import type { DocIntent, FocusAt, LeaveDir } from "@nustackdev/ui-kit";
 import type { FocusTarget, PlaneApi } from "../../api";
@@ -129,7 +136,33 @@ export const documentRules: Rule<DocIntent, string>[] = [
 		run: ({ at, api }) => api.remove([at], above(api, at)),
 		back: "R7 + R1",
 	}),
-	// Merge (phase 5) goes here: erase back, not blank, a prose cell above.
+	// Merge. Backspace at the very start of a cell with text (the editor
+	// reports it only there), with a prose cell above: its text goes onto the
+	// end of that one, joined at a paragraph break, the only join markdown
+	// can store, and this cell goes. The text is added and saved above before
+	// the remove is sent, so it is never in neither. The caret stays at the
+	// join, where append left the selection; into a blank cell above, append
+	// replaces its empty paragraph and the caret is at the text's start. The
+	// top cell, or another class above, and Backspace does nothing. Back:
+	// split at the join.
+	doc({
+		rule: "merge",
+		on: "erase",
+		when: ({ at, i, api }) => {
+			const up = api.beside(at, "up").cell;
+			return i.dir === "back" && up !== null && prose(api, up) && api.document(up) !== null;
+		},
+		run: ({ at, api }) => {
+			const up = api.beside(at, "up").cell;
+			const into = up ? api.document(up) : null;
+			const from = api.document(at);
+			if (!up || !into || !from) return;
+			into.append(from.markdown());
+			into.commit();
+			api.remove([at], { cell: up, at: "kept" });
+		},
+		back: "split",
+	}),
 
 	// R6. `/` in a blank cell (the editor reports it only there) puts the
 	// menu in its place, and a pick replaces it. Back: Escape brings the cell
@@ -152,7 +185,39 @@ export const documentRules: Rule<DocIntent, string>[] = [
 		run: ({ at, api }) => api.openInput(at, { cell: at, at: "kept" }),
 		back: "Escape",
 	}),
-	// Split (phase 5) goes here: break mid-text.
+	// Split. Cmd+Enter with text after the caret (at the very start that is
+	// all of it, leaving this cell blank; in a list it cuts the list): a cell
+	// from the prose default below, handed the text after the caret, the
+	// caret at its start. The tail is cut from here only once the new cell's
+	// document holds it, so it is never in neither; a cell that never takes
+	// it leaves it here. Back: merge, Backspace at the new cell's start.
+	doc({
+		rule: "split",
+		on: "break",
+		when: ({ i, api }) => i.at === "mid" && api.defaultSpec(PROSE) !== null,
+		run: ({ at, api }) => {
+			const spec = api.defaultSpec(PROSE);
+			const from = api.document(at);
+			if (!spec || !from) return;
+			const tail = from.tail();
+			api.create({ after: at }, spec, {
+				at: "start",
+				markdown: tail,
+				// biome-ignore lint/suspicious/noThenProperty: the focus request's hook (FocusRequest), never awaited.
+				then: (into) => {
+					into.commit();
+					// Written here meanwhile (another tab, a program), what follows
+					// the caret is no longer what was handed over: both are left as
+					// they are, the text in both cells rather than in neither.
+					const here = api.document(at);
+					if (!here || here.tail() !== tail) return;
+					here.split();
+					here.commit();
+				},
+			});
+		},
+		back: "merge",
+	}),
 
 	// R8. An arrow out of the text lands in the prose cell that way, under
 	// the caret going up or down, or in the title above the top cell. Back:

@@ -137,7 +137,8 @@ export function fakeDoc(blank = true) {
 export const leaves: (() => void)[] = [];
 
 /** Register `d` as cell `id`'s document, at the path a MarkdownRef inside it would. */
-export function mountDoc(id: string, d = fakeDoc()) {
+export function mountDoc<D extends ReturnType<typeof fakeDoc>>(id: string, given?: D): D {
+	const d = given ?? (fakeDoc() as D);
 	act(() => {
 		leaves.push(registerDocument([...VIEWER, "cells", id, "text"], d.doc));
 	});
