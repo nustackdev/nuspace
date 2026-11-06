@@ -8,9 +8,8 @@
 
 import type * as React from "react";
 import { useCallback } from "react";
+import type { PlaneModel } from "../api";
 import { tabStop } from "../focus/focusable";
-import type { PlaneModel } from "../model";
-import type { FocusReq } from "../state";
 import type { Cell } from "../types";
 
 /**
@@ -43,13 +42,17 @@ export function useCellKeys(
 	{
 		focusCell,
 		enterCell,
-		deleteCells,
+		remove,
 		moveSelected,
+		release,
 	}: {
-		focusCell: (cell: Cell, req: Omit<FocusReq, "cellId">, editing: string[]) => void;
+		focusCell: (cell: Cell, place: "start" | "end", column?: number) => void;
 		enterCell: (cell: Cell) => void;
-		deleteCells: (ids: string[]) => void;
+		/** The one delete path (../structure/useStructure.ts). */
+		remove: (ids: string[]) => void;
 		moveSelected: (dir: -1 | 1) => void;
+		/** Settle the focus requests: the person is elsewhere now. */
+		release: () => void;
 	},
 ) {
 	return useCallback(
@@ -64,6 +67,7 @@ export function useCellKeys(
 			if (e.key === "Escape") {
 				e.preventDefault();
 				patch({ selected: [], anchor: null });
+				release();
 				return;
 			}
 			// Tab carries on from the selection: down to what comes after it,
@@ -93,7 +97,7 @@ export function useCellKeys(
 			}
 			if (e.key === "Backspace" || e.key === "Delete") {
 				e.preventDefault();
-				deleteCells(sel);
+				remove(sel);
 				return;
 			}
 			if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "a") {
@@ -123,20 +127,15 @@ export function useCellKeys(
 				const j = (dir < 0 ? first - 1 + ids.length : last + 1) % ids.length;
 				// Land the caret when the neighbour can hold one; otherwise the
 				// selection just walks on, carrying the parked column with it.
-				focusCell(
-					cells[j],
-					{ place: dir < 0 ? "end" : "start", column: editor.column ?? undefined },
-					editor.editing,
-				);
+				focusCell(cells[j], dir < 0 ? "end" : "start", editor.column ?? undefined);
 				return;
 			}
 		},
 		[
 			cells,
-			deleteCells,
+			remove,
 			editor.anchor,
 			editor.column,
-			editor.editing,
 			editor.selected,
 			editable,
 			elRefs,
@@ -144,6 +143,7 @@ export function useCellKeys(
 			focusCell,
 			moveSelected,
 			patch,
+			release,
 		],
 	);
 }

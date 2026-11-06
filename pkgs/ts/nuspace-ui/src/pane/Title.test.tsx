@@ -6,28 +6,23 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { Title } from "./Title";
+import type { TitleIntent } from "../plane/intents";
+import { focusTitle, Title } from "./Title";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 let host: HTMLDivElement;
 let root: Root;
 const onCommit = vi.fn();
-const onExit = vi.fn(() => true);
-const onOpen = vi.fn(() => true);
-const endRef: { current: (() => void) | null } = { current: null };
+/** The plane below as the core has it: it takes the caret off the title's
+ *  end, and leaves Enter mid-title to the title. */
+const core = (i: TitleIntent) => i.kind === "leave" || i.end;
+const onIntent = vi.fn(core);
 
-function render(value: string, open = false) {
+function render(value: string) {
 	act(() => {
 		root.render(
-			<Title
-				value={value}
-				placeholder="Untitled"
-				onCommit={onCommit}
-				onExit={onExit}
-				onOpen={open ? onOpen : undefined}
-				endRef={endRef}
-			/>,
+			<Title value={value} placeholder="Untitled" onCommit={onCommit} onIntent={onIntent} />,
 		);
 	});
 }
@@ -69,8 +64,8 @@ beforeEach(() => {
 	document.body.appendChild(host);
 	root = createRoot(host);
 	onCommit.mockClear();
-	onExit.mockClear();
-	onOpen.mockClear();
+	onIntent.mockReset();
+	onIntent.mockImplementation(core);
 });
 
 afterEach(() => {
@@ -94,7 +89,7 @@ describe("Title", () => {
 		caret(2);
 		key("Enter");
 		expect(onCommit).toHaveBeenCalledExactlyOnceWith("Plans");
-		expect(onExit).not.toHaveBeenCalled();
+		expect(onIntent).toHaveBeenCalledExactlyOnceWith({ kind: "enter", end: false });
 		expect(document.activeElement).not.toBe(title());
 	});
 
@@ -136,43 +131,54 @@ describe("Title", () => {
 		expect(title().textContent).toBe("Again");
 	});
 
-	it("hands the caret down on Down or Enter at the end", () => {
+	it("reports Down, Right and Enter at the end, and arrows only there", () => {
 		render("Notes");
 		type("Notes");
 		caret(5);
 		key("ArrowDown");
-		expect(onExit).toHaveBeenCalledTimes(1);
 		caret(2);
 		key("ArrowDown");
-		expect(onExit).toHaveBeenCalledTimes(1);
 		caret(5);
 		key("Enter");
-		expect(onExit).toHaveBeenCalledTimes(2);
 		key("ArrowRight");
-		expect(onExit).toHaveBeenCalledTimes(3);
 		caret(2);
 		key("ArrowRight");
-		expect(onExit).toHaveBeenCalledTimes(3);
+		expect(onIntent.mock.calls.map(([i]) => i)).toEqual([
+			{ kind: "leave", dir: "down" },
+			{ kind: "enter", end: true },
+			{ kind: "leave", dir: "right" },
+		]);
 	});
 
-	it("opens a text cell on Enter anywhere, and keeps the title whole", () => {
-		render("Notes", true);
+	it("keeps the title whole when the plane takes Enter mid-title", () => {
+		onIntent.mockImplementation(() => true);
+		render("Notes");
 		type("Plans today");
 		caret(5);
 		key("Enter");
-		expect(onOpen).toHaveBeenCalledTimes(1);
-		expect(onExit).not.toHaveBeenCalled();
+		expect(onIntent).toHaveBeenCalledExactlyOnceWith({ kind: "enter", end: false });
 		expect(title().textContent).toBe("Plans today");
+		expect(document.activeElement).toBe(title());
 		act(() => title().blur());
 		expect(onCommit).toHaveBeenCalledExactlyOnceWith("Plans today");
 	});
 
-	it("sets its way back, which lands the caret at the end", () => {
-		render("Notes", true);
+	it("blurs on Enter at the end when the plane has nowhere to take it", () => {
+		onIntent.mockImplementation(() => false);
+		render("Notes");
+		type("Notes");
+		caret(5);
+		key("Enter");
+		expect(onIntent).toHaveBeenCalledTimes(1);
+		expect(document.activeElement).not.toBe(title());
+	});
+
+	it("takes the caret back at its end through focusTitle", () => {
+		render("Notes");
 		type("Notes");
 		act(() => title().blur());
 		caret(0);
-		act(() => endRef.current?.());
+		act(() => focusTitle(title(), "end"));
 		expect(document.activeElement).toBe(title());
 		const sel = document.getSelection() as Selection;
 		expect(sel.isCollapsed).toBe(true);
@@ -180,14 +186,5 @@ describe("Title", () => {
 		rest.selectNodeContents(title());
 		rest.setStart(sel.focusNode as Node, sel.focusOffset);
 		expect(rest.toString()).toBe("");
-	});
-
-	it("leaves as before when there is nothing to open", () => {
-		onOpen.mockReturnValueOnce(false);
-		render("Notes", true);
-		type("Notes");
-		caret(5);
-		key("Enter");
-		expect(onExit).toHaveBeenCalledTimes(1);
 	});
 });

@@ -1,17 +1,23 @@
 // The slash menu's behaviour: what it lists, what a key does to it, and what
 // a pick makes. The menu itself only draws (./SlashMenu.tsx); the ghost that
 // opened it forwards the keys here. A pick inserts after the ghost, or on a
-// stand-in (`replace`, ./state.ts) takes the place of the cell it stood for.
+// stand-in (`replace`, ../state.ts) takes the place of the cell it stood for.
 
 import { useCallback, useMemo } from "react";
-import type { PlaneModel } from "../model";
+import type { Place, PlaneModel } from "../api";
 import type { CellSpec } from "../types";
 import { slashItems as listed } from "./slash";
 
 export function useSlash(
-	{ editor, patch, notify }: PlaneModel,
+	{ editor, patch }: PlaneModel,
 	cellSpecs: CellSpec[],
-	createAfter: (afterId: string | null, name: string) => void,
+	{
+		create,
+		remove,
+	}: {
+		create: (at: Place, spec: string) => string;
+		remove: (ids: string[], focus: null) => void;
+	},
 ) {
 	const slash = editor.slash;
 	const slashItems = useMemo(
@@ -24,16 +30,12 @@ export function useSlash(
 			const s = editor.slash;
 			if (!s) return;
 			const replace = editor.ghost?.replace;
-			patch((e) => ({
-				slash: null,
-				ghost: null,
-				editing: replace ? e.editing.filter((id) => id !== replace) : e.editing,
-				leaving: replace ? [...e.leaving, replace] : e.leaving,
-			}));
-			createAfter(s.cellId, item.name);
-			if (replace) notify("cell.delete", { cell_id: replace });
+			patch({ slash: null, ghost: null });
+			create({ after: s.cellId }, item.name);
+			// The new cell is landed on, so the replaced one leaves the caret alone.
+			if (replace) remove([replace], null);
 		},
-		[createAfter, editor.ghost, editor.slash, notify, patch],
+		[create, editor.ghost, editor.slash, patch, remove],
 	);
 
 	/** Returns true when the menu consumed the key. */

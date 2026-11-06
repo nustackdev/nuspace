@@ -1,12 +1,15 @@
 // What on a plane can take the keyboard, shared by the two places that move it
-// by hand: landing on a new cell (./useStructure.ts), and Tab off a selected
-// cell (./useCellKeys.ts). Everywhere else the browser's own tab order rules.
-
-import { EDITABLE } from "../sugar/surface";
+// by hand: Enter into a selected cell that draws no document
+// (./useFocusRouting.ts), and Tab off a selected cell
+// (../selection/useCellKeys.ts). Everywhere else the browser's own tab order
+// rules. A cell's document is never found this way: the kit registry hands
+// it over (./useDocuments.ts).
 
 /** What a drawn cell can hand the keyboard to. */
 export const FOCUSABLE = [
-	EDITABLE,
+	'[contenteditable="true"]',
+	"textarea",
+	"input",
 	"select",
 	"button",
 	"a[href]",

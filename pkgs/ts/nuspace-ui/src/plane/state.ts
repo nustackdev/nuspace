@@ -10,20 +10,62 @@
 // prunes this when a `set_plane` drops the cells it names.
 
 import type { Path } from "@nustackdev/ui-core";
-import { patchLocal, useLocalSlot } from "../core/local";
+import type { FocusAt } from "@nustackdev/ui-kit";
+import { nodeAt } from "@nustackdev/ui-kit";
+import { LOCAL, patchLocal, useLocalSlot } from "../core/local";
 
-/** Where the caret should land next. Consumed by the cell that owns it. */
+/**
+ * Where the caret should land next, parked until the cell can take it.
+ *
+ * A request names a cell and who in it consumes it: the cell's document
+ * (the kit registry's handle, see ./focus/useDocuments.ts) or its open
+ * source editor (./cell/Code.tsx). The consumer takes it when it is ready,
+ * a document when it registers and an editor when it has a view, and clears
+ * it. A cell created a moment ago has neither yet, so the request simply
+ * waits: there is no timeout, and Escape in the line that fed it drops it.
+ *
+ * Text and markdown ride along. `markdown` is appended to the document
+ * before it is focused, `text` is typed in after, as the person's own
+ * keystrokes, so it saves like any edit. What else the caller wants to hear
+ * (the document that took it) is not serialisable, so it is kept beside
+ * this state by `id` (./focus/useFocusRouting.ts), never in it.
+ */
 export type FocusReq = {
+	/** Names the request, and the hook kept beside it, if any. */
+	id: number;
 	cellId: string;
-	/** Which end of the target editor to enter from. */
-	place: "start" | "end";
+	/** Who consumes it: the cell's document, or its open source editor. */
+	to: "document" | "source";
+	at: FocusAt;
 	/**
 	 * Desired column, carried across a cell boundary so arrowing down out of
-	 * one cell and into the next lands under the caret rather than at
-	 * column 0.
+	 * one source and into the next lands under the caret rather than at
+	 * column 0. Sources only.
 	 */
 	column?: number;
+	/** Appended to the document before it is focused. */
+	markdown?: string;
+	/** Typed into the document once it has the caret, as if at the keyboard. */
+	text?: string;
+	/**
+	 * It takes the caret when consumed. Dropped to false once the person put
+	 * the caret somewhere else meanwhile: what it carries still lands, the
+	 * caret stays where they put it.
+	 */
+	pull: boolean;
+	/** Its document registered: it is consumed once the cell is drawn. */
+	ready?: boolean;
+	/** For a cell asked for and not shipped back yet, which pruning keeps. */
+	fresh?: boolean;
+	/**
+	 * The input line feeding it, which shows `text` and takes the keys typed
+	 * meanwhile until it lands: the end line, or the summoned one.
+	 */
+	line?: InputLine;
 };
+
+/** The two input lines a plane can have: always one at the end, at most one summoned. */
+export type InputLine = "end" | "summoned";
 
 export type SlashState = {
 	/** The cell the ghost it is open on sits after. Null only on a plane
@@ -46,7 +88,8 @@ export type DragState = {
 };
 
 export type EditorState = {
-	focus: FocusReq | null;
+	/** Focus requests waiting for their cell, oldest first. At most one pulls. */
+	requests: FocusReq[];
 	selected: string[];
 	/** Anchor for shift-extended cell selection. */
 	anchor: string | null;
@@ -57,8 +100,7 @@ export type EditorState = {
 	 * The transient ghost input, as the id of the cell it sits after, null
 	 * at the top of the plane.
 	 *
-	 * Summoned by a gutter `+`, Cmd+Enter in a text cell, or `/` in a blank
-	 * one; it resolves into a cell or it goes away the moment it loses focus
+	 * Summoned by a gutter `+`, or by a sugar (../sugar); it resolves into a cell or it goes away the moment it loses focus
 	 * with nothing in it. At most one exists, because it is one
 	 * slot and not a set -- summoning a second while a first is open blurs the
 	 * first, which is what dismisses it.
@@ -86,7 +128,7 @@ export type EditorState = {
 };
 
 export const EMPTY_EDITOR: EditorState = {
-	focus: null,
+	requests: [],
 	selected: [],
 	anchor: null,
 	editing: [],
@@ -101,13 +143,17 @@ export type EditorPatch = Partial<EditorState> | ((e: EditorState) => Partial<Ed
 
 /**
  * Drop everything in one pane's editor state that points at a cell not in
- * `live`. Focus and drag are dropped outright -- a re-ship means the document
- * moved under them and guessing is worse than nothing.
+ * `live`. Drag is dropped outright -- a re-ship means the document moved
+ * under it and guessing is worse than nothing. A focus request for a cell
+ * asked for here and not shipped yet stays: the cell is on its way, and the
+ * first `set_plane` that carries it makes it an ordinary request.
  */
 export function pruneEditor(local: EditorState, live: Set<string>): EditorState {
 	return {
 		...local,
-		focus: local.focus && live.has(local.focus.cellId) ? local.focus : null,
+		requests: (local.requests ?? []).flatMap((r) =>
+			live.has(r.cellId) ? [r.fresh ? { ...r, fresh: false } : r] : r.fresh ? [r] : [],
+		),
 		selected: local.selected.filter((id) => live.has(id)),
 		anchor: local.anchor && live.has(local.anchor) ? local.anchor : null,
 		editing: local.editing.filter((id) => live.has(id)),
@@ -138,6 +184,13 @@ const NO_PANES: Record<string, EditorState> = {};
 
 export function useEditorState(path: Path, planeId: string): EditorState {
 	return useLocalSlot(path, NO_PANES, (local) => paneOf(local, planeId));
+}
+
+/** One pane's editor state as it is now, outside a render: for a handler
+ *  that patched a moment ago and must not act on the render's copy. */
+export function readEditor(path: Path, planeId: string): EditorState {
+	const local = nodeAt(path)?.props[LOCAL] as Record<string, EditorState> | undefined;
+	return paneOf(local ?? NO_PANES, planeId);
 }
 
 // -- Writes ------------------------------------------------------------------

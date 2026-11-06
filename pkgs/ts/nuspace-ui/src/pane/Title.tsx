@@ -14,15 +14,17 @@
 //     a ref, so a rename that landed while the field was focused shows up the
 //     moment it lets go.
 //
-// Enter goes on writing below, the way a document does, when the plane below
-// can take it: an empty text cell at the top (`onOpen`), the title left whole
-// wherever the caret was. Backspace in that cell while it is still empty
-// comes back to the title's end (`endRef`). The rename is saved as the caret
-// leaves.
+// What the title means to the plane below is the plane's to decide. The
+// title only reports what the person tried to do (`onIntent`): Enter, with
+// whether the caret was at the end, and Down or Right off its end. True, the
+// plane acted, and the title leaves it at that; false, Enter blurs, which
+// saves the rename, and an arrow stays the title's. The way back up is the
+// plane's too: it puts the caret here through `focusTitle`.
 
 import type * as React from "react";
 import { useCallback, useEffect, useRef } from "react";
 import { docTitle } from "../design";
+import type { TitleIntent } from "../plane/intents";
 
 /** A title is one line: newlines and runs of space collapse. */
 function clean(text: string | null): string {
@@ -41,27 +43,31 @@ function caretAtEnd(el: HTMLElement): boolean {
 	return tail.toString().length === 0;
 }
 
+/** The caret into the title, collapsed at its start or end. */
+export function focusTitle(el: HTMLElement, at: "start" | "end"): void {
+	el.focus();
+	const sel = el.ownerDocument.getSelection();
+	sel?.selectAllChildren(el);
+	if (at === "start") sel?.collapseToStart();
+	else sel?.collapseToEnd();
+}
+
 export function Title({
 	value,
 	placeholder,
 	onCommit,
-	onExit,
-	onOpen,
-	endRef,
+	onIntent,
+	headRef,
 }: {
 	/** The server's title. */
 	value: string;
 	placeholder: string;
 	/** A changed, non-empty title. */
 	onCommit: (title: string) => void;
-	/** Down or Enter at the end: hand the caret to the cells. False when there
-	 *  is nowhere to go. */
-	onExit?: () => boolean;
-	/** Enter: open an empty text cell at the top. False when there is
-	 *  nowhere to open one, and Enter leaves as it always did. */
-	onOpen?: () => boolean;
-	/** Set to "put the caret at the title's end". */
-	endRef?: React.RefObject<(() => void) | null>;
+	/** What the person tried to do, for the plane below. True when it acted. */
+	onIntent?: (intent: TitleIntent) => boolean;
+	/** The heading, for whoever puts the caret back in it (`focusTitle`). */
+	headRef?: React.RefObject<HTMLHeadingElement | null>;
 }) {
 	const ref = useRef<HTMLHeadingElement | null>(null);
 	const server = useRef(value);
@@ -74,20 +80,6 @@ export function Title({
 		if (!el || el.ownerDocument.activeElement === el) return;
 		if (el.textContent !== value) el.textContent = value;
 	}, [value]);
-
-	useEffect(() => {
-		if (!endRef) return;
-		endRef.current = () => {
-			const el = ref.current;
-			if (!el) return;
-			el.focus();
-			el.ownerDocument.getSelection()?.selectAllChildren(el);
-			el.ownerDocument.getSelection()?.collapseToEnd();
-		};
-		return () => {
-			endRef.current = null;
-		};
-	}, [endRef]);
 
 	const commit = useCallback(() => {
 		const el = ref.current;
@@ -110,8 +102,7 @@ export function Title({
 			if (e.key === "Enter") {
 				// Never a newline. Leaving commits, through the blur.
 				e.preventDefault();
-				if (onOpen?.()) return;
-				if (caretAtEnd(el) && onExit?.()) return;
+				if (onIntent?.({ kind: "enter", end: caretAtEnd(el) })) return;
 				el.blur();
 				return;
 			}
@@ -122,16 +113,21 @@ export function Title({
 				return;
 			}
 			// Down or Right off the end: on into the cells, as Up and Left come back.
-			if ((e.key === "ArrowDown" || e.key === "ArrowRight") && caretAtEnd(el) && onExit?.())
-				e.preventDefault();
+			if ((e.key === "ArrowDown" || e.key === "ArrowRight") && caretAtEnd(el)) {
+				const dir = e.key === "ArrowDown" ? "down" : "right";
+				if (onIntent?.({ kind: "leave", dir })) e.preventDefault();
+			}
 		},
-		[onExit, onOpen],
+		[onIntent],
 	);
 
 	return (
 		// biome-ignore lint/a11y/useHeadingContent: the text is there, written by the effect above rather than rendered, so React never fights the caret for it
 		<h1
-			ref={ref}
+			ref={(el) => {
+				ref.current = el;
+				if (headRef) headRef.current = el;
+			}}
 			contentEditable
 			suppressContentEditableWarning
 			spellCheck={false}

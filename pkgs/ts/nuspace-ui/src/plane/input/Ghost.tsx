@@ -5,25 +5,28 @@
 // of it. Press `/` and it offers the registered Cells; pick one and it
 // becomes a cell made from that Cell. That is the whole of it, the core.
 //
-// The text sugar (./sugar) adds the rest: typing, Enter included, becomes a
-// text cell with the typing in it. Without a text Cell the typing searches
-// the Cells instead.
+// Typing into it with the menu closed, and Enter, are intents
+// (../intents.ts): a sugar may claim them, and make a cell with the typing
+// in it. Unclaimed, the typing searches the Cells and Enter does nothing.
+// While a cell it made is on its way, the line keeps showing what was typed
+// and takes the keys typed meanwhile (`pending`), until the new cell's
+// document takes them all.
 //
 // There is always one at the end of the plane, which is what makes an empty
 // plane writeable without hunting for a control, and a second one can be
-// summoned after any row: by the gutter `+`, or Cmd+Enter in a text cell. The
-// summoned one is transient: it resolves into a cell or it is gone the moment
-// it loses focus with nothing in it. It can also stand in for an empty text
-// cell, on `/` there (see `replace` in ./state.ts). The wiring is
-// ./useGhosts.ts.
+// summoned after any row: by the gutter `+`, or by a sugar. The summoned one
+// is transient: it resolves into a cell or it is gone the moment it loses
+// focus with nothing in it. It can also stand in for a cell (see `replace`
+// in ../state.ts). The wiring is ./useGhosts.ts.
 
 import type * as React from "react";
 import { useEffect } from "react";
 import { docGhost } from "../../design";
+import type { InputIntent } from "../intents";
 import type { SlashAnchor } from "../state";
 import type { ExitDir } from "../types";
 
-/** What a ghost offers before anything has happened in it, sugar off. */
+/** What a ghost offers before anything has happened in it, with no sugar hint. */
 const GHOST_HINT = "Press / for cells";
 /** ...and once the menu is open, which is the whole of what changed. */
 const GHOST_SEARCH = "Type to search";
@@ -41,9 +44,17 @@ export type GhostProps = {
 	/** The caret arrived. */
 	onWake: () => void;
 	onOpenSlash: (anchor: SlashAnchor, query: string) => void;
-	/** Typing with the menu closed, Enter as "", starts a draft. Null:
-	 *  typing opens the menu and Enter does nothing. */
-	onType: ((text: string) => void) | null;
+	/** Typing with the menu closed, or Enter: an intent, from this line. */
+	onInput: (i: InputIntent, line: HTMLInputElement) => void;
+	/** The line of what a cell made from here is still waiting to take, the
+	 *  one being typed. Null when none is waiting. */
+	pending: string | null;
+	/** That line as it reads now. */
+	onPending: (text: string) => void;
+	/** Enter while one is waiting: a new line in what it will take. */
+	onBreak: () => void;
+	/** Escape while one is waiting: the cell keeps none of it. */
+	onDrop: () => void;
 	onQuery: (query: string) => void;
 	/** Return true if the menu consumed the key. */
 	onKey: (key: string) => boolean;
@@ -59,9 +70,9 @@ export type GhostProps = {
 /**
  * The ghost input.
  *
- * A one-line text input that never holds anything but the slash query. `/`
- * opens the menu with an empty query; any other character starts a draft, or
- * with nothing to draft opens the menu with that character as the query.
+ * A one-line text input that holds the slash query, or what a new cell is
+ * still waiting to take. `/` opens the menu with an empty query; any other
+ * character is offered as an intent first.
  *
  * An `<input>` and not a contenteditable on purpose: it is one line, it holds
  * no marks, it is in the tab order for free, and screen readers already know
@@ -75,7 +86,11 @@ export function Ghost({
 	query,
 	onWake,
 	onOpenSlash,
-	onType,
+	onInput,
+	pending,
+	onPending,
+	onBreak,
+	onDrop,
 	onQuery,
 	onKey,
 	onCloseSlash,
@@ -101,21 +116,35 @@ export function Ghost({
 			aria-label="New cell"
 			className={docGhost(hinted)}
 			placeholder={open ? GHOST_SEARCH : hint}
-			value={query ?? ""}
+			value={pending ?? query ?? ""}
 			onFocus={onWake}
 			onChange={(e) => {
 				const next = e.currentTarget.value;
+				if (pending !== null) {
+					onPending(next);
+					return;
+				}
 				if (open) {
 					onQuery(next);
 					return;
 				}
-				if (next && onType) onType(next);
-				else if (next) onOpenSlash(e.currentTarget, next);
+				if (next) onInput({ kind: "text", text: next }, e.currentTarget);
 			}}
 			onKeyDown={(e) => {
 				// The ghost owns its keyboard outright, for the reason a focused
 				// cell does: the plane must not also act on a key answered here.
 				e.stopPropagation();
+				// Waiting for a cell: every key is text for it, Escape drops it.
+				if (pending !== null) {
+					if (e.key === "Enter") {
+						e.preventDefault();
+						onBreak();
+					} else if (e.key === "Escape") {
+						e.preventDefault();
+						onDrop();
+					}
+					return;
+				}
 				if (open && onKey(e.key)) {
 					e.preventDefault();
 					return;
@@ -141,7 +170,7 @@ export function Ghost({
 				}
 				if (e.key === "Enter") {
 					e.preventDefault();
-					onType?.("");
+					onInput({ kind: "enter" }, e.currentTarget);
 					return;
 				}
 				if (e.key === "ArrowUp" || e.key === "ArrowLeft" || e.key === "Backspace") {

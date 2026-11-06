@@ -12,7 +12,7 @@
 // block's own: cmd+enter and blur commit, and an arrow out is a blur. Escape
 // closes the editor before a blur can land, so it commits for itself.
 
-import { Code, type CodeProps, Shortcut } from "@nustackdev/ui-kit";
+import { Code, type CodeProps, type FocusAt, Shortcut } from "@nustackdev/ui-kit";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { docSourceDot, docSourceFoot } from "../../design";
 import type { FocusReq } from "../state";
@@ -20,6 +20,13 @@ import type { ExitDir } from "../types";
 
 /** The live view the kit's block hands up through `onView`. */
 type CodeView = NonNullable<Parameters<NonNullable<CodeProps["onView"]>>[0]>;
+
+/** Where a request's caret goes in a source: its first line or its last,
+ *  or wherever the editor's own selection already is. */
+function sourceEdge(at: FocusAt): "start" | "end" | "kept" {
+	if (at === "kept" || at === "start" || at === "end") return at;
+	return at.edge === "first" ? "start" : "end";
+}
 
 const MIN_HEIGHT = 42;
 const MAX_HEIGHT = 560;
@@ -97,15 +104,19 @@ export function CodeBox(props: CodeBoxProps) {
 		return () => view.dom.removeEventListener("keydown", onKey, true);
 	}, [view, readOnly]);
 
+	// A focus request, consumed once there is a view to take it.
 	useEffect(() => {
 		if (!view || !focusReq) return;
-		const doc = view.state.doc;
-		const line = doc.line(focusReq.place === "start" ? 1 : doc.lines);
-		const column = focusReq.column ?? (focusReq.place === "start" ? 0 : line.length);
-		view.dispatch({
-			selection: { anchor: line.from + Math.min(column, line.length) },
-			scrollIntoView: true,
-		});
+		const edge = sourceEdge(focusReq.at);
+		if (edge !== "kept") {
+			const doc = view.state.doc;
+			const line = doc.line(edge === "start" ? 1 : doc.lines);
+			const column = focusReq.column ?? (edge === "start" ? 0 : line.length);
+			view.dispatch({
+				selection: { anchor: line.from + Math.min(column, line.length) },
+				scrollIntoView: true,
+			});
+		}
 		view.focus();
 		onFocusConsumed();
 	}, [focusReq, onFocusConsumed, view]);
