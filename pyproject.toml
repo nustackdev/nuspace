@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "nuspace"
-version = "0.6.4"
+version = "0.6.5"
 description = "Computational space for your data and tools."
 readme = "README.md"
 license = "AGPL-3.0-or-later"
@@ -24,7 +24,7 @@ dependencies = [
     "nuspace-ui>=0.6.4",
     # The everyday Planes and Cells. A plugin like any other, found through
     # its entry point, but every space ships with it.
-    "nuverse>=0.3.5",
+    "nuverse>=0.3.7",
     "typing-extensions>=4.7.0",
     "click>=8.0",
     "rich>=10.7",
