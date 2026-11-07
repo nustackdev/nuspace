@@ -2,15 +2,16 @@
 
 ## Packages shipped from this repo
 
-- **nuspace** (the runtime, the `nuspace` command) — 0.6.3
-- **nuspace-ui** (the compiled web bundle) — 0.6.3
+- **nuspace** (the runtime, the `nuspace` command) — 0.6.4
+- **nuspace-ui** (the compiled web bundle) — 0.6.4
 
 Below is the changelog for **nuspace** - the full commit stream. Newest first.
 The `nuspace-ui` wheel is the same source tree's vite output and is not tracked
 separately here.
 
-## Unreleased
+## 0.6.4 - 2026-11-07
 
+- Release nuspace and nuspace-ui 0.6.4 on nu 0.7.1, virtuals 0.2.1 and ui-kit 0.4.0
 - Telemetry sends only known nuspace events and stays off in every major CI
 - Cmd+Enter at the end of text leaves no empty line behind
 - Writing keeps to prose islands: arrows stop at other cells, input lines join in
