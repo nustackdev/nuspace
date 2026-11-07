@@ -19,6 +19,7 @@ import nu
 from nuspace import ops
 from nuspace._cli import _installed, cli
 from nuspace._cli.commands import run as run_command
+from nuspace._telemetry import config
 from nuspace.ext import CellSpec, ContentSpec, Extension, PlaneSpec
 from nuspace.host import presets
 from nuspace.shapes import Space
@@ -35,7 +36,7 @@ def _home(tmp_path, monkeypatch):
     (home / "work").mkdir(parents=True)
     monkeypatch.setenv("HOME", str(home))
     monkeypatch.chdir(home / "work")
-    for name in ("NUSPACE_TELEMETRY", "DO_NOT_TRACK", "CI"):
+    for name in (config.ENV, *config._OFF_WHEN_SET):
         monkeypatch.delenv(name, raising=False)
 
 

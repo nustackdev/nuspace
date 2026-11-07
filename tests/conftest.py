@@ -30,6 +30,10 @@ if TYPE_CHECKING:
 # The tests' specs register (nuspace_testing, _support.specs), here and on every worker.
 os.environ["NUSPACE_TESTING"] = "1"
 
+# No test run sends telemetry, from a checkout or an installed wheel. The tests of
+# telemetry itself unset it and stub the POST.
+os.environ["NUSPACE_TELEMETRY"] = "0"
+
 
 class _Hold(ScalarQuery):
     """Hands the ctx it runs in to ``opened``, then waits for ``done``.

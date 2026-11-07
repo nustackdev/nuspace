@@ -7,8 +7,9 @@ test or a sandbox pointing ``HOME`` elsewhere gets its own.
 
 The environment only ever turns telemetry off, whatever the file says:
 ``NUSPACE_TELEMETRY`` set to ``0``, ``false`` or ``off``, ``DO_NOT_TRACK``
-set to anything but that (the cross tool convention), or ``CI`` set the same
-way, which every major CI does, so nobody's pipeline is counted as use.
+set to anything but that (the cross tool convention), or ``CI`` or a major
+CI's own variable (``GITHUB_ACTIONS``, ``JENKINS_URL``, ...) set the same
+way, so nobody's pipeline is counted as use.
 """
 
 from __future__ import annotations
@@ -42,8 +43,21 @@ ENV = "NUSPACE_TELEMETRY"
 #: What ``NUSPACE_TELEMETRY`` reads as off, case ignored.
 _OFF = frozenset({"0", "false", "off", "no"})
 
-#: Conventions that turn telemetry off when set to anything but empty or off.
-_OFF_WHEN_SET = ("DO_NOT_TRACK", "CI")
+#: Conventions that turn telemetry off when set to anything but empty or off:
+#: the cross tool one, then ``CI`` and the variables CIs set of their own.
+_OFF_WHEN_SET = (
+    "DO_NOT_TRACK",
+    "CI",
+    "GITHUB_ACTIONS",
+    "GITLAB_CI",
+    "BUILDKITE",
+    "CIRCLECI",
+    "TF_BUILD",
+    "JENKINS_URL",
+    "TEAMCITY_VERSION",
+    "CODEBUILD_BUILD_ID",
+    "BITBUCKET_BUILD_NUMBER",
+)
 
 
 def home() -> Path:

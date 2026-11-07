@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Telemetry sends only known nuspace events and stays off in every major CI
 - Cmd+Enter at the end of text leaves no empty line behind
 - Writing keeps to prose islands: arrows stop at other cells, input lines join in
 - Plane menus share one layout; sidebar menu gains copy id and close items

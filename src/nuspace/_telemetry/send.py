@@ -1,6 +1,6 @@
 """Fire and forget PostHog capture, no dependency beyond the stdlib.
 
-One sender thread per process, fed by a bounded queue. :func:`capture`
+One sender thread per process, fed by a bounded queue. :func:`track`
 puts the event's name and time on the queue and returns, O(1): it never
 waits, never touches the network or the disk, and drops the event when the
 queue is full. The thread does the rest, the properties, the id, the opt out
@@ -9,9 +9,14 @@ and the JSON, and drains what is queued into one ``/batch/`` POST at a time. Eve
 breaks because of telemetry. At exit the thread gets a short grace to send
 what is left.
 
+Only nuspace's own events are ever queued: a name not in :data:`EVENTS`,
+or anything but a str, is dropped before it reaches the queue, so no caller
+can send a name of its own.
+
 Nothing is sent when telemetry is off (see :mod:`.config`: the flag, or
-``NUSPACE_TELEMETRY``, ``DO_NOT_TRACK`` or ``CI``), on a dev install, or with no token: the thread checks before each POST and drops the
-batch. ``NUSPACE_POSTHOG_TOKEN`` and ``NUSPACE_POSTHOG_HOST`` point it at
+``NUSPACE_TELEMETRY``, ``DO_NOT_TRACK``, ``CI`` or a CI's own variable), on
+a dev install, or with no token: the thread checks before each POST and
+drops the batch. ``NUSPACE_POSTHOG_TOKEN`` and ``NUSPACE_POSTHOG_HOST`` point it at
 another PostHog project, eg to test.
 """
 
@@ -40,10 +45,10 @@ if TYPE_CHECKING:
 
 
 __all__ = [
+    "EVENTS",
     "FIRST_RUN_EVENT",
     "PREFIX",
     "base_properties",
-    "capture",
     "first_run",
     "flush",
     "opened",
@@ -64,6 +69,28 @@ _BATCH_PATH = "/batch/"
 
 #: What every event is sent as: the product, then what happened.
 PREFIX = "nuspace_"
+
+#: Every event that may be sent, by its name before :data:`PREFIX`. Nothing else ever is.
+EVENTS = frozenset(
+    {
+        "first_run",
+        "space_opened",
+        "space_loaded",
+        "plane_created",
+        "plane_removed",
+        "cell_created",
+        "cell_removed",
+        # nuverse's quickstart, through ``nuspace.ops.track``.
+        "quickstart_demo_opened",
+        "quickstart_page_made",
+        "quickstart_edited",
+        "quickstart_put_back",
+        "quickstart_moved",
+    }
+)
+
+#: :data:`EVENTS` as sent, prefixed.
+_SENT = frozenset(f"{PREFIX}{event}" for event in EVENTS)
 
 #: Sent once per user, retried on every open until PostHog acks it.
 FIRST_RUN_EVENT = f"{PREFIX}first_run"
@@ -253,11 +280,16 @@ def _the_sender() -> _Sender:
 
 
 def _queue(event: str, on_success: Callable[[], None] | None) -> None:
-    _the_sender().put((event, time.time(), on_success))
+    """Put ``event``, a prefixed name, on the queue. Every send goes through here.
+
+    A name not in :data:`EVENTS`, or anything but a str, is dropped.
+    """
+    if isinstance(event, str) and event in _SENT:
+        _the_sender().put((event, time.time(), on_success))
 
 
-def capture(event: str) -> None:
-    """Queue ``event`` for the sender thread. O(1), never waits, never raises."""
+def _capture(event: str) -> None:
+    """Queue ``event``, a prefixed name, for the sender thread. O(1), never waits, never raises."""
     try:
         _queue(event, None)
     except Exception:  # noqa: S110
@@ -265,9 +297,12 @@ def capture(event: str) -> None:
 
 
 def track(event: str) -> None:
-    """:func:`capture` ``event`` as nuspace's own, eg ``plane_created``. Anything but a str is dropped."""
+    """Queue ``event`` as nuspace's own, eg ``plane_created``. Never raises.
+
+    Anything not in :data:`EVENTS`, or not a str, is dropped.
+    """
     if isinstance(event, str):
-        capture(f"{PREFIX}{event}")
+        _capture(f"{PREFIX}{event}")
 
 
 def flush(timeout: float = _EXIT_GRACE_SECONDS) -> bool:

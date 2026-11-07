@@ -23,11 +23,10 @@ from nuspace.ops.usage import opened, track
 def _home(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(tmp_path))
     for name in (
-        "NUSPACE_TELEMETRY",
+        config.ENV,
         "NUSPACE_POSTHOG_TOKEN",
         "NUSPACE_POSTHOG_HOST",
-        "DO_NOT_TRACK",
-        "CI",
+        *config._OFF_WHEN_SET,
     ):
         monkeypatch.delenv(name, raising=False)
 
@@ -117,8 +116,8 @@ def test_the_environment_turns_it_off(monkeypatch, value):
     assert _telemetry.telemetry_enabled() is False
 
 
-@pytest.mark.parametrize("name", ["DO_NOT_TRACK", "CI"])
-@pytest.mark.parametrize("value", ["1", "true", "yes"])
+@pytest.mark.parametrize("name", config._OFF_WHEN_SET)
+@pytest.mark.parametrize("value", ["1", "true", "yes", "True", "https://ci.example"])
 def test_do_not_track_and_ci_turn_it_off(monkeypatch, name, value):
     _telemetry.set_telemetry(True)
     monkeypatch.setenv(name, value)
@@ -126,7 +125,7 @@ def test_do_not_track_and_ci_turn_it_off(monkeypatch, name, value):
     assert _telemetry.telemetry_enabled() is False
 
 
-@pytest.mark.parametrize("name", ["DO_NOT_TRACK", "CI"])
+@pytest.mark.parametrize("name", config._OFF_WHEN_SET)
 @pytest.mark.parametrize("value", ["", "0", "false"])
 def test_do_not_track_and_ci_unset_or_off_leave_it_on(monkeypatch, name, value):
     monkeypatch.setenv(name, value)
@@ -178,9 +177,10 @@ def test_first_run_retries_until_acked(tmp_path, posted, answer):
 
 
 def test_events_close_together_go_in_one_post(posted):
-    for n in range(5):
-        _telemetry.capture(f"x{n}")
-    assert [e["event"] for e in posted.events()] == ["x0", "x1", "x2", "x3", "x4"]
+    names = sorted(_telemetry.EVENTS)[:5]
+    for name in names:
+        _telemetry.track(name)
+    assert [e["event"] for e in posted.events()] == [f"nuspace_{name}" for name in names]
     assert len(posted) == 1
 
 
@@ -196,7 +196,7 @@ def test_capture_never_waits_on_the_network(monkeypatch, posted):
     monkeypatch.setattr(send, "_post", lambda batch: gate.wait(5))
     started = time.monotonic()
     for _ in range(send._QUEUE_CAP * 2):  # past the cap: dropped, not waited on
-        _telemetry.capture("x")
+        _telemetry.track("plane_created")
     assert time.monotonic() - started < 1
     gate.set()
 
@@ -204,19 +204,27 @@ def test_capture_never_waits_on_the_network(monkeypatch, posted):
 def test_nothing_is_sent_when_off(monkeypatch, posted):
     _telemetry.set_telemetry(False)
     _telemetry.first_run()
-    _telemetry.capture("x")
+    _telemetry.track("plane_created")
     assert posted.events() == []
     monkeypatch.setenv("NUSPACE_TELEMETRY", "0")
     _telemetry.set_telemetry(True)
     _telemetry.first_run()
-    _telemetry.capture("x")
+    _telemetry.track("plane_created")
+    assert posted.events() == []
+
+
+@pytest.mark.parametrize("name", config._OFF_WHEN_SET)
+def test_nothing_is_sent_under_ci(monkeypatch, posted, name):
+    monkeypatch.setenv(name, "1")
+    _telemetry.first_run()
+    _telemetry.track("plane_created")
     assert posted.events() == []
 
 
 def test_nothing_is_sent_from_a_dev_install(monkeypatch, posted):
     monkeypatch.setattr(config, "is_dev_install", lambda: True)
     _telemetry.first_run()
-    _telemetry.capture("x")
+    _telemetry.track("plane_created")
     assert posted.events() == []
 
 
@@ -240,6 +248,24 @@ def test_track_queues_as_nuspace_and_drops_anything_but_a_str(posted):
         "nuspace_plane_created",
         "nuspace_cell_removed",
     ]
+
+
+@pytest.mark.parametrize("event", ["test", "/tmp/pp-fuzz", "", "debug", "nuspace_x", None, 1, b"x"])
+def test_only_nuspace_events_are_ever_sent(posted, event):
+    _telemetry.track(event)
+    _telemetry.track(f"nuspace_{event}")
+    send._capture(event)
+    send._queue(event, None)
+    if isinstance(event, str) and event:  # "" is the open, a real event
+        nu.run(track(event))
+    _telemetry.track("plane_created")
+    assert [e["event"] for e in posted.events()] == ["nuspace_plane_created"]
+
+
+def test_the_raw_capture_is_not_exported():
+    assert not hasattr(_telemetry, "capture")
+    assert "capture" not in send.__all__
+    assert {f"nuspace_{e}" for e in _telemetry.EVENTS} >= {send.FIRST_RUN_EVENT}
 
 
 def test_opened_makes_the_id_first_then_queues_the_open(tmp_path, posted):
