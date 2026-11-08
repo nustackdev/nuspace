@@ -19,7 +19,8 @@ policy         restarts after exit          never after
 
 ``interrupted`` and ``killed`` are somebody asking, so they are respected.
 A run from an earlier open (``created_at`` before ``Space.info.opened_at``)
-was ended by reap, so every supervised plane runs again at each open.
+was ended by that open's close, or by reap after a crash, so every
+supervised plane runs again at each open, whatever its exit.
 init leaves supervised planes to it, so a plane both booted and
 supervised gets this one run, not a second one from init.
 

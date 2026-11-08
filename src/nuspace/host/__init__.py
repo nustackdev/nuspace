@@ -1,7 +1,8 @@
 """``nuspace.host``: opening a space and running it. Not called from inside a space.
 
 - :mod:`.space`: :func:`open_space`, the whole open as one term (lock,
-  format check, fresh device stores, reap, spares, drivers), and
+  format check, fresh device stores, reap, spares, drivers, and at close
+  what is live ended), and
   :func:`make_space`, a space made and seeded with nothing run.
 - :mod:`.presets`: :func:`serve`, :func:`headless`, :func:`with_plane`.
 - :mod:`.stores`: the core stores, their init terms, and the store presets

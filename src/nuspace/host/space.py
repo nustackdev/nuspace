@@ -7,7 +7,7 @@ The order at open, each step inside the brackets of the ones before::
     the notification server
     Space, State                  their navigators
     format check                  space.db's format, then the core containers, a commit per store
-    fresh device stores           conn.db deleted, then the device navigators, their containers
+    fresh device stores           conn.db deleted, then every device's navigators, their containers
     reap                          what a dead host left live, ended killed
     stamp                         Space.info path and opened_at; the open told to telemetry
     system and device planes      made where missing
@@ -15,9 +15,17 @@ The order at open, each step inside the brackets of the ones before::
     backends, kernel config
     init's plane run asked for
     race                          the kernel, each device's driver, the body
+    finally, close                what is still live ended interrupted, one commit
 
-Closing runs the brackets the other way: the drivers are cancelled, the
-pool stops its workers, the stores close, the server stops, the lock goes.
+Every device's stores open, headless too: a program writing a device's rows
+finds them. Only the devices the open names seed their planes and run
+their drivers.
+
+Closing runs the brackets the other way: the drivers are cancelled and
+drained (each kernel arm lets its workers go), the close ends every plane
+run, cell run and worker still live as ``interrupted`` (``kernel.CLOSED``),
+the pool stops its workers, the stores close, the server stops, the lock
+goes. So the next open's reap finds only what a crash left.
 
 Nothing here runs at build: building the term touches no file. Evaluate it
 under a ``if __name__ == "__main__"`` guard: workers are spawned and
@@ -41,7 +49,7 @@ from nuspace._telemetry.usage import opened
 from nuspace.shapes import Space
 from nuspace.specs import RegistryWarning, space_registry
 
-from .devices import device
+from .devices import device, device_stores
 from .layout import LOCK_FILE, data_dir
 from .lock import HostLock
 from .resources import DataDir, Fresh, Throwaway, Warmed
@@ -165,14 +173,15 @@ def _envs(
     return merged
 
 
-def _opening(root: str, throwaway: bool, devices: Sequence[Device], body: nu.Nu) -> nu.With:
-    """The brackets every open shares, from the data dir to the device stores, around ``body``.
+def _opening(root: str, throwaway: bool, body: nu.Nu) -> nu.With:
+    """The brackets every open shares, from the data dir to every device's stores, around ``body``.
 
     ``body`` runs with every store open and initialized: the format checked,
-    the fresh stores made again.
+    the fresh stores made again. Every device's stores, whichever devices
+    the open serves.
     """
     data = str(data_dir(root))
-    extra = tuple(s for d in devices for s in d.stores)
+    extra = device_stores()
     files = [s.file for s in (*CORE, *extra)]
     inner = _inits(extra) >> body
     if extra:
@@ -213,14 +222,17 @@ def open_space(
     """A space opened in this process, run until ``body`` returns, or until cancelled without one.
 
     The kernel, the system planes and each device run; see the module for
-    the order. A space of another store format, or one a live host holds,
-    is refused before anything is written.
+    the order. Every device's stores open, served or not. At a clean close
+    (cancelled, or ``body`` returning) everything still live is ended
+    ``interrupted`` before the stores close. A space of another store
+    format, or one a live host holds, is refused before anything is written.
 
     Args:
         path: The space's root, any directory, made if missing; its data in
             ``.nuspace/``. None is a throwaway one, removed at close.
-        devices: The devices to open it with, by name: ``("web",)`` serves
-            the browser, ``()`` is headless.
+        devices: The devices to serve, by name: each seeds its planes and
+            runs its driver. ``("web",)`` serves the browser, ``()`` is
+            headless. Every device's stores open either way.
         host: The interface the web device binds.
         port: The port the web device binds.
         open_browser: The web device opens a tab once it is up.
@@ -247,19 +259,19 @@ def open_space(
     options = {"host": host, "port": port, "static": static, "open_browser": open_browser}
     served = {d.name: d.serve(registry=reg, **options) for d in opened_devices}
     factories = _envs(reg.envs, {n: e for n, (_, e) in served.items()})
-    stores = (*CORE, *(s for d in opened_devices for s in d.stores))
+    stores = (*CORE, *device_stores())
     drivers = nu.Race(
         kernel.kernel(), *(t for t, _ in served.values()), nu.Park() if body is None else body
     )
+    # Inside the pool, after the race: the arms are drained, the workers not stopped yet.
     running = nu.With(
         worker_pool(data, stores, name=name, spares=spares),
         kernel.bound(backends=backends, envs=factories, space_envs=space_envs),
-        body=system.start() >> drivers,
+        body=nu.TryCatch(system.start() >> drivers, finally_=kernel.close()),
     )
     return _opening(
         root,
         throwaway,
-        opened_devices,
         kernel.reap() >> stamp(root) >> opened() >> _seeds(opened_devices) >> running,
     )
 
@@ -267,9 +279,10 @@ def open_space(
 def make_space(path: str | os.PathLike[str], *, devices: Sequence[str] = ("web",)) -> nu.With:
     """The space at ``path`` made and seeded as its first open would, then closed. Nothing runs.
 
-    The data dir, the lock, the stores and their containers, the system
-    planes and each device's planes, made where missing. No reap, no
-    workers, no driver. A space already there is left as it is.
+    The data dir, the lock, every store and its containers (every
+    device's too), the system planes and each named device's planes, made
+    where missing. No reap, no workers, no driver. A space already there is
+    left as it is.
 
     Raises:
         Missing: A device of no known name (at build).
@@ -277,4 +290,4 @@ def make_space(path: str | os.PathLike[str], *, devices: Sequence[str] = ("web",
     """
     root, _ = _root(path)
     opened_devices = [device(d) for d in devices]
-    return _opening(root, False, opened_devices, _seeds(opened_devices))
+    return _opening(root, False, _seeds(opened_devices))

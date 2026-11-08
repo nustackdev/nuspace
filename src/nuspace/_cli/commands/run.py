@@ -2,10 +2,10 @@
 
 One flag, one :mod:`nuspace.host` preset: :func:`~nuspace.host.serve` by
 default, :func:`~nuspace.host.headless` with ``--headless``. Runs until
-interrupted, then the brackets reap the workers on the way out. Which space
-is :func:`~nuspace._cli._meta.space_root`: PATH, made a space if it is not
-one, else the nearest space up from here, else home. ``--tmp`` is a
-throwaway one, gone at close. The header names the space's root either way.
+interrupted, then the host ends what is live and the brackets stop the
+workers. Which space is :func:`~nuspace._cli._meta.space_root`: PATH, made
+a space if it is not one, else the nearest space up from here, else home.
+``--tmp`` is a throwaway one, gone at close. The header names the space's root either way.
 
 ``--with`` names a Plane an installed package adds, ``pkg.plane`` as
 ``nuspace verse`` lists them, or a bare name for a nuverse Plane: it is made
@@ -51,7 +51,7 @@ __all__ = ["run"]
     ),
 )
 @click.option(
-    "--headless", is_flag=True, help="No web device. --host, --port and --no-browser go unused."
+    "--headless", is_flag=True, help="Serve no browser. --host, --port and --no-browser go unused."
 )
 @click.option("--host", default="127.0.0.1", show_default=True, help="Interface to bind.")
 @click.option("-p", "--port", default=8080, show_default=True, help="Port to bind.")

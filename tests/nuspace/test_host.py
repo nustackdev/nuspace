@@ -3,13 +3,15 @@
 The registry is plain python. The layout, the lock and the resources are
 file system work, tested on their own. ``make_space`` and ``open_space``
 run for real on sqlite with a private notification server: headless, with
-real workers, held open while the test reads. One test runs ``nuspace run``
-in a process of its own and stops it with SIGINT, as Ctrl+C does.
+real workers, held open while the test reads. Two tests run ``nuspace run``
+in a process of its own: one stops it with SIGINT, as Ctrl+C does, one
+kills it with SIGKILL, as a crash does.
 """
 
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import errno
 import functools
 import os
@@ -29,7 +31,7 @@ import nu
 import nuspace
 import nustd.kv
 from nuspace import host
-from nuspace.devices.web import CONN_STORE, WEB_STORE, Conn
+from nuspace.devices.web import CONN_STORE, WEB_STORE, Conn, Web
 from nuspace.devices.web.planes import HOME
 from nuspace.errors import Missing, Refused
 from nuspace.host import interactions, presets
@@ -37,8 +39,8 @@ from nuspace.host import lock as lock_module
 from nuspace.host.layout import DATA_DIR, LOCK_FILE, data_dir, find_space, is_older, is_space
 from nuspace.host.lock import HostLock, LockWarning, holder
 from nuspace.host.resources import DataDir, Fresh, Throwaway
-from nuspace.kernel import LEFT_OVER, Env
-from nuspace.shapes import EXIT_KILLED, FORMAT, Space
+from nuspace.kernel import CLOSED, LEFT_OVER, Env
+from nuspace.shapes import EXIT_INTERRUPTED, EXIT_KILLED, FORMAT, Space
 from nuspace.specs import (
     GROUP,
     CellSpec,
@@ -345,12 +347,34 @@ def test_a_throwaway_root_is_made_at_setup_and_removed_with_its_data_at_cleanup(
 # --- make_space -------------------------------------------------------------------------
 
 
-def _read(root: Path, term: nu.Nu, stores=(*host.CORE, WEB_STORE, CONN_STORE)) -> object:
-    """``term`` read from the space at ``root`` (closed), its stores opened plain."""
+_EVERY_STORE = (*host.CORE, WEB_STORE, CONN_STORE)
+
+
+async def _aread(root: Path, term: nu.Nu, stores=_EVERY_STORE) -> object:
+    """``term`` read from the space at ``root``, its stores opened plain, beside any host."""
     data = data_dir(root)
     navs = [nustd.kv.sqlite_navigator(str(data / s.file), tags=(s.root,)) for s in stores]
-    value, _ = asyncio.run(nu.arun(nu.With(*navs, body=nuspace.atomic(term))))
+    value, _ = await nu.arun(nu.With(*navs, body=nuspace.atomic(term)))
     return value
+
+
+def _read(root: Path, term: nu.Nu, stores=_EVERY_STORE) -> object:
+    """``term`` read from the space at ``root``, its stores opened plain."""
+    return asyncio.run(_aread(root, term, stores))
+
+
+async def _apoll(root: Path, term: nu.Nu, pred, stores=_EVERY_STORE, timeout: float = 30.0):
+    """``term`` read from ``root`` until ``pred`` holds of it, while a host runs the space."""
+    deadline = time.monotonic() + timeout
+    while True:
+        with contextlib.suppress(Exception):  # the host may not have made the stores yet
+            value = await _aread(root, term, stores)
+            if pred(value):
+                return value
+        if time.monotonic() > deadline:
+            msg = f"timed out polling {root}"
+            raise AssertionError(msg)
+        await asyncio.sleep(0.2)
 
 
 def _write(root: Path, store, term: nu.Nu) -> None:
@@ -379,11 +403,18 @@ def test_make_space_seeds_a_fresh_space_and_keeps_an_existing_one(tmp_path):
     assert _read(root, Space.info.created_at) == info["created_at"]
 
 
-def test_headless_opens_no_device_store(tmp_path):
+def test_headless_opens_every_device_store_and_seeds_no_device_plane(tmp_path):
     root = tmp_path / "space"
     _make(root, devices=())
     assert is_space(root)
-    assert not (data_dir(root) / "devices").exists()
+    assert (data_dir(root) / WEB_STORE.file).exists()
+    assert (data_dir(root) / CONN_STORE.file).exists()
+    assert HOME not in _read(root, nu.list(Space.planes.keys()))
+    assert _read(root, nu.list(Web.planes.keys())) == []
+    # conn.db is made fresh at a headless open too.
+    _write(root, CONN_STORE, Conn.connections["tab"].order.set(["p"]))
+    _make(root, devices=())
+    assert _read(root, Conn.connections.extract()) == {}
 
 
 def test_conn_is_made_fresh_at_every_open_web_is_kept(tmp_path):
@@ -445,7 +476,20 @@ async def _until(ctx, term, pred, timeout: float = 20.0):
         await asyncio.sleep(0.1)
 
 
-async def test_open_space_runs_the_system_planes_and_reaps_what_the_last_open_left(tmp_path):
+async def _ended(ctx, runs: list[str]) -> tuple[dict, dict, dict]:
+    """The rows of ``runs``, of their cell runs, and of their workers, read in ``ctx``."""
+    rows = Space.exec
+    plane_runs, _ = await nu.arun(nuspace.atomic(rows.plane_runs.extract()), ctx)
+    cell_runs, _ = await nu.arun(nuspace.atomic(rows.cell_runs.extract()), ctx)
+    workers, _ = await nu.arun(nuspace.atomic(rows.workers.extract()), ctx)
+    return (
+        {r: plane_runs[r] for r in runs},
+        {c: row for c, row in cell_runs.items() if row["plane_run"] in runs},
+        {w: row for w, row in workers.items() if row["plane_run"] in runs},
+    )
+
+
+async def test_a_clean_close_ends_what_is_live_so_the_reopen_reaps_nothing(tmp_path, capfd):
     root = tmp_path / "space"
     before = time.time()
     ctx, done, task = await _opened(root)
@@ -464,13 +508,20 @@ async def test_open_space_runs_the_system_planes_and_reaps_what_the_last_open_le
     finally:
         done.set()
         await asyncio.wait_for(task, 15)
-    # The close leaves the runs live; the next open's reap ends them killed.
+    capfd.readouterr()
+    # The close ended every run, cell run and worker interrupted; the reopen's reap finds none.
     ctx, done, task = await _opened(root)
     try:
-        ends, _ = await nu.arun(nuspace.atomic(Space.exec.plane_runs.extract()), ctx)
-        reaped = [r for r, row in ends.items() if row.get("error") == LEFT_OVER]
-        assert sorted(reaped) == sorted(runs)
-        assert {ends[r]["exit"] for r in reaped} == {EXIT_KILLED}
+        assert "nuspace reap" not in capfd.readouterr().err
+        plane_runs, cell_runs, workers = await _ended(ctx, runs)
+        assert {(r["exit"], r["error"]) for r in plane_runs.values()} == {
+            (EXIT_INTERRUPTED, CLOSED)
+        }
+        assert cell_runs
+        assert {(c["exit"], c["error"]) for c in cell_runs.values()} == {(EXIT_INTERRUPTED, CLOSED)}
+        # Every worker ended by the close, a per cell run one (init's, on mp) too.
+        assert workers
+        assert {(w["exit"], w["error"]) for w in workers.values()} == {(EXIT_INTERRUPTED, CLOSED)}
         fresh = await _until(ctx, nu.list(live.plane_runs.keys()), lambda rs: len(rs) == 4)
         assert set(fresh).isdisjoint(runs)
     finally:
@@ -503,13 +554,27 @@ async def test_with_plane_reuses_the_newest_plane_of_its_spec_or_makes_one(store
     assert await store.read(nu.list(ids.keys())) == [first, second]
 
 
-def test_with_plane_headless_refuses_a_spec_that_shows_on_the_web():
-    web = PlaneSpec("nudemos.web", "Web", backend="async", web=WebOptions())
-    with pytest.raises(Refused, match="shows on the web"):
-        presets.with_plane(None, web, web=False)
-    nested = PlaneSpec("nudemos.outer", "Outer", backend="async", children=(web,))
-    with pytest.raises(Refused, match="shows on the web"):
-        presets.with_plane(None, nested, web=False)
+async def test_with_plane_headless_lands_the_web_row_of_a_spec_that_shows_on_the_web(tmp_path):
+    """No web driver runs, but the web device's stores are open: add_plane writes the web row."""
+    root = tmp_path / "space"
+    spec = PlaneSpec(
+        "nudemos.board",
+        "Board",
+        cells=(("count", "1"),),
+        backend="async",
+        web=WebOptions(compact=True),
+    )
+    term = presets.with_plane(root, spec, web=False, spares=0, name="nuspace-host", extensions=())
+    task = asyncio.create_task(nu.arun(term))
+    try:
+        planes = await _apoll(root, nu.list(Web.planes.keys()), bool)
+        assert len(planes) == 1
+        assert await _aread(root, Space.planes[planes[0]].spec) == registered_name(spec)
+        assert await _aread(root, Web.planes[planes[0]].compact) is True
+    finally:
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await asyncio.wait_for(task, 15)
 
 
 @pytest.mark.parametrize(("web", "open_browser"), [(True, True), (True, False), (False, False)])
@@ -579,22 +644,30 @@ def _left(pid: int, data: Path) -> list[str]:
     return [r[2] for r in rows if len(r) == 3 and (r[1] == str(pid) or str(data) in r[2])]
 
 
-def test_nuspace_run_stops_on_ctrl_c_and_leaves_no_process(tmp_path):
-    root = tmp_path / "space"
+def _nuspace_run(root: Path) -> subprocess.Popen:
+    """``nuspace run --headless`` on ``root``, in a session of its own."""
     env = dict(os.environ, NUSPACE_TELEMETRY="0")
-    run = subprocess.Popen(  # noqa: S603
+    return subprocess.Popen(  # noqa: S603
         [sys.executable, "-m", "nuspace._cli", "run", "--headless", str(root)],
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         start_new_session=True,
         env=env,
     )
+
+
+def _live_runs(root: Path, n: int = 4) -> list[str]:
+    """The live plane runs of the space a host runs, once there are ``n`` (init and its boots)."""
+    live = Space.exec.indexes.live.plane_runs
+    term = nu.list(live.keys())
+    return asyncio.run(_apoll(root, term, lambda rs: len(rs) == n, stores=host.CORE))
+
+
+def test_nuspace_run_stops_on_ctrl_c_ends_what_is_live_and_leaves_no_process(tmp_path):
+    root = tmp_path / "space"
+    run = _nuspace_run(root)
     try:
-        lock = data_dir(root) / LOCK_FILE
-        deadline = time.monotonic() + 30
-        while not holder(str(lock)) and time.monotonic() < deadline:
-            time.sleep(0.1)
-        time.sleep(2.0)
+        runs = _live_runs(root)
         assert _left(run.pid, data_dir(root)), "the space never came up"
         run.send_signal(signal.SIGINT)
         out, _ = run.communicate(timeout=20)
@@ -604,8 +677,39 @@ def test_nuspace_run_stops_on_ctrl_c_and_leaves_no_process(tmp_path):
             run.wait()
     assert run.returncode == 0, out.decode()
     assert "Stopped" in out.decode()
+    assert "nuspace close" not in out.decode()
     time.sleep(0.5)
     assert _left(run.pid, data_dir(root)) == []
+    # The cancelled kernel arms and the close did not end anything twice.
+    rows = _read(root, Space.exec.plane_runs.extract(), stores=host.CORE)
+    assert {(rows[r]["exit"], rows[r]["error"]) for r in runs} == {(EXIT_INTERRUPTED, CLOSED)}
+    live = _read(root, Space.exec.indexes.live.extract(), stores=host.CORE)
+    assert live["plane_runs"] == {} and live["workers"] == {}
+
+
+async def test_a_host_killed_mid_run_is_reaped_killed_at_the_next_open(tmp_path, capfd):
+    """SIGKILL, as a crash: no close runs, so the reopen's reap ends what was live, killed."""
+    root = tmp_path / "space"
+    run = _nuspace_run(root)
+    try:
+        live = Space.exec.indexes.live.plane_runs
+        term = nu.list(live.keys())
+        runs = await _apoll(root, term, lambda rs: len(rs) == 4, stores=host.CORE)
+    finally:
+        os.killpg(run.pid, signal.SIGKILL)
+        run.wait()
+    capfd.readouterr()
+    ctx, done, task = await _opened(root)
+    try:
+        err = capfd.readouterr().err
+        for r in runs:
+            assert f"nuspace reap: plane run {r} of plane " in err
+        plane_runs, cell_runs, _ = await _ended(ctx, runs)
+        assert {(r["exit"], r["error"]) for r in plane_runs.values()} == {(EXIT_KILLED, LEFT_OVER)}
+        assert {c["exit"] for c in cell_runs.values()} <= {EXIT_KILLED}
+    finally:
+        done.set()
+        await asyncio.wait_for(task, 15)
 
 
 # --- Imports ---------------------------------------------------------------------

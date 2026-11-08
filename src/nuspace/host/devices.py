@@ -5,6 +5,11 @@ three things: the stores it opens beside the core ones (and every worker
 binds), the planes it seeds where missing, and its driver, built only when
 the space is served, since that pulls in the device's server.
 
+Every open opens every device's stores (:func:`device_stores`), served or
+headless, so a program writing a device's rows (``add_plane`` of a spec
+with ``web=``) works either way. Only the devices an open names seed their
+planes and run their drivers.
+
 - ``web``: the browser. Stores Web and Conn (Conn made fresh at every
   open), the home, settings and search planes, the server and nav.
 """
@@ -26,7 +31,7 @@ if TYPE_CHECKING:
     from nuspace.specs import Registry
 
 
-__all__ = ["DEVICES", "Device", "device"]
+__all__ = ["DEVICES", "Device", "device", "device_stores"]
 
 
 @dataclass(frozen=True)
@@ -77,3 +82,8 @@ def device(name: str) -> Device:
         msg = f"no device {name!r}; known: {', '.join(DEVICES)}"
         raise Missing(msg)
     return made()
+
+
+def device_stores() -> tuple[Store, ...]:
+    """Every known device's stores, in :data:`DEVICES` order: what every open opens beside the core."""
+    return tuple(s for made in DEVICES.values() for s in made().stores)

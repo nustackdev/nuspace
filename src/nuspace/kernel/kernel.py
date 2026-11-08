@@ -206,7 +206,8 @@ def _release(plane_run: nu.Str, backend: nu.Str, taken: nu.Ref) -> nu.Nu:
 
     After a clean end the run holds none. On a raise or a cancel (the space
     closing) the records still list them: their processes go now, their
-    records end with the run (on a raise) or at reap (on a close).
+    records end with the run (on a raise) or at the host's close (on a
+    close, :mod:`.close`).
     ``taken`` is the worker the arm took for a per plane run placement
     (``""`` for none): a cancel between the end's commit and its let go
     finds the live set empty already, so it is stopped by id. Stop is
@@ -231,9 +232,11 @@ def _cell_arm(plane_run: nu.Str, cell_run: nu.Str, backend: nu.Str, placement: n
     started by an arm that is gone, so nothing runs it: it ends ``failed``.
 
     Cancelled, which is the cell run leaving the live set, the body is
-    cancelled where it runs. With a worker of its own (``PER_CELL_RUN``),
-    the worker is let go and ended ``ok`` once the arm is over, however it
-    ends. Any raise ends the cell run ``failed`` with the error text.
+    cancelled where it runs. Any raise ends the cell run ``failed`` with
+    the error text. With a worker of its own (``PER_CELL_RUN``), the worker
+    is let go once the arm is over, however it ends, and ended ``ok`` when
+    its cell run has ended. Cancelled with the cell run still live (the
+    space closing), its record is left to the close, or to the next reap.
     """
     row = _exec.cell_runs[cell_run]
     run_row = _exec.plane_runs[plane_run]
@@ -270,11 +273,10 @@ def _cell_arm(plane_run: nu.Str, cell_run: nu.Str, backend: nu.Str, placement: n
             >> unended
         )
         once = nu.IfDo(atomic(row.started_at.exists()), failed(ORPHAN), go)
-        release = nu.IfDo(
-            own.and_(worker != ""),
-            Stop(ref, nu.List.of(worker)) >> atomic(end_worker(worker, EXIT_OK)),
-        )
-        return nu.TryCatch(once, finally_=release)
+        over = nu.IfDo(row.ended_at.exists(), end_worker(worker, EXIT_OK))
+        release = nu.IfDo(own.and_(worker != ""), Stop(ref, nu.List.of(worker)) >> atomic(over))
+        # A raise ends the cell run before the release reads whether it ended.
+        return nu.TryCatch(_contained(once, failed, "kernel cell run", cell_run), finally_=release)
 
     return _contained(nu.let("", with_slot), failed, "kernel cell run", cell_run)
 

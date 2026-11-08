@@ -2,10 +2,11 @@
 
 Runs once at open, after the lock, the format check and a fresh conn.db,
 before spare workers and drivers: the kernel trusts the live indexes, so
-they must say the truth before it folds over them. A plane run, cell run or
-worker still listed live belongs to a host that died without ending it.
-Each is ended ``killed`` with a warning on stderr, then ``indexes.live`` is
-erased and made again, empty.
+they must say the truth before it folds over them. A host that closes
+cleanly ends what it had live itself (:mod:`.close`), so a plane run, cell
+run or worker still listed live belongs to a host that crashed. Each is
+ended ``killed`` with a warning on stderr, then ``indexes.live`` is erased
+and made again, empty.
 
 The processes are not touched: a worker dies with its host (mp_pool's
 parent watch kills a worker whose host is gone). Kill by handle, the
@@ -26,7 +27,7 @@ from nuspace.ops.brackets import atomic
 from nuspace.shapes import EXIT_KILLED, Space
 
 from .interactions import ErrorText
-from .records import end_cell_run, end_plane_run, end_worker, keys
+from .records import end_live, keys
 
 
 __all__ = ["LEFT_OVER", "reap"]
@@ -74,26 +75,8 @@ def _clear() -> nu.Nu:
 
 
 def _ends() -> nu.Nu:
-    """Every leftover cell run, worker and plane run ended killed, then live cleared. Bare.
-
-    Cell runs first, read off every plane run that still has a live cell
-    run set (an ended plane run keeps one until its last cell run ends).
-    """
-    by_run = _live.plane_run_to_cell_runs
-    cell_runs = nu.ForEachDo(
-        keys(by_run),
-        lambda r: nu.ForEachDo(
-            keys(by_run[nu.Str(r)].ids),
-            lambda cr: end_cell_run(nu.Str(cr), EXIT_KILLED, LEFT_OVER),
-        ),
-    )
-    workers = nu.ForEachDo(
-        keys(_live.workers), lambda w: end_worker(nu.Str(w), EXIT_KILLED, LEFT_OVER)
-    )
-    plane_runs = nu.ForEachDo(
-        keys(_live.plane_runs), lambda r: end_plane_run(nu.Str(r), EXIT_KILLED, LEFT_OVER)
-    )
-    return cell_runs >> workers >> plane_runs >> _clear()
+    """Every leftover cell run, worker and plane run ended killed, then live cleared. Bare."""
+    return end_live(EXIT_KILLED, LEFT_OVER) >> _clear()
 
 
 def reap() -> nu.Nu:

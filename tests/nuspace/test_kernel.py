@@ -46,12 +46,14 @@ import nu
 import nuspace
 import nustd.kv
 from nuspace.kernel import (
+    CLOSED,
     LEFT_OVER,
     ORPHAN,
     UNENDED,
     AsyncBackend,
     Backend,
     MpBackend,
+    close,
     reap,
 )
 from nuspace.kernel.backends import PER_PLANE_RUN, provided
@@ -838,6 +840,90 @@ async def test_reap_ends_the_leftovers_even_when_the_warnings_fail(store, capfd,
     assert "nuspace reap: could not list the leftovers: " in capfd.readouterr().err
     assert await store.read(Space.exec.plane_runs[r].exit) == EXIT_KILLED
     assert await store.read(nu.Not(_live.plane_runs)) is True
+
+
+# --- Close ------------------------------------------------------------------------------
+
+
+async def _live_run(store) -> tuple[str, str, list[str]]:
+    """A plane run left live in the store, as a closing host finds it: its worker and two cell runs."""
+    await store.run(
+        nuspace.atomic(
+            nuspace.plane.add("p", backend="async")
+            >> nuspace.cell.add("p", SET_42, id="c1", fabrics=[])
+            >> nuspace.cell.add("p", SET_42, id="c2", fabrics=[])
+        )
+    )
+    r = await store.made(nuspace.atomic(nuspace.plane_run.add("p", into=MADE)))
+    w = await store.made(nuspace.atomic(nuspace.worker.add(r, "async", into=MADE)))
+    await store.run(nuspace.atomic(nuspace.worker.start(w, handle={"pid": 1})))
+    crs = []
+    for c in ("c1", "c2"):
+        crs.append(await store.made(nuspace.atomic(nuspace.cell_run.add(r, c, into=MADE))))
+    await store.run(nuspace.atomic(nuspace.cell_run.start(crs[0], worker=w)))
+    return r, w, crs
+
+
+async def test_close_ends_what_is_live_interrupted_and_skips_what_ended(store, capfd):
+    r, w, crs = await _live_run(store)
+    # A worker that ended, still listed live: the guarded end skips it.
+    gone = await store.made(nuspace.atomic(nuspace.worker.add(r, "async", into=MADE)))
+    await store.run(nuspace.atomic(nuspace.worker.end(gone, EXIT_OK)))
+    await store.run(nuspace.atomic(_live.workers.set_item(gone, True)))
+
+    await store.run(close())
+
+    assert capfd.readouterr().err == ""
+    rows = Space.exec
+    for ref in (rows.plane_runs[r], rows.workers[w], *(rows.cell_runs[cr] for cr in crs)):
+        rec = await store.read(ref.extract())
+        assert (rec["exit"], rec["error"]) == (EXIT_INTERRUPTED, CLOSED)
+    assert (await store.read(rows.workers[gone].exit)) == EXIT_OK
+    assert await store.read(nu.Not(_live.plane_runs)) is True
+    assert await store.read(nu.list(_live.workers.keys())) == [gone]
+
+
+async def test_close_ends_a_plane_run_whose_cell_failed_failed(store):
+    r, _, crs = await _live_run(store)
+    await store.run(nuspace.atomic(nuspace.cell_run.end(crs[0], EXIT_FAILED, "boom")))
+    await store.run(close())
+    rows = Space.exec
+    assert (await store.read(rows.plane_runs[r].exit)) == EXIT_FAILED
+    assert (await store.read(rows.cell_runs[crs[1]].exit)) == EXIT_INTERRUPTED
+
+
+async def test_close_reports_a_failed_commit_and_leaves_live_for_the_reap(store, capfd):
+    r, w, crs = await _live_run(store)
+    # The plane's live set lost the run: plane_run.end's strict delete raises.
+    await store.run(nuspace.atomic(_live.plane_to_plane_runs["p"].ids.del_item(r)))
+    await store.run(close())
+    assert "nuspace close: could not end what was live" in capfd.readouterr().err
+    # One commit: nothing of it landed.
+    rows = Space.exec
+    for ref in (rows.plane_runs[r], rows.workers[w], *(rows.cell_runs[cr] for cr in crs)):
+        assert not (await store.read(ref.ended_at.exists()))
+    assert await store.read(nu.list(_live.plane_runs.keys())) == [r]
+    assert await store.read(nu.list(_live.workers.keys())) == [w]
+
+
+@module_loop
+async def test_a_cell_arm_cancelled_mid_run_leaves_its_worker_to_the_close(tmp_path):
+    """A per cell run worker is let go, not ended, when its arm is cancelled with the run live."""
+    data = str(tmp_path / "space")
+    k = await opened("nuspace-cancelled", data=data, spares=0)
+    p, (c,) = await k.plane(FOREVER, backend="mp")
+    r = await k.start(p)
+    await live_cell(k, r, c)
+    # Cancelled without the host's close: the worker stays live, so the reopen reaps it.
+    await k.close()
+    k = await opened("nuspace-cancelled", data=data, spares=0)
+    try:
+        row = await k.row(r)
+        (w,) = row["workers"]
+        assert (w["exit"], w["error"]) == (EXIT_KILLED, LEFT_OVER)
+        assert (only_cell(row)["exit"], row["exit"]) == (EXIT_KILLED, EXIT_KILLED)
+    finally:
+        await k.close()
 
 
 async def test_reap_after_a_host_crash(tmp_path):

@@ -1,7 +1,7 @@
 """Presets: the named ways to open a space, each one :func:`~.space.open_space` call.
 
 - :func:`serve`: with the web device. What ``nuspace run`` does.
-- :func:`headless`: no device, for scripts and servers.
+- :func:`headless`: no device served, for scripts and servers.
 - :func:`with_plane`: open on the plane of a spec, made from the spec when
   the space has none. What ``nuspace run --with`` does.
 
@@ -15,7 +15,6 @@ from typing import TYPE_CHECKING
 
 import nu
 import nuspace
-from nuspace.errors import Refused
 from nuspace.ops.brackets import atomic
 from nuspace.shapes import Space
 from nuspace.specs import add_plane, plane_spec, registered_name
@@ -43,17 +42,15 @@ def serve(path: str | os.PathLike[str] | None = None, **kwargs: object) -> nu.Wi
 
 
 def headless(path: str | os.PathLike[str] | None = None, **kwargs: object) -> nu.With:
-    """The space at ``path`` with no device: the kernel and the system planes only.
+    """The space at ``path`` with no device served: the kernel and the system planes run.
+
+    Every device's stores still open, without their drivers, so a program
+    writing a device's rows (``add_plane`` of a spec with ``web=``) works.
 
     Raises:
         Refused: As :func:`open_space`.
     """
     return open_space(path, devices=(), **kwargs)
-
-
-def _on_web(spec: PlaneSpec) -> bool:
-    """Whether ``spec``, or a child spec under it, shows on the web (``web=``)."""
-    return spec.web is not None or any(_on_web(child) for child in spec.children)
 
 
 def _plane_of(spec: PlaneSpec, plane: nu.Ref) -> nu.Nu:
@@ -86,7 +83,8 @@ def with_plane(
     (``Space.indexes.spec_planes``), made from the spec when there is none
     or it is removed. So the next open with the same spec finds the same
     plane, with what was done to it. Served, the browser opens on it rather
-    than on home.
+    than on home. Headless, a spec with ``web=`` still gets its web row: the
+    web device's stores open without its driver.
 
     Args:
         path: The space's root, as :func:`open_space`.
@@ -99,17 +97,9 @@ def with_plane(
 
     Raises:
         Missing: No plane spec of that name (at build).
-        Refused: Headless with a spec that shows on the web (at build):
-            a headless space has no web store to write its web row to.
-            Else as :func:`open_space`.
+        Refused: As :func:`open_space`.
     """
     found = plane_spec(spec) if isinstance(spec, str) else spec
-    if not web and _on_web(found):
-        msg = (
-            f"plane spec {found.name!r} shows on the web, and a headless space has no web store:"
-            " open it served"
-        )
-        raise Refused(msg)
 
     def opened(plane: nu.ObjectRef) -> nu.Nu:
         steps = [_plane_of(found, plane)]

@@ -112,11 +112,11 @@ def announce(path: str | None, *, headless: bool = False, plane: str | None = No
 def hold(term: nu.Nu) -> None:
     """Run a space until interrupted (Ctrl+C), then let the brackets close it.
 
-    Closing stops the workers, the stores, the notification server and the
-    lock, in that order. An open the host refuses (another host holds the
-    space, an older store format) is a short error. What is still queued
-    for telemetry (see :mod:`nuspace._telemetry`) gets a short grace to go
-    at the end.
+    Closing ends what is live, interrupted, then stops the workers, the
+    stores, the notification server and the lock, in that order. An open
+    the host refuses (another host holds the space, an older store format)
+    is a short error. What is still queued for telemetry (see
+    :mod:`nuspace._telemetry`) gets a short grace to go at the end.
 
     Compiled and evaluated without law validation: the space program is ours
     and tested, and validating its whole tree costs seconds per start.

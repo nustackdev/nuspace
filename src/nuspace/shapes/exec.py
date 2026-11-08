@@ -72,7 +72,7 @@ EXIT_FAILED = "failed"
 #: Somebody asked: an interrupt, or a removed cell or plane.
 EXIT_INTERRUPTED = "interrupted"
 
-#: Torn down: kill_at passed, or reap found it left over at open.
+#: Torn down: kill_at passed, or reap found it left over by a crash at open.
 EXIT_KILLED = "killed"
 
 #: How a run or a worker ended. Tells a crash from a request.
@@ -116,7 +116,7 @@ class LiveIds(nu.Shape):
 
 
 class Live(nu.Shape):
-    """What runs now. Cleared at open, after reap has ended the leftovers as killed.
+    """What runs now. Emptied at a clean close, its entries ended; cleared at open by reap.
 
     ``plane_runs`` is what the kernel folds over. The keyed sets answer one
     question each in one read: a plane's live runs, a cell's live runs, a

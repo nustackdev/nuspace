@@ -5,9 +5,10 @@ Files, roots and channels::
     devices/web/web_state.db   Web    nuspace.web    persistent
     devices/web/conn.db        Conn   nuspace.conn   deleted and made fresh at every open
 
-Opened only when the web device is on. Their init terms are bare, as the
-core ones are (:mod:`nuspace.host.stores`): the caller brackets each store
-on its own.
+Opened at every open, served or headless (the web device's driver runs
+only when served), so a web row a program writes always lands. Their init
+terms are bare, as the core ones are (:mod:`nuspace.host.stores`): the
+caller brackets each store on its own.
 """
 
 from __future__ import annotations
