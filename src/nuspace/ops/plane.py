@@ -133,7 +133,8 @@ def add(
         before: A sibling to place it before.
         after: A sibling to place it after. Neither: the end.
         name: Display text only.
-        key: An optional handle, slug chars, ``""`` for none.
+        key: An optional handle in key chars (letters, digits, ``_``, ``-``),
+            case-sensitive, ``""`` for none.
         icon: ``lucide:<name>``, ``emoji:<char>`` or ``""``.
         backend: What its runs execute on. ``""``: it does not run.
         system: Protected: ``remove`` refuses it.
@@ -146,7 +147,7 @@ def add(
         Missing: No parent or anchor with that id.
         Removed: The parent or the anchor is removed.
         Refused: A reserved id, an anchor that is not a sibling, a key that
-            is not slug chars, an icon spelled wrong. A literal at build.
+            is not key chars, an icon spelled wrong. A literal at build.
         TypeError: Both ``before`` and ``after``, at build.
     """
     anchor = anchor_of(before, after)
@@ -298,7 +299,7 @@ def set_key(id: nu.StrArg, key: nu.StrArg) -> nu.Nu:
         Missing: No plane with that id.
         Removed: It is removed.
         Exists: Another plane holds the key.
-        Refused: An empty key, or one not in slug chars. A literal at build.
+        Refused: An empty key, or one not in key chars. A literal at build.
     """
     spelled = key_spelled(key, "plane", empty_ok=False)
     index = Space.indexes.plane_keys

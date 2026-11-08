@@ -98,21 +98,41 @@ async def test_add_raises_on_a_parent_or_anchor_that_is_not_there(store):
 def test_add_refuses_bad_literals_at_build():
     with pytest.raises(Refused, match="reserved"):
         nuspace.plane.add(ROOT)
-    with pytest.raises(Refused, match="slug"):
+    with pytest.raises(Refused, match="key chars"):
         nuspace.plane.add(key="Has Space")
-    with pytest.raises(Refused, match="slug"):
+    with pytest.raises(Refused, match="key chars"):
         nuspace.plane.add(key="a/b")
+    with pytest.raises(Refused, match="key chars"):
+        nuspace.plane.add(key="a.b")
     with pytest.raises(Refused, match="icon"):
         nuspace.plane.add(icon="book")
     with pytest.raises(TypeError, match="not both"):
         nuspace.plane.add(before="a", after="b")
 
 
-async def test_add_refuses_a_key_term_not_in_slug_chars(store):
-    with pytest.raises(Refused, match="slug"):
+async def test_add_refuses_a_key_term_not_in_key_chars(store):
+    with pytest.raises(Refused, match="key chars"):
         await do(store, nuspace.plane.add("a", key=nu.Str("Bad Key")))
     await do(store, nuspace.plane.add("a", key=nu.Str("")))
     assert await store.read(planes["a"].key) == ""
+    await do(store, nuspace.plane.add("b", key=nu.Str("My_Notes-2")))
+    assert await store.read(keys["My_Notes-2"]) == "b"
+
+
+async def test_keys_take_uppercase_and_keep_case(store):
+    # Literals and terms alike; Notes and notes are two keys.
+    await do(store, nuspace.plane.add("a", key="Notes") >> nuspace.plane.add("b", key="notes"))
+    assert await store.read(keys.extract()) == {"Notes": "a", "notes": "b"}
+    with pytest.raises(Exists, match="Notes"):
+        await do(store, nuspace.plane.add("c", key="Notes"))
+    await do(store, nuspace.plane.add("c"))
+    await do(store, nuspace.plane.set_key("c", "NOTES"))
+    await do(store, nuspace.plane.set_key("a", nu.Str("Inbox")))
+    assert await store.read(keys.extract()) == {"Inbox": "a", "notes": "b", "NOTES": "c"}
+    with pytest.raises(Refused, match="key chars"):
+        nuspace.plane.set_key("a", "In box")
+    with pytest.raises(Refused, match="key chars"):
+        await do(store, nuspace.plane.set_key("a", nu.Str("In/box")))
 
 
 async def test_add_mints_at_evaluation(store):

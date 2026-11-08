@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Keys take uppercase letters, and spec planes build cell programs before any commit opens
 - Rewrite core ops on the new stores: strict raises, state places, planes from specs
 - Rebuild the store layout: space, state and web stores, plus the op errors
 

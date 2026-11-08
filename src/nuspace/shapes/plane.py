@@ -19,9 +19,10 @@ class Plane(nu.Shape):
     """One plane's row at ``Space.planes[id]``. Structure only.
 
     Identity: the id is the row's key and never changes. ``key`` is an
-    optional handle, slug chars with no ``/``, ``""`` for none, unique among
-    live planes through ``Space.indexes.plane_keys``; the row keeps it after
-    removal so a restore can put it back. ``name`` is display text only and
+    optional handle in key chars (letters, digits, ``_``, ``-``;
+    case-sensitive), ``""`` for none, unique among live planes through
+    ``Space.indexes.plane_keys``; the row keeps it after removal so a
+    restore can put it back. ``name`` is display text only and
     never finds anything.
 
     Tree: ``cells`` and ``children`` are the ids of its cells and child

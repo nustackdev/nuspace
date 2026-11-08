@@ -3,7 +3,7 @@
 Generic nu-level definitions kept out of the files that use them, many
 waiting to move into nu itself, so this package should shrink over time:
 
-- :mod:`.interactions`: :class:`MintId` (run time ids), :class:`IsSlug`
+- :mod:`.interactions`: :class:`MintId` (run time ids), :class:`InKeyChars`
   (key spelling), :class:`Require` (a value or a raise, for reads that
   refuse).
 - :mod:`.placement`: putting an id before or after an anchor, or at the end.
@@ -29,7 +29,7 @@ from typing import TYPE_CHECKING
 
 import nu
 
-from .interactions import SLUG, IsSlug, MintId, Require, is_slug, mint_ordered_id
+from .interactions import KEY_CHARS, InKeyChars, MintId, Require, in_key_chars, mint_ordered_id
 from .placement import anchor_of, place
 from .typed import Typed, TypedItems
 
@@ -39,15 +39,15 @@ if TYPE_CHECKING:
 
 
 __all__ = [
-    "SLUG",
-    "IsSlug",
+    "KEY_CHARS",
+    "InKeyChars",
     "MintId",
     "Require",
     "Typed",
     "TypedItems",
     "anchor_of",
     "field_str",
-    "is_slug",
+    "in_key_chars",
     "keep_order",
     "mint_ordered_id",
     "place",

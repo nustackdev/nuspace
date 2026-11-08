@@ -8,7 +8,7 @@ Five errors, one per reason, all under :class:`NuspaceError`, a
 - :class:`Removed`: the row is there, but removed.
 - :class:`Exists`: an id or key is taken, or a member is already listed.
 - :class:`Refused`: the request is not allowed: a system plane, root, a
-  cycle, an anchor that is not a sibling, a key that is not slug chars, a
+  cycle, an anchor that is not a sibling, a key that is not key chars, a
   store of another format.
 - :class:`Ended`: the run or worker already ended.
 

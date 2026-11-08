@@ -22,7 +22,7 @@ import nu
 from nuspace.errors import Ended, Exists, Missing, Refused, Removed
 from nuspace.shapes.exec import EXITS
 
-from .interactions import IsSlug, is_slug
+from .interactions import InKeyChars, in_key_chars
 
 
 if TYPE_CHECKING:
@@ -116,23 +116,25 @@ def anchored(
 
 
 def key_spelled(key: nu.StrArg, what: str, *, empty_ok: bool) -> nu.Nu:
-    """``key`` is slug chars, or ``""`` (no key) when ``empty_ok``.
+    """``key`` is key chars, or ``""`` (no key) when ``empty_ok``.
 
-    A literal key is checked at build.
+    Key chars are letters of either case, digits, ``_`` and ``-``; case is
+    kept and compared. A literal key is checked at build, a term when it
+    evaluates.
 
     Raises:
-        Refused: The key is empty (unless ``empty_ok``) or not slug chars.
+        Refused: The key is empty (unless ``empty_ok``) or not key chars.
     """
-    spelled = f"{what} keys are slug chars: lowercase letters, digits, _ and -"
+    spelled = f"{what} keys are key chars: letters, digits, _ and -"
     if isinstance(key, str):
         if key == "" and empty_ok:
             return nu.Noop()
         if key == "":
             raise Refused(f"empty {what} key")
-        if not is_slug(key):
+        if not in_key_chars(key):
             raise Refused(f"{what} key {key!r}: {spelled}")
         return nu.Noop()
-    bad = nu.Bool(IsSlug(key)).not_()
+    bad = nu.Bool(InKeyChars(key)).not_()
     if empty_ok:
         bad = (nu.Str(key) != "").and_(bad)
     else:

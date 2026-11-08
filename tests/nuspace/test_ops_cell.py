@@ -8,6 +8,7 @@ from _support.made import MADE
 import nu
 import nuspace
 from nuspace.errors import Exists, Missing, Refused, Removed
+from nuspace.ops.interactions import Fabrics
 from nuspace.shapes import Space
 
 
@@ -82,6 +83,39 @@ async def test_add_works_out_the_fabrics_from_the_prog(plane):
     assert await store.read(cells["bad"].fabrics) == []
 
 
+async def test_add_and_set_prog_store_fabrics_worked_out_already(plane):
+    store = plane
+    # Given fabrics are stored as they are: the prog is not built.
+    await do(store, nuspace.cell.add("p", "s", id="a", fabrics=["ui"]))
+    assert await store.read(cells["a"].fabrics) == ["ui"]
+    found = Fabrics(UI_SRC, "p", "b")
+    await do(store, nuspace.cell.add("p", UI_SRC, id="b", fabrics=found))
+    assert await store.read(cells["b"].fabrics) == ["ui"]
+    await do(store, nuspace.cell.set_prog("b", UI_SRC, fabrics=[]))
+    row = await store.read(cells["b"].extract())
+    assert (row["prog"], row["fabrics"], row["version"]) == (UI_SRC, [], 2)
+    await do(store, nuspace.cell.remove("b"))
+    with pytest.raises(Removed):
+        await do(store, nuspace.cell.set_prog("b", "s", fabrics=[]))
+
+
+async def test_keys_take_uppercase_and_keep_case(plane):
+    store = plane
+    keys = Space.indexes.cell_keys
+    await do(
+        store,
+        nuspace.cell.add("p", "s", id="a", key="Total")
+        >> nuspace.cell.add("p", "s", id="b", key=nu.Str("total")),
+    )
+    assert await store.read(keys.extract()) == {"Total": "a", "total": "b"}
+    with pytest.raises(Exists, match="Total"):
+        await do(store, nuspace.cell.add("q", "s", key="Total"))
+    await do(store, nuspace.cell.set_key("a", "Sum_2"))
+    assert await store.read(keys.extract()) == {"Sum_2": "a", "total": "b"}
+    with pytest.raises(Refused, match="key chars"):
+        nuspace.cell.set_key("a", "sum.2")
+
+
 async def test_add_places_and_raises(plane):
     store = plane
     await do(store, nuspace.cell.add("p", "s", id="a") >> nuspace.cell.add("p", "s", id="c"))
@@ -98,8 +132,10 @@ async def test_add_places_and_raises(plane):
     await do(store, nuspace.cell.add("p", "s", id="k", key="k"))
     with pytest.raises(Exists, match="cell key k"):
         await do(store, nuspace.cell.add("q", "s", key="k"))
-    with pytest.raises(Refused, match="slug"):
+    with pytest.raises(Refused, match="key chars"):
         nuspace.cell.add("p", "s", key="no/slash")
+    with pytest.raises(Refused, match="key chars"):
+        await do(store, nuspace.cell.add("p", "s", key=nu.Str("Has Space")))
     await do(store, nuspace.plane.remove("q"))
     with pytest.raises(Removed):
         await do(store, nuspace.cell.add("q", "s"))

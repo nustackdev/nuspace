@@ -12,8 +12,8 @@ __all__ = ["Cell"]
 class Cell(nu.Shape):
     """One cell's row at ``Space.cells[id]``. Structure only.
 
-    Identity: as a plane's. ``key`` is an optional handle, slug chars with
-    no ``/``, ``""`` for none, unique among live cells through
+    Identity: as a plane's. ``key`` is an optional handle in key
+    chars, case-sensitive, ``""`` for none, unique among live cells through
     ``Space.indexes.cell_keys`` (a plane and a cell may share one), kept
     after removal. ``name`` is display text only.
 

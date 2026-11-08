@@ -70,6 +70,7 @@ def add(
     key: nu.StrArg = "",
     spec: nu.StrArg = "",
     meta: dict[str, Any] | nu.Nu | None = None,
+    fabrics: list[str] | nu.Nu | None = None,
     into: nu.Ref | None = None,
 ) -> nu.Nu:
     """Create a cell on a plane. Create only: an id taken raises. Does not run it.
@@ -82,7 +83,11 @@ def add(
     reload does for a live one. Cost: O(1), about 20 keys.
 
     Working out the fabrics builds the prog in this process (its module
-    code runs), before any store key is read.
+    code runs), before any store key is read. A caller that brackets more
+    than this op, or retries it, works them out first in its own step
+    outside the bracket and passes ``fabrics=``, so no build runs inside a
+    commit: ``nuspace.specs.add_plane`` does. Reactions and the web device
+    should do the same.
 
     Args:
         plane: The plane it goes on.
@@ -91,23 +96,28 @@ def add(
         before: A cell of the plane to place it before.
         after: A cell of the plane to place it after. Neither: the end.
         name: Display text only.
-        key: An optional handle, slug chars, ``""`` for none.
+        key: An optional handle in key chars (letters, digits, ``_``, ``-``),
+            case-sensitive, ``""`` for none.
         spec: The spec it was made from, ``""`` for none.
         meta: The free dict, for programs. nuspace never reads it.
+        fabrics: The fabrics the prog uses, worked out already, eg a ref
+            set from :class:`~nuspace.ops.interactions.Fabrics` with the
+            same prog, plane and id. Stored as given. Absent: worked out
+            here.
         into: A ref set to the id in the same commit, for a minted one.
 
     Raises:
         Exists: The id or the key is taken.
         Missing: No plane or anchor with that id.
         Removed: The plane or the anchor is removed.
-        Refused: An anchor on another plane, a key that is not slug chars
+        Refused: An anchor on another plane, a key that is not key chars
             (a literal at build).
         TypeError: Both ``before`` and ``after``, at build.
     """
     anchor = anchor_of(before, after)
     spelled = key_spelled(key, "cell", empty_ok=True)
 
-    def write(cid: nu.StrArg, fabrics: nu.ObjectRef) -> nu.Nu:
+    def write(cid: nu.StrArg, used: list[str] | nu.Nu) -> nu.Nu:
         rows = Space.cells
         row = rows[cid]
         listed = Space.planes[plane].cells
@@ -117,7 +127,7 @@ def add(
                 row.name.set(name)
                 >> row.key.set(key)
                 >> row.prog.set(prog)
-                >> row.fabrics.set(fabrics)
+                >> row.fabrics.set(used)
                 >> row.version.set(1)
                 >> row.plane.set(plane)
                 >> row.spec.set(spec)
@@ -141,7 +151,9 @@ def add(
         return writes if into is None else writes >> into.set(cid)
 
     def analysed(cid: nu.StrArg) -> nu.Nu:
-        return nu.let(Fabrics(prog, plane, cid), lambda fabrics: write(cid, fabrics))
+        if fabrics is not None:
+            return write(cid, fabrics)
+        return nu.let(Fabrics(prog, plane, cid), lambda found: write(cid, found))
 
     if id is None:
         return nu.let(MintId("c"), lambda cid: analysed(nu.Str(cid)))
@@ -234,7 +246,7 @@ def set_key(id: nu.StrArg, key: nu.StrArg) -> nu.Nu:
         Missing: No cell with that id.
         Removed: It is removed.
         Exists: Another cell holds the key.
-        Refused: An empty key, or one not in slug chars. A literal at build.
+        Refused: An empty key, or one not in key chars. A literal at build.
     """
     spelled = key_spelled(key, "cell", empty_ok=False)
     index = Space.indexes.cell_keys
@@ -270,7 +282,7 @@ def remove_key(id: nu.StrArg) -> nu.Nu:
     )
 
 
-def set_prog(id: nu.StrArg, prog: nu.StrArg) -> nu.Nu:
+def set_prog(id: nu.StrArg, prog: nu.StrArg, *, fabrics: list[str] | nu.Nu | None = None) -> nu.Nu:
     """Replace a cell's program. Live runs keep the old one; reload reruns the cell.
 
     One commit: prog, fabrics (worked out from the prog, which builds it in
@@ -278,21 +290,35 @@ def set_prog(id: nu.StrArg, prog: nu.StrArg) -> nu.Nu:
     +1. Nothing validates: a prog that does not build stores fine and uses
     no fabric. Cost: O(1), 5 keys.
 
+    Worked out here, the build runs after the row is read, so inside the
+    caller's commit. A caller that brackets it works the fabrics out first,
+    in its own step outside the bracket, and passes ``fabrics=``. Reactions
+    and the web device should.
+
+    Args:
+        id: The cell.
+        prog: Its new source.
+        fabrics: The fabrics the new prog uses, worked out already (see
+            :func:`add`). Stored as given. Absent: worked out here.
+
     Raises:
         Missing: No cell with that id.
         Removed: It is removed.
     """
     row = Space.cells[id]
 
-    def written(fabrics: nu.ObjectRef) -> nu.Nu:
+    def written(used: list[str] | nu.Nu) -> nu.Nu:
         return (
             row.prog.set(prog)
-            >> row.fabrics.set(fabrics)
+            >> row.fabrics.set(used)
             >> row.version.set(row.version.fallback(0) + 1)
             >> _edited(id)
         )
 
-    return live(Space.cells, id, "cell") >> nu.let(Fabrics(prog, row.plane, id), written)
+    checked = live(Space.cells, id, "cell")
+    if fabrics is not None:
+        return checked >> written(fabrics)
+    return checked >> nu.let(Fabrics(prog, row.plane, id), written)
 
 
 def set_meta(id: nu.StrArg, fields: dict[str, Any] | nu.Nu) -> nu.Nu:

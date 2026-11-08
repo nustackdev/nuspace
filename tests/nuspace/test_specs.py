@@ -10,6 +10,7 @@ import nuspace
 import nustd.kv
 from nuspace.devices.web.shapes import Web
 from nuspace.errors import Exists, Missing
+from nuspace.ops.interactions import Fabrics
 from nuspace.shapes import ROOT, Space, State
 from nuspace.specs import EMPTY_PLANE, CellSpec, PlaneSpec, SpecCells, WebOptions
 
@@ -18,6 +19,20 @@ STORES = ("memory", "sqlite")
 
 planes = Space.planes
 specs = nuspace.specs
+
+
+#: A source that draws: its built term holds a ui ref.
+UI_SRC = "import nustd.ui\n\n\ndef out(cell):\n    return nustd.ui.StatRef(cell).set_label('n')\n"
+
+
+def bracketed_builds(term):
+    """The prog builds (``Fabrics``) in ``term``: all of them, and those inside a kv bracket."""
+    builds = nu.tree.find(term, lambda n: isinstance(n, Fabrics))
+    brackets = nu.tree.find(
+        term, lambda n: isinstance(n, (nustd.kv.Transaction, nustd.kv.Snapshot))
+    )
+    inside = [b for br in brackets for b in nu.tree.find(br, lambda n: isinstance(n, Fabrics))]
+    return builds, inside
 
 
 async def kids(store, p):
@@ -157,3 +172,36 @@ async def test_add_cell_from_a_spec_or_its_name(store):
     assert await store.read(Space.cells["x"].spec) == "loose"
     with pytest.raises(Missing, match="no cell spec"):
         specs.add_cell("p", "testing.nope")
+
+
+async def test_add_plane_works_out_every_cells_fabrics_before_its_brackets(store):
+    leaf = PlaneSpec("leaf", "Leaf", cells=(("stat", UI_SRC),), backend="async")
+    spec = PlaneSpec(
+        "t", "T", cells=(("stat", UI_SRC), ("note", "n")), children=(leaf,), backend="async"
+    )
+    term = specs.add_plane(spec, into=MADE)
+    builds, inside = bracketed_builds(term)
+    assert (len(builds), inside) == (3, [])
+    top = await store.made(term)
+    (child,) = await kids(store, top)
+    named = await store.read(SpecCells.ids.with_parent(State.planes[top]).extract())
+    assert await store.read(Space.cells[named["stat"]].fabrics) == ["ui"]
+    assert await store.read(Space.cells[named["note"]].fabrics) == []
+    (leaf_cell,) = await store.read(nu.list(planes[child].cells.keys()))
+    assert await store.read(Space.cells[leaf_cell].fabrics) == ["ui"]
+
+
+async def test_add_cell_works_out_the_fabrics_in_a_step_of_its_own(store):
+    await store.run(nuspace.atomic(nuspace.plane.add("p", backend="async")))
+    drawn = CellSpec("stat", "Stat", UI_SRC)
+    term = nuspace.bracketed(specs.add_cell("p", drawn, into=MADE))
+    builds, inside = bracketed_builds(term)
+    assert (len(builds), inside) == (1, [])
+    c = await store.made(term)
+    assert c.startswith("c_")
+    assert await store.read(Space.cells[c].fabrics) == ["ui"]
+    # Given fabrics: no build at all, stored as given.
+    given = specs.add_cell("p", drawn, id="x", fabrics=[])
+    assert nu.tree.find(given, lambda n: isinstance(n, Fabrics)) == []
+    await store.run(nuspace.atomic(given))
+    assert await store.read(Space.cells["x"].fabrics) == []

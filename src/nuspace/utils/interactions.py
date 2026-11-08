@@ -1,7 +1,7 @@
 """Nu interactions nuspace needs and nu does not have yet. Generic: nothing here knows a plane.
 
 - :class:`MintId`: a fresh time ordered id, minted each time it evaluates.
-- :class:`IsSlug`: whether a key is spelled in slug chars.
+- :class:`InKeyChars`: whether a key is spelled in key chars.
 - :class:`Require`: a value, or a raise when a condition does not hold. The
   query form of ``IfDo(check, Raise)``, for a read that must yield.
 
@@ -26,13 +26,14 @@ if TYPE_CHECKING:
     from nu.lang.runtime import Runtime
 
 
-__all__ = ["SLUG", "IsSlug", "MintId", "Require", "is_slug", "mint_ordered_id"]
+__all__ = ["KEY_CHARS", "InKeyChars", "MintId", "Require", "in_key_chars", "mint_ordered_id"]
 
 
 _ORDER_COUNTER = itertools.count()
 
-#: A key's spelling: lowercase letters, digits, ``_`` and ``-``, one at least. No ``/``.
-SLUG = re.compile(r"[a-z0-9_-]+")
+#: A key's spelling, the key chars: letters of either case, digits, ``_`` and ``-``,
+#: one at least. No ``/``. Keys are case-sensitive: ``Notes`` and ``notes`` are two keys.
+KEY_CHARS = re.compile(r"[A-Za-z0-9_-]+")
 
 
 def mint_ordered_id(prefix: str) -> str:
@@ -51,9 +52,9 @@ def mint_ordered_id(prefix: str) -> str:
     return f"{prefix}_{stamp}_{seq}_{uuid.uuid4().hex[:4]}"
 
 
-def is_slug(key: object) -> bool:
-    """Whether ``key`` is a str spelled in slug chars (:data:`SLUG`)."""
-    return isinstance(key, str) and SLUG.fullmatch(key) is not None
+def in_key_chars(key: object) -> bool:
+    """Whether ``key`` is a str spelled in key chars (:data:`KEY_CHARS`)."""
+    return isinstance(key, str) and KEY_CHARS.fullmatch(key) is not None
 
 
 class MintId(ScalarQuery):
@@ -85,8 +86,8 @@ class MintId(ScalarQuery):
         return athunk
 
 
-class IsSlug(ScalarQuery):
-    """Whether a key is spelled in slug chars (:func:`is_slug`).
+class InKeyChars(ScalarQuery):
+    """Whether a key is spelled in key chars (:func:`in_key_chars`).
 
     Args:
         key: The key, any term.
@@ -97,13 +98,13 @@ class IsSlug(ScalarQuery):
 
     def _compile(self, nid: int, children: tuple[Callable, ...]) -> Callable:
         (key,) = children
-        return lambda rt: is_slug(key(rt))
+        return lambda rt: in_key_chars(key(rt))
 
     def _acompile(self, nid: int, children: tuple[Callable, ...]) -> Callable:
         (key,) = children
 
         async def athunk(rt: Runtime) -> object:
-            return is_slug(await key(rt))
+            return in_key_chars(await key(rt))
 
         return athunk
 
