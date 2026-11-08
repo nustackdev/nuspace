@@ -1,79 +1,58 @@
-"""The kernel: runs, interrupts and kills plane runs, runs and interrupts cell runs, records them.
+"""The kernel: the main driver. It runs plane runs and cell runs on workers, and records them.
 
-Headless and in the host, where the backends are. The ops write intents to
-the store (D1); the kernel reads them and makes them true through the
-backends (:mod:`nuspace.system.backends`), never asking which kind:
+The ops write what is wanted to ``Space.exec`` (``plane_run.add``,
+``interrupt_at``, ``kill_at``); the kernel makes it true through the
+backends, never asking which kind, and writes what happened through the
+same ops. Nobody calls it but the host, which opens a space as::
 
-- :mod:`.space`: the brackets a space opens in, and :func:`open_kernel`.
-- :mod:`.envs`: named env factories, resolved per cell run in the host.
+    stores, worker pool, bound(...)
+      reap() >> race(kernel(), the rest)
+
+- :mod:`.kernel`: the driver, one arm per live plane run, and
+  :func:`bound`, what it needs around it.
+- :mod:`.reap`: at open, what a gone host left live ended killed.
 - :mod:`.body`: one cell run's life on its worker.
-- :mod:`.out`: a cell run's stdout and stderr, captured per cell run.
-- :mod:`.dispatch`: a cell run's body built and run by its backend, to its end.
-- :mod:`.runs`: the fold over live plane runs.
-- :mod:`.reconcile`: at open, leftovers ended killed.
-- :mod:`.kernel`: all of it as one term.
+- :mod:`.envs`: named env factories, resolved per cell run in the host.
+- :mod:`.out`: a cell run's stdout and stderr, captured in the worker.
+- :mod:`.records`: the guarded end writes the kernel and reap share.
+- :mod:`.interactions`: the kernel's own nu interactions.
+- :mod:`.backends`: what runs cells on workers: the contract, ``mp``, ``async``.
 """
 
-from .body import build_body, end_cell_run
-from .dispatch import RunCell
-from .envs import Env, EnvFactory, KernelConfig, KernelConfigRef, UnknownEnvError
-from .kernel import INIT_BY, init_start, kernel, kernel_loop
-from .out import OUT_CAP
-from .reconcile import reconcile
-from .runs import end_run, outcome, run_arm, run_fold
-from .space import (
-    DATA_DIR,
-    DEFAULT_NAME,
-    DEFAULT_SPARES,
-    KERNEL_FILE,
-    STATE_FILE,
-    VALKEY_DIR,
-    NotASpace,
-    data_dir,
-    find_space,
-    is_space,
-    navigator,
-    open_kernel,
-    space_dir,
-    store,
-    worker_context,
-    worker_pool,
+from .backends import (
+    BACKENDS,
+    PER_CELL_RUN,
+    PER_PLANE_RUN,
+    AsyncBackend,
+    Backend,
+    MpBackend,
+    PoolBackend,
+    UnknownBackendError,
 )
+from .body import build_body
+from .envs import Env, EnvFactory, KernelConfig, UnknownEnvError
+from .kernel import ORPHAN, UNENDED, bound, kernel
+from .reap import LEFT_OVER, reap
 
 
 __all__ = [
-    "DATA_DIR",
-    "DEFAULT_NAME",
-    "DEFAULT_SPARES",
-    "INIT_BY",
-    "KERNEL_FILE",
-    "OUT_CAP",
-    "STATE_FILE",
-    "VALKEY_DIR",
+    "BACKENDS",
+    "LEFT_OVER",
+    "ORPHAN",
+    "PER_CELL_RUN",
+    "PER_PLANE_RUN",
+    "UNENDED",
+    "AsyncBackend",
+    "Backend",
     "Env",
     "EnvFactory",
     "KernelConfig",
-    "KernelConfigRef",
-    "NotASpace",
-    "RunCell",
+    "MpBackend",
+    "PoolBackend",
+    "UnknownBackendError",
     "UnknownEnvError",
+    "bound",
     "build_body",
-    "data_dir",
-    "end_cell_run",
-    "end_run",
-    "find_space",
-    "init_start",
-    "is_space",
     "kernel",
-    "kernel_loop",
-    "navigator",
-    "open_kernel",
-    "outcome",
-    "reconcile",
-    "run_arm",
-    "run_fold",
-    "space_dir",
-    "store",
-    "worker_context",
-    "worker_pool",
+    "reap",
 ]

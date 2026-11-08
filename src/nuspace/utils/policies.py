@@ -1,8 +1,4 @@
-"""Small things services and system cells share: the store snapshot and the error policies.
-
-**Snapshot.** :func:`snap` reads a term in a snapshot of both stores, each
-opened only if read. One implementation (:func:`nuspace.ops.utils.snapshot`);
-this is its public path.
+"""The error policies drivers and system cells share.
 
 **Error policies.** An unhandled raise in a fold arm ends the whole fold, so
 every arm says what happens on one. Each policy reports through
@@ -19,10 +15,9 @@ from __future__ import annotations
 
 import nu
 from nu.core.io import STDOUT
-from nuspace.ops.utils import snapshot as snap
 
 
-__all__ = ["isolated", "report", "restarting", "snap"]
+__all__ = ["isolated", "report", "restarting"]
 
 
 def report(name: str, id: nu.StrArg | None, error: nu.Nu) -> nu.Nu:

@@ -4,11 +4,12 @@ An env is a wrap around the body and a rewrite over the loaded program::
 
     session = Env(wrap=lambda body: piped_session(address, sid, body), label="session")
 
-A run cannot store a lambda, so it stores specs, ``[name, *args]``, and the
-host resolves them through factories registered at open (D2). The wrap runs
-here, in the host, so the lambda never crosses: what crosses is the Nu it
-built. The rewrite does cross, inside the body that loads the program, so it
-must pickle (a class, not a closure).
+A plane run cannot store a lambda, so it stores specs, ``[name, *args]``
+(``PlaneRun.envs``), and the host resolves them through factories
+registered at open. The wrap runs here, in the host, so the lambda never
+crosses: what crosses is the Nu it built. The rewrite does cross, inside
+the body that loads the program, so it must pickle (a class, not a
+closure).
 
 Order: space-wide envs outermost, then the run's own, first outermost.
 """
@@ -19,8 +20,6 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from nu.context import FabricRef
-
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
@@ -29,7 +28,7 @@ if TYPE_CHECKING:
     from nu.tree import Transform
 
 
-__all__ = ["Env", "EnvFactory", "KernelConfig", "KernelConfigRef", "UnknownEnvError"]
+__all__ = ["Env", "EnvFactory", "KernelConfig", "UnknownEnvError"]
 
 
 @dataclass(frozen=True)
@@ -39,7 +38,7 @@ class Env:
     Args:
         wrap: ``body -> body``, run in the host at dispatch. None wraps nothing.
         rewrite: A picklable ``Nu -> Nu`` over the loaded program, applied in
-            the worker after reroot. None rewrites nothing.
+            the worker. None rewrites nothing.
         label: What it is called, for reading and errors.
     """
 
@@ -59,8 +58,9 @@ class UnknownEnvError(LookupError):
 class KernelConfig:
     """What the kernel is told at open: the env registry and the space-wide envs.
 
-    Bound on the host's context, read by dispatch. Host only: factories are
-    python callables and never cross.
+    Bound on the host's context (:func:`~nuspace.kernel.bound`), read when a
+    cell run's body is built. Host only: factories are python callables and
+    never cross.
 
     Args:
         envs: Factories by name.
@@ -94,9 +94,3 @@ class KernelConfig:
     def resolve(self, specs: Sequence[Sequence[str]] | None) -> list[Env]:
         """The envs a run executes inside: space-wide, then its own. Outermost first."""
         return [self.build(spec) for spec in [*self.space_envs, *(specs or [])]]
-
-
-class KernelConfigRef(FabricRef):
-    """The :class:`KernelConfig` bound on the context. NULL when none is."""
-
-    fabric = KernelConfig

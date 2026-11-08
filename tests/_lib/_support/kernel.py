@@ -1,23 +1,35 @@
-"""The kernel harness and programs shared by the kernel, services and host tests.
+"""The kernel harness and programs shared by the kernel, system plane and host tests.
 
-One kernel held open on the test's loop: run ops against it, read the store, wait
-until the kernel has made something true.
+One kernel held open on the test's loop, headless, with real workers: the
+Space and State stores on sqlite with a private notification server, reap,
+then a worker pool whose workers open the same stores, the backends and the
+kernel. Run ops against it, read the store, wait until the kernel has made
+something true.
+
+The stores are opened here, not through the host: the kernel needs only
+them, the pool and :func:`nuspace.kernel.bound` around it.
 """
 
 from __future__ import annotations
 
 import asyncio
 import multiprocessing
+import tempfile
 import time
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import nu
+import nuspace
+import nustd.kv
+import nustd.mp_pool
+import nustd.valkey
 from _support.made import MADE, MADE_STORE
 from nu.lang import ScalarQuery
-from nuspace import ops
+from nuspace import kernel
+from nuspace.host.stores import SPACE_STORE, STATE_STORE
 from nuspace.shapes import Space
-from nuspace.system.kernel import open_kernel
 
 
 if TYPE_CHECKING:
@@ -30,9 +42,8 @@ _HEAD = """
 import nu
 import nustd.kv
 import nuspace
-from nuspace import ops
 
-class Tick(nuspace.CellState):
+class Tick(nu.Shape):
     n = nustd.kv.IntRef.slot()
     s = nustd.kv.StrRef.slot()
 
@@ -45,11 +56,12 @@ def prog(*lines: str) -> str:
     return _HEAD + "".join(f"    {line}\n" for line in lines)
 
 
-SET_42 = prog("return ops.atomic_state(Tick.n.set(42))")
+SET_42 = prog("return nuspace.atomic(nuspace.here(Tick).n.set(42))")
 RAISES = prog('raise ValueError("boom")')
 FOREVER = prog('print("built")', 'return nu.print("tick") >> nu.ForeverDo(nu.Delay(0.05))')
 READS_TAG = prog(
-    "from _support.kernel_envs import Tag", "return ops.atomic_state(Tick.s.set(Tag.value))"
+    "from _support.kernel_envs import Tag",
+    "return nuspace.atomic(nuspace.here(Tick).s.set(Tag.value))",
 )
 #: Holds its worker's loop, so it never hears an interrupt.
 BLOCKS = prog(
@@ -61,6 +73,60 @@ CRASHES = prog(
     "from _support.actions import Crash",
     "return nu.Delay(0.3) >> nu.let(Crash(3), lambda _: nu.Noop())",
 )
+
+
+# --- The stores -----------------------------------------------------------------
+
+#: The core stores, as the kernel reads them.
+STORES = (SPACE_STORE, STATE_STORE)
+
+#: The notification server's dir inside a space's data dir.
+VALKEY_DIR = "valkey"
+
+
+def navigators(data: str) -> nu.With:
+    """Every core store under ``data``, notified through its server, as any process opens them."""
+    url = nustd.valkey.url_for(Path(data) / VALKEY_DIR)
+    return nu.With(
+        *(
+            nustd.kv.sqlite_navigator_redis(
+                str(Path(data) / s.file), tags=(s.root,), redis_url=url, channel_prefix=s.channel
+            )
+            for s in STORES
+        )
+    )
+
+
+def init_stores() -> nu.Nu:
+    """Every core store's fixed containers, made where missing: one commit per store."""
+    return nu.Sequential(*(nustd.kv.atomic(s.init()) for s in STORES))
+
+
+def kernel_open(
+    body: nu.Nu,
+    *,
+    data: str,
+    name: str = "nuspace-test",
+    spares: int = 0,
+    grace: float = 2.0,
+    **bound: object,
+) -> nu.With:
+    """The kernel open on the space whose data dir is ``data``, beside ``body``.
+
+    The open's order: server and stores, a dict, the containers, reap;
+    then the pool (spare workers, each opening the stores itself), the
+    backends and config, and inside them the kernel racing ``body``. Reap
+    needs no backend, so nothing is spawned before it.
+    """
+    (Path(data) / "store").mkdir(parents=True, exist_ok=True)
+    served = nu.With(nustd.valkey.server(Path(data) / VALKEY_DIR), navigators(data))
+    pool = nustd.mp_pool.pool(name=name, init=navigators(data), spares=spares, grace=grace)
+    drivers = nu.With(pool, kernel.bound(**bound), body=nu.Race(kernel.kernel(), body))
+    return nu.With(
+        served,
+        nu.Provide(dict, {}),
+        body=init_stores() >> kernel.reap() >> drivers,
+    )
 
 
 # --- The harness ------------------------------------------------------------------
@@ -90,26 +156,31 @@ class Kernel:
     ctx: nu.Context
     done: asyncio.Event
     task: asyncio.Task
+    data: str
 
     async def run(self, term: nu.Nu) -> object:
         value, _ = await nu.arun(term, self.ctx)
         return value
 
     async def read(self, term: nu.Nu) -> object:
-        return await self.run(ops.snapshot(term))
+        return await self.run(nuspace.atomic(term))
+
+    async def do(self, term: nu.Nu) -> object:
+        """``term`` in one commit: ``nuspace.atomic``."""
+        return await self.run(nuspace.atomic(term))
 
     async def made(self, term: nu.Nu) -> object:
-        """Run ``term``, an op given ``into=MADE``, and read what it set there."""
-        await self.run(term)
+        """Run ``term``, an op given ``into=MADE``, in one commit, and read what it set there."""
+        await self.do(term)
         return await self.run(MADE)
 
     async def until(
-        self, term: nu.Nu, pred: Callable[[object], bool], timeout: float = 4.0
+        self, read: Callable[[], object], pred: Callable[[object], bool], timeout: float = 4.0
     ) -> object:
-        """Read ``term`` until ``pred`` holds on it, or fail with the last value."""
+        """Call ``read`` (a coroutine function) until ``pred`` holds on it, or fail with the last value."""
         deadline = time.monotonic() + timeout
         while True:
-            value = await self.read(term)
+            value = await read()
             if pred(value):
                 return value
             if time.monotonic() > deadline:
@@ -117,19 +188,42 @@ class Kernel:
                 raise AssertionError(msg)
             await asyncio.sleep(0.05)
 
-    async def run_row(self, rid: str, pred: Callable[[dict], bool], timeout: float = 4.0) -> dict:
-        """The plane run, read by id until ``pred`` holds on it."""
-        return await self.until(ops.run(rid), pred, timeout)
+    async def row(self, plane_run: str) -> dict:
+        """A plane run as a dict: its record, its cell runs oldest first, its workers.
 
-    async def worker_row(
-        self, wid: str, pred: Callable[[dict], bool] | None = None, timeout: float = 4.0
+        ``cells`` lists the records of every cell run it ever had, each with
+        its ``id``; ``workers`` every worker it ever held, each a record with
+        its ``id``. Reads history, test only.
+        """
+        rec = await self.read(Space.exec.plane_runs[plane_run].extract())
+        node = Space.exec.indexes.history.plane_to_plane_runs[rec["plane"]].runs[plane_run]
+        by_cell = await self.read(node.cell_to_cell_runs.extract()) or {}
+        ids = sorted(cr for runs in by_cell.values() for cr in runs.get("ids", {}))
+        cells = [{"id": cr, **await self.read(Space.exec.cell_runs[cr].extract())} for cr in ids]
+        held = await self.read(node.workers.extract()) or {}
+        workers = [
+            {"id": w, **await self.read(Space.exec.workers[w].extract())} for w in sorted(held)
+        ]
+        return {"id": plane_run, **rec, "cells": cells, "workers": workers}
+
+    async def run_row(
+        self, plane_run: str, pred: Callable[[dict], bool], timeout: float = 4.0
     ) -> dict:
-        """A worker's record, live or ended. With ``pred``, read until it holds; by default until ended."""
-        return await self.until(worker(wid), pred or ended, timeout)
+        """The plane run as :meth:`row` reads it, until ``pred`` holds on it."""
+        return await self.until(lambda: self.row(plane_run), pred, timeout)
+
+    async def live(self) -> dict:
+        """``indexes.live``, whole. Test only."""
+        return await self.read(Space.exec.indexes.live.extract())
 
     async def plane(self, *progs: str, backend: str = "async") -> tuple[str, list[str]]:
-        p = await self.made(ops.add_plane(ui=True, backend=backend, into=MADE))
-        return p, [await self.made(ops.add_cell(p, src, into=MADE)) for src in progs]
+        """A plane on ``backend`` with a cell per prog: its id and its cells' ids."""
+        p = await self.made(nuspace.plane.add(backend=backend, into=MADE))
+        return p, [await self.made(nuspace.cell.add(p, src, into=MADE)) for src in progs]
+
+    async def start(self, plane: str, **kwargs: object) -> str:
+        """A plane run of ``plane`` asked for: its id."""
+        return await self.made(nuspace.plane_run.add(plane, into=MADE, **kwargs))
 
     async def close(self) -> None:
         if not self.task.done():
@@ -138,12 +232,12 @@ class Kernel:
 
 
 def ended(row: dict) -> bool:
-    """A run or cell run row that has ended."""
-    return row.get("terminated_at") is not None
+    """A plane run, cell run or worker row that has ended."""
+    return row.get("ended_at") is not None
 
 
 def live(row: dict) -> bool:
-    """A run or cell run row that started and has not ended."""
+    """A plane run or cell run row that started and has not ended."""
     return row.get("started_at") is not None and not ended(row)
 
 
@@ -160,36 +254,8 @@ def only_cell(row: dict) -> dict:
 
 
 def texts(row: dict, stream: str | None = None) -> list[str]:
-    return [text for _, s, text in row["out"] if stream is None or s == stream]
-
-
-def worker(wid: str) -> nu.Nu:
-    """One worker record as a dict, any worker, by id. Tests only read ended ones this way."""
-    row = Space.kernel.workers[wid]
-
-    def read(ref: nu.Nu, default: object) -> nu.Nu:
-        return nu.If(ref.exists(), ref, nu.Literal(default))
-
-    return nu.Dict.of(
-        id=wid,
-        backend=read(row.backend, ""),
-        run=read(row.run, ""),
-        handle=read(row.handle, ""),
-        started_at=read(row.started_at, None),
-        terminated_at=read(row.terminated_at, None),
-        exit=read(row.exit, ""),
-        error=read(row.error, ""),
-    )
-
-
-def history(plane: str | None = None) -> nu.Nu:
-    """Every plane run ever, oldest first, as :func:`nuspace.ops.run` rows. Test only: O(n)."""
-    item = "test.history"
-    rid = nu.Str(nu.Attr(item))
-    ids: nu.Nu = nu.list(Space.kernel.runs.keys())
-    if plane is not None:
-        ids = nu.Filter(ids, nu.Eq(Space.kernel.runs[rid].plane, plane), key=item)
-    return nu.Collect(nu.Map(ids, ops.run(rid), key=item))
+    """The text of each output entry of a cell run row, of ``stream`` only when given."""
+    return [text for _, s, text in row.get("out") or [] if stream is None or s == stream]
 
 
 def workers_named(prefix: str) -> list:
@@ -197,11 +263,18 @@ def workers_named(prefix: str) -> list:
     return [p for p in multiprocessing.active_children() if p.name.startswith(f"nu:{prefix}")]
 
 
-async def opened(name: str = "nuspace-test", **kwargs: object) -> Kernel:
-    """A kernel open on this loop, held until :meth:`Kernel.close`."""
+async def opened(
+    name: str = "nuspace-test", *, data: str | None = None, **kwargs: object
+) -> Kernel:
+    """A kernel open on this loop, held until :meth:`Kernel.close`. ``data`` None is a fresh dir."""
+    data = data or tempfile.mkdtemp(prefix="nuspace-kernel-")
     loop = asyncio.get_running_loop()
     ready, done = loop.create_future(), asyncio.Event()
     hold = nu.With(MADE_STORE, body=nu.let(_Hold(ready, done), lambda _: nu.Noop()))
-    task = asyncio.create_task(nu.arun(open_kernel(hold, name=name, **kwargs)))
-    ctx = await asyncio.wait_for(asyncio.shield(ready), 20)
-    return Kernel(ctx, done, task)
+    task = asyncio.create_task(nu.arun(kernel_open(hold, data=data, name=name, **kwargs)))
+    waiting = asyncio.ensure_future(asyncio.shield(ready))
+    finished, _ = await asyncio.wait({waiting, task}, timeout=30, return_when="FIRST_COMPLETED")
+    if task in finished:
+        task.result()
+    ctx = await waiting
+    return Kernel(ctx, done, task, data)

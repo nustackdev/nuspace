@@ -1,26 +1,29 @@
 """The body of one cell run: built in the host, handed to a backend, run on a worker.
 
-Everything a cell run is, as one Nu term with its ids baked in as plain strs::
+Everything a cell run is on its worker, as one Nu term with its ids baked
+in as plain strs::
 
-    Frame(Here: plane, cell, run, cell run ids)
-      With(Captured)                       out, attributed to this cell run
+    Frame(Here: plane, cell, plane_run, cell_run)
+      With(Captured)                       out, told apart per cell run
         TryCatch(                          raised: exit failed, error, traceback
           envs' wraps, space-wide outermost
-            mark started
             Race(program, interrupt watch, out flusher)
-            exit ok, or interrupted when the watch won
-        the end: out, exit, terminated_at, out of cells_running
+            exit ok, or interrupted when an interrupt was asked
+        the end: the last out, cell_run.end, one commit
+
+The kernel wrote ``cell_run.start`` before handing the body over; the body
+writes its own end, so its output never travels back to the host. An end
+already written (the run was killed, its worker torn down) is kept.
 
 The program is loaded on the worker from the store, so a cell run always
-runs the prog as it is now. Its term is rewritten on the way in: reroot
-first, then each env's rewrite. Nothing brackets it: a program opens its own
-short bracket per store around each store access (D23), the way every op
-does. The kernel's own reads and record writes are short brackets of their
-own, never held open while the program runs.
+runs the prog as it is now, through each env's rewrite. Nothing brackets
+it: a program brackets its own store access (``nuspace.atomic``,
+``nuspace.bracketed``). The body's own reads and writes are short brackets
+of their own, never held while the program runs.
 
 Interrupt is cooperative and backend agnostic: the body watches its own
-``interrupt_requested`` and leaves when it reads true, so every backend gets
-it for free. Kill is a plane op, the backend's.
+``CellRun.interrupt_at`` and leaves once it is set, so every backend gets
+it for free. Kill is the kernel's, through the backend.
 """
 
 from __future__ import annotations
@@ -29,14 +32,12 @@ from typing import TYPE_CHECKING
 
 import nu
 import nu.prog
-import nustd.kv
-import nustd.time
-from nuspace.ops import Here
-from nuspace.ops.utils import atomic
-from nuspace.shapes import EXIT_FAILED, EXIT_INTERRUPTED, EXIT_OK, Reroot, Space
+from nuspace import ops
+from nuspace.ops.brackets import atomic
+from nuspace.places import Here
+from nuspace.shapes import EXIT_FAILED, EXIT_INTERRUPTED, EXIT_OK, Space
 
-from .out import Captured, ErrorText, HasOut, TakeOut
-from .utils import snap
+from .interactions import Captured, ErrorText, HasOut, TakeOut
 
 
 if TYPE_CHECKING:
@@ -47,13 +48,11 @@ if TYPE_CHECKING:
     from .envs import Env
 
 
-__all__ = ["FLUSH_SECONDS", "Rewrites", "build_body", "end_cell_run"]
+__all__ = ["FLUSH_SECONDS", "Rewrites", "build_body"]
 
 
-#: How often a cell run's waiting output is written to its record.
+#: How often a cell run's waiting output is written to its record, in seconds.
 FLUSH_SECONDS = 1.0
-
-_kernel = Space.kernel
 
 
 class _Ending(nu.Shape):
@@ -78,64 +77,37 @@ class Rewrites:
         return term
 
 
-def end_cell_run(
-    run_id: nu.StrArg,
-    cell_run_id: nu.StrArg,
-    exit_: nu.StrArg,
-    error: nu.StrArg | None = None,
-    out: nu.Nu | None = None,
-) -> nu.Nu:
-    """A cell run's end: ``exit``, ``error``, ``terminated_at``, out of ``cells_running``. No bracket.
-
-    Written once: a cell run already ended keeps the end it has. Shared by
-    the body, which ends its own, and the kernel, which ends the ones whose
-    worker died or whose plane run was killed.
-
-    Args:
-        run_id: The plane run.
-        cell_run_id: The cell run.
-        exit_: How it ended, one of :data:`~nuspace.shapes.EXITS`.
-        error: Why, when there is something to say.
-        out: What ``out`` is set to, when the writer has it.
-    """
-    row = _kernel.runs[run_id]
-    cr = row.cells[cell_run_id]
-    writes = cr.exit.set(exit_)
-    if error is not None:
-        writes = writes >> cr.error.set(error)
-    if out is not None:
-        writes = cr.out.set(out) >> writes
-    writes = writes >> cr.terminated_at.set(nustd.time.time())
-    return nu.IfDo(cr.terminated_at.exists().not_(), writes) >> row.cells_running.remove(
-        cell_run_id, missing_ok=True
-    )
-
-
-def _flush(run_id: str, cell_run_id: str) -> nu.Nu:
-    """Write waiting output to the record, if there is any."""
-    cr = _kernel.runs[run_id].cells[cell_run_id]
-    return nu.IfDo(HasOut(), nu.let(TakeOut(), lambda out: atomic(cr.out.set(out))))
+def _flush(cell_run: str) -> nu.Nu:
+    """Append waiting output to the record, if there is any. One commit."""
+    out = Space.exec.cell_runs[cell_run].out
+    return nu.IfDo(HasOut(), nu.let(TakeOut(), lambda taken: atomic(out.extend(taken))))
 
 
 def _finish(
-    run_id: str,
-    cell_run_id: str,
-    exit_: nu.StrArg,
+    cell_run: str,
+    exit: nu.StrArg,
     *,
     error: nu.Nu | None = None,
     extra: nu.Nu | str = "",
 ) -> nu.Nu:
-    """The last write: out flushed, exit, error, terminated_at, out of ``cells_running``. One commit."""
-    why = None if error is None else _Ending.why
-    commit = atomic(end_cell_run(run_id, cell_run_id, exit_, why, _Ending.out))
-    if error is None:
-        return nu.Frame(_Ending, commit, out=TakeOut(extra, final=True))
-    return nu.Frame(_Ending, commit, out=TakeOut(extra, final=True), why=error)
+    """The last write: the output left, then ``cell_run.end``. One commit, skipped once ended.
+
+    The output and the error text are worked out before the commit, so a
+    retry on conflict takes nothing twice.
+    """
+    row = Space.exec.cell_runs[cell_run]
+    why = "" if error is None else _Ending.why
+    end = row.out.extend(_Ending.out) >> ops.cell_run.end(cell_run, exit, why)
+    commit = atomic(nu.IfDo(row.ended_at.exists().not_(), end))
+    fields: dict[str, object] = {"out": TakeOut(extra, final=True)}
+    if error is not None:
+        fields["why"] = error
+    return nu.Frame(_Ending, commit, **fields)
 
 
 def build_body(
-    run_id: str,
-    cell_run_id: str,
+    plane_run: str,
+    cell_run: str,
     plane: str,
     cell: str,
     envs: Sequence[Env] = (),
@@ -143,37 +115,38 @@ def build_body(
     """One cell run's whole life on its worker, as a term to run there.
 
     Args:
-        run_id: The plane run's store id.
-        cell_run_id: The cell run's store id.
+        plane_run: The plane run's id.
+        cell_run: The cell run's id.
         plane: The plane id.
         cell: The cell id.
         envs: Resolved envs, outermost first. Their wraps are applied here,
-            in the host, their rewrites ride along onto the worker.
+            in the host; their rewrites ride along onto the worker.
 
     Returns:
-        A picklable term. Holds :class:`~nuspace.ops.Here` in a frame for
-        the program and its envs.
+        A picklable term. Holds :class:`~nuspace.places.Here` in a frame
+        for the program and its envs.
     """
-    rewrite = Rewrites(
-        Reroot(plane, cell), *(env.rewrite for env in envs if env.rewrite is not None)
-    )
+    steps = [env.rewrite for env in envs if env.rewrite is not None]
+    rewrite = Rewrites(*steps) if steps else None
     source = Space.cells[cell].prog
     # The prog is read in a snapshot of its own, closed before the program runs.
-    load = nustd.kv.Snapshot(
-        source.load(scope={"plane": plane, "cell": cell}, rewrite=rewrite), scope=Space
-    )
+    load = atomic(source.load(scope={"plane": plane, "cell": cell}, rewrite=rewrite))
     # On the loop: a program that subscribes is async only.
     program = nu.ParallelAsync(nu.prog.Eval(load))
-    cr = _kernel.runs[run_id].cells[cell_run_id]
-    asked = cr.interrupt_requested.fallback(False)
-    interrupted = nu.WaitUntil(snap(cr.interrupt_requested.on_change()), snap(asked))
-    flusher = nu.ForeverDo(nu.Delay(FLUSH_SECONDS) >> _flush(run_id, cell_run_id))
+    row = Space.exec.cell_runs[cell_run]
+    asked = row.interrupt_at.exists()
+    # Level: a missed notification would leave the cell running, so re-check.
+    interrupted = nu.WaitUntil(
+        atomic(row.interrupt_at.on_change()),
+        atomic(asked),
+        after=nu.RECHECK_AFTER,
+        every=nu.RECHECK_EVERY,
+    )
+    flusher = nu.ForeverDo(nu.Delay(FLUSH_SECONDS) >> _flush(cell_run))
     # The record says why the race ended: an asked interrupt, or the program
     # finishing. The flusher never wins.
-    run = (
-        atomic(cr.started_at.init(nustd.time.time()))
-        >> nu.Race(program, interrupted, flusher)
-        >> _finish(run_id, cell_run_id, nu.If(asked, EXIT_INTERRUPTED, EXIT_OK))
+    run = nu.Race(program, interrupted, flusher) >> _finish(
+        cell_run, nu.If(atomic(asked), EXIT_INTERRUPTED, EXIT_OK)
     )
     for env in reversed(envs):
         if env.wrap is not None:
@@ -182,8 +155,8 @@ def build_body(
     caught = nu.TryCatch(
         run,
         catch=lambda err: _finish(
-            run_id, cell_run_id, EXIT_FAILED, error=ErrorText(err), extra=ErrorText(err, full=True)
+            cell_run, EXIT_FAILED, error=ErrorText(err), extra=ErrorText(err, full=True)
         ),
     )
     body = nu.With(Captured(), body=caught)
-    return nu.Frame(Here, body, plane=plane, cell=cell, run=run_id, cell_run=cell_run_id)
+    return nu.Frame(Here, body, plane=plane, cell=cell, plane_run=plane_run, cell_run=cell_run)

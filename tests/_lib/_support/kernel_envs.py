@@ -8,9 +8,9 @@ class by module name there. ``tests/_lib`` is on ``sys.path`` (pytest's
 from __future__ import annotations
 
 import nu
-from nuspace.ops import Here, atomic_state
-from nuspace.shapes import States
-from nuspace.system.kernel import Env
+import nuspace
+import nustd.kv
+from nuspace.kernel import Env
 
 
 class Tag(nu.Shape):
@@ -25,16 +25,20 @@ class Connection(nu.Shape):
     sid = nu.StrRef.slot()
 
 
+class Stamped(nu.Shape):
+    """What :class:`Stamp` writes in the running plane's state."""
+
+    stamped = nustd.kv.BoolRef.slot()
+
+
 class Stamp:
     """A rewrite: the program writes ``stamped`` into its plane's state first.
 
-    Runs after reroot, so it names the state store path itself, and brackets
-    its own write: nothing brackets a program for it.
+    Brackets its own write: nothing brackets a program for it.
     """
 
     def __call__(self, term: nu.Nu) -> nu.Nu:
-        plane = Here.plane
-        return atomic_state(States.planes[plane].state.set_item("stamped", nu.Bool(True))) >> term
+        return nuspace.atomic(nuspace.at.plane.state(Stamped).stamped.set(True)) >> term
 
 
 def tagged(value: str) -> Env:

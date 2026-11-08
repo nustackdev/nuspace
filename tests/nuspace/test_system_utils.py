@@ -120,10 +120,3 @@ async def test_guard_ends_a_dead_arm_without_taking_its_siblings(capsys):
     alive = nu.Delay(0.1) >> nu.print("alive")
     await _run(nu.ParallelAsync(dead, alive))
     assert _lines(capsys) == ["nuspace web t dead: division by zero", "alive"]
-
-
-def test_snap_is_one_implementation():
-    from nuspace.ops.utils import snapshot
-    from nuspace.system.kernel.utils import snap as kernel_snap
-
-    assert snap is snapshot is kernel_snap

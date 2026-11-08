@@ -1,13 +1,14 @@
-"""Backends: what executes plane runs. Polymorphic fabrics the kernel never looks inside.
+"""Backends: what runs cells on workers. Fabrics the kernel never looks inside.
 
-A plane names its backend (``props.backend``), a plane run records it, and
-the kernel reaches it by that name through :class:`~.base.BackendRef`. A new
-backend is a :class:`~.base.Backend` subclass registered by name at open,
-with no kernel edit.
+A plane names its backend (``Plane.backend``), a plane run records it, and
+the kernel reaches it by that name through
+:class:`~.interactions.BackendRef`. A new backend is a
+:class:`~.base.Backend` subclass registered by name at open, with no kernel
+edit.
 
-- :mod:`.base`: the fabric, its ref, its interactions, and the worker
-  records every backend writes through them.
-- :mod:`.pool`: the books both process backends keep over ``nustd.mp_pool``.
+- :mod:`.base`: the contract, placement, worker id keyed methods.
+- :mod:`.interactions`: the ref and the calls the kernel makes.
+- :mod:`.pool`: what both process backends share over ``nustd.mp_pool``.
 - :mod:`.async_`: ``async``, one worker per plane run.
 - :mod:`.mp`: ``mp``, one worker per cell run.
 """
@@ -20,22 +21,14 @@ import nu
 
 from .async_ import AsyncBackend
 from .base import (
+    PER_CELL_RUN,
+    PER_PLANE_RUN,
+    PLACEMENTS,
     Backend,
-    BackendRef,
-    EndCell,
-    KillRun,
-    PlaceCell,
-    StartRun,
     UnknownBackendError,
-    end_cell,
-    ended,
-    kill,
-    lost,
-    placed,
-    released,
     require_backend,
-    start,
 )
+from .interactions import BackendRef, Kill, Launch, Placement, Run, Stop
 from .mp import MpBackend
 from .pool import PoolBackend
 
@@ -46,25 +39,22 @@ if TYPE_CHECKING:
 
 __all__ = [
     "BACKENDS",
+    "PER_CELL_RUN",
+    "PER_PLANE_RUN",
+    "PLACEMENTS",
     "AsyncBackend",
     "Backend",
     "BackendRef",
-    "EndCell",
-    "KillRun",
+    "Kill",
+    "Launch",
     "MpBackend",
-    "PlaceCell",
+    "Placement",
     "PoolBackend",
-    "StartRun",
+    "Run",
+    "Stop",
     "UnknownBackendError",
-    "end_cell",
-    "ended",
-    "kill",
-    "lost",
-    "placed",
     "provided",
-    "released",
     "require_backend",
-    "start",
 ]
 
 
@@ -76,12 +66,19 @@ BACKENDS: dict[str, type[Backend]] = {"async": AsyncBackend, "mp": MpBackend}
 def provided(backends: Mapping[str, type[Backend]] | None = None) -> nu.With:
     """Every backend bound on the context under its name: :data:`BACKENDS`, then ``backends``.
 
-    Goes inside the pool and its shelf, which the process backends take from.
+    Goes inside the pool, which the process backends take from.
 
     Args:
         backends: Backend classes by name, on top of the built in ones.
+
+    Raises:
+        ValueError: A backend declares a placement none of ``PLACEMENTS``.
     """
     merged = {**BACKENDS, **(backends or {})}
+    for name, cls in merged.items():
+        if cls.placement not in PLACEMENTS:
+            msg = f"Backend {name!r} declares placement {cls.placement!r}, not one of {PLACEMENTS}"
+            raise ValueError(msg)
     return nu.With(
         *(nu.Provide(cls, {}, tag=name, bind_as=Backend) for name, cls in merged.items())
     )
