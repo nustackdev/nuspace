@@ -16,7 +16,7 @@ import pytest
 import nu
 from nuspace import _telemetry
 from nuspace._telemetry import config, send
-from nuspace.ops.usage import opened, track
+from nuspace._telemetry.usage import opened, track
 
 
 @pytest.fixture(autouse=True)
@@ -289,7 +289,7 @@ def test_opened_breaks_nothing_when_home_is_unwritable(monkeypatch, posted):
 
 
 async def test_the_web_device_queues_space_loaded(posted):
-    from nuspace.system.devices.web import device
+    from nuspace.devices.web import device
 
     (route,) = device.ROUTES
     assert (route.path, route.methods >= {"POST"}) == ("/api/telemetry/space-loaded", True)

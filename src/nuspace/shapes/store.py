@@ -31,9 +31,13 @@ class Store:
         file: The SQLite file, relative to the space's data dir.
         channel: The notify channel prefix, explicit, one per store.
         init: Builds the bare term that makes the store's fixed containers.
+        fresh: Deleted and made again at every open: what it holds lives
+            as long as one open of the space (the web device's tabs). Only
+            a device's stores may set it: the host never deletes a core one.
     """
 
     root: type[nu.Shape]
     file: str
     channel: str
     init: Callable[[], nu.Nu]
+    fresh: bool = False

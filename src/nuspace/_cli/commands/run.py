@@ -10,20 +10,22 @@ throwaway one, gone at close. The header names the space's root either way.
 ``--with`` names a Plane an installed package adds, ``pkg.plane`` as
 ``nuspace verse`` lists them, or a bare name for a nuverse Plane: it is made
 in the space once, through :func:`~nuspace.host.with_plane`, and the tab
-opens on it. The space remembers the plane it made, so the next run with
-the same name reopens it. The header names the Plane: its id is only known
-once the space is open.
+opens on it. The next run with the same name reopens the newest plane made
+from it, unless removed. The header names the Plane: its id is only known
+once the space is open. A space open in another host, or of an older store
+format, is refused with a short error.
 """
 
 from __future__ import annotations
 
 import rich_click as click
 
-from nuspace.ext.registry import registered_name
+from nuspace.errors import Refused
 from nuspace.host import presets
+from nuspace.specs import registered_name
 
 from .._installed import resolve
-from .._meta import announce, hold, opened, path_argument, space_root, tmp_option
+from .._meta import announce, hold, path_argument, space_root, tmp_option
 
 
 __all__ = ["run"]
@@ -66,18 +68,20 @@ def run(
     """Run until Ctrl+C."""
     path = space_root(path, tmp=tmp)
     web = {"host": host, "port": port, "open_browser": not no_browser}
-    if plane is not None:
-        spec = resolve(plane)
-        made = registered_name(spec)
-        if headless:
-            term = opened(presets.with_plane, spec, path, web=False)
+    made = None
+    try:
+        if plane is not None:
+            spec = resolve(plane)
+            made = registered_name(spec)
+            if headless:
+                term = presets.with_plane(path, spec, web=False)
+            else:
+                term = presets.with_plane(path, spec, **web)
+        elif headless:
+            term = presets.headless(path)
         else:
-            term = opened(presets.with_plane, spec, path, **web)
-    elif headless:
-        term = opened(presets.headless, path)
-        made = None
-    else:
-        term = opened(presets.serve, path, **web)
-        made = None
+            term = presets.serve(path, **web)
+    except Refused as e:
+        raise click.ClickException(str(e)) from None
     announce(path, headless=headless, plane=made)
     hold(term)

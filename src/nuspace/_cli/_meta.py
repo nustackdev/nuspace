@@ -19,14 +19,14 @@ from rich.text import Text
 import nu
 from nuspace import _telemetry
 from nuspace._branding import BLUE, header
-from nuspace.system.kernel import DATA_DIR, NotASpace, find_space
+from nuspace.errors import Refused
+from nuspace.host.layout import DATA_DIR, find_space
 
 
 __all__ = [
     "announce",
     "console",
     "hold",
-    "opened",
     "path_argument",
     "space_root",
     "tilde",
@@ -109,20 +109,14 @@ def announce(path: str | None, *, headless: bool = False, plane: str | None = No
         console.print("[dim]headless, Ctrl+C to stop[/dim]")
 
 
-def opened(preset: Callable[..., nu.Nu], *args: object, **kwargs: object) -> nu.Nu:
-    """What ``preset`` opens, or a short error when the path is not a space."""
-    try:
-        return preset(*args, **kwargs)
-    except NotASpace as e:
-        raise click.ClickException(str(e)) from None
-
-
 def hold(term: nu.Nu) -> None:
-    """Run a space until interrupted, then let the brackets reap the fleet.
+    """Run a space until interrupted (Ctrl+C), then let the brackets close it.
 
-    What is still queued for telemetry (see :mod:`nuspace._telemetry`) gets
-    a short grace to go at the end. The space tells it what happens itself,
-    from its open on, the same as when opened from code.
+    Closing stops the workers, the stores, the notification server and the
+    lock, in that order. An open the host refuses (another host holds the
+    space, an older store format) is a short error. What is still queued
+    for telemetry (see :mod:`nuspace._telemetry`) gets a short grace to go
+    at the end.
 
     Compiled and evaluated without law validation: the space program is ours
     and tested, and validating its whole tree costs seconds per start.
@@ -131,5 +125,7 @@ def hold(term: nu.Nu) -> None:
         nu.eval_in_loop(nu.compile(term), nu.Context())
     except KeyboardInterrupt:
         console.print("[dim]Stopped[/dim]")
+    except Refused as e:
+        raise click.ClickException(str(e)) from None
     finally:
         _telemetry.flush()

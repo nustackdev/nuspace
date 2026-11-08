@@ -18,23 +18,48 @@ once, at open, by its ``init`` term: only where missing, so it is safe on
 every open of an existing space. A row's own containers are made by the op
 that adds the row. Init terms are bare, as ops are: the caller brackets each
 store on its own, ``nustd.kv.atomic(SPACE_STORE.init())``, one commit per store.
+
+Every process opens a store the same way, through :func:`navigators`: the
+SQLite file under the space's data dir, notified through the space's one
+Valkey server (:func:`notifier`) on the store's own channel. The host,
+every worker and a script all name the channels explicitly, from the
+store records, so no store ever falls back to a default channel.
 """
 
 from __future__ import annotations
 
+from pathlib import Path
+from typing import TYPE_CHECKING
+
 import nu
+import nustd.kv
 import nustd.time
+import nustd.valkey
 from nuspace.errors import Refused
 from nuspace.shapes import FORMAT, ROOT, Space, State, Store
 
 
+if TYPE_CHECKING:
+    import os
+    from collections.abc import Iterable
+
+
 __all__ = [
+    "CORE",
     "SPACE_STORE",
     "STATE_STORE",
+    "VALKEY_DIR",
     "init_live",
     "init_space",
     "init_state",
+    "navigators",
+    "notifier",
 ]
+
+
+#: The notification server's dir inside a space's data dir: ``infra/`` holds
+#: what runs the space, not what it holds.
+VALKEY_DIR = "infra/valkey"
 
 
 def _format() -> nu.Nu:
@@ -144,3 +169,41 @@ SPACE_STORE = Store(Space, "store/space.db", "nuspace.space", init_space)
 
 #: What programs keep: state at three scopes, and content.
 STATE_STORE = Store(State, "store/state.db", "nuspace.state", init_state)
+
+#: The stores every open of a space has, whatever its devices.
+CORE = (SPACE_STORE, STATE_STORE)
+
+
+def notifier(data: str | os.PathLike[str]) -> nu.Provide:
+    """The space's notification server: one private Valkey for every store, on a unix socket.
+
+    Put before :func:`navigators` in a ``nu.With``: the server answers before
+    their publishers connect and stops after they close.
+
+    Args:
+        data: The space's data dir.
+    """
+    return nustd.valkey.server(Path(data) / VALKEY_DIR)
+
+
+def navigators(data: str | os.PathLike[str], stores: Iterable[Store]) -> nu.With:
+    """``stores`` as any process opens them: each its SQLite file, tagged by its root, on its channel.
+
+    The channel is the store's own (:attr:`Store.channel`), passed by name,
+    so two stores never wake each other's subscribers, even on equal keys.
+    Needs the server of :func:`notifier` up: it is reached at its socket,
+    derived from ``data``, so a worker builds the same address on its own.
+
+    Args:
+        data: The space's data dir, absolute: workers get it pickled.
+        stores: The stores to open, eg :data:`CORE`.
+    """
+    url = nustd.valkey.url_for(Path(data) / VALKEY_DIR)
+    return nu.With(
+        *(
+            nustd.kv.sqlite_navigator_redis(
+                str(Path(data) / s.file), tags=(s.root,), redis_url=url, channel_prefix=s.channel
+            )
+            for s in stores
+        )
+    )

@@ -18,7 +18,7 @@ import logging
 from pathlib import Path
 
 import nu
-import nuspace
+import nuspace.host
 
 
 # Closing the space drops sockets under workers still holding them. Expected.
@@ -32,6 +32,6 @@ STORE = str(Path(__file__).parent / "example.nuspace")
 if __name__ == "__main__":
     # Load bearing: workers are spawned and re-import __main__.
     try:
-        nu.run_in_loop(nuspace.open_space(STORE))
+        nu.run_in_loop(nuspace.host.serve(STORE))
     except KeyboardInterrupt:
         print("stopped")

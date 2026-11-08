@@ -39,4 +39,4 @@ def init_conn() -> nu.Nu:
 WEB_STORE = Store(Web, "devices/web/web_state.db", "nuspace.web", init_web)
 
 #: Browser tabs: their panes and sidebar folds.
-CONN_STORE = Store(Conn, "devices/web/conn.db", "nuspace.conn", init_conn)
+CONN_STORE = Store(Conn, "devices/web/conn.db", "nuspace.conn", init_conn, fresh=True)

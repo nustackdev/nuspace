@@ -1,42 +1,63 @@
-"""The host: the registry, and open_space headless with real workers.
+"""The host: the registry, where a space lives, the lock, the open's resources, and open_space for real.
 
-The registry is plain python. open_space runs once, headless, on a store
-seeded the way a person would: a user plane added to init's boot list before
-the space opens. The web variant is only compiled.
+The registry is plain python. The layout, the lock and the resources are
+file system work, tested on their own. ``make_space`` and ``open_space``
+run for real on sqlite with a private notification server: headless, with
+real workers, held open while the test reads. One test runs ``nuspace run``
+in a process of its own and stops it with SIGINT, as Ctrl+C does.
 """
 
 from __future__ import annotations
 
 import asyncio
+import errno
 import functools
+import os
+import signal
+import socket
 import subprocess
 import sys
+import time
 import warnings
+from typing import TYPE_CHECKING
 
 import pytest
-from _support.kernel import SET_42, Kernel, _Hold, history
+from _support.kernel import _Hold
+from _support.made import MADE, MADE_STORE
 
 import nu
-from nuspace import CellSpec, Extension, PlaneSpec, _telemetry, boot, open_space, ops
-from nuspace.ext import (
+import nuspace
+import nustd.kv
+from nuspace import host
+from nuspace.devices.web import CONN_STORE, WEB_STORE, Conn
+from nuspace.devices.web.planes import HOME
+from nuspace.errors import Missing, Refused
+from nuspace.host import interactions, presets
+from nuspace.host import lock as lock_module
+from nuspace.host.layout import DATA_DIR, LOCK_FILE, data_dir, find_space, is_older, is_space
+from nuspace.host.lock import HostLock, LockWarning, holder
+from nuspace.host.resources import DataDir, Fresh, Throwaway
+from nuspace.kernel import LEFT_OVER, Env
+from nuspace.shapes import EXIT_KILLED, FORMAT, Space
+from nuspace.specs import (
     GROUP,
+    CellSpec,
+    Extension,
+    PlaneSpec,
     Registry,
     RegistryWarning,
+    WebOptions,
     discover,
     registered_name,
     short_name,
     space_registry,
 )
-from nuspace.ext import registry as registry_module
-from nuspace.host import presets
-from nuspace.ops.utils import atomic
-from nuspace.shapes import Space, States, reroot
-from nuspace.system.info import versions
-from nuspace.system.kernel import Env, store
-from nuspace.system.kernel.space import free_port
-from nuspace.system.services import BOOTED, SERVICES, ensure_system, init
-from nuspace.system.ui import home
-from nuspace.system.ui.seed import seeded_id
+from nuspace.specs import registry as registry_module
+from nuspace.system import init
+
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def _plane(name: str, label: str = "") -> PlaneSpec:
@@ -202,173 +223,324 @@ def test_the_tests_specs_register_through_their_installed_package():
     assert list(reg.contents) == ["testing.Note", "testing.Plain"]
 
 
-# --- open_space ------------------------------------------------------------------
+# --- Layout ------------------------------------------------------------------------
 
 
-USER = "user"
-TAB = "tab"
+def _mark(root: Path) -> None:
+    """``root`` made a space as far as finding one goes: its Space store file."""
+    file = data_dir(root) / host.SPACE_STORE.file
+    file.parent.mkdir(parents=True)
+    file.touch()
 
 
-async def test_boot_before_the_first_open_keeps_the_services(store):
-    await store.run(boot(USER) >> ensure_system())
-    assert await store.read(ops.cell_rows(init.PLANE)) == [
-        {
-            "id": init.CELL,
-            "name": "main",
-            "prog": init.SHIM,
-            "props": {"made_by": "", "has_ui": False},
-            "meta": {},
-        }
-    ]
-    rows = {r["id"]: r for r in await store.read(ops.plane_rows())}
-    assert (rows[init.PLANE]["name"], rows[init.PLANE]["props"]["system"]) == (init.PLANE, True)
-    boot_list = reroot(init.Boot.planes, init.PLANE, init.CELL)
-    assert await store.read(nu.list(boot_list)) == [*BOOTED, USER]
+def test_a_space_is_found_by_its_space_store_up_from_here(tmp_path):
+    root = tmp_path / "space"
+    nested = root / "a" / "b"
+    nested.mkdir(parents=True)
+    assert not is_space(root)
+    assert find_space(nested) is None
+    # A data dir alone (the user's ~/.nuspace config) is no space.
+    (root / DATA_DIR).mkdir()
+    assert find_space(nested) is None
+    _mark(root)
+    assert is_space(root)
+    assert find_space(nested) == root.resolve()
 
 
-async def test_open_space_headless_runs_a_booted_plane(tmp_path, monkeypatch):
-    """A store seeded the way a person would, boot() before anything opened it."""
-    _points(monkeypatch, [])
-    path = str(tmp_path / "space")
-    seed = (
-        ops.add_plane(USER, backend="async")
-        >> ops.add_cell(USER, SET_42, cell_id="u")
-        >> boot(USER)
+@pytest.mark.parametrize("old", ["CURRENT", "kernel.sqlite", f"{DATA_DIR}/kernel.sqlite"])
+def test_an_older_space_is_told_apart(tmp_path, old):
+    (tmp_path / old).parent.mkdir(parents=True, exist_ok=True)
+    (tmp_path / old).touch()
+    assert is_older(tmp_path)
+    with pytest.raises(Refused, match="older nuspace store format"):
+        DataDir(str(tmp_path), [host.SPACE_STORE.file]).setup(None)
+    assert not (data_dir(tmp_path) / "store").exists()
+    _mark(tmp_path)
+    assert not is_older(tmp_path)
+
+
+def test_the_data_dir_holds_a_folder_per_store(tmp_path):
+    files = [s.file for s in (*host.CORE, WEB_STORE, CONN_STORE)]
+    DataDir(str(tmp_path), files).setup(None)
+    assert (data_dir(tmp_path) / "store").is_dir()
+    assert (data_dir(tmp_path) / "devices" / "web").is_dir()
+
+
+def test_fresh_deletes_a_store_file_and_what_sqlite_keeps_beside_it(tmp_path):
+    db = tmp_path / "conn.db"
+    for f in (db, tmp_path / "conn.db-wal", tmp_path / "conn.db-shm", tmp_path / "keep.db"):
+        f.write_text("x")
+    Fresh([str(db), str(tmp_path / "never.db")]).setup(None)
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["keep.db"]
+
+
+# --- The host lock -----------------------------------------------------------------
+
+
+def test_the_lock_names_its_holder_and_refuses_a_second_open(tmp_path):
+    path = str(tmp_path / LOCK_FILE)
+    first = HostLock(path)
+    first.setup(None)
+    try:
+        name, pid, _ = holder(path).split()
+        assert (name, int(pid)) == (socket.gethostname(), os.getpid())
+        with pytest.raises(Refused, match="open already in this process"):
+            HostLock(path).setup(None)
+    finally:
+        first.cleanup()
+    again = HostLock(path)
+    again.setup(None)
+    again.cleanup()
+
+
+def test_a_lock_another_process_holds_refuses_the_open(tmp_path):
+    path = str(tmp_path / LOCK_FILE)
+    code = (
+        "import sys, time\n"
+        "from nuspace.host.lock import HostLock\n"
+        f"HostLock({path!r}).setup(None)\n"
+        "print('held', flush=True)\n"
+        "time.sleep(60)\n"
     )
-    # A tab the previous run never closed, routed to a plane of its own.
-    stale = Space.connections["stale"]
-    seed = (
-        seed
-        >> ops.add_plane(TAB, ui=True, backend="async")
-        >> ops.add_cell(TAB, SET_42, cell_id="t")
-        >> atomic(stale.opened.set(nu.Float(0.0)) >> stale.routes.set(nu.Literal([TAB])))
-    )
-    await nu.arun(nu.With(store(path), body=ops.init_stores() >> seed))
+    other = subprocess.Popen([sys.executable, "-c", code], stdout=subprocess.PIPE, text=True)  # noqa: S603
+    try:
+        assert other.stdout.readline().strip() == "held"
+        with pytest.raises(
+            Refused, match=f"open on {socket.gethostname()}, pid {other.pid}. Close it there"
+        ):
+            HostLock(path).setup(None)
+    finally:
+        other.kill()
+        other.wait()
+    # Its holder died: the lock went with it.
+    mine = HostLock(path)
+    mine.setup(None)
+    mine.cleanup()
 
+
+def test_a_lock_the_file_system_cannot_take_opens_with_a_warning(tmp_path, monkeypatch):
+    def nolock(fd, cmd):
+        raise OSError(errno.ENOLCK, "No locks available")
+
+    monkeypatch.setattr(lock_module.fcntl, "lockf", nolock)
+    path = str(tmp_path / LOCK_FILE)
+    lock = HostLock(path)
+    with pytest.warns(LockWarning, match="opening without it"):
+        lock.setup(None)
+    assert not holder(path)
+    lock.cleanup()
+
+
+def test_a_throwaway_root_is_made_at_setup_and_removed_with_its_data_at_cleanup(tmp_path):
+    root = tmp_path / "tmp-space"
+    throwaway = Throwaway(str(root))
+    throwaway.setup(None)
+    assert root.is_dir()
+    (data_dir(root) / "store").mkdir(parents=True)
+    (data_dir(root) / "store" / "space.db").write_text("x")
+    throwaway.cleanup()
+    assert not root.exists()
+
+
+# --- make_space -------------------------------------------------------------------------
+
+
+def _read(root: Path, term: nu.Nu, stores=(*host.CORE, WEB_STORE, CONN_STORE)) -> object:
+    """``term`` read from the space at ``root`` (closed), its stores opened plain."""
+    data = data_dir(root)
+    navs = [nustd.kv.sqlite_navigator(str(data / s.file), tags=(s.root,)) for s in stores]
+    value, _ = asyncio.run(nu.arun(nu.With(*navs, body=nuspace.atomic(term))))
+    return value
+
+
+def _write(root: Path, store, term: nu.Nu) -> None:
+    file = str(data_dir(root) / store.file)
+    navs = nustd.kv.sqlite_navigator(file, tags=(store.root,))
+    asyncio.run(nu.arun(nu.With(navs, body=nuspace.atomic(term))))
+
+
+def _make(root: Path, **kwargs) -> None:
+    nu.eval_in_loop(nu.compile(host.make_space(root, **kwargs)), nu.Context())
+
+
+def test_make_space_seeds_a_fresh_space_and_keeps_an_existing_one(tmp_path):
+    root = tmp_path / "space"
+    _make(root)
+    assert is_space(root)
+    info = _read(root, Space.info.extract())
+    assert info["format"] == FORMAT
+    planes = set(_read(root, nu.list(Space.planes.keys())))
+    assert {"root", init.PLANE, HOME} <= planes
+    assert set(_read(root, nu.list(init.boot_list().keys()))) == set(init.BOOTED)
+    # A second make keeps what is there: a booted plane stays booted.
+    _write(root, host.STATE_STORE, init.boot_list().set_item("mine", True))
+    _make(root)
+    assert "mine" in _read(root, nu.list(init.boot_list().keys()))
+    assert _read(root, Space.info.created_at) == info["created_at"]
+
+
+def test_headless_opens_no_device_store(tmp_path):
+    root = tmp_path / "space"
+    _make(root, devices=())
+    assert is_space(root)
+    assert not (data_dir(root) / "devices").exists()
+
+
+def test_conn_is_made_fresh_at_every_open_web_is_kept(tmp_path):
+    root = tmp_path / "space"
+    _make(root)
+    _write(root, CONN_STORE, Conn.connections["tab"].order.set(["p"]))
+    _write(root, WEB_STORE, nuspace.devices.web.Web.pinned.set([HOME]))
+    _make(root)
+    assert _read(root, Conn.connections.extract()) == {}
+    assert _read(root, nuspace.devices.web.Web.pinned.extract()) == [HOME]
+
+
+def test_a_space_of_another_format_is_refused_before_anything_is_written(tmp_path):
+    root = tmp_path / "space"
+    _make(root)
+    _write(root, host.SPACE_STORE, Space.info.format.set(FORMAT + 1))
+    _write(root, CONN_STORE, Conn.connections["tab"].order.set(["p"]))
+    with pytest.raises(Refused, match="another store format"):
+        _make(root)
+    # conn.db is recreated after the format check: the refused open left it.
+    assert _read(root, Conn.connections["tab"].order.extract()) == ["p"]
+    # The lock went with the refused open.
+    assert holder(str(data_dir(root) / LOCK_FILE))
+    _write(root, host.SPACE_STORE, Space.info.format.set(FORMAT))
+    _make(root)
+
+
+def test_an_unknown_device_is_refused_at_build(tmp_path):
+    with pytest.raises(Missing, match="no device 'tv'"):
+        host.open_space(tmp_path, devices=("tv",))
+
+
+# --- open_space, for real ---------------------------------------------------------------
+
+
+async def _opened(root: Path, **kwargs):
+    """``host.headless`` on this loop, held open: ``(ctx, done, task)``. Close with ``done.set()``."""
     loop = asyncio.get_running_loop()
     ready, done = loop.create_future(), asyncio.Event()
-    held = nu.let(_Hold(ready, done), lambda _: nu.Noop())
-    term = open_space(path, web=False, spares=1, name="nuspace-host", body=held)
+    hold = nu.With(MADE_STORE, body=nu.let(_Hold(ready, done), lambda _: nu.Noop()))
+    term = host.headless(root, spares=0, name="nuspace-host", extensions=(), body=hold, **kwargs)
     task = asyncio.create_task(nu.arun(term))
-    space = Kernel(await asyncio.wait_for(asyncio.shield(ready), 20), done, task)
+    waiting = asyncio.ensure_future(asyncio.shield(ready))
+    finished, _ = await asyncio.wait({waiting, task}, timeout=30, return_when="FIRST_COMPLETED")
+    if task in finished:
+        task.result()
+    return await waiting, done, task
+
+
+async def _until(ctx, term, pred, timeout: float = 20.0):
+    deadline = time.monotonic() + timeout
+    while True:
+        value, _ = await nu.arun(nuspace.atomic(term), ctx)
+        if pred(value):
+            return value
+        if time.monotonic() > deadline:
+            msg = f"timed out, last read: {value!r}"
+            raise AssertionError(msg)
+        await asyncio.sleep(0.1)
+
+
+async def test_open_space_runs_the_system_planes_and_reaps_what_the_last_open_left(tmp_path):
+    root = tmp_path / "space"
+    before = time.time()
+    ctx, done, task = await _opened(root)
     try:
-        state = States.cells["u"].extract()
-        assert await space.until(state, lambda s: s == {"n": 42}) == {"n": 42}
-        # The services are made and init brought up its boot list beside the user plane.
-        assert {r["id"] for r in await space.read(ops.plane_rows())} >= {
-            USER,
-            *(plane for plane, _, _ in SERVICES),
+        live = Space.exec.indexes.live
+        info, _ = await nu.arun(nuspace.atomic(Space.info.extract()), ctx)
+        assert info["path"] == str(root.resolve())
+        assert info["opened_at"] >= before
+        runs = await _until(ctx, nu.list(live.plane_runs.keys()), lambda rs: len(rs) == 4)
+        planes = {
+            (await nu.arun(nuspace.atomic(Space.exec.plane_runs[r].plane), ctx))[0] for r in runs
         }
-        for plane in BOOTED:
-            await space.until(history(plane), lambda rs: any(r["started_at"] for r in rs))
-        # Cleared before init started nav: the stale tab brought nothing up.
-        assert await space.read(nu.list(Space.connections.keys())) == []
-        assert await space.read(ops.runs(plane=TAB)) == []
-        # Home seeded, and this open's info written by the host.
-        assert await space.read(ops.cells(home.PLANE)) == [
-            seeded_id(home.PLANE, name) for name, _ in home.CELLS
-        ]
-        info = await space.read(Space.state.info.extract())
-        assert info["path"] == str(tmp_path / "space")
-        assert info["opened"] > 0
-        assert info["versions"] == versions()
-        assert set(info["versions"]) == {"nuspace"}
+        assert planes == {init.PLANE, *init.BOOTED}
+        with pytest.raises(Refused, match="open already in this process"):
+            await nu.arun(host.headless(root))
     finally:
-        await space.close()
-
-
-async def test_the_ops_track_what_is_made_and_removed(tmp_path, monkeypatch):
-    """Each user plane and cell made or removed tracked once by its op, the system's never, edits not at all."""
-    _points(monkeypatch, [])
-    told: list[str] = []
-    monkeypatch.setattr(_telemetry, "track", told.append)
-    monkeypatch.setattr(_telemetry, "opened", lambda: told.append("opened"))
-    path = str(tmp_path / "space")
-    await nu.arun(
-        nu.With(
-            store(path),
-            body=ops.init_stores() >> ops.add_plane(USER, backend="async") >> boot(USER),
-        )
-    )
-    assert told == ["plane_created"]
-    told.clear()
-
-    loop = asyncio.get_running_loop()
-    ready, done = loop.create_future(), asyncio.Event()
-    held = nu.let(_Hold(ready, done), lambda _: nu.Noop())
-    term = open_space(path, web=False, spares=1, name="nuspace-host", body=held)
-    task = asyncio.create_task(nu.arun(term))
-    space = Kernel(await asyncio.wait_for(asyncio.shield(ready), 20), done, task)
+        done.set()
+        await asyncio.wait_for(task, 15)
+    # The close leaves the runs live; the next open's reap ends them killed.
+    ctx, done, task = await _opened(root)
     try:
-        # Booted: the services, home and settings made themselves, none of it told.
-        for plane in BOOTED:
-            await space.until(history(plane), lambda rs: any(r["started_at"] for r in rs))
-        assert told == ["opened"]
-        told.clear()
-        await space.run(ops.add_plane("extra", backend="async"))
-        await space.run(ops.add_plane("extra", backend="async", name="again"))
-        assert told == ["plane_created"]
-        await space.run(ops.add_cell("extra", SET_42, cell_id="e1"))
-        await space.run(ops.add_cell("extra", SET_42, cell_id="e2"))
-        await space.run(ops.add_cell("extra", SET_42, cell_id="e1"))
-        await space.run(ops.add_cell("missing", SET_42, cell_id="e3"))
-        await space.run(ops.add_cell(home.PLANE, SET_42, cell_id="on-home"))
-        assert told == ["plane_created", "cell_created", "cell_created"]
-        await space.run(ops.rename_plane("extra", "renamed") >> ops.set_prog("e1", SET_42))
-        await space.run(ops.remove_cell("e1") >> ops.remove_cell("e1"))
-        await space.run(ops.remove_cell("on-home"))
-        await space.run(ops.remove_plane("extra"))
-        await space.run(ops.remove_plane(home.PLANE))
-        assert told == [
-            "plane_created",
-            "cell_created",
-            "cell_created",
-            "cell_removed",
-            "plane_removed",
-            "cell_removed",
-        ]
+        ends, _ = await nu.arun(nuspace.atomic(Space.exec.plane_runs.extract()), ctx)
+        reaped = [r for r, row in ends.items() if row.get("error") == LEFT_OVER]
+        assert sorted(reaped) == sorted(runs)
+        assert {ends[r]["exit"] for r in reaped} == {EXIT_KILLED}
+        fresh = await _until(ctx, nu.list(live.plane_runs.keys()), lambda rs: len(rs) == 4)
+        assert set(fresh).isdisjoint(runs)
     finally:
-        await space.close()
+        done.set()
+        await asyncio.wait_for(task, 15)
 
 
-def test_create_plane_tracks_each_plane_and_cell_it_makes(tmp_path, monkeypatch):
-    told: list[str] = []
-    monkeypatch.setattr(_telemetry, "track", told.append)
-    child = PlaneSpec("child", "Child", cells=(("c", "1"),), backend="async")
-    spec = PlaneSpec(
-        "parent", "Parent", cells=(("a", "1"), ("b", "2")), children=(child,), backend="async"
-    )
-    path = str(tmp_path / "space")
-    made = (
-        ops.init_stores()
-        >> ops.create_plane(spec, plane_id="p")
-        >> ops.create_plane(spec, plane_id="p")
-    )
-    asyncio.run(nu.arun(nu.With(store(path), body=made)))
-    assert sorted(told) == ["cell_created"] * 3 + ["plane_created"] * 2
-
-
-def test_open_space_with_web_compiles():
-    term = open_space(extensions=["testing"], open_browser=False)
+def test_served_open_compiles_and_validates(tmp_path):
+    term = host.serve(tmp_path, extensions=["testing"], open_browser=False, static=None, port=0)
     nu.validate(nu.compile(term))
+
+
+# --- with_plane -------------------------------------------------------------------------
+
+
+_COUNTER = PlaneSpec("nudemos.counter", "Counter", cells=(("count", "1"),), backend="async")
+
+
+async def test_with_plane_reuses_the_newest_plane_of_its_spec_or_makes_one(store):
+    await store.run(presets._plane_of(_COUNTER, MADE))
+    first = await store.run(MADE)
+    assert first.startswith("p_")
+    await store.run(presets._plane_of(_COUNTER, MADE))
+    assert await store.run(MADE) == first
+    await store.run(nuspace.atomic(nuspace.plane.remove(first)))
+    await store.run(presets._plane_of(_COUNTER, MADE))
+    second = await store.run(MADE)
+    assert second not in ("", first)
+    ids = Space.indexes.spec_planes[registered_name(_COUNTER)].ids
+    assert await store.read(nu.list(ids.keys())) == [first, second]
+
+
+def test_with_plane_headless_refuses_a_spec_that_shows_on_the_web():
+    web = PlaneSpec("nudemos.web", "Web", backend="async", web=WebOptions())
+    with pytest.raises(Refused, match="shows on the web"):
+        presets.with_plane(None, web, web=False)
+    nested = PlaneSpec("nudemos.outer", "Outer", backend="async", children=(web,))
+    with pytest.raises(Refused, match="shows on the web"):
+        presets.with_plane(None, nested, web=False)
 
 
 @pytest.mark.parametrize(("web", "open_browser"), [(True, True), (True, False), (False, False)])
 def test_with_plane_compiles(monkeypatch, web, open_browser):
     _points(monkeypatch, [])
-    spec = _plane("nudemos.counter", "Counter")
-    term = presets.with_plane(spec, web=web, open_browser=open_browser)
+    term = presets.with_plane(None, _COUNTER, web=web, open_browser=open_browser, static=None)
     nu.validate(nu.compile(term))
+
+
+def test_with_plane_by_an_unknown_name_is_missing():
+    with pytest.raises(Missing):
+        presets.with_plane(None, "nobody.nothing")
+
+
+# --- Browse ----------------------------------------------------------------------------
+
+
+def _free_port() -> int:
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        return int(s.getsockname()[1])
 
 
 async def test_browse_opens_once_the_port_answers(monkeypatch):
     opened: list[str] = []
-    monkeypatch.setattr(presets.webbrowser, "open", opened.append)
+    monkeypatch.setattr(interactions.webbrowser, "open", opened.append)
     server = await asyncio.start_server(lambda r, w: w.close(), "127.0.0.1", 0)
     port = server.sockets[0].getsockname()[1]
     try:
         url = f"http://127.0.0.1:{port}/p_x"
-        await presets.browse(url, "0.0.0.0", port)  # noqa: S104
+        await interactions.browse(url, "0.0.0.0", port)  # noqa: S104
     finally:
         server.close()
         await server.wait_closed()
@@ -377,18 +549,18 @@ async def test_browse_opens_once_the_port_answers(monkeypatch):
 
 async def test_browse_gives_up_quietly(monkeypatch):
     opened: list[str] = []
-    monkeypatch.setattr(presets.webbrowser, "open", opened.append)
-    await presets.browse("http://x", "127.0.0.1", free_port(), timeout=0.2)
+    monkeypatch.setattr(interactions.webbrowser, "open", opened.append)
+    await interactions.browse("http://x", "127.0.0.1", _free_port(), timeout=0.2)
     assert opened == []
 
 
 async def test_browse_as_a_term_reads_its_url_at_run_time(monkeypatch):
     opened: list[str] = []
-    monkeypatch.setattr(presets.webbrowser, "open", opened.append)
+    monkeypatch.setattr(interactions.webbrowser, "open", opened.append)
     server = await asyncio.start_server(lambda r, w: w.close(), "127.0.0.1", 0)
     port = server.sockets[0].getsockname()[1]
     base = f"http://127.0.0.1:{port}/"
-    term = nu.let("p_x", lambda plane: presets.Browse(nu.Str(base) + nu.Str(plane), "", port))
+    term = nu.let("p_x", lambda plane: interactions.Browse(nu.Str(base) + nu.Str(plane), "", port))
     try:
         await nu.arun(term)
     finally:
@@ -397,16 +569,57 @@ async def test_browse_as_a_term_reads_its_url_at_run_time(monkeypatch):
     assert opened == [base + "p_x"]
 
 
+# --- nuspace run and Ctrl+C ----------------------------------------------------------------
+
+
+def _left(pid: int, data: Path) -> list[str]:
+    """Processes still up from the run: in its session, or naming its data dir or socket."""
+    out = subprocess.run(["ps", "-eo", "pid,sid,args"], capture_output=True, text=True).stdout  # noqa: S607
+    rows = [line.split(None, 2) for line in out.splitlines()[1:]]
+    return [r[2] for r in rows if len(r) == 3 and (r[1] == str(pid) or str(data) in r[2])]
+
+
+def test_nuspace_run_stops_on_ctrl_c_and_leaves_no_process(tmp_path):
+    root = tmp_path / "space"
+    env = dict(os.environ, NUSPACE_TELEMETRY="0")
+    run = subprocess.Popen(  # noqa: S603
+        [sys.executable, "-m", "nuspace._cli", "run", "--headless", str(root)],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        start_new_session=True,
+        env=env,
+    )
+    try:
+        lock = data_dir(root) / LOCK_FILE
+        deadline = time.monotonic() + 30
+        while not holder(str(lock)) and time.monotonic() < deadline:
+            time.sleep(0.1)
+        time.sleep(2.0)
+        assert _left(run.pid, data_dir(root)), "the space never came up"
+        run.send_signal(signal.SIGINT)
+        out, _ = run.communicate(timeout=20)
+    finally:
+        if run.poll() is None:
+            os.killpg(run.pid, signal.SIGKILL)
+            run.wait()
+    assert run.returncode == 0, out.decode()
+    assert "Stopped" in out.decode()
+    time.sleep(0.5)
+    assert _left(run.pid, data_dir(root)) == []
+
+
 # --- Imports ---------------------------------------------------------------------
 
 
-def test_importing_nuspace_pulls_in_no_server_and_no_cli():
-    code = (
-        "import sys, nuspace\n"
-        "print(sorted(m for m in ('starlette', 'uvicorn', 'click', 'nustd.ws_server',"
-        " 'nuspace._telemetry')"
-        " if m in sys.modules))"
-    )
+@pytest.mark.parametrize(
+    ("imported", "absent"),
+    [
+        ("nuspace", ("starlette", "uvicorn", "click", "nustd.ws_server", "nuspace._telemetry")),
+        ("nuspace.host", ("starlette", "uvicorn", "click", "nustd.ws_server")),
+    ],
+)
+def test_importing_nuspace_or_the_host_pulls_in_no_server_and_no_cli(imported, absent):
+    code = f"import sys, {imported}\nprint(sorted(m for m in {absent!r} if m in sys.modules))"
     out = subprocess.run(  # noqa: S603 -- our own interpreter, a fixed script
         [sys.executable, "-c", code], capture_output=True, text=True, check=True
     )

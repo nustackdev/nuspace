@@ -1,4 +1,4 @@
-"""Usage: the ops that make and remove planes and cells say so, once their commit lands.
+"""Usage: telemetry as nu terms, told once the term runs.
 
 - :func:`track`: one event by name, eg ``track("plane_created")``, handed
   to :func:`nuspace._telemetry.track`. O(1): it queues and returns, never
@@ -7,11 +7,10 @@
   script.
 - :func:`opened`: a space opened, told once per open by the host.
 
-Each op tracks after its own commit, never inside it, so a retried commit
-is told once, and only when it made or removed something. Only what is the
-user's is told: a system plane and the cells on one never are. A write
-that goes round the ops is not told at all: this is the trend, not a count.
-An event is its name alone, never a name, an id, a count or a source.
+Ops touch only the stores, so no op tracks: ``plane_created`` and the
+like have no teller yet. Whoever tells one does it after the commit, never
+inside it, so a retried commit is told once. An event is its name alone,
+never a name, an id, a count or a source.
 """
 
 from __future__ import annotations

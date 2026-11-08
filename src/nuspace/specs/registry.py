@@ -92,7 +92,7 @@ class Extension:
         planes: What ``+`` can create.
         cells: What ``/`` can insert.
         contents: The content kinds cells keep items of and search finds.
-        envs: Env factories by name, see :mod:`nuspace.system.kernel.envs`.
+        envs: Env factories by name, see :mod:`nuspace.kernel.envs`.
     """
 
     planes: tuple[PlaneSpec, ...] = ()

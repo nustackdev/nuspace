@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Open a space behind a host lock and format check, with fresh tabs each open
 - Restart one cell in place, and rerun finished panes when a cell is added or edited
 - Rebuild the web device on its own stores: lazy sidebar, panes, nav, failure toasts
 - Reactions skip changes landing while their last run is live, never waiting it out

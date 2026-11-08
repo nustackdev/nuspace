@@ -1,7 +1,8 @@
 """The command line: help and version, each command wired to its preset, init, verse, telemetry.
 
-Nothing here opens a space for real but ``init``: the presets and the hold
-are swapped for recorders, so a test sees what a command asked for.
+Nothing here opens a space for real but ``init`` and the refusals: the
+presets and the hold are swapped for recorders, so a test sees what a
+command asked for. A real ``nuspace run`` and its Ctrl+C are in test_host.
 """
 
 from __future__ import annotations
@@ -16,17 +17,20 @@ from _support.contents import NoteContent
 from click.testing import CliRunner
 
 import nu
-from nuspace import ops
+import nuspace
+import nustd.kv
 from nuspace._cli import _installed, cli
 from nuspace._cli.commands import run as run_command
 from nuspace._telemetry import config
-from nuspace.ext import CellSpec, ContentSpec, Extension, PlaneSpec
-from nuspace.host import presets
-from nuspace.shapes import Space
-from nuspace.system.kernel import DATA_DIR, KERNEL_FILE, STATE_FILE, VALKEY_DIR, store
-from nuspace.system.kernel import space as kernel_space
-from nuspace.system.ui import home
-from nuspace.system.utils import snap
+from nuspace.devices.web import WEB_STORE
+from nuspace.devices.web.planes import HOME
+from nuspace.host import CORE, SPACE_STORE, presets
+from nuspace.host.layout import DATA_DIR
+from nuspace.specs import CellSpec, ContentSpec, Extension, PlaneSpec
+
+
+#: The Space store's file in a space's data dir: the mark of a space.
+SPACE_FILE = SPACE_STORE.file
 
 
 @pytest.fixture(autouse=True)
@@ -192,9 +196,9 @@ def headless(monkeypatch, held):
 
 
 def _space(root) -> None:
-    """``root`` made a space as far as finding one goes: its store file in ``.nuspace/``."""
-    (root / DATA_DIR).mkdir(parents=True)
-    (root / DATA_DIR / KERNEL_FILE).touch()
+    """``root`` made a space as far as finding one goes: its Space store file in ``.nuspace/``."""
+    (root / DATA_DIR / SPACE_FILE).parent.mkdir(parents=True)
+    (root / DATA_DIR / SPACE_FILE).touch()
 
 
 def test_run_opens_the_path_given(headless, tmp_path):
@@ -240,12 +244,15 @@ def test_run_refuses_a_path_and_tmp(headless):
     assert headless.calls == []
 
 
-def test_run_refuses_an_old_store(tmp_path, held):
-    (tmp_path / "CURRENT").write_text("MANIFEST-000001\n")
+@pytest.mark.parametrize("old", ["CURRENT", f"{DATA_DIR}/kernel.sqlite"])
+def test_run_refuses_a_space_of_an_older_format(tmp_path, old):
+    """Refused at open, before the lock, the server or a store: nothing is made."""
+    (tmp_path / old).parent.mkdir(parents=True, exist_ok=True)
+    (tmp_path / old).write_text("old\n")
     result = _invoke("run", "--headless", str(tmp_path))
-    assert result.exit_code == 1
-    assert "RocksDB" in result.output
-    assert held == []
+    assert result.exit_code == 1, result.output
+    assert "older nuspace store format" in _said(result)
+    assert not (tmp_path / DATA_DIR / SPACE_FILE).exists()
 
 
 # --- run --with ---------------------------------------------------------------
@@ -257,7 +264,7 @@ def test_run_from_opens_the_named_plane(monkeypatch, held, verse, tmp_path):
     result = _invoke("run", "--with", "agents.crew", "-p", "9002", "--no-browser")
     assert result.exit_code == 0, result.output
     ((args, kwargs),) = opened.calls
-    assert (args[0].name, args[1]) == ("agents.crew", _home_root(tmp_path))
+    assert (args[1].name, args[0]) == ("agents.crew", _home_root(tmp_path))
     assert kwargs == {"host": "127.0.0.1", "port": 9002, "open_browser": False}
     assert "plane agents.crew" in result.output
     assert held == ["term"]
@@ -269,7 +276,7 @@ def test_run_from_tells_apart_two_packages_sharing_a_name(monkeypatch, held, ver
     result = _invoke("run", "/tmp/space", "--with", "tools.chat", "--headless")
     assert result.exit_code == 0, result.output
     ((args, kwargs),) = opened.calls
-    assert (args[0].name, args[0].description, args[1]) == (
+    assert (args[1].name, args[1].description, args[0]) == (
         "tools.chat",
         "Talk.",
         _abs("/tmp/space"),
@@ -294,7 +301,7 @@ def test_run_from_takes_a_bare_name_as_a_nuverse_plane(monkeypatch, held, verse_
     result = _invoke("run", "--with", "jobs", "--headless")
     assert result.exit_code == 0, result.output
     ((args, _),) = opened.calls
-    assert (args[0].name, args[0].description) == ("nuverse.jobs", "Queue.")
+    assert (args[1].name, args[1].description) == ("nuverse.jobs", "Queue.")
     assert _installed.resolve("jobs") == _installed.resolve("nuverse.jobs")
     assert _installed.resolve("tools.jobs").name == "tools.jobs"
 
@@ -323,78 +330,17 @@ def test_a_bare_name_resolves_against_the_real_nuverse():
         assert _installed.resolve(name) == _installed.resolve(f"nuverse.{name}")
 
 
-def _run_with(path: str, *specs: PlaneSpec) -> None:
-    """Open the space at ``path`` headless with each of ``specs`` in turn, for real."""
-    for spec in specs:
-        term = presets.with_plane(spec, path, web=False, extensions=())
-        nu.eval_in_loop(nu.compile(nu.Race(term, nu.Delay(3.0))), nu.Context())
-
-
-def _read(path: str, term: nu.Nu):
-    value, _ = asyncio.run(nu.arun(nu.With(store(path), body=snap(term))))
-    return value
-
-
-def _made(path: str) -> dict:
-    """What the space recorded: registered plane name to the plane id made for it."""
-    return dict(_read(path, nu.Dict(Space.state.made.extract())))
-
-
-def _made_by(path: str, name: str) -> list[str]:
-    """The ids of the planes made from the Plane registered as ``name``."""
-    planes = _read(path, nu.Dict(Space.planes.extract()))
-    return [pid for pid, row in planes.items() if row["props"]["made_by"] == name]
-
-
-_COUNTER = PlaneSpec("nudemos.counter", "Counter", cells=(("count", "1"),), backend="async")
-
-
-def test_run_from_makes_the_plane_once(tmp_path):
-    """The real thing, headless: the plane gets a minted id, recorded, and the second run reuses it."""
-    path = str(tmp_path / "space")
-    _run_with(path, _COUNTER)
-    (plane,) = _made_by(path, "nudemos.counter")
-    assert plane.startswith("p_")
-    assert _made(path) == {"nudemos.counter": plane}
-    _run_with(path, _COUNTER)
-    assert _made_by(path, "nudemos.counter") == [plane]
-    assert _made(path) == {"nudemos.counter": plane}
-    assert len(_read(path, ops.cells(plane))) == 1
-
-
-def test_run_from_makes_a_deleted_plane_again(tmp_path):
-    path = str(tmp_path / "space")
-    _run_with(path, _COUNTER)
-    gone = _made(path)["nudemos.counter"]
-    asyncio.run(nu.arun(nu.With(store(path), body=ops.remove_plane(gone))))
-    assert _made_by(path, "nudemos.counter") == []
-    _run_with(path, _COUNTER)
-    (plane,) = _made_by(path, "nudemos.counter")
-    assert plane != gone
-    assert _made(path) == {"nudemos.counter": plane}
-
-
-def test_run_from_keeps_one_record_per_plane(tmp_path):
-    other = PlaneSpec("nudemos.movies", "Movies", backend="async")
-    path = str(tmp_path / "space")
-    _run_with(path, _COUNTER, other, _COUNTER, other)
-    made = _made(path)
-    assert set(made) == {"nudemos.counter", "nudemos.movies"}
-    assert made["nudemos.counter"] != made["nudemos.movies"]
-    assert _made_by(path, "nudemos.counter") == [made["nudemos.counter"]]
-    assert _made_by(path, "nudemos.movies") == [made["nudemos.movies"]]
-
-
-def test_run_from_a_bare_nuverse_name_records_it_under_its_full_name(tmp_path):
-    path = str(tmp_path / "space")
-    jobs = _installed.resolve("jobs")
-    _run_with(path, jobs, jobs)
-    made = _made(path)
-    assert list(made) == ["nuverse.jobs"]
-    assert _made_by(path, "nuverse.jobs") == [made["nuverse.jobs"]]
-
-
 # --- init ------------------------------------------------------------------------
+
+
+def _read(root: Path, term: nu.Nu) -> object:
+    """``term`` read from the space at ``root``, its core and web stores opened plain."""
+    data = root / DATA_DIR
+    navs = [
+        nustd.kv.sqlite_navigator(str(data / s.file), tags=(s.root,)) for s in (*CORE, WEB_STORE)
+    ]
+    value, _ = asyncio.run(nu.arun(nu.With(*navs, body=nuspace.atomic(term))))
+    return value
 
 
 def test_init_makes_a_space_and_seeds_it(tmp_path):
@@ -402,11 +348,8 @@ def test_init_makes_a_space_and_seeds_it(tmp_path):
     result = _invoke("init", str(path))
     assert result.exit_code == 0, result.output
     assert "Initialized" in result.output
-    assert (path / DATA_DIR / KERNEL_FILE).is_file()
-    assert not (path / KERNEL_FILE).exists()
-    seeded = nu.With(store(str(path)), body=snap(ops.plane_exists(home.PLANE)))
-    value, _ = asyncio.run(nu.arun(seeded))
-    assert value is True
+    assert (path / DATA_DIR / SPACE_FILE).is_file()
+    assert _read(path, nuspace.plane.exists(HOME)) is True
 
     again = _invoke("init", str(path))
     assert again.exit_code == 0, again.output
@@ -416,7 +359,7 @@ def test_init_makes_a_space_and_seeds_it(tmp_path):
 def test_init_makes_the_current_directory_a_space(tmp_path):
     result = _invoke("init")
     assert result.exit_code == 0, result.output
-    assert (tmp_path / "home" / "work" / DATA_DIR / KERNEL_FILE).is_file()
+    assert (tmp_path / "home" / "work" / DATA_DIR / SPACE_FILE).is_file()
     assert "inside the space" not in result.output
     assert "nuspace run" in result.output
 
@@ -430,7 +373,7 @@ def test_init_warns_inside_another_space(tmp_path, monkeypatch):
     result = _invoke("init")
     assert result.exit_code == 0, result.output
     assert "inside the space at ~/work" in _said(result)
-    assert (inner / DATA_DIR / KERNEL_FILE).is_file()
+    assert (inner / DATA_DIR / SPACE_FILE).is_file()
 
 
 def test_init_keeps_quiet_about_the_home_space(tmp_path):
@@ -440,38 +383,12 @@ def test_init_keeps_quiet_about_the_home_space(tmp_path):
     assert "inside the space" not in result.output
 
 
-def test_a_flat_space_moves_into_its_data_dir(tmp_path):
-    """A space an older nuspace made, its files loose in the root: moved in on open, kept."""
-    path = tmp_path / "old"
-    assert _invoke("init", str(path)).exit_code == 0
-    data = path / DATA_DIR
-    for name in (KERNEL_FILE, STATE_FILE, VALKEY_DIR):
-        (data / name).rename(path / name)
-    data.rmdir()
-    planes = _read(str(path), nu.Dict(Space.planes.extract()))
-    assert planes
-    assert (data / KERNEL_FILE).is_file()
-    assert (data / STATE_FILE).is_file()
-    assert not (path / KERNEL_FILE).exists()
-    assert _invoke("init", str(path)).output.startswith("Already a space")
-
-
-def test_a_flat_space_still_open_is_left_alone(tmp_path, monkeypatch):
-    """An older nuspace holding it open: nothing moves, the error says what to do."""
-    monkeypatch.setattr(kernel_space, "ping", lambda _: True)
-    (tmp_path / KERNEL_FILE).touch()
+def test_init_refuses_a_space_of_an_older_format(tmp_path):
+    (tmp_path / DATA_DIR).mkdir()
+    (tmp_path / DATA_DIR / "kernel.sqlite").touch()
     result = _invoke("init", str(tmp_path))
     assert result.exit_code == 1
-    assert "Stop it and open again" in _said(result)
-    assert (tmp_path / KERNEL_FILE).is_file()
-    assert not (tmp_path / DATA_DIR).exists()
-
-
-def test_init_refuses_an_old_store(tmp_path):
-    (tmp_path / "CURRENT").write_text("MANIFEST-000001\n")
-    result = _invoke("init", str(tmp_path))
-    assert result.exit_code == 1
-    assert "RocksDB" in result.output
+    assert "older nuspace store format" in _said(result)
 
 
 # --- verse -----------------------------------------------------------------------

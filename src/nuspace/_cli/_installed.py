@@ -3,7 +3,7 @@
 ``nuspace verse`` lists it and ``nuspace run --with`` picks a Plane out of
 it. A package is its entry point's name, and its Planes are
 ``<package>.<name>``, as a space registers them
-(:func:`~nuspace.ext.qualified`). A bare name is a Plane of
+(:func:`~nuspace.specs.qualified`). A bare name is a Plane of
 :data:`DEFAULT_PACKAGE`, the one nuspace ships with.
 """
 
@@ -16,13 +16,13 @@ from typing import TYPE_CHECKING
 
 import rich_click as click
 
-from nuspace.ext.registry import GROUP, _load, qualified
+from nuspace.specs.registry import GROUP, _load, qualified
 
 from ._meta import version_of
 
 
 if TYPE_CHECKING:
-    from nuspace.ext import Extension, PlaneSpec
+    from nuspace.specs import Extension, PlaneSpec
 
 
 __all__ = ["DEFAULT_PACKAGE", "Installed", "installed", "resolve"]

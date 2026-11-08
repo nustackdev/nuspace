@@ -28,7 +28,8 @@ import nustd.valkey
 from _support.made import MADE, MADE_STORE
 from nu.lang import ScalarQuery
 from nuspace import kernel
-from nuspace.host.stores import SPACE_STORE, STATE_STORE
+from nuspace.host.stores import CORE, VALKEY_DIR
+from nuspace.host.stores import navigators as host_navigators
 from nuspace.shapes import Space
 
 
@@ -78,23 +79,12 @@ CRASHES = prog(
 # --- The stores -----------------------------------------------------------------
 
 #: The core stores, as the kernel reads them.
-STORES = (SPACE_STORE, STATE_STORE)
-
-#: The notification server's dir inside a space's data dir.
-VALKEY_DIR = "valkey"
+STORES = CORE
 
 
 def navigators(data: str) -> nu.With:
     """Every core store under ``data``, notified through its server, as any process opens them."""
-    url = nustd.valkey.url_for(Path(data) / VALKEY_DIR)
-    return nu.With(
-        *(
-            nustd.kv.sqlite_navigator_redis(
-                str(Path(data) / s.file), tags=(s.root,), redis_url=url, channel_prefix=s.channel
-            )
-            for s in STORES
-        )
-    )
+    return host_navigators(data, STORES)
 
 
 def init_stores() -> nu.Nu:

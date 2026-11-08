@@ -12,7 +12,7 @@ import textwrap
 from importlib.metadata import entry_points
 from pathlib import Path
 
-from nuspace.ext import GROUP, space_registry
+from nuspace.specs import GROUP, space_registry
 
 
 ROOT = Path(__file__).parents[2]
