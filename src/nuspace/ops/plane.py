@@ -20,7 +20,7 @@ from typing import Any
 import nu
 import nustd.time
 from nuspace.errors import Exists, Missing, Refused
-from nuspace.shapes.plane import ROOT
+from nuspace.shapes.plane import RESERVED, ROOT
 from nuspace.shapes.space import Space
 from nuspace.utils import MintId, Require, anchor_of, place
 from nuspace.utils.checks import (
@@ -71,20 +71,23 @@ def _icon_spelled(icon: nu.StrArg) -> None:
         raise Refused(msg)
 
 
-def _reserved(id: nu.StrArg) -> nu.Nu:
-    """Refuse an id no new plane may take: root's, or the empty one.
+def _reserved(id: nu.StrArg, system: nu.BoolArg) -> nu.Nu:
+    """Refuse an id no new plane may take: root's, ``""``, or a :data:`RESERVED` one for a user plane.
 
     Raises:
         Refused: A literal at build, a term at run time.
     """
     if isinstance(id, str):
-        if id in (ROOT, ""):
+        user = system is False
+        if id in (ROOT, "") or (user and id in RESERVED):
             msg = f"plane id {id!r} is reserved"
             raise Refused(msg)
-        return nu.Noop()
-    return refuse(
-        (nu.Str(id) == ROOT).or_(nu.Str(id) == ""), Refused, "plane id ", id, " is reserved"
-    )
+        if system is True or id not in RESERVED:
+            return nu.Noop()
+    pid = nu.Str(id)
+    always = (pid == ROOT).or_(pid == "")
+    taken = nu.List.of(*sorted(RESERVED)).contains(pid).and_(nu.Bool(system).not_())
+    return refuse(always.or_(taken), Refused, "plane id ", id, " is reserved")
 
 
 def _not_root(id: nu.StrArg, doing: str) -> nu.Nu:
@@ -137,7 +140,8 @@ def add(
             case-sensitive, ``""`` for none.
         icon: ``lucide:<name>``, ``emoji:<char>`` or ``""``.
         backend: What its runs execute on. ``""``: it does not run.
-        system: Protected: ``remove`` refuses it.
+        system: Protected: ``remove`` refuses it. Only a system plane takes
+            a :data:`~nuspace.shapes.plane.RESERVED` id.
         spec: The spec it was made from, ``""`` for none.
         meta: The free dict, for programs. nuspace never reads it.
         into: A ref set to the id in the same commit, for a minted one.
@@ -146,8 +150,10 @@ def add(
         Exists: The id or the key is taken.
         Missing: No parent or anchor with that id.
         Removed: The parent or the anchor is removed.
-        Refused: A reserved id, an anchor that is not a sibling, a key that
-            is not key chars, an icon spelled wrong. A literal at build.
+        Refused: A reserved id (root's, ``""``, or one of
+            :data:`~nuspace.shapes.plane.RESERVED` unless ``system``), an
+            anchor that is not a sibling, a key that is not key chars, an
+            icon spelled wrong. A literal at build.
         TypeError: Both ``before`` and ``after``, at build.
     """
     anchor = anchor_of(before, after)
@@ -177,7 +183,7 @@ def add(
             )
 
         writes = (
-            _reserved(pid)
+            _reserved(pid, system)
             >> refuse(rows.contains(pid), Exists, "plane ", pid, " exists")
             >> live(rows, parent, "plane")
             >> anchored(siblings, rows, anchor, pid, "plane", text("plane ", parent))

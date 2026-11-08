@@ -1,14 +1,20 @@
-"""Layer two: the system, built from ops.
+"""The system planes: planes shipped with nuspace, running, not removable. One folder each.
 
-- :mod:`nuspace.system.kernel`: starts, stops, records and reaps runs.
-- :mod:`nuspace.system.services`: init, nav, supervisor, reload, reactions, as cells.
-- :mod:`nuspace.system.ui`: home, settings and search, the ui planes seeded at open.
-- :mod:`nuspace.system.info`: what the space says about this open.
+- :mod:`.init`: starts the planes on its boot list when the space opens.
+- :mod:`.supervisor`: restarts planes whose runs end, per policy.
+- :mod:`.reload`: keeps live plane runs on the latest code.
+- :mod:`.reactions`: runs a plane when something changes.
 
-Devices come next, on top of the same ops.
+Each folder holds its own ``shapes`` (its state, in its plane's state), its
+``ops`` and its ``plane`` (ids, cells, driver). They run without any device.
+:func:`ensure` makes them where missing and :func:`start` asks for init's
+run: the host calls both at open.
+
+Namespaced, never re-exported at the top: ``nuspace.system.supervisor.supervise(...)``.
 """
 
-from . import info, kernel, services, ui
+from . import init, reactions, reload, supervisor
+from .planes import PLANES, ensure, start
 
 
-__all__ = ["info", "kernel", "services", "ui"]
+__all__ = ["PLANES", "ensure", "init", "reactions", "reload", "start", "supervisor"]

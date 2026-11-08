@@ -6,13 +6,18 @@ import nu
 import nustd.kv
 
 
-__all__ = ["ROOT", "Plane"]
+__all__ = ["RESERVED", "ROOT", "Plane"]
 
 
 #: The top plane's id. A real plane, made at open with the stores' fixed
 #: containers: every top level plane has it as its parent. It is system (no
 #: remove), has no backend (no run) and no parent of its own (``""``).
 ROOT = "root"
+
+#: Plane ids only nuspace's own planes take: ``plane.add`` refuses them
+#: unless ``system=True``. The system planes' (``nuspace.system``); the web
+#: device adds its own. Root's id and ``""`` are refused for every add.
+RESERVED = frozenset({"init", "supervisor", "reload", "reactions"})
 
 
 class Plane(nu.Shape):

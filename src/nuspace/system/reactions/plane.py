@@ -1,343 +1,113 @@
-"""reactions: a plane run whenever a change is notified, with nothing kept running idle for it.
+"""The reactions plane: runs a plane when something changes. No engine of its own.
 
-One system plane, :data:`PLANE`, on the ``async`` backend, with no cells of
-its own. Every cell on it is a reaction, and every reaction is a task in its
-live run's one worker. init runs it at boot, reactions and all; with none,
-the run ends at once and :func:`enable_react` starts one again.
+The plane runs its cells like any plane, on the ``async`` backend, and
+init boots it. Its first cell, :data:`PARK`, runs ``nu.Park()``: it never
+ends, so the plane run stays live with no reactions at all, and reload
+gives each new reaction cell its first run in it. Every other cell is a
+reaction (see :mod:`.ops`), whose program is :func:`react`::
 
-    enable_react(change, plane)   a reaction cell added, run in the live run
-                                    (or a run of the plane started)
-    disable_react(change, plane)  its live cell run interrupted, the cell removed
+    nu.ReactLatest(change, up_plane(plane, reaction))
 
-A reaction is an ordinary cell. Its prog is Python source like any other,
-so the change it waits on is written into it as source, nothing serialized::
-
-    def out():
-        return restarting(
-            nu.ReactLatest(
-                ops.snapshot(States.planes["chat"].state["messages"].on_change()),
-                up_plane("chat"),
-            ),
-            "reactions",
-            "chat",
-        )
-
-A reaction is an event flow: "this changed, run that plane". Each
-notification starts one plane run (:func:`up_plane`), and nothing else does:
-not enabling it, not a boot, no re-check. It cannot tell "nothing new" from
-the change it watches (any subscription, no value to compare), so a level
-re-check would only add whole plane runs. The key is not read. A newer
+An event flow: each notification of ``change`` runs :func:`up_plane` once,
+and nothing else does, not the add, not a boot, no re-check. A newer
 notification restarts an :func:`up_plane` still waiting, so a burst merges
-into one run after the one live (see Dedupe below).
+into one run after the live one. Best effort, as event flows are: a change
+landing before the reaction subscribes, or while the space is closed, is
+missed. A plane that must not miss one watches on a level flow of its own.
 
-Best effort, as event flows are: a notification dropped, or a write landing
-before the subscription binds or while the space is closed, is a reaction
-missed. A plane that must not miss one runs on a level flow of its own.
-A fire that raises is reported on the reaction's stdout and the reaction
-runs again after a short delay (:func:`~nuspace.system.utils.restarting`).
-
-:func:`enable_react` loads the source before it writes the cell, the way
-the kernel will: source that does not construct, a bad import included,
-fails the call with its diagnostic, and no cell is made.
-
-What a change can watch: what its source can name. ``Space`` and ``States``
-are in scope, with ``nu``, ``nustd``, ``nuspace`` and ``ops``, so any plane's
-state (``States.planes[p].state[key]``) and any cell's
-(``States.cells.on_descendants_change(c, key)``) can be watched,
-and anything in Space. A shape from an importable module is brought in with
-``imports``; a ``CellState`` or ``PlaneState`` one must be placed with
-``ops.cell_state`` or ``ops.plane_state``, or it lands under the reaction's
-own cell. A shape declared in another cell's prog cannot be imported.
-
-Dedupe is :func:`up_plane`'s. It starts a run of the plane ``by``
-:data:`BY` in a commit that finds none live (a filter of the plane's live
-runs, O(k)), so two never run at once, even from two reactions on one
-plane. One live already may or may not have seen the change, so it waits
-until none by :data:`BY` is live (one subscription on the plane's live runs,
-held for the whole wait) and starts one then. A notification landing while
-one fire waits restarts it (``ReactLatest``), so a burst of changes is one
-run after the one live, never two at once.
-
-Contract for the planes run. A plane a reaction runs runs to completion: it
-keeps a cursor in its plane state (the last item it handled), handles
-everything past it, and returns. An extra fire is then harmless. A plane
-writing the ref it reacts to fires itself once more: its cursor makes that
-run a no-op. This is a convention, not checked here.
-
-A reaction is known by its change and plane: the plane's own state
-(:class:`Registry`) maps their key to the reaction cell, so both ops are
-point reads. Nothing here walks ``runs``, the reaction cells, or the planes.
+Contract for the planes a reaction runs: they run to completion, keep a
+cursor in their state and handle everything past it, so an extra run is
+harmless and a plane writing what it reacts to settles.
 """
 
 from __future__ import annotations
 
 import nu
-import nu.prog
-import nustd.kv
-from nuspace.ops import add_cell, add_plane, cell_exists, cell_interrupt, latest, remove_cell
-from nuspace.ops.kernel import add_cell_run, add_plane_run, plane_live
-from nuspace.ops.state import plane_state
-from nuspace.ops.utils import MintId, atomic, atomic_state
-from nuspace.shapes import PlaneState, Space
+from nuspace import ops
+from nuspace.ops.brackets import atomic
+from nuspace.places import at
+from nuspace.shapes import Space
+from nuspace.utils.policies import restarting
 
-from ..utils import snap
+from .shapes import Reaction, Registry
 
 
-__all__ = [
-    "BY",
-    "PLANE",
-    "Registry",
-    "disable_react",
-    "enable_react",
-    "ensure_reactions",
-    "live_run",
-    "react_run",
-    "reaction_of",
-    "source",
-    "up_plane",
-]
+__all__ = ["BACKEND", "PARK", "PARK_PROG", "PLANE", "react", "registry", "up_plane"]
 
 
-#: The plane id, fixed (D31).
+#: The plane's id, fixed.
 PLANE = "reactions"
 
-#: What plane runs and cell runs reactions start are recorded as ``by``.
-BY = "react"
+#: Its fixed first cell, the one that keeps its run live.
+PARK = "reactions_park"
 
-_HEAD = """\
+#: What its runs execute on.
+BACKEND = "async"
+
+#: The park cell's prog.
+PARK_PROG = """\
 import nu
-import nustd.kv
-import nuspace
-from nuspace import ops
-from nuspace.shapes import Space, States
-from nuspace.system.services.reactions import up_plane
-from nuspace.system.utils import restarting
+
+
+def out():
+    return nu.Park()
 """
 
-_kernel = Space.kernel
+
+def registry() -> Registry:
+    """The plane's state: ``State.planes["reactions"]`` read through :class:`~.shapes.Registry`."""
+    return at.plane(id=PLANE).state(Registry)
 
 
-class Registry(PlaneState):
-    """The plane's own state: its reactions, each key (see :func:`_key`) to its cell."""
+def up_plane(plane: nu.StrArg, reaction: nu.StrArg) -> nu.Nu:
+    """Run a plane once more for a reaction, never two of its runs at once. Returns once asked for.
 
-    cells = nustd.kv.DictRef.slot(str)
+    The reaction keeps the plane run it last asked for in its own cell
+    state (:attr:`~.shapes.Reaction.run`), so whether that run is still
+    live is one point read, whatever else runs the plane. With it ended,
+    one is added now. With it live, it may or may not see what asked for
+    this, so this waits until it ends (a level wait with the standard
+    re-checks), then adds one. A plane gone or removed gets nothing.
+    Cancelled while it waits, it adds nothing.
 
-
-def _here(term: nu.Nu) -> nu.Nu:
-    """``term`` with :class:`Registry` landing at the plane's state, for callers anywhere."""
-    return plane_state(PLANE, term)
-
-
-def ensure_reactions() -> nu.Nu:
-    """The plane, made when missing. No cells: each is a reaction. init's boot list runs it."""
-    missing = snap(Space.planes[PLANE].name.exists().not_())
-    return nu.IfDo(missing, add_plane(PLANE, backend="async", name=PLANE, system=True))
-
-
-# --- The source --------------------------------------------------------------------
-
-
-def _key(change: nu.StrArg, plane_id: nu.StrArg) -> nu.Nu:
-    """A reaction's key in :class:`Registry`: its change and plane, spelled as Python."""
-    return nu.Repr(nu.Dict.of(change=change, plane=plane_id))
-
-
-def source(change: nu.StrArg, plane_id: nu.StrArg, imports: str = "") -> nu.Nu:
-    """A reaction cell's prog: ``plane_id`` run on every notification of ``change``. A str term.
+    Two commits: the run (Space, the check and the add), then the id kept
+    (State). A cancel landing between them leaves that run untracked, so
+    the next call may add one beside it: the contract makes it harmless.
 
     Args:
-        change: Source of an expression yielding a subscription, eg
-            ``'States.planes["chat"].state["messages"].on_change()'``.
-        plane_id: The plane to run.
-        imports: Source put after the standard imports, eg
-            ``"from myapp.shapes import Inbox"``.
+        plane: The plane to run.
+        reaction: The reaction's id: what the run is recorded ``by``, and
+            whose cell state keeps it.
     """
-    head = _HEAD + (imports.rstrip("\n") + "\n" if imports else "")
-    return (
-        nu.Str(head + "\n#: The plane this reaction runs.\nPLANE = ")
-        + nu.Repr(plane_id)
-        + nu.Str("\n\n\ndef out():\n    return restarting(\n        nu.ReactLatest(\n")
-        + nu.Str("            ops.snapshot(")
-        + nu.Str(change)
-        + nu.Str("),\n            up_plane(PLANE),\n        ),\n")
-        + nu.Str('        "reactions",\n        PLANE,\n    )\n')
+    held = at.cell(id=reaction).state(Reaction).run
+    free = Space.exec.indexes.live.plane_runs.contains(held.fallback("")).not_()
+    settled = nu.WaitUntil(
+        atomic(ops.plane_run.on_live_change(plane=plane)),
+        atomic(free),
+        after=nu.RECHECK_AFTER,
+        every=nu.RECHECK_EVERY,
     )
 
-
-# --- Reads --------------------------------------------------------------------------
-
-
-def _live_of(plane_id: nu.StrArg, by: nu.StrArg | None = None) -> nu.Str:
-    """A live plane run of the plane, ``by`` when given, ``""`` when none. O(k), k its live runs."""
-    live = plane_live(plane_id).iter()
-    if by is not None:
-        live = live.filter(lambda rid: _kernel.runs[nu.Str(rid)].by == by)
-    return nu.Str(live.first(default=""))
-
-
-def live_run() -> nu.Str:
-    """The plane's live run, the one reactions run in, ``""`` when it is down. Bare read, O(k)."""
-    return _live_of(PLANE)
-
-
-def react_run(plane_id: nu.StrArg, by: nu.StrArg = BY) -> nu.Str:
-    """A live plane run of the plane ``by`` :data:`BY`, ``""`` when none. Bare read, O(k).
-
-    There is at most one: :func:`up_plane` only starts one in a commit that
-    finds none.
-    """
-    return _live_of(plane_id, by)
-
-
-def _known(key: nu.Nu) -> nu.Str:
-    """The reaction cell under ``key``, ``""`` when none or when it is gone. Unrerooted."""
-    cid = Registry.cells.get_item(key, "")
-    return nu.Str(nu.If((cid != "").and_(cell_exists(cid)), cid, ""))
-
-
-def reaction_of(change: nu.StrArg, plane_id: nu.StrArg) -> nu.Str:
-    """The reaction cell of a change and a plane, ``""`` when there is none. Bare read, from anywhere."""
-    return _here(_known(_key(change, plane_id)))
-
-
-# --- up_plane -----------------------------------------------------------------------
-
-
-def up_plane(plane_id: nu.StrArg, by: nu.StrArg = BY) -> nu.Nu:
-    """Run a plane that runs to completion once more, never two at once. Returns once started.
-
-    With no live run of the plane ``by`` ``by``, one is started. With one
-    live, it may or may not see whatever asked for this, so this waits until
-    none is live (one subscription on the plane's live runs, held for the
-    whole wait, a run started meanwhile waited out too) and then starts one.
-    The start is one commit that finds none live, so callers racing on one
-    plane start one run between them. Nothing when the plane is gone.
-
-    Cancelled while it waits (its reaction disabled), it starts nothing.
-
-    Args:
-        plane_id: The plane.
-        by: Who asked, what the run is recorded as, and whose live runs count.
-    """
-    none = react_run(plane_id, by) == ""
-    # A run leaves the plane's live runs in the commit that ends it.
-    lives = _kernel.planes_running[plane_id].runs.on_children_change()
-    settled = nu.WaitUntil(snap(lives), snap(none))
-
-    def start(new: nu.ObjectRef) -> nu.Nu:
-        return atomic(nu.IfDo(none, add_plane_run(nu.Str(new), plane_id, by=by)))
-
-    return settled >> nu.let(MintId("r"), start)
-
-
-# --- The ops ------------------------------------------------------------------------
-
-
-def _start(cid: nu.StrArg) -> nu.Nu:
-    """The reaction run: into the plane's live run, or a run of the plane when down. One commit.
-
-    A live run that already had a cell run of it (it came up since the cell
-    was added, and ran every cell) is left alone. Down, a new run of the
-    plane runs every cell, this one included.
-    """
-
-    def into_or_up(live: nu.ObjectRef) -> nu.Nu:
-        rid = nu.Str(live)
-        into = nu.IfDo(
-            _kernel.runs[rid].latest.contains(cid).not_(),
-            nu.let(MintId("cr"), lambda cr: add_cell_run(rid, cid, nu.Str(cr), BY)),
+    def write(new: nu.ObjectRef) -> nu.Nu:
+        asked = free.and_(ops.plane.exists(plane))
+        return atomic(nu.IfDo(asked, ops.plane_run.add(plane, by=reaction, into=new))) >> atomic(
+            nu.IfDo(nu.Str(new) != "", held.set(nu.Str(new)))
         )
-        up = nu.let(MintId("r"), lambda new: add_plane_run(nu.Str(new), PLANE, by=BY))
-        return nu.IfDo(rid != "", into, up)
 
-    return atomic(nu.let(live_run(), into_or_up))
+    return settled >> nu.let("", write)
 
 
-class _Enabling(nu.Shape):
-    """What :func:`enable_react` works out before it writes: the key, the source, the cell."""
+def react(change: nu.Nu, plane: nu.StrArg, reaction: nu.StrArg) -> nu.Nu:
+    """A reaction's whole program: :func:`up_plane` on every notification of ``change``.
 
-    key = nu.StrRef.slot()
-    src = nu.StrRef.slot()
-    known = nu.StrRef.slot()
-    cid = nu.StrRef.slot()
-
-
-class _Disabling(nu.Shape):
-    """What :func:`disable_react` reads before it stops anything: the key, and its cell."""
-
-    key = nu.StrRef.slot()
-    cid = nu.StrRef.slot()
-
-
-def enable_react(change: nu.StrArg, plane_id: nu.StrArg, *, imports: str = "") -> nu.Nu:
-    """Run ``plane_id`` on every notification of ``change``: a reaction cell added and run. Idempotent.
-
-    A reaction already there for the change and the plane is kept as it is.
-    Otherwise its source is loaded first, as the kernel will load it, then
-    three commits: the cell (Space), its key (States), then its run
-    (:func:`_start`). A reaction made by a racing call in between wins, and
-    this one's cell is removed.
+    What a reaction cell's prog calls (see :func:`~.ops.source`), so the
+    stored source names this one entry and nothing internal. A raise is
+    reported on the cell run's output and the flow runs again.
 
     Args:
-        change: Source of an expression yielding a subscription, with
-            ``Space``, ``States``, ``nu``, ``nustd``, ``nuspace`` and ``ops``
-            in scope, eg ``'States.planes["chat"].state["messages"].on_change()'``.
-            See the module for what it can watch.
-        plane_id: The plane to run. It runs to completion (see the module).
-        imports: Source put after the standard imports, for a shape from an
-            importable module.
-
-    The reaction's cell is :func:`reaction_of` the change and the plane,
-    whichever call made it.
-
-    Raises:
-        nu.prog.ConstructionError: The source does not construct (a bad
-            change, a bad import). Nothing is written.
+        change: A subscription, eg ``nuspace.at.plane(id="chat").state(Inbox).messages.on_change()``.
+        plane: The plane it runs.
+        reaction: The reaction's id.
     """
-    key, src, known, cid = _Enabling.key, _Enabling.src, _Enabling.known, _Enabling.cid
-    loads = nu.prog.LoadNu(src, scope={"plane": nu.Str(PLANE), "cell": cid})
-    claim = atomic_state(_here(nu.IfDo(_known(key) == "", Registry.cells.set_item(key, cid))))
-    won = snap(_here(Registry.cells.get_item(key, "") == cid))
-    lost = remove_cell(cid)
-    made = (
-        add_cell(PLANE, src, cell_id=cid, name=plane_id) >> claim >> nu.IfDo(won, _start(cid), lost)
-    )
-    # Loaded first and held only for that: source that does not construct
-    # raises here, before anything is written.
-    make = nu.let(loads, lambda _: made)
-    return nu.Frame(
-        _Enabling,
-        nu.IfDo(known == "", make),
-        key=_key(change, plane_id),
-        src=source(change, plane_id, imports),
-        known=snap(_here(_known(key))),
-        cid=nu.If(known == "", MintId("react"), known),
-    )
-
-
-def disable_react(change: nu.StrArg, plane_id: nu.StrArg) -> nu.Nu:
-    """Stop running ``plane_id`` on ``change``. A no-op when there is no such reaction.
-
-    The reaction's cell run in the live run is interrupted, then its cell
-    removed (which interrupts any other run of it), then its key. The key
-    last: a crash between leaves a key naming no cell, which reads as no
-    reaction, never a reaction nobody can find. A run of the plane it
-    already started is left to finish.
-    """
-    k, c = _Disabling.key, _Disabling.cid
-
-    def interrupting(live: nu.ObjectRef) -> nu.Nu:
-        r = nu.Str(live)
-        return nu.IfDo(r != "", cell_interrupt(r, latest(r, c)))
-
-    interrupt = nu.let(snap(live_run()), interrupting)
-    forget = atomic_state(
-        _here(nu.IfDo(Registry.cells.get_item(k, "") == c, Registry.cells.del_item(k)))
-    )
-    gone = interrupt >> remove_cell(c) >> forget
-    return nu.Frame(
-        _Disabling,
-        nu.IfDo(c != "", gone),
-        key=_key(change, plane_id),
-        cid=snap(_here(Registry.cells.get_item(k, ""))),
-    )
+    flow = nu.ReactLatest(atomic(change), up_plane(plane, reaction))
+    return restarting(flow, PLANE, reaction)

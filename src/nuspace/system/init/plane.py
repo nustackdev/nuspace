@@ -1,119 +1,123 @@
-"""init: pid 1. Runs the planes its boot list names, once, at open.
+"""The init plane: starts the planes on its boot list when the space opens.
 
-The kernel starts this and nothing else. What else runs at boot is data, in
-this cell's own state (:class:`Boot`), edited with :func:`boot` and
-:func:`unboot` from anywhere. Each plane gets a plane run of its own,
-``by`` init, on the backend the plane names, unless it is live already:
-something may bring a plane up before init reaches it (``enable_react``
-starts the reactions plane when it finds it down), and a second run would
-run its cells twice. The check and the start are one commit.
+One cell, :data:`CELL`, runs :func:`driver`. The host asks for init's own
+plane run at open (``nuspace.system.start``); init asks for the rest. A
+plane on the boot list (:class:`~.shapes.Boot`) gets one plane run ``by``
+init in every open, unless it already ran in this open:
+
+    on the list, there, not supervised, not live, no run since the open   plane_run.add(by="init")
+    anything else                                                         left alone
+
+A supervised plane is the supervisor's: it runs one at every open itself,
+so init leaves it alone and a plane booted and supervised gets one run, not
+two.
+
+"Since the open" is a run created at or after ``Space.info.opened_at``,
+which the host stamps before the drivers start. So a pass is idempotent:
+a booted plane whose run ended stays down until the next open (bringing
+it back is the supervisor's job), and booting a plane mid open runs it
+once, now.
+
+The driver is a level flow on the boot list with the standard re-checks:
+a missed notification is a late boot, never a lost one. Each plane's check
+and its run are one commit. A raise is caught per plane and reported, so
+one bad entry never stops the others; one outside them restarts the
+driver. Cost: O(boot list) per pass.
 """
 
 from __future__ import annotations
 
 import nu
-import nustd.kv
-from nuspace.ops.kernel import add_plane_run
-from nuspace.ops.utils import MintId, atomic, atomic_state, listed
-from nuspace.shapes import CellState, Space, reroot
+from nuspace import ops
+from nuspace.ops.brackets import atomic
+from nuspace.places import at
+from nuspace.shapes import Space
+from nuspace.utils.policies import report, restarting
 
-from ..utils import snap
-
-
-__all__ = [
-    "BOOTED",
-    "BY",
-    "CELL",
-    "PLANE",
-    "SHIM",
-    "Boot",
-    "boot",
-    "booted",
-    "program",
-    "seed",
-    "unboot",
-]
+from .. import supervisor
+from .shapes import Boot
 
 
-#: The plane id, fixed (D31).
+__all__ = ["BACKEND", "BOOTED", "BY", "CELL", "PLANE", "PROG", "boot_list", "driver"]
+
+
+#: The plane's id, fixed.
 PLANE = "init"
 
-#: The one cell on the plane.
+#: Its one cell's id, fixed.
 CELL = "init_main"
 
-#: What plane runs init starts are recorded as ``by``.
+#: What its runs execute on.
+BACKEND = "mp"
+
+#: What the plane runs init asks for are recorded as ``by``.
 BY = "init"
 
-#: The cell's prog: the code lives here, the store holds this (D20).
-SHIM = """\
-from nuspace.system.services import init
+#: What the boot list starts as, the first time the system planes are made.
+BOOTED = ("supervisor", "reload", "reactions")
+
+#: The cell's prog: the driver lives here, the store holds this.
+PROG = """\
+from nuspace.system.init import plane
 
 
 def out():
-    return init.program()
+    return plane.driver()
 """
 
-#: What the boot list starts as: every other service (nav, supervisor, reload, reactions).
-#: Seeded by whichever comes first, bootstrap or :func:`boot`, so booting a
-#: plane before the first open does not leave the services out.
-BOOTED = ("nav", "supervisor", "reload", "reactions")
+
+def boot_list() -> nu.Nu:
+    """The boot list's ref: ``State.planes["init"]`` read through :class:`~.shapes.Boot`."""
+    return at.plane(id=PLANE).state(Boot).planes
 
 
-class Boot(CellState):
-    """init's state: the plane ids to bring up at open, in order."""
+def _supervised(plane: nu.Str) -> nu.Bool:
+    """Whether the supervisor keeps the plane up, so its runs are the supervisor's. One point read.
 
-    planes = nustd.kv.ListRef.slot(str)
-
-
-def _here(term: nu.Nu) -> nu.Nu:
-    """``term`` with :class:`Boot` landing at init's own cell, for callers anywhere."""
-    return reroot(term, PLANE, CELL)
-
-
-def seed(planes: list[str]) -> nu.Nu:
-    """Set init's boot list to ``planes`` if it has none yet. Unbracketed."""
-    return _here(Boot.planes.init(list(planes)))
-
-
-def boot(plane_id: nu.StrArg) -> nu.Nu:
-    """Add a plane to init's boot list. A no-op when it is listed already.
-
-    A store with no list yet gets :data:`BOOTED` first. Takes effect at the
-    next open: init reads its list once.
+    The supervisor plane itself is never skipped: init is what brings it up.
     """
-    planes = Boot.planes
-    return atomic_state(
-        seed(list(BOOTED))
-        >> _here(nu.IfDo(planes.contains(plane_id).not_(), planes.append(plane_id)))
+    policy = supervisor.supervised()[plane].policy
+    return policy.exists().and_(plane != supervisor.PLANE)
+
+
+def _due(plane: nu.Str) -> nu.Bool:
+    """Whether a listed plane is to be run now. A read: about 7 point reads.
+
+    It is there, not removed, not supervised, has no live plane run, and its
+    newest plane run (if any) is older than this open.
+    """
+    runs = Space.exec.indexes.history.plane_to_plane_runs[plane].runs
+    opened = Space.info.opened_at.fallback(0.0)
+    newest = Space.exec.plane_runs[runs.last()].created_at
+    ran = nu.Bool(nu.If(runs.exists(), newest >= opened, False))
+    return (
+        ops.plane.exists(plane)
+        .and_(_supervised(plane).not_())
+        .and_(ops.plane_run.any_live(plane).not_())
+        .and_(ran.not_())
     )
 
 
-def unboot(plane_id: nu.StrArg) -> nu.Nu:
-    """Take a plane off init's boot list. A no-op when it is not listed, or there is no list yet.
+def _up(plane: nu.Str) -> nu.Nu:
+    """One listed plane run if it is due, check and run in one commit. A raise is reported."""
+    up = atomic(nu.IfDo(_due(plane), ops.plane_run.add(plane, by=BY)))
+    return nu.TryCatch(up, catch=lambda err: report(PLANE, plane, err))
 
-    The list is written by the first :func:`boot` or open, so a store that
-    had neither has none to take from.
+
+def driver() -> nu.Nu:
+    """The init driver: every due plane on the boot list run, at open and on every list change.
+
+    Never returns. Bracketed per step: each plane is its own commit. A
+    raise outside a plane's step (reading the list) is reported and the
+    driver runs again (``restarting``).
     """
-    planes = Boot.planes
-    return atomic_state(_here(nu.IfDo(planes.exists(), planes.remove(plane_id, missing_ok=True))))
-
-
-def booted() -> nu.List:
-    """The boot list, from anywhere. Bare read, ``[]`` when there is none."""
-    return nu.list(_here(listed(Boot.planes)))
-
-
-def program() -> nu.Nu:
-    """Every listed plane that exists and is down, run. Then parked: pid 1 never returns."""
-    running = Space.kernel.planes_running
-
-    def up(at: nu.Attr) -> nu.Nu:
-        plane = nu.Str(at)
-        # A plane's entry is there only while it has live runs. No run is
-        # written for a plane that does not exist.
-        down = running.contains(plane).not_()
-        return nu.let(
-            MintId("r"), lambda rid: atomic(nu.IfDo(down, add_plane_run(nu.Str(rid), plane, by=BY)))
-        )
-
-    return nu.ForEachDo(snap(nu.list(Boot.planes)), up) >> nu.Park()
+    planes = boot_list()
+    listed = nu.If(planes.exists(), nu.list(planes.keys()), nu.Literal([]))
+    one_pass = nu.ForEachDo(atomic(listed), lambda p: _up(nu.Str(p)))
+    flow = nu.Reconcile(
+        atomic(planes.on_children_change()),
+        one_pass,
+        after=nu.RECHECK_AFTER,
+        every=nu.RECHECK_EVERY,
+    )
+    return restarting(flow, PLANE)

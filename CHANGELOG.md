@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Rebuild init, supervisor, reload and reactions as system planes on the new stores
 - Rebuild the kernel on the run records, with worker placement and reaping at open
 - Keys take uppercase letters, and spec planes build cell programs before any commit opens
 - Rewrite core ops on the new stores: strict raises, state places, planes from specs
