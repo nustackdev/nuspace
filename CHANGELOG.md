@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- The web lint config matches the installed linter, so checks run clean again
 - Simpler worker and search reads, and docs that name the right brackets
 - Remove dead helpers, share common reads, and name browser fields after the data model
 - Reaction and stop tests wait for what they check, so loaded runs stay green

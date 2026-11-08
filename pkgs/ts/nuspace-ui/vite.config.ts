@@ -18,7 +18,9 @@ const REACT_DOM = path.resolve(__dirname, "node_modules/react-dom");
 // checkout is not the sibling one. package.json and the lockfile never change.
 const KIT =
 	process.env.NU_KIT === "local"
-		? path.resolve(process.env.NU_KIT_PATH ?? path.resolve(__dirname, "../../../../nu/pkgs/ts/ui-kit"))
+		? path.resolve(
+				process.env.NU_KIT_PATH ?? path.resolve(__dirname, "../../../../nu/pkgs/ts/ui-kit"),
+			)
 		: null;
 if (KIT) console.log(`ui-kit: local (${KIT})`);
 
