@@ -86,8 +86,7 @@ def add(
     code runs), before any store key is read. A caller that brackets more
     than this op, or retries it, works them out first in its own step
     outside the bracket and passes ``fabrics=``, so no build runs inside a
-    commit: ``nuspace.specs.add_plane`` does. Reactions and the web device
-    should do the same.
+    commit: ``nuspace.specs.add_plane``, reactions and the web device do.
 
     Args:
         plane: The plane it goes on.
@@ -292,8 +291,8 @@ def set_prog(id: nu.StrArg, prog: nu.StrArg, *, fabrics: list[str] | nu.Nu | Non
 
     Worked out here, the build runs after the row is read, so inside the
     caller's commit. A caller that brackets it works the fabrics out first,
-    in its own step outside the bracket, and passes ``fabrics=``. Reactions
-    and the web device should.
+    in its own step outside the bracket, and passes ``fabrics=``, as the
+    web device does.
 
     Args:
         id: The cell.

@@ -25,9 +25,10 @@ from nu.core.io import STDERR
 from nuspace.host.stores import init_live
 from nuspace.ops.brackets import atomic
 from nuspace.shapes import EXIT_KILLED, Space
+from nuspace.utils import keys_of
 
 from .interactions import ErrorText
-from .records import end_live, keys
+from .records import end_live
 
 
 __all__ = ["LEFT_OVER", "reap"]
@@ -49,7 +50,7 @@ def _warnings() -> nu.Nu:
     runs = Space.exec.plane_runs
     workers = Space.exec.workers
     return nu.ForEachDo(
-        keys(_live.plane_runs),
+        keys_of(_live.plane_runs),
         lambda r: _warn(
             "plane run ",
             r,
@@ -58,7 +59,7 @@ def _warnings() -> nu.Nu:
             " was left live, ending it killed",
         ),
     ) >> nu.ForEachDo(
-        keys(_live.workers),
+        keys_of(_live.workers),
         lambda w: _warn(
             "worker ",
             w,

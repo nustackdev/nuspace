@@ -12,7 +12,7 @@ factories are the one thing it passes, being callables, not specs.
 Everything installed is named ``<package>.<name>``, the package being its
 entry point's name: ``nudemos.movies`` and ``nuverse.slider`` for a Plane
 and a Cell, ``nuverse.Text`` for a content kind. That is what a plane or a
-cell made from one records as ``made_by``, what ``nuspace run --with``
+cell made from one records as ``spec``, what ``nuspace run --with``
 takes, and what the store keys a kind's items by; a cell keeps the short
 name as its own. Two packages may share a short name without a clash.
 

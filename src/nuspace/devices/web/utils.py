@@ -56,7 +56,6 @@ __all__ = [
     "cell_ui",
     "cells_ui",
     "event",
-    "field_bool",
     "field_dict",
     "field_ids",
     "field_str",
@@ -255,11 +254,6 @@ class Arms:
 def field_str(row: nu.Nu, field: str) -> nu.Str:
     """One string field off an event. Absent or not a string raises ``ValueError``."""
     return nu.Str(EventField(row, field, "str"))
-
-
-def field_bool(row: nu.Nu, field: str) -> nu.Bool:
-    """One bool field off an event. Absent or not a bool raises ``ValueError``."""
-    return nu.Bool(EventField(row, field, "bool"))
 
 
 def field_ids(row: nu.Nu, field: str) -> nu.List:

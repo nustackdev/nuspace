@@ -13,7 +13,7 @@
 //
 // A cell whose view has not arrived yet is not the same as one that draws
 // nothing. The server says per cell whether its program holds ui refs at all
-// (`has_ui`). One that does not gets the chip at once. One that does (or an
+// (`draws`). One that does not gets the chip at once. One that does (or an
 // older cell that never said) waits: nothing for `VIEW_LOADER_DELAY_MS`, so a
 // quick view never flashes a placeholder, then a skeleton until the view
 // lands. An error stands in for either.

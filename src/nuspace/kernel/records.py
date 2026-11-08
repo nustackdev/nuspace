@@ -13,6 +13,7 @@ from __future__ import annotations
 import nu
 from nuspace import ops
 from nuspace.shapes import EXIT_FAILED, EXIT_INTERRUPTED, Space
+from nuspace.utils import keys_of
 
 
 __all__ = [
@@ -21,24 +22,18 @@ __all__ = [
     "end_live",
     "end_plane_run",
     "end_worker",
-    "keys",
     "workers_of",
 ]
 
 
-def keys(ids: nu.Nu) -> nu.Nu:
-    """The ids in a live set, as a list. ``[]`` when the set is gone: an ended run's is erased."""
-    return nu.If(ids.exists(), nu.list(ids.keys()), nu.Literal([]))
-
-
 def cell_runs_of(plane_run: nu.StrArg) -> nu.Nu:
     """A plane run's live cell runs, as a list. A read."""
-    return keys(Space.exec.indexes.live.plane_run_to_cell_runs[plane_run].ids)
+    return keys_of(Space.exec.indexes.live.plane_run_to_cell_runs[plane_run].ids)
 
 
 def workers_of(plane_run: nu.StrArg) -> nu.Nu:
     """A plane run's held workers, as a list. A read."""
-    return keys(Space.exec.indexes.live.plane_run_to_workers[plane_run].ids)
+    return keys_of(Space.exec.indexes.live.plane_run_to_workers[plane_run].ids)
 
 
 def _open(rows: nu.Nu, id: nu.StrArg) -> nu.Bool:
@@ -92,14 +87,14 @@ def end_live(exit: nu.StrArg, error: nu.StrArg) -> nu.Nu:
     live = Space.exec.indexes.live
     by_run = live.plane_run_to_cell_runs
     cell_runs = nu.ForEachDo(
-        keys(by_run),
+        keys_of(by_run),
         lambda r: nu.ForEachDo(
-            keys(by_run[nu.Str(r)].ids), lambda cr: end_cell_run(nu.Str(cr), exit, error)
+            keys_of(by_run[nu.Str(r)].ids), lambda cr: end_cell_run(nu.Str(cr), exit, error)
         ),
     )
-    workers = nu.ForEachDo(keys(live.workers), lambda w: end_worker(nu.Str(w), exit, error))
+    workers = nu.ForEachDo(keys_of(live.workers), lambda w: end_worker(nu.Str(w), exit, error))
     plane_runs = nu.ForEachDo(
-        keys(live.plane_runs),
+        keys_of(live.plane_runs),
         lambda r: end_plane_run(nu.Str(r), _run_exit(nu.Str(r), exit), error),
     )
     return cell_runs >> workers >> plane_runs

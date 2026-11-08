@@ -33,6 +33,7 @@ from __future__ import annotations
 import nu
 import nuspace
 from nuspace.ops.brackets import atomic
+from nuspace.utils import keys_of
 from nuspace.utils.policies import report, restarting
 
 from .interactions import SESSION_ENV
@@ -48,11 +49,6 @@ BY = "nav"
 _RECHECK = {"after": nu.RECHECK_AFTER, "every": nu.RECHECK_EVERY}
 
 _tabs = Conn.connections
-
-
-def _listed(ids: nu.Nu) -> nu.Nu:
-    """A dict's keys as a list, ``[]`` when it is gone."""
-    return nu.If(ids.exists(), nu.list(ids.keys()), nu.Literal([]))
 
 
 def _turn(sid: nu.Str, plane: nu.Str, token: nu.Str) -> nu.Nu:
@@ -97,7 +93,7 @@ def _tab(sid: nu.Str) -> nu.Nu:
     """One tab: :func:`pane` per pane, opens and closes included. Never returns."""
     panes = _tabs[sid].panes
     return nu.ReconcileLatestEach(
-        atomic(_listed(panes)),
+        atomic(keys_of(panes)),
         # The tab's whole row, watched from the tabs: a closed tab's row is deleted.
         atomic(_tabs.on_child_change(sid)),
         lambda plane: pane(sid, nu.Str(plane)),
@@ -112,7 +108,7 @@ def nav() -> nu.Nu:
     make the plane runs it adds true. Only the web device runs it.
     """
     return nu.ReconcileLatestEach(
-        atomic(_listed(_tabs)),
+        atomic(keys_of(_tabs)),
         atomic(_tabs.on_children_change()),
         lambda sid: restarting(_tab(nu.Str(sid)), "nav", nu.Str(sid)),
         **_RECHECK,

@@ -100,7 +100,7 @@ export function cell(id: string, classes: string[] = ["prose"], error: string | 
 		id,
 		name: id,
 		source: "",
-		has_ui: null,
+		draws: null,
 		classes,
 		status: { cell_id: id, state: error ? "failed" : "running", error, started_at: null },
 	};

@@ -6,8 +6,8 @@
 """
 
 from .ops import add, clear, remove, source
-from .plane import PARK, PLANE, react, registry, up_plane
-from .shapes import Reaction, ReactionIds, Registry
+from .plane import PARK, react, up_plane
+from .shapes import PLANE, Reaction, ReactionIds, Registry, registry
 
 
 __all__ = [

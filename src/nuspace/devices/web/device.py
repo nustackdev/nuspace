@@ -47,6 +47,7 @@ import nuspace
 from nuspace import _telemetry
 from nuspace.ops.brackets import atomic
 from nuspace.specs import space_registry
+from nuspace.utils import keys_of
 from nustd.ui.core import WsSession
 from nustd.ws_server import SID_ATTR, listen, run_once, session_for, sessions_fold
 
@@ -94,8 +95,7 @@ _UNVISITED = (HOME, SETTINGS, SEARCH)
 
 def _erase(viewer: Ref, plane: nu.Str) -> nu.Nu:
     """A plane's cells erased as drawn, so nothing of a closed pane stays on screen."""
-    cells = nuspace.Space.planes[plane].cells
-    ids = nu.If(cells.exists(), nu.list(cells.keys()), nu.Literal([]))
+    ids = keys_of(nuspace.Space.planes[plane].cells)
     return nu.ForEachDo(atomic(ids), lambda cell: cell_ui(viewer, nu.Str(cell)).erase())
 
 

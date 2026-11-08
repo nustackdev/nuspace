@@ -87,7 +87,7 @@ def set_plane(
 
     ``meta`` is how the pane shows it: its web flags (``editable``,
     ``full_width``, ``compact``) and its ``icon``. A cell is ``{id, name,
-    source, spec, has_ui, classes}``. Every open plane is answered
+    source, spec, draws, classes}``. Every open plane is answered
     with one or with a :func:`set_absent`, or its pane loads forever.
     """
     return write(viewer, "set_plane", plane_id=plane_id, title=title, meta=meta, cells=cells)

@@ -6,6 +6,8 @@
 - :data:`Href`: a pane's URL, encoded the way the browser does.
 - :data:`IconName`: a stored icon as a page link takes it.
 - :class:`EventField`: one field off a browser event, strict.
+- :class:`Drawing`: the term drawing one content item found at run time,
+  landed under a ui ref (search hits).
 
 Safe for a worker to import: nothing here pulls in a server.
 """
@@ -18,17 +20,23 @@ from urllib.parse import quote
 
 import nu
 import nustd.ui
+from nu.engine import Declared
 from nu.lang import ScalarQuery
+from nuspace.shapes.content import entries
+from nuspace.specs.registry import content_spec
+from nustd.ui.core import Ref as UiRef
 
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+    from nu.domains.shape import StructuredRef
     from nu.lang.runtime import Runtime
 
 
 __all__ = [
     "SESSION_ENV",
+    "Drawing",
     "ErrorMessage",
     "ErrorType",
     "EventField",
@@ -166,5 +174,76 @@ class EventField(ScalarQuery):
 
         async def athunk(rt: Runtime) -> object:
             return self._read(await row(rt))
+
+        return athunk
+
+
+# --- Drawing -----------------------------------------------------------------------
+
+
+def _drawn_ui(ref: StructuredRef) -> bool:
+    """A ``rooted`` predicate: every chain but a bare ui one stays where it is."""
+    return not isinstance(ref, UiRef)
+
+
+class Drawing(ScalarQuery):
+    """The term drawing one item by its address, landed under ``under``. Run it with ``nu.Eval``.
+
+    For a program that learns which item to draw only at run time (eg a
+    search hit): the kind is found by name (``content_spec``), the item
+    reached through :func:`entries`, and its :meth:`~Content.render` (or
+    :meth:`~Content.render_hit`) term built, its bare ui chains spliced
+    under ``under``. ``under`` is a ref the program names bare like any of
+    its ui refs: it sits in a structural slot, never read, so the program's
+    own rewrites land it first and the drawing lands where it does.
+
+    Args:
+        kind: The kind's registered name.
+        level: The scope's level, one of :data:`LEVELS`.
+        scope: The cell or plane id, ``""`` for the space.
+        key: The item's content key.
+        under: A ui ref the drawing lands under.
+        hit: Draw ``render_hit`` rather than ``render``.
+
+    Yields:
+        The drawing, a term: ``nu.Eval(Drawing(...))`` draws it. It reads the
+        item bare, so its caller brackets it, as any read:
+        ``nuspace.atomic(nu.Eval(Drawing(...)))``.
+    """
+
+    _structural = Declared(value=frozenset({4}), name="structural")
+
+    def __init__(
+        self,
+        kind: nu.StrArg,
+        level: nu.StrArg,
+        scope: nu.StrArg,
+        key: nu.StrArg,
+        under: nu.Nu,
+        *,
+        hit: bool = False,
+    ) -> None:
+        super().__init__(kind, level, scope, key, under)
+        self._payload["hit"] = hit
+
+    def _term(self, kind: object, level: object, scope: object, key: object) -> nu.Nu:
+        found = content_spec(str(kind)).kind
+        item = entries(found, str(level), str(scope))[str(key)]
+        drawn = found.render_hit(item) if self._payload["hit"] else found.render(item)
+        return nu.shape.reroot(drawn, self._children[4], rooted=_drawn_ui)
+
+    def _compile(self, nid: int, children: tuple[Callable, ...]) -> Callable:
+        kind, level, scope, key = children[:4]
+
+        def thunk(rt: Runtime) -> object:
+            return self._term(kind(rt), level(rt), scope(rt), key(rt))
+
+        return thunk
+
+    def _acompile(self, nid: int, children: tuple[Callable, ...]) -> Callable:
+        kind, level, scope, key = children[:4]
+
+        async def athunk(rt: Runtime) -> object:
+            return self._term(await kind(rt), await level(rt), await scope(rt), await key(rt))
 
         return athunk

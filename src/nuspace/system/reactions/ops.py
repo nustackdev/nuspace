@@ -23,11 +23,10 @@ from nuspace.errors import Missing
 from nuspace.ops.brackets import atomic
 from nuspace.places import at
 from nuspace.shapes import Space
-from nuspace.utils import MintId
+from nuspace.utils import MintId, keys_of
 from nuspace.utils.checks import live, refuse
 
-from .plane import PLANE, registry
-from .shapes import Reaction
+from .shapes import PLANE, Reaction, registry
 
 
 if TYPE_CHECKING:
@@ -177,7 +176,7 @@ def clear(plane: nu.StrArg) -> nu.Nu:
     Never raises for a plane with no reactions.
     """
     ids = registry().by_plane[plane].ids
-    listed = nu.If(ids.exists(), nu.list(ids.keys()), nu.Literal([]))
+    listed = keys_of(ids)
 
     def one(at_: nu.Attr) -> nu.Nu:
         reaction = nu.Str(at_)

@@ -5,8 +5,8 @@
 """
 
 from .ops import supervise, unsupervise
-from .plane import BACKOFF_CAP, BACKOFF_START, BY, CELL, PLANE, driver, supervised
-from .shapes import ALWAYS, ON_FAILURE, POLICIES, Policy, Supervised
+from .plane import BACKOFF_CAP, BACKOFF_START, BY, CELL, driver
+from .shapes import ALWAYS, ON_FAILURE, PLANE, POLICIES, Policy, Supervised, supervised
 
 
 __all__ = [

@@ -959,7 +959,7 @@ describe("K. split", () => {
 		const a = mountDoc("a", paper(["one", "two"], 1));
 		const { id } = splitA(a);
 		expect(row(id).hidden).toBe(true);
-		plane([cell("a"), { ...cell(id), has_ui: false }, cell("z")]);
+		plane([cell("a"), { ...cell(id), draws: false }, cell("z")]);
 		expect(row(id).hidden).toBe(false);
 		expect(readEditor(VIEWER, "p1").requests).toEqual([]);
 		expect(a.doc.cut).not.toHaveBeenCalled();

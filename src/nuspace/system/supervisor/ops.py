@@ -12,8 +12,7 @@ from nuspace.errors import Exists, Missing, Refused
 from nuspace.shapes import Space
 from nuspace.utils.checks import live, refuse
 
-from .plane import supervised
-from .shapes import POLICIES
+from .shapes import POLICIES, supervised
 
 
 __all__ = ["supervise", "unsupervise"]

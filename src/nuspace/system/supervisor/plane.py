@@ -39,11 +39,11 @@ from __future__ import annotations
 import nu
 from nuspace import ops
 from nuspace.ops.brackets import atomic
-from nuspace.places import at
 from nuspace.shapes import EXIT_FAILED, EXIT_OK, Space
+from nuspace.utils import keys_of
 from nuspace.utils.policies import restarting
 
-from .shapes import ALWAYS, Policy
+from .shapes import ALWAYS, PLANE, supervised
 
 
 __all__ = [
@@ -52,15 +52,10 @@ __all__ = [
     "BACKOFF_START",
     "BY",
     "CELL",
-    "PLANE",
     "PROG",
     "driver",
-    "supervised",
 ]
 
-
-#: The plane's id, fixed.
-PLANE = "supervisor"
 
 #: Its one cell's id, fixed.
 CELL = "supervisor_main"
@@ -87,11 +82,6 @@ def out():
 """
 
 _RECHECK = {"after": nu.RECHECK_AFTER, "every": nu.RECHECK_EVERY}
-
-
-def supervised() -> nu.Nu:
-    """The supervised planes' ref: ``State.planes["supervisor"]`` read through :class:`~.shapes.Policy`."""
-    return at.plane(id=PLANE).state(Policy).planes
 
 
 class _Arm(nu.Shape):
@@ -191,7 +181,7 @@ def driver() -> nu.Nu:
     few point reads a pass.
     """
     planes = supervised()
-    listed = nu.If(planes.exists(), nu.list(planes.keys()), nu.Literal([]))
+    listed = keys_of(planes)
     arms = nu.ReconcileLatestEach(
         atomic(listed),
         atomic(planes.on_children_change()),

@@ -552,7 +552,7 @@ import nustd.ui
 import nuspace
 import nuspace.devices.web as web
 from nuspace.devices.web import search
-from nuspace.shapes.content import Drawing
+from nuspace.devices.web.interactions import Drawing
 
 #: Hits drawn at most. The rest are counted.
 SHOWN = 200

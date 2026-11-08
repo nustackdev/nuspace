@@ -1,12 +1,17 @@
-"""The reactions plane's own state: its reactions by the plane they run, and each reaction's plane."""
+"""The reactions plane's own state: the plane's id, its reactions by the plane they run, and each reaction's plane."""
 
 from __future__ import annotations
 
 import nu
 import nustd.kv
+from nuspace.places import at
 
 
-__all__ = ["Reaction", "ReactionIds", "Registry"]
+__all__ = ["PLANE", "Reaction", "ReactionIds", "Registry", "registry"]
+
+
+#: The plane's id, fixed.
+PLANE = "reactions"
 
 
 class Reaction(nu.Shape):
@@ -36,3 +41,8 @@ class Registry(nu.Shape):
     """
 
     by_plane = nustd.kv.DictRef.slot(ReactionIds)
+
+
+def registry() -> Registry:
+    """The plane's state: ``State.planes["reactions"]`` read through :class:`Registry`."""
+    return at.plane(id=PLANE).state(Registry)

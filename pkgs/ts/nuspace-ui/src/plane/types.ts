@@ -30,7 +30,7 @@ export type Cell = {
 	source: string;
 	/** Whether its program draws, as the server worked out from the source.
 	 *  Null when it never said (an older cell): it may draw. */
-	has_ui: boolean | null;
+	draws: boolean | null;
 	/** The protocols it keeps, read Nu side off the spec it was made from:
 	 *  `["prose"]`. Empty for a cell made from no spec. The only thing a
 	 *  sugar (./sugar) binds to. */
@@ -140,7 +140,7 @@ export function coerceCells(raw: unknown): Cell[] {
 			id,
 			name: String(r.name ?? id),
 			source: String(r.source ?? ""),
-			has_ui: typeof r.has_ui === "boolean" ? r.has_ui : null,
+			draws: typeof r.draws === "boolean" ? r.draws : null,
 			classes: Array.isArray(r.classes) ? r.classes.map(String) : [],
 			status: coerceStatus(r.status) ?? {
 				cell_id: id,

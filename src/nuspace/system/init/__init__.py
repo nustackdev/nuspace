@@ -5,8 +5,8 @@
 """
 
 from .ops import boot, unboot
-from .plane import BOOTED, BY, CELL, PLANE, boot_list, driver
-from .shapes import Boot
+from .plane import BOOTED, BY, CELL, driver
+from .shapes import PLANE, Boot, boot_list
 
 
 __all__ = ["BOOTED", "BY", "CELL", "PLANE", "Boot", "boot", "boot_list", "driver", "unboot"]

@@ -139,7 +139,7 @@ export function Cell({
 				{dropAbove ? <span className={`${docDropIndicator} top-0`} /> : null}
 				<ProgramCell
 					source={cell.source}
-					draws={cell.has_ui}
+					draws={cell.draws}
 					uiPath={uiPath}
 					status={cell.status}
 					editing={editing}

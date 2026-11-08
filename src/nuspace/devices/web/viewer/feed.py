@@ -62,6 +62,7 @@ from nuspace.ops.brackets import atomic
 from nuspace.ops.interactions import Fabrics
 from nuspace.shapes import EXIT_FAILED, EXIT_INTERRUPTED, EXIT_KILLED, Space
 from nuspace.specs import registered_name
+from nuspace.utils import keys_of
 
 
 if TYPE_CHECKING:
@@ -94,24 +95,19 @@ _live = Space.exec.indexes.live
 _history = Space.exec.indexes.history
 
 
-def _listed(ids: nu.Nu) -> nu.Nu:
-    """A dict's keys as a list, ``[]`` when it is gone or was never written."""
-    return nu.If(ids.exists(), nu.list(ids.keys()), nu.Literal([]))
-
-
 def _cells(plane: nu.StrArg) -> nu.Nu:
     """A plane's cell ids, in order. ``[]`` for a plane with no row."""
-    return _listed(Space.planes[plane].cells)
+    return keys_of(Space.planes[plane].cells)
 
 
 # --- What the browser is handed: bare reads ----------------------------------
 
 
 def plane_cells(plane: nu.StrArg, specs: Iterable[CellSpec] = ()) -> nu.List:
-    """A plane's cells as ``{id, name, source, spec, has_ui, classes}``, in order. Bare read.
+    """A plane's cells as ``{id, name, source, spec, draws, classes}``, in order. Bare read.
 
     ``spec`` is the CellSpec the cell was made from, ``""`` when none.
-    ``has_ui`` is whether its prog draws (``"ui"`` among its fabrics).
+    ``draws`` is whether its prog draws (``"ui"`` among its fabrics).
     ``classes`` are those of the spec in ``specs`` that ``spec`` names,
     ``[]`` when none does. Cost: O(cells), a few reads each.
     """
@@ -126,7 +122,7 @@ def plane_cells(plane: nu.StrArg, specs: Iterable[CellSpec] = ()) -> nu.List:
             name=row.name.fallback(""),
             source=nu.str(row.prog.fallback("")),
             spec=made,
-            has_ui=nu.List(row.fabrics.fallback([])).contains("ui"),
+            draws=nu.List(row.fabrics.fallback([])).contains("ui"),
             classes=nu.Switch(made, classes, default=[]),
         )
 
@@ -255,7 +251,7 @@ def _status(arms: Arms, viewer: Ref, sid: nu.StrArg, plane: nu.Str) -> nu.Nu:
             return arms.state("started", begun, ship)
 
         moved_again = _live.plane_run_to_cell_runs.on_child_change(run)
-        each = nu.ReconcileLatestEach(atomic(_listed(held_runs)), atomic(moved_again), started)
+        each = nu.ReconcileLatestEach(atomic(keys_of(held_runs)), atomic(moved_again), started)
         return nu.ParallelAsync(arms.states("status", changes, ship), arms.guard(each, "started"))
 
     pane = Conn.connections[sid].panes[plane].plane_run

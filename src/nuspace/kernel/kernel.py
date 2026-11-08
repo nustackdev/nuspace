@@ -51,6 +51,7 @@ import nustd.time
 from nuspace import ops
 from nuspace.ops.brackets import atomic
 from nuspace.shapes import EXIT_FAILED, EXIT_INTERRUPTED, EXIT_KILLED, EXIT_OK, Space
+from nuspace.utils import keys_of
 from nuspace.utils.policies import report
 
 from .backends import PER_CELL_RUN, PER_PLANE_RUN, BackendRef, Kill, Launch, Placement, Run, Stop
@@ -62,7 +63,6 @@ from .records import (
     end_cell_run,
     end_plane_run,
     end_worker,
-    keys,
     workers_of,
 )
 
@@ -285,7 +285,7 @@ def _cells(plane_run: nu.Str, backend: nu.Str, placement: nu.Str) -> nu.Nu:
     """:func:`_cell_arm` for every live cell run of the plane run, births and deaths included."""
     ids = _live.plane_run_to_cell_runs[plane_run].ids
     return nu.ReconcileLatestEach(
-        atomic(keys(ids)),
+        atomic(keys_of(ids)),
         atomic(ids.on_children_change()),
         lambda cr: _cell_arm(plane_run, nu.Str(cr), backend, placement),
         **_RECHECK,
@@ -469,7 +469,7 @@ def kernel() -> nu.Nu:
     """
     plane_runs = _live.plane_runs
     return nu.ReconcileLatestEach(
-        atomic(keys(plane_runs)),
+        atomic(keys_of(plane_runs)),
         atomic(plane_runs.on_children_change()),
         lambda r: _arm(nu.Str(r)),
         **_RECHECK,

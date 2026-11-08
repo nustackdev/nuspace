@@ -1,12 +1,17 @@
-"""The supervisor's own state: a policy per supervised plane, kept in its plane's state."""
+"""The supervisor's own state: the plane's id and a policy per supervised plane, kept in its plane's state."""
 
 from __future__ import annotations
 
 import nu
 import nustd.kv
+from nuspace.places import at
 
 
-__all__ = ["ALWAYS", "ON_FAILURE", "POLICIES", "Policy", "Supervised"]
+__all__ = ["ALWAYS", "ON_FAILURE", "PLANE", "POLICIES", "Policy", "Supervised", "supervised"]
+
+
+#: The plane's id, fixed.
+PLANE = "supervisor"
 
 
 #: Restart after a failed exit only.
@@ -38,3 +43,8 @@ class Policy(nu.Shape):
     """The supervisor's state, at ``State.planes["supervisor"]``: the supervised planes by id."""
 
     planes = nustd.kv.DictRef.slot(Supervised)
+
+
+def supervised() -> nu.Nu:
+    """The supervised planes' ref: ``State.planes["supervisor"]`` read through :class:`Policy`."""
+    return at.plane(id=PLANE).state(Policy).planes

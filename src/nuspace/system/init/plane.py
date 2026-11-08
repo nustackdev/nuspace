@@ -30,19 +30,16 @@ from __future__ import annotations
 import nu
 from nuspace import ops
 from nuspace.ops.brackets import atomic
-from nuspace.places import at
 from nuspace.shapes import Space
+from nuspace.utils import keys_of
 from nuspace.utils.policies import report, restarting
 
 from .. import supervisor
-from .shapes import Boot
+from .shapes import PLANE, boot_list
 
 
-__all__ = ["BACKEND", "BOOTED", "BY", "CELL", "PLANE", "PROG", "boot_list", "driver"]
+__all__ = ["BACKEND", "BOOTED", "BY", "CELL", "PROG", "driver"]
 
-
-#: The plane's id, fixed.
-PLANE = "init"
 
 #: Its one cell's id, fixed.
 CELL = "init_main"
@@ -64,11 +61,6 @@ from nuspace.system.init import plane
 def out():
     return plane.driver()
 """
-
-
-def boot_list() -> nu.Nu:
-    """The boot list's ref: ``State.planes["init"]`` read through :class:`~.shapes.Boot`."""
-    return at.plane(id=PLANE).state(Boot).planes
 
 
 def _supervised(plane: nu.Str) -> nu.Bool:
@@ -112,7 +104,7 @@ def driver() -> nu.Nu:
     driver runs again (``restarting``).
     """
     planes = boot_list()
-    listed = nu.If(planes.exists(), nu.list(planes.keys()), nu.Literal([]))
+    listed = keys_of(planes)
     one_pass = nu.ForEachDo(atomic(listed), lambda p: _up(nu.Str(p)))
     flow = nu.Reconcile(
         atomic(planes.on_children_change()),

@@ -30,14 +30,11 @@ from nuspace.places import at
 from nuspace.shapes import Space
 from nuspace.utils.policies import restarting
 
-from .shapes import Reaction, Registry
+from .shapes import PLANE, Reaction
 
 
-__all__ = ["BACKEND", "PARK", "PARK_PROG", "PLANE", "react", "registry", "up_plane"]
+__all__ = ["BACKEND", "PARK", "PARK_PROG", "react", "up_plane"]
 
-
-#: The plane's id, fixed.
-PLANE = "reactions"
 
 #: Its fixed first cell, the one that keeps its run live.
 PARK = "reactions_park"
@@ -53,11 +50,6 @@ import nu
 def out():
     return nu.Park()
 """
-
-
-def registry() -> Registry:
-    """The plane's state: ``State.planes["reactions"]`` read through :class:`~.shapes.Registry`."""
-    return at.plane(id=PLANE).state(Registry)
 
 
 def up_plane(plane: nu.StrArg, reaction: nu.StrArg) -> nu.Nu:

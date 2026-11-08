@@ -12,7 +12,7 @@ from nuspace.errors import Exists, Missing
 from nuspace.shapes import Space
 from nuspace.utils.checks import live, refuse
 
-from .plane import boot_list
+from .shapes import boot_list
 
 
 __all__ = ["boot", "unboot"]

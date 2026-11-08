@@ -45,6 +45,7 @@ from nuspace.ops.brackets import atomic
 from nuspace.shapes.plane import ROOT
 from nuspace.shapes.space import Space
 from nuspace.specs import EMPTY_PLANE, add_plane, registered_name
+from nuspace.utils import keys_of
 
 
 if TYPE_CHECKING:
@@ -69,9 +70,12 @@ def _shown(plane: nu.StrArg) -> nu.Bool:
 
 def _kids(plane: nu.StrArg) -> nu.List:
     """A branch's listed children, in sibling order: O(its children)."""
-    children = Space.planes[plane].children
-    listed = nu.If(children.exists(), nu.list(children.keys()), [])
-    return nu.List(listed).iter().filter(lambda kid: _shown(nu.Str(kid))).to_list()
+    return (
+        keys_of(Space.planes[plane].children)
+        .iter()
+        .filter(lambda kid: _shown(nu.Str(kid)))
+        .to_list()
+    )
 
 
 def _row(plane: nu.Str, parent: nu.StrArg, children: nu.Nu) -> nu.Dict:
@@ -147,7 +151,7 @@ def rows(sid: nu.StrArg, *, into: nu.Ref) -> nu.Nu:
         done = into.set(nu.List(walked) + extra)
         return nu.Frame(_Walk, walk >> done, level=nu.List.of(space), walked=nu.List.create())
 
-    return nu.let(nu.If(expanded.exists(), nu.list(expanded.keys()), []), with_open)
+    return nu.let(keys_of(expanded), with_open)
 
 
 def pins() -> nu.List:

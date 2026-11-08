@@ -235,7 +235,7 @@ export function Plane({
 	// and text an input line fed it goes back into the line.
 	useEffect(() => {
 		for (const c of cells) {
-			const over = c.has_ui === false || isBad(c.status.state) || c.status.state === "stopped";
+			const over = c.draws === false || isBad(c.status.state) || c.status.state === "stopped";
 			if (!over || editorOf(c.id)) continue;
 			if (editor.requests.some((r) => r.cellId === c.id && r.to === "document")) abandon(c.id);
 		}

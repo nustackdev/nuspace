@@ -1,7 +1,7 @@
 """Terms test programs use to misbehave on a worker. A module of its own so a worker can import it.
 
 Each acts when evaluated, never when built: building a program happens in
-the host too (``add_cell`` works out ``has_ui`` by constructing it).
+the host too (``cell.add`` works out a prog's fabrics by constructing it).
 """
 
 from __future__ import annotations

@@ -20,7 +20,7 @@ function render(
 	editable: boolean,
 	state: CellState = "idle",
 	error = "",
-	has_ui: boolean | null = false,
+	draws: boolean | null = false,
 	selection: { selected?: boolean; multi?: boolean } = {},
 	editing = false,
 ) {
@@ -33,7 +33,7 @@ function render(
 						id: "c1",
 						name: "",
 						source: "",
-						has_ui,
+						draws,
 						classes: [],
 						status: { cell_id: "c1", state, error, started_at: 0 },
 					}}
@@ -181,7 +181,7 @@ describe("a cell whose view is on the way", () => {
 		[false, true],
 		[true, null],
 		[false, null],
-	])("waits, then shows a skeleton, editable=%s has_ui=%s", (editable, hasUi) => {
+	])("waits, then shows a skeleton, editable=%s draws=%s", (editable, hasUi) => {
 		render(editable, "running", "", hasUi);
 		expect(body()).toBe("");
 		expect(loading()).toBe(false);

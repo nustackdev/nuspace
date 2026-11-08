@@ -643,7 +643,7 @@ describe("a create fed by the input line", () => {
 		act(() => endLine().focus());
 		typeInto(endLine(), "hi");
 		const id = notify.mock.calls[0][1].cell_id as string;
-		render([{ ...cell(id), has_ui: false }], { sugars: [write], specs: WITH_DEFAULT });
+		render([{ ...cell(id), draws: false }], { sugars: [write], specs: WITH_DEFAULT });
 		expect(row(id).hidden).toBe(false);
 		expect(endLine().value).toBe("hi");
 		// Typing on goes on from it, offered afresh: the sugar makes another cell.

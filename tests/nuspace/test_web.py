@@ -223,13 +223,13 @@ async def test_viewer_plane(store):
         "icon": "lucide:book",
     }
     assert got["cells"] == [
-        {"id": "c1", "name": "one", "source": "x = 1", "spec": "", "has_ui": True, "classes": []},
+        {"id": "c1", "name": "one", "source": "x = 1", "spec": "", "draws": True, "classes": []},
         {
             "id": "c2",
             "name": "text",
             "source": TEXT_SRC,
             "spec": TEXT,
-            "has_ui": False,
+            "draws": False,
             "classes": ["prose"],
         },
     ]
