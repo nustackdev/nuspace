@@ -1,34 +1,34 @@
-"""Search: a content search is a plane that runs once, and a system plane that asks and shows them.
+"""Search: a content search is a plane that runs once, and a web plane that asks and shows them.
 
-Search is by kind, never by Cell spec or by who made a cell. Three parts, all
-planes and cells:
+Search is by kind, never by CellSpec or by who made a cell. Three parts,
+all planes and cells:
 
-- **a search**: a plane under the system parent :data:`SEARCHES`, made by
-  :func:`search`. Not drawn. What it asks is plain data, per kind name the
-  ``match`` keywords given, and its one cell, named
-  :data:`CELL`, looks: per kind it walks the store's ``cells``, then
-  ``planes``, then ``space`` (:func:`walk`), checks each
-  item with the kind's ``match`` and appends the hits, a commit per scope,
-  so a reader sees them land. A hit is the item's address, ``(kind,
-  scope, id)`` (:class:`Hit`). It stamps ``finished_at`` once it is
-  through, then ends, and its run with it. The plane stays: it is the record.
+- **a search**: a plane under the system plane :data:`SEARCHES`, made by
+  :func:`search`. Not on the web. What it asks is plain data, per kind name
+  the ``match`` keywords given, kept in its plane state (:class:`Search`),
+  and its one cell, named :data:`CELL`, looks: per kind it walks the
+  cells, then the planes, then the space holding items of it
+  (:func:`walk`), skipping removed ones, checks each item with the kind's
+  ``match`` and appends the hits, a commit per place, so a reader sees them
+  land. A hit is the item's address, ``{kind, scope, key}``
+  (:class:`Hit`). It stamps ``finished_at`` once it is through, then ends,
+  and its run with it. The plane stays: it is the record.
 - **what is searched**: every item of the kinds asked, wherever it lives.
   A keyword left out stays ``UNSET``, so ``match`` checks only what was
   asked, and a kind asked nothing lists all its items.
-- **the viewer**: :data:`PLANE`, a system ui plane like home, seeded by the
-  host at open. Its ``form`` cell asks (the installed kinds, the picked
-  kind's search fields, a Search button), its ``pick`` cell lists the
-  searches, newest first, and its ``results`` cell draws the picked one's
-  hits, live, each with its kind's ``render_hit``. The kinds are read from
-  the installed specs where the cell is built (:func:`kinds`), never from
-  the store.
+- **the viewer**: :data:`PLANE`, a system web plane like home. Its ``form``
+  cell asks (the installed kinds, the picked kind's search fields, a Search
+  button), its ``pick`` cell lists the searches, newest first, and its
+  ``results`` cell draws the picked one's hits, live, each with its kind's
+  ``render_hit``. The kinds are read from the installed specs where the cell
+  is built (:func:`kinds`), never from the store.
 
-The walk drives the kind's bare reads (:mod:`nuspace.shapes.content`), a
-bracket per place (:func:`walk`), and this module appends what it finds.
 A search's cell runs on a worker, where the host's registry is not. Its
 prog names the request, and each kind is found there by its registered
-name, through its installed spec (:func:`~nuspace.ext.content_spec`). Like
-a service's prog, it is a thin shim over this module (D20).
+name, through its installed spec (:func:`~nuspace.specs.content_spec`).
+Like a system plane's prog, it is a thin shim over this module.
+
+Content search reads every item of a kind: there is no index for it yet.
 
 Workers import this module: nothing here may pull in a server.
 """
@@ -40,18 +40,14 @@ from dataclasses import asdict
 from typing import TYPE_CHECKING, Any
 
 import nu
+import nuspace
 import nustd.kv
 import nustd.time
-from nuspace import ops
-from nuspace.ext import content_spec, content_specs, short_name
-from nuspace.ops.cell import HasUi, cell_writes
-from nuspace.ops.plane import plane_writes
-from nuspace.ops.utils import MintId, atomic, atomic_state
-from nuspace.shapes import PlaneState, content
+from nuspace.ops.brackets import atomic
+from nuspace.shapes import content
 from nuspace.shapes.content import address
-
-from ..kernel.utils import snap
-from .seed import seed, seeded_id
+from nuspace.specs import content_spec, content_specs, short_name
+from nuspace.utils import MintId
 
 
 if TYPE_CHECKING:
@@ -71,13 +67,13 @@ __all__ = [
     "PLANE",
     "RESULTS",
     "SEARCHES",
+    "SEARCHES_BACKEND",
     "SEARCHES_NAME",
     "Describe",
     "Hit",
     "Search",
     "Source",
     "describe",
-    "ensure_search",
     "kinds",
     "run",
     "search",
@@ -86,11 +82,14 @@ __all__ = [
 ]
 
 
-#: The system plane every search hangs under. Not drawn.
+#: The system plane every search hangs under. Not on the web.
 SEARCHES = "searches"
 
 #: What it is called.
 SEARCHES_NAME = "Searches"
+
+#: What a search's run executes on: its walk is sync work.
+SEARCHES_BACKEND = "mp"
 
 #: The viewer plane's id, fixed: routed at ``/search``.
 PLANE = "search"
@@ -98,31 +97,31 @@ PLANE = "search"
 #: What the viewer is called.
 NAME = "Search"
 
-#: Its icon, as :func:`~nuspace.ops.plane.plane_icon` spells it.
+#: Its icon.
 ICON = "emoji:🔍"
 
 #: A search plane's one cell, its name. Its id is minted with the plane.
 CELL = "search"
 
-#: The ``by`` a search's run is started with.
+#: The ``by`` a search's run is asked with.
 BY = "search"
 
 
 class Hit(nu.Shape):
-    """One hit: the item's :func:`~nuspace.content.address`. ``scope`` is ``[level, id]``, ``id`` the item's own."""
+    """One hit: the item's address. ``scope`` is ``[level, id]``, ``key`` the item's content key."""
 
     kind = nustd.kv.StrRef.slot()
     scope = nustd.kv.PrimitiveListRef.slot()
-    id = nustd.kv.StrRef.slot()
+    key = nustd.kv.StrRef.slot()
 
 
-class Search(PlaneState):
+class Search(nu.Shape):
     """A search plane's state: what it asked, what it found, when it was done.
 
     Written by :func:`search` when it is made (``request``, ``started_at``)
-    and by its cell as it runs (``hits``, one commit per scope, then
-    ``finished_at``). Read by the viewer from outside, through
-    :func:`~nuspace.ops.plane_state`.
+    and by its cell as it runs (``hits``, one commit per place, then
+    ``finished_at``). Read from anywhere through
+    ``nuspace.at.plane(id=p).state(Search)``.
     """
 
     request = nustd.kv.PrimitiveDictRef.slot()
@@ -149,7 +148,8 @@ def walk(
 ) -> nu.Nu:
     """Every item of one kind searched: its cells, then its planes, then the space's.
 
-    Per place its matches are read in a bracket of their own
+    A removed cell or plane is skipped: one read per place. Per place its
+    matches are read in a snapshot of their own
     (:func:`~nuspace.shapes.content.matched`), then handed to ``found`` with
     the place, so nothing is held open across the walk. The keywords are
     filtered to what ``match`` takes (:func:`_asked`).
@@ -164,35 +164,44 @@ def walk(
 
     def one(level: str, scope_id: nu.StrArg) -> nu.Nu:
         scope = (level, scope_id)
-        hits = nustd.kv.atomic(content.matched(kind, scope, question).to_list())
+        hits = atomic(content.matched(kind, scope, question).to_list())
         return nu.let(hits, lambda keys: found(scope, keys))
 
-    def each(level: str) -> nu.Nu:
-        held = nustd.kv.atomic(content.scopes(kind, level))
+    def each(level: str, there: Callable[[nu.Str], nu.Bool]) -> nu.Nu:
+        held = atomic(
+            content.scopes(kind, level).iter().filter(lambda at: there(nu.Str(at))).to_list()
+        )
         return nu.ForEachDo(held, lambda at: one(level, nu.Str(at)))
 
-    return each(content.CELL) >> each(content.PLANE) >> one(content.SPACE, "")
+    cells = each(content.CELL, nuspace.cell.exists)
+    planes = each(content.PLANE, nuspace.plane.exists)
+    return cells >> planes >> one(content.SPACE, "")
 
 
 # --- The search's own cell --------------------------------------------------------------
 
 
-def _hits(kind: type[Content[Any]], scope: tuple[str, nu.StrArg], ids: nu.ObjectRef) -> nu.Nu:
-    """One scope's hits appended, in one commit, when there are any."""
+def _found() -> Search:
+    """The running search's own state: its plane's, read through :class:`Search`."""
+    return nuspace.at.plane.state(Search)
+
+
+def _hits(kind: type[Content[Any]], scope: tuple[str, nu.StrArg], keys: nu.ObjectRef) -> nu.Nu:
+    """One place's hits appended, in one commit, when there are any."""
 
     def one(item: nu.Attr) -> nu.Nu:
-        return Search.hits.append(address(kind, scope, nu.Str(item)))
+        return _found().hits.append(address(kind, scope, nu.Str(item)))
 
-    hits = atomic_state(nu.ForEachDo(nu.List(ids), one))
-    return nu.IfDo(nu.List(ids).len() > 0, hits)
+    hits = atomic(nu.ForEachDo(nu.List(keys), one))
+    return nu.IfDo(nu.List(keys).len() > 0, hits)
 
 
 def run(request: Mapping[str, Mapping[str, Any]]) -> nu.Nu:
     """A search's cell: each kind asked, its hits appended as they turn up, then ``finished_at``.
 
-    Each scope's read is a snapshot of its own and its hits one commit, so
+    Each place's read is a snapshot of its own and its hits one commit, so
     nothing is held open across the walk and a reader sees hits land one
-    scope at a time. ``finished_at`` is stamped however the walk ends, a
+    place at a time. ``finished_at`` is stamped however the walk ends, a
     failure or an interrupt included.
 
     Args:
@@ -208,11 +217,11 @@ def run(request: Mapping[str, Mapping[str, Any]]) -> nu.Nu:
             continue
         kinds.append(walk(kind, keywords, lambda scope, ids, kind=kind: _hits(kind, scope, ids)))
     walked = nu.Sequential(*kinds) if kinds else nu.Noop()
-    return nu.TryCatch(walked, finally_=atomic_state(Search.finished_at.set(nustd.time.time())))
+    return nu.TryCatch(walked, finally_=atomic(_found().finished_at.set(nustd.time.time())))
 
 
 _SOURCE = """\
-from nuspace.system.ui import search
+from nuspace.devices.web import search
 
 #: What this search asks, as it was made: per kind name, the match keywords.
 REQUEST = {request!r}
@@ -257,9 +266,9 @@ def kinds() -> dict[str, dict[str, Any]]:
     """Every installed kind by name, as the viewer offers it: ``{label, fields}``, plain data.
 
     ``label`` is its spec's, ``fields`` its search form, ``{name, input,
-    label}`` per ``match`` keyword, in order (:meth:`~nuspace.Content.form`).
+    label}`` per ``match`` keyword, in order (:meth:`~nuspace.shapes.Content.form`).
     Built in whatever process asks, from the installed specs
-    (:func:`~nuspace.ext.content_specs`).
+    (:func:`~nuspace.specs.content_specs`).
     """
     return {
         name: {"label": spec.label, "fields": [asdict(f) for f in spec.kind.form()]}
@@ -277,29 +286,28 @@ Describe = nu.host(describe, name="SearchDescribe")
 # --- The op ------------------------------------------------------------------------------
 
 
-def _searches() -> nu.Nu:
-    """The system parent every search hangs under, made when missing. Not drawn. No bracket."""
-    made = plane_writes(SEARCHES, backend="mp", name=SEARCHES_NAME, system=True)
-    return nu.IfDo(ops.plane_exists(SEARCHES).not_(), made)
-
-
 def search(
-    request: Mapping[str, Mapping[str, Any]] | nu.Nu, *, name: nu.StrArg | None = None
+    request: Mapping[str, Mapping[str, Any]] | nu.Nu,
+    *,
+    name: nu.StrArg | None = None,
+    into: nu.Ref | None = None,
 ) -> nu.Nu:
-    """Search the space: a new search plane under :data:`SEARCHES`, its state set, its run started.
+    """Search the space: a new search plane under :data:`SEARCHES`, its state set, its run asked for.
 
-    Three commits: the plane with its cell (and the parent when missing),
-    then its state, which lives in the other store, then the run. The run
-    does the searching.
+    A wrapper that brackets itself, run it on its own: three commits in a
+    row, the plane with its cell (Space), then its state (State), then its
+    run (Space). The run does the searching. The new search is the newest
+    child of :data:`SEARCHES`, where the viewer finds it.
 
     Args:
         request: Per kind name, the ``match`` keywords given, plain data: a
             mapping, or a term yielding one (eg read off a form).
         name: What the search plane is called. :func:`describe` of the
             request when None.
+        into: A ref set to the search plane's id, once its plane landed.
 
-    The new search is the newest child of :data:`SEARCHES`, where the
-    viewer finds it.
+    Raises:
+        Missing: No searches plane: the web device makes it at open.
     """
     if isinstance(request, nu.Nu):
         asked: nu.Nu | dict = request
@@ -310,24 +318,22 @@ def search(
         prog = source(asked)
         called = describe(asked) if name is None else name
 
-    def fill(minted: nu.ObjectRef, cell: nu.ObjectRef, text: nu.ObjectRef) -> nu.Nu:
+    def made(minted: nu.ObjectRef, cell: nu.ObjectRef, text: nu.ObjectRef) -> nu.Nu:
         pid, cid = nu.Str(minted), nu.Str(cell)
-        state = Search.request.set(asked) >> Search.started_at.set(nustd.time.time())
-
-        def made(ui: nu.ObjectRef) -> nu.Nu:
-            plane = atomic(
-                _searches()
-                >> plane_writes(pid, backend="mp", name=called, parent=SEARCHES)
-                >> cell_writes(pid, cid, nu.Str(text), nu.Bool(ui), name=CELL)
-            )
-            return plane >> atomic_state(ops.plane_state(pid, state)) >> ops.plane_run(pid, by=BY)
-
-        return nu.let(HasUi(nu.Str(text), pid, cid), made)
+        plane = nuspace.plane.add(pid, parent=SEARCHES, name=called, backend=SEARCHES_BACKEND)
+        made_cell = nuspace.cell.add(pid, nu.Str(text), id=cid, name=CELL, fabrics=[])
+        state = nuspace.at.plane(id=pid).state(Search)
+        steps = (
+            atomic(plane >> made_cell)
+            >> atomic(state.request.set(asked) >> state.started_at.set(nustd.time.time()))
+            >> atomic(nuspace.plane_run.add(pid, by=BY))
+        )
+        return steps if into is None else steps >> atomic(into.set(pid))
 
     return nu.let(
         MintId("p"),
         lambda pid: nu.let(
-            MintId("c"), lambda cid: nu.let(prog, lambda text: fill(pid, cid, text))
+            MintId("c"), lambda cid: nu.let(prog, lambda text: made(pid, cid, text))
         ),
     )
 
@@ -340,17 +346,19 @@ import nu
 import nustd.kv
 import nustd.ui
 import nuspace
-from nuspace import ops
-from nuspace.system.ui import search
+from nuspace.devices.web import search
 
 # Every installed kind, read off the registry as the cell is built: name to {label, fields}.
 KINDS = search.kinds()
 FIELDS = nu.Dict(nu.Literal({name: kind["fields"] for name, kind in KINDS.items()}))
 
 
-class Asked(nuspace.CellState):
+class Asked(nu.Shape):
     # The kind picked last, kept across runs.
     kind = nustd.kv.StrRef.slot()
+
+
+ASKED = nuspace.here(Asked)
 
 
 class Head(nustd.ui.Row):
@@ -405,7 +413,7 @@ def draw_fields(kind):
 def draw():
     options = [{"value": name, "label": kind["label"]} for name, kind in KINDS.items()]
     names = nu.List(nu.Literal(list(KINDS)))
-    kept = ops.snapshot(Asked.kind.fallback(""))
+    kept = nuspace.atomic(ASKED.kind.fallback(""))
     kind = nu.If(names.contains(kept), kept, next(iter(KINDS), ""))
 
     def picked(k):
@@ -421,8 +429,7 @@ def draw():
 
 def pick():
     kind = nu.Str(View.head.kind)
-    keep = nustd.kv.Transaction(Asked.kind.set(kind), scope=nuspace.States)
-    return keep >> draw_fields(kind)
+    return nuspace.atomic(ASKED.kind.set(kind)) >> draw_fields(kind)
 
 
 def read_field(f):
@@ -459,17 +466,22 @@ import nu
 import nustd.kv
 import nustd.ui
 import nuspace
-from nuspace import ops
-from nuspace.system.ui import search
+from nuspace.devices.web import search
+
+#: How many searches the picker lists, newest first.
+LISTED = 50
 
 
-class Chosen(nuspace.PlaneState):
-    # The search picked by hand, and the newest one when it was: a newer
-    # search since takes over, so the one just made is the one shown.
+class Chosen(nu.Shape):
+    # In the search plane's own state, shared by its cells: the search picked
+    # by hand, and the newest one when it was. A newer search since takes
+    # over, so the one just made is the one shown. What the results cell shows.
     picked = nustd.kv.StrRef.slot()
     newest = nustd.kv.StrRef.slot()
-    # What the results cell shows.
     shown = nustd.kv.StrRef.slot()
+
+
+CHOSEN = nuspace.at.plane.state(Chosen)
 
 
 class Pick(nustd.ui.Field):
@@ -481,8 +493,10 @@ class View(nustd.ui.Column):
 
 
 def newest_first():
-    # The children of one node: as many reads as there are searches.
-    return nu.List(nu.Collect(nu.Reversed(nu.Iter(ops.children(search.SEARCHES)))))
+    # The newest searches, one page off the folder's children.
+    kids = nuspace.Space.planes[search.SEARCHES].children
+    page = nu.List(nu.If(kids.exists(), nu.list(kids.reversed_keys(limit=LISTED)), []))
+    return page.iter().filter(lambda s: nuspace.plane.exists(s)).to_list()
 
 
 def first_of(ids):
@@ -490,34 +504,35 @@ def first_of(ids):
 
 
 def draw():
-    return nu.let(ops.snapshot(newest_first()), draw_ids)
+    return nu.let(nuspace.atomic(newest_first()), draw_ids)
 
 
 def draw_ids(ids):
     options = nu.Collect(
-        nu.Map(nu.Iter(ids), lambda s: nu.Dict.of(value=s, label=ops.plane_title(nu.Str(s))))
+        nu.Map(nu.Iter(ids), lambda s: nu.Dict.of(value=s, label=nuspace.plane.title(nu.Str(s))))
     )
     newest = first_of(ids)
-    picked = Chosen.picked.fallback("")
+    picked = CHOSEN.picked.fallback("")
     held = nu.And(
-        picked != "", Chosen.newest.fallback("") == newest, nu.List(ids).contains(picked)
+        picked != "", CHOSEN.newest.fallback("") == newest, nu.List(ids).contains(picked)
     )
 
     def show(shown):
-        write = nu.IfDo(Chosen.shown.fallback("") != shown, Chosen.shown.set(shown))
+        write = nu.IfDo(CHOSEN.shown.fallback("") != shown, CHOSEN.shown.set(shown))
         return (
-            View.pick.search.set_options(ops.snapshot(options))
+            View.pick.search.set_options(nuspace.atomic(options))
             >> View.pick.search.set(shown)
-            >> nustd.kv.Transaction(write, scope=nuspace.States)
+            >> nuspace.atomic(write)
         )
 
-    return nu.let(ops.snapshot(nu.If(held, picked, newest)), show)
+    return nu.let(nuspace.atomic(nu.If(held, picked, newest)), show)
 
 
 def pick():
     value = nu.Str(View.pick.search)
-    keep = Chosen.picked.set(value) >> Chosen.newest.set(first_of(ops.snapshot(newest_first())))
-    return nustd.kv.Transaction(keep, scope=nuspace.States) >> draw()
+    newest = nuspace.atomic(first_of(newest_first()))
+    keep = nu.let(newest, lambda n: nuspace.atomic(CHOSEN.picked.set(value) >> CHOSEN.newest.set(nu.Str(n))))
+    return keep >> draw()
 
 
 def out():
@@ -525,7 +540,7 @@ def out():
     made = nuspace.Space.planes[search.SEARCHES].children.on_change()
     return nu.ParallelAsync(
         nu.ReactEvery(View.pick.search.on_change(), pick()),
-        nu.Reconcile(ops.snapshot(made), draw()),
+        nu.Reconcile(nuspace.atomic(made), draw()),
     )
 """
 
@@ -535,9 +550,9 @@ import nu
 import nustd.kv
 import nustd.ui
 import nuspace
-from nuspace import ops
+import nuspace.devices.web as web
+from nuspace.devices.web import search
 from nuspace.shapes.content import Drawing
-from nuspace.system.ui import search
 
 #: Hits drawn at most. The rest are counted.
 SHOWN = 200
@@ -546,8 +561,12 @@ SHOWN = 200
 LABELS = nu.Dict(nu.Literal({name: kind["label"] for name, kind in search.kinds().items()}))
 
 
-class Chosen(nuspace.PlaneState):
+class Chosen(nu.Shape):
+    # The pick cell's choice, in the plane's state both cells share.
     shown = nustd.kv.StrRef.slot()
+
+
+CHOSEN = nuspace.at.plane.state(Chosen)
 
 
 class Head(nustd.ui.Row):
@@ -570,33 +589,39 @@ class Results(nustd.ui.Column):
     hits = nustd.ui.Column.slot(gap=4)
 
 
-def of(sel, term):
+def of(sel):
     # The shown search's own state, read from here.
-    return ops.plane_state(sel, term)
+    return nuspace.at.plane(id=sel).state(search.Search)
 
 
 def hit(i, h):
     row = nustd.ui.core.SectionRef(nu.Str("h") + nu.str(i), section_cls=Hit, parent_ref=Results.hits)
-    # Read totally: a search made before content search kept hits of another shape.
     got = nu.Dict(h)
     scope = nu.List(got.get_item("scope", ["", ""]))
     level, at, kind = nu.str(scope[0]), nu.str(scope[1]), nu.str(got.get_item("kind", ""))
     # The plane a hit opens: its cell's, its own, none for the space's.
-    where = ops.snapshot(
+    where = nuspace.atomic(
         nu.Dict.of(
-            plane=nu.If(level == "cell", ops.cell_plane(at), nu.If(level == "plane", at, "")),
+            plane=nu.If(
+                level == "cell",
+                nuspace.Space.cells[at].plane.fallback(""),
+                nu.If(level == "plane", at, ""),
+            ),
             label=LABELS.get_item(kind, kind),
         )
     )
 
     def head(place):
         plane, label = nu.str(place["plane"]), nu.str(place["label"])
-        linked = nuspace.ui.page_link(row.head.link, plane)
+        linked = nuspace.atomic(web.link(row.head.link, plane))
         return nu.IfDo(plane != "", linked, row.head.where.set("Space")) >> row.head.kind.set(label)
 
-    # One draw of what the item holds now, read in a snapshot.
-    item = nu.str(got.get_item("id", ""))
-    drawn = ops.snapshot(nu.Eval(Drawing(kind, level, at, item, row.item, hit=True)))
+    # One draw of what the item holds now, read in a snapshot. The drawing is
+    # built at run time, where atomic cannot see its reads: the snapshot is
+    # named, on State, where the items live.
+    key = nu.str(got.get_item("key", ""))
+    drawing = nu.Eval(Drawing(kind, level, at, key, row.item, hit=True))
+    drawn = nustd.kv.Snapshot(drawing, scope=nuspace.State)
     failed = lambda err: row.note.set(nu.Str("Cannot draw this hit: ") + nu.str(err))
     return nu.let(where, head) >> nu.TryCatch(drawn, catch=failed)
 
@@ -604,7 +629,7 @@ def hit(i, h):
 def more(sel, drawn, upto):
     # Only what landed since the last look, one point read each: hits only ever append.
     n = nu.Int(drawn)
-    one = ops.snapshot(of(sel, search.Search.hits)[n].extract())
+    one = nuspace.atomic(of(sel).hits[n].extract())
     draw = nu.let(one, lambda h: hit(n, h)) >> drawn.set(n + 1)
     return nu.WhileDo(n < upto, draw)
 
@@ -618,10 +643,10 @@ def status(total, done):
 
 
 def look(sel, drawn):
-    hits = of(sel, search.Search.hits)
+    hits = of(sel).hits
     read = nu.Dict.of(
         total=nu.If(hits.exists(), hits.len(), 0),
-        done=of(sel, search.Search.finished_at).exists(),
+        done=of(sel).finished_at.exists(),
     )
 
     def show(got):
@@ -629,26 +654,26 @@ def look(sel, drawn):
         upto = nu.If(total > SHOWN, SHOWN, total)
         return more(sel, drawn, upto) >> status(total, done)
 
-    return nu.let(ops.snapshot(read), show)
+    return nu.let(nuspace.atomic(read), show)
 
 
 def landed(sel):
     # Hits appended, or the search stamped done.
-    hits = of(sel, search.Search.hits)
+    hits = of(sel).hits
     return nu.OnAny(
         hits.on_change(),
         hits.on_children_change(),
-        of(sel, search.Search.finished_at).on_change(),
+        of(sel).finished_at.on_change(),
     )
 
 
 def shown(sel):
-    said = ops.snapshot(ops.plane_title(sel))
+    said = nuspace.atomic(nuspace.plane.title(sel))
     # Hits land while it runs: look on each that lands until it is done, then once more.
-    done = ops.snapshot(of(sel, search.Search.finished_at).exists())
+    done = nuspace.atomic(of(sel).finished_at.exists())
 
     def watch(drawn):
-        looking = nu.ReconcileWhile(ops.snapshot(landed(sel)), nu.Not(done), look(sel, drawn))
+        looking = nu.ReconcileWhile(nuspace.atomic(landed(sel)), nu.Not(done), look(sel, drawn))
         return looking >> look(sel, drawn)
 
     return (
@@ -671,51 +696,16 @@ def none():
 
 
 def showing(sel):
-    there = (nu.Str(sel) != "").and_(ops.snapshot(ops.plane_exists(sel)))
+    there = (nu.Str(sel) != "").and_(nuspace.atomic(nuspace.plane.exists(sel)))
     return nu.IfDo(there, shown(sel), none())
 
 
 def out():
     # "" is a search of its own: none chosen, drawn as such.
-    shown = ops.snapshot(Chosen.shown.fallback(""))
-    return nu.ReconcileLatest(shown, ops.snapshot(Chosen.shown.on_change()), showing)
+    picked = nuspace.atomic(CHOSEN.shown.fallback(""))
+    return nu.ReconcileLatest(picked, nuspace.atomic(CHOSEN.shown.on_change()), showing)
 """
 
 
-#: The cells the viewer is seeded with, in order, as ``(name, source)``.
+#: The cells the viewer is made with, in order, as ``(name, source)``.
 CELLS = (("form", FORM), ("pick", PICK), ("results", RESULTS))
-
-
-def _form_missing() -> nu.Bool:
-    """Whether the viewer is there but was seeded before it asked: it has no form cell."""
-    return ops.plane_exists(PLANE).and_(ops.cell_exists(seeded_id(PLANE, "form")).not_())
-
-
-def _upgrade() -> nu.Nu:
-    """A viewer seeded before content search brought up to it: the form cell first, results redrawn.
-
-    Only when the form cell is missing, so a viewer that has one is left as
-    the owner keeps it. The results cell drew the old hits, so its prog is
-    rewritten too, where it is still there. One commit, each ``has_ui``
-    worked out first, outside the bracket.
-    """
-    form, results = seeded_id(PLANE, "form"), seeded_id(PLANE, "results")
-
-    def write(on_form: nu.ObjectRef, on_results: nu.ObjectRef) -> nu.Nu:
-        writes = cell_writes(PLANE, form, FORM, nu.Bool(on_form), name="form", index=0)
-        redrawn = cell_writes(PLANE, results, RESULTS, nu.Bool(on_results), name="results")
-        writes = writes >> nu.IfDo(ops.cell_exists(results), redrawn)
-        return atomic(nu.IfDo(_form_missing(), writes))
-
-    def known(on_form: nu.ObjectRef) -> nu.Nu:
-        return nu.let(HasUi(RESULTS, PLANE, results), lambda r: write(on_form, r))
-
-    return nu.IfDo(snap(_form_missing()), nu.let(HasUi(FORM, PLANE, form), known))
-
-
-def ensure_search() -> nu.Nu:
-    """The viewer plane and its cells, seeded once, an older one given its form.
-
-    The sidebar's nav row and Cmd+K open it.
-    """
-    return seed(PLANE, NAME, ICON, CELLS, backend="async") >> _upgrade()

@@ -1,28 +1,32 @@
-"""The sidebar feed: one arm per interaction, all in parallel. Host only.
+"""The sidebar feed: one arm per interaction, all in parallel, for one tab. Host only.
 
 Two families:
 
 - **browser to store.** A sidebar event runs one op over its own fields.
-- **store to browser.** The tree changed; the arm ships it again.
+  A failure toasts on the tab (:meth:`~nuspace.devices.web.utils.Arms.event`).
+- **store to browser.** What the tree shows changed; the arm ships it again.
 
-**One tree.** Every plane with ``props.ui`` is listed, under its parent and
-in its parent's sibling order, top level planes (``Space.top``) under the
-space row. ``made_by`` and ``system`` group nothing. A drawn plane whose
-parent is not drawn (a service's child) is shown at the top level, after the
-rest, so nothing drawn goes missing.
+**A lazy tree.** The tab sees the web planes under root, and under each
+branch it has open (``Conn.connections[sid].expanded``), never the whole
+space. A branch is walked from its plane's ``children``, keeping the web
+planes (a ``Web.planes`` row) that are not removed, in sibling order. A
+plane with no web row stops the walk: what hangs under it is not listed.
+A row ships its children only when its branch is open, ``[]`` otherwise,
+and the walk goes down from root through shipped rows only, so a branch
+left open under a closed one lists nothing until its parent opens again.
+Pinned planes ship a row too, wherever they hang, so a pin always has its
+title and icon.
 
-**Icons.** A row carries its plane's ``meta.icon`` and no other meta key.
-The browser falls back to the registered Plane's icon when it is empty.
+**Rows.** A row carries its plane's name, icon, ``spec`` and ``system``
+(the browser offers no delete for a plane ``plane.remove`` refuses). The
+browser falls back to the registered PlaneSpec's icon when the plane has
+none.
 
-**System.** A row carries ``props.system``, so the browser offers no delete
-for a plane ``remove_plane`` refuses.
-
-**Pins.** ``Space.pinned`` ships with the tree, in order, drawn planes only.
-A pin is a shortcut: the pinned plane is in the tree as well.
-
-**Narrow watch.** The tree is shipped again when the set of planes, a
-plane's name, props or icon, the nesting, or the pins change, and nothing
-else: a cell writing its state or the kernel writing a run never wakes it.
+**Watches.** The tree ships again when a plane's name, icon, removal or
+children change, a web row comes or goes, the pins change, or the tab
+opens or closes a branch. A cell writing its state or the kernel writing a
+run never wakes it. Level, with no re-checks: a missed notification leaves
+the tree stale until the next change.
 """
 
 from __future__ import annotations
@@ -30,236 +34,235 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import nu
-from nuspace import ops
-from nuspace.ext import EMPTY_PLANE
-from nuspace.ops.utils import field_str
-from nuspace.shapes import Space
-from nuspace.system.devices.web.sidebar import interactions
-from nuspace.system.devices.web.sidebar.interactions import KIND_PLANE, KIND_SPACE, ROOT_ID
-from nuspace.system.devices.web.utils import Arms, field_index
-from nuspace.system.kernel.utils import snap
+import nuspace
+from nuspace.devices.web import ops as web
+from nuspace.devices.web.shapes import Conn, Web
+from nuspace.devices.web.sidebar import interactions
+from nuspace.devices.web.sidebar.interactions import KIND_PLANE, KIND_SPACE, ROOT_ID
+from nuspace.devices.web.utils import Arms, field_str, placed
+from nuspace.errors import Missing
+from nuspace.ops.brackets import atomic
+from nuspace.shapes.plane import ROOT
+from nuspace.shapes.space import Space
+from nuspace.specs import EMPTY_PLANE, add_plane, registered_name
 
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
-    from nuspace.ext import PlaneSpec
+    from nuspace.specs import PlaneSpec
     from nustd.ui.core import Ref
 
 
-__all__ = ["create", "move", "node", "pins", "rows", "sidebar_feed"]
-
-
-_arms = Arms("sidebar")
-
-
-def _prop(row: nu.Nu, field: str) -> nu.Object:
-    """One of a plane row's props. The row carries them whole, defaults filled in."""
-    return nu.Dict(nu.Dict(row).get_item("props", nu.Dict.of())).get_item(field)
+__all__ = ["create", "node", "pins", "rows", "sidebar_feed"]
 
 
 def node(parent_id: nu.Nu) -> nu.Str:
-    """The store's parent for a browser parent id: :data:`ROOT_ID` is the top level, ``""``."""
-    return nu.Str(nu.Switch(parent_id, {ROOT_ID: ""}, default=parent_id))
+    """The store's plane for a browser parent id: :data:`ROOT_ID` is root."""
+    return nu.Str(nu.Switch(parent_id, {ROOT_ID: ROOT}, default=parent_id))
 
 
-class _Listing(nu.Shape):
-    """What :func:`rows` reads once: the drawn plane rows, and their ids."""
-
-    rows = nu.ObjectRef.slot()
-    ids = nu.ObjectRef.slot()
+def _shown(plane: nu.StrArg) -> nu.Bool:
+    """Whether a plane is listed: on the web and not removed. Two reads in Space, one in Web."""
+    return Web.planes.contains(plane).and_(nuspace.plane.exists(plane))
 
 
-class _Moving(nu.Shape):
-    """What :func:`move` reads before it moves: the parent, its other children, those drawn."""
+def _kids(plane: nu.StrArg) -> nu.List:
+    """A branch's listed children, in sibling order: O(its children)."""
+    children = Space.planes[plane].children
+    listed = nu.If(children.exists(), nu.list(children.keys()), [])
+    return nu.List(listed).iter().filter(lambda kid: _shown(nu.Str(kid))).to_list()
 
-    under = nu.StrRef.slot()
-    others = nu.ObjectRef.slot()
-    drawn = nu.ObjectRef.slot()
+
+def _row(plane: nu.Str, parent: nu.StrArg, children: nu.Nu) -> nu.Dict:
+    """One plane as a browser row."""
+    row = Space.planes[plane]
+    return nu.Dict.of(
+        id=plane,
+        kind=KIND_PLANE,
+        title=row.name.fallback(""),
+        parent=nu.If(nu.Str(parent) == ROOT, ROOT_ID, parent),
+        children=children,
+        spec=row.spec.fallback(""),
+        icon=row.icon.fallback(""),
+        system=row.system.fallback(False),
+    )
 
 
-def rows() -> nu.Nu:
-    """The space and every drawn plane, as browser rows. Bare read.
+class _Walk(nu.Shape):
+    """A walk down the tab's open branches: the level to go down from, the rows walked."""
 
-    ``parent`` is on every row: the browser defaults it to the row's own id
-    and takes the first self parenting row as the root, so a plane row
-    without one would become the root.
+    level = nu.ObjectRef.slot()
+    walked = nu.ObjectRef.slot()
 
-    Yields:
-        ``[space, *planes]``, each ``{id, kind, title, parent, children}``,
-        planes with ``made_by``, ``icon`` and ``system`` too. Planes in
-        creation order, ``children`` in sibling order.
+
+def rows(sid: nu.StrArg, *, into: nu.Ref) -> nu.Nu:
+    """The tab's tree as browser rows, set into ``into``: the space row, then the open branches.
+
+    Walked down from root a level at a time: a branch is walked only when
+    it is open and its own row was shipped, so a branch left open under a
+    closed one, or under a plane off the web or removed, lists nothing.
+    ``parent`` is on every row: the browser takes the first self parenting
+    row as the root, so a plane row without one would become it. Bare
+    term, no bracket: the caller brackets it, so the whole tree is one
+    read. Cost: O(rows shipped): the children of root and of each branch
+    walked, plus one level per depth walked.
+
+    Args:
+        sid: The tab.
+        into: A ref set to ``[space, *planes]``, each ``{id, kind, title,
+            parent, children}``, planes with ``spec``, ``icon`` and
+            ``system`` too. Pinned planes not under a walked branch ship as
+            rows with no children.
     """
-    held, ids = _Listing.rows, _Listing.ids
+    expanded = Conn.connections[sid].expanded
+    space = nu.Dict.of(id=ROOT_ID, kind=KIND_SPACE, title="", parent=ROOT_ID, children=_kids(ROOT))
+    level, walked = _Walk.level, _Walk.walked
 
-    def kids(plane_id: nu.StrArg) -> nu.List:
-        return ops.children(plane_id).iter().filter(lambda kid: ids.contains(kid)).to_list()
+    def with_open(held: nu.ObjectRef) -> nu.Nu:
+        opened = nu.List(held)
 
-    def listed_under(row: nu.Nu) -> nu.Bool:
-        """Whether the row's parent is drawn too, so the row hangs under it."""
-        return ids.contains(field_str(row, "parent"))
+        def under(at: nu.Attr) -> nu.List:
+            """A shipped row's children as rows, with their own children when open."""
+            got = nu.Dict(at)
+            parent = nu.str(got["id"])
 
-    def plane(row: nu.Attr) -> nu.Dict:
-        return nu.Dict.of(
-            id=field_str(row, "id"),
-            kind=KIND_PLANE,
-            title=field_str(row, "name"),
-            parent=nu.If(listed_under(row), field_str(row, "parent"), ROOT_ID),
-            children=kids(field_str(row, "id")),
-            made_by=nu.str(_prop(row, "made_by")),
-            icon=field_str(nu.Dict(row).get_item("meta", nu.Dict.of()), "icon"),
-            system=nu.bool(_prop(row, "system")),
+            def one(kid: nu.Attr) -> nu.Dict:
+                plane = nu.Str(kid)
+                return _row(plane, parent, nu.If(opened.contains(plane), _kids(plane), []))
+
+            return nu.List(got["children"]).iter().map(one).to_list()
+
+        down = walked.set(nu.List(walked) + nu.List(level)) >> level.set(
+            nu.List(level).iter().map(under).flatten().to_list()
         )
+        walk = nu.WhileDo(nu.List(level).len() > 0, down)
 
-    # Drawn planes whose parent is neither drawn nor the top: shown at the top.
-    stray = nu.Filter(
-        held,
-        lambda row: (field_str(row, "parent") != "").and_(listed_under(row).not_()),
-    )
-    space = nu.Dict.of(
-        id=ROOT_ID,
-        kind=KIND_SPACE,
-        # Empty: the browser draws its own word for the space here.
-        title="",
-        parent=ROOT_ID,
-        children=kids("") + nu.List(nu.Collect(nu.Map(stray, lambda row: field_str(row, "id")))),
-    )
-    return nu.Frame(
-        _Listing,
-        nu.List.of(space) + nu.List(nu.Collect(nu.Map(held, plane))),
-        rows=ops.plane_rows().iter().filter(lambda row: nu.bool(_prop(row, "ui"))).to_list(),
-        ids=nu.List(nu.Collect(nu.Map(held, lambda row: field_str(row, "id")))),
-    )
+        def alone(at: nu.Attr) -> nu.Dict:
+            plane = nu.Str(at)
+            return _row(plane, Space.planes[plane].parent.fallback(ROOT), [])
+
+        ids = nu.List(walked).iter().map(lambda r: nu.Dict(r)["id"]).to_list()
+        extra = pins().iter().filter(lambda p: ids.contains(p).not_()).map(alone).to_list()
+        done = into.set(nu.List(walked) + extra)
+        return nu.Frame(_Walk, walk >> done, level=nu.List.of(space), walked=nu.List.create())
+
+    return nu.let(nu.If(expanded.exists(), nu.list(expanded.keys()), []), with_open)
 
 
 def pins() -> nu.List:
-    """The pinned plane ids, in order, those that draw only. Bare read."""
-    pinned = ops.pinned().iter()
-    return pinned.filter(lambda p: Space.planes[nu.Str(p)].props.ui.fallback(False)).to_list()
+    """The pinned plane ids, in order, those listed only (on the web, not removed). Bare read."""
+    pinned = nu.If(Web.pinned.exists(), nu.list(Web.pinned), [])
+    return nu.List(pinned).iter().filter(lambda p: _shown(nu.Str(p))).to_list()
 
 
 def create(
-    planes: Sequence[PlaneSpec], made_by: nu.Nu, plane_id: nu.Nu, parent_id: nu.Nu, title: nu.Nu
+    planes: Sequence[PlaneSpec], spec: nu.Nu, plane_id: nu.Nu, parent_id: nu.Nu, title: nu.Nu
 ) -> nu.Nu:
-    """Create ``plane_id`` from the registered Plane ``made_by`` names.
+    """Make ``plane_id`` from the registered PlaneSpec ``spec`` names, ``""`` for the empty plane.
 
-    ``""``, or a name nothing registered answers to, creates the empty plane
-    (:data:`~nuspace.ext.EMPTY_PLANE`), which every space has. An empty ``title``
-    takes the Plane's label.
+    :func:`nuspace.specs.add_plane`, a wrapper that brackets itself: the
+    plane, then its state and its web row. An empty ``title`` takes the
+    spec's label.
+
+    Raises:
+        Missing: No registered PlaneSpec of that name.
     """
-    specs = (EMPTY_PLANE, *planes)
-    named = [nu.Str(made_by) == spec.name for spec in specs]
-    unknown = nu.Not(nu.Or(*named))
-    return nu.Sequential(
-        *(
-            nu.IfDo(
-                named[0].or_(unknown) if i == 0 else named[i],
-                ops.create_plane(
-                    spec,
-                    parent=node(parent_id),
-                    name=nu.If(nu.Str(title) == "", spec.label, title),
-                    plane_id=plane_id,
-                ),
-            )
-            for i, spec in enumerate(specs)
-        )
-    )
+    specs = {"": EMPTY_PLANE, **{registered_name(p): p for p in planes}}
+    name = nu.Str(spec)
+
+    def made(found: PlaneSpec) -> nu.Nu:
+        called = nu.If(nu.Str(title) == "", found.label, title)
+        return add_plane(found, id=plane_id, parent=node(parent_id), name=called)
+
+    unknown = nu.Raise(nu.Str("no plane spec ") + name, exc_cls=Missing)
+    return nu.SwitchDo(name, {key: made(found) for key, found in specs.items()}, default=unknown)
 
 
-def move(plane_id: nu.Nu, parent_id: nu.Nu, index: nu.Nu) -> nu.Nu:
-    """Move a plane to ``index`` among the drawn children of ``parent_id``.
-
-    The browser counts only what it draws, the store's parent lists planes it
-    does not (services, for one). The position goes in before the drawn
-    sibling the browser named, or at the end when it named none.
-    """
-    under, rest, seen = _Moving.under, nu.List(_Moving.others), nu.List(_Moving.drawn)
-    i = nu.Int(index)
-    position = nu.If((i >= 0).and_(i < seen.len()), rest.index(seen[i]), rest.len())
-    others = ops.children(under).iter().filter(lambda p: p != plane_id)
-    drawn = rest.iter().filter(lambda p: Space.planes[nu.Str(p)].props.ui.fallback(False))
-    return nu.Frame(
-        _Moving,
-        ops.move_plane(plane_id, parent=under, index=position),
-        under=node(parent_id),
-        others=snap(others.to_list()),
-        drawn=snap(drawn.to_list()),
-    )
-
-
-def _changes() -> list[nu.Nu]:
-    """What reships the tree: the planes, their names, props and icons, the nesting, the pins."""
+def _changes(sid: nu.StrArg) -> list[nu.Nu]:
+    """What reships the tree: names, icons, removals and children of planes, web rows, pins, folds."""
     planes = Space.planes
     return [
-        snap(planes.on_children_change()),
-        snap(planes.on_descendants_change("*", "name")),
-        snap(planes.on_descendants_change("*", "props")),
-        snap(planes.on_descendants_change("*", "props", "*")),
-        snap(planes.on_descendants_change("*", "meta")),
-        snap(planes.on_descendants_change("*", "meta", "icon")),
-        snap(planes.on_descendants_change("*", "children")),
-        snap(planes.on_descendants_change("*", "children", "*")),
-        snap(Space.top.on_change()),
-        snap(Space.top.on_children_change()),
-        snap(Space.pinned.on_change()),
-        snap(Space.pinned.on_children_change()),
+        atomic(planes.on_descendants_change("*", "name")),
+        atomic(planes.on_descendants_change("*", "icon")),
+        atomic(planes.on_descendants_change("*", "removed_at")),
+        atomic(planes.on_descendants_change("*", "children")),
+        atomic(planes.on_descendants_change("*", "children", "*")),
+        atomic(Web.planes.on_children_change()),
+        atomic(Web.pinned.on_change()),
+        atomic(Web.pinned.on_children_change()),
+        atomic(Conn.connections[sid].expanded.on_change()),
     ]
 
 
-def _ship(sidebar: Ref) -> nu.Nu:
-    def ship(held: nu.ObjectRef) -> nu.Nu:
-        return nu.let(snap(pins()), lambda pinned: interactions.set_tree(sidebar, held, pinned))
+def _ship(sidebar: Ref, sid: nu.StrArg) -> nu.Nu:
+    """The tree and the pins read in one snapshot, then shipped."""
 
-    return nu.let(snap(rows()), ship)
+    def ship(tree: nu.ObjectRef, pinned: nu.ObjectRef) -> nu.Nu:
+        read = atomic(rows(sid, into=tree) >> pinned.set(pins()))
+        return read >> interactions.set_tree(sidebar, nu.List(tree), nu.List(pinned))
+
+    return nu.let([], lambda tree: nu.let([], lambda pinned: ship(tree, pinned)))
 
 
-def sidebar_feed(sidebar: Ref, planes: Sequence[PlaneSpec]) -> nu.Nu:
-    """The sidebar, live, as one term. Built per connection, never ends.
+def sidebar_feed(sidebar: Ref, sid: nu.StrArg, planes: Sequence[PlaneSpec], toasts: Ref) -> nu.Nu:
+    """The sidebar of one tab, live, as one term. Built per tab, never ends.
 
     Args:
         sidebar: The shell's sidebar ref.
-        planes: The registered Planes, what ``plane.create`` can create
+        sid: The tab, whose row must exist before this runs.
+        planes: The registered PlaneSpecs, what ``plane.create`` can make
             beside the empty one.
+        toasts: The tab's toast ref, where a failed event shows.
     """
+    arms = Arms("sidebar", toasts)
 
-    def made(plane_id: nu.Str, event: nu.Attr) -> nu.Nu:
-        made_by, parent_id = field_str(event, "made_by"), field_str(event, "parent_id")
-        return create(planes, made_by, plane_id, parent_id, field_str(event, "title"))
+    def made(plane: nu.Str, event: nu.Attr) -> nu.Nu:
+        spec, parent = field_str(event, "spec"), field_str(event, "parent_id")
+        return create(planes, spec, plane, parent, field_str(event, "title"))
+
+    def moved(plane: nu.Str, event: nu.Attr) -> nu.Nu:
+        under = node(field_str(event, "parent_id"))
+        return placed(event, lambda **at: atomic(nuspace.plane.move(plane, parent=under, **at)))
 
     return nu.ParallelAsync(
-        _arms.states("tree", _changes(), _ship(sidebar)),
-        _arms.plane_event("create", interactions.on_create_plane(sidebar), made),
-        _arms.plane_event(
+        arms.states("tree", _changes(sid), _ship(sidebar, sid)),
+        arms.plane_event("create", interactions.on_create_plane(sidebar), made),
+        arms.plane_event(
             "rename",
             interactions.on_rename_plane(sidebar),
-            lambda p, event: ops.rename_plane(p, field_str(event, "title")),
+            lambda p, ev: atomic(nuspace.plane.rename(p, field_str(ev, "title"))),
         ),
-        _arms.plane_event(
-            "delete", interactions.on_delete_plane(sidebar), lambda p, _: ops.remove_plane(p)
+        arms.plane_event(
+            "delete",
+            interactions.on_delete_plane(sidebar),
+            lambda p, _: atomic(nuspace.plane.remove(p)),
         ),
-        _arms.plane_event(
-            "move",
-            interactions.on_move_plane(sidebar),
-            lambda p, event: move(
-                p, field_str(event, "parent_id"), field_index(event, "index", -1)
-            ),
-        ),
-        _arms.plane_event(
+        arms.plane_event("move", interactions.on_move_plane(sidebar), moved),
+        arms.plane_event(
             "icon",
             interactions.on_set_icon(sidebar),
-            lambda p, event: ops.set_plane_icon(p, field_str(event, "icon")),
+            lambda p, ev: atomic(nuspace.plane.set_icon(p, field_str(ev, "icon"))),
         ),
-        _arms.plane_event(
+        arms.plane_event(
             "pin",
             interactions.on_pin_plane(sidebar),
-            lambda p, event: ops.pin_plane(p, field_index(event, "index", -1)),
+            lambda p, ev: placed(ev, lambda **at: atomic(web.pin(p, **at))),
         ),
-        _arms.plane_event(
-            "unpin", interactions.on_unpin_plane(sidebar), lambda p, _: ops.unpin_plane(p)
+        arms.plane_event(
+            "unpin", interactions.on_unpin_plane(sidebar), lambda p, _: atomic(web.unpin(p))
         ),
-        _arms.plane_event(
+        arms.plane_event(
             "pin_move",
             interactions.on_move_pin(sidebar),
-            lambda p, event: ops.move_pin(p, field_index(event, "index", -1)),
+            lambda p, ev: placed(ev, lambda **at: atomic(web.move_pin(p, **at))),
+        ),
+        arms.plane_event(
+            "expand", interactions.on_expand(sidebar), lambda p, _: atomic(web.expand(sid, p))
+        ),
+        arms.plane_event(
+            "collapse",
+            interactions.on_collapse(sidebar),
+            lambda p, _: atomic(web.collapse(sid, p)),
         ),
     )

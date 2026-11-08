@@ -17,7 +17,7 @@ export type VisibleRow = {
 	depth: number;
 	title: string;
 	/** The registered Plane it was made from, for its fallback icon. */
-	made_by: string;
+	spec: string;
 	/** The plane's own `meta.icon`, "" when it has none. */
 	icon: string;
 	hasKids: boolean;
@@ -74,7 +74,7 @@ function flatten(
 		kind: row.kind,
 		depth,
 		title: row.title || "Untitled",
-		made_by: row.made_by,
+		spec: row.spec,
 		icon: row.icon,
 		hasKids: kids.length > 0,
 		open,

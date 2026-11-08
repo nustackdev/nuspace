@@ -66,7 +66,7 @@ describe("AddPlane", () => {
 		expect(args).toEqual({
 			plane_id: expect.any(String),
 			parent_id: ROOT_ID,
-			made_by: "nuverse.jobs",
+			spec: "nuverse.jobs",
 			title: "Jobs",
 		});
 		expect(openHere).toHaveBeenCalledWith(args.plane_id);
@@ -79,7 +79,7 @@ describe("AddPlane", () => {
 		act(() => item("Empty")?.click());
 		expect(notify).toHaveBeenCalledWith(
 			"plane.create",
-			expect.objectContaining({ made_by: "", title: "Untitled" }),
+			expect.objectContaining({ spec: "", title: "Untitled" }),
 		);
 	});
 

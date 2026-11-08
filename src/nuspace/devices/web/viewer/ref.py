@@ -3,8 +3,8 @@
 A component ref like ``ButtonRef``, only wider: it renders the open planes'
 cells, one pane per plane.
 It never asks what kind of plane it draws; what it reads off the plane is
-its meta (``editable``, ``full_width``), which arrives with the plane like
-anything else, and goes back through ``plane.meta``.
+its web flags (``editable``, ``full_width``, ``compact``), which arrive with
+the plane like anything else, and go back through ``plane.web``.
 
 It is mounted with one prop off the registered Cells (D19):
 ``cell_specs``, the ``/`` menu's entries in order, each with its classes and
@@ -19,15 +19,16 @@ from typing import TYPE_CHECKING, ClassVar
 
 from typing_extensions import Self
 
-from nuspace.system.devices.web.utils import SpaceRef
-from nuspace.system.devices.web.viewer import interactions
+from nuspace.devices.web.utils import SpaceRef
+from nuspace.devices.web.viewer import interactions
+from nuspace.specs import registered_name
 
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping, Sequence
 
     from nu.lang import DictArg, ListArg, Nu, StrArg
-    from nuspace.ext import CellSpec
+    from nuspace.specs import CellSpec
     from nustd.ui.core import Changed
 
 
@@ -48,7 +49,7 @@ def slash_entries(cells: Iterable[CellSpec]) -> list[dict]:
         claimed.update(default_for)
         entries.append(
             {
-                "name": s.name,
+                "name": registered_name(s),
                 "label": s.label,
                 "group": s.group,
                 "icon": s.icon,
@@ -94,7 +95,7 @@ class ViewerRef(SpaceRef):
         return interactions.on_open(self)
 
     def on_create_cell(self) -> Changed:
-        """``{plane_id, cell_id, name, index}``."""
+        """``{plane_id, cell_id, name, before?, after?}``."""
         return interactions.on_create_cell(self)
 
     def on_update_cell(self) -> Changed:
@@ -105,9 +106,9 @@ class ViewerRef(SpaceRef):
         """``{cell_id}``."""
         return interactions.on_delete_cell(self)
 
-    def on_reorder_cells(self) -> Changed:
-        """``{plane_id, cell_ids}``."""
-        return interactions.on_reorder_cells(self)
+    def on_move_cell(self) -> Changed:
+        """``{cell_id, before?, after?}``."""
+        return interactions.on_move_cell(self)
 
     def on_restart_cell(self) -> Changed:
         """``{cell_id}``."""
@@ -117,6 +118,6 @@ class ViewerRef(SpaceRef):
         """``{plane_id}``."""
         return interactions.on_restart_plane(self)
 
-    def on_set_meta(self) -> Changed:
-        """``{plane_id, meta}``."""
-        return interactions.on_set_meta(self)
+    def on_set_web(self) -> Changed:
+        """``{plane_id, flags}``."""
+        return interactions.on_set_web(self)

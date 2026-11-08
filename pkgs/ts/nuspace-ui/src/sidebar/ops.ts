@@ -1,5 +1,5 @@
 // The sidebar op table, browser side. Mirrors
-// `nuspace/web/sidebar/interactions.py`.
+// `nuspace/devices/web/sidebar/interactions.py`.
 //
 // One ref per op: a notify goes to `<sidebar ref>.ops.<name>` and the payload
 // carries that op's arguments and nothing else. There is no `op` key, because
@@ -23,30 +23,42 @@
 export type Ops = {
 	/**
 	 * `plane_id` is minted here. `parent_id` is a Plane id, or `ROOT_ID` for
-	 * the top. `made_by` names the registered Plane to seed it from, and
-	 * `title` is what it is called.
+	 * the top. `spec` names the registered Plane to seed it from, "" for the
+	 * empty one, and `title` is what it is called.
 	 */
-	"plane.create": { plane_id: string; parent_id: string; made_by: string; title: string };
+	"plane.create": { plane_id: string; parent_id: string; spec: string; title: string };
 	"plane.rename": { plane_id: string; title: string };
 	/** Takes every Cell on the Plane with it, and every Plane below it. */
 	"plane.delete": { plane_id: string };
 	/**
-	 * Reparent and reorder in one. `index` is the position among the
-	 * sidebar's children of `parent_id`, counted without the moved Plane. The
-	 * server refuses a move into the Plane's own subtree.
+	 * Reparent and reorder in one: before or after a sibling under
+	 * `parent_id`, neither for the end. The server refuses a move into the
+	 * Plane's own subtree.
 	 */
-	"plane.move": { plane_id: string; parent_id: string; index: number };
+	"plane.move": { plane_id: string; parent_id: string } & Anchor;
 	/** `icon` is a stored spelling (../icon/parse.ts), "" for the default. */
 	"plane.icon": { plane_id: string; icon: string };
 	/**
-	 * Pin at `index` among the pins, counted without the Plane; -1 is the
-	 * end. Already pinned, it moves there. The Plane stays in the tree.
+	 * Pin before or after a pin, neither for the end. The Plane stays in the
+	 * tree. Already pinned, the server refuses it: move it with `pin_move`.
 	 */
-	"plane.pin": { plane_id: string; index: number };
+	"plane.pin": { plane_id: string } & Anchor;
 	"plane.unpin": { plane_id: string };
-	/** Reorder a pinned Plane, `index` as in `plane.pin`. */
-	"plane.pin_move": { plane_id: string; index: number };
+	/** Move a pinned Plane, placed as in `plane.pin`. */
+	"plane.pin_move": { plane_id: string } & Anchor;
+	/** The rail opened a branch: the server ships its children. The tree is lazy. */
+	"plane.expand": { plane_id: string };
+	/** The rail closed a branch. */
+	"plane.collapse": { plane_id: string };
 };
+
+/** Where a placed thing goes: before or after a sibling, neither for the end. */
+export type Anchor = { before?: string; after?: string };
+
+/** The anchor that puts an item at `index` of `others` (the item itself left out). */
+export function anchorAt(others: readonly string[], index: number): Anchor {
+	return index >= 0 && index < others.length ? { before: others[index] } : {};
+}
 
 /** Send one op. Threaded down from `Sidebar.tsx` into the rail. */
 export type Notify = <K extends keyof Ops>(op: K, args: Ops[K]) => void;

@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, Any
 
 import pytest
 
-from nuspace.system.devices.web.session import PipeSession, SessionPipe, _Pipe
+from nuspace.devices.web.session import PipeSession, SessionPipe, _Pipe
 from nustd.ui.core import OP_NOTIFY, Frame, WsSession
 
 

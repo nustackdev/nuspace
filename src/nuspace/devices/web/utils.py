@@ -1,8 +1,8 @@
-"""The small things both regions and the device are built out of. Helpers, not concepts.
+"""The small things the shell, the regions and the device are built out of. Helpers, not concepts.
 
 A mark for the refs nuspace mounts on a browser, the two halves idiom the
 wire vocabulary is spelled in, where a cell's own ui lands under the viewer,
-the arm factory, and the total readers an arm reads a browser event with.
+the arm factory, and the strict readers an arm reads a browser event with.
 
 **The two halves**, stated once so neither region respells them:
 
@@ -18,6 +18,12 @@ env's rewrite, :class:`CellRoot`, splices every bare ui chain under the
 cell's own node on the viewer, and :func:`rooted` keeps store chains (and
 nuspace's own refs) out of it.
 
+**A failed interaction toasts.** Every browser event runs under one guard
+(:meth:`Arms.event`): a raise is reported on stdout and shown on the tab as
+a toast with the error's type and message, and the arm keeps listening.
+A malformed event raises like any other failure: the field readers here
+are strict.
+
 A worker unpickles :class:`CellRoot` and the refs it holds, so this module
 imports no web server, at module scope or through anything it imports.
 """
@@ -28,9 +34,10 @@ from typing import TYPE_CHECKING
 
 import nu
 import nustd.ui
-from nuspace.ops.utils import field_str
-from nuspace.system.utils import isolated, report
+from nuspace.utils.policies import isolated, report
 from nustd.ui.core import Changed, Ref, SectionRef, Write
+
+from .interactions import ErrorMessage, ErrorType, EventField
 
 
 if TYPE_CHECKING:
@@ -49,9 +56,13 @@ __all__ = [
     "cell_ui",
     "cells_ui",
     "event",
+    "field_bool",
+    "field_dict",
     "field_ids",
-    "field_index",
+    "field_str",
+    "placed",
     "rooted",
+    "toast",
     "write",
 ]
 
@@ -92,6 +103,11 @@ def write(ref: Ref, op: str, **fields: object) -> nu.Nu:
     return Write(ref, nu.Dict.of(op=op, **fields))
 
 
+def toast(ref: Ref, kind: nu.StrArg, message: nu.StrArg) -> nu.Nu:
+    """Show a toast on the tab: an error's type as its title, its message under it."""
+    return write(ref, "show", type=kind, message=message)
+
+
 # --- Where a cell's ui lands -------------------------------------------------
 
 
@@ -122,7 +138,7 @@ def cell_ui(viewer: Ref, cell: nu.StrArg) -> SectionRef:
 
     Args:
         viewer: The ref cells are drawn on, bound to its place on the shell.
-        cell: The cell id, any ``StrArg`` (eg ``ops.Here.cell``).
+        cell: The cell id, any ``StrArg`` (eg ``Here.cell``).
     """
     return SectionRef(
         cell, section_cls=nustd.ui.Column, parent_ref=cells_ui(viewer), props={"gap": 0}
@@ -154,51 +170,67 @@ class CellRoot:
 
 
 class Arms:
-    """Arm factory for one feed. Holds the label its failures print under."""
+    """Arm factory for one feed: its label, and the tab's toast ref its event arms report to.
 
-    __slots__ = ("label",)
+    Args:
+        label: What its failures print under.
+        toasts: The tab's :class:`~nuspace.devices.web.ref.ToastRef`. None for a feed with no events.
+    """
 
-    def __init__(self, label: str) -> None:
+    __slots__ = ("label", "toasts")
+
+    def __init__(self, label: str, toasts: Ref | None = None) -> None:
         self.label = label
+        self.toasts = toasts
 
     def report(self, what: str, error: nu.Nu) -> nu.Nu:
         """Say ``error`` went wrong in ``what``, one line on this process's stdout."""
         return report(f"web {self.label}", what, error)
 
     def guard(self, term: nu.Nu, what: str) -> nu.Nu:
-        """Run ``term``, and survive it raising: the web policy, report and end the arm."""
+        """Run ``term``, and survive it raising: report and end the arm. For feeds, never events."""
         return isolated(term, f"web {self.label}", what)
 
-    def event(self, name: str, change: nu.Nu, body: Callable[[nu.Attr], nu.Nu]) -> nu.Nu:
-        """One browser subscription, every event, twice guarded.
+    def toasted(self, term: nu.Nu, what: str) -> nu.Nu:
+        """Run ``term``; on a raise, report it and toast its type and message on the tab.
 
-        The inner guard keeps the arm alive across a bad frame, the outer
-        turns a dead subscription into a completed arm rather than a raise
-        that takes the tab's other arms with it.
+        The one base path every user-initiated interaction fails through.
+        """
+
+        def caught(error: nu.Nu) -> nu.Nu:
+            said = self.report(what, error)
+            if self.toasts is None:
+                return said
+            return said >> toast(self.toasts, ErrorType(error), ErrorMessage(error))
+
+        return nu.TryCatch(term, catch=caught)
+
+    def event(self, name: str, change: nu.Nu, body: Callable[[nu.Attr], nu.Nu]) -> nu.Nu:
+        """One browser subscription, every event, each one toasted when it fails.
+
+        The inner guard keeps the arm alive across a failed event and tells
+        the tab; the outer turns a dead subscription into a completed arm
+        rather than a raise that takes the tab's other arms with it.
 
         Args:
             name: What failures say.
             change: The subscription, built fresh per arm.
             body: Builds what runs per event from the event's ref.
         """
-        return self.guard(nu.ReactEvery(change, lambda ev: self.guard(body(ev), name)), name)
+        return self.guard(nu.ReactEvery(change, lambda ev: self.toasted(body(ev), name)), name)
 
     def plane_event(
         self, name: str, change: nu.Nu, op: Callable[[nu.Str, nu.Attr], nu.Nu]
     ) -> nu.Nu:
-        """:meth:`event` for an op on a plane: ``op(plane_id, event)`` when the event names one."""
-
-        def body(event: nu.Attr) -> nu.Nu:
-            plane_id = field_str(event, "plane_id")
-            return nu.IfDo(plane_id != "", op(plane_id, event))
-
-        return self.event(name, change, body)
+        """:meth:`event` for an op on a plane: ``op(plane_id, event)``. No ``plane_id`` raises."""
+        return self.event(name, change, lambda ev: op(field_str(ev, "plane_id"), ev))
 
     def state(self, name: str, change: nu.Nu, ship: nu.Nu) -> nu.Nu:
-        """A level watch, guarded: ship after subscribing, on every change and on re-checks.
+        """A level watch, guarded: ship after subscribing and on every change.
 
-        ``ship`` reads the store as it is now, so a change the subscription
-        missed ships on the next re-check.
+        ``ship`` reads the store as it is now. A feed redraws a display, so a
+        missed notification leaves it stale until the next change, which is
+        fine: no re-checks.
         """
         return self.guard(nu.Reconcile(change, self.guard(ship, name)), name)
 
@@ -215,20 +247,47 @@ class Arms:
 
 # --- Reading one event's fields ---------------------------------------------
 #
-# Total on purpose: a field the browser left out reads as its default, not as
-# NULL, so an op is handed what it wants. A string field is
-# :func:`~nuspace.ops.utils.field_str`, shared with the rows the ops read.
+# Strict on purpose: a field the browser left out, or sent as the wrong
+# type, raises, and the event's guard toasts it. A malformed event never runs
+# an op on a guess.
+
+
+def field_str(row: nu.Nu, field: str) -> nu.Str:
+    """One string field off an event. Absent or not a string raises ``ValueError``."""
+    return nu.Str(EventField(row, field, "str"))
+
+
+def field_bool(row: nu.Nu, field: str) -> nu.Bool:
+    """One bool field off an event. Absent or not a bool raises ``ValueError``."""
+    return nu.Bool(EventField(row, field, "bool"))
 
 
 def field_ids(row: nu.Nu, field: str) -> nu.List:
-    """One list of ids off an event or a row. Empty when absent."""
-    return nu.List(nu.Dict(row).get_item(field, nu.List.of()))
+    """One list of ids off an event. Absent or not a list of strings raises ``ValueError``."""
+    return nu.List(EventField(row, field, "ids"))
 
 
-def field_index(row: nu.Nu, field: str, end: nu.IntArg) -> nu.Int:
-    """One position off an event, ``end`` when absent: a position the op reads as the end.
+def field_dict(row: nu.Nu, field: str) -> nu.Dict:
+    """One dict field off an event. Absent or not a dict raises ``ValueError``."""
+    return nu.Dict(EventField(row, field, "dict"))
 
-    Zero is a real position, so a ``0`` default would prepend everything a
-    caller forgot to place.
+
+def placed(row: nu.Nu, op: Callable[..., nu.Nu]) -> nu.Nu:
+    """``op`` with the event's placement: ``before=`` or ``after=`` an id, or neither for the end.
+
+    ``op(before=None, after=None)`` builds the op. The event names one of
+    ``before`` and ``after``, or neither; a given one must be a string, and
+    both raise ``ValueError``.
     """
-    return nu.int(nu.Dict(row).get_item(field, end))
+    before = nu.Str(EventField(row, "before", "anchor"))
+    after = nu.Str(EventField(row, "after", "anchor"))
+    both = (before != "").and_(after != "")
+    return nu.IfDo(
+        both,
+        nu.Raise("malformed event: give before or after, not both", exc_cls=ValueError),
+        nu.IfDo(
+            before != "",
+            op(before=before),
+            nu.IfDo(after != "", op(after=after), op()),
+        ),
+    )

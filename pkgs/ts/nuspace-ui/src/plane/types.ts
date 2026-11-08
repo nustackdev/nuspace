@@ -47,7 +47,7 @@ export type Cell = {
 /**
  * The Plane's own settings, as `set_plane.meta` ships them. Open-ended: the two
  * named keys are the ones the browser reads today, and anything else the
- * server adds rides along untouched so a `plane.meta` merge never drops it.
+ * server adds rides along untouched so a `plane.web` flags merge never drops it.
  */
 export type PlaneMeta = Record<string, unknown> & {
 	/** Whether the Plane's own Cells can be authored from in here. The

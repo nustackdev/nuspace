@@ -1,5 +1,5 @@
 // The Viewer op table, browser side. Mirrors
-// `nuspace/web/viewer/interactions.py`.
+// `nuspace/devices/web/viewer/interactions.py`.
 //
 // One ref per op: a notify goes to `<viewer ref>.ops.<name>` and the payload
 // carries that op's arguments and nothing else. There is no `op` key, because
@@ -14,7 +14,7 @@
 // Every Cell write is here and every Plane write the sidebar makes is in
 // ../sidebar/ops.ts. That is the whole line between the two refs. `planes.open`
 // is on this side because which panes are open is a fact about what the Viewer
-// has open, and `plane.meta` because the settings are flipped from a pane.
+// has open, and `plane.web` because the settings are flipped from a pane.
 //
 // ## Ids are minted here
 //
@@ -28,29 +28,32 @@ export type Ops = {
 	/**
 	 * The full ordered list of open panes, left to right, and each one's
 	 * params by Plane, sent whenever either changes and on load. One way: the
-	 * server writes it as the connection's routes and params (data: nothing
-	 * runs again), and answers with a `set_plane` plus a `set_status` per
-	 * Plane.
+	 * server writes it as the tab's pane order and each pane's params (data:
+	 * nothing runs again), and answers with a `set_plane` plus a `set_status`
+	 * per Plane.
 	 */
 	"planes.open": { plane_ids: string[]; params: Record<string, Record<string, string>> };
 	/**
-	 * Shallow-merge into the Plane's `meta`. The pane applies it optimistically
-	 * and the next `set_plane` confirms it.
+	 * Set the Plane's web flags given (`editable`, `full_width`, `compact`).
+	 * The pane applies them optimistically and the next `set_plane` confirms.
 	 */
-	"plane.meta": { plane_id: string; meta: Record<string, unknown> };
+	"plane.web": { plane_id: string; flags: Record<string, boolean> };
 	"cell.create": {
 		plane_id: string;
 		cell_id: string;
 		/** The Cell it is made from. The server stores that Cell's
 		 *  program, or the starter program when no Cell has this name. */
 		name: string;
-		index: number;
+		/** Before or after a cell of the plane, neither for the end. */
+		before?: string;
+		after?: string;
 	};
 	/** Replaces the stored program. Nothing else about the cell moves. A cell
 	 *  id is unique across the space, so it is the whole address. */
 	"cell.update": { cell_id: string; source: string };
 	"cell.delete": { cell_id: string };
-	"cell.reorder": { plane_id: string; cell_ids: string[] };
+	/** One cell before or after another of its plane, neither for the end. */
+	"cell.move": { cell_id: string; before?: string; after?: string };
 	/** Run the cell again in this pane's run. With the run over, the whole
 	 *  pane runs again. */
 	"cell.restart": { cell_id: string };
@@ -60,3 +63,21 @@ export type Ops = {
 
 /** Send one op. Threaded down from the strip (../main/Main.tsx) into each plane. */
 export type Notify = <K extends keyof Ops>(op: K, args: Ops[K]) => void;
+
+/**
+ * The moves that turn `current` into `next`, one `cell.move` each: walk
+ * `next` and put every cell out of place after the one before it. A block
+ * moved as one costs a move per cell in it.
+ */
+export function cellMoves(current: readonly string[], next: readonly string[]): Ops["cell.move"][] {
+	const now = current.filter((id) => next.includes(id));
+	const out: Ops["cell.move"][] = [];
+	next.forEach((id, i) => {
+		if (now[i] === id) return;
+		const from = now.indexOf(id);
+		if (from >= 0) now.splice(from, 1);
+		now.splice(i, 0, id);
+		out.push(i === 0 ? { cell_id: id, before: now[1] } : { cell_id: id, after: next[i - 1] });
+	});
+	return out;
+}

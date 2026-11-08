@@ -1,4 +1,5 @@
-// The shell: the sidebar and the main strip, side by side, and nothing else.
+// The shell: the sidebar and the main strip, side by side, and the toaster
+// a failed interaction shows in (../refs/toast.ts).
 //
 // There is no top strip and no surface switcher, because there is no third
 // region to switch to, and the two controls the window still has (the
@@ -45,6 +46,7 @@ import {
 	type ResizablePanelGroupHandle,
 	SIDEBAR_WIDTH,
 	Spinner,
+	Toaster,
 	useAnchorCatcher,
 } from "@nustackdev/ui-kit";
 import { useLayoutEffect, useRef } from "react";
@@ -163,6 +165,7 @@ export function Shell() {
 					</main>
 				</ResizablePanel>
 			</ResizablePanelGroup>
+			<Toaster />
 		</div>
 	);
 }

@@ -1,30 +1,32 @@
-"""The web device: the ws server, its connections in the store, the feeds.
+"""The web device: the server, one arm per browser tab, nav, and the web planes it ships with.
 
-A device owns an external resource and makes it bindable. It never runs a
-cell (D1): which plane runs for a tab is the nav service's call, made from
-``connections[sid].routes``, which this device writes and nobody else (D14).
+A device is a way into the space with its own store: it calls ops like
+anyone. Per tab, one arm:
 
-Per connection, one arm:
-
-1. ``connections[sid] = {opened: now, routes: [], params: {}}``;
-2. in parallel: the route arm, and the shell boot followed by the sidebar
-   and viewer feeds. The route arm subscribes beside the boot rather than
+1. ``web.open_tab(sid)``: the tab's ``Conn.connections[sid]`` row;
+2. in parallel: the pane arm, and the shell boot followed by the sidebar
+   and viewer feeds. The pane arm subscribes beside the boot rather than
    after it, so the browser's first ``planes.open`` cannot land before
    anybody listens;
-3. on every way out, ``connections[sid]`` is deleted.
+3. on every way out, ``web.close_tab(sid)``: nav stops its panes' runs.
 
-The route arm (D15, D44): the viewer's ``planes.open`` carries the full
-ordered list of open planes (its panes, left to right) and each pane's
-params. Deduped with order kept and empty ids dropped, the list is written
-whole as ``routes``, and the params of the planes in it as ``params``, in one
-commit. Every plane that left the list has its cells erased as drawn first.
-The planes newly in the list are pushed onto ``Space.state.recents`` in the
-same commit (:func:`remember`). Params are data: a cell that follows them
-reads them (:func:`nuspace.ui.params`), and nothing here runs a plane again.
-One way: the browser reports, nothing here asks it.
+**The pane arm.** The viewer's ``planes.open`` carries the full ordered
+list of open panes, left to right, and each pane's params. It becomes
+``web.set_panes`` (the order whole: a new plane gets its pane, nav runs it),
+then ``web.set_pane_params`` for each pane whose params moved, then
+``web.visit`` for each plane newly open (not home, settings or search).
+The cells of every plane leaving the list are erased as drawn first, so
+nothing of a closed pane stays on screen. The browser mints a new plane's
+id and opens it while its create is in flight, so the arm waits a moment
+for a plane new to the list before it asks.
 
-What a run needs to draw on a tab is the session env, returned beside the
-term for the host to register with the kernel.
+**A failed interaction toasts.** Every browser event, ``planes.open``
+included, runs under one guard: its error's type and message show on the
+tab (:meth:`~nuspace.devices.web.utils.Arms.event`).
+
+**The device term** (:func:`serve_web`): the web planes made where missing
+(:func:`~nuspace.devices.web.planes.ensure`), then the server and nav side
+by side. nav runs here, in the host, beside the tabs it serves.
 
 Beside the socket the server answers one plain route,
 ``POST /api/telemetry/space-loaded``: the browser saying a page loaded,
@@ -34,51 +36,46 @@ never talks to PostHog and follows the same opt out.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+import socket
 from typing import TYPE_CHECKING
 
 from starlette.responses import Response
 from starlette.routing import Route
 
 import nu
-import nustd.time
-from nuspace import _telemetry, ops
-from nuspace.ext import space_registry
-from nuspace.ops.utils import atomic
-from nuspace.shapes import RECENTS_CAP, Space
-from nuspace.system.devices.web.env import SESSION_ENV, session_env
-from nuspace.system.devices.web.session import served_sessions
-from nuspace.system.devices.web.shell import Shell
-from nuspace.system.devices.web.sidebar import registered_entries, sidebar_feed
-from nuspace.system.devices.web.utils import Arms, cell_ui, field_ids
-from nuspace.system.devices.web.viewer import on_open, slash_entries, viewer_feed
-from nuspace.system.kernel.space import free_port
-from nuspace.system.kernel.utils import snap
-from nuspace.system.services.nav import clear_connections
-from nuspace.system.ui.home import PLANE as HOME
-from nuspace.system.ui.search import PLANE as SEARCH
-from nuspace.system.ui.settings import PLANE as SETTINGS
+import nuspace
+from nuspace import _telemetry
+from nuspace.ops.brackets import atomic
+from nuspace.specs import space_registry
 from nustd.ui.core import WsSession
 from nustd.ws_server import SID_ATTR, listen, run_once, session_for, sessions_fold
+
+from . import ops as web
+from .env import SESSION_ENV, session_env
+from .nav import nav
+from .planes import HOME, SEARCH, SETTINGS, ensure
+from .session import served_sessions
+from .shapes import Conn
+from .shell import Shell
+from .sidebar import registered_entries, sidebar_feed
+from .utils import Arms, cell_ui, field_dict, field_ids
+from .viewer import on_open, slash_entries, viewer_feed
 
 
 if TYPE_CHECKING:
     from starlette.requests import Request
 
-    from nuspace.ext import Registry
-    from nuspace.system.kernel import EnvFactory
+    from nuspace.kernel import EnvFactory
+    from nuspace.specs import Registry
     from nustd.ui.core import Ref
 
 
 __all__ = [
     "BANNER",
+    "OPEN_WAIT",
     "ROUTES",
-    "clear_connections",
-    "close_connection",
     "connection",
-    "open_connection",
-    "remember",
-    "route_arm",
+    "pane_arm",
     "serve_web",
     "space_loaded",
 ]
@@ -87,128 +84,101 @@ __all__ = [
 #: What the server calls itself when it is up.
 BANNER = "nuspace"
 
-_arms = Arms("device")
-_connections = Space.connections
+#: How long the pane arm waits for a plane new to the list to land, in seconds:
+#: the browser opens a plane it creates while the create is in flight.
+OPEN_WAIT = 2.0
+
+#: Planes a tab opens without a visit: they live in the sidebar's nav group.
+_UNVISITED = (HOME, SETTINGS, SEARCH)
 
 
-def open_connection(sid: nu.StrArg) -> nu.Nu:
-    """Publish connection ``sid``: opened now, no plane open. One commit."""
-    row = _connections[sid]
-    return atomic(row.opened.set(nustd.time.time()) >> row.routes.set([]) >> row.params.set({}))
-
-
-def close_connection(sid: nu.StrArg) -> nu.Nu:
-    """Drop connection ``sid``. A no-op when it is gone."""
-    return atomic(nu.IfDo(_connections.contains(sid), _connections.del_item(sid)))
-
-
-def _erase(viewer: Ref, plane: nu.Nu) -> nu.Nu:
+def _erase(viewer: Ref, plane: nu.Str) -> nu.Nu:
     """A plane's cells erased as drawn, so nothing of a closed pane stays on screen."""
-    ids = nu.If(ops.plane_exists(plane), ops.cells(plane), [])
-    return nu.ForEachDo(snap(ids), lambda cell: cell_ui(viewer, nu.Str(cell)).erase())
+    cells = nuspace.Space.planes[plane].cells
+    ids = nu.If(cells.exists(), nu.list(cells.keys()), nu.Literal([]))
+    return nu.ForEachDo(atomic(ids), lambda cell: cell_ui(viewer, nu.Str(cell)).erase())
 
 
-def _remembered(plane: nu.Nu) -> nu.Bool:
-    """Whether an opened plane goes in recents: not home, settings or search, and not a service.
+def _landed(planes: nu.List) -> nu.Nu:
+    """Wait up to :data:`OPEN_WAIT` for every plane to be in the space and on the web.
 
-    A plane not written yet counts: a new plane is routed before its create
-    lands (D41), and the home cell drops ids that never came to exist.
+    A plane made in the same breath lands in two commits, its Space row then
+    its web row, so the wait hears both.
     """
-    props = Space.planes[plane].props
-    service = props.system.fallback(False).and_(props.ui.fallback(False).not_())
-    return nu.List.of(HOME, SETTINGS, SEARCH).contains(plane).or_(service).not_()
+    there = planes.iter().filter(
+        lambda p: nuspace.plane.exists(nu.Str(p)).and_(web.Web.planes.contains(nu.Str(p))).not_()
+    )
+    ready = nu.Int(nu.Count(there)) == 0
+    landing = nu.OnAny(
+        nuspace.Space.planes.on_children_change(), web.Web.planes.on_children_change()
+    )
+    waited = nu.WaitUntil(atomic(landing), atomic(ready), after=(0.05, 0.2, 0.5))
+    return nu.Timeout(OPEN_WAIT, waited, on_timeout=nu.Noop())
 
 
-def remember(opened: nu.Nu) -> nu.Nu:
-    """Push plane ids onto ``Space.state.recents``, newest first. Unbracketed.
+def pane_arm(viewer: Ref, sid: nu.StrArg, arms: Arms) -> nu.Nu:
+    """The tab's panes, as the viewer has them open. Never ends.
 
-    ``opened`` is a list in pane order, so its last one is the newest. Those
-    :func:`_remembered` skips are left out; the list is deduped and capped at
-    :data:`~nuspace.shapes.RECENTS_CAP`, and written whole (D24).
+    Per ``planes.open``: erase what closed, wait for planes new to the
+    list, then ``set_panes``, the params that moved, and a visit for each
+    plane newly open. Each step is its own commit, Conn then Web.
     """
-    recents = Space.state.recents
-    wanted = nu.Reversed(nu.Filter(nu.List(opened), lambda p: _remembered(nu.str(p))))
-
-    def push(held: nu.ObjectRef) -> nu.Nu:
-        pushed = nu.List(held)
-        kept = recents.fallback([]).iter().filter(lambda p: pushed.contains(p).not_())
-        merged = (pushed + kept.to_list())[0:RECENTS_CAP]
-        return nu.IfDo(pushed.len() > 0, recents.set(merged))
-
-    return nu.let(nu.List(nu.Collect(wanted)), push)
-
-
-@nu.host
-def _pane_params(planes: list, given: object) -> dict[str, dict[str, str]]:
-    """The params ``given`` holds for each of ``planes``, values as str. ``{}`` for one with none."""
-    raw = given if isinstance(given, Mapping) else {}
-    out: dict[str, dict[str, str]] = {}
-    for plane in planes:
-        held = raw.get(plane)
-        pairs = held if isinstance(held, Mapping) else {}
-        out[plane] = {str(k): str(v) for k, v in pairs.items() if v is not None}
-    return out
-
-
-def route_arm(viewer: Ref, sid: nu.StrArg) -> nu.Nu:
-    """Route ``sid`` to the panes the viewer has open (D15, D44). Never ends.
-
-    ``planes.open`` is the full list every time, with each pane's params. The
-    cells of every plane leaving it are erased as drawn before ``routes`` and
-    ``params`` are written, so nothing of a closed pane stays on screen. The
-    planes entering it are pushed onto recents in the same commit.
-    """
-    row = _connections[sid]
-    routes = row.routes.fallback([])
-
-    def routed(wanted: nu.ObjectRef, given: nu.Nu) -> nu.Nu:
-        kept = nu.List(wanted)
-
-        def write_params(params: nu.ObjectRef) -> nu.Nu:
-            closed = nu.Filter(snap(routes), lambda p: kept.contains(p).not_())
-            # Read inside the commit, so a burst of opens never pushes one twice.
-            opened = kept.iter().filter(lambda p: routes.contains(p).not_())
-            write = (
-                nu.let(opened.to_list(), remember)
-                >> row.routes.set(kept)
-                >> row.params.set(nu.Dict(params))
-            )
-            erase = nu.ForEachDo(nu.List(nu.Collect(closed)), lambda p: _erase(viewer, nu.Str(p)))
-            return erase >> atomic(nu.IfDo(_connections.contains(sid), write))
-
-        return nu.let(_pane_params(kept, given), write_params)
+    tab = Conn.connections[sid]
 
     def route(event: nu.Attr) -> nu.Nu:
-        ids = nu.Map(field_ids(event, "plane_ids"), lambda p: nu.str(p))
-        given = nu.Dict(event).get_item("params", nu.Dict.create())
-        kept = nu.List(nu.Collect(nu.Unique(nu.Filter(ids, lambda p: p != ""))))
-        return nu.let(kept, lambda wanted: routed(wanted, given))
+        wanted = field_ids(event, "plane_ids")
+        given = field_dict(event, "params")
 
-    return _arms.event("route", on_open(viewer), route)
+        def opened(held: nu.ObjectRef) -> nu.Nu:
+            before = nu.List(held)
+            fresh = wanted.iter().filter(lambda p: before.contains(p).not_()).to_list()
+            gone = before.iter().filter(lambda p: wanted.contains(p).not_()).to_list()
+
+            def params(at: nu.Attr) -> nu.Nu:
+                plane = nu.Str(at)
+                pairs = nu.Dict(given.get_item(plane, nu.Dict.create()))
+                moved = tab.panes[plane].params.fallback({}) != pairs
+                return nu.IfDo(moved, web.set_pane_params(sid, plane, pairs))
+
+            def visited(at: nu.Attr) -> nu.Nu:
+                plane = nu.Str(at)
+                skip = nu.List.of(*_UNVISITED).contains(plane)
+                return nu.IfDo(skip.not_(), atomic(web.visit(plane)))
+
+            return (
+                nu.ForEachDo(gone, lambda p: _erase(viewer, nu.Str(p)))
+                >> _landed(fresh)
+                >> atomic(web.set_panes(sid, wanted) >> nu.ForEachDo(wanted, params))
+                >> nu.ForEachDo(fresh, visited)
+            )
+
+        listed = nu.If(tab.order.exists(), nu.list(tab.order), nu.Literal([]))
+        return nu.let(atomic(listed), opened)
+
+    return arms.event("open", on_open(viewer), route)
 
 
-def connection(
-    sid: nu.StrArg, *, registry: Registry | None = None, shell: type[Shell] = Shell
-) -> nu.Nu:
+def connection(sid: nu.StrArg, *, registry: Registry | None = None) -> nu.Nu:
     """What one browser tab runs, with its session bound. Never ends.
 
     Args:
-        sid: The connection id.
-        registry: What the space registered: its Planes, what the sidebar
-            can create, and its Cells, for the viewer's ``/`` menu. None is
-            every installed package's (:func:`~nuspace.ext.space_registry`).
-        shell: The shell every tab holds.
+        sid: The tab id.
+        registry: What the space registered: its PlaneSpecs, what the
+            sidebar can create, and its CellSpecs, for the viewer's ``/``
+            menu. None is every installed package's.
     """
     reg = space_registry() if registry is None else registry
     planes, cells = list(reg.planes.values()), list(reg.cells.values())
-    boot = shell.boot(slash_entries(cells), registered_entries(planes))
+    arms = Arms("device", Shell.toast)
+    boot = Shell.boot(slash_entries(cells), registered_entries(planes))
     feeds = boot >> nu.ParallelAsync(
-        sidebar_feed(shell.sidebar, planes),
-        viewer_feed(shell.viewer, sid, cells),
+        sidebar_feed(Shell.sidebar, sid, planes, Shell.toast),
+        viewer_feed(Shell.viewer, sid, cells, Shell.toast),
     )
+    gone = atomic(nu.IfDo(Conn.connections.contains(sid), web.close_tab(sid)))
     return nu.TryCatch(
-        open_connection(sid) >> nu.ParallelAsync(route_arm(shell.viewer, sid), feeds),
-        finally_=close_connection(sid),
+        atomic(web.open_tab(sid)) >> nu.ParallelAsync(pane_arm(Shell.viewer, sid, arms), feeds),
+        finally_=gone,
     )
 
 
@@ -223,6 +193,13 @@ async def space_loaded(request: Request) -> Response:
 ROUTES = (Route("/api/telemetry/space-loaded", space_loaded, methods=["POST"]),)
 
 
+def _free_port() -> int:
+    """A port nothing listens on now, on the loopback."""
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        return int(s.getsockname()[1])
+
+
 def serve_web(
     *,
     registry: Registry | None = None,
@@ -235,34 +212,32 @@ def serve_web(
 ) -> tuple[nu.Nu, dict[str, EnvFactory]]:
     """The web device: the term the host runs, and the envs it registers.
 
-    The term opens the server and the socket workers draw through, then
-    runs one arm per connection. Connections a previous open left are the
-    host's to clear, before init starts (D34). It
-    never returns; it goes in a ``body=`` slot, beside the kernel, inside the
-    store brackets (``open_kernel``).
+    The term makes the web planes where missing, then runs the server (one
+    arm per tab) and nav side by side. It never returns; it goes beside the
+    kernel, inside the stores (Space, State, Web, Conn) with ``conn.db``
+    fresh, so no tab of a previous open is left.
 
     Args:
-        registry: What the space registered: its Planes, what the sidebar
-            can create, and its Cells, the viewer's ``/`` menu and what a
-            cell made from each entry stores. None is every installed
-            package's (:func:`~nuspace.ext.space_registry`).
+        registry: What the space registered: its PlaneSpecs, what the
+            sidebar can create, and its CellSpecs, the viewer's ``/`` menu.
+            None is every installed package's.
         host: The interface the server binds.
         port: The port the server binds.
         static: The wheel shipping the browser bundle. None serves the socket
             alone, eg for a vite dev server.
         open_browser: Open the URL once the server is up.
         log_level: How much the server says.
-        session_address: ``host:port`` for the connection socket. A free port
-            by default.
+        session_address: ``host:port`` for the tab socket. A free port by
+            default.
 
     Returns:
         ``(term, envs)``: ``envs`` maps ``"session"`` to the session env
         factory, ``factory(sid) -> Env``.
     """
-    session_address = session_address or f"127.0.0.1:{free_port()}"
+    session_address = session_address or f"127.0.0.1:{_free_port()}"
     registry = space_registry() if registry is None else registry
     sid = nu.Str(nu.Attr(SID_ATTR))
-    term = nu.With(
+    server = nu.With(
         listen(
             session_cls=WsSession,
             static=static,
@@ -277,11 +252,12 @@ def serve_web(
         body=sessions_fold(
             session_for(
                 SID_ATTR,
-                # Once per connection: the fold respawns ended arms on every
-                # connect or disconnect anywhere, and a tab rebooted because
-                # somebody else opened one is wiped for no reason.
+                # Once per tab: the fold respawns ended arms on every connect
+                # or disconnect anywhere, and a tab rebooted because somebody
+                # else opened one is wiped for no reason.
                 run_once(connection(sid, registry=registry)),
             )
         ),
     )
+    term = ensure() >> nu.ParallelAsync(server, nav())
     return term, {SESSION_ENV: session_env(session_address)}

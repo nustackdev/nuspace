@@ -6,7 +6,7 @@
 // the next `set_tree` replaces it with what the server stored.
 //
 // An index is a position among the pins with the Plane taken out, the end
-// when out of range, which is how the server reads it too.
+// when out of range. On the wire it goes as the pin it lands before.
 
 import type { Path } from "@nustackdev/ui-core";
 import { nodeAt, pathKey, tree as store } from "@nustackdev/ui-kit";
@@ -14,7 +14,7 @@ import { useMemo } from "react";
 import { useTypePath } from "../core/surfaces";
 import { notifyOp } from "../core/wire";
 import { NAV_PLANES } from "./nav";
-import type { Ops } from "./ops";
+import { anchorAt, type Ops } from "./ops";
 import { usePinned, usePlaneTree } from "./state";
 import { KIND_PLANE } from "./types";
 
@@ -54,11 +54,18 @@ function patch(path: Path, next: (pins: string[]) => string[]): void {
 function bind(path: Path, ids: string[]): Pins {
 	const send = <K extends "plane.pin" | "plane.unpin" | "plane.pin_move">(op: K, args: Ops[K]) =>
 		notifyOp<Ops, K>(path, op, args);
+	const at = (id: string, index: number) =>
+		anchorAt(
+			ids.filter((k) => k !== id),
+			index,
+		);
 	return {
 		ids,
 		pin: (id, index = -1) => {
 			patch(path, (pins) => placePin(pins, id, index));
-			send("plane.pin", { plane_id: id, index });
+			// Pinned already, it is a move: a second pin is refused.
+			const op = ids.includes(id) ? "plane.pin_move" : "plane.pin";
+			send(op, { plane_id: id, ...at(id, index) });
 		},
 		unpin: (id) => {
 			patch(path, (pins) => pins.filter((k) => k !== id));
@@ -66,7 +73,7 @@ function bind(path: Path, ids: string[]): Pins {
 		},
 		move: (id, index) => {
 			patch(path, (pins) => (pins.includes(id) ? placePin(pins, id, index) : pins));
-			send("plane.pin_move", { plane_id: id, index });
+			send("plane.pin_move", { plane_id: id, ...at(id, index) });
 		},
 	};
 }

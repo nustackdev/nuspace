@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from nuspace.system.devices.web.utils import event, write
+from nuspace.devices.web.utils import event, write
 
 
 if TYPE_CHECKING:
@@ -35,11 +35,11 @@ __all__ = [
     "STATE_STOPPED",
     "on_create_cell",
     "on_delete_cell",
+    "on_move_cell",
     "on_open",
-    "on_reorder_cells",
     "on_restart_cell",
     "on_restart_plane",
-    "on_set_meta",
+    "on_set_web",
     "on_update_cell",
     "set_absent",
     "set_plane",
@@ -68,7 +68,7 @@ STATES = (STATE_IDLE, STATE_STARTING, STATE_RUNNING, STATE_STOPPED, STATE_FAILED
 #: No plane by that id.
 ABSENT_MISSING = "missing"
 
-#: A plane, but not a ui one: it runs without a view.
+#: A plane, but not on the web: no tab shows it.
 ABSENT_HEADLESS = "headless"
 
 
@@ -85,8 +85,9 @@ def set_plane(
 ) -> Nu:
     """Replace what one pane draws: one plane and its cells, in order.
 
-    ``meta`` is the plane's whole meta, ``editable`` and ``full_width`` at
-    least. A cell is ``{id, name, source}``. Every open plane is answered
+    ``meta`` is how the pane shows it: its web flags (``editable``,
+    ``full_width``, ``compact``) and its ``icon``. A cell is ``{id, name,
+    source, spec, has_ui, classes}``. Every open plane is answered
     with one or with a :func:`set_absent`, or its pane loads forever.
     """
     return write(viewer, "set_plane", plane_id=plane_id, title=title, meta=meta, cells=cells)
@@ -123,9 +124,10 @@ def on_open(viewer: Ref) -> Changed:
 
 
 def on_create_cell(viewer: Ref) -> Changed:
-    """``{plane_id, cell_id, name, index}``. Browser minted id.
+    """``{plane_id, cell_id, name, before?, after?}``. Browser minted id.
 
-    ``name`` names a Cell spec: the cell stores its prog and takes its name.
+    ``name`` names a CellSpec: the cell stores its source and takes its
+    name. ``before`` or ``after`` is a cell of the plane, neither the end.
     """
     return event(viewer, "cell.create")
 
@@ -140,13 +142,13 @@ def on_delete_cell(viewer: Ref) -> Changed:
     return event(viewer, "cell.delete")
 
 
-def on_reorder_cells(viewer: Ref) -> Changed:
-    """``{plane_id, cell_ids}``. One plane's cells, in the new order."""
-    return event(viewer, "cell.reorder")
+def on_move_cell(viewer: Ref) -> Changed:
+    """``{cell_id, before?, after?}``. Moves one cell among its plane's, neither anchor the end."""
+    return event(viewer, "cell.move")
 
 
 def on_restart_cell(viewer: Ref) -> Changed:
-    """``{cell_id}``. Runs the cell again in this pane's run."""
+    """``{cell_id}``. Restarts the pane of the cell's plane: a new plane run, as ``plane.restart``."""
     return event(viewer, "cell.restart")
 
 
@@ -155,6 +157,6 @@ def on_restart_plane(viewer: Ref) -> Changed:
     return event(viewer, "plane.restart")
 
 
-def on_set_meta(viewer: Ref) -> Changed:
-    """``{plane_id, meta}``. Merges ``meta``'s keys into the plane's meta, shallow."""
-    return event(viewer, "plane.meta")
+def on_set_web(viewer: Ref) -> Changed:
+    """``{plane_id, flags}``. Sets the plane's web flags given: ``editable``, ``full_width``, ``compact``."""
+    return event(viewer, "plane.web")

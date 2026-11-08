@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from nuspace.system.devices.web.utils import event, write
+from nuspace.devices.web.utils import event, write
 
 
 if TYPE_CHECKING:
@@ -26,8 +26,10 @@ __all__ = [
     "KIND_PLANE",
     "KIND_SPACE",
     "ROOT_ID",
+    "on_collapse",
     "on_create_plane",
     "on_delete_plane",
+    "on_expand",
     "on_move_pin",
     "on_move_plane",
     "on_pin_plane",
@@ -57,9 +59,11 @@ ROOT_ID = "space"
 
 
 def set_tree(sidebar: Ref, rows: ListArg[dict], pinned: ListArg[str]) -> Nu:
-    """Replace the sidebar. A row is ``{id, kind, title, parent, children, made_by, icon, system}``.
+    """Replace the sidebar. A row is ``{id, kind, title, parent, children, spec, icon, system}``.
 
-    ``pinned`` is the pinned plane ids, in order, every one a row too.
+    The tree is lazy: ``children`` is filled only for the space row and the
+    branches the tab has open; every other row ships ``[]``. ``pinned`` is
+    the pinned plane ids, in order, every one a row too.
     """
     return write(sidebar, "set_tree", planes=rows, pinned=pinned)
 
@@ -68,10 +72,10 @@ def set_tree(sidebar: Ref, rows: ListArg[dict], pinned: ListArg[str]) -> Nu:
 
 
 def on_create_plane(sidebar: Ref) -> Changed:
-    """``{plane_id, parent_id, made_by, title}``. The browser minted ``plane_id``.
+    """``{plane_id, parent_id, spec, title}``. The browser minted ``plane_id``.
 
-    ``made_by`` names the registered Plane to create, ``parent_id`` is a
-    plane id or :data:`ROOT_ID`.
+    ``spec`` names the registered PlaneSpec to create, ``""`` for the empty
+    plane; ``parent_id`` is a plane id or :data:`ROOT_ID`.
     """
     return event(sidebar, "plane.create")
 
@@ -87,10 +91,9 @@ def on_delete_plane(sidebar: Ref) -> Changed:
 
 
 def on_move_plane(sidebar: Ref) -> Changed:
-    """``{plane_id, parent_id, index}``.
+    """``{plane_id, parent_id, before?, after?}``.
 
-    ``index`` is a position among the parent's children as the sidebar
-    draws them, the moved plane taken out.
+    ``before`` or ``after`` is a sibling under ``parent_id``, neither the end.
     """
     return event(sidebar, "plane.move")
 
@@ -101,10 +104,7 @@ def on_set_icon(sidebar: Ref) -> Changed:
 
 
 def on_pin_plane(sidebar: Ref) -> Changed:
-    """``{plane_id, index}``. ``index`` is a position among the pins, the plane taken out.
-
-    Out of range, -1 included, is the end. Already pinned, the plane moves there.
-    """
+    """``{plane_id, before?, after?}``: pin before or after a pin, neither the end."""
     return event(sidebar, "plane.pin")
 
 
@@ -114,5 +114,15 @@ def on_unpin_plane(sidebar: Ref) -> Changed:
 
 
 def on_move_pin(sidebar: Ref) -> Changed:
-    """``{plane_id, index}``. Reorders a pinned plane, ``index`` as in ``plane.pin``."""
+    """``{plane_id, before?, after?}``. Moves a pinned plane, placed as in ``plane.pin``."""
     return event(sidebar, "plane.pin_move")
+
+
+def on_expand(sidebar: Ref) -> Changed:
+    """``{plane_id}``. The tab opened the branch: its children load."""
+    return event(sidebar, "plane.expand")
+
+
+def on_collapse(sidebar: Ref) -> Changed:
+    """``{plane_id}``. The tab closed the branch."""
+    return event(sidebar, "plane.collapse")

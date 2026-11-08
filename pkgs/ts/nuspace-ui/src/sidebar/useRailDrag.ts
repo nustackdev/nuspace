@@ -24,7 +24,7 @@
 
 import type * as React from "react";
 import { useCallback, useMemo, useState } from "react";
-import type { Notify } from "./ops";
+import { anchorAt, type Notify } from "./ops";
 import { subtreeOf, type VisibleRow } from "./tree";
 import { childrenOf, type PlaneTree, ROOT_ID } from "./types";
 
@@ -113,7 +113,14 @@ export function useRailDrag({
 			const move = dropMove(tree, id, to, row);
 			if (!move) return;
 			if (move.parent !== ROOT_ID) reveal(move.parent);
-			notify("plane.move", { plane_id: id, parent_id: move.parent, index: move.index });
+			const others = childrenOf(tree, move.parent)
+				.map((r) => r.id)
+				.filter((k) => k !== id);
+			notify("plane.move", {
+				plane_id: id,
+				parent_id: move.parent,
+				...anchorAt(others, move.index),
+			});
 		},
 		[dragKey, barred, rows, tree, notify, reveal, end],
 	);

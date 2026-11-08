@@ -119,19 +119,18 @@ class _Tree:
 
 
 def _web_row(pid: nu.Str, spec: PlaneSpec) -> nu.Nu:
-    """The plane's web row, from ``spec.web``: the plane shows on the web.
+    """The plane's web row, from ``spec.web``: ``nuspace.devices.web.add``, the plane shows on the web.
 
-    Stands in for ``nuspace.devices.web.add`` until the web device has its
-    ops. Imported here, not at the top, so core loads without the web device.
+    Imported here, not at the top, so core loads without the web device.
     """
-    from nuspace.devices.web.shapes import Web
+    from nuspace.devices.web import ops as web
 
-    row = Web.planes[pid]
-    web = spec.web
-    return (
-        row.editable.set(web.editable)  # type: ignore[union-attr]
-        >> row.full_width.set(web.full_width)  # type: ignore[union-attr]
-        >> row.compact.set(web.compact)  # type: ignore[union-attr]
+    flags = spec.web
+    return web.add(
+        pid,
+        editable=flags.editable,  # type: ignore[union-attr]
+        full_width=flags.full_width,  # type: ignore[union-attr]
+        compact=flags.compact,  # type: ignore[union-attr]
     )
 
 

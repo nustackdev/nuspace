@@ -10,7 +10,7 @@ const tree = coerceTree([
 	{ id: "a", kind: "plane", title: "A", parent: ROOT_ID, children: ["a1", "a2"] },
 	{ id: "a1", kind: "plane", title: "A1", parent: "a", children: [] },
 	{ id: "a2", kind: "plane", title: "A2", parent: "a", children: [] },
-	{ id: "b", kind: "plane", title: "B", parent: ROOT_ID, children: [], made_by: "runs", icon: "" },
+	{ id: "b", kind: "plane", title: "B", parent: ROOT_ID, children: [], spec: "runs", icon: "" },
 	{ id: "g", kind: "group", title: "Old", parent: ROOT_ID, children: [] },
 ]);
 
@@ -27,7 +27,7 @@ describe("sidebar tree", () => {
 			["b", 0],
 		]);
 		expect(tree.g).toBeUndefined();
-		expect(row("b")?.made_by).toBe("runs");
+		expect(row("b")?.spec).toBe("runs");
 	});
 
 	it("places a drop before, after, into, and at the end", () => {

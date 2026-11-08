@@ -1,52 +1,41 @@
-"""The viewer feed: one arm per interaction, all in parallel. Host only.
+"""The viewer feed: one arm per interaction, all in parallel, for one tab. Host only.
 
 Two families:
 
 - **browser to store.** A viewer event runs one op over its own fields.
+  A failure toasts on the tab (:meth:`~nuspace.devices.web.utils.Arms.event`).
 - **store to browser.** An open plane or its pane's run changed; its arm
   ships the plane or the statuses again, keyed by ``plane_id``.
 
-**A pane with nothing to draw is told why.** A route nav does not bring up
-(:func:`~nuspace.system.services.nav.routable`) ships ``set_absent`` in
-place of the plane: ``missing`` when there is no such plane, ``headless``
-when it is not a ui one. The same arm reships, so a plane deleted from
-another tab turns its pane absent, and one that comes back or turns ui is
-drawn again.
+**Which planes are open** is the tab's pane order,
+``Conn.connections[sid].order``, written by the device from the browser's
+``planes.open``. One arm per plane in it: its subscriptions die with it
+when the plane leaves the order.
 
-**Which planes are open** is ``connections[sid].routes``, written by the
-device's route arm (D15), never read off the browser. One arm per plane in
-it: its subscriptions die with it when the plane leaves ``routes``.
-
-**Narrow watch.** A plane is shipped again when anything under its row
-changes, its ``version`` counting every write to its cells included; the
-statuses when the pane's plane run or the plane's cells change, or a cell
-run of the pane's run starts, begins or ends. Nothing of another plane or
-run wakes either, and neither does a cell writing its state or a cell run
-writing its output. Both are level: each ship reads the store as it is, so
-a change a fresh subscription missed ships on the next re-check. Every wake
-ships, the same view included: the browser takes a repeat as is.
-
-**A failing arm ends alone.** Every arm is guarded
-(:meth:`~nuspace.system.devices.web.utils.Arms.guard`): a raise is reported
-on stdout and ends that arm, while the plane's other arms and the rest of
-the connection keep going.
-
-**Meta goes both ways.** A shipped plane carries its whole meta, and a
-``plane.meta`` event merges keys into it. A plane's props never reach the
-browser, a cell's ship as a flat ``made_by`` and ``has_ui``, and neither is written from it.
-
-**A cell's classes are read off its spec, here.** Each shipped cell carries
-the classes of the installed Cell spec its ``made_by`` names, so the browser
-binds behaviour to a class and never to who made a cell. A cell made from no
-spec, or from one no longer installed, ships none.
+**A pane with nothing to draw is told why.** A plane not in the space, or
+removed, ships ``set_absent`` ``missing``; one with no web row ``headless``.
+The same arm reships, so a plane removed from another tab turns its pane
+absent.
 
 **Statuses come from records, never stored.** A pane shows the plane run
-nav made for it (:func:`~nuspace.system.services.nav.pane_run`), so two tabs
-on one plane each see their own. Per cell: its live cell run in that run if
-it has one, else its most recent. Live and not started is starting, live
-and started is running. Ended, it is idle when it exited ``ok``, stopped
-when ``interrupted`` or ``killed``, failed (with its error) when
-``failed``. No run, or no cell run of the cell, is idle.
+nav keeps for it (``Pane.plane_run``), so two tabs on one plane each see
+their own. Per cell: its newest cell run in that run, one seek on its
+history list. Live and not started is starting, live and started is
+running. Ended, it is idle when it exited ``ok``, stopped when
+``interrupted`` or ``killed``, failed (with its error) when ``failed``. No
+run, or no cell run of the cell, is idle.
+
+**Narrow watches.** A plane ships again when its row changes (its
+``version`` counts every write to its cells) or its web row does. The
+statuses ship again when the pane's run changes, the plane's cells change,
+one of the run's cell runs comes or goes, or one of its live cell runs
+starts: one small arm per live cell run watches its ``started_at``.
+Nothing of another plane or run wakes either. Level, no re-checks: a
+missed notification leaves the display stale until the next change.
+
+**A cell's classes are read off its spec, here.** Each shipped cell carries
+the classes of the installed CellSpec its ``spec`` names, so the browser
+binds behaviour to a class and never to who made a cell.
 """
 
 from __future__ import annotations
@@ -54,13 +43,13 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import nu
-from nuspace import ops
-from nuspace.ext import short_name
-from nuspace.ops.utils import field_str
-from nuspace.shapes import EXIT_FAILED, EXIT_INTERRUPTED, EXIT_KILLED, Space
-from nuspace.system.devices.web.utils import Arms, field_ids, field_index
-from nuspace.system.devices.web.viewer import interactions
-from nuspace.system.devices.web.viewer.interactions import (
+import nuspace
+from nuspace import specs as spec_ops
+from nuspace.devices.web import ops as web
+from nuspace.devices.web.shapes import Conn, Web
+from nuspace.devices.web.utils import Arms, field_dict, field_str, placed
+from nuspace.devices.web.viewer import interactions
+from nuspace.devices.web.viewer.interactions import (
     ABSENT_HEADLESS,
     ABSENT_MISSING,
     STATE_FAILED,
@@ -69,286 +58,350 @@ from nuspace.system.devices.web.viewer.interactions import (
     STATE_STARTING,
     STATE_STOPPED,
 )
-from nuspace.system.kernel.utils import snap
-from nuspace.system.services import nav
-from nuspace.system.services.nav import pane_key, panes, routable
+from nuspace.ops.brackets import atomic
+from nuspace.ops.interactions import Fabrics
+from nuspace.shapes import EXIT_FAILED, EXIT_INTERRUPTED, EXIT_KILLED, Space
+from nuspace.specs import registered_name
+from nuspace.utils.checks import live
 
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable, Sequence
 
-    from nuspace.ext import CellSpec
+    from nuspace.specs import CellSpec
     from nustd.ui.core import Ref
 
 
-__all__ = ["PLANE_META", "PROGRAM", "plane_cells", "plane_view", "statuses", "viewer_feed"]
+__all__ = [
+    "PROGRAM",
+    "WEB_FLAGS",
+    "plane_cells",
+    "plane_view",
+    "statuses",
+    "viewer_feed",
+]
 
 
-_arms = Arms("viewer")
-_runs = Space.kernel.runs
-
-#: What a shipped plane's meta says where the stored one does not: the keys the browser reads.
-PLANE_META = {"editable": False, "full_width": False}
-
-#: What a cell made from no Cell spec starts as: a program that runs and draws, not an empty one that fails.
+#: What a cell made from no CellSpec starts as: a program that runs and draws, not an empty one that fails.
 PROGRAM = """\
 import nustd
 out = nustd.ui.TextRef("out").set("Hello, cell!")
 """
 
+#: The web flags a ``plane.web`` event may set.
+WEB_FLAGS = ("editable", "full_width", "compact")
+
+_live = Space.exec.indexes.live
+_history = Space.exec.indexes.history
+
+
+def _listed(ids: nu.Nu) -> nu.Nu:
+    """A dict's keys as a list, ``[]`` when it is gone or was never written."""
+    return nu.If(ids.exists(), nu.list(ids.keys()), nu.Literal([]))
+
+
+def _cells(plane: nu.StrArg) -> nu.Nu:
+    """A plane's cell ids, in order. ``[]`` for a plane with no row."""
+    return _listed(Space.planes[plane].cells)
+
 
 # --- What the browser is handed: bare reads ----------------------------------
 
 
-def plane_cells(plane_id: nu.StrArg, specs: Iterable[CellSpec] = ()) -> nu.List:
-    """A plane's cells as ``{id, name, source, made_by, has_ui, classes}``, in order. Bare read.
+def plane_cells(plane: nu.StrArg, specs: Iterable[CellSpec] = ()) -> nu.List:
+    """A plane's cells as ``{id, name, source, spec, has_ui, classes}``, in order. Bare read.
 
-    ``made_by`` is the Cell spec the cell was made from, ``""`` when none.
-    ``has_ui`` is whether its program draws, True where never worked out.
-    ``classes`` are those of the spec in ``specs`` that ``made_by`` names,
-    ``[]`` when none does.
+    ``spec`` is the CellSpec the cell was made from, ``""`` when none.
+    ``has_ui`` is whether its prog draws (``"ui"`` among its fabrics).
+    ``classes`` are those of the spec in ``specs`` that ``spec`` names,
+    ``[]`` when none does. Cost: O(cells), a few reads each.
     """
-    classes = {s.name: list(s.classes) for s in specs}
+    classes = {registered_name(s): list(s.classes) for s in specs}
 
-    def cell(row: nu.Attr) -> nu.Dict:
-        props = nu.Dict(nu.Dict(row).get_item("props", nu.Dict.of()))
-        made_by = field_str(props, "made_by")
+    def cell(at: nu.Attr) -> nu.Dict:
+        cid = nu.Str(at)
+        row = Space.cells[cid]
+        made = nu.Str(row.spec.fallback(""))
         return nu.Dict.of(
-            id=field_str(row, "id"),
-            name=field_str(row, "name"),
-            source=field_str(row, "prog"),
-            made_by=made_by,
-            has_ui=nu.bool(props.get_item("has_ui", True)),
-            classes=nu.Switch(made_by, classes, default=[]),
+            id=cid,
+            name=row.name.fallback(""),
+            source=nu.str(row.prog.fallback("")),
+            spec=made,
+            has_ui=nu.List(row.fabrics.fallback([])).contains("ui"),
+            classes=nu.Switch(made, classes, default=[]),
         )
 
-    return ops.cell_rows(plane_id).iter().map(cell).to_list()
+    return nu.List(_cells(plane)).iter().map(cell).to_list()
 
 
-def plane_view(plane_id: nu.StrArg, specs: Iterable[CellSpec] = ()) -> nu.Nu:
-    """``{title, meta, cells}`` for a plane. Bare read.
+def plane_view(plane: nu.StrArg, specs: Iterable[CellSpec] = ()) -> nu.Dict:
+    """``{absent, title, meta, cells}`` for a pane on a plane. Bare read.
 
-    ``meta`` is the plane's whole meta over :data:`PLANE_META`, ``cells``
-    its :func:`plane_cells` with the classes ``specs`` give them. A plane that
-    is not there reads as an empty untitled one, so a pane open on it is
-    still answered.
+    ``absent`` says why the pane has nothing to draw, ``""`` when it has:
+    :data:`ABSENT_MISSING` for no plane or a removed one,
+    :data:`ABSENT_HEADLESS` for a plane not on the web. ``meta`` is how it
+    shows: its web flags and its icon.
     """
-    row = Space.planes[plane_id]
-    return nu.If(
-        ops.plane_exists(plane_id),
-        nu.Dict.of(
-            title=row.name.fallback(""),
-            meta=nu.Dict(PLANE_META).merge(row.meta.extract()),
-            cells=plane_cells(plane_id, specs),
-        ),
-        nu.Dict.of(title="", meta=PLANE_META, cells=[]),
+    row, flags = Space.planes[plane], Web.planes[plane]
+    there = nuspace.plane.exists(plane)
+    absent = nu.Str(
+        nu.If(there, nu.If(Web.planes.contains(plane), "", ABSENT_HEADLESS), ABSENT_MISSING)
+    )
+    meta = nu.Dict.of(
+        editable=flags.editable.fallback(False),
+        full_width=flags.full_width.fallback(False),
+        compact=flags.compact.fallback(False),
+        icon=row.icon.fallback(""),
+    )
+    return nu.Dict(
+        nu.If(
+            absent == "",
+            nu.Dict.of(
+                absent="", title=row.name.fallback(""), meta=meta, cells=plane_cells(plane, specs)
+            ),
+            nu.Dict.of(absent=absent, title="", meta={}, cells=[]),
+        )
     )
 
 
-def _state(run_id: nu.StrArg, cell_run_id: nu.Nu) -> nu.Str:
-    """The browser state a cell run of the run says, ``""`` being none."""
-    row = _runs[run_id]
-    cr = row.cells[cell_run_id]
+def _state(run: nu.StrArg, picked: nu.Str) -> nu.Str:
+    """The browser state of a cell run of ``run``. ``picked`` of ``""`` (no cell run) is idle."""
+    cr = Space.exec.cell_runs[picked]
     ended = nu.Switch(
         cr.exit.fallback(""),
         {EXIT_FAILED: STATE_FAILED, EXIT_INTERRUPTED: STATE_STOPPED, EXIT_KILLED: STATE_STOPPED},
         default=STATE_IDLE,
     )
-    return nu.Str(
-        nu.If(
-            nu.Str(cell_run_id) == "",
-            STATE_IDLE,
-            nu.If(
-                row.cells_running.contains(cell_run_id),
-                nu.If(cr.started_at.exists(), STATE_RUNNING, STATE_STARTING),
-                ended,
-            ),
-        )
-    )
+    # An ended run's live set is erased: no member then.
+    ids = _live.plane_run_to_cell_runs[run].ids
+    live = nu.If(ids.exists(), ids.contains(picked), False)
+    going = nu.If(cr.started_at.exists(), STATE_RUNNING, STATE_STARTING)
+    return nu.Str(nu.If(picked == "", STATE_IDLE, nu.If(live, going, ended)))
 
 
-class _Status(nu.Shape):
-    """One cell's status as it is worked out: its newest cell run, and the state that run is in."""
-
-    pick = nu.StrRef.slot()
-    state = nu.StrRef.slot()
-
-
-def statuses(plane_id: nu.StrArg, run_id: nu.StrArg) -> nu.Nu:
+def statuses(plane: nu.StrArg, run: nu.StrArg) -> nu.List:
     """A plane's cells as ``{cell_id, state, error, started_at}`` in one plane run, in order. Bare read.
 
-    Per cell, its newest cell run in the run, a point read of the run's
-    ``latest``: never a walk of the run's cell runs, which grow with every
-    reload. A ``run_id`` of ``""`` is every cell idle.
+    Per cell, its newest cell run in the run, one seek on its history list:
+    never a walk of the run's cell runs. A ``run`` of ``""`` is every cell
+    idle. Cost: O(cells), a few reads each.
     """
-    row = _runs[run_id]
-    picked, said = _Status.pick, _Status.state
 
-    def status(cell: nu.Attr) -> nu.Nu:
-        entry = nu.Dict.of(
-            cell_id=cell,
-            state=said,
-            error=nu.If(said == STATE_FAILED, row.cells[picked].error.fallback(""), ""),
-            started_at=nu.If(picked != "", row.cells[picked].started_at.fallback(0), 0),
-        )
-        return nu.Frame(
-            _Status, entry, pick=ops.latest(run_id, nu.Str(cell)), state=_state(run_id, picked)
-        )
+    def status(at: nu.Attr) -> nu.Nu:
+        cell = nu.Str(at)
+        node = _history.plane_to_plane_runs[plane].runs[run].cell_to_cell_runs[cell].ids
 
-    def idle(cell: nu.Attr) -> nu.Dict:
-        return nu.Dict.of(cell_id=cell, state=STATE_IDLE, error="", started_at=0)
+        def entry(held: nu.ObjectRef) -> nu.Dict:
+            picked = nu.Str(held)
+            cr = Space.exec.cell_runs[picked]
+            said = _state(run, picked)
+            return nu.Dict.of(
+                cell_id=cell,
+                state=said,
+                error=nu.If(said == STATE_FAILED, cr.error.fallback(""), ""),
+                started_at=nu.If(picked == "", 0, cr.started_at.fallback(0)),
+            )
 
-    cells = ops.cells(plane_id).iter()
-    return nu.If(nu.Str(run_id) == "", cells.map(idle).to_list(), cells.map(status).to_list())
+        # A mem slot holds no NULL: no cell run of the cell reads "".
+        return nu.let(node.last().fallback(""), entry)
+
+    def idle(at: nu.Attr) -> nu.Dict:
+        return nu.Dict.of(cell_id=at, state=STATE_IDLE, error="", started_at=0)
+
+    cells = nu.List(_cells(plane)).iter()
+    return nu.List(nu.If(nu.Str(run) == "", cells.map(idle).to_list(), cells.map(status).to_list()))
 
 
 # --- Shipping ------------------------------------------------------------------
 
 
-def _plane(viewer: Ref, plane: nu.Nu, specs: Sequence[CellSpec]) -> nu.Nu:
-    """The plane, shipped again when anything under its row changes, its cells included.
-
-    Its ``version`` counts every write to its cells, so one watch on the row
-    hears them. Shipped as ``set_absent`` when nav does not bring it up.
-    """
-    # Why a pane has no plane to draw, "" when it has one.
-    absence = nu.If(
-        routable(plane), "", nu.If(ops.plane_exists(plane), ABSENT_HEADLESS, ABSENT_MISSING)
-    )
+def _plane(arms: Arms, viewer: Ref, plane: nu.Str, specs: Sequence[CellSpec]) -> nu.Nu:
+    """The pane's plane, shipped again when its row or its web row changes."""
 
     def show(held: nu.ObjectRef) -> nu.Nu:
         got = nu.Dict(held)
-        why, view = field_str(got, "absent"), nu.Dict(got.get_item("view", nu.Dict.of()))
+        why = nu.Str(got["absent"])
         shown = interactions.set_plane(
             viewer,
             plane,
-            title=field_str(view, "title"),
-            meta=nu.Dict(view.get_item("meta", nu.Dict.of())),
-            cells=nu.List(view.get_item("cells", nu.List.of())),
+            title=nu.Str(got["title"]),
+            meta=nu.Dict(got["meta"]),
+            cells=nu.List(got["cells"]),
         )
         return nu.IfDo(why == "", shown, interactions.set_absent(viewer, plane, why))
 
-    ship = nu.let(snap(nu.Dict.of(absent=absence, view=plane_view(plane, specs))), show)
-    return _arms.state("plane", snap(Space.planes[plane].on_change()), ship)
+    ship = nu.let(atomic(plane_view(plane, specs)), show)
+    changes = [atomic(Space.planes[plane].on_change()), atomic(Web.planes[plane].on_change())]
+    return arms.states("plane", changes, ship)
 
 
-def _status(viewer: Ref, sid: nu.StrArg, plane: nu.Nu) -> nu.Nu:
+def _status(arms: Arms, viewer: Ref, sid: nu.StrArg, plane: nu.Str) -> nu.Nu:
     """The statuses, following the pane's run, shipped again on what changes them.
 
-    The pane's run changes when nav makes a new one, and the arm moves to it.
-    The plane's cells, on its ``version``. One of the run's cell runs added
-    or ended (``cells_running``), one starting (``started_at``); exit and
-    error land with the end. Nothing of another run or plane is heard.
-
-    No run yet reads as ``""``, an id of its own: its arm ships every cell
-    idle, so a pane nav has not brought up is still answered.
+    No run yet reads ``""``: every cell idle, so a pane nav has not brought
+    up is still answered.
     """
 
     def watch(at: nu.Attr) -> nu.Nu:
         run = nu.Str(at)
-        row = _runs[run]
-        read = nu.If(ops.plane_exists(plane), statuses(plane, run), [])
-        changes = [
-            snap(Space.planes[plane].version.on_change()),
-            snap(row.cells_running.on_children_change()),
-            snap(row.cells.on_descendants_change("*", "started_at")),
-        ]
-        ship = nu.let(snap(read), lambda held: interactions.set_status(viewer, plane, held))
-        return _arms.states("status", changes, ship)
+        held_runs = _live.plane_run_to_cell_runs[run].ids
+        # Watched from its parent, which always exists: an ended run's set is erased.
+        moved = _live.plane_run_to_cell_runs.on_child_change(run)
+        read = nu.If(nuspace.plane.exists(plane), statuses(plane, run), [])
+        ship = nu.let(atomic(read), lambda held: interactions.set_status(viewer, plane, held))
+        changes = [atomic(Space.planes[plane].version.on_change()), atomic(moved)]
 
-    pane = panes()[pane_key(sid, plane)]
-    followed = nu.ReconcileLatest(snap(nu.Str(pane).fallback("")), snap(pane.on_change()), watch)
-    return _arms.guard(followed, "status")
+        def started(cr: nu.Attr) -> nu.Nu:
+            begun = atomic(Space.exec.cell_runs[nu.Str(cr)].started_at.on_change())
+            return arms.state("started", begun, ship)
 
+        moved_again = _live.plane_run_to_cell_runs.on_child_change(run)
+        each = nu.ReconcileLatestEach(atomic(_listed(held_runs)), atomic(moved_again), started)
+        return nu.ParallelAsync(arms.states("status", changes, ship), arms.guard(each, "started"))
 
-# --- The composition -------------------------------------------------------------
-
-
-def _on_cell(name: str, change: nu.Nu, op: Callable[[nu.Str, nu.Attr], nu.Nu]) -> nu.Nu:
-    """An arm running ``op(cell_id, event)`` for each event that names a cell."""
-
-    def body(event: nu.Attr) -> nu.Nu:
-        cell_id = field_str(event, "cell_id")
-        return nu.IfDo(cell_id != "", op(cell_id, event))
-
-    return _arms.event(name, change, body)
+    pane = Conn.connections[sid].panes[plane].plane_run
+    followed = nu.ReconcileLatest(atomic(pane.fallback("")), atomic(pane.on_change()), watch)
+    return arms.guard(followed, "status")
 
 
-def _events(viewer: Ref, sid: nu.StrArg, specs: Sequence[CellSpec]) -> list[nu.Nu]:
-    """Browser to store: one arm per viewer op.
+# --- Events ----------------------------------------------------------------------
 
-    A restart is the connection's: nav runs this tab's pane again, not
-    another tab's on the same plane.
 
-    A created cell stores the prog and ``made_by`` of the Cell spec its
-    ``name`` names, the registered name, and is called by its short name; an
-    unknown or empty name stores :data:`PROGRAM` and ``""``.
+def _create(specs: Sequence[CellSpec], plane: nu.Str, event: nu.Attr) -> nu.Nu:
+    """A cell from the CellSpec ``name`` names, or the starter program for an unknown or empty one.
+
+    The fabrics are worked out first, outside the commit.
     """
+    name, cell = field_str(event, "name"), field_str(event, "cell_id")
 
-    def create(plane_id: nu.Str, event: nu.Attr) -> nu.Nu:
-        name, cell_id = field_str(event, "name"), field_str(event, "cell_id")
-        made = ops.add_cell(
-            plane_id,
-            nu.Switch(name, {s.name: s.source for s in specs}, default=PROGRAM),
-            cell_id=cell_id,
-            name=nu.Switch(name, {s.name: short_name(s.name) for s in specs}, default=name),
-            index=field_index(event, "index", ops.cells(plane_id).len()),
-            made_by=nu.Switch(name, {s.name: s.name for s in specs}, default=""),
+    def from_spec(spec: CellSpec) -> nu.Nu:
+        def made(fabrics: nu.ObjectRef) -> nu.Nu:
+            return placed(
+                event,
+                lambda **at: atomic(
+                    spec_ops.add_cell(plane, spec, id=cell, fabrics=nu.Object(fabrics), **at)
+                ),
+            )
+
+        return nu.let(Fabrics(spec.source, plane, cell), made)
+
+    def starter(fabrics: nu.ObjectRef) -> nu.Nu:
+        return placed(
+            event,
+            lambda **at: atomic(
+                nuspace.cell.add(
+                    plane, PROGRAM, id=cell, name=name, fabrics=nu.Object(fabrics), **at
+                )
+            ),
         )
-        return nu.IfDo(cell_id != "", made)
+
+    known = {registered_name(s): from_spec(s) for s in specs}
+    return nu.SwitchDo(name, known, default=nu.let(Fabrics(PROGRAM, plane, cell), starter))
+
+
+def _update(cell: nu.Str, event: nu.Attr) -> nu.Nu:
+    """A cell's prog replaced, its fabrics worked out first, outside the commit."""
+    source = field_str(event, "source")
+
+    def on(plane: nu.ObjectRef) -> nu.Nu:
+        def write(fabrics: nu.ObjectRef) -> nu.Nu:
+            return atomic(nuspace.cell.set_prog(cell, source, fabrics=nu.Object(fabrics)))
+
+        return nu.let(Fabrics(source, nu.Str(plane), cell), write)
+
+    return nu.let(atomic(Space.cells[cell].plane.fallback("")), on)
+
+
+def _restart_cell(sid: nu.StrArg, cell: nu.Str) -> nu.Nu:
+    """A cell's restart is its pane's: a new restart token on its plane's pane, one commit.
+
+    nav stops the pane's run and adds a fresh one
+    (:func:`~nuspace.devices.web.restart_pane`, which folds the old restart
+    and restart_cell).
+
+    Raises:
+        Missing: No cell with that id, or no pane on its plane in the tab.
+        Removed: The cell is removed.
+    """
+    return atomic(live(Space.cells, cell, "cell") >> web.restart_pane(sid, Space.cells[cell].plane))
+
+
+def _web_flags(plane: nu.Str, event: nu.Attr) -> nu.Nu:
+    """The plane's web flags the event gives, set in one commit. An unknown flag raises."""
+    flags = field_dict(event, "flags")
+    unknown = (
+        nu.list(flags.keys()).iter().filter(lambda k: nu.List.of(*WEB_FLAGS).contains(k).not_())
+    )
+    stray = nu.Int(nu.Count(unknown)) > 0
+    given = {
+        flag: nu.IfDo(flags.contains(flag), web.set(plane, **{flag: nu.Bool(flags[flag])}))
+        for flag in WEB_FLAGS
+    }
+    writes = nu.Sequential(*given.values())
+    bad = nu.Raise(
+        "malformed event: web flags are editable, full_width, compact", exc_cls=ValueError
+    )
+    return nu.IfDo(stray, bad, atomic(writes))
+
+
+def _events(arms: Arms, viewer: Ref, sid: nu.StrArg, specs: Sequence[CellSpec]) -> list[nu.Nu]:
+    """Browser to store: one arm per viewer op. A restart is this tab's, not another's."""
+
+    def on_cell(name: str, change: nu.Nu, op: Callable[[nu.Str, nu.Attr], nu.Nu]) -> nu.Nu:
+        return arms.event(name, change, lambda ev: op(field_str(ev, "cell_id"), ev))
 
     return [
-        _arms.plane_event("create", interactions.on_create_cell(viewer), create),
-        _on_cell(
-            "update",
-            interactions.on_update_cell(viewer),
-            lambda c, event: ops.set_prog(c, field_str(event, "source")),
+        arms.plane_event(
+            "create", interactions.on_create_cell(viewer), lambda p, ev: _create(specs, p, ev)
         ),
-        _on_cell("delete", interactions.on_delete_cell(viewer), lambda c, _: ops.remove_cell(c)),
-        _on_cell(
+        on_cell("update", interactions.on_update_cell(viewer), _update),
+        on_cell(
+            "delete",
+            interactions.on_delete_cell(viewer),
+            lambda c, _: atomic(nuspace.cell.remove(c)),
+        ),
+        on_cell(
+            "move",
+            interactions.on_move_cell(viewer),
+            lambda c, ev: placed(ev, lambda **at: atomic(nuspace.cell.move(c, **at))),
+        ),
+        on_cell(
             "restart_cell",
             interactions.on_restart_cell(viewer),
-            lambda c, _: nav.restart_cell(sid, c),
+            lambda c, _: _restart_cell(sid, c),
         ),
-        _arms.plane_event(
+        arms.plane_event(
             "restart_plane",
             interactions.on_restart_plane(viewer),
-            lambda p, _: nav.restart(sid, p),
+            lambda p, _: atomic(web.restart_pane(sid, p)),
         ),
-        _arms.plane_event(
-            "meta",
-            interactions.on_set_meta(viewer),
-            lambda p, event: ops.set_plane_meta(
-                p, nu.Dict(nu.Dict(event).get_item("meta", nu.Dict.of()))
-            ),
-        ),
-        _arms.plane_event(
-            "reorder",
-            interactions.on_reorder_cells(viewer),
-            lambda p, event: ops.reorder_cells(p, field_ids(event, "cell_ids")),
-        ),
+        arms.plane_event("web", interactions.on_set_web(viewer), _web_flags),
     ]
 
 
-def viewer_feed(viewer: Ref, sid: nu.StrArg, specs: Iterable[CellSpec] = ()) -> nu.Nu:
-    """The viewer, live, as one term. Built per connection, never ends.
+def viewer_feed(viewer: Ref, sid: nu.StrArg, specs: Iterable[CellSpec], toasts: Ref) -> nu.Nu:
+    """The viewer of one tab, live, as one term. Built per tab, never ends.
 
     Args:
         viewer: The shell's viewer ref.
-        sid: The connection id, whose ``connections[sid].routes`` says which
-            planes are open. The row must exist before this runs.
-        specs: The registered Cells, what a created cell stores and the
+        sid: The tab, whose row must exist before this runs.
+        specs: The registered CellSpecs, what a created cell stores and the
             classes a shipped cell carries.
+        toasts: The tab's toast ref, where a failed event shows.
     """
     specs = list(specs)
-    routes = Space.connections[sid].routes
+    arms = Arms("viewer", toasts)
+    order = Conn.connections[sid].order
 
     def shown(at: nu.Attr) -> nu.Nu:
         plane = nu.Str(at)
-        return nu.ParallelAsync(_plane(viewer, plane, specs), _status(viewer, sid, plane))
+        return nu.ParallelAsync(
+            _plane(arms, viewer, plane, specs), _status(arms, viewer, sid, plane)
+        )
 
-    # One arm per open plane: a plane opened gets itself and its statuses
-    # shipped, a plane closed has its subscriptions torn down, and the other
+    # One arm per open pane: a pane opened gets its plane and statuses
+    # shipped, a pane closed has its subscriptions torn down, and the other
     # panes' arms are untouched.
-    routed = nu.ReconcileLatestEach(snap(routes.fallback([])), snap(routes.on_change()), shown)
-    return nu.ParallelAsync(_arms.guard(routed, "routes"), *_events(viewer, sid, specs))
+    listed = nu.If(order.exists(), nu.list(order), nu.Literal([]))
+    panes = nu.ReconcileLatestEach(atomic(listed), atomic(order.on_change()), shown)
+    return nu.ParallelAsync(arms.guard(panes, "panes"), *_events(arms, viewer, sid, specs))

@@ -8,7 +8,7 @@ here and opens the space with ``extensions=["testing"]``.
 
 from __future__ import annotations
 
-from nuspace.specs import CellSpec, ContentSpec, PlaneSpec
+from nuspace.specs import CellSpec, ContentSpec, PlaneSpec, WebOptions
 
 from .contents import NoteContent, PlainContent
 
@@ -17,8 +17,10 @@ from .contents import NoteContent, PlainContent
 TEXT_SRC = "def out():\n    return prose()\n"
 
 PLANES = (
-    PlaneSpec("plain", "Plain", backend="async"),
-    PlaneSpec("jobs", "Jobs", icon="list", cells=(("list", TEXT_SRC),), backend="mp"),
+    PlaneSpec("plain", "Plain", web=WebOptions(), backend="async"),
+    PlaneSpec(
+        "jobs", "Jobs", icon="list", cells=(("list", TEXT_SRC),), web=WebOptions(), backend="mp"
+    ),
 )
 
 CELLS = (

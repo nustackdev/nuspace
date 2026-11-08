@@ -1,8 +1,8 @@
 // The plane settings a pane's `...` menu offers, in the order it lists them.
 //
-// Each one is a key in the Plane's `meta` (see ../plane/types.ts). Flipping one
-// sends `plane.meta` with just that key, applied optimistically; the server's
-// next `set_plane` confirms it. Adding a setting is adding a row here, plus
+// Each one is a web flag of the Plane, shipped in its `meta` (see
+// ../plane/types.ts). Flipping one sends `plane.web` with just that flag,
+// applied optimistically; the server's next `set_plane` confirms it. Adding a setting is adding a row here, plus
 // reading its key wherever it takes effect. A `kind` other than a switch gets
 // its own control in ./PaneMenu.tsx.
 

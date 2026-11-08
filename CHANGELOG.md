@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Rebuild the web device on its own stores: lazy sidebar, panes, nav, failure toasts
 - Reactions skip changes landing while their last run is live, never waiting it out
 - Rebuild init, supervisor, reload and reactions as system planes on the new stores
 - Rebuild the kernel on the run records, with worker placement and reaping at open

@@ -49,7 +49,7 @@ export type TreeRow = {
 	/** Already in sibling order. */
 	children: string[];
 	/** The registered Plane it was created from, "" when none. Its icon is the fallback. */
-	made_by: string;
+	spec: string;
 	/** The plane's own `meta.icon`, "" when it has none. See ../icon/parse.ts. */
 	icon: string;
 	/** A protected Plane (home, settings, a service): the server refuses its delete. */
@@ -58,7 +58,7 @@ export type TreeRow = {
 
 /** One registered Plane, as the Add plane popup offers it. Seeded at boot. */
 export type Registered = {
-	/** `pkg.plane` for an installed package's, what a plane made from it records in `made_by`. */
+	/** `pkg.plane` for an installed package's, what a plane made from it records as its `spec`. */
 	name: string;
 	label: string;
 	/** The picker heading it sits under, "" for none. */
@@ -150,7 +150,7 @@ export function coerceTree(raw: unknown): PlaneTree {
 			title: String(r.title ?? ""),
 			parent: String(r.parent ?? id),
 			children: coerceStrs(r.children),
-			made_by: String(r.made_by ?? ""),
+			spec: String(r.spec ?? ""),
 			icon: typeof r.icon === "string" ? r.icon : "",
 			system: r.system === true,
 		};

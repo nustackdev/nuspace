@@ -1,7 +1,7 @@
 """The sidebar as one node on the browser's tree.
 
-A component ref like ``ButtonRef``, only wider: it renders the tree of planes
-that draw. It holds no state and knows no store; everything it ships is
+A component ref like ``ButtonRef``, only wider: it renders the tree of web
+planes. It holds no state and knows no store; everything it ships is
 handed to it.
 
 It is mounted with one prop off the registry: ``registered``, what the add
@@ -15,15 +15,16 @@ from typing import TYPE_CHECKING, ClassVar
 
 from typing_extensions import Self
 
-from nuspace.system.devices.web.sidebar import interactions
-from nuspace.system.devices.web.utils import SpaceRef
+from nuspace.devices.web.sidebar import interactions
+from nuspace.devices.web.utils import SpaceRef
+from nuspace.specs import registered_name
 
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping, Sequence
 
     from nu.lang import ListArg, Nu
-    from nuspace.ext import PlaneSpec
+    from nuspace.specs import PlaneSpec
     from nustd.ui.core import Changed
 
 
@@ -34,7 +35,7 @@ def registered_entries(planes: Iterable[PlaneSpec]) -> list[dict]:
     """The popup's entries, ``{name, label, group, icon, description}`` in registry order."""
     return [
         {
-            "name": p.name,
+            "name": registered_name(p),
             "label": p.label,
             "group": p.group,
             "icon": p.icon,
@@ -45,7 +46,7 @@ def registered_entries(planes: Iterable[PlaneSpec]) -> list[dict]:
 
 
 class SidebarRef(SpaceRef):
-    """Every plane that draws, as one browser node."""
+    """The web planes, as one browser node."""
 
     _wire_type: ClassVar[str] = "SidebarRef"
 
@@ -59,7 +60,7 @@ class SidebarRef(SpaceRef):
         return interactions.set_tree(self, rows, pinned)
 
     def on_create_plane(self) -> Changed:
-        """``{plane_id, parent_id, made_by, title}``."""
+        """``{plane_id, parent_id, spec, title}``."""
         return interactions.on_create_plane(self)
 
     def on_rename_plane(self) -> Changed:
@@ -71,11 +72,11 @@ class SidebarRef(SpaceRef):
         return interactions.on_delete_plane(self)
 
     def on_move_plane(self) -> Changed:
-        """``{plane_id, parent_id, index}``."""
+        """``{plane_id, parent_id, before?, after?}``."""
         return interactions.on_move_plane(self)
 
     def on_pin_plane(self) -> Changed:
-        """``{plane_id, index}``."""
+        """``{plane_id, before?, after?}``."""
         return interactions.on_pin_plane(self)
 
     def on_unpin_plane(self) -> Changed:
@@ -83,5 +84,13 @@ class SidebarRef(SpaceRef):
         return interactions.on_unpin_plane(self)
 
     def on_move_pin(self) -> Changed:
-        """``{plane_id, index}``."""
+        """``{plane_id, before?, after?}``."""
         return interactions.on_move_pin(self)
+
+    def on_expand(self) -> Changed:
+        """``{plane_id}``."""
+        return interactions.on_expand(self)
+
+    def on_collapse(self) -> Changed:
+        """``{plane_id}``."""
+        return interactions.on_collapse(self)

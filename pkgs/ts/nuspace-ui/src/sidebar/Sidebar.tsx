@@ -1,4 +1,9 @@
-// The sidebar: every Plane that draws, as one tree. One per tab.
+// The sidebar: the web planes, as one tree. One per tab.
+//
+// The tree is lazy: the server ships the planes under the root and under
+// every branch this tab has open, and nothing below a closed one. Opening a
+// branch here tells the server (`plane.expand`), which ships its children;
+// closing one tells it too.
 //
 // The only thing in nuspace that navigates. A row click replaces the focused
 // pane, a cmd/ctrl-click is the browser's new tab; the URL is the cursor, and
@@ -36,14 +41,16 @@ export function Sidebar({ path }: NodeProps) {
 	// biome-ignore lint/correctness/useExhaustiveDependencies: path is compared by value.
 	const toggleExpanded = useCallback(
 		(id: string) => {
+			const open = !expanded.has(id);
 			patchSidebar(path, (s) => {
 				const next = new Set(s.expanded);
-				if (next.has(id)) next.delete(id);
-				else next.add(id);
+				if (open) next.add(id);
+				else next.delete(id);
 				return { expanded: Array.from(next) };
 			});
+			notify(open ? "plane.expand" : "plane.collapse", { plane_id: id });
 		},
-		[key],
+		[key, expanded, notify],
 	);
 
 	return (

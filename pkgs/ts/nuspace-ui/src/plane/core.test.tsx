@@ -139,7 +139,7 @@ describe("the input line, with no sugar", () => {
 		press(endLine(), "Enter");
 		expect(notify).toHaveBeenCalledWith(
 			"cell.create",
-			expect.objectContaining({ plane_id: "p1", name: "", index: 2 }),
+			expect.objectContaining({ plane_id: "p1", name: "", after: "b" }),
 		);
 		expect(menu()).toBeNull();
 	});
@@ -283,10 +283,13 @@ describe("cell selection", () => {
 		press(plane, "ArrowDown", { shiftKey: true });
 		expect(selected()).toEqual(["b", "c"]);
 		press(plane, "ArrowUp", { metaKey: true });
-		expect(notify).toHaveBeenLastCalledWith("cell.reorder", {
-			plane_id: "p1",
-			cell_ids: ["b", "c", "a"],
-		});
+		// [b, c] up past a: each cell out of place moved after the one before it.
+		expect(ops().slice(-2)).toEqual([
+			["cell.move", "b"],
+			["cell.move", "c"],
+		]);
+		expect(notify.mock.calls.at(-2)?.[1]).toEqual({ cell_id: "b", before: "a" });
+		expect(notify.mock.calls.at(-1)?.[1]).toEqual({ cell_id: "c", after: "b" });
 		press(plane, "Escape");
 		expect(selected()).toEqual([]);
 	});
@@ -502,7 +505,7 @@ describe("the plane api, from a sugar", () => {
 		poke(mountDoc("a"));
 		expect(notify).toHaveBeenCalledWith(
 			"cell.create",
-			expect.objectContaining({ cell_id: made, index: 1 }),
+			expect.objectContaining({ cell_id: made, after: "a" }),
 		);
 		// A set_plane without the new cell yet must not drop its request.
 		render([cell("a"), cell("z")], { sugars: [] });
@@ -539,7 +542,7 @@ describe("the plane api, from a sugar", () => {
 		a.say({ kind: "slash" });
 		press(lines()[0], "Enter");
 		expect(ops().map(([op]) => op)).toEqual(["cell.create", "cell.delete"]);
-		expect(notify.mock.calls[0][1]).toMatchObject({ index: 1 });
+		expect(notify.mock.calls[0][1]).toMatchObject({ after: "a" });
 		expect(notify.mock.calls[1][1]).toEqual({ cell_id: "a" });
 		expect(row("a").hidden).toBe(true);
 	});
@@ -577,7 +580,8 @@ describe("a create fed by the input line", () => {
 		typeInto(endLine(), "h");
 		const [op, args] = notify.mock.calls[0];
 		expect(op).toBe("cell.create");
-		expect(args).toMatchObject({ name: "text", index: 0 });
+		expect(args).toMatchObject({ name: "text" });
+		expect(args).not.toHaveProperty("before");
 		expect(endLine().value).toBe("h");
 		expect(menu()).toBeNull();
 		typeInto(endLine(), "hello");

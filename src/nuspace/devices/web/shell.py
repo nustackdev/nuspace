@@ -1,14 +1,14 @@
 """The frame: what a browser tab holds before any plane is drawn.
 
-:class:`Shell` is the top of the tree and its class body is the two regions:
-the sidebar and the viewer. A ref's wire address is its chain and only its
-chain, so ``Shell.viewer`` resolves at ``("viewer",)`` and a cell drawn on it
-lands two levels below.
+:class:`Shell` is the top of the tree and its class body is the two regions,
+the sidebar and the viewer, plus the tab's toaster. A ref's wire address is
+its chain and only its chain, so ``Shell.viewer`` resolves at
+``("viewer",)`` and a cell drawn on it lands two levels below.
 
 There is no route slot. What a tab has open lives in the store
-(``connections[sid].routes`` and ``.params``), written by the device from the
-viewer's ``planes.open``, which the browser sends one way (D15, D35); nothing
-reads them off the browser.
+(``Conn.connections[sid].order`` and each pane's params), written by the
+device from the viewer's ``planes.open``, which the browser sends one way;
+nothing reads them off the browser.
 
 :class:`Boot` seeds one tab. The shell is a static class, because a worker
 unpickles cell chains rooted on it, so what varies per space (the viewer's
@@ -24,8 +24,9 @@ from typing import TYPE_CHECKING, Any
 import nu
 from nu.engine.structure import Declared
 from nu.lang import Command
-from nuspace.system.devices.web.sidebar import SidebarRef
-from nuspace.system.devices.web.viewer import ViewerRef
+from nuspace.devices.web.ref import ToastRef
+from nuspace.devices.web.sidebar.ref import SidebarRef
+from nuspace.devices.web.viewer.ref import ViewerRef
 from nustd.ui.core import Chain, boot_chains
 from nustd.ui.core.protocol import OP_INIT, OP_REMOVE, Frame
 from nustd.ui.core.session import Session
@@ -97,10 +98,11 @@ class Boot(Command):
 
 
 class Shell(nu.Shape):
-    """The top of one browser tab: the sidebar and the viewer."""
+    """The top of one browser tab: the sidebar, the viewer, and the toaster failures show on."""
 
     sidebar = SidebarRef.slot()
     viewer = ViewerRef.slot()
+    toast = ToastRef.slot()
 
     @classmethod
     def boot(

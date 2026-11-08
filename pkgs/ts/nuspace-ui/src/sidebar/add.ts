@@ -113,7 +113,7 @@ export function createPlane(
 	notify("plane.create", {
 		plane_id: planeId,
 		parent_id: parent || ROOT_ID,
-		made_by: entry.name,
+		spec: entry.name,
 		title: empty ? "Untitled" : entry.label,
 	});
 	return planeId;

@@ -1,7 +1,7 @@
-"""Devices: each owns an external resource and makes it bindable. Never runs cells.
+"""Devices: ways into the space, each with its own stores. A device calls ops like anyone.
 
-- :mod:`.web`: the ws server, browser connections in the store, the shell's
-  feeds, and the session env.
+- :mod:`.web`: the browser: the server, its tabs and panes in its own
+  stores, the shell's feeds, nav, and the session env.
 """
 
 from . import web

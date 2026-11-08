@@ -17,10 +17,12 @@
 
 import { type NodeEntry, register } from "@nustackdev/ui-kit";
 import { SidebarRef } from "./sidebar";
+import { ToastRef } from "./toast";
 import { ViewerRef } from "./viewer";
 
 export const nuspaceEntries: Record<string, NodeEntry> = {
 	SidebarRef,
+	ToastRef,
 	ViewerRef,
 	// Structural and write-only: a cell moving its own pane. Renders nothing.
 };

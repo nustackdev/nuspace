@@ -1,7 +1,7 @@
-"""The sidebar: every plane that draws, as one tree.
+"""The sidebar: the web planes, as one lazy tree per tab.
 
 ``ref``
-    The node the browser draws, mounted with the registered Planes.
+    The node the browser draws, mounted with the registered PlaneSpecs.
 ``interactions``
     Everything that node says and hears, in the browser's words.
 ``feed``
@@ -9,14 +9,16 @@
     tree again.
 """
 
-from nuspace.system.devices.web.sidebar.feed import create, move, node, pins, rows, sidebar_feed
-from nuspace.system.devices.web.sidebar.interactions import (
+from nuspace.devices.web.sidebar.feed import create, node, pins, rows, sidebar_feed
+from nuspace.devices.web.sidebar.interactions import (
     KIND_PLANE,
     KIND_SPACE,
     KINDS,
     ROOT_ID,
+    on_collapse,
     on_create_plane,
     on_delete_plane,
+    on_expand,
     on_move_pin,
     on_move_plane,
     on_pin_plane,
@@ -25,7 +27,7 @@ from nuspace.system.devices.web.sidebar.interactions import (
     on_unpin_plane,
     set_tree,
 )
-from nuspace.system.devices.web.sidebar.ref import SidebarRef, registered_entries
+from nuspace.devices.web.sidebar.ref import SidebarRef, registered_entries
 
 
 __all__ = [
@@ -35,10 +37,11 @@ __all__ = [
     "ROOT_ID",
     "SidebarRef",
     "create",
-    "move",
     "node",
+    "on_collapse",
     "on_create_plane",
     "on_delete_plane",
+    "on_expand",
     "on_move_pin",
     "on_move_plane",
     "on_pin_plane",

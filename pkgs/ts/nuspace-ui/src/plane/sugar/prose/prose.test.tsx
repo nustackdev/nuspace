@@ -100,7 +100,7 @@ describe("A. the input line", () => {
 		plane([cell("a")]);
 		act(() => endLine().focus());
 		typeInto(endLine(), "h");
-		expect(created()).toEqual([expect.objectContaining({ name: "text", index: 1 })]);
+		expect(created()).toEqual([expect.objectContaining({ name: "text", after: "a" })]);
 		expect(menu()).toBeNull();
 		const id = created()[0].cell_id as string;
 		plane([cell("a"), cell(id)]);
@@ -119,7 +119,9 @@ describe("A. the input line", () => {
 	it("row 3 r1_enter_creates_empty: Enter makes an empty prose cell, the caret in it", () => {
 		plane([]);
 		press(endLine(), "Enter");
-		expect(created()).toEqual([expect.objectContaining({ name: "text", index: 0 })]);
+		expect(created()).toEqual([expect.objectContaining({ name: "text" })]);
+		expect(created()[0]).not.toHaveProperty("before");
+		expect(created()[0]).not.toHaveProperty("after");
 		const id = created()[0].cell_id as string;
 		plane([cell(id)]);
 		const d = mountDoc(id);
@@ -250,7 +252,7 @@ describe("B. the title", () => {
 	it("row 26 r5_title_enter_creates_top: Enter anywhere makes a prose cell at the top", () => {
 		plane([cell("a")]);
 		expect(title({ kind: "enter", end: false })).toBe(true);
-		expect(created()).toEqual([expect.objectContaining({ name: "text", index: 0 })]);
+		expect(created()).toEqual([expect.objectContaining({ name: "text", before: "a" })]);
 		const id = created()[0].cell_id as string;
 		plane([cell(id), cell("a")]);
 		expect(mountDoc(id).doc.focus).toHaveBeenCalledWith("start");
@@ -392,7 +394,7 @@ describe("C. a blank prose cell", () => {
 		mountDoc("a").say({ kind: "slash" });
 		press(lines()[0], "Enter");
 		expect(ops().map(([op]) => op)).toEqual(["cell.create", "cell.delete"]);
-		expect(notify.mock.calls[0][1]).toMatchObject({ index: 1 });
+		expect(notify.mock.calls[0][1]).toMatchObject({ after: "a" });
 		expect(notify.mock.calls[1][1]).toEqual({ cell_id: "a" });
 	});
 
@@ -889,7 +891,7 @@ describe("K. split", () => {
 	function splitA(a: ReturnType<typeof paper>, into = paper([])) {
 		expect(a.say({ kind: "break", at: "mid" })).toBe(true);
 		const id = created()[0].cell_id as string;
-		expect(created()[0]).toMatchObject({ name: "text", index: 1 });
+		expect(created()[0]).toMatchObject({ name: "text", after: "a" });
 		plane([cell("a"), cell(id), cell("z")]);
 		return { id, into };
 	}
@@ -1227,7 +1229,7 @@ describe("M. live writes", () => {
 		vi.mocked(d.doc.blank).mockReturnValue(false);
 		press(lines()[0], "Enter");
 		expect(ops().map(([op]) => op)).toEqual(["cell.create"]);
-		expect(notify.mock.calls[0][1]).toMatchObject({ index: 1 });
+		expect(notify.mock.calls[0][1]).toMatchObject({ after: "a" });
 		expect(row("a").hidden).toBe(false);
 	});
 });

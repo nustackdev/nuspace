@@ -23,6 +23,7 @@ import { useCallback, useEffect, useRef } from "react";
 import { mintId } from "../../core/ids";
 import type { FocusRequest, FocusTarget, Place, PlaneModel } from "../api";
 import type { Ask } from "../focus/useFocusRouting";
+import { cellMoves } from "../ops";
 import type { FocusReq, InputLine } from "../state";
 
 export function useStructure(
@@ -81,12 +82,16 @@ export function useStructure(
 		(at: Place, spec: string, want?: FocusRequest, line?: InputLine): string => {
 			const id = mintId("c");
 			const i = at.after === null ? -1 : index(at.after);
-			notify("cell.create", {
-				plane_id: planeId,
-				cell_id: id,
-				name: spec,
-				index: at.after === null ? 0 : i < 0 ? cells.length : i + 1,
-			});
+			// The top is before the first cell; an `after` that is gone is the end.
+			const place =
+				at.after === null
+					? cells.length > 0
+						? { before: cells[0].id }
+						: {}
+					: i < 0
+						? {}
+						: { after: at.after };
+			notify("cell.create", { plane_id: planeId, cell_id: id, name: spec, ...place });
 			if (want) {
 				const { landed, ...carry } = want;
 				request(id, { ...carry, to: "document", fresh: true, line }, landed);
@@ -95,7 +100,7 @@ export function useStructure(
 			}
 			return id;
 		},
-		[cells.length, index, notify, planeId, request],
+		[cells, index, notify, planeId, request],
 	);
 
 	/** The cells out of sight: hidden, their sources closed, out of the selection. */
@@ -163,8 +168,14 @@ export function useStructure(
 	);
 
 	const reorder = useCallback(
-		(ids: string[]) => notify("cell.reorder", { plane_id: planeId, cell_ids: ids }),
-		[notify, planeId],
+		(ids: string[]) => {
+			for (const move of cellMoves(
+				cells.map((c) => c.id),
+				ids,
+			))
+				notify("cell.move", move);
+		},
+		[cells, notify],
 	);
 
 	/** The selected cells one step up or down, as a block. */

@@ -144,7 +144,11 @@ export function Main({ path }: NodeProps) {
 	const onMeta = useCallback(
 		(planeId: string, meta: Record<string, unknown>) => {
 			patchPlaneMeta(path, planeId, meta);
-			notify("plane.meta", { plane_id: planeId, meta });
+			// The pane's settings are the plane's web flags, all switches.
+			const flags = Object.fromEntries(
+				Object.entries(meta).filter(([, v]) => typeof v === "boolean"),
+			) as Record<string, boolean>;
+			notify("plane.web", { plane_id: planeId, flags });
 		},
 		[key, notify],
 	);

@@ -15,9 +15,12 @@ __all__ = ["RESERVED", "ROOT", "Plane"]
 ROOT = "root"
 
 #: Plane ids only nuspace's own planes take: ``plane.add`` refuses them
-#: unless ``system=True``. The system planes' (``nuspace.system``); the web
-#: device adds its own. Root's id and ``""`` are refused for every add.
-RESERVED = frozenset({"init", "supervisor", "reload", "reactions"})
+#: unless ``system=True``. The system planes' (``nuspace.system``), then the
+#: web device's (``nuspace.devices.web.planes``): home, search, settings and
+#: the searches folder. Root's id and ``""`` are refused for every add.
+RESERVED = frozenset(
+    {"init", "supervisor", "reload", "reactions", "home", "search", "settings", "searches"}
+)
 
 
 class Plane(nu.Shape):

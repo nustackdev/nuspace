@@ -162,7 +162,7 @@ export function pruneViewer(path: Path, open: string[]): void {
 
 /**
  * Merge `meta` into one plane's settings, locally. The optimistic half of a
- * `plane.meta`: the switch moves now, and the server's next `set_plane`
+ * `plane.web` flags write: the switch moves now, and the server's next `set_plane`
  * replaces the whole plane with what it actually stored.
  */
 export function patchPlaneMeta(path: Path, planeId: string, meta: Record<string, unknown>): void {
