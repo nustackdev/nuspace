@@ -1,12 +1,15 @@
 """The specs an extension registers, one per extension point. Plain data.
 
-- :class:`PlaneSpec`: a plane ``+`` creates.
+- :class:`PlaneSpec`: a plane ``+`` creates, with :class:`WebOptions` when
+  it shows on the web.
 - :class:`CellSpec`: a cell ``/`` inserts.
 - :class:`ContentSpec`: a content kind cells keep items of and search finds.
+- :class:`SpecCells`: where a plane made from a spec keeps its cells' ids,
+  in its own state, so its cells find each other.
 
-The ops that act on them, :func:`~nuspace.ops.create_plane` and
-:func:`~nuspace.ops.create_cell`, live in :mod:`nuspace.ops`. A content
-kind's behaviors live on its class (:class:`~nuspace.shapes.content.Content`); its
+The ops that make planes and cells from them, :func:`~nuspace.specs.add_plane`
+and :func:`~nuspace.specs.add_cell`, are in :mod:`.ops`. A content kind's
+behaviors live on its class (:class:`~nuspace.shapes.content.Content`); its
 spec says how a space presents it.
 """
 
@@ -15,12 +18,48 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
+import nu
+import nustd.kv
+
 
 if TYPE_CHECKING:
     from nuspace.shapes.content import Content
 
 
-__all__ = ["EMPTY_PLANE", "CellSpec", "ContentSpec", "PlaneSpec"]
+__all__ = ["EMPTY_PLANE", "CellSpec", "ContentSpec", "PlaneSpec", "SpecCells", "WebOptions"]
+
+
+@dataclass(frozen=True)
+class WebOptions:
+    """How a plane made from a spec shows on the web: the flags of its web row.
+
+    A spec with these makes a web plane (the sidebar lists it, a tab runs
+    it); one without makes a plane the web never shows.
+
+    Args:
+        editable: Its cells can be edited in the browser.
+        full_width: It takes the whole width of a pane.
+        compact: It draws its cells tight.
+    """
+
+    editable: bool = True
+    full_width: bool = False
+    compact: bool = False
+
+
+class SpecCells(nu.Shape):
+    """A spec plane's cells by name, in its own plane state: ``State.planes[p]``.
+
+    Written by :func:`~nuspace.specs.add_plane` when it makes the plane, so
+    a cell finds a sibling by the name the spec gave it, not by a key or a
+    scan::
+
+        nuspace.at.plane.state(SpecCells).ids["composer"]
+
+    Two cells of one spec under one name keep the last one's id.
+    """
+
+    ids = nustd.kv.DictRef.slot(str)
 
 
 @dataclass(frozen=True)
@@ -28,16 +67,16 @@ class PlaneSpec:
     """A plane ``+`` can create: data, seeded as is. No build hook.
 
     Everything it does lives in its cells: args, forms, lists, background
-    work. Creating one only seeds it.
+    work. Creating one only seeds it. Each cell made gets its id written in
+    the plane's state, under its name (:class:`SpecCells`).
 
     Args:
         name: Installed by a package, it registers as ``<package>.<name>``,
             the registry key and what the planes created from it record as
-            ``made_by``.
+            ``spec``.
         label: What the picker shows, and a new plane's default name.
-        icon: A lucide icon name, ``""`` for the default. ``"lucide:<name>"``
-            and ``"emoji:<char>"`` work too. A new plane's ``meta.icon``
-            starts as it, unless ``meta`` sets one.
+        icon: A lucide icon name, ``""`` for none. ``"lucide:<name>"`` and
+            ``"emoji:<char>"`` work too.
         description: One line for the picker.
         meta: What a new plane's meta starts as.
         cells: ``(name, source)`` per cell, in order.
@@ -45,6 +84,11 @@ class PlaneSpec:
         group: The picker heading it sits under, ``""`` for none. Groups show
             in the order their first PlaneSpec registers; the ungrouped come
             last.
+        key: A key the plane is made with, for a plane meant once per
+            space. Explicit and prefixed with the package
+            (``quickstart_meter``). ``""`` for none. A second plane of the
+            spec then raises ``Exists``.
+        web: How it shows on the web, None for a plane the web never shows.
         backend: Keyword, required. The backend a plane created from it
             runs on, by registered name. Picked by the kind of work its cells
             do: many awaiting tasks run well on ``async``, sync code on ``mp``.
@@ -61,6 +105,8 @@ class PlaneSpec:
     cells: tuple[tuple[str, str], ...] = ()
     children: tuple[PlaneSpec, ...] = ()
     group: str = ""
+    key: str = ""
+    web: WebOptions | None = None
     backend: str = field(kw_only=True)
 
     def __post_init__(self) -> None:
@@ -71,13 +117,13 @@ class PlaneSpec:
 
 #: The empty plane: no cells, no children. Inherent to a space like the empty
 #: cell is, so it needs no registry entry: ``""`` is no registered plane's
-#: name, and the planes made from it record ``made_by`` as none. With nothing
+#: name, and the planes made from it record ``spec`` as none. With nothing
 #: under it, it works as a folder too: grouping in the sidebar is nesting.
 EMPTY_PLANE = PlaneSpec(
     "",
     "Empty",
     description="An empty plane. Add cells with /, or nest planes under it.",
-    meta={"editable": True, "full_width": False},
+    web=WebOptions(editable=True, full_width=False),
     backend="async",
 )
 
@@ -102,7 +148,7 @@ class CellSpec:
     Args:
         name: The new cell's name. Installed by a package, it registers
             as ``<package>.<name>``, the registry key and what the cells made
-            from it record as ``props.made_by``.
+            from it record as ``spec``.
         label: What the menu shows.
         source: The cell's prog. A cell keeps what it edits or shows in
             content items (:mod:`nuspace.shapes.content`), where search finds them.

@@ -99,8 +99,8 @@ def test_match_branches_on_what_was_asked_at_construction():
 def test_entries_are_typed_as_the_kinds_shape_under_state():
     for level, scope_id in ((CELL, "c"), (PLANE, "p"), (SPACE, "")):
         item = entries(NoteContent, level, scope_id)["x"]
-        assert isinstance(item, nustd.kv.ShapeRef)
         assert isinstance(item.body, nustd.kv.StrRef)
+        assert isinstance(item["body"], nustd.kv.StrRef)
         assert isinstance(item.stars, nustd.kv.FloatRef)
         assert nu.shape.root_shape(item.body) is State
     by_name = entries("elsewhere.Note", CELL, "c", schema=Note)["x"]

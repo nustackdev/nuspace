@@ -1,18 +1,16 @@
-"""Plane ops: make one, name it, annotate it, drop it.
+"""``nuspace.plane``: the ops over ``Space.planes``. Root is the plane ``"root"``.
 
-Its props (``system``, ``ui``, ``made_by``, ``backend``) are set when it is
-made. Its meta is free and merged into any time.
+A plane is a node in the space's tree: its row names its ``parent`` and
+lists its ``children`` and ``cells``, and both sides change together. Every
+op is a bare term: the caller brackets it, ``nuspace.atomic(...)`` in code
+without flows, ``nuspace.bracketed`` in flows. What decides a write is read
+in the same term, so under ``atomic`` it lands in the same commit.
 
-A plane's icon is ``meta.icon``, a string: ``"lucide:<name>"`` for one of the
-shell's icon pack, ``"emoji:<char>"`` for an emoji. Every plane is made with
-one, :data:`DEFAULT_ICON` unless it is given its own, and what is stored is
-what shows: nothing works an icon out of anything else. ``""`` is no icon.
-:func:`plane_icon` is the one place a spelling is read.
+Writes raise when they cannot do what they say (:mod:`nuspace.errors`);
+reads that may find nothing give NULL or False. Each op's doc gives its cost
+in keys touched and what it raises.
 
-A plane is structure plus the one run setting, its ``backend``: nothing else
-here says how anything runs. Which
-cells are on it and in what order is :mod:`nuspace.ops.cell`; where it hangs
-is :mod:`nuspace.ops.tree`; whether it is pinned is :mod:`nuspace.ops.pin`.
+Programs write the module in front: ``nuspace.plane.add(...)``.
 """
 
 from __future__ import annotations
@@ -20,278 +18,398 @@ from __future__ import annotations
 from typing import Any
 
 import nu
-from nuspace.shapes import Space
-
-from .kernel import kill, live_runs_of
-from .pin import unpin
-from .read import plane_exists
-from .state import drop_cell_state, drop_plane_state
-from .tree import link, subtree, unlink
-from .usage import track
-from .utils import MintId, atomic, atomic_state
+import nustd.time
+from nuspace.errors import Exists, Missing, Refused
+from nuspace.shapes.plane import ROOT
+from nuspace.shapes.space import Space
+from nuspace.utils import MintId, Require, anchor_of, place
+from nuspace.utils.checks import (
+    anchored,
+    key_free,
+    key_spelled,
+    live,
+    refuse,
+    text,
+    unkey,
+    when,
+)
+from nuspace.utils.tree import no_cycle, subtree
 
 
 __all__ = [
-    "DEFAULT_ICON",
-    "ICON_EMOJI",
-    "ICON_LUCIDE",
-    "add_plane",
-    "plane_icon",
-    "remove_plane",
-    "rename_plane",
-    "set_plane_icon",
-    "set_plane_meta",
+    "add",
+    "exists",
+    "move",
+    "on_change",
+    "on_children_change",
+    "remove",
+    "remove_key",
+    "rename",
+    "set_backend",
+    "set_icon",
+    "set_key",
+    "set_meta",
+    "title",
 ]
 
 
-#: The prefix of an icon from the shell's pack, a lucide name after it.
-ICON_LUCIDE = "lucide:"
-
-#: The prefix of an emoji icon, the emoji itself after it.
-ICON_EMOJI = "emoji:"
-
-#: The icon a plane is made with when it is given none.
-DEFAULT_ICON = ICON_LUCIDE + "file-text"
-
-#: What :func:`add_plane` says when it is given no backend.
-NO_BACKEND = "A plane needs a backend, eg mp or async: none was given"
+#: The prefixes an icon is spelled with, a lucide name or an emoji after it.
+ICON_PREFIXES = ("lucide:", "emoji:")
 
 
-def _refuse_empty(backend: nu.StrArg) -> nu.Nu:
-    """Raise :data:`NO_BACKEND` when ``backend`` evaluates to ``""``: the commit makes nothing."""
-    if isinstance(backend, str):
+def _icon_spelled(icon: nu.StrArg) -> None:
+    """A literal icon is ``""`` or a prefix with something after it. A term is stored as it is.
+
+    Raises:
+        Refused: At build, a literal icon spelled otherwise.
+    """
+    if not isinstance(icon, str) or icon == "":
+        return
+    prefix, _, rest = icon.partition(":")
+    if f"{prefix}:" not in ICON_PREFIXES or not rest:
+        msg = f"icon {icon!r}: spell it lucide:<name> or emoji:<char>, or '' for none"
+        raise Refused(msg)
+
+
+def _reserved(id: nu.StrArg) -> nu.Nu:
+    """Refuse an id no new plane may take: root's, or the empty one.
+
+    Raises:
+        Refused: A literal at build, a term at run time.
+    """
+    if isinstance(id, str):
+        if id in (ROOT, ""):
+            msg = f"plane id {id!r} is reserved"
+            raise Refused(msg)
         return nu.Noop()
-    return nu.IfDo(nu.Str(backend) == "", nu.Raise(NO_BACKEND, exc_cls=ValueError))
+    return refuse(
+        (nu.Str(id) == ROOT).or_(nu.Str(id) == ""), Refused, "plane id ", id, " is reserved"
+    )
 
 
-def add_plane(
-    plane_id: nu.StrArg | None = None,
+def _not_root(id: nu.StrArg, doing: str) -> nu.Nu:
+    """Refuse an op on root. A literal at build.
+
+    Raises:
+        Refused: ``id`` is root.
+    """
+    msg = f"root cannot be {doing}"
+    if isinstance(id, str):
+        if id == ROOT:
+            raise Refused(msg)
+        return nu.Noop()
+    return refuse(nu.Str(id) == ROOT, Refused, msg)
+
+
+def _touched(id: nu.StrArg) -> nu.Nu:
+    """Stamp a write to the plane's own row on ``modified_at``."""
+    return Space.planes[id].modified_at.set(nustd.time.time())
+
+
+def add(
+    id: nu.StrArg | None = None,
     *,
-    backend: nu.StrArg,
+    parent: nu.StrArg = ROOT,
+    before: nu.StrArg | None = None,
+    after: nu.StrArg | None = None,
     name: nu.StrArg = "",
-    parent: nu.StrArg = "",
+    key: nu.StrArg = "",
+    icon: nu.StrArg = "",
+    backend: nu.StrArg = "",
     system: nu.BoolArg = False,
-    ui: nu.BoolArg = False,
-    made_by: nu.StrArg = "",
+    spec: nu.StrArg = "",
     meta: dict[str, Any] | nu.Nu | None = None,
     into: nu.Ref | None = None,
 ) -> nu.Nu:
-    """Make a plane with no cells and hang it under ``parent``, in one commit.
+    """Create a plane with no cells under ``parent``. Create only: an id taken raises.
+
+    One commit: the row, the id in the parent's ``children``, the key in
+    ``Space.indexes.plane_keys`` and the id in ``spec_planes[spec].ids``
+    when given. Cost: O(1), about 20 keys.
 
     Args:
-        plane_id: Its id. Minted when the term is evaluated when absent. An
-            existing plane given again keeps its cells and is rewritten and
-            moved.
-        backend: Prop, the backend its runs execute on, by the name it was
-            registered under at open (``mp``, ``async``). Required: there is
-            no default, and an empty one is refused. Picked by the kind of
-            work its cells do: many awaiting tasks run well on ``async``,
-            sync code on ``mp``.
-        name: What to call it.
-        parent: The plane to hang it under, ``""`` for the top level. A
-            parent that does not exist falls back to the top level.
-        system: Prop, a protected plane, eg a service or home.
-            ``remove_plane`` refuses it.
-        ui: Prop, the shell draws it and nav brings it up when routed.
-        made_by: Prop, the registered Plane it was created from. Nothing
-            groups by it.
-        meta: Fields to merge into its meta. A new plane's ``icon`` starts
-            as :data:`DEFAULT_ICON`; an ``icon`` here replaces it.
-        into: Set to the plane id in the commit, for a caller that needs a
-            minted one: the record does not say which plane this call made.
-
-    The props are written every time, so an existing plane given again takes
-    the ones passed now. Tracked as ``plane_created`` once the commit lands,
-    only when the plane is new and not a system one.
+        id: Its id. Minted when the op evaluates when absent.
+        parent: The plane it hangs under.
+        before: A sibling to place it before.
+        after: A sibling to place it after. Neither: the end.
+        name: Display text only.
+        key: An optional handle, slug chars, ``""`` for none.
+        icon: ``lucide:<name>``, ``emoji:<char>`` or ``""``.
+        backend: What its runs execute on. ``""``: it does not run.
+        system: Protected: ``remove`` refuses it.
+        spec: The spec it was made from, ``""`` for none.
+        meta: The free dict, for programs. nuspace never reads it.
+        into: A ref set to the id in the same commit, for a minted one.
 
     Raises:
-        ValueError: ``backend`` is empty: at build when it is a ``str``, at
-            run time, before the commit writes anything, when it is a term.
+        Exists: The id or the key is taken.
+        Missing: No parent or anchor with that id.
+        Removed: The parent or the anchor is removed.
+        Refused: A reserved id, an anchor that is not a sibling, a key that
+            is not slug chars, an icon spelled wrong. A literal at build.
+        TypeError: Both ``before`` and ``after``, at build.
     """
-    if isinstance(backend, str) and not backend:
-        raise ValueError(NO_BACKEND)
+    anchor = anchor_of(before, after)
+    _icon_spelled(icon)
+    spelled = key_spelled(key, "plane", empty_ok=True)
 
-    def write(pid: nu.ObjectRef, made: nu.Ref) -> nu.Nu:
-        writes = made.set(_new_user_plane(nu.Str(pid), system)) >> plane_writes(
-            nu.Str(pid),
-            backend=backend,
-            name=name,
-            parent=parent,
-            system=system,
-            ui=ui,
-            made_by=made_by,
-            meta=meta,
+    def write(pid: nu.StrArg) -> nu.Nu:
+        rows = Space.planes
+        row = rows[pid]
+        siblings = rows[parent].children
+
+        def made(now: nu.ObjectRef) -> nu.Nu:
+            return (
+                row.name.set(name)
+                >> row.key.set(key)
+                >> row.icon.set(icon)
+                >> row.parent.set(parent)
+                >> row.version.set(0)
+                >> row.cells.set(nu.Dict.create())
+                >> row.children.set(nu.Dict.create())
+                >> row.system.set(system)
+                >> row.backend.set(backend)
+                >> row.spec.set(spec)
+                >> row.meta.set(nu.Dict.create() if meta is None else meta)
+                >> row.created_at.set(now)
+                >> row.modified_at.set(now)
+            )
+
+        writes = (
+            _reserved(pid)
+            >> refuse(rows.contains(pid), Exists, "plane ", pid, " exists")
+            >> live(rows, parent, "plane")
+            >> anchored(siblings, rows, anchor, pid, "plane", text("plane ", parent))
+            >> spelled
+            >> key_free(Space.indexes.plane_keys, key, None, "plane")
+            >> nu.let(nustd.time.time(), made)
+            >> place(siblings, pid, before=before, after=after)
+            >> when(key, Space.indexes.plane_keys.set_item(key, pid))
+            >> when(spec, Space.indexes.spec_planes[spec].ids.set_item(pid, True))
         )
-        return writes if into is None else writes >> into.set(nu.Str(pid))
+        return writes if into is None else writes >> into.set(pid)
 
-    minted = MintId("p") if plane_id is None else plane_id
-    return nu.let(
-        False,
-        lambda made: (
-            atomic(nu.let(minted, lambda pid: write(pid, made)))
-            >> nu.IfDo(nu.bool(made), track("plane_created"))
-        ),
+    if id is None:
+        return nu.let(MintId("p"), lambda pid: write(nu.Str(pid)))
+    return write(id)
+
+
+def remove(id: nu.StrArg) -> nu.Nu:
+    """Remove a plane and everything below it, softly: rows are stamped, kept and readable.
+
+    Stamps ``removed_at`` and ``removed_by=id`` on the plane and on every
+    plane and cell below it not removed yet (rows removed earlier keep
+    their own stamp), and drops each stamped row's key from the key index
+    (the rows keep ``.key``). The plane leaves its parent's ``children``;
+    the rows below stay listed where they are, for a restore. The id goes
+    into ``Space.indexes.removed``. Writes nothing about runs: the kernel
+    stops the live plane runs of what it sees removed.
+
+    Cost: O(subtree), a few keys per plane and cell below.
+
+    Raises:
+        Missing: No plane with that id.
+        Removed: It is removed already.
+        Refused: Root, or a system plane. Root as a literal at build.
+    """
+    rows = Space.planes
+    row = rows[id]
+    keys = Space.indexes
+
+    def stamped(now: nu.ObjectRef) -> nu.Nu:
+        def plane(p: nu.Str) -> nu.Nu:
+            at = rows[p]
+            return (
+                at.removed_at.set(now) >> at.removed_by.set(id) >> unkey(keys.plane_keys, at.key, p)
+            )
+
+        def cell(c: nu.Str) -> nu.Nu:
+            at = Space.cells[c]
+            return (
+                at.removed_at.set(now) >> at.removed_by.set(id) >> unkey(keys.cell_keys, at.key, c)
+            )
+
+        return subtree(id, plane, cell)
+
+    return (
+        _not_root(id, "removed")
+        >> live(rows, id, "plane")
+        >> refuse(row.system.fallback(False), Refused, "plane ", id, " is a system plane")
+        >> rows[row.parent].children.del_item(id)
+        >> nu.let(nustd.time.time(), stamped)
+        >> keys.removed.set_item(id, True)
     )
 
 
-def _new_user_plane(plane_id: nu.StrArg, system: nu.BoolArg) -> nu.Nu:
-    """Whether writing ``plane_id`` now makes a plane a user owns: none there yet, not a system one."""
-    if system is True:
-        return nu.bool(False)
-    new = plane_exists(plane_id).not_()
-    return new if system is False else new.and_(nu.bool(system).not_())
-
-
-def plane_writes(
-    plane_id: nu.StrArg,
+def move(
+    id: nu.StrArg,
     *,
-    backend: nu.StrArg,
-    name: nu.StrArg = "",
-    parent: nu.StrArg = "",
-    system: nu.BoolArg = False,
-    ui: nu.BoolArg = False,
-    made_by: nu.StrArg = "",
-    meta: dict[str, Any] | nu.Nu | None = None,
+    parent: nu.StrArg | None = None,
+    before: nu.StrArg | None = None,
+    after: nu.StrArg | None = None,
 ) -> nu.Nu:
-    """:func:`add_plane`'s writes for a plane id already known. No bracket."""
-    row = Space.planes[plane_id]
-    writes = (
-        _refuse_empty(backend)
-        >> nu.IfDo(
-            plane_exists(plane_id).not_(),
-            row.cells.set([])
-            >> row.children.set([])
-            >> row.meta.update(nu.Dict.of(icon=DEFAULT_ICON)),
-        )
-        >> row.name.set(name)
-        >> row.props.system.set(system)
-        >> row.props.ui.set(ui)
-        >> row.props.made_by.set(made_by)
-        >> row.props.backend.set(backend)
-    )
-    if meta is not None:
-        writes = writes >> row.meta.update(meta)
-    under = nu.If((nu.Str(parent) == "").or_(plane_exists(parent)), parent, "")
-    return writes >> unlink(plane_id) >> link(plane_id, under)
+    """Move a plane under a new parent, or to a new spot among its siblings when ``parent`` is left out.
 
-
-def remove_plane(plane_id: nu.StrArg) -> nu.Nu:
-    """Drop a plane, its cells, and every plane nested below it, unpinning each. Then their state and items.
-
-    Refused when the plane or any plane below it is a system plane. Live
-    runs of every plane going are killed in the same commit, so nothing keeps
-    running against rows that are gone. Whether it went is in the record:
-    :func:`~nuspace.ops.read.plane_exists`.
-
-    Two commits: the rows, then their state and items, one subtree delete
-    per plane and per cell, and one per kind holding items of theirs. The first writes which planes and cells went into slots
-    of the op's own, where the second reads them. Rows first, as
-    :func:`~nuspace.ops.cell.remove_cell` does, so no plane or cell still
-    there reads its state gone. Once the rows are gone, each plane and each
-    cell that went is tracked as ``plane_removed`` and ``cell_removed``.
-    """
-
-    def dropped(gone: nu.Ref, cells: nu.Ref) -> nu.Nu:
-        planes = nu.ForEachDo(nu.List(gone), lambda p: drop_plane_state(nu.Str(p)))
-        return planes >> nu.ForEachDo(nu.List(cells), lambda c: drop_cell_state(nu.Str(c)))
-
-    def told(gone: nu.Ref, cells: nu.Ref) -> nu.Nu:
-        planes = nu.ForEachDo(nu.List(gone), lambda _: track("plane_removed"))
-        return planes >> nu.ForEachDo(nu.List(cells), lambda _: track("cell_removed"))
-
-    return nu.let(
-        [],
-        lambda gone: nu.let(
-            [],
-            lambda cells: (
-                _remove_rows(plane_id, gone, cells)
-                >> told(gone, cells)
-                >> atomic_state(dropped(gone, cells))
-            ),
-        ),
-    )
-
-
-def _remove_rows(plane_id: nu.StrArg, gone: nu.Ref, cells: nu.Ref) -> nu.Nu:
-    """:func:`remove_plane`'s Space commit. ``gone`` and ``cells`` set to the ids removed.
-
-    Both ``[]`` when refused. Every try sets them, so after a retried commit
-    they hold what the try that landed removed.
-    """
-
-    def delete(at: nu.Attr) -> nu.Nu:
-        p = nu.Str(at)
-        return (
-            live_runs_of(p, kill)
-            >> unpin(p)
-            >> nu.IfDo(Space.planes.contains(p), Space.planes.del_item(p))
-        )
-
-    def drop(ids: nu.Nu) -> nu.Nu:
-        going = nu.List(ids)
-        system = going.iter().filter(lambda p: Space.planes[nu.Str(p)].props.system.fallback(False))
-        owned = nu.Flatten(nu.Map(going, lambda p: nu.list(Space.planes[nu.Str(p)].cells)))
-        # Only the top of what goes is listed anywhere that stays: the rest
-        # are listed in rows deleted with it.
-        removed = (
-            unlink(plane_id)
-            >> cells.set(nu.List(nu.Collect(owned)))
-            >> nu.ForEachDo(nu.List(cells), lambda c: Space.cells.del_item(nu.Str(c)))
-            >> nu.ForEachDo(going, delete)
-            >> gone.set(going)
-        )
-        return nu.IfDo(
-            plane_exists(plane_id).and_(system.to_list().len() == 0),
-            removed,
-            gone.set([]) >> cells.set([]),
-        )
-
-    return atomic(subtree(plane_id, drop))
-
-
-def rename_plane(plane_id: nu.StrArg, name: nu.StrArg) -> nu.Nu:
-    """Set a plane's name. A no-op when it is missing."""
-    return atomic(nu.IfDo(plane_exists(plane_id), Space.planes[plane_id].name.set(name)))
-
-
-def set_plane_meta(plane_id: nu.StrArg, fields: dict[str, Any] | nu.Nu) -> nu.Nu:
-    """Merge ``fields`` into a plane's meta, shallow. A no-op when it is missing.
-
-    Props are not reachable from here: they are set by :func:`add_plane`.
-    """
-    return atomic(nu.IfDo(plane_exists(plane_id), Space.planes[plane_id].meta.update(fields)))
-
-
-def plane_icon(icon: str) -> str:
-    """The stored spelling of an icon: ``lucide:<name>``, ``emoji:<char>`` or ``""``.
-
-    A bare name, with no prefix, is a lucide name, which is how a registered
-    Plane names its icon. Surrounding space is dropped.
+    Before or after a sibling there, or at the end when neither is given.
+    The key and everything below it stay as they are. Cost: O(1) writes,
+    about 10 keys, plus O(depth) reads for the cycle check, which climbs
+    from the new parent to root.
 
     Raises:
-        ValueError: A prefix that is neither ``lucide:`` nor ``emoji:``, or
-            one with nothing after it.
+        Missing: No plane, new parent or anchor with that id.
+        Removed: The plane, the new parent or the anchor is removed.
+        Refused: Root, a cycle, an anchor that is not a sibling there.
+        TypeError: Both ``before`` and ``after``, at build.
     """
-    icon = icon.strip()
-    if not icon:
-        return ""
-    if icon.startswith((ICON_LUCIDE, ICON_EMOJI)):
-        if not icon.partition(":")[2].strip():
-            raise ValueError(f"icon {icon!r} names nothing")
-        return icon
-    if ":" in icon:
-        raise ValueError(f"icon {icon!r} is neither lucide: nor emoji:")
-    return ICON_LUCIDE + icon
+    anchor = anchor_of(before, after)
+    rows = Space.planes
+    row = rows[id]
+    target = row.parent if parent is None else parent
+    checks = _not_root(id, "moved") >> live(rows, id, "plane")
+    if parent is not None:
+        checks = checks >> live(rows, parent, "plane") >> no_cycle(id, parent)
+    siblings = rows[target].children
+    return (
+        checks
+        >> anchored(siblings, rows, anchor, id, "plane", text("plane ", target))
+        >> rows[row.parent].children.del_item(id)
+        >> place(siblings, id, before=before, after=after)
+        >> row.parent.set(target)
+        >> _touched(id)
+    )
 
 
-def set_plane_icon(plane_id: nu.StrArg, icon: nu.StrArg) -> nu.Nu:
-    """Set a plane's icon: a merge of ``meta.icon``. A no-op when it is missing.
+def rename(id: nu.StrArg, name: nu.StrArg) -> nu.Nu:
+    """Set a plane's name, display text only. Cost: O(1), 2 keys.
 
-    Args:
-        plane_id: The plane.
-        icon: ``"lucide:<name>"``, ``"emoji:<char>"``, a bare lucide name,
-            or ``""`` for none. A Python string is checked and
-            spelled by :func:`plane_icon`; a term is stored as it evaluates.
+    Raises:
+        Missing: No plane with that id.
+        Removed: It is removed.
     """
-    value = nu.Str(plane_icon(icon)) if isinstance(icon, str) else icon
-    return set_plane_meta(plane_id, nu.Dict.of(icon=value))
+    return live(Space.planes, id, "plane") >> Space.planes[id].name.set(name) >> _touched(id)
+
+
+def set_key(id: nu.StrArg, key: nu.StrArg) -> nu.Nu:
+    """Set a plane's key, or change it: the old entry out of ``plane_keys``, the new one in.
+
+    Cost: O(1), about 5 keys.
+
+    Raises:
+        Missing: No plane with that id.
+        Removed: It is removed.
+        Exists: Another plane holds the key.
+        Refused: An empty key, or one not in slug chars. A literal at build.
+    """
+    spelled = key_spelled(key, "plane", empty_ok=False)
+    index = Space.indexes.plane_keys
+    row = Space.planes[id]
+    old = row.key.fallback("")
+    return (
+        spelled
+        >> live(Space.planes, id, "plane")
+        >> key_free(index, key, id, "plane")
+        >> nu.IfDo((old != "").and_(old != key), index.del_item(old))
+        >> index.set_item(key, id)
+        >> row.key.set(key)
+        >> _touched(id)
+    )
+
+
+def remove_key(id: nu.StrArg) -> nu.Nu:
+    """Drop a plane's key: out of ``plane_keys``, ``.key`` cleared, free for other planes.
+
+    Cost: O(1), 3 keys.
+
+    Raises:
+        Missing: No plane with that id, or it has no key.
+        Removed: It is removed.
+    """
+    row = Space.planes[id]
+    return (
+        live(Space.planes, id, "plane")
+        >> refuse(row.key.fallback("") == "", Missing, "plane ", id, " has no key")
+        >> Space.indexes.plane_keys.del_item(row.key)
+        >> row.key.set("")
+        >> _touched(id)
+    )
+
+
+def set_icon(id: nu.StrArg, icon: nu.StrArg) -> nu.Nu:
+    """Set a plane's icon: ``lucide:<name>``, ``emoji:<char>`` or ``""``. Cost: O(1), 2 keys.
+
+    Raises:
+        Missing: No plane with that id.
+        Removed: It is removed.
+        Refused: A literal icon spelled otherwise, at build.
+    """
+    _icon_spelled(icon)
+    return live(Space.planes, id, "plane") >> Space.planes[id].icon.set(icon) >> _touched(id)
+
+
+def set_backend(id: nu.StrArg, backend: nu.StrArg) -> nu.Nu:
+    """Set what a plane's runs execute on. Live runs keep theirs. Cost: O(1), 2 keys.
+
+    Raises:
+        Missing: No plane with that id.
+        Removed: It is removed.
+        Refused: Root, which never runs. A literal at build.
+    """
+    return (
+        _not_root(id, "given a backend")
+        >> live(Space.planes, id, "plane")
+        >> Space.planes[id].backend.set(backend)
+        >> _touched(id)
+    )
+
+
+def set_meta(id: nu.StrArg, fields: dict[str, Any] | nu.Nu) -> nu.Nu:
+    """Merge ``fields`` into a plane's free meta dict, shallow. Cost: O(fields).
+
+    Raises:
+        Missing: No plane with that id.
+        Removed: It is removed.
+    """
+    return live(Space.planes, id, "plane") >> Space.planes[id].meta.update(fields) >> _touched(id)
+
+
+def exists(id: nu.StrArg, *, removed: bool = False) -> nu.Bool:
+    """Whether a plane with this id is in the space: a row, not removed. A read, never raises.
+
+    ``removed=True`` counts removed rows as well. Cost: O(1), 2 point reads.
+    """
+    there = Space.planes.contains(id)
+    return there if removed else there.and_(Space.planes[id].removed_at.exists().not_())
+
+
+def title(id: nu.StrArg) -> nu.Str:
+    """What a list or a header shows for a plane: its name, else its id. Cost: O(1), 2 reads.
+
+    Removed planes keep theirs.
+
+    Raises:
+        Missing: No plane with that id.
+    """
+    name = Space.planes[id].name.fallback("")
+    shown = nu.If(name == "", id, name)
+    return nu.Str(Require(Space.planes.contains(id), shown, text("no plane ", id), exc_cls=Missing))
+
+
+def on_change(id: nu.StrArg) -> nu.Nu:
+    """A watch over a plane's whole row: every slot at any depth. One kv subscription.
+
+    Fires on its name, icon, meta, removal, its ``version`` (so on every
+    write to one of its cells), and its ``cells`` and ``children`` lists. A
+    child's own row sits outside this prefix, so a child rename does not
+    fire it; a child added, moved or removed does. Never raises.
+    """
+    return Space.planes[id].on_change()
+
+
+def on_children_change(id: nu.StrArg) -> nu.Nu:
+    """A watch over a plane's ``children`` list only. One kv subscription.
+
+    Fires when a child is added, moved in or out, reordered or removed. Not
+    on a child's own row: a rename is that child's :func:`on_change`. Never
+    raises.
+    """
+    return Space.planes[id].children.on_change()

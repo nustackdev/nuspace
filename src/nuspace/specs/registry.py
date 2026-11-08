@@ -21,6 +21,8 @@ host's or a worker's: loaded from the entry points once, then cached. So a
 name alone is enough to find what it names, with no registry object handed
 over:
 
+- :func:`plane_spec`, :func:`cell_spec`: a plane or cell spec's
+  registered name to the spec;
 - :func:`content_spec`: a content kind's registered name to its spec, and
   through it to the kind; :func:`content_specs`, every one, for a reader
   that offers the kinds, eg a search form, built where it runs;
@@ -41,12 +43,14 @@ from dataclasses import dataclass, field, replace
 from importlib.metadata import entry_points
 from typing import TYPE_CHECKING, Any
 
+from nuspace.errors import Missing
+
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping, Sequence
 
+    from nuspace.kernel import EnvFactory
     from nuspace.shapes.content import Content
-    from nuspace.system.kernel import EnvFactory
 
     from .specs import CellSpec, ContentSpec, PlaneSpec
 
@@ -56,10 +60,12 @@ __all__ = [
     "Extension",
     "Registry",
     "RegistryWarning",
+    "cell_spec",
     "content_spec",
     "content_specs",
     "discover",
     "kind_name",
+    "plane_spec",
     "qualified",
     "registered_name",
     "short_name",
@@ -302,6 +308,32 @@ def content_spec(name: str) -> ContentSpec:
     if found is None:
         msg = f"No content kind {name!r} installed"
         raise LookupError(msg)
+    return found
+
+
+def plane_spec(name: str) -> PlaneSpec:
+    """The installed plane spec registered as ``name``, eg ``nudemos.movies``.
+
+    Raises:
+        Missing: No installed package adds a plane spec of that name.
+    """
+    found = _installed().registry.planes.get(name)
+    if found is None:
+        msg = f"no plane spec {name!r} installed"
+        raise Missing(msg)
+    return found
+
+
+def cell_spec(name: str) -> CellSpec:
+    """The installed cell spec registered as ``name``, eg ``nuverse.slider``.
+
+    Raises:
+        Missing: No installed package adds a cell spec of that name.
+    """
+    found = _installed().registry.cells.get(name)
+    if found is None:
+        msg = f"no cell spec {name!r} installed"
+        raise Missing(msg)
     return found
 
 

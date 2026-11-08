@@ -1,307 +1,328 @@
-"""Cell ops: write one, edit it, place it, drop it.
+"""``nuspace.cell``: the ops over ``Space.cells``. A cell is a program on one plane.
 
-The only writer of the two facts that must agree about a cell's place: the
-plane's ``cells`` list and the cell's ``plane``. Every op here that changes
-one writes the other in the same commit. A cell stays on the plane it was
-made on: nothing here moves one to another.
+A cell's row names its ``plane``; the plane lists it in ``cells``. Both
+sides change in one commit. Two versions move: ``Cell.version`` only with
+the prog (what reload compares a cell run's version to), ``Plane.version``
+with any write to any of the plane's cells (the one key to watch for a
+plane's cells).
 
-Every op here that writes a cell, or the plane's ``cells``, counts it on
-the plane's ``version`` in the same commit, so following a plane's cells is
-one key to watch.
-
-A cell is addressed by its id alone. An op that needs its plane reads
-``plane`` off it, inside its own bracket.
-
-A cell's state is in the other store (States), and so are its items.
-Dropping a cell drops both, as a commit of its own after the structure
-one, in the order :func:`~.utils.atomic_state` gives.
+Every op is a bare term the caller brackets (see :mod:`nuspace.ops`).
+Programs write the module in front: ``nuspace.cell.add(...)``.
 """
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import nu
-import nu.prog
-import nu.tree
-from nu.lang import ScalarQuery
-from nuspace.shapes import Space
-from nustd.ui.core import Ref as UiRef
+import nustd.time
+from nuspace.errors import Exists, Missing
+from nuspace.shapes.space import Space
+from nuspace.utils import MintId, Require, anchor_of, place
+from nuspace.utils.checks import (
+    anchored,
+    key_free,
+    key_spelled,
+    live,
+    refuse,
+    text,
+    unkey,
+    when,
+)
 
-from .kernel import interrupt_cell
-from .read import cell_exists, cell_plane, plane_exists
-from .state import drop_cell_state
-from .usage import track
-from .utils import MintId, atomic, atomic_state, keep_order, snapshot
-
-
-if TYPE_CHECKING:
-    from collections.abc import Callable, Sequence
-
-    from nu.lang.runtime import Runtime
+from .interactions import Fabrics
 
 
 __all__ = [
-    "HasUi",
-    "add_cell",
-    "remove_cell",
-    "rename_cell",
-    "reorder_cells",
-    "set_cell_meta",
+    "add",
+    "exists",
+    "move",
+    "remove",
+    "remove_key",
+    "rename",
+    "set_key",
+    "set_meta",
     "set_prog",
+    "title",
 ]
 
 
-# In process: the host's own interpreter builds the term it inspects.
-_BRACE = nu.prog.PyBrace()
-
-
-def _draws(built: object) -> bool:
-    """A constructed term holding a ui ref anywhere. A failed build draws nothing."""
-    if not isinstance(built, nu.Nu):
-        return False
-    return nu.tree.find_first(built, lambda node: isinstance(node, UiRef)) is not None
-
-
-class HasUi(ScalarQuery):
-    """Whether ``prog`` draws: constructed, its tree holds a ui ref.
-
-    Construction runs the prog's module code in this process, offered the
-    ``plane`` and ``cell`` a run offers. Source that does not construct reads
-    False: as it stands it draws nothing.
-    """
-
-    def __init__(self, prog: nu.StrArg, plane_id: nu.StrArg, cell_id: nu.StrArg) -> None:
-        super().__init__(prog, plane_id, cell_id)
-
-    def _compile(self, nid: int, children: tuple[Callable, ...]) -> Callable:
-        prog, plane, cell = children
-
-        def thunk(rt: Runtime) -> object:
-            scope = {"plane": plane(rt), "cell": cell(rt)}
-            return _draws(_BRACE.construct(str(prog(rt)), scope=scope))
-
-        return thunk
-
-    def _acompile(self, nid: int, children: tuple[Callable, ...]) -> Callable:
-        prog, plane, cell = children
-
-        async def athunk(rt: Runtime) -> object:
-            scope = {"plane": await plane(rt), "cell": await cell(rt)}
-            return _draws(await _BRACE.aconstruct(str(await prog(rt)), scope=scope))
-
-        return athunk
-
-
-def _write_prog(row: nu.Nu, prog: nu.StrArg, has_ui: nu.Nu) -> nu.Nu:
-    """Set a cell's prog and the ``has_ui`` it implies, together, and count the write.
-
-    ``version`` goes up by one per write, from 1, so a cell run recording an
-    older one is running an older prog.
-    """
-    return (
-        row.prog.set(prog)
-        >> row.props.has_ui.set(has_ui)
-        >> row.version.set(row.version.fallback(0) + 1)
-    )
-
-
-def _touch(plane_id: nu.StrArg) -> nu.Nu:
-    """Count a write to one of the plane's cells on its ``version``. No bracket."""
-    version = Space.planes[plane_id].version
+def _bump(plane: nu.StrArg) -> nu.Nu:
+    """Count a write to one of the plane's cells on ``Plane.version``."""
+    version = Space.planes[plane].version
     return version.set(version.fallback(0) + 1)
 
 
-def _knowing_ui(
-    prog: nu.StrArg,
-    plane_id: nu.StrArg,
-    cell_id: nu.StrArg,
-    build: Callable[[nu.Nu], nu.Nu],
-) -> nu.Nu:
-    """``build(has_ui)``, with :class:`HasUi` worked out before it runs.
-
-    Constructing runs the prog's module code, which can take as long as its
-    imports do. Outside the op's bracket, so the store's write lock is never
-    held for it, and a retried commit does not construct again.
-    """
-    return nu.let(HasUi(prog, plane_id, cell_id), lambda has_ui: build(nu.Bool(has_ui)))
+def _edited(id: nu.StrArg) -> nu.Nu:
+    """Stamp ``modified_at`` and count the write on the cell's plane."""
+    row = Space.cells[id]
+    return row.modified_at.set(nustd.time.time()) >> _bump(row.plane)
 
 
-def _place(cells: nu.ListRef, cell_id: nu.StrArg, index: nu.IntArg | None) -> nu.Nu:
-    """Put ``cell_id`` in a plane's ``cells`` at ``index``, the end when None, once."""
-    put = cells.append(cell_id) if index is None else cells.insert(index, cell_id)
-    return nu.IfDo(cells.contains(cell_id).not_(), put)
-
-
-def _placeable(plane_id: nu.StrArg, cell_id: nu.StrArg) -> nu.Bool:
-    """Whether ``cell_id`` may be written onto the plane: it is there, and the cell is new or its own."""
-    on = cell_plane(cell_id)
-    return plane_exists(plane_id).and_((on == "").or_(on == plane_id))
-
-
-def add_cell(
-    plane_id: nu.StrArg,
+def add(
+    plane: nu.StrArg,
     prog: nu.StrArg,
     *,
-    cell_id: nu.StrArg | None = None,
+    id: nu.StrArg | None = None,
+    before: nu.StrArg | None = None,
+    after: nu.StrArg | None = None,
     name: nu.StrArg = "",
-    index: nu.IntArg | None = None,
-    made_by: nu.StrArg = "",
+    key: nu.StrArg = "",
+    spec: nu.StrArg = "",
     meta: dict[str, Any] | nu.Nu | None = None,
     into: nu.Ref | None = None,
 ) -> nu.Nu:
-    """Write a cell onto a plane and place it at ``index``, in one commit.
+    """Create a cell on a plane. Create only: an id taken raises. Does not run it.
+
+    One commit: the row (name, key, prog, the fabrics worked out from the
+    prog, version 1, plane, spec, meta, created_at), the id in the plane's
+    ``cells`` (before or after a sibling, else at the end), the key in
+    ``Space.indexes.cell_keys``, the id in ``spec_cells[spec].ids`` when
+    given, and ``Plane.version`` +1. A plane run picks the cell up, or
+    reload does for a live one. Cost: O(1), about 20 keys.
+
+    Working out the fabrics builds the prog in this process (its module
+    code runs), before any store key is read.
 
     Args:
-        plane_id: The plane. Nothing is written when it is missing.
-        prog: The cell's source.
-        cell_id: Its id, unique across the space. Minted when the term is
-            evaluated when absent. Nothing is written when a cell of this id
-            is on another plane.
-        name: What to call it.
-        index: Where in the plane's cells. The end when absent.
-        made_by: Prop, the Cell spec it was made from, ``""`` for none.
-        meta: Fields to merge into its meta.
-        into: Set to the cell id in the commit, ``""`` when nothing was
-            written, for a caller that needs a minted one: the record does
-            not say which cell this call made.
+        plane: The plane it goes on.
+        prog: Its source.
+        id: Its id. Minted when the op evaluates when absent.
+        before: A cell of the plane to place it before.
+        after: A cell of the plane to place it after. Neither: the end.
+        name: Display text only.
+        key: An optional handle, slug chars, ``""`` for none.
+        spec: The spec it was made from, ``""`` for none.
+        meta: The free dict, for programs. nuspace never reads it.
+        into: A ref set to the id in the same commit, for a minted one.
 
-    ``has_ui`` is worked out from ``prog`` (:class:`HasUi`). The props are
-    written every time, so an existing cell given again takes
-    the ones passed now. Tracked as ``cell_created`` once the commit lands,
-    only when the cell is new and its plane not a system one.
+    Raises:
+        Exists: The id or the key is taken.
+        Missing: No plane or anchor with that id.
+        Removed: The plane or the anchor is removed.
+        Refused: An anchor on another plane, a key that is not slug chars
+            (a literal at build).
+        TypeError: Both ``before`` and ``after``, at build.
     """
+    anchor = anchor_of(before, after)
+    spelled = key_spelled(key, "cell", empty_ok=True)
 
-    def knowing(minted: nu.ObjectRef, made: nu.Ref) -> nu.Nu:
-        cid = nu.Str(minted)
+    def write(cid: nu.StrArg, fabrics: nu.ObjectRef) -> nu.Nu:
+        rows = Space.cells
+        row = rows[cid]
+        listed = Space.planes[plane].cells
 
-        def commit(has_ui: nu.Nu) -> nu.Nu:
-            placed = made.set(_new_user_cell(plane_id, cid)) >> cell_writes(
-                plane_id, cid, prog, has_ui, name=name, index=index, made_by=made_by, meta=meta
+        def made(now: nu.ObjectRef) -> nu.Nu:
+            return (
+                row.name.set(name)
+                >> row.key.set(key)
+                >> row.prog.set(prog)
+                >> row.fabrics.set(fabrics)
+                >> row.version.set(1)
+                >> row.plane.set(plane)
+                >> row.spec.set(spec)
+                >> row.meta.set(nu.Dict.create() if meta is None else meta)
+                >> row.created_at.set(now)
+                >> row.modified_at.set(now)
             )
-            if into is None:
-                return atomic(placed)
-            return atomic(placed >> into.set(nu.If(cell_plane(cid) == plane_id, cid, "")))
 
-        return _knowing_ui(prog, plane_id, cid, commit)
+        writes = (
+            refuse(rows.contains(cid), Exists, "cell ", cid, " exists")
+            >> live(Space.planes, plane, "plane")
+            >> anchored(listed, rows, anchor, cid, "cell", text("plane ", plane))
+            >> spelled
+            >> key_free(Space.indexes.cell_keys, key, None, "cell")
+            >> nu.let(nustd.time.time(), made)
+            >> place(listed, cid, before=before, after=after)
+            >> when(key, Space.indexes.cell_keys.set_item(key, cid))
+            >> when(spec, Space.indexes.spec_cells[spec].ids.set_item(cid, True))
+            >> _bump(plane)
+        )
+        return writes if into is None else writes >> into.set(cid)
 
-    # Minted ahead of the bracket, so has_ui is worked out outside it, and a
-    # retried commit writes the same id again.
-    minted = MintId("c") if cell_id is None else cell_id
-    return nu.let(
-        False,
-        lambda made: (
-            nu.let(minted, lambda cid: knowing(cid, made))
-            >> nu.IfDo(nu.bool(made), track("cell_created"))
-        ),
+    def analysed(cid: nu.StrArg) -> nu.Nu:
+        return nu.let(Fabrics(prog, plane, cid), lambda fabrics: write(cid, fabrics))
+
+    if id is None:
+        return nu.let(MintId("c"), lambda cid: analysed(nu.Str(cid)))
+    return analysed(id)
+
+
+def remove(id: nu.StrArg) -> nu.Nu:
+    """Remove a cell softly: stamped, kept and readable, with its runs, state and content.
+
+    Stamps ``removed_at`` and ``removed_by=id``, takes the id out of its
+    plane's ``cells``, drops its key from ``cell_keys`` (the row keeps
+    ``.key``), adds the id to ``Space.indexes.removed``, ``Plane.version``
+    +1. Writes nothing about runs: the kernel sees the removed cell and
+    interrupts its live cell runs. Cost: O(1), about 7 keys.
+
+    Raises:
+        Missing: No cell with that id.
+        Removed: It is removed already.
+    """
+    row = Space.cells[id]
+    return (
+        live(Space.cells, id, "cell")
+        >> Space.planes[row.plane].cells.del_item(id)
+        >> unkey(Space.indexes.cell_keys, row.key, id)
+        >> row.removed_at.set(nustd.time.time())
+        >> row.removed_by.set(id)
+        >> Space.indexes.removed.set_item(id, True)
+        >> _bump(row.plane)
     )
 
 
-def _new_user_cell(plane_id: nu.StrArg, cell_id: nu.StrArg) -> nu.Bool:
-    """Whether writing ``cell_id`` onto the plane now makes a cell a user owns.
-
-    The plane there and not a system one, and no cell of this id yet.
-    """
-    on_user = nu.bool(Space.planes[plane_id].props.system.fallback(False)).not_()
-    return plane_exists(plane_id).and_(cell_exists(cell_id).not_()).and_(on_user)
-
-
-def cell_writes(
-    plane_id: nu.StrArg,
-    cell_id: nu.StrArg,
-    prog: nu.StrArg,
-    has_ui: nu.Nu,
+def move(
+    id: nu.StrArg,
     *,
-    name: nu.StrArg = "",
-    index: nu.IntArg | None = None,
-    made_by: nu.StrArg = "",
-    meta: dict[str, Any] | nu.Nu | None = None,
+    plane: nu.StrArg | None = None,
+    before: nu.StrArg | None = None,
+    after: nu.StrArg | None = None,
 ) -> nu.Nu:
-    """:func:`add_cell`'s writes for a cell id and ``has_ui`` already known. No bracket.
+    """Move a cell before or after a sibling, or to the end; with ``plane``, onto another plane.
 
-    The cell's row, its ``plane`` and its place in the plane's ``cells``,
-    together. Nothing is written when the plane is missing or the cell is
-    on another one.
+    Out of the old plane's ``cells``, into the target's, ``Cell.plane`` set,
+    ``Plane.version`` +1 on both. Left out, ``plane`` is the cell's own. The
+    kernel interrupts its live runs on the old plane; reload gives it a
+    first run in the new plane's live runs. Cost: O(1), about 10 keys.
+
+    Raises:
+        Missing: No cell, target plane or anchor with that id.
+        Removed: The cell, the target plane or the anchor is removed.
+        Refused: An anchor not on the target plane, or the cell itself.
+        TypeError: Both ``before`` and ``after``, at build.
     """
-    row = Space.cells[cell_id]
-    writes = (
-        row.plane.set(plane_id)
-        >> row.name.set(name)
-        >> _write_prog(row, prog, has_ui)
-        >> row.props.made_by.set(made_by)
-        >> row.meta.init(nu.Dict.create())
+    anchor = anchor_of(before, after)
+    row = Space.cells[id]
+    target = row.plane if plane is None else plane
+    listed = Space.planes[target].cells
+    checks = live(Space.cells, id, "cell")
+    if plane is not None:
+        checks = checks >> live(Space.planes, plane, "plane")
+    # The old plane is read off the row, so everything about it comes before the row moves.
+    moved = (
+        Space.planes[row.plane].cells.del_item(id)
+        >> _bump(row.plane)
+        >> place(listed, id, before=before, after=after)
+        >> row.plane.set(target)
+        >> row.modified_at.set(nustd.time.time())
     )
-    if meta is not None:
-        writes = writes >> row.meta.update(meta)
-    placed = writes >> _place(Space.planes[plane_id].cells, cell_id, index) >> _touch(plane_id)
-    return nu.IfDo(_placeable(plane_id, cell_id), placed)
+    if plane is not None:
+        moved = moved >> _bump(plane)
+    return (
+        checks >> anchored(listed, Space.cells, anchor, id, "cell", text("plane ", target)) >> moved
+    )
 
 
-def remove_cell(cell_id: nu.StrArg) -> nu.Nu:
-    """Drop a cell: its live cell runs interrupted, off its plane, row deleted, then its state and items.
+def rename(id: nu.StrArg, name: nu.StrArg) -> nu.Nu:
+    """Set a cell's name, display text only. ``Cell.version`` stays. Cost: O(1), 3 keys.
 
-    Two commits, the row first. The second deletes its items of every kind
-    with its state. The other way round, a cell still on the
-    plane (and its runs, still live until the interrupt lands) would read
-    its state gone. This way the worst a crash between them leaves is state
-    no cell points at. Tracked as ``cell_removed`` once the row is gone,
-    unless it was on a system plane.
+    Raises:
+        Missing: No cell with that id.
+        Removed: It is removed.
     """
-
-    def row(gone: nu.Ref) -> nu.Nu:
-        on_user = nu.bool(Space.planes[cell_plane(cell_id)].props.system.fallback(False)).not_()
-        return atomic(
-            gone.set(False)
-            >> nu.IfDo(
-                cell_exists(cell_id),
-                gone.set(on_user)
-                >> interrupt_cell(cell_id)
-                >> Space.planes[cell_plane(cell_id)].cells.remove(cell_id, missing_ok=True)
-                >> _touch(cell_plane(cell_id))
-                >> Space.cells.del_item(cell_id),
-            )
-        ) >> nu.IfDo(nu.bool(gone), track("cell_removed"))
-
-    return nu.let(False, row) >> atomic_state(drop_cell_state(cell_id))
+    return live(Space.cells, id, "cell") >> Space.cells[id].name.set(name) >> _edited(id)
 
 
-def rename_cell(cell_id: nu.StrArg, name: nu.StrArg) -> nu.Nu:
-    """Set a cell's name. A no-op when it is missing."""
-    named = Space.cells[cell_id].name.set(name) >> _touch(cell_plane(cell_id))
-    return atomic(nu.IfDo(cell_exists(cell_id), named))
+def set_key(id: nu.StrArg, key: nu.StrArg) -> nu.Nu:
+    """Set a cell's key, or change it: the old entry out of ``cell_keys``, the new one in.
 
+    Cost: O(1), about 6 keys.
 
-def set_prog(cell_id: nu.StrArg, prog: nu.StrArg) -> nu.Nu:
-    """Replace a cell's source, and its ``has_ui`` with it. Bumps its ``version``.
-
-    Live cell runs keep running the prog they loaded: rerunning them is the
-    reload service's. Nothing validates: a broken prog stores fine, and reads as not drawing.
+    Raises:
+        Missing: No cell with that id.
+        Removed: It is removed.
+        Exists: Another cell holds the key.
+        Refused: An empty key, or one not in slug chars. A literal at build.
     """
-    row = Space.cells[cell_id]
-
-    def knowing(plane: nu.ObjectRef) -> nu.Nu:
-        def write(has_ui: nu.Nu) -> nu.Nu:
-            written = _write_prog(row, prog, has_ui) >> _touch(cell_plane(cell_id))
-            return atomic(nu.IfDo(cell_exists(cell_id), written))
-
-        return _knowing_ui(prog, nu.Str(plane), cell_id, write)
-
-    # Its plane is offered to the construction, as a run offers it.
-    return nu.let(snapshot(cell_plane(cell_id)), knowing)
-
-
-def set_cell_meta(cell_id: nu.StrArg, fields: dict[str, Any] | nu.Nu) -> nu.Nu:
-    """Merge ``fields`` into a cell's meta. A no-op when it is missing."""
-    merged = Space.cells[cell_id].meta.update(fields) >> _touch(cell_plane(cell_id))
-    return atomic(nu.IfDo(cell_exists(cell_id), merged))
+    spelled = key_spelled(key, "cell", empty_ok=False)
+    index = Space.indexes.cell_keys
+    row = Space.cells[id]
+    old = row.key.fallback("")
+    return (
+        spelled
+        >> live(Space.cells, id, "cell")
+        >> key_free(index, key, id, "cell")
+        >> nu.IfDo((old != "").and_(old != key), index.del_item(old))
+        >> index.set_item(key, id)
+        >> row.key.set(key)
+        >> _edited(id)
+    )
 
 
-def reorder_cells(plane_id: nu.StrArg, cell_ids: Sequence[nu.StrArg] | nu.Nu) -> nu.Nu:
-    """Put a plane's cells in the order given.
+def remove_key(id: nu.StrArg) -> nu.Nu:
+    """Drop a cell's key: out of ``cell_keys``, ``.key`` cleared, free for other cells.
 
-    Ids not on the plane are skipped, and cells left out keep their place
-    after the named ones, so a partial order is a move, not a truncation.
+    Cost: O(1), 4 keys.
+
+    Raises:
+        Missing: No cell with that id, or it has no key.
+        Removed: It is removed.
     """
-    cells = Space.planes[plane_id].cells
-    ordered = keep_order(cells, cell_ids, member=cells) >> _touch(plane_id)
-    return atomic(nu.IfDo(plane_exists(plane_id), ordered))
+    row = Space.cells[id]
+    return (
+        live(Space.cells, id, "cell")
+        >> refuse(row.key.fallback("") == "", Missing, "cell ", id, " has no key")
+        >> Space.indexes.cell_keys.del_item(row.key)
+        >> row.key.set("")
+        >> _edited(id)
+    )
+
+
+def set_prog(id: nu.StrArg, prog: nu.StrArg) -> nu.Nu:
+    """Replace a cell's program. Live runs keep the old one; reload reruns the cell.
+
+    One commit: prog, fabrics (worked out from the prog, which builds it in
+    this process), ``Cell.version`` +1, ``modified_at``, ``Plane.version``
+    +1. Nothing validates: a prog that does not build stores fine and uses
+    no fabric. Cost: O(1), 5 keys.
+
+    Raises:
+        Missing: No cell with that id.
+        Removed: It is removed.
+    """
+    row = Space.cells[id]
+
+    def written(fabrics: nu.ObjectRef) -> nu.Nu:
+        return (
+            row.prog.set(prog)
+            >> row.fabrics.set(fabrics)
+            >> row.version.set(row.version.fallback(0) + 1)
+            >> _edited(id)
+        )
+
+    return live(Space.cells, id, "cell") >> nu.let(Fabrics(prog, row.plane, id), written)
+
+
+def set_meta(id: nu.StrArg, fields: dict[str, Any] | nu.Nu) -> nu.Nu:
+    """Merge ``fields`` into a cell's free meta dict, shallow. ``Cell.version`` stays.
+
+    Cost: O(fields).
+
+    Raises:
+        Missing: No cell with that id.
+        Removed: It is removed.
+    """
+    return live(Space.cells, id, "cell") >> Space.cells[id].meta.update(fields) >> _edited(id)
+
+
+def exists(id: nu.StrArg, *, removed: bool = False) -> nu.Bool:
+    """Whether a cell with this id is in the space: a row, not removed. A read, never raises.
+
+    A plane removal stamps its cells too, so one row says it. ``removed=True``
+    counts removed rows as well. Cost: O(1), 2 point reads.
+    """
+    there = Space.cells.contains(id)
+    return there if removed else there.and_(Space.cells[id].removed_at.exists().not_())
+
+
+def title(id: nu.StrArg) -> nu.Str:
+    """What a list or a header shows for a cell: its name, else its id. Cost: O(1), 2 reads.
+
+    Raises:
+        Missing: No cell with that id.
+    """
+    name = Space.cells[id].name.fallback("")
+    shown = nu.If(name == "", id, name)
+    return nu.Str(Require(Space.cells.contains(id), shown, text("no cell ", id), exc_cls=Missing))

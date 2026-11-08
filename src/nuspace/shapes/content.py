@@ -29,8 +29,8 @@ import nu
 from nu.engine import Declared
 from nu.lang import ScalarQuery
 from nu.lang.sentinels import UNSET, Unset
-from nu.lang.typeinfo import TypeInfo
 from nuspace.specs.registry import content_spec, kind_name
+from nuspace.utils import TypedItems
 from nustd.ui.core import Ref as UiRef
 
 from .state import State
@@ -39,7 +39,6 @@ from .state import State
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
 
-    import nustd.kv
     from nu.domains.shape import StructuredRef
     from nu.lang.runtime import Runtime
 
@@ -155,10 +154,11 @@ def entries(
     scope_id: nu.StrArg = "",
     *,
     schema: type[nu.Shape] | None = None,
-) -> nustd.kv.DictRef[str, Any]:
+) -> TypedItems:
     """One place's items of a kind, by content key, each typed as the kind's Shape.
 
-    The mapping is the store's own: ``[key]`` is one item, ``keys()`` lists
+    ``[key].body`` is ``Note.body.with_parent(...entries[key])``, the kind's
+    slot placed under the item. The mapping is the store's own: ``keys()`` lists
     the place, ``[key].erase()`` removes one, and a write to a new key adds
     it. A place no item ever landed in has no mapping yet: ``exists()`` is
     False, and ``keys`` or ``len`` raise. Builds a ref, reads nothing.
@@ -184,17 +184,13 @@ def entries(
     level, scope_id = _place(level, scope_id)
     name = _name(kind)
     if level == CELL:
-        typed = State.content_cells[name].cells[scope_id].entries
+        held = State.content_cells[name].cells[scope_id].entries
     elif level == PLANE:
-        typed = State.content_planes[name].planes[scope_id].entries
+        held = State.content_planes[name].planes[scope_id].entries
     else:
-        typed = State.content_space[name].entries
-    # The slot holds the empty Entry; typing it as the kind's Shape makes
-    # ``[key]`` a ref of the kind's slots. A fresh ref per access, so this
-    # touches no other chain.
-    item = schema if schema is not None else _schema(kind)
-    typed._payload["type_info"] = TypeInfo.from_annotation(dict[str, item])
-    return typed
+        held = State.content_space[name].entries
+    # Each item is the empty Entry: the kind's Shape sits on it through with_parent.
+    return TypedItems(held, schema if schema is not None else _schema(kind))
 
 
 def address(

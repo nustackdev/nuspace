@@ -1,18 +1,15 @@
-"""Kernel ops: run planes, interrupt and kill them, run and interrupt their cells.
+"""``nuspace.plane_run``: the ops over ``Space.exec.plane_runs``, one per lifecycle slot.
 
-The store is the transport (D1): these write intents only. ``plane_run``
-and ``cell_run`` write new records into the live indexes, the interrupts
-set ``interrupt_requested``, ``plane_kill`` sets ``termination_requested``.
-The kernel, in the host where the backends live, sees the records and makes
-them true, and it and the backends write every effect. So every op here is
-safe from any process holding the store, a service on a worker included.
+``add`` writes ``created_at``, ``start`` ``started_at``, ``interrupt``
+``interrupt_at``, ``kill`` ``kill_at``, ``end`` ``ended_at``; ``stop`` writes
+two. ``add``, ``interrupt``, ``kill`` and ``stop`` ask; ``start`` and ``end``
+are the kernel saying what happened. Calling those by hand records a fact
+the kernel did not see.
 
-Every op is O(1) or O(k), k being what is live of what it asks about: a
-plane's live runs are its ``planes_running``, a run's live cell runs its
-``cells_running``, its live workers its ``workers_running``, never ``runs``
-nor all of ``running``. A cell's newest cell run in a plane run is a point
-read of the run's ``latest`` (:func:`latest`), never a walk of its
-``cells``, which grows with every reload.
+Declarative: nothing here starts or stops a process. The kernel watches
+the records and the live indexes and makes them true.
+
+Every op is a bare term the caller brackets (see :mod:`nuspace.ops`).
 """
 
 from __future__ import annotations
@@ -20,398 +17,252 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import nu
-from nuspace.shapes import Space
-
-from .read import cell_plane, cells, plane_exists
-from .utils import MintId, atomic, listed, snapshot
+import nustd.time
+from nuspace.errors import Missing, Refused
+from nuspace.shapes.exec import EXIT_FAILED, EXIT_OK
+from nuspace.shapes.space import Space
+from nuspace.utils import MintId, Require
+from nuspace.utils.checks import exit_known, live, not_ended, refuse, row_known, text
 
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Sequence
+    from collections.abc import Sequence
 
 
 __all__ = [
     "STOP_GRACE",
-    "Here",
-    "add_cell_run",
-    "add_plane_run",
-    "cell_interrupt",
-    "cell_run",
-    "cell_runs",
-    "env",
+    "add",
+    "any_live",
+    "end",
     "interrupt",
-    "interrupt_cell",
     "kill",
-    "latest",
-    "live_runs_of",
-    "off_running",
-    "plane_interrupt",
-    "plane_kill",
-    "plane_live",
-    "plane_run",
-    "plane_stop",
-    "run",
-    "runs",
-    "workers",
+    "on_live_change",
+    "start",
+    "stop",
+    "wait",
 ]
 
 
-class Here(nu.Shape):
-    """Where a cell run's body runs: the ids the kernel holds for it in a frame.
-
-    The kernel opens a frame over this Shape around every cell run's body,
-    so a program and its envs read these, eg ``Here.plane``, and never set
-    them.
-    """
-
-    plane = nu.StrRef.slot()
-    cell = nu.StrRef.slot()
-    run = nu.StrRef.slot()
-    cell_run = nu.StrRef.slot()
-
-
-#: How long ``plane_stop`` waits after interrupting before it kills, in seconds.
+#: How long ``stop`` gives a plane run after its interrupt before its kill falls due, in seconds.
 STOP_GRACE = 10.0
-
-_kernel = Space.kernel
-
-
-def plane_live(plane_id: nu.StrArg) -> nu.List:
-    """A plane's live plane run ids, ``[]`` when it has none. Bare read.
-
-    Its ``planes_running`` entry is there only while it has live runs (the
-    last run out takes it away), so a plane with none has no set to read.
-    """
-    return listed(_kernel.planes_running[plane_id].runs)
-
-
-# --- Running -------------------------------------------------------------------
-
-
-def env(name: str, *args: str) -> list[str]:
-    """An env spec: the name a factory was registered under, then its args.
-
-    Plain data, so it is stored on the run (``Run.envs``) and anyone can run
-    the plane the same way again.
-    """
-    return [name, *args]
 
 
 def _envs(envs: Sequence[Sequence[str]] | nu.Nu) -> object:
-    """Env specs as a value ``Run.envs`` stores whole."""
+    """Env specs, ``[name, *args]`` each, as a value ``PlaneRun.envs`` stores whole."""
     if isinstance(envs, nu.Nu):
         return envs
     return nu.Literal([list(spec) for spec in envs])
 
 
-def _add_cell_run(
-    run_id: nu.StrArg, cell_id: nu.StrArg, cell_run_id: nu.StrArg, by: nu.StrArg
-) -> nu.Nu:
-    """One cell run written into a plane run, its ``cells_running`` and ``latest``. No bracket."""
-    row = _kernel.runs[run_id]
-    cr = row.cells[cell_run_id]
-    return (
-        cr.cell.set(cell_id)
-        >> cr.version.set(Space.cells[cell_id].version.fallback(0))
-        >> cr.by.set(by)
-        >> cr.interrupt_requested.set(False)
-        >> row.cells_running.add(cell_run_id)
-        >> row.latest.set_item(cell_id, cell_run_id)
-    )
-
-
-def add_plane_run(
-    run_id: nu.StrArg,
-    plane_id: nu.StrArg,
-    *,
-    by: nu.StrArg = "",
-    envs: Sequence[Sequence[str]] | nu.Nu = (),
-) -> nu.Nu:
-    """A plane run written under ``run_id``, a cell run per cell, into the live indexes. No bracket.
-
-    For ops and services that write a run and their own record of it in one
-    commit. Nothing is written when the plane is missing.
-    """
-    row = _kernel.runs[run_id]
-    writes = (
-        row.plane.set(plane_id)
-        >> row.backend.set(Space.planes[plane_id].props.backend.fallback(""))
-        >> row.by.set(by)
-        >> row.envs.set(_envs(envs))
-        >> row.termination_requested.set(False)
-        >> row.cells.init(nu.Dict.create())
-        >> row.cells_running.init(nu.Set.create())
-        >> row.latest.init(nu.Dict.create())
-        >> row.workers.init(nu.Set.create())
-        >> row.workers_running.init(nu.Set.create())
-        >> nu.ForEachDo(
-            cells(plane_id),
-            lambda cell: nu.let(
-                MintId("cr"),
-                lambda cr: _add_cell_run(run_id, nu.Str(cell), nu.Str(cr), by),
-            ),
-        )
-        >> _kernel.running.add(run_id)
-        >> _kernel.planes_running[plane_id].runs.add(run_id)
-    )
-    return nu.IfDo(plane_exists(plane_id), writes)
-
-
-def plane_run(
-    plane_id: nu.StrArg,
+def add(
+    plane: nu.StrArg,
     *,
     by: nu.StrArg = "",
     envs: Sequence[Sequence[str]] | nu.Nu = (),
     into: nu.Ref | None = None,
 ) -> nu.Nu:
-    """Run a plane: a new plane run with a cell run per cell, in order. One commit.
+    """Ask for a run of a plane: a new plane run record. Starts nothing, the kernel does.
 
-    The run takes the plane's ``backend`` prop as it is now. A plane with no
-    cells makes a run the kernel ends at once. A plane with no backend makes
-    a run the kernel ends failed, the error saying so: there is no default.
+    One commit: the row (plane, the plane's backend as it is now, by, envs,
+    created_at), its node in ``history``, and the live indexes: into
+    ``live.plane_runs`` (what the kernel folds over) and
+    ``live.plane_to_plane_runs[plane]``, with its own live sets made empty.
+    The kernel adds its cell runs. Cost: O(1), about 12 keys.
 
     Args:
-        plane_id: The plane.
+        plane: The plane to run.
         by: Who asked, eg ``nav``.
         envs: Env specs its cells run inside, outermost first, each
-            ``env(name, *args)``.
-        into: Set to the run id in the commit, ``""`` when the plane is
-            missing, for a caller that needs it: the record does not say
-            which run this call made. A retried commit sets it again, so it
-            names the run that landed.
+            ``[name, *args]`` naming a factory registered at open.
+        into: A ref set to the new run's id in the same commit.
+
+    Raises:
+        Missing: No plane with that id.
+        Removed: It is removed.
+        Refused: It has no backend (root), so it does not run.
     """
+    planes = Space.planes
+    indexes = Space.exec.indexes
 
     def write(rid: nu.ObjectRef) -> nu.Nu:
-        made = add_plane_run(nu.Str(rid), plane_id, by=by, envs=envs)
-        if into is None:
-            return made
-        return made >> into.set(nu.If(plane_exists(plane_id), nu.Str(rid), ""))
-
-    return atomic(nu.let(MintId("r"), write))
-
-
-def add_cell_run(
-    run_id: nu.StrArg, cell_id: nu.StrArg, cell_run_id: nu.StrArg, by: nu.StrArg = ""
-) -> nu.Nu:
-    """A cell run written into a live plane run, under ``cell_run_id``. No bracket.
-
-    Nothing is written when the plane run is not live or the cell is not on
-    its plane.
-    """
-    on = cell_plane(cell_id) == _kernel.runs[run_id].plane.fallback("")
-    live = _kernel.running.contains(run_id).and_(on)
-    return nu.IfDo(live, _add_cell_run(run_id, cell_id, cell_run_id, by))
-
-
-def cell_run(run_id: nu.StrArg, cell_id: nu.StrArg, *, by: nu.StrArg = "") -> nu.Nu:
-    """Run a cell inside a live plane run: a new cell run, beside any other of it. One commit.
-
-    The new cell run is the cell's :func:`latest` in the run, where a caller
-    reads it. Nothing is written when the plane run is not live or the cell
-    is not on its plane.
-    """
-    return atomic(nu.let(MintId("cr"), lambda cr: add_cell_run(run_id, cell_id, nu.Str(cr), by)))
-
-
-def interrupt(run_id: nu.StrArg, cell_run_id: nu.StrArg) -> nu.Nu:
-    """Ask a live cell run to stop, unless it was asked already. No bracket."""
-    ask = _kernel.runs[run_id].cells[cell_run_id].interrupt_requested
-    live = _kernel.runs[run_id].cells_running.contains(cell_run_id)
-    return nu.IfDo(live.and_(ask.fallback(False).not_()), ask.set(True))
-
-
-def cell_interrupt(run_id: nu.StrArg, cell_run_id: nu.StrArg) -> nu.Nu:
-    """Ask a cell run to stop. A no-op when it is not live. One commit.
-
-    Cooperative: its body watches ``interrupt_requested`` and ends itself
-    ``interrupted``. There is no cell kill: a backend may not be able to
-    kill one cell alone, so kill is a plane op.
-    """
-    return atomic(interrupt(run_id, cell_run_id))
-
-
-def plane_interrupt(run_id: nu.StrArg) -> nu.Nu:
-    """Ask every live cell run of a plane run to stop. One commit.
-
-    Once they have, ``cells_running`` is empty and the run ends.
-    """
-    live = nu.list(_kernel.runs[run_id].cells_running)
-    return atomic(nu.ForEachDo(live, lambda cr: interrupt(run_id, nu.Str(cr))))
-
-
-def kill(run_id: nu.StrArg) -> nu.Nu:
-    """Ask the kernel to tear a live plane run down. No bracket."""
-    ask = _kernel.runs[run_id].termination_requested
-    live = _kernel.running.contains(run_id)
-    return nu.IfDo(live.and_(ask.fallback(False).not_()), ask.set(True))
-
-
-def plane_kill(run_id: nu.StrArg) -> nu.Nu:
-    """Tear a plane run down: its backend kills whatever runs it. One commit.
-
-    Not cooperative: its live cell runs end ``killed`` without a say. A
-    no-op when the run is not live.
-    """
-    return atomic(kill(run_id))
-
-
-def _until_ended(run_id: nu.StrArg) -> nu.Nu:
-    """Wait until a plane run is out of ``running``. Returns at once if it is.
-
-    Woken by its plane's live runs, which it leaves in the same commit.
-    """
-    live = _kernel.planes_running[_kernel.runs[run_id].plane.fallback("")].runs
-    return nu.WaitUntil(
-        snapshot(live.on_children_change()), snapshot(_kernel.running.contains(run_id).not_())
-    )
-
-
-def plane_stop(run_id: nu.StrArg, grace: nu.FloatArg = STOP_GRACE) -> nu.Nu:
-    """Interrupt a plane run, then kill it if it is still running after ``grace`` seconds.
-
-    Two intents, written as they fall due. Returns once the run has ended,
-    or once the kill is asked for: a caller waits ``grace`` at most.
-    """
-    return plane_interrupt(run_id) >> nu.Timeout(
-        grace, _until_ended(run_id), on_timeout=plane_kill(run_id)
-    )
-
-
-# --- Unbracketed parts, for ops that take away what runs belong to ----------------------
-
-
-def off_running(run_id: nu.StrArg) -> nu.Nu:
-    """A plane run out of ``running`` and out of its plane's live runs. No bracket.
-
-    The one way out of both, so they never disagree. A plane whose last
-    live run this was leaves ``planes_running``.
-    """
-    plane = _kernel.runs[run_id].plane.fallback("")
-    live = _kernel.planes_running[plane].runs
-    last = nu.IfDo(live.len() == 0, _kernel.planes_running.del_item(plane))
-    mine = nu.IfDo(
-        _kernel.planes_running.contains(plane), live.remove(run_id, missing_ok=True) >> last
-    )
-    return mine >> _kernel.running.remove(run_id, missing_ok=True)
-
-
-def live_runs_of(plane_id: nu.StrArg, body: Callable[[nu.Str], nu.Nu]) -> nu.Nu:
-    """``body(run_id)`` for every live plane run of the plane. No bracket."""
-    live = plane_live(plane_id)
-    return nu.ForEachDo(live, lambda rid: body(nu.Str(rid)))
-
-
-def interrupt_cell(cell_id: nu.StrArg) -> nu.Nu:
-    """Ask every live cell run of a cell, in any live run of its plane, to stop. No bracket."""
-
-    def one(rid: nu.Str, cr: nu.Str) -> nu.Nu:
-        same = _kernel.runs[rid].cells[cr].cell.fallback("") == cell_id
-        return nu.IfDo(same, interrupt(rid, cr))
-
-    return live_runs_of(
-        cell_plane(cell_id),
-        lambda rid: nu.ForEachDo(
-            nu.list(_kernel.runs[rid].cells_running), lambda cr: one(rid, nu.Str(cr))
-        ),
-    )
-
-
-# --- Reads ---------------------------------------------------------------------
-
-
-def latest(run_id: nu.StrArg, cell_id: nu.StrArg) -> nu.Str:
-    """A cell's newest cell run in a plane run, live or ended, ``""`` when it has none. Bare read.
-
-    A point read of the run's ``latest``: O(1) however many times the cell
-    was reloaded or restarted in it.
-    """
-    return _kernel.runs[run_id].latest.get_item(cell_id, "")
-
-
-def cell_runs(run_id: nu.StrArg, *, live: bool = False) -> nu.List:
-    """A plane run's cell runs as dicts with their ``id``, oldest first. Bare read.
-
-    Every one it ever had, or with ``live`` only those in ``cells_running``.
-    Minted ids sort by creation, so sorted is oldest first.
-    """
-    run = _kernel.runs[run_id]
-
-    def row(cr: nu.Attr) -> nu.Dict:
-        cell_run = run.cells[nu.Str(cr)]
-        return nu.Dict.of(
-            id=cr,
-            cell=cell_run.cell.fallback(""),
-            version=cell_run.version.fallback(0),
-            by=cell_run.by.fallback(""),
-            worker=cell_run.worker.fallback(""),
-            started_at=cell_run.started_at.fallback(None),
-            interrupt_requested=cell_run.interrupt_requested.fallback(False),
-            terminated_at=cell_run.terminated_at.fallback(None),
-            exit=cell_run.exit.fallback(""),
-            error=cell_run.error.fallback(""),
-            out=cell_run.out.fallback([]),
+        r = nu.Str(rid)
+        row = Space.exec.plane_runs[r]
+        node = indexes.history.plane_to_plane_runs[plane].runs[r]
+        held = indexes.live
+        writes = (
+            row.plane.set(plane)
+            >> row.backend.set(planes[plane].backend)
+            >> row.by.set(by)
+            >> row.envs.set(_envs(envs))
+            >> row.created_at.set(nustd.time.time())
+            >> node.cell_to_cell_runs.set(nu.Dict.create())
+            >> node.workers.set(nu.Dict.create())
+            >> held.plane_runs.set_item(r, True)
+            >> held.plane_to_plane_runs[plane].ids.set_item(r, True)
+            >> held.plane_run_to_cell_runs[r].ids.set(nu.Dict.create())
+            >> held.plane_run_to_failed_cells[r].ids.set(nu.Dict.create())
+            >> held.plane_run_to_workers[r].ids.set(nu.Dict.create())
         )
+        return writes if into is None else writes >> into.set(r)
 
-    ids = nu.sorted(run.cells_running) if live else nu.list(run.cells.keys())
-    return ids.iter().map(row).to_list()
-
-
-def _run_row(rid: nu.StrArg, *, whole: bool = False) -> nu.Dict:
-    """A plane run as a dict. ``workers`` is every worker it had when ``whole``, else its live ones."""
-    row = _kernel.runs[rid]
-    return nu.Dict.of(
-        id=rid,
-        plane=row.plane.fallback(""),
-        backend=row.backend.fallback(""),
-        by=row.by.fallback(""),
-        envs=row.envs.fallback([]),
-        started_at=row.started_at.fallback(None),
-        termination_requested=row.termination_requested.fallback(False),
-        terminated_at=row.terminated_at.fallback(None),
-        exit=row.exit.fallback(""),
-        error=row.error.fallback(""),
-        cells_running=nu.sorted(row.cells_running),
-        latest=row.latest.extract(),
-        workers=nu.sorted(row.workers if whole else row.workers_running),
+    backend = planes[plane].backend.fallback("")
+    return (
+        live(planes, plane, "plane")
+        >> refuse(backend == "", Refused, "plane ", plane, " has no backend, so it does not run")
+        >> nu.let(MintId("r"), write)
     )
 
 
-def runs(plane: nu.StrArg | None = None) -> nu.List:
-    """The live plane runs as dicts with their ``id``, oldest first. Bare read.
+def start(plane_run: nu.StrArg) -> nu.Nu:
+    """Observed, by the kernel: the run is really up. Writes ``started_at`` once. Cost: O(1), 1 key.
 
-    Live is ``running``, so this reads in the time of what is live, its
-    ``workers`` the live ones. With ``plane``, that plane's live runs only.
-    A run's cell runs are :func:`cell_runs`; an ended run is read by id with
-    :func:`run`.
+    Raises:
+        Missing: No plane run with that id.
+        Ended: It already ended.
     """
-    live = _kernel.running if plane is None else plane_live(plane)
-    return nu.sorted(live).iter().map(lambda rid: _run_row(nu.Str(rid))).to_list()
+    runs = Space.exec.plane_runs
+    return not_ended(runs, plane_run, "plane run") >> runs[plane_run].started_at.init(
+        nustd.time.time()
+    )
 
 
-def run(run_id: nu.StrArg) -> nu.Dict:
-    """One plane run by id, live or ended, whole: every cell run under ``cells``, every worker. Bare read.
+def _unless_ended(plane_run: nu.StrArg, write: nu.Nu) -> nu.Nu:
+    """``write`` on a known plane run, a no-op on one that ended: a race that harms nothing."""
+    runs = Space.exec.plane_runs
+    return row_known(runs, plane_run, "plane run") >> nu.IfDo(
+        runs[plane_run].ended_at.exists().not_(), write
+    )
 
-    The one read that walks a run's history, for inspecting it: O(what the
-    run ever had). Nothing that runs on repeat reads it.
+
+def _kill_by(plane_run: nu.StrArg, when: nu.Nu) -> nu.Nu:
+    """Set ``kill_at`` to ``when``, or keep an earlier one: the earliest wins."""
+    kill_at = Space.exec.plane_runs[plane_run].kill_at
+    earlier = kill_at.exists().and_(kill_at <= when)
+    return kill_at.set(nu.If(earlier, kill_at, when))
+
+
+def interrupt(plane_run: nu.StrArg) -> nu.Nu:
+    """Ask the kernel to interrupt the run's live cell runs: ``interrupt_at = now``.
+
+    The kernel interrupts those started before it; the plane run goes on. A
+    repeat is a newer time. A no-op on a run that ended. Cost: O(1), 1 key.
+
+    Raises:
+        Missing: No plane run with that id.
     """
-    return _run_row(run_id, whole=True).merge(nu.Dict.of(cells=cell_runs(run_id)))
+    at = Space.exec.plane_runs[plane_run].interrupt_at
+    return _unless_ended(plane_run, at.set(nustd.time.time()))
 
 
-def workers() -> nu.List:
-    """The live workers as dicts with their ``id``, oldest first. Bare read.
+def kill(plane_run: nu.StrArg) -> nu.Nu:
+    """Ask the kernel to kill the run now: ``kill_at = now``, or an earlier one kept.
 
-    ``handle`` is the backend's own, not for reading into.
+    Not cooperative: once ``kill_at`` has passed the kernel tears the run
+    down. A no-op on a run that ended. Cost: O(1), 1 key.
+
+    Raises:
+        Missing: No plane run with that id.
     """
+    return _unless_ended(plane_run, nu.let(nustd.time.time(), lambda now: _kill_by(plane_run, now)))
 
-    def row(wid: nu.Attr) -> nu.Dict:
-        worker = _kernel.workers[nu.Str(wid)]
-        return nu.Dict.of(
-            id=wid,
-            backend=worker.backend.fallback(""),
-            run=worker.run.fallback(""),
-            plane=_kernel.runs[worker.run.fallback("")].plane.fallback(""),
-            handle=worker.handle.fallback(""),
-            started_at=worker.started_at.fallback(None),
-        )
 
-    return nu.sorted(_kernel.workers_running).iter().map(row).to_list()
+def stop(plane_run: nu.StrArg, *, grace: nu.FloatArg = STOP_GRACE) -> nu.Nu:
+    """Interrupt now, kill later if still running: ``interrupt_at = now``, ``kill_at = now + grace``.
+
+    An earlier ``kill_at`` stays. No op waits: :func:`wait` does, if the
+    caller wants to. A no-op on a run that ended. Cost: O(1), 2 keys.
+
+    Raises:
+        Missing: No plane run with that id.
+    """
+    at = Space.exec.plane_runs[plane_run].interrupt_at
+
+    def asked(now: nu.ObjectRef) -> nu.Nu:
+        return at.set(now) >> _kill_by(plane_run, nu.Float(now) + grace)
+
+    return _unless_ended(plane_run, nu.let(nustd.time.time(), asked))
+
+
+def wait(plane_run: nu.StrArg) -> nu.Nu:
+    """Return once the store says the run ended. At once when it already has.
+
+    A watch on the run's own row, level: it re-reads ``ended_at`` on every
+    change and on the standard re-check schedule, so a missed notification
+    is late, never lost. Bracket it with ``nuspace.bracketed``, never
+    ``nuspace.atomic``: a snapshot held over the wait would never see the
+    end. Cost: O(1), one subscription and one read per wake.
+
+    Raises:
+        Missing: No plane run with that id.
+    """
+    runs = Space.exec.plane_runs
+    row = runs[plane_run]
+    return row_known(runs, plane_run, "plane run") >> nu.WaitUntil(
+        row.on_change(),
+        row.ended_at.exists(),
+        after=nu.RECHECK_AFTER,
+        every=nu.RECHECK_EVERY,
+    )
+
+
+def end(plane_run: nu.StrArg, exit: nu.StrArg, error: nu.StrArg = "") -> nu.Nu:
+    """Observed, by the kernel: the run is over. Writes ``ended_at``, ``exit``, ``error``.
+
+    Out of ``live.plane_runs`` and its plane's live runs; its failed cells
+    set is dropped, and its live cell run and worker sets when empty. An
+    ``ok`` exit is written ``failed`` when a cell's last cell run in it
+    failed (``live.plane_run_to_failed_cells[r]`` not empty). Cost: O(1),
+    about 9 keys.
+
+    Args:
+        plane_run: The run.
+        exit: How it ended, one of :data:`~nuspace.shapes.exec.EXITS`.
+        error: Why it failed, ``""`` for none.
+
+    Raises:
+        Missing: No plane run with that id.
+        Ended: It already ended: ending twice is a driver bug.
+        Refused: An exit none of ``EXITS`` (a literal at build).
+    """
+    runs = Space.exec.plane_runs
+    row = runs[plane_run]
+    held = Space.exec.indexes.live
+    failed = nu.Bool(nu.Not(held.plane_run_to_failed_cells[plane_run].ids)).not_()
+    told = nu.If((nu.Str(exit) == EXIT_OK).and_(failed), EXIT_FAILED, exit)
+    cells = held.plane_run_to_cell_runs[plane_run]
+    workers = held.plane_run_to_workers[plane_run]
+    return (
+        exit_known(exit)
+        >> not_ended(runs, plane_run, "plane run")
+        >> row.exit.set(told)
+        >> row.error.set(error)
+        >> row.ended_at.set(nustd.time.time())
+        >> held.plane_runs.del_item(plane_run)
+        >> held.plane_to_plane_runs[row.plane].ids.del_item(plane_run)
+        >> held.plane_run_to_failed_cells[plane_run].erase()
+        >> nu.IfDo(nu.Not(cells.ids), cells.erase())
+        >> nu.IfDo(nu.Not(workers.ids), workers.erase())
+    )
+
+
+def any_live(plane: nu.StrArg) -> nu.Bool:
+    """Whether the plane has a live plane run. A read. Cost: O(1), about 3 reads.
+
+    Raises:
+        Missing: No plane with that id.
+    """
+    ids = Space.exec.indexes.live.plane_to_plane_runs[plane].ids
+    has = nu.If(ids.exists(), nu.Bool(nu.Not(ids)).not_(), False)
+    known = Space.planes.contains(plane)
+    return nu.Bool(Require(known, has, text("no plane ", plane), exc_cls=Missing))
+
+
+def on_live_change(*, plane: nu.StrArg | None = None) -> nu.Nu:
+    """A watch: a plane run was added to or ended out of the live set. One kv subscription.
+
+    Every plane's runs, or one plane's with ``plane``. Never raises.
+    """
+    held = Space.exec.indexes.live
+    if plane is None:
+        return held.plane_runs.on_change()
+    return held.plane_to_plane_runs[plane].ids.on_change()

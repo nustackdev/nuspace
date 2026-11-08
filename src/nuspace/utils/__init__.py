@@ -1,172 +1,57 @@
-"""Helpers the ops share: the bracket, run time ids, a total field read, a reorder.
+"""Internal pieces the rest of nuspace shares. Never re-exported at the top.
 
-Nothing here knows what a plane or a cell is.
+Generic nu-level definitions kept out of the files that use them, many
+waiting to move into nu itself, so this package should shrink over time:
 
-The bracket rule. Nothing brackets a term for its author: a store read or
-write with no bracket around it raises, and nothing autocommits. So whoever
-touches a store brackets it, and every op, service and cell program keeps
-to the same rule:
+- :mod:`.interactions`: :class:`MintId` (run time ids), :class:`IsSlug`
+  (key spelling), :class:`Require` (a value or a raise, for reads that
+  refuse).
+- :mod:`.placement`: putting an id before or after an anchor, or at the end.
+- :mod:`.typed`: :class:`Typed`, :class:`TypedItems`, a ref read through a
+  Shape with ``with_parent`` (places and content kinds).
+- :func:`field_str`, :func:`keep_order`: small reads and rewrites the web
+  device shares.
 
-- **One short bracket per store, Space first.** A write is one commit to
-  one store (:func:`atomic` or :func:`atomic_state`); a term writing both is
-  a commit to each, Space then States. A read is one :func:`snapshot`.
-- **What decides a write is read inside its bracket.** A check and the
-  write it guards share one commit, so nothing lands between them.
-- **A term argument that reads a store is read inside the bracket too**, or
-  first, on its own, as ``nu.let(snapshot(...), ...)``, when the op uses it
-  before its bracket opens.
-- **No bracket is held across slow or open ended work:** another op (it
-  opens its own, and two write brackets on one store never join), a wait or
-  a subscription's body, a loaded program (``Eval``, ``LoadNu``), or a call
-  out of the process. The work runs bare, its result is kept in a
-  ``nu.let`` slot, and a short bracket after it writes what it came to.
-- **Bare reads stay bare.** A read helper composes into any expression, so
-  it brackets nothing and its caller wraps it.
+What the ops share, imported by module, not from here (they read
+:mod:`nuspace.shapes`, which reads this package):
 
-Brackets never join: one opened inside another on the same store is a
-second handle, and a second write one on SQLite is the same thread waiting
-on its own lock.
+- :mod:`.checks`: the checks an op makes before it writes, and two guarded
+  writes.
+- :mod:`.tree`: the walks plane ops make, down a subtree and up to root.
+
+Brackets are not here: every caller uses ``nuspace.atomic`` (one commit, or
+one consistent read, on the stores a term touches) or ``nuspace.bracketed``.
 """
 
 from __future__ import annotations
 
-import itertools
-import time
-import uuid
 from typing import TYPE_CHECKING
 
 import nu
-import nustd.kv
-from nu.lang import ScalarQuery, is_null
-from nuspace.shapes import Space, States
+
+from .interactions import SLUG, IsSlug, MintId, Require, is_slug, mint_ordered_id
+from .placement import anchor_of, place
+from .typed import Typed, TypedItems
 
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Sequence
-
-    from nu.lang.runtime import Runtime
+    from collections.abc import Sequence
 
 
 __all__ = [
+    "SLUG",
+    "IsSlug",
     "MintId",
-    "atomic",
-    "atomic_state",
+    "Require",
+    "Typed",
+    "TypedItems",
+    "anchor_of",
     "field_str",
+    "is_slug",
     "keep_order",
-    "listed",
     "mint_ordered_id",
-    "snapshot",
+    "place",
 ]
-
-
-_ORDER_COUNTER = itertools.count()
-
-
-def mint_ordered_id(prefix: str) -> str:
-    """A time ordered id like ``p_<12 hex ms>_<4 hex seq>_<4 hex rand>``.
-
-    A container lists sorted by key, so ids that sort by the moment they were
-    minted give creation order with nothing storing it.
-
-    Args:
-        prefix: What the id starts with, eg ``p`` for a plane.
-    """
-    stamp = format(int(time.time() * 1000), "012x")
-    # The counter separates two ids in one millisecond, the random tail two
-    # processes, where the counter restarts from zero.
-    seq = format(next(_ORDER_COUNTER) % 0x10000, "04x")
-    return f"{prefix}_{stamp}_{seq}_{uuid.uuid4().hex[:4]}"
-
-
-class MintId(ScalarQuery):
-    """A fresh :func:`mint_ordered_id`, minted each time it is evaluated.
-
-    Hand written rather than ``nu.host`` so a term holding it pickles.
-
-    Args:
-        prefix: The id's prefix.
-
-    Yields:
-        The id, a str. NULL when the prefix is NULL.
-    """
-
-    def _compile(self, nid: int, children: tuple[Callable, ...]) -> Callable:
-        (prefix,) = children
-
-        def thunk(rt: Runtime) -> object:
-            p = prefix(rt)
-            if is_null(p):
-                return p
-            return mint_ordered_id(p)
-
-        return thunk
-
-    def _acompile(self, nid: int, children: tuple[Callable, ...]) -> Callable:
-        (prefix,) = children
-
-        async def athunk(rt: Runtime) -> object:
-            p = await prefix(rt)
-            if is_null(p):
-                return p
-            return mint_ordered_id(p)
-
-        return athunk
-
-
-def atomic(body: nu.Nu) -> nu.Nu:
-    """``body`` as one commit against the Space store, retried on conflict.
-
-    Every write op goes through here, around its whole body, so the reads
-    that decide a write and the write land as one commit. Ops are called
-    from many processes at once (services on workers, the host), so a lost
-    commit is re-run against fresh state.
-
-    Brackets do not merge: an op inside another op's bracket opens its own.
-    Composite ops are built from unbracketed parts for that reason.
-
-    Space only: States reads inside see a snapshot, opened only if one is
-    made, and a States write has no transaction to go through and fails. An
-    op that writes both is two commits, see :func:`atomic_state`.
-    """
-    snapped = nustd.kv.Snapshot(nustd.kv.Transaction(body, scope=Space), scope=States)
-    return nustd.kv.RetryOnConflict(snapped)
-
-
-def atomic_state(body: nu.Nu) -> nu.Nu:
-    """``body`` as one commit against the States store, retried on conflict.
-
-    :func:`atomic` for program state. Space reads inside see a snapshot,
-    opened only if one is made, so a state write can ask about structure
-    (eg whether the cell is there) without taking the Space store's lock.
-
-    The two stores are two files: nothing commits both at once. An op that
-    writes both commits Space first, then States, and never holds both
-    write locks, so two processes writing both can never wait on each
-    other. Structure first means a live plane or cell never points at state
-    that is gone; what a crash between the two can leave is state nothing
-    points at.
-    """
-    snapped = nustd.kv.Snapshot(nustd.kv.Transaction(body, scope=States), scope=Space)
-    return nustd.kv.RetryOnConflict(snapped)
-
-
-def snapshot(term: nu.Nu) -> nu.Nu:
-    """``term`` read in a snapshot of both stores, Space and States.
-
-    Each opens only if ``term`` reads it, so wrapping a read that touches
-    one store costs nothing for the other.
-    """
-    return nustd.kv.Snapshot(nustd.kv.Snapshot(term, scope=States), scope=Space)
-
-
-def listed(ref: nu.Nu) -> nu.List:
-    """A list or set container's members as a list, ``[]`` when it was never written. Bare read.
-
-    For containers that may legitimately be absent, eg a plane's ``cells``
-    asked about a plane that is not there. A fixed container is made at open
-    instead (:func:`~nuspace.ops.init_stores`) and read as is.
-    """
-    return nu.list(nu.If(ref.exists(), nu.list(ref), []))
 
 
 def field_str(row: nu.Nu, field: str) -> nu.Str:

@@ -1,152 +1,32 @@
-"""Layer one: the ops, nuspace's language.
+"""The core ops: nus over the stores, one module per shape, re-exported at the top.
 
-Every op is a function returning a Nu term. Planes' cells, services and the
-shell compose these and nothing narrower.
+``ops/plane.py`` is ``nuspace.plane``, ``ops/cell.py`` is ``nuspace.cell``,
+and so on, mirroring :mod:`nuspace.shapes` file for file. Programs write the
+module in front, ``nuspace.plane.add(...)``, never ``from ... import add``.
 
-- **Writes are one commit each.** An op brackets itself in a kv transaction
-  over :class:`~nuspace.shapes.Space`, retried on conflict, so nothing reads
-  half of it and it is safe from any process holding the store, a proxied
-  navigator on a worker included. Nothing brackets a term for its author:
-  ops, services and cell programs all keep the one bracket rule in
-  :mod:`nuspace.ops.utils`, by hand with :func:`atomic`, :func:`atomic_state`
-  and :func:`snapshot`, or with :func:`bracketed` around a whole program.
-- **Queries yield, effects write.** A query, a pure read or computation,
-  evaluates to its value. A flow or an op with effects never hands a
-  result back: it writes what it made or decided into a ref, yields
-  nothing, and chains with ``>>``; whoever needs the result reads that
-  ref. Mostly the ref is the record itself: a plane made is listed under its parent,
-  a plane moved has its new parent. Where the record cannot say which one
-  this call made, the op takes an ``into`` ref, a mem ref the caller holds
-  or a kv ref in the store it commits to, and sets it as part of its
-  writes.
-- **Ids are minted at evaluation.** A term is built once and may run many
-  times (eg in an arm), so an op that makes something mints its id when it
-  runs.
-- **Reads are bare.** They compose into any expression and read inside the
-  enclosing bracket. Alone, wrap one in ``nustd.kv.Snapshot(..., scope=Space)``,
-  or in :func:`snapshot` when it reads program state too.
-- **Two stores.** Space holds structure, runs and devices; States holds
-  program state, by plane and cell id. A write op commits to one; one that
-  touches both is a commit to each, Space first (see
-  :func:`~.utils.atomic_state`).
-- **Kernel ops write intents only.** The kernel and the backends, in the
-  host, make them true and write the effects (see :mod:`nuspace.ops.kernel`).
+- **Bare terms.** An op carries no bracket. The caller brackets it:
+  ``nuspace.atomic(...)`` in code without flows (one commit on the store it
+  writes, a snapshot on each it only reads), ``nuspace.bracketed`` in flows.
+  What decides a write is read in the same term, so under ``atomic`` it
+  lands in the same commit. An op is itself a flow of checks and writes,
+  so ``bracketed`` brackets each of its steps on its own (see
+  :func:`~nuspace.ops.brackets.bracketed`). Something that needs two stores
+  is two ops in a row, two commits.
+- **Declarative.** Ops touch only the stores. They write what is wanted
+  (``plane_run.add`` starts nothing, it adds a record) and what drivers
+  observed (``cell_run.end``); the kernel and the other drivers make
+  reality match.
+- **Raise, never fail silently.** An op that cannot do what it says raises
+  one of :mod:`nuspace.errors` and the commit aborts. A no-op only where it
+  harms nothing and races are normal, eg stopping a run that already ended.
+- **Constant keys.** Each op touches a constant number of keys, except the
+  inherent cases its doc names (removing a subtree). Nothing iterates
+  planes, cells or runs: ops read indexes.
+- **Ids.** The id acted on comes first. Minting ops mint when they evaluate
+  and set ``into=`` in the same commit.
 """
 
-from .cell import (
-    add_cell,
-    remove_cell,
-    rename_cell,
-    reorder_cells,
-    set_cell_meta,
-    set_prog,
-)
-from .extend import create_cell, create_plane
-from .kernel import (
-    STOP_GRACE,
-    Here,
-    cell_interrupt,
-    cell_run,
-    cell_runs,
-    env,
-    latest,
-    plane_interrupt,
-    plane_kill,
-    plane_run,
-    plane_stop,
-    run,
-    runs,
-    workers,
-)
-from .pin import move_pin, pin_plane, pinned, unpin_plane
-from .plane import add_plane, remove_plane, rename_plane, set_plane_icon, set_plane_meta
-from .read import (
-    cell_exists,
-    cell_named,
-    cell_plane,
-    cell_rows,
-    cells,
-    children,
-    parent,
-    plane_exists,
-    plane_rows,
-    plane_title,
-    planes,
-    prog,
-)
-from .state import (
-    CellState,
-    PlaneState,
-    bracketed,
-    cell_state,
-    clear_cell_state,
-    clear_plane_state,
-    plane_state,
-    sibling,
-)
-from .stores import init_stores
-from .tree import move_plane
-from .usage import track
-from .utils import atomic, atomic_state, mint_ordered_id, snapshot
+from . import cell, cell_run, plane, plane_run, state, worker
 
 
-__all__ = [
-    "STOP_GRACE",
-    "CellState",
-    "Here",
-    "PlaneState",
-    "add_cell",
-    "add_plane",
-    "atomic",
-    "atomic_state",
-    "bracketed",
-    "cell_exists",
-    "cell_interrupt",
-    "cell_named",
-    "cell_plane",
-    "cell_rows",
-    "cell_run",
-    "cell_runs",
-    "cell_state",
-    "cells",
-    "children",
-    "clear_cell_state",
-    "clear_plane_state",
-    "create_cell",
-    "create_plane",
-    "env",
-    "init_stores",
-    "latest",
-    "mint_ordered_id",
-    "move_pin",
-    "move_plane",
-    "parent",
-    "pin_plane",
-    "pinned",
-    "plane_exists",
-    "plane_interrupt",
-    "plane_kill",
-    "plane_rows",
-    "plane_run",
-    "plane_state",
-    "plane_stop",
-    "plane_title",
-    "planes",
-    "prog",
-    "remove_cell",
-    "remove_plane",
-    "rename_cell",
-    "rename_plane",
-    "reorder_cells",
-    "run",
-    "runs",
-    "set_cell_meta",
-    "set_plane_icon",
-    "set_plane_meta",
-    "set_prog",
-    "sibling",
-    "snapshot",
-    "track",
-    "unpin_plane",
-    "workers",
-]
+__all__ = ["cell", "cell_run", "plane", "plane_run", "state", "worker"]

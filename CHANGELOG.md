@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Rewrite core ops on the new stores: strict raises, state places, planes from specs
 - Rebuild the store layout: space, state and web stores, plus the op errors
 
 ## 0.6.5 - 2026-11-07
