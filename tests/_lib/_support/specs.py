@@ -8,7 +8,7 @@ here and opens the space with ``extensions=["testing"]``.
 
 from __future__ import annotations
 
-from nuspace import CellSpec, ContentSpec, PlaneSpec
+from nuspace.specs import CellSpec, ContentSpec, PlaneSpec
 
 from .contents import NoteContent, PlainContent
 

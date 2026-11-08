@@ -1,250 +1,396 @@
-"""Layer zero: program declared state lands under its cell and plane.
+"""The store layout: roots, records, named slots, views, and a fresh space's stores made at open.
 
-The spike first: a ``CellState`` and a ``PlaneState`` shape, rerooted, read
-and written through the real kv stack and watched through it. Then what the
-rerooter must leave alone, and the class form surviving a pickle, since that
-is how it reaches a worker.
+Build-only checks first (slots and views), then the stores on both backends:
+init makes every fixed container and the root plane once, refuses another
+format, and the named slots at dynamic levels read and write by plain
+navigation.
 """
 
 from __future__ import annotations
 
 import pickle
+import sqlite3
+import subprocess
+import sys
 
 import pytest
 
 import nu
 import nustd.kv
-import nustd.ui
-from nuspace import ops
+from nu.lang import is_null
+from nuspace.devices.web.shapes import RECENTS_CAP, Conn, Pane, Tab, Web, WebPlane
+from nuspace.devices.web.stores import CONN_STORE, WEB_STORE
+from nuspace.errors import Refused
+from nuspace.host.stores import SPACE_STORE, STATE_STORE, init_live
 from nuspace.shapes import (
-    EXITS,
-    CellState,
-    PlaneState,
-    Reroot,
+    FORMAT,
+    OUT_CAP,
+    ROOT,
+    Cell,
+    CellRun,
+    Info,
+    Live,
+    Plane,
+    PlaneRun,
     Space,
-    States,
-    reroot,
+    State,
+    Worker,
 )
-from nuspace.system.kernel import KERNEL_FILE, STATE_FILE
 
 
-class Tick(CellState):
-    n = nustd.kv.IntRef.slot()
+#: Run every ``store`` test on both backends: in memory, and the space's sqlite files.
+STORES = ("memory", "sqlite")
+
+HISTORY = Space.exec.indexes.history.plane_to_plane_runs
+LIVE = Space.exec.indexes.live
+
+
+class Counter(nu.Shape):
+    """A program's own shape, as a cell declares it: no scope base."""
+
+    value = nustd.kv.IntRef.slot()
 
 
 class Note(nu.Shape):
-    text = nustd.kv.StrRef.slot()
+    """A content item's shape."""
+
+    body = nustd.kv.StrRef.slot()
 
 
-class Draft(CellState):
-    note = nustd.kv.ShapeRef.slot(Note)
-    tags = nustd.kv.ListRef.slot(str)
+def slots(shape: type[nu.Shape]) -> set[str]:
+    return set(shape._slots)
 
 
-class Chat(PlaneState):
-    title = nustd.kv.StrRef.slot()
+# --- Layout ---------------------------------------------------------------------------------
 
 
-class Movies(nu.Shape):
-    """Another store, tagged apart from Space. Must never be rerooted."""
-
-    count = nustd.kv.IntRef.slot()
-
-
-class Form(nu.Shape):
-    inp = nustd.ui.InputRef.slot()
-
-
-def n_of(plane: str, cell: str) -> nu.Nu:
-    """``Tick.n`` of one cell, read from anywhere."""
-    return reroot(Tick.n, plane, cell)
+def test_each_store_has_its_own_root_file_and_channel():
+    stores = (SPACE_STORE, STATE_STORE, WEB_STORE, CONN_STORE)
+    assert [(s.root, s.file, s.channel) for s in stores] == [
+        (Space, "store/space.db", "nuspace.space"),
+        (State, "store/state.db", "nuspace.state"),
+        (Web, "devices/web/web_state.db", "nuspace.web"),
+        (Conn, "devices/web/conn.db", "nuspace.conn"),
+    ]
 
 
-def bump() -> nu.Nu:
-    return nu.IfDo(Tick.n.exists().not_(), Tick.n.set(0)) >> Tick.n.set(Tick.n + 1)
-
-
-def _stores(tmp_path) -> nu.With:
-    """Both stores of a space on disk, as a worker opens them but without the server."""
-    root = tmp_path / "space"
-    return nu.With(
-        nustd.kv.sqlite_navigator(str(root / KERNEL_FILE), tags=(Space,)),
-        nustd.kv.sqlite_navigator(str(root / STATE_FILE), tags=(States,)),
+def test_a_devices_stores_load_without_the_host():
+    """The host opens the devices, never the other way round: a fresh import keeps them apart."""
+    check = (
+        "import sys, nuspace.devices.web.stores; "
+        "sys.exit(any(m.startswith('nuspace.host') for m in sys.modules))"
     )
+    assert subprocess.run([sys.executable, "-c", check], check=False).returncode == 0  # noqa: S603
 
 
-def _store(tmp_path):
-    """A space on disk, and the two calls that write it, bracketed by :func:`ops.bracketed`, and read it back."""
-
-    async def write(term):
-        await nu.arun(nu.With(_stores(tmp_path), body=ops.init_stores() >> ops.bracketed(term)))
-
-    async def read(term):
-        value, _ = await nu.arun(nu.With(_stores(tmp_path), body=ops.snapshot(term)))
-        return value
-
-    return write, read
-
-
-# --- The spike ---------------------------------------------------------------
-
-
-async def test_cell_state_persists_under_the_cell(tmp_path):
-    write, read = _store(tmp_path)
-    await write(reroot(bump() >> bump(), "p", "c"))
-    await write(reroot(bump(), "p", "c"))
-    assert await read(States.cells["c"].extract()) == {"n": 3}
-    assert await read(n_of("p", "c")) == 3
-
-
-async def test_state_lands_in_the_state_file_only(tmp_path):
-    """Rerooted, a chain roots at States: its writes go to ``state.sqlite``, never Space's."""
-    write, _ = _store(tmp_path)
-    assert nu.shape.root_shape(reroot(Tick.n, "p", "c")) is States
-    assert nu.shape.root_shape(reroot(Chat.title, "p", "c")) is States
-    await write(reroot(bump() >> Chat.title.set("t"), "p", "c"))
-    root = tmp_path / "space"
-
-    async def whole(file, tag, ref):
-        stack = nustd.kv.sqlite_navigator(str(root / file), tags=(tag,))
-        value, _ = await nu.arun(nu.With(stack, body=nustd.kv.Snapshot(ref, scope=tag)))
-        return value
-
-    got = await whole(
-        STATE_FILE, States, nu.List.of(States.planes.extract(), States.cells.extract())
-    )
-    assert got == [{"p": {"state": {"title": "t"}}}, {"c": {"n": 1}}]
-    assert await whole(KERNEL_FILE, Space, Space.planes.extract()) == {}
-    assert await whole(KERNEL_FILE, Space, Space.cells.extract()) == {}
-
-
-async def test_cells_do_not_share_cell_state(tmp_path):
-    write, read = _store(tmp_path)
-    await write(reroot(bump(), "p", "a") >> reroot(bump() >> bump(), "p", "b"))
-    assert await read(nu.List.of(n_of("p", "a"), n_of("p", "b"))) == [1, 2]
+def test_the_roots_and_records_carry_the_slots_of_the_data_model():
+    lifecycle = {"created_at", "modified_at", "removed_at", "removed_by"}
+    common = {"name", "key", "version", "spec", "meta", *lifecycle}
+    assert slots(Space) == {"info", "planes", "cells", "indexes", "exec"}
+    assert slots(Info) == {"format", "path", "created_at", "opened_at"}
+    assert slots(Plane) == common | {
+        "icon",
+        "parent",
+        "cells",
+        "children",
+        "system",
+        "backend",
+    }
+    assert slots(Cell) == common | {"prog", "fabrics", "plane"}
+    ran = {"exit", "error", "created_at", "started_at", "ended_at"}
+    assert slots(PlaneRun) == ran | {
+        "plane",
+        "backend",
+        "by",
+        "envs",
+        "interrupt_at",
+        "kill_at",
+    }
+    assert slots(CellRun) == ran | {
+        "plane_run",
+        "cell",
+        "version",
+        "by",
+        "worker",
+        "out",
+        "interrupt_at",
+    }
+    assert slots(Worker) == ran | {"backend", "plane_run", "handle"}
+    assert slots(State) == {
+        "cells",
+        "planes",
+        "space",
+        "content_cells",
+        "content_planes",
+        "content_space",
+    }
+    assert slots(Web) == {"planes", "pinned", "recents"}
+    assert slots(WebPlane) == {"editable", "full_width", "compact"}
+    assert slots(Tab) == {"order", "panes", "expanded"}
+    assert slots(Pane) == {"params", "plane_run", "restart"}
 
 
-async def test_nested_slots_resolve_under_cell_state(tmp_path):
-    write, read = _store(tmp_path)
-    await write(reroot(Draft.note.text.set("hi") >> Draft.tags.append("x"), "p", "c"))
-    got = reroot(nu.List.of(Draft.note.text, nu.list(Draft.tags)), "p", "c")
-    assert await read(got) == ["hi", ["x"]]
-
-
-async def test_plane_state_is_shared_by_the_planes_cells(tmp_path):
-    write, read = _store(tmp_path)
-    await write(reroot(Chat.title.set("ideas"), "p", "a"))
-    assert await read(reroot(Chat.title, "p", "b")) == "ideas"
-    assert await read(States.planes["p"].state["title"]) == "ideas"
-
-
-def watched(watch: nu.Nu, change: nu.Nu, plane: str = "p", cell: str = "c") -> nu.Nu:
-    """``watch`` and a later ``change`` racing on one store, bounded.
-
-    Both rerooted under ``plane``. The change waits a beat so the watch has
-    subscribed first; the timeout turns a watch that never fires into a
-    failed read rather than a hung test.
-    """
-    return nu.Timeout(
-        2.0,
-        nu.Gather(
-            reroot(watch, plane, cell),
-            nu.Delay(0.05) >> reroot(change, plane, cell),
-        ),
-    )
-
-
-async def test_on_change_fires_on_a_rerooted_cell_ref(tmp_path):
-    write, read = _store(tmp_path)
-    seen = Space.planes["p"].name
-    await write(watched(nu.ReactOnce(Tick.n.on_change(), seen.set("fired")), bump()))
-    assert await read(nu.List.of(seen, n_of("p", "c"))) == ["fired", 1]
-
-
-async def test_on_change_fires_on_a_rerooted_plane_ref(tmp_path):
-    write, read = _store(tmp_path)
-    seen = Space.planes["p"].name
-    await write(
-        watched(nu.ReactOnce(Chat.title.on_change(), seen.set(Chat.title)), Chat.title.set("t"))
-    )
-    assert await read(seen) == "t"
-
-
-@pytest.mark.parametrize(("target", "expected"), [("d", "quiet"), ("c", "wrong")])
-async def test_a_cell_does_not_hear_its_siblings_cell_state(tmp_path, target, expected):
-    """Cell ``c`` listens while ``target`` bumps; only its own bump is heard.
-
-    The ``c`` case is the control: it proves the listener would have fired.
-    """
-    write, read = _store(tmp_path)
-    seen = Space.planes["p"].name
-    heard = nu.ReactOnce(Tick.n.on_change(), seen.set("wrong"))
-    other = nu.Delay(0.05) >> reroot(bump(), "p", target)
-    # Bracketed by hand: left to the pass, a write in ``on_timeout`` puts the
-    # whole Timeout in one write transaction, held across the wait, and the
-    # sqlite store refuses the sibling's write while it is open.
-    quiet = nustd.kv.Transaction(seen.set("quiet"), scope=Space)
-    await write(nu.Timeout(0.3, reroot(heard, "p", "c"), on_timeout=quiet) | other)
-    assert await read(seen) == expected
-
-
-# --- Run time ids -------------------------------------------------------------
-
-
-async def test_plane_and_cell_can_be_read_at_run_time(tmp_path):
-    write, read = _store(tmp_path)
-    body = reroot(bump() >> Chat.title.set("t"), ops.Here.plane, ops.Here.cell)
-    await write(nu.Frame(ops.Here, body, plane="p", cell="c"))
-    assert await read(nu.List.of(n_of("p", "c"), States.planes["p"].state["title"])) == [1, "t"]
-
-
-async def test_the_class_form_survives_a_pickle(tmp_path):
-    write, read = _store(tmp_path)
-    rewrite = pickle.loads(pickle.dumps(Reroot(ops.Here.plane, ops.Here.cell)))  # noqa: S301
-    await write(nu.Frame(ops.Here, rewrite(bump()), plane="p", cell="c"))
-    assert await read(n_of("p", "c")) == 1
-
-
-async def test_a_rerooted_term_survives_a_pickle(tmp_path):
-    """What actually crosses to a worker: the term, already rewritten."""
-    write, read = _store(tmp_path)
-    term = pickle.loads(pickle.dumps(reroot(bump(), ops.Here.plane, "c")))  # noqa: S301
-    await write(nu.Frame(ops.Here, term, plane="p"))
-    assert await read(n_of("p", "c")) == 1
-
-
-# --- What is left alone --------------------------------------------------------
-
-
-def test_foreign_chains_come_back_as_the_same_object():
-    for term in (
-        Movies.count.set(Movies.count + 1),
-        Space.planes["p"].name.set("x"),
-        Form.inp.set("hi"),
-        Space.planes[Movies.count].name,
+def test_every_collection_gets_the_view_that_fits_how_it_is_read():
+    kv = nustd.kv
+    run = HISTORY["p"].runs["r"]
+    picked = {
+        # point-read records and indexes: plain dicts
+        "planes": (Space.planes, kv.DictRef),
+        "plane_keys": (Space.indexes.plane_keys, kv.DictRef),
+        "cell_runs": (Space.exec.cell_runs, kv.DictRef),
+        "web planes": (Web.planes, kv.DictRef),
+        "panes": (Conn.connections["s"].panes, kv.DictRef),
+        # uncapped user-ordered lists
+        "plane cells": (Space.planes["p"].cells, kv.OrderedDictRef),
+        "children": (Space.planes["p"].children, kv.OrderedDictRef),
+        # append-only paged lists
+        "spec_planes": (Space.indexes.spec_planes["s"].ids, kv.LogDictRef),
+        "spec_cells": (Space.indexes.spec_cells["s"].ids, kv.LogDictRef),
+        "removed": (Space.indexes.removed, kv.LogDictRef),
+        "runs": (HISTORY["p"].runs, kv.LogDictRef),
+        "cell runs in a run": (run.cell_to_cell_runs["c"].ids, kv.LogDictRef),
+        "workers in a run": (run.workers, kv.LogDictRef),
+        # live sets and folds: dicts of bool
+        "live plane runs": (LIVE.plane_runs, kv.DictRef),
+        "live workers": (LIVE.workers, kv.DictRef),
+        "expanded": (Conn.connections["s"].expanded, kv.DictRef),
+        # small user lists
+        "pinned": (Web.pinned, kv.ListRef),
+        "recents": (Web.recents, kv.ListRef),
+        "order": (Conn.connections["s"].order, kv.ListRef),
+        # a capped log
+        "out": (Space.exec.cell_runs["cr"].out, kv.RingRef),
+    }
+    for keyed in (
+        "plane_to_plane_runs",
+        "cell_to_cell_runs",
+        "plane_run_to_cell_runs",
+        "plane_run_to_failed_cells",
+        "plane_run_to_workers",
     ):
-        assert reroot(term, "p", "c") is term
+        picked[keyed] = (getattr(LIVE, keyed)["x"].ids, kv.DictRef)
+    wrong = {
+        name: type(ref).__name__ for name, (ref, view) in picked.items() if type(ref) is not view
+    }
+    assert wrong == {}
+    assert RECENTS_CAP == 50
 
 
-async def test_foreign_store_stays_where_it_is(tmp_path):
-    """A program touching its own db and its own state: only the state moves."""
-    write, read = _store(tmp_path)
-    movies = str(tmp_path / "movies")
-    moved = reroot(Movies.count.set(7) >> Tick.n.set(Movies.count), "p", "c")
-    term = nu.With(
-        nustd.kv.rocksdb_navigator(movies, tags=(Movies,)),
-        body=nustd.kv.auto_flow_atomic(moved, scope=Movies),
+def test_a_placed_state_chain_routes_to_the_state_store_and_survives_a_pickle():
+    placed = Counter.value.with_parent(State.cells["c1"])
+    assert nu.shape.root_shape(placed) is State
+    back = pickle.loads(pickle.dumps(placed))  # noqa: S301 -- our own term, as a worker gets it
+    assert nu.shape.root_shape(back) is State
+
+
+# --- A fresh space -------------------------------------------------------------------------
+
+
+async def test_a_fresh_space_gets_its_format_and_every_fixed_container(store):
+    info = await store.read(Space.info.extract())
+    assert info["format"] == FORMAT
+    assert isinstance(info["created_at"], float)
+    empty = [
+        Space.planes["nothing"].exists(),
+        Space.cells.contains("nothing"),
+        nu.Not(Space.indexes.spec_planes),
+        nu.Not(Space.indexes.spec_cells),
+        nu.Not(Space.indexes.plane_keys),
+        nu.Not(Space.indexes.cell_keys),
+        nu.Not(Space.indexes.removed),
+        nu.Not(Space.exec.plane_runs),
+        nu.Not(Space.exec.cell_runs),
+        nu.Not(Space.exec.workers),
+        nu.Not(HISTORY),
+        *(nu.Not(getattr(LIVE, name)) for name in Live._slots),
+        nu.Not(State.cells),
+        nu.Not(State.planes),
+        nu.Not(State.content_cells),
+        nu.Not(State.content_planes),
+        nu.Not(State.content_space),
+        nu.Not(Web.planes),
+        nu.Not(Web.pinned),
+        nu.Not(Web.recents),
+        nu.Not(Conn.connections),
+    ]
+    assert await store.read(nu.List.of(*empty)) == [False, False, *([True] * (len(empty) - 2))]
+    assert await store.read(State.space.exists()) is True
+
+
+async def test_the_root_plane_is_made_once_system_with_no_parent_and_no_backend(store):
+    root = await store.read(Space.planes[ROOT].extract())
+    assert root.pop("created_at") == root.pop("modified_at")
+    assert root == {
+        "name": "",
+        "key": "",
+        "icon": "",
+        "parent": "",
+        "version": 0,
+        "cells": {},
+        "children": {},
+        "system": True,
+        "backend": "",
+        "spec": "",
+        "meta": {},
+    }
+    assert await store.read(nu.list(Space.planes.keys())) == [ROOT]
+
+
+async def test_init_again_keeps_what_is_there(store):
+    created = await store.read(Space.info.created_at)
+    await store.run(
+        nustd.kv.atomic(
+            Space.planes[ROOT].children.set_item("p1", True)
+            >> Space.planes[ROOT].name.set("top")
+            >> Space.indexes.plane_keys.set_item("notes", "p1")
+        )
+        >> nustd.kv.atomic(Web.pinned.append("p1"))
     )
-    await write(term)
-    assert await read(n_of("p", "c")) == 7
-    value, _ = await nu.arun(
-        nu.With(
-            nustd.kv.rocksdb_navigator(movies, tags=(Movies,)),
-            body=nustd.kv.Snapshot(Movies.count, scope=Movies),
+    await store.run(nustd.kv.atomic(SPACE_STORE.init()) >> nustd.kv.atomic(WEB_STORE.init()))
+    assert await store.read(Space.info.created_at) == created
+    assert await store.read(nu.list(Space.planes[ROOT].children.keys())) == ["p1"]
+    assert await store.read(Space.planes[ROOT].name) == "top"
+    assert await store.read(Space.indexes.plane_keys["notes"]) == "p1"
+    assert await store.read(Web.pinned.iter().to_list()) == ["p1"]
+
+
+async def test_a_store_of_another_format_is_refused(store):
+    await store.run(nustd.kv.atomic(Space.info.format.set(FORMAT + 1)))
+    with pytest.raises(Refused, match="another store format"):
+        await store.run(nustd.kv.atomic(SPACE_STORE.init()))
+    assert await store.read(Space.info.format) == FORMAT + 1
+
+
+async def test_live_cleared_at_open_is_made_again_empty(store):
+    await store.run(
+        nustd.kv.atomic(
+            LIVE.plane_runs.set_item("r1", True)
+            >> LIVE.plane_run_to_cell_runs["r1"].ids.set_item("cr1", True)
+            >> LIVE.workers.set_item("w1", True)
         )
     )
-    assert value == 7
+    await store.run(nustd.kv.atomic(Space.exec.indexes.live.erase()))
+    assert await store.read(LIVE.plane_runs.exists()) is False
+    await store.run(nustd.kv.atomic(init_live()))
+    assert await store.read(nu.List.of(*(nu.Not(getattr(LIVE, n)) for n in Live._slots))) == [
+        True
+    ] * len(Live._slots)
 
 
-def test_constants():
-    assert EXITS == ("ok", "failed", "interrupted", "killed")
+async def test_the_store_files_sit_where_the_layout_says(disk):
+    root = disk.path
+    for store in (SPACE_STORE, STATE_STORE, WEB_STORE, CONN_STORE):
+        with sqlite3.connect(f"{root}/{store.file}") as db:
+            assert db.execute("select count(*) from sqlite_master").fetchone()[0] > 0
+    assert await disk.read(Space.info.format) == FORMAT
+
+
+# --- Named slots at dynamic levels -----------------------------------------------------------
+
+
+async def test_history_is_plane_then_its_runs_then_a_cell_in_one_run(store):
+    p = HISTORY["p1"]
+    await store.run(
+        nustd.kv.atomic(
+            p.runs["r1"].cell_to_cell_runs["c1"].ids.set_item("cr1", True)
+            >> p.runs["r1"].workers.set_item("w1", True)
+            >> p.runs["r2"].cell_to_cell_runs["c1"].ids.set_item("cr3", True)
+            >> p.runs["r1"].cell_to_cell_runs["c1"].ids.set_item("cr2", True)
+            >> p.runs["r1"].cell_to_cell_runs["c2"].ids.set_item("cr4", True)
+        )
+    )
+    assert await store.read(p.runs.keys(limit=10)) == ["r1", "r2"]
+    assert await store.read(p.runs.reversed_keys(limit=1)) == ["r2"]
+    cells = p.runs["r1"].cell_to_cell_runs
+    assert await store.read(cells["c1"].ids.keys(limit=10)) == ["cr1", "cr2"]
+    assert await store.read(cells["c1"].ids.last()) == "cr2"
+    assert await store.read(nu.list(p.runs["r1"].workers.keys())) == ["w1"]
+    assert sorted(await store.read(nu.list(cells.keys()))) == ["c1", "c2"]
+    # A plane never run has no node: reads find nothing, no raise.
+    assert is_null(await store.read(HISTORY["p9"].runs.last()))
+
+
+async def test_live_sets_add_drop_and_read_empty_in_one_seek(store):
+    runs = LIVE.plane_run_to_cell_runs["r1"].ids
+    await store.run(nustd.kv.atomic(runs.set_item("cr1", True) >> runs.set_item("cr2", True)))
+    await store.run(nustd.kv.atomic(runs.del_item("cr1")))
+    assert await store.read(nu.list(runs.keys())) == ["cr2"]
+    await store.run(nustd.kv.atomic(runs.del_item("cr2")))
+    assert await store.read(nu.Not(runs)) is True
+    with pytest.raises(KeyError):
+        await store.run(nustd.kv.atomic(runs.del_item("cr2")))
+
+
+async def test_the_newest_plane_of_a_spec_is_one_seek(store):
+    made = Space.indexes.spec_planes["nulog.board"].ids
+    await store.run(nustd.kv.atomic(made.set_item("p1", True) >> made.set_item("p2", True)))
+    assert await store.read(made.last()) == "p2"
+    assert is_null(await store.read(Space.indexes.spec_planes["never"].ids.last()))
+
+
+async def test_a_programs_shape_sits_on_a_scope_through_with_parent(store):
+    mine = Counter.value.with_parent(State.cells["c1"])
+    theirs = Counter.value.with_parent(State.cells["c2"])
+    shared = Counter.value.with_parent(State.planes["p1"])
+    space = Counter.value.with_parent(State.space)
+    await store.run(nustd.kv.atomic(mine.set(1) >> theirs.set(2) >> shared.set(3) >> space.set(4)))
+    assert await store.read(nu.List.of(mine, theirs, shared, space)) == [1, 2, 3, 4]
+    assert await store.read(State.cells.extract()) == {"c1": {"value": 1}, "c2": {"value": 2}}
+
+
+async def test_a_key_read_from_space_places_a_state_chain(store):
+    by_key = Counter.value.with_parent(State.cells[Space.indexes.cell_keys["summary"]])
+    await store.run(nustd.kv.atomic(Space.indexes.cell_keys.set_item("summary", "c7")))
+    await store.run(nustd.kv.atomic(by_key.set(5)))
+    assert await store.read(Counter.value.with_parent(State.cells["c7"])) == 5
+    gone = Counter.value.with_parent(State.cells[Space.indexes.cell_keys["gone"]])
+    assert is_null(await store.read(gone))
+    with pytest.raises(nustd.kv.NullAddressError):
+        await store.run(nustd.kv.atomic(gone.set(1)))
+
+
+async def test_content_sits_kind_first_then_place_then_content_key(store):
+    kind = "testing.Note"
+    at_cell = State.content_cells[kind].cells["c1"].entries
+    at_plane = State.content_planes[kind].planes["p1"].entries
+    at_space = State.content_space[kind].entries
+    await store.run(
+        nustd.kv.atomic(
+            Note.body.with_parent(at_cell["title"]).set("cell")
+            >> Note.body.with_parent(at_plane["title"]).set("plane")
+            >> Note.body.with_parent(at_space["readme"]).set("space")
+        )
+    )
+    assert await store.read(State.content_cells.extract()) == {
+        kind: {"cells": {"c1": {"entries": {"title": {"body": "cell"}}}}}
+    }
+    assert await store.read(nu.list(at_plane.keys())) == ["title"]
+    assert await store.read(Note.body.with_parent(at_space["readme"])) == "space"
+
+
+async def test_a_cell_runs_output_keeps_the_last_entries(store):
+    out = Space.exec.cell_runs["cr1"].out
+    lines = [[float(i), "stdout", f"line {i}"] for i in range(OUT_CAP + 5)]
+    await store.run(nustd.kv.atomic(out.extend(lines)))
+    kept = await store.read(out.iter().to_list())
+    assert len(kept) == OUT_CAP
+    assert kept[0] == lines[5]
+    assert kept[-1] == lines[-1]
+
+
+async def test_a_tab_keeps_its_pane_order_apart_from_each_panes_data(store):
+    tab = Conn.connections["s1"]
+    await store.run(
+        nustd.kv.atomic(
+            tab.order.set(["p1", "p2"])
+            >> tab.panes["p1"].params.set({"row": "r1"})
+            >> tab.panes["p1"].plane_run.set("run1")
+            >> tab.panes["p2"].restart.set("t1")
+            >> tab.expanded.set_item("p1", True)
+        )
+    )
+    await store.run(nustd.kv.atomic(tab.order.set(["p2", "p1"])))
+    assert await store.read(tab.order.iter().to_list()) == ["p2", "p1"]
+    assert await store.read(tab.panes["p1"].params) == {"row": "r1"}
+    assert is_null(await store.read(tab.panes["p2"].plane_run))
+    assert await store.read(tab.expanded.contains("p1")) is True

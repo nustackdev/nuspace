@@ -1,28 +1,33 @@
-"""States: the state store, where program declared state lives. Apart from Space.
+"""State: the root of ``state.db``, what programs keep. Plain slots, plus Content.
 
-A space keeps two stores. Space holds what the space is (planes, cells,
-nesting, runs); States holds what the programs remember::
+Three scopes, cell, plane and space, each holding program slots directly,
+then Content, the part of State with a kind::
 
-    States
-      planes          id -> PlaneStates
-        <p>
-          state       PlaneState shapes, rerooted here
-      cells           id -> CellStates
-        <c>           CellState shapes, rerooted here
-      contents        kind name -> KindContents, every item, by kind and scope
+    State
+      cells[cell_id]                                       a cell's slots
+      planes[plane_id]                                     a plane's, shared by its cells
+      space                                                the space's
+      content_cells[kind].cells[cell_id].entries[key]      items of a kind, at a cell
+      content_planes[kind].planes[plane_id].entries[key]   at a plane
+      content_space[kind].entries[key]                     at the space
 
-Keyed by the same ids as ``Space.planes`` and ``Space.cells``, and nothing
-else: no names, no progs, no run info. ``contents`` is the one exception
-to keying by id first: an item is found by its kind, then its scope
-(:mod:`nuspace.shapes.contents`). Flat as Space is, so a cell's state
-is one lookup away by its id, wherever the cell sits. A plane's own state
-sits in ``state`` rather than at the plane's row, so the row can grow
-without a state field ever sharing a key. Dropping a plane's state or a
-cell's is one delete of its subtree.
+Keyed by the ids in ``Space`` and nothing else: state belongs to the id, so
+a removed cell or plane keeps its state and content, readable. Content goes
+kind first, so a search reads one kind's subtree per scope and nothing
+else. ``key`` is the item's content key, set by the program: its only
+identity, unique within its kind at that place.
 
-``States`` is also this store's tag, as ``Space`` is the other's: a
-rerooted chain picks it up and routes to this store's navigator, and a
-bracket names it to open a snapshot or a transaction here.
+A scope and an item are empty Shapes: a program's own Shape sits on one
+through ``with_parent``, typed, and nothing else shares its keys::
+
+    Counter.value.with_parent(State.cells[cell_id])
+    Text.value.with_parent(State.content_cells[kind].cells[cell_id].entries["title"])
+
+Programs reach them through places (``nuspace.at``), which build exactly
+these chains.
+
+``State`` is also the store's tag, as :class:`~nuspace.shapes.space.Space`
+is the other's.
 """
 
 from __future__ import annotations
@@ -30,30 +35,59 @@ from __future__ import annotations
 import nu
 import nustd.kv
 
-from .contents import KindContents
+
+__all__ = [
+    "CellScope",
+    "Entries",
+    "Entry",
+    "KindCells",
+    "KindPlanes",
+    "PlaneScope",
+    "SpaceScope",
+    "State",
+]
 
 
-__all__ = ["CellStates", "PlaneStates", "States"]
+class CellScope(nu.Shape):
+    """One cell's state, ``State.cells[id]``. No slots: a program's Shape sits on it."""
 
 
-class CellStates(nu.Shape):
-    """One cell's state. No slots of its own: the program's ``CellState`` shapes fill it."""
+class PlaneScope(nu.Shape):
+    """One plane's state, ``State.planes[id]``, shared by its cells. No slots of its own."""
 
 
-class PlaneStates(nu.Shape):
-    """One plane's state, shared by its cells in ``state``."""
-
-    state = nustd.kv.DictRef.slot(object)
+class SpaceScope(nu.Shape):
+    """The space's state, ``State.space``. No slots of its own."""
 
 
-class States(nu.Shape):
-    """The state store's root: every plane's state and every cell's, by id.
+class Entry(nu.Shape):
+    """One content item, ``...entries[key]``. No slots: its kind's Shape sits on it."""
 
-    Written by programs, through their rerooted ``CellState`` and
-    ``PlaneState`` slots and their kinds' items, and by the ops that drop a
-    plane or cell after its structure.
-    """
 
-    planes = nustd.kv.DictRef.slot(PlaneStates)
-    cells = nustd.kv.DictRef.slot(CellStates)
-    contents = nustd.kv.DictRef.slot(KindContents)
+class Entries(nu.Shape):
+    """One place's items of one kind, by content key."""
+
+    entries = nustd.kv.DictRef.slot(Entry)
+
+
+class KindCells(nu.Shape):
+    """One kind's items at cells: ``content_cells[kind].cells[cell_id]``."""
+
+    cells = nustd.kv.DictRef.slot(Entries)
+
+
+class KindPlanes(nu.Shape):
+    """One kind's items at planes: ``content_planes[kind].planes[plane_id]``."""
+
+    planes = nustd.kv.DictRef.slot(Entries)
+
+
+class State(nu.Shape):
+    """The root of ``state.db``, and its store's tag. Written by programs, through places."""
+
+    cells = nustd.kv.DictRef.slot(CellScope)
+    planes = nustd.kv.DictRef.slot(PlaneScope)
+    space = nustd.kv.ShapeRef.slot(SpaceScope)
+    content_cells = nustd.kv.DictRef.slot(KindCells)
+    content_planes = nustd.kv.DictRef.slot(KindPlanes)
+    content_space = nustd.kv.DictRef.slot(Entries)

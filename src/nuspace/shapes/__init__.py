@@ -1,109 +1,105 @@
-"""The store layout: layer zero.
+"""The store layout: one entity per file, every op starts from a root here.
 
-Imports ``nu`` and ``nustd.kv`` and nothing of nuspace, so everything above
-reads it and it reads nothing back. Two stores, each its own root and tag.
-Space, what the space is::
+Imports ``nu``, ``nustd`` and the specs registry (a content kind's name),
+nothing else of nuspace, so everything reads it and it reads nothing back. Two roots, each its own store and tag:
+:class:`Space`, what the space is (``store/space.db``), and :class:`State`,
+what programs keep (``store/state.db``). Only ids cross between them::
 
     Space
-      planes        id -> Plane
-        <p>
-          name, meta
-          props     system, ui, made_by, backend
-          cells     [cell id], in order
-          children  [plane id], in order
-          parent    plane id, "" at the top level
-          version   +1 on every write to one of its cells
-      cells         id -> Cell
-        <c>
-          name, prog, version, meta
-          props     made_by, has_ui
-          plane     the plane it is on
-      top           [plane id], the top level planes, in order
-      kernel
-        runs        id -> Run, every plane run ever, its cell runs and live workers inside
-        running     {run id}, live
-        workers     id -> Worker, every worker ever
-        workers_running  {worker id}, live
-        planes_running   plane id -> {run id}, live, of planes with any
-      connections   id -> Connection
-      state         SpaceState
-        recents     [plane id], newest first
-        info        path, opened, versions
-        made        registered plane name -> plane id, the plane made from it
-      pinned        [plane id], in order
+      info               format, path, created_at, opened_at
+      planes[id]         Plane: name, key, icon, parent, version, cells, children,
+                         system, backend, spec, meta, created/modified/removed_at, removed_by
+      cells[id]          Cell: name, key, prog, fabrics, version, plane, spec, meta, ...
+      indexes            spec_planes[s].ids, spec_cells[s].ids, plane_keys, cell_keys, removed
+      exec               plane_runs, cell_runs, workers, indexes.history, indexes.live
 
-States, what the programs remember, by the same ids::
+    State
+      cells[id], planes[id], space                    program slots, by scope
+      content_cells[kind].cells[id].entries[key]      content, kind first
+      content_planes[kind].planes[id].entries[key]
+      content_space[kind].entries[key]
 
-    States
-      planes        id -> PlaneStates
-        <p>
-          state     PlaneState shapes, rerooted here
-      cells         id -> CellStates
-        <c>         CellState shapes, rerooted here
-      contents      kind name -> KindContents
-        <kind>
-          cells     cell id -> Items, that cell's items by id
-          planes    plane id -> Items
-          space     Items, the space's own
+A dict's value is a Shape, so each dynamic level that holds a container has
+a named slot (``ids``, ``runs``, ``cells``, ``planes``, ``entries``). Places
+and ops hide them from programs. Each collection has the view that fits how
+it is read: dicts for point reads, FractionalIndexed for a plane's cells and
+children, logs for append only lists, dicts of bool for live sets, a ring
+for a cell run's output.
 
-Plane and cell hold structure only, but for the plane's ``backend``. What
-ran and how it ended is a run. What a program remembers is a state.
+Each store is a :class:`Store` record (root, file, channel, init), declared
+by the host for the core stores. The web device keeps its own stores and
+shapes, in :mod:`nuspace.devices.web.shapes`. Core never reads them.
 """
 
-from .cell import Cell, CellProps
-from .connection import Connection
-from .contents import CONTENT_KIND, CellContent, Items, KindContents, PlaneContent
-from .kernel import (
+from .cell import Cell
+from .cell_run import OUT_CAP, CellRun
+from .content import Content
+from .exec import (
     EXIT_FAILED,
     EXIT_INTERRUPTED,
     EXIT_KILLED,
     EXIT_OK,
     EXITS,
-    CellRun,
-    Kernel,
+    CellRunIds,
+    Exec,
+    ExecIndexes,
+    History,
+    Live,
+    LiveIds,
+    PlaneRunNode,
     PlaneRuns,
-    Run,
-    Worker,
 )
-from .plane import Plane, PlaneProps
-from .reroot import Reroot, reroot, reroot_base, reroot_contents
-from .space import RECENTS_CAP, Space, SpaceInfo, SpaceState
-from .state import CellState, PlaneState
-from .states import CellStates, PlaneStates, States
+from .plane import ROOT, Plane
+from .plane_run import PlaneRun
+from .space import FORMAT, Indexes, Info, Space, SpecIds
+from .state import (
+    CellScope,
+    Entries,
+    Entry,
+    KindCells,
+    KindPlanes,
+    PlaneScope,
+    SpaceScope,
+    State,
+)
+from .store import Store
+from .worker import Worker
 
 
 __all__ = [
-    "CONTENT_KIND",
     "EXITS",
     "EXIT_FAILED",
     "EXIT_INTERRUPTED",
     "EXIT_KILLED",
     "EXIT_OK",
-    "RECENTS_CAP",
+    "FORMAT",
+    "OUT_CAP",
+    "ROOT",
     "Cell",
-    "CellContent",
-    "CellProps",
     "CellRun",
-    "CellState",
-    "CellStates",
-    "Connection",
-    "Items",
-    "Kernel",
-    "KindContents",
+    "CellRunIds",
+    "CellScope",
+    "Content",
+    "Entries",
+    "Entry",
+    "Exec",
+    "ExecIndexes",
+    "History",
+    "Indexes",
+    "Info",
+    "KindCells",
+    "KindPlanes",
+    "Live",
+    "LiveIds",
     "Plane",
-    "PlaneContent",
-    "PlaneProps",
+    "PlaneRun",
+    "PlaneRunNode",
     "PlaneRuns",
-    "PlaneState",
-    "PlaneStates",
-    "Reroot",
-    "Run",
+    "PlaneScope",
     "Space",
-    "SpaceInfo",
-    "SpaceState",
-    "States",
+    "SpaceScope",
+    "SpecIds",
+    "State",
+    "Store",
     "Worker",
-    "reroot",
-    "reroot_base",
-    "reroot_contents",
 ]

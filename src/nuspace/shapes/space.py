@@ -1,4 +1,4 @@
-"""Space: the world. What you open."""
+"""Space: the root of ``space.db``, what the space is. Info, planes, cells, indexes, execution."""
 
 from __future__ import annotations
 
@@ -6,75 +6,76 @@ import nu
 import nustd.kv
 
 from .cell import Cell
-from .connection import Connection
-from .kernel import Kernel
+from .exec import Exec
 from .plane import Plane
 
 
-__all__ = ["RECENTS_CAP", "Space", "SpaceInfo", "SpaceState"]
+__all__ = ["FORMAT", "Indexes", "Info", "Space", "SpecIds"]
 
 
-#: How many plane ids ``SpaceState.recents`` keeps.
-RECENTS_CAP = 20
+#: The store layout this nuspace reads and writes. Written at create; a
+#: space of another format is refused at open. No converter.
+FORMAT = 1
 
 
-class SpaceInfo(nu.Shape):
-    """What the host says about the space it opened. Written once per open.
+class Info(nu.Shape):
+    """``Space.info``: about the space as a whole.
 
-    ``path`` is the space directory, ``""`` for a throwaway one. ``opened``
-    is when this open started, in seconds since the epoch. ``versions`` maps
-    a package name (``nuspace``) to its installed version.
+    ``format`` is the store layout number (:data:`FORMAT`) and
+    ``created_at`` when the space was made, both written once, at create.
+    ``path`` (the space dir) and ``opened_at`` are rewritten at every open.
     """
 
+    format = nustd.kv.IntRef.slot()
     path = nustd.kv.StrRef.slot()
-    opened = nustd.kv.FloatRef.slot()
-    versions = nustd.kv.DictRef.slot(str)
+    created_at = nustd.kv.FloatRef.slot()
+    opened_at = nustd.kv.FloatRef.slot()
 
 
-class SpaceState(nu.Shape):
-    """Space wide state: things about the space as a whole, not one plane.
+class SpecIds(nu.Shape):
+    """The ids made from one spec, in creation order: ``Space.indexes.spec_planes[s]``."""
 
-    ``recents`` is the plane ids opened in a tab, newest first, deduped and
-    capped at :data:`RECENTS_CAP`, written whole (D24) by the web device.
-    ``info`` is written by the host at open. ``made`` maps a registered
-    Plane's name (``nuverse.jobs``) to the id of the plane the host made
-    from it when the space was opened with it, so the next open with it
-    finds that plane in one lookup. Written by the host.
+    ids = nustd.kv.LogDictRef.slot(bool)
+
+
+class Indexes(nu.Shape):
+    """``Space.indexes``: what finds a plane or a cell without a scan.
+
+    Written in the same commit as the row they mirror.
+
+    - ``spec_planes[s].ids``, ``spec_cells[s].ids``: the ids made from spec
+      ``s``, oldest first. Removed ones stay listed; readers skip
+      ``removed_at``. ``spec_planes[s].ids.last()`` is the newest plane of
+      a spec, one seek.
+    - ``plane_keys``, ``cell_keys``: key to id, live rows only. A plane and
+      a cell may share a key.
+    - ``removed``: the ids removed by themselves (``removed_by == id``), in
+      removal order. What a Trash lists.
     """
 
-    recents = nustd.kv.PrimitiveListRef.slot()
-    info = nustd.kv.ShapeRef.slot(SpaceInfo)
-    made = nustd.kv.DictRef.slot(str)
+    spec_planes = nustd.kv.DictRef.slot(SpecIds)
+    spec_cells = nustd.kv.DictRef.slot(SpecIds)
+    plane_keys = nustd.kv.DictRef.slot(str)
+    cell_keys = nustd.kv.DictRef.slot(str)
+    removed = nustd.kv.LogDictRef.slot(bool)
 
 
 class Space(nu.Shape):
-    """Planes, their cells, the top level, the kernel's records, device and space state.
+    """The root of ``space.db``, and its store's tag.
 
-    ``planes`` and ``cells`` are flat, so a plane or a cell is one lookup
-    away by its id alone. A plane lists its cell ids in order, a cell names
-    its plane. Nesting is on the planes too: a plane lists its children and
-    names its parent. ``top`` lists the planes with no parent, in order.
+    ``planes`` and ``cells`` are flat by id, so any row is one read away.
+    The tree is on the rows: a plane lists its ``children`` and ``cells``,
+    each names its ``parent`` or ``plane``. :data:`~nuspace.shapes.plane.ROOT`
+    is the top plane. Nothing is deleted: a removed row keeps its id, with
+    ``removed_at`` set.
 
-    One writer per subtree: people, cells and services write ``planes``,
-    ``cells`` and ``top`` through ops, the ops write intents into ``kernel`` and the
-    kernel and the backends its effects, the web device writes
-    ``connections`` and ``state.recents``, the host writes ``state.info`` and
-    ``state.made``.
-
-    ``pinned`` is the plane ids pinned to the top of the sidebar, in order,
-    written through the pin ops. A pin is a shortcut: the plane stays where
-    it hangs.
-
-    ``Space`` is also the store's tag. kv refs find their navigator by root
-    shape class, so the store is bound under this class. Program state is
-    not here: it lives in the other store, under
-    :class:`~nuspace.shapes.states.States`.
+    kv refs find their navigator by root shape class, so this class is the
+    tag ``space.db`` is bound under. What programs keep is in the other
+    store, under :class:`~nuspace.shapes.state.State`. Only ids cross.
     """
 
+    info = nustd.kv.ShapeRef.slot(Info)
     planes = nustd.kv.DictRef.slot(Plane)
     cells = nustd.kv.DictRef.slot(Cell)
-    top = nustd.kv.ListRef.slot(str)
-    kernel = nustd.kv.ShapeRef.slot(Kernel)
-    connections = nustd.kv.DictRef.slot(Connection)
-    state = nustd.kv.ShapeRef.slot(SpaceState)
-    pinned = nustd.kv.ListRef.slot(str)
+    indexes = nustd.kv.ShapeRef.slot(Indexes)
+    exec = nustd.kv.ShapeRef.slot(Exec)

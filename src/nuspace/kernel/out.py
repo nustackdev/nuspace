@@ -31,6 +31,7 @@ from nu.context import FabricRef
 from nu.core.spans.bracket import _LifecycleBracket
 from nu.engine.structure import Declared
 from nu.lang import ScalarAction, ScalarQuery, is_null
+from nuspace.shapes.cell_run import OUT_CAP
 
 
 if TYPE_CHECKING:
@@ -51,9 +52,6 @@ __all__ = [
     "TakeOut",
 ]
 
-
-#: How many entries ``Run.out`` keeps, newest last.
-OUT_CAP = 200
 
 #: The stream names an entry carries.
 STDOUT = "stdout"

@@ -9,6 +9,10 @@ Below is the changelog for **nuspace** - the full commit stream. Newest first.
 The `nuspace-ui` wheel is the same source tree's vite output and is not tracked
 separately here.
 
+## Unreleased
+
+- Rebuild the store layout: space, state and web stores, plus the op errors
+
 ## 0.6.5 - 2026-11-07
 
 - Release nuspace 0.6.5 requiring nuverse 0.3.7, so installs get working planes and cells

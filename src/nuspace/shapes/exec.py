@@ -1,23 +1,48 @@
-"""Kernel records: plane runs, their cell runs, the workers they run on, and what is live.
+"""Execution: ``Space.exec``, the run records and the indexes that relate them.
 
-No status anywhere. A record logs intents (``*_requested``, written by ops)
-and effects (``started_at``, ``terminated_at``, ``exit``, ``error``, written
-by the kernel and the backends). Whether something is live is whether its id
-is in an index: ``running`` for plane runs, ``cells_running`` for a plane
-run's cell runs, ``workers_running`` for workers. Ending is a write of
-``terminated_at`` plus a delete from the index. Nothing moves, nothing is
-pruned, and nothing iterates ``runs`` or ``workers`` whole.
+Like an executable and its processes: a plane or a cell is the program, its
+runs are processes, any number of them, several at once::
 
-An index has narrower copies, one per owner, written in the same commit as
-the index itself: a plane's live runs (``planes_running``), a run's live
-workers (``Run.workers_running``). What is live of one plane or one run is
-read in the time of that, never of everything live.
+    Space.exec
+      plane_runs    id -> PlaneRun
+      cell_runs     id -> CellRun
+      workers       id -> Worker
+      indexes
+        history                                   every run ever, never cleared
+          plane_to_plane_runs[p].runs             a plane's runs, in start order
+            [r].cell_to_cell_runs[c].ids          a cell's runs in r, in start order
+            [r].workers                           r's workers
+        live                                      what runs now, cleared at open
+          plane_runs                              every live plane run
+          plane_to_plane_runs[p].ids              a plane's live runs
+          cell_to_cell_runs[c].ids                a cell's live runs, any plane run
+          plane_run_to_cell_runs[r].ids           r's live cell runs
+          plane_run_to_failed_cells[r].ids        cells whose last cell run in r failed
+          plane_run_to_workers[r].ids             r's held workers
+          workers                                 every live worker
+
+Records hold their own facts plus a back ref. Every list is an index here,
+written in the same commit as the record change it mirrors. A dict's value
+is a Shape, so each dynamic level that holds a list gets a named slot
+(``runs``, ``ids``).
+
+Views: records and keyed levels are plain dicts (point reads). History
+lists are logs: append only, read a page at a time, newest first. Live sets
+are dicts of bool: point add and delete, ``nu.Not(set)`` for empty, and no
+count key shared by every writer.
+
+Nothing here is iterated whole. Live questions read ``live``, history
+questions one plane's or one plane run's list.
 """
 
 from __future__ import annotations
 
 import nu
 import nustd.kv
+
+from .cell_run import CellRun
+from .plane_run import PlaneRun
+from .worker import Worker
 
 
 __all__ = [
@@ -26,124 +51,101 @@ __all__ = [
     "EXIT_INTERRUPTED",
     "EXIT_KILLED",
     "EXIT_OK",
-    "CellRun",
-    "Kernel",
+    "CellRunIds",
+    "Exec",
+    "ExecIndexes",
+    "History",
+    "Live",
+    "LiveIds",
+    "PlaneRunNode",
     "PlaneRuns",
-    "Run",
-    "Worker",
 ]
 
 
-#: It returned. For a plane run, no cell run of it failed. For a worker,
-#: its backend let it go once the plane run was over.
+#: It returned. For a plane run, no cell's last run in it failed. For a
+#: worker, its backend let it go once the plane run was over.
 EXIT_OK = "ok"
 
 #: It raised, or its worker died under it. For a worker, it died by itself.
 EXIT_FAILED = "failed"
 
-#: Somebody asked, via ``cell_interrupt`` or ``plane_interrupt``.
+#: Somebody asked: an interrupt, or a removed cell or plane.
 EXIT_INTERRUPTED = "interrupted"
 
-#: Torn down: ``plane_kill``, or reconcile at open.
+#: Torn down: kill_at passed, or reap found it left over at open.
 EXIT_KILLED = "killed"
 
 #: How a run or a worker ended. Tells a crash from a request.
 EXITS = (EXIT_OK, EXIT_FAILED, EXIT_INTERRUPTED, EXIT_KILLED)
 
 
-class CellRun(nu.Shape):
-    """One execution of one cell, inside a plane run. Never mutated into another.
+class CellRunIds(nu.Shape):
+    """One cell's runs inside one plane run, in start order: ``...cell_to_cell_runs[c]``."""
 
-    A reload or a restart is a new cell run. ``version`` is the cell's
-    version when this run was asked for, so a newer prog is told apart
-    without reading source. ``by`` says who asked. ``worker`` is the id of
-    the :class:`Worker` its backend put it on.
+    ids = nustd.kv.LogDictRef.slot(bool)
 
-    ``out`` is ``[ts, stream, text]`` entries, a capped ring written whole by
-    the run's own body.
+
+class PlaneRunNode(nu.Shape):
+    """One plane run's node in history: ``...plane_to_plane_runs[p].runs[r]``.
+
+    ``cell_to_cell_runs`` maps a cell to its runs in this plane run,
+    ``workers`` lists the workers the run ever held. Reaching a node needs
+    its plane: one read of ``PlaneRun.plane``.
     """
 
-    cell = nustd.kv.StrRef.slot()
-    version = nustd.kv.IntRef.slot()
-    by = nustd.kv.StrRef.slot()
-    worker = nustd.kv.StrRef.slot()
-    started_at = nustd.kv.FloatRef.slot()
-    interrupt_requested = nustd.kv.BoolRef.slot()
-    terminated_at = nustd.kv.FloatRef.slot()
-    exit = nustd.kv.StrRef.slot()
-    error = nustd.kv.StrRef.slot()
-    out = nustd.kv.PrimitiveListRef.slot()
-
-
-class Run(nu.Shape):
-    """One execution of a plane: the thing started, stopped and killed.
-
-    ``backend`` is the plane's backend when the run was asked for. ``envs``
-    is the env specs its cells run inside, each ``[name, *args]`` naming a
-    factory registered at open: stored rather than the envs themselves
-    because a function cannot be stored, and so anyone can run the plane
-    the same way again.
-
-    ``cells`` is every cell run it ever had, ``cells_running`` the live ones.
-    ``latest`` maps each cell to its newest cell run, written with it, so a
-    cell's current run is a point read and never a walk of ``cells``, which
-    grows with every reload. The run ends once ``cells_running`` is empty,
-    or on kill, its exit read off ``latest``. ``workers`` is every worker
-    its backend ever gave it, ``workers_running`` the live ones.
-    """
-
-    plane = nustd.kv.StrRef.slot()
-    backend = nustd.kv.StrRef.slot()
-    by = nustd.kv.StrRef.slot()
-    envs = nustd.kv.PrimitiveListRef.slot()
-    started_at = nustd.kv.FloatRef.slot()
-    termination_requested = nustd.kv.BoolRef.slot()
-    terminated_at = nustd.kv.FloatRef.slot()
-    exit = nustd.kv.StrRef.slot()
-    error = nustd.kv.StrRef.slot()
-    cells = nustd.kv.DictRef.slot(CellRun)
-    cells_running = nustd.kv.SetRef.slot(str)
-    latest = nustd.kv.DictRef.slot(str)
-    workers = nustd.kv.SetRef.slot(str)
-    workers_running = nustd.kv.SetRef.slot(str)
-
-
-class Worker(nu.Shape):
-    """The executor unit a backend runs cells on: a process today, anything later.
-
-    Written by its backend only, read by everybody. ``run`` is the plane run
-    it belongs to. ``handle`` is the backend's own address for it, a str
-    only the backend reads (the pool's id, for the process backends).
-    ``exit`` is ``ok`` when its backend let it go, ``killed`` when the plane
-    run was killed, ``failed`` when it died by itself (``error`` says how).
-    """
-
-    backend = nustd.kv.StrRef.slot()
-    run = nustd.kv.StrRef.slot()
-    handle = nustd.kv.StrRef.slot()
-    started_at = nustd.kv.FloatRef.slot()
-    terminated_at = nustd.kv.FloatRef.slot()
-    exit = nustd.kv.StrRef.slot()
-    error = nustd.kv.StrRef.slot()
+    cell_to_cell_runs = nustd.kv.DictRef.slot(CellRunIds)
+    workers = nustd.kv.LogDictRef.slot(bool)
 
 
 class PlaneRuns(nu.Shape):
-    """One plane's live plane runs: the ids in ``running`` whose run is of it."""
+    """One plane's runs, in start order: ``history.plane_to_plane_runs[p]``."""
 
-    runs = nustd.kv.SetRef.slot(str)
+    runs = nustd.kv.LogDictRef.slot(PlaneRunNode)
 
 
-class Kernel(nu.Shape):
-    """Everything the kernel and the backends record.
+class History(nu.Shape):
+    """Every run ever, by plane. Never cleared; nothing walks it whole."""
 
-    ``runs`` and ``workers`` are the source of truth, every one ever.
-    ``running`` and ``workers_running`` are the live ids, so what is live is
-    read in the time of what is live. ``planes_running`` is ``running`` by
-    plane: a plane is listed while it has a live run, and only then.
+    plane_to_plane_runs = nustd.kv.DictRef.slot(PlaneRuns)
+
+
+class LiveIds(nu.Shape):
+    """One keyed live set: ``live.<set>[x].ids``, the ids of what is live for ``x``."""
+
+    ids = nustd.kv.DictRef.slot(bool)
+
+
+class Live(nu.Shape):
+    """What runs now. Cleared at open, after reap has ended the leftovers as killed.
+
+    ``plane_runs`` is what the kernel folds over. The keyed sets answer one
+    question each in one read: a plane's live runs, a cell's live runs, a
+    plane run's live cell runs (empty: the plane run is done), the cells
+    whose last cell run in a plane run failed (not empty: the plane run
+    failed), a plane run's held workers. ``workers`` is every live worker,
+    what reap walks at open.
     """
 
-    runs = nustd.kv.DictRef.slot(Run)
-    running = nustd.kv.SetRef.slot(str)
+    plane_runs = nustd.kv.DictRef.slot(bool)
+    plane_to_plane_runs = nustd.kv.DictRef.slot(LiveIds)
+    cell_to_cell_runs = nustd.kv.DictRef.slot(LiveIds)
+    plane_run_to_cell_runs = nustd.kv.DictRef.slot(LiveIds)
+    plane_run_to_failed_cells = nustd.kv.DictRef.slot(LiveIds)
+    plane_run_to_workers = nustd.kv.DictRef.slot(LiveIds)
+    workers = nustd.kv.DictRef.slot(bool)
+
+
+class ExecIndexes(nu.Shape):
+    """How the records relate (``history``) and what is running now (``live``)."""
+
+    history = nustd.kv.ShapeRef.slot(History)
+    live = nustd.kv.ShapeRef.slot(Live)
+
+
+class Exec(nu.Shape):
+    """``Space.exec``: every plane run, cell run and worker ever, by id, and their indexes."""
+
+    plane_runs = nustd.kv.DictRef.slot(PlaneRun)
+    cell_runs = nustd.kv.DictRef.slot(CellRun)
     workers = nustd.kv.DictRef.slot(Worker)
-    workers_running = nustd.kv.SetRef.slot(str)
-    planes_running = nustd.kv.DictRef.slot(PlaneRuns)
+    indexes = nustd.kv.ShapeRef.slot(ExecIndexes)

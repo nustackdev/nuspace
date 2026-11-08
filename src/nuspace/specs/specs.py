@@ -6,7 +6,7 @@
 
 The ops that act on them, :func:`~nuspace.ops.create_plane` and
 :func:`~nuspace.ops.create_cell`, live in :mod:`nuspace.ops`. A content
-kind's behaviors live on its class (:class:`~nuspace.content.Content`); its
+kind's behaviors live on its class (:class:`~nuspace.shapes.content.Content`); its
 spec says how a space presents it.
 """
 
@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING, Any
 
 
 if TYPE_CHECKING:
-    from nuspace.content import Content
+    from nuspace.shapes.content import Content
 
 
 __all__ = ["EMPTY_PLANE", "CellSpec", "ContentSpec", "PlaneSpec"]
@@ -105,7 +105,7 @@ class CellSpec:
             from it record as ``props.made_by``.
         label: What the menu shows.
         source: The cell's prog. A cell keeps what it edits or shows in
-            content items (:mod:`nuspace.content`), where search finds them.
+            content items (:mod:`nuspace.shapes.content`), where search finds them.
         description: One line on what a cell made from it is for.
         group: The ``/`` menu heading it sits under, ``""`` for none. Groups
             show in the order their first CellSpec registers; the ungrouped
@@ -148,10 +148,10 @@ class ContentSpec:
     ``class TextContent(Content[Text], name="Text")``, and read here as
     :attr:`name`. Installed by a package, it registers as
     ``<package>.<name>``, ``nuverse.Text``: the name the store keys its
-    items by (:func:`~nuspace.content.kind_name`).
+    items by (:func:`~nuspace.shapes.content.kind_name`).
 
     Args:
-        kind: The :class:`~nuspace.content.Content` subclass: the schema
+        kind: The :class:`~nuspace.shapes.content.Content` subclass: the schema
             and the behaviors.
         label: What the search ui calls the kind. Empty takes the class
             name, less a trailing ``Content``.
@@ -160,7 +160,7 @@ class ContentSpec:
             :class:`PlaneSpec`'s ``icon``. ``""`` for the default.
 
     Raises:
-        TypeError: ``kind`` is no :class:`~nuspace.content.Content` subclass.
+        TypeError: ``kind`` is no :class:`~nuspace.shapes.content.Content` subclass.
     """
 
     kind: type[Content[Any]]
@@ -169,7 +169,7 @@ class ContentSpec:
     icon: str = ""
 
     def __post_init__(self) -> None:
-        from nuspace.content import Content  # content imports this package
+        from nuspace.shapes.content import Content  # content imports this package
 
         if not (isinstance(self.kind, type) and issubclass(self.kind, Content)):
             msg = f"ContentSpec kind {self.kind!r} is no Content subclass"

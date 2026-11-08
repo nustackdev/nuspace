@@ -7,10 +7,9 @@
 from __future__ import annotations
 
 import nu
-import nuspace
 import nustd.kv
 import nustd.ui
-from nuspace.content import UNSET, Unset
+from nuspace.shapes.content import UNSET, Content, Unset, entries
 
 
 class Note(nu.Shape):
@@ -25,7 +24,7 @@ class Shown(nustd.ui.Column):
     body = nustd.ui.TextRef.slot()
 
 
-class NoteContent(nuspace.Content[Note], name="Note"):
+class NoteContent(Content[Note], name="Note"):
     @classmethod
     def match(
         cls,
@@ -50,14 +49,12 @@ class NoteContent(nuspace.Content[Note], name="Note"):
         return Shown.body.set(item.body)
 
 
-class PlainContent(nuspace.Content[Note], name="Plain"):
+class PlainContent(Content[Note], name="Plain"):
     pass
 
 
-def write(
-    kind: type[nuspace.Content], scope: tuple[str, str], item: str, **fields: object
-) -> nu.Nu:
-    """One item's fields set, as a program keeping it would. One commit."""
-    at = kind.at(scope, item)
+def write(kind: type[Content], scope: tuple[str, str], key: str, **fields: object) -> nu.Nu:
+    """One item's fields set at ``scope``, ``(level, id)``, as a program keeping it would. One commit."""
+    at = entries(kind, *scope)[key]
     writes = nu.Sequential(*[getattr(at, k).set(v) for k, v in fields.items()])
-    return nuspace.ops.atomic_state(writes)
+    return nustd.kv.atomic(writes)

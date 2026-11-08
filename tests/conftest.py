@@ -1,4 +1,4 @@
-"""Shared fixtures: the Space and States stores held open across evaluations.
+"""Shared fixtures: a space's stores (Space, State, Web, Conn) held open across evaluations.
 
 ``store`` is in memory. A test module that sets ``STORES`` to backend names
 (``"memory"``, ``"sqlite"``) runs each of its ``store`` tests once per name.
@@ -18,9 +18,8 @@ from _support.made import MADE, MADE_STORE
 import nu
 import nustd.kv
 from nu.lang import ScalarQuery
-from nuspace import ops
-from nuspace.shapes import Space, States
-from nuspace.system.kernel import KERNEL_FILE, STATE_FILE
+from nuspace.devices.web.stores import CONN_STORE, WEB_STORE
+from nuspace.host.stores import SPACE_STORE, STATE_STORE
 
 
 if TYPE_CHECKING:
@@ -59,7 +58,7 @@ class _Hold(ScalarQuery):
 
 @dataclass
 class Store:
-    """``run`` evaluates an op as is, ``read`` inside a Snapshot of both stores.
+    """``run`` evaluates an op as is, ``read`` inside ``atomic``, a snapshot of each store it reads.
 
     ``made`` runs an op that sets ``into`` and reads it back.
     """
@@ -71,7 +70,7 @@ class Store:
         return value
 
     async def read(self, term: nu.Nu) -> object:
-        return await self.run(ops.snapshot(term))
+        return await self.run(nustd.kv.atomic(term))
 
     async def made(self, term: nu.Nu) -> object:
         """Run ``term``, an op given ``into=MADE``, and read what it set there."""
@@ -86,15 +85,22 @@ def pytest_generate_tests(metafunc):
         metafunc.parametrize("store", backends, indirect=True)
 
 
-def _navigators(backend: str, root: Path) -> tuple[nu.Nu, nu.Nu]:
-    """The Space and States navigators of one backend: in memory, or the space's two sqlite files."""
+#: Every store of a space with the web device on, in the order they are made.
+STORES_OF_A_SPACE = (SPACE_STORE, STATE_STORE, WEB_STORE, CONN_STORE)
+
+
+def _navigators(backend: str, root: Path) -> tuple[nu.Nu, ...]:
+    """Every store's navigator on one backend: in memory, or the space's sqlite files under ``root``."""
     if backend == "sqlite":
-        root.mkdir(parents=True, exist_ok=True)
-        return (
-            nustd.kv.sqlite_navigator(str(root / KERNEL_FILE), tags=(Space,)),
-            nustd.kv.sqlite_navigator(str(root / STATE_FILE), tags=(States,)),
+        return tuple(
+            nustd.kv.sqlite_navigator(str(root / s.file), tags=(s.root,)) for s in STORES_OF_A_SPACE
         )
-    return nustd.kv.memory_navigator(tags=(Space,)), nustd.kv.memory_navigator(tags=(States,))
+    return tuple(nustd.kv.memory_navigator(tags=(s.root,)) for s in STORES_OF_A_SPACE)
+
+
+def init_stores() -> nu.Nu:
+    """Every store's fixed containers, made where missing: one commit per store."""
+    return nu.Sequential(*(nustd.kv.atomic(s.init()) for s in STORES_OF_A_SPACE))
 
 
 @pytest_asyncio.fixture
@@ -105,7 +111,7 @@ async def store(request, tmp_path):
     held = asyncio.create_task(nu.arun(nu.With(*navigators, MADE_STORE, body=_Hold(opened, done))))
     ctx = await opened
     held_store = Store(ctx)
-    await held_store.run(ops.init_stores())
+    await held_store.run(init_stores())
     yield held_store
     done.set()
     await held
@@ -113,15 +119,12 @@ async def store(request, tmp_path):
 
 @dataclass
 class DiskStore(Store):
-    """The same calls against the space's two sqlite files, opened per evaluation. A few tests only."""
+    """The same calls against the space's sqlite files, opened per evaluation. A few tests only."""
 
     path: str = ""
 
     async def run(self, term: nu.Nu) -> object:
-        stack = nu.With(
-            nustd.kv.sqlite_navigator(str(Path(self.path) / KERNEL_FILE), tags=(Space,)),
-            nustd.kv.sqlite_navigator(str(Path(self.path) / STATE_FILE), tags=(States,)),
-        )
+        stack = nu.With(*_navigators("sqlite", Path(self.path)))
         value, _ = await nu.arun(nu.With(stack, body=term))
         return value
 
@@ -129,5 +132,5 @@ class DiskStore(Store):
 @pytest_asyncio.fixture
 async def disk(tmp_path):
     held = DiskStore(ctx=None, path=str(tmp_path / "space"))
-    await held.run(ops.init_stores())
+    await held.run(init_stores())
     return held

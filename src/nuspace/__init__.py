@@ -1,61 +1,15 @@
-"""nuspace: runs Nu programs as a space of planes and cells.
+"""nuspace: a space that runs nu programs as planes and cells.
 
-What a host and a program need, without knowing the layers:
-
-- :func:`open_space`, and what an installed package registers with: an
-  :class:`Extension` of :class:`PlaneSpec`, :class:`CellSpec` and
-  :class:`ContentSpec` (the store's own shapes are ``shapes.Plane`` and
-  ``shapes.Cell``);
-- :class:`Content`, a kind of findable item, ``class
-  TextContent(nuspace.Content[Text], name="Text")``, registered through a
-  :class:`ContentSpec` (:mod:`nuspace.content`);
-- :class:`CellState`, :class:`PlaneState`, so a program says
-  ``class Tick(nuspace.CellState)``, and :class:`States`, the tag of the
-  store they land in, for a program bracketing its own state;
-- :mod:`ops`, and the few a host reaches for first: :func:`boot`,
-  :func:`unboot`, :func:`supervise`, :func:`enable_react`, :func:`env`;
-- :mod:`ui`, what a cell reads its params and links planes with:
-  ``ui.params()``, ``ui.href("results")``, ``ui.page_link(ref, plane_id)``.
+The top level holds the everyday names only. Two roots, :class:`Space`
+(what the space is) and :class:`State` (what programs keep); the record
+shapes are under :mod:`nuspace.shapes`. What an op raises is in
+:mod:`nuspace.errors`.
 
 Workers import this package: nothing here may pull in a server.
 """
 
-from nuspace import content, ops, shapes, ui
-from nuspace.content import Content
-from nuspace.ext import CellSpec, ContentSpec, Extension, PlaneSpec
-from nuspace.host import open_space
-from nuspace.ops import env
-from nuspace.shapes import CellState, PlaneState, Space, States
-from nuspace.system.services import (
-    boot,
-    disable_react,
-    enable_react,
-    supervise,
-    unboot,
-    unsupervise,
-)
+from nuspace import errors
+from nuspace.shapes import Space, State
 
 
-__all__ = [
-    "CellSpec",
-    "CellState",
-    "Content",
-    "ContentSpec",
-    "Extension",
-    "PlaneSpec",
-    "PlaneState",
-    "Space",
-    "States",
-    "boot",
-    "content",
-    "disable_react",
-    "enable_react",
-    "env",
-    "open_space",
-    "ops",
-    "shapes",
-    "supervise",
-    "ui",
-    "unboot",
-    "unsupervise",
-]
+__all__ = ["Space", "State", "errors"]

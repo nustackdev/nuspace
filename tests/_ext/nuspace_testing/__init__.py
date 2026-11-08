@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import os
 
-from nuspace import Extension
+from nuspace.specs import Extension
 
 
 __all__ = ["ENV", "extension"]

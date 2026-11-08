@@ -1,4 +1,4 @@
-"""Cell: a program, the irreducible thing a space holds, on exactly one plane."""
+"""Cell: a program on a plane."""
 
 from __future__ import annotations
 
@@ -6,47 +6,40 @@ import nu
 import nustd.kv
 
 
-__all__ = ["Cell", "CellProps"]
-
-
-class CellProps(nu.Shape):
-    """What nuspace itself reads off a cell to work. Typed, unlike ``meta``.
-
-    ``made_by`` names the Cell spec the cell was made from (``""`` for none).
-    A cell without one is not of any Cell spec's type.
-
-    ``has_ui`` says whether the cell's program draws: its constructed tree
-    holds a ui ref. Worked out whenever the prog is written, never by hand.
-    """
-
-    made_by = nustd.kv.StrRef.slot()
-    has_ui = nustd.kv.BoolRef.slot()
+__all__ = ["Cell"]
 
 
 class Cell(nu.Shape):
-    """A program. Structure only.
+    """One cell's row at ``Space.cells[id]``. Structure only.
 
-    ``prog`` is python source whose entry point returns a Nu tree. ``version``
-    counts its writes: every cell run records the version it ran, so a live
-    one running an older prog is told apart without reading source. A cell
-    carries no run info: runs, their output and their errors live under
-    ``Space.kernel``.
+    Identity: as a plane's. ``key`` is an optional handle, slug chars with
+    no ``/``, ``""`` for none, unique among live cells through
+    ``Space.indexes.cell_keys`` (a plane and a cell may share one), kept
+    after removal. ``name`` is display text only.
 
-    ``plane`` is the id of the one plane it is on, the back pointer of that
-    plane's ``cells``. The two are written together, in one commit, and never
-    disagree. A cell is addressed by its own id alone: ids are unique across
-    the space.
+    ``prog`` is its source. ``fabrics`` lists the fabrics the prog uses
+    (only ``"ui"`` is detected for now), worked out from the prog and
+    written in the same commit, so it never goes stale. ``version`` counts
+    prog writes: a cell run records the version it ran. ``plane`` is the
+    plane listing it in its ``cells``; ``cell.move`` can change it, both
+    sides in one commit. ``spec`` names the spec it was made from, ``""``
+    for none. ``meta`` is free for programs.
 
-    Its state is not here: it lives in the state store, at
-    ``States.cells[c]`` (:mod:`nuspace.shapes.states`).
+    Lifecycle slots as on :class:`~nuspace.shapes.plane.Plane`: a removed
+    cell keeps its row, its runs, its state and its content.
 
-    ``props`` is what nuspace reads to work (:class:`CellProps`). ``meta``
-    is free, for anything else.
+    Its state is in the State store, at ``State.cells[id]``.
     """
 
     name = nustd.kv.StrRef.slot()
+    key = nustd.kv.StrRef.slot()
     prog = nustd.kv.ProgramRef.slot()
+    fabrics = nustd.kv.PrimitiveListRef.slot()
     version = nustd.kv.IntRef.slot()
-    props = nustd.kv.ShapeRef.slot(CellProps)
-    meta = nustd.kv.DictRef.slot(object)
     plane = nustd.kv.StrRef.slot()
+    spec = nustd.kv.StrRef.slot()
+    meta = nustd.kv.DictRef.slot(object)
+    created_at = nustd.kv.FloatRef.slot()
+    modified_at = nustd.kv.FloatRef.slot()
+    removed_at = nustd.kv.FloatRef.slot()
+    removed_by = nustd.kv.StrRef.slot()

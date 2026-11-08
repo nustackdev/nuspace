@@ -7,7 +7,7 @@ planes and cells:
   :func:`search`. Not drawn. What it asks is plain data, per kind name the
   ``match`` keywords given, and its one cell, named
   :data:`CELL`, looks: per kind it walks the store's ``cells``, then
-  ``planes``, then ``space`` (:mod:`nuspace.shapes.contents`), checks each
+  ``planes``, then ``space`` (:func:`walk`), checks each
   item with the kind's ``match`` and appends the hits, a commit per scope,
   so a reader sees them land. A hit is the item's address, ``(kind,
   scope, id)`` (:class:`Hit`). It stamps ``finished_at`` once it is
@@ -23,9 +23,10 @@ planes and cells:
   the installed specs where the cell is built (:func:`kinds`), never from
   the store.
 
-The walk itself is content's (:func:`~nuspace.content.search.walk`): this
-module appends what it finds. A search's cell runs on a worker, where the
-host's registry is not. Its prog names the request, and each kind is found there by its registered
+The walk drives the kind's bare reads (:mod:`nuspace.shapes.content`), a
+bracket per place (:func:`walk`), and this module appends what it finds.
+A search's cell runs on a worker, where the host's registry is not. Its
+prog names the request, and each kind is found there by its registered
 name, through its installed spec (:func:`~nuspace.ext.content_spec`). Like
 a service's prog, it is a thin shim over this module (D20).
 
@@ -34,6 +35,7 @@ Workers import this module: nothing here may pull in a server.
 
 from __future__ import annotations
 
+import inspect
 from dataclasses import asdict
 from typing import TYPE_CHECKING, Any
 
@@ -41,22 +43,21 @@ import nu
 import nustd.kv
 import nustd.time
 from nuspace import ops
-from nuspace.content import address
-from nuspace.content.search import walk
 from nuspace.ext import content_spec, content_specs, short_name
 from nuspace.ops.cell import HasUi, cell_writes
 from nuspace.ops.plane import plane_writes
 from nuspace.ops.utils import MintId, atomic, atomic_state
-from nuspace.shapes import PlaneState
+from nuspace.shapes import PlaneState, content
+from nuspace.shapes.content import address
 
 from ..kernel.utils import snap
 from .seed import seed, seeded_id
 
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Callable, Mapping
 
-    from nuspace.content import Content
+    from nuspace.shapes.content import Content
 
 
 __all__ = [
@@ -81,6 +82,7 @@ __all__ = [
     "run",
     "search",
     "source",
+    "walk",
 ]
 
 
@@ -127,6 +129,49 @@ class Search(PlaneState):
     started_at = nustd.kv.FloatRef.slot()
     finished_at = nustd.kv.FloatRef.slot()
     hits = nustd.kv.ListRef.slot(Hit)
+
+
+# --- Walking a kind ---------------------------------------------------------------------
+
+
+def _asked(kind: type[Content[Any]], keywords: Mapping[str, Any]) -> dict[str, Any]:
+    """The keywords ``kind``'s ``match`` takes, the rest dropped: a form older than the kind asks no more."""
+    params = inspect.signature(kind.match).parameters
+    if any(p.kind is inspect.Parameter.VAR_KEYWORD for p in params.values()):
+        return dict(keywords)
+    return {k: v for k, v in keywords.items() if k in params}
+
+
+def walk(
+    kind: type[Content[Any]],
+    keywords: Mapping[str, Any],
+    found: Callable[[tuple[str, nu.StrArg], nu.ObjectRef], nu.Nu],
+) -> nu.Nu:
+    """Every item of one kind searched: its cells, then its planes, then the space's.
+
+    Per place its matches are read in a bracket of their own
+    (:func:`~nuspace.shapes.content.matched`), then handed to ``found`` with
+    the place, so nothing is held open across the walk. The keywords are
+    filtered to what ``match`` takes (:func:`_asked`).
+
+    Args:
+        kind: The kind.
+        keywords: ``match``'s keywords; one left out stays ``UNSET``.
+        found: ``(scope, keys)`` to what is done with one place's hits, its
+            keys a list, possibly empty. Its writes are its own to bracket.
+    """
+    question = _asked(kind, keywords)
+
+    def one(level: str, scope_id: nu.StrArg) -> nu.Nu:
+        scope = (level, scope_id)
+        hits = nustd.kv.atomic(content.matched(kind, scope, question).to_list())
+        return nu.let(hits, lambda keys: found(scope, keys))
+
+    def each(level: str) -> nu.Nu:
+        held = nustd.kv.atomic(content.scopes(kind, level))
+        return nu.ForEachDo(held, lambda at: one(level, nu.Str(at)))
+
+    return each(content.CELL) >> each(content.PLANE) >> one(content.SPACE, "")
 
 
 # --- The search's own cell --------------------------------------------------------------
@@ -491,7 +536,7 @@ import nustd.kv
 import nustd.ui
 import nuspace
 from nuspace import ops
-from nuspace.content import Drawing
+from nuspace.shapes.content import Drawing
 from nuspace.system.ui import search
 
 #: Hits drawn at most. The rest are counted.

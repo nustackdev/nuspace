@@ -45,7 +45,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping, Sequence
 
-    from nuspace.content import Content
+    from nuspace.shapes.content import Content
     from nuspace.system.kernel import EnvFactory
 
     from .specs import CellSpec, ContentSpec, PlaneSpec

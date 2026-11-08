@@ -182,6 +182,25 @@ async def test_items_of_a_removed_cell_are_no_longer_found(store):
     assert [a[1] for a in await _addresses(store, pid)] == [(CELL, "c2"), (PLANE, "p1")]
 
 
+async def test_walk_hands_each_places_matching_keys_to_found(store):
+    await store.run(
+        write(NoteContent, (CELL, "c"), "a", body="basil")
+        >> write(NoteContent, (PLANE, "p"), "b", body="mint")
+        >> write(NoteContent, (SPACE, ""), "s", body="basil")
+    )
+
+    class Hits(nu.Shape):
+        got = nu.mem.ListRef.slot(object)
+
+    def found(scope, keys):
+        return Hits.got.append(nu.List.of(scope[0], scope[1], keys))
+
+    hits: dict = {"got": []}
+    term = search.walk(NoteContent, {"text": "basil", "unknown": 1}, found)
+    await nu.arun(term, store.ctx.bind(dict, hits, Hits))
+    assert hits["got"] == [[CELL, "c", ["a"]], [PLANE, "p", []], [SPACE, "", ["s"]]]
+
+
 # --- The viewer ------------------------------------------------------------------------------
 
 

@@ -1,4 +1,4 @@
-"""Plane: a named, ordered group of cells."""
+"""Plane: a node in the space's tree. Holds cells and child planes."""
 
 from __future__ import annotations
 
@@ -6,56 +6,58 @@ import nu
 import nustd.kv
 
 
-__all__ = ["Plane", "PlaneProps"]
+__all__ = ["ROOT", "Plane"]
 
 
-class PlaneProps(nu.Shape):
-    """What nuspace itself reads off a plane to work. Typed, unlike ``meta``.
-
-    ``system`` marks a protected plane, eg a service or home:
-    ``remove_plane`` refuses it, and that is all it means. ``ui`` says the
-    shell draws it, and nav brings a routed plane up iff it is set.
-    ``made_by`` names the registered Plane it was created from (``""`` for
-    none). A record, nothing groups by it. ``backend`` names the backend its
-    runs execute on, as registered at open. There is no default: whoever
-    makes a plane names one, and a run of a plane with none fails. The one
-    run setting a plane holds.
-    """
-
-    system = nustd.kv.BoolRef.slot()
-    ui = nustd.kv.BoolRef.slot()
-    made_by = nustd.kv.StrRef.slot()
-    backend = nustd.kv.StrRef.slot()
+#: The top plane's id. A real plane, made at open with the stores' fixed
+#: containers: every top level plane has it as its parent. It is system (no
+#: remove), has no backend (no run) and no parent of its own (``""``).
+ROOT = "root"
 
 
 class Plane(nu.Shape):
-    """A group of cells, the runnable thing. How it runs is its ``backend`` prop only.
+    """One plane's row at ``Space.planes[id]``. Structure only.
 
-    ``cells`` is its cell ids, in order: membership and order in one list,
-    so rearranging them is one write that touches no cell. The cells
-    themselves are in ``Space.cells``, each pointing back here through its
-    ``plane``.
+    Identity: the id is the row's key and never changes. ``key`` is an
+    optional handle, slug chars with no ``/``, ``""`` for none, unique among
+    live planes through ``Space.indexes.plane_keys``; the row keeps it after
+    removal so a restore can put it back. ``name`` is display text only and
+    never finds anything.
 
-    Nesting is two facts kept together, the way ``cells`` and a cell's
-    ``plane`` are: ``children`` is its subplane ids in sibling order, and
-    ``parent`` the plane listing it, ``""`` for a top level plane, which
-    ``Space.top`` lists instead. Either way is one read.
+    Tree: ``cells`` and ``children`` are the ids of its cells and child
+    planes in order (uncapped, user ordered, so FractionalIndexed).
+    ``parent`` is the plane listing it in its ``children``: :data:`ROOT` at
+    the top level, ``""`` for root itself. Both sides change in one commit.
 
-    ``version`` goes up by one with every write to one of its cells, so
-    whoever follows the plane's cells watches one key.
+    ``version`` goes up by one on every write to one of its cells, so
+    whoever follows the plane's cells watches one key. ``system`` protects
+    it: remove refuses a system plane, nothing more. ``backend`` names what
+    its runs execute on; a plane with none does not run. ``spec`` names the
+    spec it was made from, ``""`` for none. ``icon`` is ``lucide:<name>``,
+    ``emoji:<char>`` or ``""``. ``meta`` is free for programs; nuspace never
+    reads it.
 
-    ``props`` is what nuspace reads to work (:class:`PlaneProps`). ``meta``
-    is free, for anything else, eg a ui plane's ``editable`` and
-    ``full_width``.
+    Lifecycle: ``created_at`` is written once, ``modified_at`` on every
+    write to the row itself (not on cell edits, which move ``version``).
+    A removed plane keeps its row: ``removed_at`` is set, and
+    ``removed_by`` names the plane or cell whose removal stamped it
+    (itself, or a plane above). Both are absent while it is in the space.
 
-    The state its cells share is not here: it lives in the state store, at
-    ``States.planes[p].state`` (:mod:`nuspace.shapes.states`).
+    Its state is in the State store, at ``State.planes[id]``.
     """
 
     name = nustd.kv.StrRef.slot()
-    props = nustd.kv.ShapeRef.slot(PlaneProps)
-    meta = nustd.kv.DictRef.slot(object)
-    cells = nustd.kv.ListRef.slot(str)
-    children = nustd.kv.ListRef.slot(str)
+    key = nustd.kv.StrRef.slot()
+    icon = nustd.kv.StrRef.slot()
     parent = nustd.kv.StrRef.slot()
     version = nustd.kv.IntRef.slot()
+    cells = nustd.kv.OrderedDictRef.slot(bool)
+    children = nustd.kv.OrderedDictRef.slot(bool)
+    system = nustd.kv.BoolRef.slot()
+    backend = nustd.kv.StrRef.slot()
+    spec = nustd.kv.StrRef.slot()
+    meta = nustd.kv.DictRef.slot(object)
+    created_at = nustd.kv.FloatRef.slot()
+    modified_at = nustd.kv.FloatRef.slot()
+    removed_at = nustd.kv.FloatRef.slot()
+    removed_by = nustd.kv.StrRef.slot()
