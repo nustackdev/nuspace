@@ -142,9 +142,7 @@ def _take(plane_run: nu.Str, backend: nu.Str, into: nu.Ref) -> nu.Nu:
 
 def _the_worker(plane_run: nu.Str) -> nu.Nu:
     """A plane run's one live worker, ``""`` when it holds none. For a per plane run placement."""
-    ids = _live.plane_run_to_workers[plane_run].ids
-    held = nu.List(ids.keys(limit=1))
-    return nu.If(ids.exists(), nu.If(held.len() == 0, "", held[0]), "")
+    return _live.plane_run_to_workers[plane_run].ids.first().fallback("")
 
 
 # --- the end -----------------------------------------------------------------------

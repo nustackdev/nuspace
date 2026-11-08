@@ -80,7 +80,7 @@ EVENTS = frozenset(
         "plane_removed",
         "cell_created",
         "cell_removed",
-        # nuverse's quickstart, through ``nuspace.ops.track``.
+        # nuverse's quickstart, through ``nuspace._telemetry.usage.track``.
         "quickstart_demo_opened",
         "quickstart_page_made",
         "quickstart_edited",

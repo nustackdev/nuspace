@@ -207,8 +207,9 @@ class Drawing(ScalarQuery):
 
     Yields:
         The drawing, a term: ``nu.Eval(Drawing(...))`` draws it. It reads the
-        item bare, so its caller brackets it, as any read:
-        ``nuspace.atomic(nu.Eval(Drawing(...)))``.
+        item bare, so its caller brackets it. ``atomic`` cannot see the reads
+        of a term built at run time, so the bracket names its store:
+        ``nustd.kv.Snapshot(nu.Eval(Drawing(...)), scope=nuspace.State)``.
     """
 
     _structural = Declared(value=frozenset({4}), name="structural")

@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Simpler worker and search reads, and docs that name the right brackets
 - Remove dead helpers, share common reads, and name browser fields after the data model
 - Reaction and stop tests wait for what they check, so loaded runs stay green
 - Closing a space ends live runs as interrupted; headless opens still write device rows

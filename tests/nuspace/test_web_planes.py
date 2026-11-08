@@ -446,6 +446,13 @@ async def test_pick_lists_searches_newest_first_and_shows_the_newest(store):
     assert await store.read(CHOSEN.shown) == new
 
 
+async def test_pick_lists_nothing_before_any_search(store):
+    await store.run(ensure())
+    framed = await _framed(store, _viewer(search.PICK, "draw"))
+    select = [payload for ref, payload in framed if ref == ("pick", "search")]
+    assert select == [{"options": []}, ""]
+
+
 async def test_pick_follows_a_search_made_while_it_runs(store):
     old = await _searched(store, {NOTE: {}}, name="old")
     session, task = await _live(store, _viewer(search.PICK, "out"))

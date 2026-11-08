@@ -219,7 +219,7 @@ class Content(Generic[S]):
       only the checks asked for.
     - :meth:`render`, :meth:`render_hit`: how an item draws in full and as a
       search hit. Bare ui chains, landed under wherever the drawing goes
-      (:class:`Drawing`).
+      (:class:`~nuspace.devices.web.interactions.Drawing`).
     - :meth:`form`: the search form, generated from ``match``'s keywords.
     - :meth:`find`: every item ``match`` holds for, from every place.
 

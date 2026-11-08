@@ -495,8 +495,7 @@ class View(nustd.ui.Column):
 def newest_first():
     # The newest searches, one page off the folder's children.
     kids = nuspace.Space.planes[search.SEARCHES].children
-    page = nu.List(nu.If(kids.exists(), nu.list(kids.reversed_keys(limit=LISTED)), []))
-    return page.iter().filter(lambda s: nuspace.plane.exists(s)).to_list()
+    return kids.reversed_keys(limit=LISTED).iter().filter(lambda s: nuspace.plane.exists(s)).to_list()
 
 
 def first_of(ids):
