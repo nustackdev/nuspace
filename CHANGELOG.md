@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Reactions skip changes landing while their last run is live, never waiting it out
 - Rebuild init, supervisor, reload and reactions as system planes on the new stores
 - Rebuild the kernel on the run records, with worker placement and reaping at open
 - Keys take uppercase letters, and spec planes build cell programs before any commit opens

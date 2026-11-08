@@ -325,24 +325,24 @@ async def test_a_reaction_runs_its_plane_on_each_change_until_removed(space):
 
 
 @module_loop
-async def test_a_burst_merges(space):
-    """A burst of changes while idle: one run for the first, at most one after it."""
+async def test_a_burst_gives_one_run(space):
+    """A burst of changes while idle: the first adds a run, the rest land while it is live and add nothing."""
     p, _ = await space.plane(WORKS)
     await reacting(space, "burst", p)
     for n in range(12):
         await space.do(box("burst").body.set(str(n)))
+    landed = time.time()
     await until_runs(space, p, all_ended)
     await asyncio.sleep(1.5)
     rows = await runs_of(space, p)
-    assert 1 <= len(rows) <= 2, rows
-    assert all_ended(rows)
-    assert no_overlap(rows), rows
+    assert landed < rows[0]["ended_at"], "the burst outlasted the run: nothing to check"
+    assert len(rows) == 1, rows
 
 
 @module_loop
 @pytest.mark.parametrize("changes", [1, 12])
-async def test_changes_during_a_live_run_fire_after_it(space, changes):
-    """Changes landing mid run: one run follows it, never two at once."""
+async def test_changes_during_a_live_run_add_nothing(space, changes):
+    """Changes landing mid run are skipped; the next change after it ends adds one, never two at once."""
     watched = f"during{changes}"
     p, _ = await space.plane(WORKS)
     r = await reacting(space, watched, p)
@@ -351,12 +351,16 @@ async def test_changes_during_a_live_run_fire_after_it(space, changes):
     for n in range(changes):
         await space.do(box(watched).body.set(f"mid {n}"))
         await asyncio.sleep(0.02)
-    await until_runs(space, p, lambda rs: len(rs) >= 2 and all_ended(rs))
-    await asyncio.sleep(1.5)
-    rows = await runs_of(space, p)
-    assert len(rows) == 2, rows
+    (first,) = await until_runs(space, p, all_ended)
+    await asyncio.sleep(1.0)
+    assert len(await runs_of(space, p)) == 1
+    await space.do(box(watched).body.set("after"))
+    rows = await until_runs(space, p, lambda rs: len(rs) == 2 and all_ended(rs))
+    assert rows[0]["id"] == first["id"]
     assert all(x["by"] == r for x in rows)
-    assert rows[1]["started_at"] >= rows[0]["ended_at"]
+    assert no_overlap(rows), rows
+    await asyncio.sleep(0.8)
+    assert len(await runs_of(space, p)) == 2
 
 
 @module_loop
