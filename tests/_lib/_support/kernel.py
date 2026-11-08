@@ -67,7 +67,8 @@ READS_TAG = prog(
 #: Holds its worker's loop, so it never hears an interrupt.
 BLOCKS = prog(
     "from _support.actions import Block",
-    "return nu.Delay(0.2) >> nu.let(Block(60), lambda _: nu.Noop())",
+    "set_n = nuspace.atomic(nuspace.here(Tick).n.set(1))",
+    "return set_n >> nu.let(Block(60), lambda _: nu.Noop())",
 )
 #: Takes its own worker process down, a moment in.
 CRASHES = prog(

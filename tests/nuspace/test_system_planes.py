@@ -293,6 +293,26 @@ async def reacting(k: Kernel, watched: str, plane: str) -> str:
     return r
 
 
+async def poke(k: Kernel, watched: str, plane: str, value: str, runs: int) -> list[dict]:
+    """Set ``watched``'s body until ``plane`` has ``runs`` plane runs: their rows.
+
+    A reaction's cell run is live before its event flow listens, and a
+    change landing in between is lost (event flows are best effort). So the
+    first change after :func:`reacting` is repeated until one gets through.
+    Each try waits long enough for its run to show, so a try never lands
+    after the run it caused has ended.
+    """
+    deadline = time.monotonic() + SLOW
+    for n in itertools.count():
+        await k.do(box(watched).body.set(f"{value} {n}" if n else value))
+        try:
+            return await until_runs(k, plane, lambda rs: len(rs) >= runs, timeout=1.0)
+        except AssertionError:
+            if time.monotonic() > deadline:
+                raise
+    raise AssertionError("unreachable")
+
+
 def no_overlap(rows: list[dict]) -> bool:
     """No two of the plane runs were up at once."""
     spans = sorted((r["started_at"], r["ended_at"]) for r in rows)
@@ -312,7 +332,7 @@ async def test_a_reaction_runs_its_plane_on_each_change_until_removed(space):
     assert cell_of(await space.row(host["id"]), r)["by"] == reload.BY
     await asyncio.sleep(0.3)
     assert await runs_of(space, p) == []
-    await space.do(box().body.set("one"))
+    await poke(space, WATCHED, p, "one", 1)
     (row,) = await until_runs(space, p, lambda rs: len(rs) == 1 and ended(rs[0]))
     assert (row["by"], row["exit"]) == (r, EXIT_OK)
     await space.do(box().body.set("two"))
@@ -346,7 +366,7 @@ async def test_changes_during_a_live_run_add_nothing(space, changes):
     watched = f"during{changes}"
     p, _ = await space.plane(WORKS)
     r = await reacting(space, watched, p)
-    await space.do(box(watched).body.set("first"))
+    await poke(space, watched, p, "first", 1)
     await until_runs(space, p, lambda rs: len(rs) == 1 and live(rs[0]))
     for n in range(changes):
         await space.do(box(watched).body.set(f"mid {n}"))
@@ -389,7 +409,7 @@ async def test_a_run_by_someone_else_does_not_hold_a_reaction_back(space):
     r = await reacting(space, "theirs", p)
     theirs = await space.made(nuspace.plane_run.add(p, by="test", into=MADE))
     await space.run_row(theirs, lambda x: live(first_cell(x)), SLOW)
-    await space.do(box("theirs").body.set("go"))
+    await poke(space, "theirs", p, "go", 2)
     rows = await until_runs(space, p, lambda rs: len(rs) == 2 and live(first_cell(rs[1])))
     assert rows[1]["by"] == r
     assert not ended(await space.row(theirs))
@@ -421,7 +441,7 @@ async def test_a_reaction_comes_back_at_the_next_open():
         await k.run_row(row["id"], lambda x: live(cell_of(x, r)), SLOW)
         await asyncio.sleep(0.3)
         assert await runs_of(k, p) == []
-        await k.do(box("reopen").body.set("again"))
+        await poke(k, "reopen", p, "again", 1)
         (fired,) = await until_runs(k, p, lambda rs: len(rs) == 1 and ended(rs[0]))
         assert (fired["by"], fired["exit"]) == (r, EXIT_OK)
     finally:

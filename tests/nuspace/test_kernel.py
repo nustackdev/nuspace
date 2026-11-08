@@ -31,6 +31,7 @@ from _support.kernel import (
     RAISES,
     READS_TAG,
     SET_42,
+    Kernel,
     cell_of,
     ended,
     live,
@@ -45,6 +46,7 @@ from _support.probe import PROBE_INIT, Probe
 import nu
 import nuspace
 import nustd.kv
+from nu.lang import is_null
 from nuspace.kernel import (
     CLOSED,
     LEFT_OVER,
@@ -58,7 +60,7 @@ from nuspace.kernel import (
 )
 from nuspace.kernel.backends import PER_PLANE_RUN, provided
 from nuspace.kernel.kernel import _release
-from nuspace.shapes import EXIT_FAILED, EXIT_INTERRUPTED, EXIT_KILLED, EXIT_OK, Space
+from nuspace.shapes import EXIT_FAILED, EXIT_INTERRUPTED, EXIT_KILLED, EXIT_OK, Space, State
 from nustd.mp_pool import WorkerPool
 
 
@@ -381,13 +383,18 @@ async def test_plane_stop_interrupts_a_cell_that_listens(space):
     assert (row["exit"], only_cell(row)["exit"]) == (EXIT_INTERRUPTED, EXIT_INTERRUPTED)
 
 
+async def blocking(k: Kernel, cell: str) -> None:
+    """Wait until a :data:`BLOCKS` cell wrote its state: from there its loop is held."""
+    state = State.cells[cell].extract()
+    await k.until(lambda: k.read(state), lambda s: not is_null(s) and s.get("n") == 1, SLOW)
+
+
 @module_loop
 async def test_plane_stop_kills_after_the_grace(space):
     p, (c,) = await space.plane(BLOCKS)
     r = await space.start(p)
     await live_cell(space, r, c)
-    # Past the program's first step: from here its loop is held.
-    await asyncio.sleep(0.5)
+    await blocking(space, c)
     started = time.monotonic()
     await space.do(nuspace.plane_run.stop(r, grace=1.0))
     row = await space.run_row(r, ended, SLOW)
@@ -403,7 +410,7 @@ async def test_a_kill_at_moved_earlier_restarts_the_wait(space):
     p, (c,) = await space.plane(BLOCKS)
     r = await space.start(p)
     await live_cell(space, r, c)
-    await asyncio.sleep(0.5)
+    await blocking(space, c)
     await space.do(nuspace.plane_run.stop(r, grace=600.0))
     await asyncio.sleep(0.3)
     assert not ended(await space.row(r))

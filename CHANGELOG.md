@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Reaction and stop tests wait for what they check, so loaded runs stay green
 - Closing a space ends live runs as interrupted; headless opens still write device rows
 - Open a space behind a host lock and format check, with fresh tabs each open
 - Restart one cell in place, and rerun finished panes when a cell is added or edited
@@ -21,6 +22,7 @@ separately here.
 - Keys take uppercase letters, and spec planes build cell programs before any commit opens
 - Rewrite core ops on the new stores: strict raises, state places, planes from specs
 - Rebuild the store layout: space, state and web stores, plus the op errors
+- Move nuspace onto the new source tree: shapes, ops, kernel, system planes, devices
 
 ## 0.6.5 - 2026-11-07
 
