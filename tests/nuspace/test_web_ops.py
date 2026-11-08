@@ -223,6 +223,107 @@ async def test_restart_pane_writes_a_new_token_each_time(store):
     assert first != "" and await store.read(token) != first
 
 
+# --- restart_cell: without a kernel, the run records written by hand -------------------
+
+
+async def pane_on(
+    store, *, run: bool = False, started: bool = False, ended: bool = False, running=("c1", "c2")
+):
+    """Tab ``t`` with a pane on plane ``a`` (cells ``c1``, ``c2``), its run as asked: its id, or ``""``.
+
+    A started run has a cell run of each cell in ``running``.
+    """
+    await plane(store, "a")
+    for c in ("c1", "c2"):
+        await do(store, nuspace.cell.add("a", "x = 1", id=c, fabrics=[]))
+    await do(store, web.open_tab("t"))
+    await do(store, web.set_panes("t", ["a"]))
+    if run:
+        made = await store.made(nuspace.atomic(nuspace.plane_run.add("a", into=_made())))
+        await do(store, tabs["t"].panes["a"].plane_run.set(made))
+        if started:
+            await do(store, nuspace.plane_run.start(made))
+            for c in running:
+                await do(store, nuspace.cell_run.add(made, c))
+        if ended:
+            await do(store, nuspace.plane_run.end(made, "ok"))
+        return made
+    return ""
+
+
+def cell_runs(run: str, cell: str):
+    node = Space.exec.indexes.history.plane_to_plane_runs["a"].runs[run]
+    ids = node.cell_to_cell_runs[cell].ids
+    return nu.If(ids.exists(), nu.list(ids.keys()), nu.Literal([]))
+
+
+async def test_restart_cell_in_a_started_run_adds_a_cell_run(store):
+    run = await pane_on(store, run=True, started=True)
+    (old,) = await store.read(cell_runs(run, "c1"))
+    await store.run(web.restart_cell("t", "c1"))
+    old_row = await store.read(Space.exec.cell_runs[old].extract())
+    assert old_row.get("interrupt_at") is not None
+    first, new = await store.read(cell_runs(run, "c1"))
+    assert first == old
+    row = await store.read(Space.exec.cell_runs[new].extract())
+    assert row["plane_run"] == run and row["by"] == "web"
+    # The other cell runs on; the plane run is the same; no restart asked.
+    assert len(await store.read(cell_runs(run, "c2"))) == 1
+    assert await store.read(tabs["t"].panes["a"].restart) == ""
+
+
+async def test_restart_cell_with_no_cell_run_yet_adds_one(store):
+    run = await pane_on(store, run=True, started=True, running=("c2",))
+    (other,) = await store.read(cell_runs(run, "c2"))
+    await store.run(web.restart_cell("t", "c1"))
+    (new,) = await store.read(cell_runs(run, "c1"))
+    row = await store.read(Space.exec.cell_runs[new].extract())
+    assert row["plane_run"] == run and row["by"] == "web"
+    # Nothing was interrupted, no restart asked.
+    assert (await store.read(Space.exec.cell_runs[other].extract())).get("interrupt_at") is None
+    assert await store.read(tabs["t"].panes["a"].restart) == ""
+
+
+async def test_restart_cell_in_a_run_not_started_does_nothing(store):
+    run = await pane_on(store, run=True)
+    await store.run(web.restart_cell("t", "c1"))
+    assert await store.read(cell_runs(run, "c1")) == []
+    assert await store.read(tabs["t"].panes["a"].restart) == ""
+
+
+async def test_restart_cell_with_no_live_run_restarts_the_pane(store):
+    await pane_on(store)
+    await store.run(web.restart_cell("t", "c1"))
+    token = await store.read(tabs["t"].panes["a"].restart)
+    assert token != ""
+    await store.run(web.restart_cell("t", "c2"))
+    assert await store.read(tabs["t"].panes["a"].restart) not in ("", token)
+
+
+async def test_restart_cell_on_an_ended_run_restarts_the_pane(store):
+    run = await pane_on(store, run=True, started=True, ended=True)
+    before = await store.read(cell_runs(run, "c1"))
+    await store.run(web.restart_cell("t", "c1"))
+    assert await store.read(tabs["t"].panes["a"].restart) != ""
+    assert await store.read(cell_runs(run, "c1")) == before
+
+
+async def test_restart_cell_raises(store):
+    await pane_on(store)
+    await plane(store, "b")
+    await do(store, nuspace.cell.add("b", "x = 1", id="cb", fabrics=[]))
+    with pytest.raises(Missing):
+        await store.run(web.restart_cell("t", "ghost"))
+    with pytest.raises(Missing):
+        await store.run(web.restart_cell("t", "cb"))
+    with pytest.raises(Missing):
+        await store.run(web.restart_cell("nope", "c1"))
+    await do(store, nuspace.cell.remove("c2"))
+    with pytest.raises(Removed):
+        await store.run(web.restart_cell("t", "c2"))
+    assert await store.read(tabs["t"].panes["a"].restart) == ""
+
+
 async def test_expand_and_collapse_fold(store):
     await do(store, web.open_tab("t"))
     await do(store, web.expand("t", "a"))

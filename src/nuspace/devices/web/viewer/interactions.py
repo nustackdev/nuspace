@@ -148,7 +148,7 @@ def on_move_cell(viewer: Ref) -> Changed:
 
 
 def on_restart_cell(viewer: Ref) -> Changed:
-    """``{cell_id}``. Restarts the pane of the cell's plane: a new plane run, as ``plane.restart``."""
+    """``{cell_id}``. Runs the cell again in this tab's pane: a new cell run, or the pane's run when over."""
     return event(viewer, "cell.restart")
 
 

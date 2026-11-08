@@ -479,6 +479,8 @@ async def test_results_follow_hits_as_they_land_and_end_once_done(store):
         await asyncio.wait_for(task, 3.0)
         assert session.last(("status",)) == "Done: 1 hit"
         assert session.last(("hits", "h0", "item", "body")) == "Tomato needs sun"
+        # The hit links to its cell's plane, titled by its id: p1 has no name.
+        assert session.last(("hits", "h0", "head", "link")) == {"href": "/p1", "label": "p1"}
     finally:
         await _stop(task)
 

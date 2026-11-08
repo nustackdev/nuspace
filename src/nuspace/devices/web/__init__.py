@@ -7,6 +7,7 @@ The sdk, what a program calls, is the ops (:mod:`.ops`), flat here::
     nuspace.atomic(web.add(plane, editable=True))     # put a plane on the web
     nuspace.atomic(web.pin(plane))                    # pin it in the sidebar
     web.params(), web.on_params()                     # a cell's own pane params
+    web.restart_cell(sid, cell)                       # run one cell again, brackets itself
     nuspace.atomic(web.link(row.link, plane))         # draw a link to a plane
 
 - :mod:`.shapes`: :class:`Web` (web planes, pins, recents) and :class:`Conn`
@@ -33,6 +34,7 @@ from .ops import (
     open_tab,
     params,
     pin,
+    restart_cell,
     restart_pane,
     set,
     set_pane_params,
@@ -64,6 +66,7 @@ __all__ = [
     "open_tab",
     "params",
     "pin",
+    "restart_cell",
     "restart_pane",
     "set",
     "set_pane_params",

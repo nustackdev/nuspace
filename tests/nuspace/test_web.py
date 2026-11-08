@@ -418,6 +418,47 @@ async def test_tab_live(store):
     assert await store.read(tabs.contains("s1")) is False
 
 
+async def test_a_cell_made_or_edited_in_a_finished_pane_restarts_it(store):
+    """nav starts runs only on open or a restart token: the device asks for one when the run is over."""
+    from nuspace.devices.web.device import connection
+
+    await plane(store, "p1", "Notes")
+    await do(store, nuspace.cell.add("p1", "x = 1", id="c1", fabrics=[]))
+    session = FakeSession()
+    ctx = store.ctx.bind(Session, session)
+    task = asyncio.create_task(nu.arun(connection(nu.Str("s1"), registry=REGISTRY), ctx))
+    pane = web.Conn.connections["s1"].panes["p1"]
+    try:
+        await _until(lambda: session.writes("set_tree"), BOOT_TIMEOUT)
+        session.notify(("viewer", "ops", "planes.open"), {"plane_ids": ["p1"], "params": {}})
+        await _until_store(store, web.Conn.connections["s1"].panes.contains("p1"))
+
+        # No run recorded yet: nav is starting one, nothing asked.
+        session.notify(("viewer", "ops", "cell.update"), {"cell_id": "c1", "source": "x = 2"})
+        await _until_store(store, Space.cells["c1"].prog == "x = 2")
+        # A live run: reload's to rerun the cell, nothing asked.
+        run = await store.made(nuspace.atomic(nuspace.plane_run.add("p1", into=MADE)))
+        await do(store, pane.plane_run.set(run))
+        session.notify(("viewer", "ops", "cell.update"), {"cell_id": "c1", "source": "x = 3"})
+        await _until_store(store, Space.cells["c1"].prog == "x = 3")
+        await asyncio.sleep(0.2)
+        assert await store.read(pane.restart) == ""
+
+        # The run is over: an edit restarts the pane, and so does a new cell.
+        await do(store, nuspace.plane_run.end(run, EXIT_OK))
+        session.notify(("viewer", "ops", "cell.update"), {"cell_id": "c1", "source": "x = 4"})
+        await _until_store(store, pane.restart != "")
+        first = await store.read(pane.restart)
+        session.notify(
+            ("viewer", "ops", "cell.create"), {"plane_id": "p1", "cell_id": "c2", "name": ""}
+        )
+        await _until_store(store, pane.restart != first)
+        assert session.toasts() == []
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+
+
 async def test_a_failed_event_toasts_its_type_and_message(store):
     from nuspace.devices.web.device import connection
 

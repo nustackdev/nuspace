@@ -9,9 +9,10 @@ what the panes show.
 
 Every op is a bare term the caller brackets, as the core ops are:
 ``nuspace.atomic(...)`` in code without flows. Each writes one store, Web or
-Conn, and may read Space to check a plane. Writes raise when they cannot do
-what they say (:mod:`nuspace.errors`); reads that may find nothing give
-NULL or a default.
+Conn, and may read Space to check a plane. One wrapper brackets itself:
+:func:`restart_cell`, which writes Space or Conn as the pane's run says.
+Writes raise when they cannot do what they say (:mod:`nuspace.errors`);
+reads that may find nothing give NULL or a default.
 
 A cell on a web pane reads its own params and draws links::
 
@@ -35,6 +36,8 @@ from typing import TYPE_CHECKING
 import nu
 import nustd.ui
 from nuspace.errors import Exists, Missing, Refused
+from nuspace.ops import cell_run
+from nuspace.ops.brackets import atomic
 from nuspace.places import Here
 from nuspace.shapes.space import Space
 from nuspace.utils import MintId
@@ -60,6 +63,7 @@ __all__ = [
     "open_tab",
     "params",
     "pin",
+    "restart_cell",
     "restart_pane",
     "set",
     "set_pane_params",
@@ -70,6 +74,9 @@ __all__ = [
 
 
 _tabs = Conn.connections
+
+#: What cell runs :func:`restart_cell` adds are recorded as ``by``.
+_BY = "web"
 
 
 def _plane_live(plane: nu.StrArg) -> nu.Nu:
@@ -381,6 +388,56 @@ def restart_pane(sid: nu.StrArg, plane: nu.StrArg) -> nu.Nu:
     """
     token = _tabs[sid].panes[plane].restart
     return _pane_known(sid, plane) >> token.set(MintId("rs"))
+
+
+def restart_cell(sid: nu.StrArg, cell: nu.StrArg) -> nu.Nu:
+    """Run one cell again in the tab's pane on its plane: a new cell run in the pane's live run.
+
+    The pane's plane run (the one nav keeps for it), when it is live:
+
+        started        the cell's newest cell run there is interrupted (a
+                         no-op when it ended; older ones were interrupted
+                         when they were replaced) and one new cell run of
+                         the cell is added, ``by`` web. The other cells
+                         run on, the plane run stays.
+        not started    nothing: the kernel starts every cell on its latest
+                         prog.
+
+    When the pane has no live run (none recorded yet, or it ended), it falls
+    back to :func:`restart_pane`: nav runs the whole plane again. With none
+    recorded yet that means nav stops the run it is starting and adds a
+    fresh one: one extra start, harmless. Unlike the device's rerun on an
+    edit, which leaves that case to nav, the user asked for a run here, so
+    a run is asked for whatever nav is doing.
+
+    A wrapper, not a bare op: it brackets itself, run it on its own. The
+    cell run is a Space commit, the fallback a Conn one, so the check and
+    the cell run land in one Space commit, and only when that one finds no
+    live run does the Conn commit follow. Cost: O(1), about 8 reads and 13
+    keys in one commit.
+
+    Raises:
+        Missing: No cell with that id, or no pane on its plane in the tab.
+        Removed: The cell is removed.
+    """
+    plane = Space.cells[cell].plane
+    run = nu.Str(_tabs[sid].panes[plane].plane_run.fallback(""))
+    row = Space.exec.plane_runs[run]
+    node = Space.exec.indexes.history.plane_to_plane_runs[plane].runs[run]
+    ids = node.cell_to_cell_runs[cell].ids
+    going = nu.Bool(nu.If(run == "", False, row.ended_at.exists().not_()))
+    again = nu.IfDo(ids.exists(), cell_run.interrupt(ids.last())) >> cell_run.add(run, cell, by=_BY)
+
+    def decided(done: nu.ObjectRef) -> nu.Nu:
+        in_run = (
+            live(Space.cells, cell, "cell")
+            >> _pane_known(sid, plane)
+            >> nu.IfDo(going, nu.IfDo(row.started_at.exists(), again) >> done.set(True))
+        )
+        fallback = nu.IfDo(nu.Bool(done).not_(), atomic(restart_pane(sid, plane)))
+        return atomic(in_run) >> fallback
+
+    return nu.let(False, decided)
 
 
 def expand(sid: nu.StrArg, plane: nu.StrArg) -> nu.Nu:

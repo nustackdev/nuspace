@@ -23,7 +23,6 @@ import nuspace.devices.web as web
 import nustd.kv
 from nuspace.devices.web.nav import BY, nav
 from nuspace.devices.web.stores import CONN_STORE, WEB_STORE
-from nuspace.devices.web.viewer.feed import _restart_cell
 from nuspace.kernel import Env
 from nuspace.shapes import Space
 
@@ -167,19 +166,47 @@ async def test_a_pane_whose_start_fails_waits_for_its_next_restart(space):
     await k.do(web.close_tab("x1"))
 
 
+def cell_runs(plane: str, run: str, cell: str):
+    node = Space.exec.indexes.history.plane_to_plane_runs[plane].runs[run]
+    ids = node.cell_to_cell_runs[cell].ids
+    return nu.If(ids.exists(), nu.list(ids.keys()), nu.Literal([]))
+
+
 @module_loop
-async def test_a_cell_restart_restarts_its_pane(space):
+async def test_a_cell_restart_in_a_live_run_runs_the_cell_again(space):
     k = space
-    p, (c,) = await web_plane(k, FOREVER)
+    p, (c, other) = await web_plane(k, FOREVER, FOREVER)
     await k.do(web.open_tab("rc"))
     await k.do(web.set_panes("rc", [p]))
-    first = await pane_run(k, "rc", p)
-    await k.run(_restart_cell("rc", nu.Str(c)))
-    second = await pane_run(k, "rc", p, not_=first)
-    await ended(k, first)
-    assert await k.read(Space.exec.indexes.live.plane_runs.contains(second)) is True
+    run = await pane_run(k, "rc", p)
+    (old,) = await k.until(lambda: k.read(cell_runs(p, run, c)), lambda ids: len(ids) == 1, SLOW)
+    await k.run(web.restart_cell("rc", c))
+    _, new = await k.until(lambda: k.read(cell_runs(p, run, c)), lambda ids: len(ids) == 2, SLOW)
+    row = Space.exec.cell_runs
+    await k.until(
+        lambda: k.read(row[old].extract()), lambda r: r.get("exit") == "interrupted", SLOW
+    )
+    await k.until(lambda: k.read(row[new].started_at), lambda at: at is not None, SLOW)
+    # The plane run goes on, the other cell untouched, nav asked for nothing.
+    assert await k.read(Space.exec.indexes.live.plane_runs.contains(run)) is True
+    assert len(await k.read(cell_runs(p, run, other))) == 1
+    assert await k.read(web.Conn.connections["rc"].panes[p].plane_run) == run
     await k.do(web.close_tab("rc"))
-    await ended(k, second)
+    await ended(k, run)
+
+
+@module_loop
+async def test_a_cell_restart_in_a_finished_pane_restarts_the_pane(space):
+    k = space
+    p, (c,) = await web_plane(k, SET_42)
+    await k.do(web.open_tab("rf"))
+    await k.do(web.set_panes("rf", [p]))
+    first = await pane_run(k, "rf", p)
+    await ended(k, first)
+    await k.run(web.restart_cell("rf", c))
+    second = await pane_run(k, "rf", p, not_=first)
+    assert (await ended(k, second))["exit"] == "ok"
+    await k.do(web.close_tab("rf"))
 
 
 @module_loop

@@ -62,7 +62,6 @@ from nuspace.ops.brackets import atomic
 from nuspace.ops.interactions import Fabrics
 from nuspace.shapes import EXIT_FAILED, EXIT_INTERRUPTED, EXIT_KILLED, Space
 from nuspace.specs import registered_name
-from nuspace.utils.checks import live
 
 
 if TYPE_CHECKING:
@@ -267,10 +266,32 @@ def _status(arms: Arms, viewer: Ref, sid: nu.StrArg, plane: nu.Str) -> nu.Nu:
 # --- Events ----------------------------------------------------------------------
 
 
-def _create(specs: Sequence[CellSpec], plane: nu.Str, event: nu.Attr) -> nu.Nu:
+def _rerun(sid: nu.StrArg, plane: nu.StrArg) -> nu.Nu:
+    """The tab's pane on ``plane`` runs again when its run is over, so a cell made or edited there runs.
+
+    nav starts a run only when a pane opens or its restart token moves, so
+    the device asks for one itself (:func:`~nuspace.devices.web.restart_pane`)
+    once the pane's run ended. A live run is reload's: it gives the cell its
+    run. No run recorded yet is nav's: it is starting one. No pane on the
+    plane in the tab, nothing. One Conn commit, reading Space.
+
+    It decides in its own commit, after the cell's: an edit landing after the
+    last cell run ended but before the kernel writes the run's end is read as
+    live, so reload's cell run add raises Ended and the cell waits for a
+    manual restart. A narrow window, accepted with this design.
+    """
+    panes = Conn.connections[sid].panes
+    run = nu.Str(panes[plane].plane_run.fallback(""))
+    ended = nu.If(run == "", False, Space.exec.plane_runs[run].ended_at.exists())
+    over = panes.contains(plane).and_(ended)
+    return atomic(nu.IfDo(over, web.restart_pane(sid, plane)))
+
+
+def _create(specs: Sequence[CellSpec], sid: nu.StrArg, plane: nu.Str, event: nu.Attr) -> nu.Nu:
     """A cell from the CellSpec ``name`` names, or the starter program for an unknown or empty one.
 
-    The fabrics are worked out first, outside the commit.
+    The fabrics are worked out first, outside the commit. A pane whose run
+    is over runs again (:func:`_rerun`).
     """
     name, cell = field_str(event, "name"), field_str(event, "cell_id")
 
@@ -296,34 +317,26 @@ def _create(specs: Sequence[CellSpec], plane: nu.Str, event: nu.Attr) -> nu.Nu:
         )
 
     known = {registered_name(s): from_spec(s) for s in specs}
-    return nu.SwitchDo(name, known, default=nu.let(Fabrics(PROGRAM, plane, cell), starter))
+    made = nu.SwitchDo(name, known, default=nu.let(Fabrics(PROGRAM, plane, cell), starter))
+    return made >> _rerun(sid, plane)
 
 
-def _update(cell: nu.Str, event: nu.Attr) -> nu.Nu:
-    """A cell's prog replaced, its fabrics worked out first, outside the commit."""
+def _update(sid: nu.StrArg, cell: nu.Str, event: nu.Attr) -> nu.Nu:
+    """A cell's prog replaced, its fabrics worked out first, outside the commit.
+
+    A pane whose run is over runs again (:func:`_rerun`).
+    """
     source = field_str(event, "source")
 
-    def on(plane: nu.ObjectRef) -> nu.Nu:
+    def on(held: nu.ObjectRef) -> nu.Nu:
+        plane = nu.Str(held)
+
         def write(fabrics: nu.ObjectRef) -> nu.Nu:
             return atomic(nuspace.cell.set_prog(cell, source, fabrics=nu.Object(fabrics)))
 
-        return nu.let(Fabrics(source, nu.Str(plane), cell), write)
+        return nu.let(Fabrics(source, plane, cell), write) >> _rerun(sid, plane)
 
     return nu.let(atomic(Space.cells[cell].plane.fallback("")), on)
-
-
-def _restart_cell(sid: nu.StrArg, cell: nu.Str) -> nu.Nu:
-    """A cell's restart is its pane's: a new restart token on its plane's pane, one commit.
-
-    nav stops the pane's run and adds a fresh one
-    (:func:`~nuspace.devices.web.restart_pane`, which folds the old restart
-    and restart_cell).
-
-    Raises:
-        Missing: No cell with that id, or no pane on its plane in the tab.
-        Removed: The cell is removed.
-    """
-    return atomic(live(Space.cells, cell, "cell") >> web.restart_pane(sid, Space.cells[cell].plane))
 
 
 def _web_flags(plane: nu.Str, event: nu.Attr) -> nu.Nu:
@@ -352,9 +365,11 @@ def _events(arms: Arms, viewer: Ref, sid: nu.StrArg, specs: Sequence[CellSpec]) 
 
     return [
         arms.plane_event(
-            "create", interactions.on_create_cell(viewer), lambda p, ev: _create(specs, p, ev)
+            "create",
+            interactions.on_create_cell(viewer),
+            lambda p, ev: _create(specs, sid, p, ev),
         ),
-        on_cell("update", interactions.on_update_cell(viewer), _update),
+        on_cell("update", interactions.on_update_cell(viewer), lambda c, ev: _update(sid, c, ev)),
         on_cell(
             "delete",
             interactions.on_delete_cell(viewer),
@@ -368,7 +383,7 @@ def _events(arms: Arms, viewer: Ref, sid: nu.StrArg, specs: Sequence[CellSpec]) 
         on_cell(
             "restart_cell",
             interactions.on_restart_cell(viewer),
-            lambda c, _: _restart_cell(sid, c),
+            lambda c, _: web.restart_cell(sid, c),
         ),
         arms.plane_event(
             "restart_plane",
