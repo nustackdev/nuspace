@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Empty indexes read explicit defaults, so worker picks, home links and cell statuses work
 - The web lint config matches the installed linter, so checks run clean again
 - Simpler worker and search reads, and docs that name the right brackets
 - Remove dead helpers, share common reads, and name browser fields after the data model

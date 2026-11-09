@@ -14,6 +14,7 @@ import subprocess
 import sys
 
 import pytest
+from virtuals.container import ContainerNotFoundError
 
 import nu
 import nustd.kv
@@ -306,8 +307,10 @@ async def test_history_is_plane_then_its_runs_then_a_cell_in_one_run(store):
     assert await store.read(cells["c1"].ids.last()) == "cr2"
     assert await store.read(nu.list(p.runs["r1"].workers.keys())) == ["w1"]
     assert sorted(await store.read(nu.list(cells.keys()))) == ["c1", "c2"]
-    # A plane never run has no node: reads find nothing, no raise.
-    assert is_null(await store.read(HISTORY["p9"].runs.last()))
+    # A plane never run has no node: the newest run is the default asked for, else a raise.
+    assert is_null(await store.read(HISTORY["p9"].runs.last(default=nu.NullForm())))
+    with pytest.raises(ContainerNotFoundError):
+        await store.read(HISTORY["p9"].runs.last())
 
 
 async def test_live_sets_add_drop_and_read_empty_in_one_seek(store):
@@ -325,7 +328,7 @@ async def test_the_newest_plane_of_a_spec_is_one_seek(store):
     made = Space.indexes.spec_planes["nulog.board"].ids
     await store.run(nustd.kv.atomic(made.set_item("p1", True) >> made.set_item("p2", True)))
     assert await store.read(made.last()) == "p2"
-    assert is_null(await store.read(Space.indexes.spec_planes["never"].ids.last()))
+    assert await store.read(Space.indexes.spec_planes["never"].ids.last(default="")) == ""
 
 
 async def test_a_programs_shape_sits_on_a_scope_through_with_parent(store):

@@ -60,11 +60,9 @@ def _plane_of(spec: PlaneSpec, plane: nu.Ref) -> nu.Nu:
     seek. Removed, or never made, a new one is made (``specs.add_plane``,
     its own commits) and becomes the newest.
     """
-    newest = Space.indexes.spec_planes[registered_name(spec)].ids.last()
+    newest = Space.indexes.spec_planes[registered_name(spec)].ids.last(default="")
     gone = nuspace.plane.exists(nu.Str(plane)).not_()
-    return plane.set(atomic(newest.fallback(""))) >> nu.IfDo(
-        atomic(gone), add_plane(spec, into=plane)
-    )
+    return plane.set(atomic(newest)) >> nu.IfDo(atomic(gone), add_plane(spec, into=plane))
 
 
 def with_plane(

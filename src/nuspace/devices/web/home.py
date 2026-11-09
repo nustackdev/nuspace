@@ -206,9 +206,9 @@ def show_live(got):
 
 def newest(spec):
     # The newest plane made from a spec, one seek; "" when none, or when it is removed.
-    last = nuspace.Space.indexes.spec_planes[spec].ids.last()
-    there = last.is_null().not_().and_(nuspace.plane.exists(nu.str(last)))
-    return nu.Str(nu.If(there, nu.str(last), ""))
+    last = nu.Str(nuspace.Space.indexes.spec_planes[spec].ids.last(default=""))
+    there = (last != "").and_(nuspace.plane.exists(last))
+    return nu.Str(nu.If(there, last, ""))
 
 
 def link(ref, spec, label):

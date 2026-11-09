@@ -198,7 +198,7 @@ def statuses(plane: nu.StrArg, run: nu.StrArg) -> nu.List:
             )
 
         # A mem slot holds no NULL: no cell run of the cell reads "".
-        return nu.let(node.last().fallback(""), entry)
+        return nu.let(node.last(default=""), entry)
 
     def idle(at: nu.Attr) -> nu.Dict:
         return nu.Dict.of(cell_id=at, state=STATE_IDLE, error="", started_at=0)
