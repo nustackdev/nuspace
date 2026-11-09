@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Web device type hints import cleanly, and the reload test waits for state
 - Minting an id refuses a NULL prefix instead of passing NULL along
 - A place reached by a key that finds nothing now raises on reads too
 - Empty indexes read explicit defaults, so worker picks, home links and cell statuses work

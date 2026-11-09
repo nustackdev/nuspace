@@ -20,6 +20,7 @@ from _support.made import MADE
 
 import nu
 import nuspace
+from nu.lang import is_null
 from nuspace import system
 from nuspace.shapes import EXIT_FAILED, EXIT_INTERRUPTED, EXIT_KILLED, EXIT_OK, Space, State
 from nuspace.system import init, reactions, reload, supervisor
@@ -234,7 +235,8 @@ async def test_reload_reruns_a_rewritten_cell_and_runs_a_new_one(space):
     gone, new = row["cells"]
     assert (gone["id"], gone["exit"]) == (old["id"], EXIT_INTERRUPTED)
     assert (new["by"], new["version"]) == (reload.BY, 2)
-    await space.until(lambda: space.read(State.cells[c].extract()), lambda s: s.get("s") == "v2")
+    state = State.cells[c].extract()
+    await space.until(lambda: space.read(state), lambda s: not is_null(s) and s.get("s") == "v2")
     added = await space.made(nuspace.cell.add(p, SET_42, fabrics=[], into=MADE))
     row = await space.run_row(r, lambda x: ended(cell_of(x, added)), SLOW)
     assert (cell_of(row, added)["by"], cell_of(row, added)["exit"]) == (reload.BY, EXIT_OK)

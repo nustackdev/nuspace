@@ -43,7 +43,7 @@ from .interactions import ErrorMessage, ErrorType, EventField
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
 
-    from nu.domains.shape.refs.base import StructuredRef
+    from nu.domains.shape import StructuredRef
 
 
 __all__ = [
