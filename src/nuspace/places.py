@@ -22,8 +22,11 @@ Ask a place for one of two things, then it is plain nu on refs:
 term, so a place bound at module level is fine. ``nuspace.here(Counter)``
 is ``nuspace.at.cell.state(Counter)``, the common case.
 
-- A key or id that finds nothing reads as NULL; a write under it raises
-  (``nustd.kv.NullAddressError``).
+- A key that finds nothing addresses nothing: a read, write or watch
+  through it raises ``nustd.kv.NullAddressError``. Where a key may be
+  missing, branch on the index first:
+  ``nu.If(nu.IsNull(Space.indexes.cell_keys[k]), fallback, read)``.
+- State not written yet reads NULL: ``.value.fallback(0)``.
 - The bare forms read :class:`Here`, which the kernel holds around every
   cell run. Outside one (a service, the CLI, a plain script) there is no
   Here and they raise ``LookupError``. :func:`inside` binds one, for tests.

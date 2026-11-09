@@ -81,11 +81,14 @@ async def test_by_id_and_by_key_land_where_with_parent_does(space):
     assert await store.read(at.plane(id="p").state(Prefs).theme) == "dark"
 
 
-async def test_a_key_that_finds_nothing_reads_null_and_a_write_raises(space):
+async def test_a_key_that_finds_nothing_raises_on_read_and_write(space):
     store = space
     gone = at.cell("nobody").state(Counter).value
-    assert is_null(await store.read(gone))
-    assert await store.read(gone.fallback(0)) == 0
+    with pytest.raises(nustd.kv.NullAddressError):
+        await store.read(gone)
+    # Where a key may be missing, the caller branches on the index first.
+    held = nu.If(nu.IsNull(Space.indexes.cell_keys["nobody"]), 0, gone)
+    assert await store.read(held) == 0
     with pytest.raises(nustd.kv.NullAddressError):
         await do(store, gone.set(1))
     with pytest.raises(nustd.kv.NullAddressError):

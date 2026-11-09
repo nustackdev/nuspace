@@ -347,7 +347,8 @@ async def test_a_key_read_from_space_places_a_state_chain(store):
     await store.run(nustd.kv.atomic(by_key.set(5)))
     assert await store.read(Counter.value.with_parent(State.cells["c7"])) == 5
     gone = Counter.value.with_parent(State.cells[Space.indexes.cell_keys["gone"]])
-    assert is_null(await store.read(gone))
+    with pytest.raises(nustd.kv.NullAddressError):
+        await store.read(gone)
     with pytest.raises(nustd.kv.NullAddressError):
         await store.run(nustd.kv.atomic(gone.set(1)))
 
