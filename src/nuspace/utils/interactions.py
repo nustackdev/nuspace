@@ -64,15 +64,17 @@ class MintId(ScalarQuery):
         prefix: The id's prefix.
 
     Yields:
-        The id, a str. NULL when the prefix is NULL.
+        The id, a str.
+
+    Raises:
+        ValueError: The prefix reads NULL.
     """
 
     def _compile(self, nid: int, children: tuple[Callable, ...]) -> Callable:
         (prefix,) = children
 
         def thunk(rt: Runtime) -> object:
-            p = prefix(rt)
-            return p if is_null(p) else mint_ordered_id(p)
+            return _minted(prefix(rt))
 
         return thunk
 
@@ -80,10 +82,17 @@ class MintId(ScalarQuery):
         (prefix,) = children
 
         async def athunk(rt: Runtime) -> object:
-            p = await prefix(rt)
-            return p if is_null(p) else mint_ordered_id(p)
+            return _minted(await prefix(rt))
 
         return athunk
+
+
+def _minted(prefix: object) -> str:
+    """A fresh id under ``prefix``, refused when the prefix read NULL."""
+    if is_null(prefix):
+        msg = "MintId: the prefix read NULL"
+        raise ValueError(msg)
+    return mint_ordered_id(str(prefix))
 
 
 class InKeyChars(ScalarQuery):
