@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Plane spacing reduced to one top pad, title gap and end run-off
 - Search and spec setup no longer carry state over between runs
 - Home shows space stats, a yearly heatmap, history, live runs and recent runs
 - A background indexer counts planes and cells added per day so Home opens fast

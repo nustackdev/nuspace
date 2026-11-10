@@ -165,7 +165,7 @@ export function Pane({
 				) : (
 					<>
 						<header className={docTitleHead(wide, compact)}>
-							<div className={docTitleRow(compact)}>
+							<div className={docTitleRow}>
 								<TitleIcon value={plane.meta.icon} onChange={(icon) => onIcon(planeId, icon)} />
 								<Title
 									value={plane.title}

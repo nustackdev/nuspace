@@ -28,7 +28,7 @@ export function ViewerSkeleton() {
 			{shown ? (
 				<>
 					<header className={docTitleHead()}>
-						<div className={docTitleRow()}>
+						<div className={docTitleRow}>
 							<Skeleton className={docSkeletonTitle} />
 						</div>
 					</header>

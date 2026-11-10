@@ -61,15 +61,16 @@ export const docContentTrack = "col-[content] row-start-1 min-w-0";
  * The column of cells. Each child is a `docRow`, and the ones that are not
  * (the tail, the slash menu) span it or float over it.
  *
- * The top pad is the air between the title and the first cell, 32. The
- * bottom one is the air under the last cell before the tail. Compact trims
- * both to 12.
+ * The top pad is the canvas pad, the air between the title and the first
+ * cell, 32. Under the last cell the tail is the only air, so there is no
+ * bottom pad. Compact trims the top to 12 and, having no tail, keeps 12
+ * under the last cell, the same as over the title.
  */
 export function docColumn(wide = false, compact = false): string {
 	return cn(
 		"relative",
 		docPlaneWidth(wide),
-		compact ? "pt-3 pb-3" : "pt-8 pb-doc-pad-y",
+		compact ? "pt-3 pb-3" : "pt-8",
 		"flex flex-col gap-doc-cell-gap",
 	);
 }
@@ -130,57 +131,44 @@ export const docTail = "h-doc-tail w-full shrink-0 cursor-text";
 
 /* ============================== Plane head ================================ */
 //
-// A plane opens with where it is and what it is called, and nothing else. No
-// cover: a small trail at the top, then blank air, then the plane's icon when
-// it has one (see ./icon.ts), then the name of the thing you are reading. What used to sit up here was chrome describing a
-// document rather than the document, and it pushed the first line of actual
-// writing off the fold.
+// A plane opens with what it is called, and nothing else. No cover: blank
+// air, then the plane's icon when it has one (see ./icon.ts), then the name
+// of the thing you are reading. What used to sit up here was chrome
+// describing a document rather than the document, and it pushed the first
+// line of actual writing off the fold.
 //
-// One left edge runs through all three of these and the cells below. A
-// cell's text starts at the content track's edge plus the cell's own pad,
-// so the trail and the title pay the same pad -- `px-doc-cell` on both is
-// alignment, not padding for its own sake.
+// One left edge runs through the title and the cells below. A cell's text
+// starts at the content track's edge plus the cell's own pad, so the title
+// pays the same pad -- `px-doc-cell` is alignment, not padding for its own
+// sake.
 
 /**
- * The band the trail and the title sit in. The same width as `docColumn`,
- * so its rows and the cells' rows share their tracks.
+ * The band the title sits in, with the plane's key and identity block under
+ * it. The same width as `docColumn`, so its rows and the cells' rows share
+ * their tracks.
  *
- * The air between the title and the first cell is the column's top pad, not
- * anything here.
+ * Its top pad is the plane's one run-up, the air above everything it draws:
+ * the full gap (`--spacing-doc-title-gap`), or 12 in compact, the same as
+ * the 12 compact keeps under the last cell. The air between the title and
+ * the first cell is the column's top pad, not anything here.
  */
 export function docTitleHead(wide = false, compact = false): string {
-	return cn(docPlaneWidth(wide), "group/title", compact ? "pt-3" : "pt-4");
+	return cn(docPlaneWidth(wide), "group/title", compact ? "pt-3" : "pt-doc-title-gap");
 }
 
 /**
  * The title's row: the plane's icon in the left gutter, the title in the
- * content track, so a long title wraps on the cells' text edge. It carries
- * the run-up the title always had: the full gap, or 28 in compact.
+ * content track, so a long title wraps on the cells' text edge.
  */
-export function docTitleRow(compact = false): string {
-	return cn(docRow, compact ? "mt-7" : "mt-doc-title-gap");
-}
-
-/**
- * The trail, riding at the top of the band. It stays in the document rather
- * than moving up into the shell strip: the strip belongs to the window and
- * this says where one plane sits among the others, which is a fact about the
- * document.
- *
- * Small and quiet on purpose. It is the one thing up here you can click, and
- * the whole point of the air under it is that the title arrives on its own.
- */
-export const docTrail = "px-doc-cell";
+export const docTitleRow = docRow;
 
 /**
  * The editable title. It is an `h1` with `contenteditable`, not an input and
  * not a button: the heading you read and the heading you type are the same
  * node, so there is no mode swap and no layout shift on click.
  *
- * The blank run-up above it (see `--spacing-doc-title-gap`) is carried by
- * `docTitleRow`, the row it shares with the plane's icon, rather than as
- * pad on the band, so the trail sits above it and the air lands between the
- * two. It fills that row's content track.
+ * The blank run-up above it is the band's top pad (`docTitleHead`). It fills
+ * the content track of `docTitleRow`, the row it shares with the plane's icon.
  *
  * No focus ring. A ring around a 40px heading is a box drawn around the plane's
  * name, and the caret already says where you are. The placeholder is a `::before` on the empty element
