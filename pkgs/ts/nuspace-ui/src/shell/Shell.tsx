@@ -152,10 +152,10 @@ export function Shell() {
 						) : slow ? (
 							<EmptyState
 								className={shellMissing}
-								icon={<Spinner size="lg" tone="neutral" label="Waking up" />}
+								icon={<Spinner size="lg" tone="neutral" label="Booting" />}
 								description="First boot takes a little longer while everything gets ready. Almost there!"
 							>
-								Waking up your space
+								Booting your space
 							</EmptyState>
 						) : (
 							<div className={shellPanePlane}>
