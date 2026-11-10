@@ -30,12 +30,12 @@ import {
 	TooltipTrigger,
 } from "@nustackdev/ui-kit";
 import {
+	AtSign,
 	Check,
 	Code,
 	Ellipsis,
 	GripVertical,
 	Hash,
-	KeyRound,
 	Plus,
 	RotateCw,
 	Trash2,
@@ -166,14 +166,12 @@ export function LeftGutter({
 						</DropdownMenuItem>
 						<DropdownMenuItem onSelect={copy.onSelect}>
 							{copy.copied ? <Check /> : <Hash />}
-							{copy.copied ? "Copied" : "Copy cell id"}
+							{copy.copied ? "Copied" : "Copy cell ID"}
 						</DropdownMenuItem>
-						{cellKey ? (
-							<DropdownMenuItem onSelect={copyKey.onSelect}>
-								{copyKey.copied ? <Check /> : <KeyRound />}
-								{copyKey.copied ? "Copied" : "Copy cell key"}
-							</DropdownMenuItem>
-						) : null}
+						<DropdownMenuItem disabled={!cellKey} onSelect={copyKey.onSelect}>
+							{copyKey.copied ? <Check /> : <AtSign />}
+							{copyKey.copied ? "Copied" : "Copy cell key"}
+						</DropdownMenuItem>
 						{editable ? (
 							<>
 								<DropdownMenuSeparator />
