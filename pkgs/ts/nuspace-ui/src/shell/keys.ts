@@ -11,6 +11,7 @@ import { KEYS_KEYS } from "../core/keys";
 import {
 	DESK_CLICK,
 	DESK_KEYS,
+	HOME_KEYS,
 	NEW_INSIDE_KEYS,
 	NEW_PLANE_KEYS,
 	OPEN_KEYS,
@@ -32,6 +33,7 @@ export const BINDINGS: BindingGroup[] = [
 	{
 		title: "Anywhere",
 		bindings: [
+			{ does: "Home", keys: [HOME_KEYS] },
 			{ does: "Search", keys: [SEARCH_KEYS] },
 			{ does: "Settings", keys: [SETTINGS_KEYS] },
 			{ does: "New plane", keys: [NEW_PLANE_KEYS] },

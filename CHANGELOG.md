@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Jump to Home from anywhere with Cmd+Shift+H, shown in the sidebar
 - Reopened planes no longer flash their old cell output before rendering fresh
 - New and empty planes put the cursor in the cell input right away
 

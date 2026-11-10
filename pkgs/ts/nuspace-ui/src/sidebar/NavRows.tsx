@@ -14,7 +14,7 @@ import type { LucideIcon } from "lucide-react";
 import { House, Search, Settings } from "lucide-react";
 import { hrefFor } from "../core/router";
 import { railNav, railNavIcon, railNavKeys, railNavLabel, railNavRow } from "../design";
-import { HOME_PLANE, SETTINGS_KEYS, SETTINGS_PLANE } from "./nav";
+import { HOME_KEYS, HOME_PLANE, SETTINGS_KEYS, SETTINGS_PLANE } from "./nav";
 import { SEARCH_KEYS, SEARCH_PLANE } from "./search";
 import { navKey, useRailNav } from "./useRailFocus";
 
@@ -26,7 +26,7 @@ type NavItem = {
 };
 
 export const NAV_ITEMS: NavItem[] = [
-	{ id: HOME_PLANE, label: "Home", icon: House },
+	{ id: HOME_PLANE, label: "Home", icon: House, keys: HOME_KEYS },
 	{ id: SEARCH_PLANE, label: "Search", icon: Search, keys: SEARCH_KEYS },
 	{ id: SETTINGS_PLANE, label: "Settings", icon: Settings, keys: SETTINGS_KEYS },
 ];

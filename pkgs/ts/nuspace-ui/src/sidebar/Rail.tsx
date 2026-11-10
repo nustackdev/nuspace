@@ -56,7 +56,7 @@ import { AddPlane } from "./AddPlane";
 import { Extensions, extensionGroups, extensionLines } from "./Extensions";
 import { NAV_ITEMS, NavRows } from "./NavRows";
 import { NewPlaneRow } from "./NewPlaneRow";
-import { NAV_PLANES, useSettingsShortcut } from "./nav";
+import { NAV_PLANES, useHomeShortcut, useSettingsShortcut } from "./nav";
 import type { Notify } from "./ops";
 import { Pinned, shownPins } from "./Pinned";
 import type { Pins } from "./pin";
@@ -130,6 +130,7 @@ export function Rail({
 				? pinKey(selKey)
 				: null;
 	const focus = useRailFocus(keys, selRow);
+	useHomeShortcut();
 	useSearchShortcut();
 	useSettingsShortcut();
 

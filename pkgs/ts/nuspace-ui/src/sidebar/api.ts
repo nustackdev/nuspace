@@ -29,7 +29,7 @@ export {
 	useRailShortcut,
 } from "./collapse";
 export { DESK_CLICK, DESK_KEYS, OPEN_KEYS } from "./keys";
-export { SETTINGS_KEYS } from "./nav";
+export { HOME_KEYS, SETTINGS_KEYS } from "./nav";
 export { RailPlaceholder } from "./Rail";
 export { RailToggle } from "./RailHeader";
 export { SEARCH_KEYS } from "./search";
