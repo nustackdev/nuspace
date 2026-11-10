@@ -28,12 +28,36 @@ export function paneBar(first: boolean, movable: boolean): string {
 }
 
 /**
- * The bar's title. Muted, and a tier up on the focused pane when the desk
- * holds more than one, so the focus reads in the title as well as the surface.
+ * The bar's trail: the planes above this one, then its own title, on the
+ * kit's breadcrumb. One line, filling the bar up to its buttons.
+ */
+export const paneCrumbs = "min-w-0 flex-1";
+
+export const paneCrumbList = "min-w-0 flex-nowrap gap-1";
+
+/**
+ * A parent's crumb, and the `...` for the ones collapsed. They give way
+ * first when the pane is narrow, so the plane's own title is the last to
+ * truncate.
+ */
+export const paneCrumbParent = "min-w-0 shrink-[8]";
+
+/** A parent's link. Muted like the title, up a tier on hover. */
+export const paneCrumbLink = "block truncate text-text-muted hover:text-text-primary";
+
+export const paneCrumbSep = "shrink-0";
+
+/** The plane's own crumb, the last one. */
+export const paneCrumbHere = "min-w-0";
+
+/**
+ * The bar's title, the plane's own crumb. Muted, and a tier up on the
+ * focused pane when the desk holds more than one, so the focus reads in the
+ * title as well as the surface.
  */
 export function paneBarTitle(lit: boolean): string {
 	return cn(
-		"min-w-0 flex-1 select-none truncate text-sm",
+		"block min-w-0 select-none truncate font-normal",
 		lit ? "text-text-primary" : "text-text-muted",
 	);
 }

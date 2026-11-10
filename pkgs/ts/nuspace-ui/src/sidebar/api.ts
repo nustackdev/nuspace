@@ -41,4 +41,5 @@ export { PIN_MIME } from "./Pinned";
 export { pinDropIndex } from "./pin";
 export { canDelete, deletePlane } from "./remove";
 export { usePlaneTree } from "./state";
+export { type Crumb, trailOf } from "./types";
 export { PLANE_MIME } from "./useRailDrag";

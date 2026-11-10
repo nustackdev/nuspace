@@ -61,6 +61,7 @@ import {
 	deletePlane,
 	type Notify as SidebarNotify,
 	type Ops as SidebarOps,
+	trailOf,
 	usePlaneTree,
 } from "../sidebar/api";
 import { Dock } from "./Dock";
@@ -235,6 +236,7 @@ export function Main({ path }: NodeProps) {
 							onRename={onRename}
 							onIcon={onIcon}
 							onDelete={deleteOf(id)}
+							trail={trailOf(tree, id)}
 							many={many}
 							divided={i > 0}
 							focused={id === focused}

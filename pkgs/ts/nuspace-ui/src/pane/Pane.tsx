@@ -37,6 +37,7 @@ import { Identity } from "../plane/Identity";
 import type { Notify } from "../plane/ops";
 import { Plane } from "../plane/Plane";
 import type { AbsentReason, ActivePlane, CellSpec } from "../plane/types";
+import type { Crumb } from "../sidebar/api";
 import { PaneBar } from "./PaneBar";
 import { focusTitle, Title } from "./Title";
 import { TitleIcon } from "./TitleIcon";
@@ -73,6 +74,7 @@ export function Pane({
 	onRename,
 	onIcon,
 	onDelete,
+	trail = [],
 	many,
 	divided,
 	focused,
@@ -94,6 +96,8 @@ export function Pane({
 	onIcon: (planeId: string, icon: string) => void;
 	/** Delete this plane. Left out for one that cannot be deleted. */
 	onDelete?: () => void;
+	/** The planes above this one, top first, for the bar's trail. */
+	trail?: readonly Crumb[];
 	/** More than one pane on the desk: dim the unfocused, drag by the bar. */
 	many: boolean;
 	/** Not the desk's first pane, so the rail's reopen button is not over its bar. */
@@ -135,6 +139,7 @@ export function Pane({
 			<PaneBar
 				planeId={planeId}
 				title={title}
+				trail={absent ? [] : trail.map((c) => ({ ...c, title: c.title || TITLE_FALLBACK }))}
 				meta={plane?.meta ?? null}
 				onMeta={(patch) => onMeta(planeId, patch)}
 				onDelete={onDelete}

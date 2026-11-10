@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- A pane's bar shows the plane's breadcrumbs, with parents one click away
 - Plane spacing reduced to one top pad, title gap and end run-off
 - Search and spec setup no longer carry state over between runs
 - Home shows space stats, a yearly heatmap, history, live runs and recent runs
