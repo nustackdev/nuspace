@@ -1,21 +1,32 @@
-"""Home: the web plane ``/`` redirects to. Made at open when missing (:mod:`.planes`).
+"""Home: the web plane ``/`` redirects to. Made at open when missing (:mod:`..planes`).
 
 A system web plane with a fixed id: ``plane.remove`` refuses it, nav runs
 it like any web plane, and the sidebar draws it first in its nav group,
 out of the tree. Its cells are ordinary cells, made once: after that they
-are the owner's to edit, and a space that has a home keeps it as it is.
+are the owner's to edit, and a space that has a home keeps it as it is
+(an older space keeps its older home).
 
-Four cells, read only. All but ``start`` are drawn again when what they
-show changes:
+A live pulse of the space that opens fast whatever its size. Four cells,
+read only, each a shim over its module here, like a system plane's:
 
-- ``header``: the space, its directory, versions and uptime, off
-  ``Space.info``;
-- ``recent``: the first :data:`RECENT_SHOWN` planes of ``Web.recents``
-  still in the space, as links;
-- ``glance``: live plane runs, live cell runs and workers up, read off the
-  live indexes and drawn at most once a second, with links to the newest Runs, Workers and Planes planes
-  there are (``Space.indexes.spec_planes``);
-- ``start``: how the shell works, static: drawn once, then its run ends.
+- ``space`` (:mod:`.space`): the info line, the counts and the planes and
+  cells added per day, off ``Space.info`` and the home indexer;
+- ``history`` (:mod:`.history`): pinned, then recent pages;
+- ``now`` (:mod:`.now`): the Execution heading, then Now, the plane runs
+  live now, with a switch for system runs (off by default);
+- ``runs`` (:mod:`.runs`): Recent, under Execution: the last planes that
+  ran, their runs on a timeline, with its own system runs switch (off by
+  default) that sets which planes the walk takes as lanes.
+
+Headings: the page title is the h1, so Space, History and Execution are h2,
+and Now and Recent are h3.
+
+Built for the common space, honest with a huge one: every list is capped,
+and past a cap it says how much it left out, as a number. Every number is
+a cached value or a bounded read, never a scan of the space. A page shows
+as its icon and title, never its parents. Nothing draws on a timer: each
+cell draws again when what it shows changes, and time moving on its own
+(uptime, how long a run is up) ticks in the browser.
 
 Core only: the cells import ``nu``, ``nustd`` and ``nuspace``, never an
 extension, so home works with none installed.
@@ -24,17 +35,7 @@ extension, so home works with none installed.
 from __future__ import annotations
 
 
-__all__ = [
-    "CELLS",
-    "GLANCE",
-    "HEADER",
-    "ICON",
-    "NAME",
-    "PLANE",
-    "RECENT",
-    "RECENT_SHOWN",
-    "START",
-]
+__all__ = ["CELLS", "HEADER", "ICON", "NAME", "PLANE", "prog"]
 
 
 #: The plane id, fixed: routed at ``/home``, like any plane.
@@ -46,10 +47,18 @@ NAME = "Home"
 #: Its icon.
 ICON = "emoji:🏠"
 
-#: How many recent planes the ``recent`` cell links.
-RECENT_SHOWN = 8
+
+def prog(cell: str) -> str:
+    """A home cell's prog: a shim importing its program from :mod:`nuspace.devices.web.home`."""
+    return f"from nuspace.devices.web.home.{cell} import out\n"
 
 
+#: The cells home is made with, in order, as ``(name, source)``.
+CELLS = tuple((name, prog(name)) for name in ("space", "history", "now", "runs"))
+
+
+#: The space line Settings draws (:mod:`..settings`): name, path, versions, uptime.
+#: Home drew it too before its cells moved into this package.
 HEADER = """\
 import importlib.metadata
 
@@ -98,185 +107,3 @@ def out():
     # Uptime moves with the clock, in minutes: read again every minute.
     return nu.Reconcile(nuspace.atomic(nuspace.Space.info.on_change()), draw(), every=60.0)
 """
-
-
-RECENT = f"""\
-import nu
-import nustd.ui
-import nuspace
-import nuspace.devices.web as web
-
-SHOWN = {RECENT_SHOWN}
-
-RECENT = nustd.ui.ColumnRef("recent", props={{"gap": 2}})
-# A list of pages: rows flush, the hover marking each one.
-LINKS = nustd.ui.ColumnRef("links", parent_ref=RECENT, props={{"gap": 0}})
-
-
-def link(shown, i):
-    # A page link: the plane's mark and its name, one row of a list of pages.
-    ref = nustd.ui.PageLinkRef("r" + str(i), parent_ref=LINKS)
-    ids = nu.List(shown)
-    return nu.IfDo(ids.len() > i, nuspace.atomic(web.link(ref, nu.str(ids[i]))), ref.erase())
-
-
-def show(shown):
-    title = nustd.ui.HeadingRef("title", parent_ref=RECENT)
-    none = nustd.ui.TextRef("none", parent_ref=RECENT)
-    empty = nu.IfDo(nu.List(shown).len() == 0, none.set("Nothing opened yet."), none.erase())
-    links = nu.Sequential(*[link(shown, i) for i in range(SHOWN)])
-    return title.set("Recent", level=3) >> links >> empty
-
-
-def recent():
-    recents = web.Web.recents
-    listed = nu.List(nu.If(recents.exists(), nu.list(recents), []))
-    return listed.iter().filter(lambda p: nuspace.plane.exists(p)).to_list()[0:SHOWN]
-
-
-def draw():
-    return nu.let(nuspace.atomic(recent()), show)
-
-
-def out():
-    # Opened, or a plane renamed or removed.
-    planes = nuspace.Space.planes
-    changes = nu.OnAny(
-        web.Web.recents.on_change(),
-        web.Web.recents.on_children_change(),
-        planes.on_descendants_change("*", "name"),
-        planes.on_descendants_change("*", "removed_at"),
-    )
-    return nu.Reconcile(nuspace.atomic(changes), draw())
-"""
-
-
-GLANCE = """\
-import nu
-import nustd.ui
-import nuspace
-import nuspace.devices.web as web
-
-
-class Tiles(nustd.ui.Row):
-    live = nustd.ui.StatRef.slot(label="Live runs")
-    cells = nustd.ui.StatRef.slot(label="Live cells")
-    workers = nustd.ui.StatRef.slot(label="Workers up")
-
-
-class Links(nustd.ui.Row):
-    runs = nustd.ui.LinkRef.slot()
-    workers = nustd.ui.LinkRef.slot()
-    planes = nustd.ui.LinkRef.slot()
-
-
-class Glance(nustd.ui.Column):
-    tiles = Tiles.slot(gap=6, wrap=True)
-    links = Links.slot(gap=4, wrap=True)
-
-
-class View(nu.Shape):
-    glance = Glance.slot(gap=4)
-
-
-LIVE = nuspace.Space.exec.indexes.live
-
-#: The least time between two draws of the counts, in seconds.
-GAP = 1.0
-
-
-def ids(held):
-    return nu.List(nu.If(held.exists(), nu.list(held.keys()), []))
-
-
-def counts():
-    runs = ids(LIVE.plane_runs)
-    each = runs.iter().map(lambda r: ids(LIVE.plane_run_to_cell_runs[nu.Str(r)].ids).len())
-    return nu.List.of(runs.len(), nu.Sum(each), ids(LIVE.workers).len())
-
-
-def show_live(got):
-    counted = nu.List(got)
-    return (
-        View.glance.tiles.live.set(nu.str(counted[0]))
-        >> View.glance.tiles.cells.set(nu.str(counted[1]))
-        >> View.glance.tiles.workers.set(nu.str(counted[2]))
-    )
-
-
-def newest(spec):
-    # The newest plane made from a spec, one seek; "" when none, or when it is removed.
-    last = nu.Str(nuspace.Space.indexes.spec_planes[spec].ids.last(default=""))
-    there = (last != "").and_(nuspace.plane.exists(last))
-    return nu.Str(nu.If(there, last, ""))
-
-
-def link(ref, spec, label):
-    def drawn(held):
-        pid = nu.Str(held)
-        return nu.IfDo(pid != "", ref.set(href=web.href(pid), label=label), ref.erase())
-
-    return nu.let(nuspace.atomic(newest(spec)), drawn)
-
-
-def draw_links():
-    links = View.glance.links
-    return (
-        link(links.runs, "nuverse.runs", "Runs")
-        >> link(links.workers, "nuverse.workers", "Workers")
-        >> link(links.planes, "nuverse.planes", "Planes")
-    )
-
-
-def draw_live():
-    return nu.let(nuspace.atomic(counts()), show_live)
-
-
-def paced():
-    # A count reads every live run's cell runs, and a busy space changes them
-    # all the time: one draw, then a rest. A change during the rest merges
-    # into one more draw after it, so the last change is always drawn.
-    return draw_live() >> nu.Delay(GAP)
-
-
-def out():
-    # Live runs, their cell runs and workers come and go with the live
-    # indexes; the links move when a plane is made or removed.
-    lives = nu.OnAny(
-        LIVE.plane_runs.on_children_change(),
-        LIVE.plane_run_to_cell_runs.on_descendants_change("*", "ids", "*"),
-        LIVE.workers.on_children_change(),
-    )
-    made = nu.OnAny(
-        nuspace.Space.planes.on_children_change(),
-        nuspace.Space.indexes.removed.on_children_change(),
-    )
-    return nu.ParallelAsync(
-        nu.Reconcile(nuspace.atomic(lives), paced()),
-        nu.Reconcile(nuspace.atomic(made), draw_links()),
-    )
-"""
-
-
-START = '''\
-import nustd.ui
-
-TEXT = """\\
-### Getting started
-
-- `+` in the sidebar, on a plane row or in a plane's `⋯` menu adds a plane.
-- Drag a plane in the sidebar to reorder it or nest it under another.
-- `/` in a plane adds a cell.
-- Cmd/Ctrl-click a plane in the sidebar opens it as a split.
-- `⋯` on a plane holds its settings.
-- The code button on a cell edits it in place.
-"""
-
-
-def out():
-    return nustd.ui.MarkdownRef("help").set(TEXT)
-'''
-
-
-#: The cells home is made with, in order, as ``(name, source)``.
-CELLS = (("header", HEADER), ("recent", RECENT), ("glance", GLANCE), ("start", START))

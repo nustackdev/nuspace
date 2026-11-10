@@ -129,121 +129,13 @@ def test_each_cell_builds_and_validates(cell):
     nu.validate(nu.compile(term))
 
 
-async def test_header_draws_the_space_line(store):
+async def test_settings_header_draws_the_space_line(store):
     await do(store, Space.info.path.set("/tmp/garden") >> Space.info.opened_at.set(1.0))
     (line,) = (await _frames(store, _built(home.HEADER)["draw"]())).values()
     parts = line.split("  ·  ")
     assert parts[0] == "nuspace" and parts[1] == "/tmp/garden"
     assert parts[2].startswith("nuspace ")
     assert parts[-1].startswith("Up ")
-
-
-async def test_recent_links_the_planes_still_there(store):
-    for p, name in (("a", "Alpha"), ("b", "Beta"), ("c", "Gone")):
-        await do(store, nuspace.plane.add(p, name=name, backend="async"))
-        await do(store, web.visit(p))
-    await do(store, nuspace.plane.remove("c"))
-    frames = await _frames(store, _built(home.RECENT)["draw"]())
-    links = [v for k, v in frames.items() if k and k[-1].startswith("r") and v]
-    assert [link["title"] for link in links] == ["Beta", "Alpha"]
-
-
-async def test_recent_with_nothing_opened(store):
-    frames = await _frames(store, _built(home.RECENT)["draw"]())
-    assert "Nothing opened yet." in [v for v in frames.values() if isinstance(v, str)]
-
-
-async def test_recent_shows_at_most_eight(store):
-    ids = [f"p{i:02}" for i in range(12)]
-    for p in ids:
-        await do(store, nuspace.plane.add(p, name=p.upper(), backend="async"))
-        await do(store, web.visit(p))
-    frames = await _frames(store, _built(home.RECENT)["draw"]())
-    links = [frames[("recent", "links", f"r{i}")]["href"] for i in range(home.RECENT_SHOWN)]
-    assert links == [f"/{p}" for p in reversed(ids)][: home.RECENT_SHOWN]
-
-
-async def test_recent_redraws_on_an_open_and_not_while_idle(store):
-    for p, name in (("a", "Alpha"), ("b", "Beta")):
-        await do(store, nuspace.plane.add(p, name=name, backend="async"))
-    session, task = await _live(store, _built(home.RECENT)["out"]())
-    try:
-        idle = await _quiet(session)
-        assert idle > 0
-        assert await _quiet(session) == idle
-        await do(store, web.visit("a"))
-        await _until(
-            lambda: (session.last(("recent", "links", "r0")) or {}).get("title") == "Alpha"
-        )
-        # A plane renamed that it does not show: drawn again as it was.
-        seen = len(session.frames)
-        await do(store, nuspace.plane.rename("b", "Bee"))
-        await asyncio.sleep(0.5)
-        assert not any("Bee" in str(f.payload) for f in session.frames[seen:])
-        await do(store, nuspace.plane.rename("a", "Ay"))
-        await _until(lambda: (session.last(("recent", "links", "r0")) or {}).get("title") == "Ay")
-    finally:
-        await _stop(task)
-
-
-def _tiles(session: _Recording) -> dict:
-    return {
-        name: (session.last(("glance", "tiles", name)) or {}).get("value")
-        for name in ("live", "cells", "workers")
-    }
-
-
-async def test_glance_redraws_live_counts_on_a_change_only(store):
-    await do(store, nuspace.plane.add("p", backend="async"))
-    await do(store, nuspace.cell.add("p", "x = 1", id="c", fabrics=[]))
-    session, task = await _live(store, _built(home.GLANCE)["out"]())
-    try:
-        await _until(lambda: _tiles(session)["live"] == "0")
-        idle = await _quiet(session, 1.5)
-        assert await _quiet(session) == idle
-        run = await store.made(nuspace.atomic(nuspace.plane_run.add("p", into=MADE)))
-        await do(store, nuspace.cell_run.add(run, "c"))
-        await _until(lambda: _tiles(session) == {"live": "1", "cells": "1", "workers": "0"})
-        seen = await _quiet(session, 1.5)
-        # A write it does not show wakes nothing.
-        await do(store, Space.info.path.set("/elsewhere"))
-        assert await _quiet(session, 0.5) == seen
-    finally:
-        await _stop(task)
-
-
-async def test_glance_draws_a_burst_once_per_gap(store):
-    await do(store, nuspace.plane.add("p", backend="async"))
-    for i in range(6):
-        await do(store, nuspace.cell.add("p", "x = 1", id=f"c{i}", fabrics=[]))
-    run = await store.made(nuspace.atomic(nuspace.plane_run.add("p", into=MADE)))
-    session, task = await _live(store, _built(home.GLANCE)["out"]())
-    try:
-        await _until(lambda: _tiles(session)["live"] == "1")
-        await _quiet(session, 1.5)
-
-        def drawn() -> int:
-            return sum(1 for f in session.frames if f.ref == ("glance", "tiles", "cells"))
-
-        before = drawn()
-        for i in range(6):
-            await do(store, nuspace.cell_run.add(run, f"c{i}"))
-            await asyncio.sleep(0.15)
-        # The last change is always drawn, after the rest.
-        await _until(lambda: _tiles(session)["cells"] == "6", timeout=4.0)
-        assert drawn() - before <= 3
-    finally:
-        await _stop(task)
-
-
-async def test_glance_counts_off_the_live_indexes(store):
-    await do(store, nuspace.plane.add("p", backend="async"))
-    await do(store, nuspace.cell.add("p", "x = 1", id="c", fabrics=[]))
-    run = await store.made(nuspace.atomic(nuspace.plane_run.add("p", into=MADE)))
-    await do(store, nuspace.cell_run.add(run, "c"))
-    frames = await _frames(store, _built(home.GLANCE)["draw_live"]())
-    tiles = {path[-1]: shown["value"] for path, shown in frames.items()}
-    assert tiles == {"live": "1", "cells": "1", "workers": "0"}
 
 
 async def test_ensure_then_home_is_a_system_web_plane(store):

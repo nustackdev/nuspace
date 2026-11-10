@@ -589,4 +589,4 @@ async def test_ensure_makes_the_web_planes_once(store):
     assert await store.read(web.Web.planes.contains("home")) is True
     assert await store.read(web.Web.planes.contains("searches")) is False
     cells = await store.read(nu.list(Space.planes["home"].cells.keys()))
-    assert cells == ["home_header", "home_recent", "home_glance", "home_start"]
+    assert cells == ["home_space", "home_history", "home_now", "home_runs"]

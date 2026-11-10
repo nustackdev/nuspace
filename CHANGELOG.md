@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Home shows space stats, a yearly heatmap, history, live runs and recent runs
 - A background indexer counts planes and cells added per day so Home opens fast
 - The sidebar lists installed specs under Specs instead of Extensions
 - See, copy and edit a plane's ID and key, with its key shown under the title
