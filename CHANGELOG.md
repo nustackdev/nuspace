@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Search and spec setup no longer carry state over between runs
 - Home shows space stats, a yearly heatmap, history, live runs and recent runs
 - A background indexer counts planes and cells added per day so Home opens fast
 - The sidebar lists installed specs under Specs instead of Extensions

@@ -450,7 +450,7 @@ def go():
     kind = nu.Str(View.head.kind)
     read = nu.ForEachDo(fields_of(kind), read_field) >> Building.request[kind].set(Building.keywords.extract())
     asked = read >> search.search(Building.request.extract())
-    return nu.IfDo(kind != "", nu.Frame(Building, asked, keywords={}, request={}))
+    return nu.IfDo(kind != "", nu.Frame(Building, asked, keywords=nu.Dict.of(), request=nu.Dict.of()))
 
 
 def out():

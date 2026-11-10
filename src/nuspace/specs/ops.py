@@ -191,7 +191,7 @@ def add_plane(
         steps.append(nustd.kv.atomic(nu.Sequential(*tree.state)))
     if tree.web:
         steps.append(nustd.kv.atomic(nu.Sequential(*tree.web)))
-    return nu.Frame(_Minted, nu.Sequential(*steps), ids={}, fabrics={})
+    return nu.Frame(_Minted, nu.Sequential(*steps), ids=nu.Dict.of(), fabrics=nu.Dict.of())
 
 
 def add_cell(
@@ -251,4 +251,4 @@ def add_cell(
         fabrics=fabrics,
         into=into,
     )
-    return nu.Frame(_Minted, nu.Sequential(*first, made), ids={}, fabrics={})
+    return nu.Frame(_Minted, nu.Sequential(*first, made), ids=nu.Dict.of(), fabrics=nu.Dict.of())
