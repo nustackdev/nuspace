@@ -1,4 +1,4 @@
-// The extensions, the body's last section, under the planes: what the installed
+// The specs, the body's last section, under the planes: what the installed
 // packages offer, one folding group per package, its registered Planes under
 // it. Not planes: a row here is a kind of plane, and clicking it makes a new
 // one from it at the top of the tree and opens it, the same as picking it in
@@ -37,7 +37,7 @@ import type { Registered } from "./types";
 import { useRailNav } from "./useRailFocus";
 
 /** One package's group: its name, and the Planes it registers, in order. */
-export type ExtensionGroup = { pkg: string; entries: Registered[] };
+export type SpecGroup = { pkg: string; entries: Registered[] };
 
 /** The fold key of a package's group, apart from every plane id. */
 export const groupKey = (pkg: string) => `ext:${pkg}`;
@@ -49,7 +49,7 @@ export function packageOf(name: string): string {
 }
 
 /** The registered Planes by package, packages in the order they first show. */
-export function extensionGroups(registered: Registered[]): ExtensionGroup[] {
+export function specGroups(registered: Registered[]): SpecGroup[] {
 	const by = new Map<string, Registered[]>();
 	for (const entry of registered) {
 		const pkg = packageOf(entry.name);
@@ -62,11 +62,11 @@ export function extensionGroups(registered: Registered[]): ExtensionGroup[] {
 }
 
 /** One visible line of the section: a group, or an entry under an open one. */
-export type ExtensionLine = { key: string; group: ExtensionGroup; entry?: Registered };
+export type SpecLine = { key: string; group: SpecGroup; entry?: Registered };
 
 /** The section's visible lines, in order: each group, then its entries while it is open. */
-export function extensionLines(groups: ExtensionGroup[], expanded: Set<string>): ExtensionLine[] {
-	const out: ExtensionLine[] = [];
+export function specLines(groups: SpecGroup[], expanded: Set<string>): SpecLine[] {
+	const out: SpecLine[] = [];
 	for (const group of groups) {
 		const gKey = groupKey(group.pkg);
 		out.push({ key: gKey, group });
@@ -76,16 +76,16 @@ export function extensionLines(groups: ExtensionGroup[], expanded: Set<string>):
 	return out;
 }
 
-export function Extensions({
+export function Specs({
 	groups,
 	lines,
 	expanded,
 	onToggle,
 	notify,
 }: {
-	groups: ExtensionGroup[];
-	/** `extensionLines` of `groups`, worked out once in ./Rail.tsx for the body's focus order. */
-	lines: ExtensionLine[];
+	groups: SpecGroup[];
+	/** `specLines` of `groups`, worked out once in ./Rail.tsx for the body's focus order. */
+	lines: SpecLine[];
 	expanded: Set<string>;
 	onToggle: (key: string) => void;
 	notify: Notify;
@@ -98,8 +98,8 @@ export function Extensions({
 
 	return (
 		<>
-			<RailSection label="Extensions" />
-			<div role="tree" aria-label="Extensions" className={railTreeList}>
+			<RailSection label="Specs" />
+			<div role="tree" aria-label="Specs" className={railTreeList}>
 				{lines.map(({ key, group, entry }) => {
 					const gKey = groupKey(group.pkg);
 					if (!entry) {

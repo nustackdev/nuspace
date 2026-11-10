@@ -84,7 +84,7 @@ export function RailRow({
 	className?: string;
 	onFocus: (e: React.FocusEvent<HTMLDivElement>) => void;
 	onKeyDown: (e: React.KeyboardEvent) => void;
-	/** A click anywhere on the row, for a row that is one button (eg an extension's). */
+	/** A click anywhere on the row, for a row that is one button (eg a spec group's). */
 	onClick?: (e: React.MouseEvent<HTMLDivElement>) => void;
 	/**
 	 * With `ref` and the rest, what a kit trigger (a tooltip's) hands the row

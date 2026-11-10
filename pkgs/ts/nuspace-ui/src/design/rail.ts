@@ -128,7 +128,7 @@ export const railStatus = cn(
 
 /**
  * The body under the top bar, the rail's one scroller: the nav rows, then
- * the pinned, the planes and the extensions, each under its section header. `rail-inset` keeps a row's
+ * the pinned, the planes and the specs, each under its section header. `rail-inset` keeps a row's
  * fill off both rail edges. `rail-top-gap` top and bottom alike, as pad
  * rather than margin, so a focus ring at either end is not clipped.
  */
@@ -249,7 +249,7 @@ export function railTwisty(swap: boolean): string {
 
 /**
  * The fold chevron as a glyph rather than a control, for a row that is one
- * button (an extension's group): swapped in for the icon like `railTwisty`,
+ * button (a spec group): swapped in for the icon like `railTwisty`,
  * turned like `railChevron`.
  */
 export function railLaneChevron(open: boolean): string {
@@ -391,7 +391,7 @@ export const railDragging = "opacity-50";
 
 /**
  * The space under the last row, a section gap tall, which is also the air
- * between the planes and the extensions under them. A drop here moves the
+ * between the planes and the specs under them. A drop here moves the
  * row to the top level, last.
  */
 export const railDropTail = "relative min-h-rail-section-gap shrink-0";
@@ -428,7 +428,7 @@ export const railNavKeys = "shrink-0";
 /* ============================== Sections ================================ */
 
 /*
- * A section of the body (Pinned, Planes, Extensions): a quiet header over its rows.
+ * A section of the body (Pinned, Planes, Specs): a quiet header over its rows.
  * The label one tier back and a size down, so it reads as a heading and not
  * a row. An action (the Planes `+`) sits on the rows' right edge, shown while
  * the header is hovered or holds the keyboard.
@@ -451,10 +451,10 @@ export const railSectionAction = cn(
 	"group-hover/section:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100",
 );
 
-/* ============================== Extensions ============================== */
+/* ================================ Specs ================================= */
 
 /**
- * An extension row's label, a group's package name or an entry's: plain text
+ * A spec row's label, a group's package name or an entry's: plain text
  * on the label's tier where a plane row has its link, since the whole row is
  * the button, folding or making a plane rather than opening one.
  */
@@ -463,5 +463,5 @@ export const railGroupLabel = cn(
 	"transition-colors duration-fast ease-out group-hover/row:text-text-primary",
 );
 
-/** A tooltip holding a sentence (an extension entry's description): wraps rather than runs on. */
+/** A tooltip holding a sentence (a spec entry's description): wraps rather than runs on. */
 export const railTooltipWide = "max-w-64 text-pretty";

@@ -2,7 +2,7 @@
 //
 // The body is one tab stop and the arrows move through every row in it, in
 // the order they are drawn: the nav rows, the pinned, New plane, the tree,
-// the extensions. Down off the last wraps to the first. A body with fifty
+// the specs. Down off the last wraps to the first. A body with fifty
 // rows is otherwise a hundred and fifty tab stops. Section headers are not
 // rows: the arrows pass them by.
 //

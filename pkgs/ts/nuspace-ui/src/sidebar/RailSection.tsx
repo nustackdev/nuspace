@@ -1,4 +1,4 @@
-// A section header in the rail's body (Pinned, Planes, Extensions): a quiet label over
+// A section header in the rail's body (Pinned, Planes, Specs): a quiet label over
 // the section's rows, and an optional action on the rows' right edge, shown
 // while the header is hovered or holds the keyboard.
 

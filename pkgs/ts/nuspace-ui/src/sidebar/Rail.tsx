@@ -1,5 +1,5 @@
 // The sidebar rail: a top bar, the one thing fixed up there, a body that
-// scrolls (the nav rows, then the pinned, the planes and the extensions,
+// scrolls (the nav rows, then the pinned, the planes and the specs,
 // each under a section header), a bottom bar.
 //
 // Planes only. Cells are parts of a Plane, not navigable entities, so they
@@ -30,7 +30,7 @@
 //   RailSection.tsx   a section header in the body, and its action
 //   NewPlaneRow.tsx   the tree's first row, which makes a top-level plane
 //   Pinned.tsx        the pinned planes, under the nav rows
-//   Extensions.tsx    what each extension offers, folded by package; a click makes one
+//   Specs.tsx         the specs each package offers, folded by package; a click makes one
 //   RailFooter.tsx    the bottom bar: links, connection, theme
 //   pin.ts            the pins and their ops
 //   RailTree.tsx      the tree: keyboard, drop marks
@@ -53,7 +53,6 @@ import { useSkeleton } from "../core/delay";
 import { useFocusedRoute, useRoutes } from "../core/router";
 import { railAside, railIndent, railScroll, railSkeletonBar, railSkeletonRow } from "../design";
 import { AddPlane } from "./AddPlane";
-import { Extensions, extensionGroups, extensionLines } from "./Extensions";
 import { NAV_ITEMS, NavRows } from "./NavRows";
 import { NewPlaneRow } from "./NewPlaneRow";
 import { NAV_PLANES, useHomeShortcut, useSettingsShortcut } from "./nav";
@@ -64,6 +63,7 @@ import { RailFooter } from "./RailFooter";
 import { RailHeader } from "./RailHeader";
 import { RailSection } from "./RailSection";
 import { RailTree } from "./RailTree";
+import { Specs, specGroups, specLines } from "./Specs";
 import { useSearchShortcut } from "./search";
 import { visibleRows } from "./tree";
 import { childrenOf, type PlaneTree, type Registered, rootId } from "./types";
@@ -102,8 +102,8 @@ export function Rail({
 
 	const reveal = useReveal({ tree, root, routes, selKey, expanded, onToggle });
 
-	const groups = useMemo(() => extensionGroups(registered), [registered]);
-	const lines = useMemo(() => extensionLines(groups, expanded), [groups, expanded]);
+	const groups = useMemo(() => specGroups(registered), [registered]);
+	const lines = useMemo(() => specLines(groups, expanded), [groups, expanded]);
 	const pinned = useMemo(() => shownPins(tree, pins.ids), [tree, pins.ids]);
 
 	// Every row of the body, in the order it is drawn: what the arrows walk.
@@ -175,7 +175,7 @@ export function Rail({
 								notify={notify}
 								pins={pins}
 							/>
-							<Extensions
+							<Specs
 								groups={groups}
 								lines={lines}
 								expanded={expanded}

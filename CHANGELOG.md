@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- The sidebar lists installed specs under Specs instead of Extensions
 - See, copy and edit a plane's ID and key, with its key shown under the title
 - The cell menu always offers copying the key, with clearer ID and key icons
 - See, copy, set and remove a cell's id and key from its controls
