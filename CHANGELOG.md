@@ -9,6 +9,10 @@ Below is the changelog for **nuspace** - the full commit stream. Newest first.
 The `nuspace-ui` wheel is the same source tree's vite output and is not tracked
 separately here.
 
+## Unreleased
+
+- New and empty planes put the cursor in the cell input right away
+
 ## 0.7.0 - 2026-11-10
 
 - Release nuspace and nuspace-ui 0.7.0 on nu 0.7.2, virtuals 0.2.2 and ui-kit 0.4.1

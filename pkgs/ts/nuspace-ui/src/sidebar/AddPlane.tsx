@@ -21,7 +21,7 @@ import {
 	CommandList,
 	CommandPalette,
 } from "@nustackdev/ui-kit";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { focusPane, openHere } from "../core/router";
 import { menuItem } from "../design";
 import { DEFAULT_ICON } from "../icon/parse";
@@ -58,10 +58,14 @@ export function AddPlane({
 }) {
 	const request = useAddRequest();
 	const [query, setQuery] = useState("");
+	// A pick sends the caret on to the new Plane (an empty one takes it, see
+	// ../plane/Plane.tsx), so the popup does not hand it back as it closes.
+	const picked = useRef(false);
 	const sections = addSections(query, registered);
 
 	const pick = (entry: Registered) => {
 		const req = request;
+		picked.current = true;
 		closeAddPlane();
 		setQuery("");
 		if (!req) return;
@@ -80,6 +84,10 @@ export function AddPlane({
 				setQuery("");
 			}}
 			label="Add plane"
+			onCloseAutoFocus={(e) => {
+				if (picked.current) e.preventDefault();
+				picked.current = false;
+			}}
 			// Ranked and grouped here (../menu/rank.ts), like the / menu.
 			shouldFilter={false}
 			// The arrows wrap past either end, as the / menu's do.

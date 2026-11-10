@@ -170,6 +170,7 @@ export function Pane({
 							notify={notify}
 							handleRef={planeHandle}
 							onTitle={toTitle}
+							focused={focused}
 						/>
 					</>
 				)}

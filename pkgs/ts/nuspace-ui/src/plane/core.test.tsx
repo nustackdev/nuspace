@@ -204,6 +204,55 @@ describe("the input line, with no sugar", () => {
 	});
 });
 
+describe("opening a plane", () => {
+	it("puts the caret in the end line of an empty plane in the focused pane (open_empty_focuses_line)", () => {
+		render([], { focused: true });
+		expect(document.activeElement).toBe(endLine());
+	});
+
+	it("leaves the keyboard alone on a plane with cells (open_cells_keep_focus)", () => {
+		render([cell("a")], { focused: true });
+		expect(document.activeElement).toBe(document.body);
+	});
+
+	it("leaves it alone in a pane that is not the focused one (open_unfocused_keeps_focus)", () => {
+		render([]);
+		expect(document.activeElement).toBe(document.body);
+	});
+
+	it("leaves it with a field being typed in (open_typing_keeps_focus)", () => {
+		const field = document.createElement("input");
+		document.body.append(field);
+		field.focus();
+		render([], { focused: true });
+		expect(document.activeElement).toBe(field);
+		field.remove();
+	});
+
+	it("leaves it with a dialog open, not one on its way out (open_dialog_keeps_focus)", () => {
+		const dialog = document.createElement("div");
+		dialog.setAttribute("role", "dialog");
+		dialog.dataset.state = "open";
+		document.body.append(dialog);
+		render([], { focused: true });
+		expect(document.activeElement).toBe(document.body);
+		dialog.remove();
+	});
+
+	it("takes it from a field in a closing dialog (open_closing_dialog_yields)", () => {
+		const dialog = document.createElement("div");
+		dialog.setAttribute("role", "dialog");
+		dialog.dataset.state = "closed";
+		const field = document.createElement("input");
+		dialog.append(field);
+		document.body.append(dialog);
+		field.focus();
+		render([], { focused: true });
+		expect(document.activeElement).toBe(endLine());
+		dialog.remove();
+	});
+});
+
 describe("the title's intents, core defaults", () => {
 	it("Enter at the end goes into the cells: the top one selected (title_enter_core_at_end)", () => {
 		render([cell("a", []), cell("b", [])]);

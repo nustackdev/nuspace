@@ -40,6 +40,7 @@ import {
 import type { FocusRequest, PlaneApi, PlaneHandle, PlaneModel } from "./api";
 import { cellUiPath } from "./cell/address";
 import { Cell } from "./cell/Cell";
+import { keyboardBusy } from "./focus/focusable";
 import { useCaret } from "./focus/useCaret";
 import { useEditors } from "./focus/useEditors";
 import { useFocusRouting } from "./focus/useFocusRouting";
@@ -69,6 +70,7 @@ export function Plane({
 	notify,
 	handleRef,
 	onTitle,
+	focused = false,
 	sugars = SUGARS,
 }: {
 	/** The ViewerRef node, which holds every pane's editor state and roots
@@ -89,6 +91,8 @@ export function Plane({
 	/** The caret into the title above, at its start or end. Left out for a
 	 *  host with no title, and the plane takes the keyboard instead. */
 	onTitle?: (at: "start" | "end") => void;
+	/** Its pane is the focused one as it opens: an empty plane takes the caret. */
+	focused?: boolean;
 	/** The sugar sets. The registry's (./sugar) unless a test hands its own. */
 	sugars?: readonly Sugar[];
 }) {
@@ -257,6 +261,15 @@ export function Plane({
 			handleRef.current = null;
 		};
 	}, [handleRef, release]);
+
+	// An empty plane opens with the caret in its end line: there is nothing
+	// else on it to write in, so a new plane is typed into at once. Once, as
+	// it opens, and only in the focused pane. One with cells keeps the
+	// keyboard where it was, and so does a dialog or a field being typed in.
+	// biome-ignore lint/correctness/useExhaustiveDependencies: on open, never again
+	useEffect(() => {
+		if (focused && cells.length === 0 && !keyboardBusy()) endGhost.current?.focus();
+	}, []);
 
 	// -- Render ---------------------------------------------------------------
 

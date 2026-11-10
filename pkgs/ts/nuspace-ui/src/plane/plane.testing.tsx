@@ -67,7 +67,14 @@ export function render(
 		editable = true,
 		sugars = [],
 		title = true,
-	}: { specs?: CellSpec[]; editable?: boolean; sugars?: Sugar[]; title?: boolean } = {},
+		focused = false,
+	}: {
+		specs?: CellSpec[];
+		editable?: boolean;
+		sugars?: Sugar[];
+		title?: boolean;
+		focused?: boolean;
+	} = {},
 ) {
 	const plane: ActivePlane = {
 		plane_id: "p1",
@@ -88,6 +95,7 @@ export function render(
 					notify={notify}
 					handleRef={handle}
 					onTitle={title ? onTitle : undefined}
+					focused={focused}
 					sugars={sugars}
 				/>
 			</TooltipProvider>,
