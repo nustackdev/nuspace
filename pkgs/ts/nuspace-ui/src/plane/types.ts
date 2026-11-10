@@ -26,6 +26,8 @@ export type CellStatus = {
 export type Cell = {
 	id: string;
 	name: string;
+	/** Its handle, what code and agents reach it by. "" when it has none. */
+	key: string;
 	/** The Nu program this cell stores. */
 	source: string;
 	/** Whether its program draws, as the server worked out from the source.
@@ -139,6 +141,7 @@ export function coerceCells(raw: unknown): Cell[] {
 		out.push({
 			id,
 			name: String(r.name ?? id),
+			key: typeof r.key === "string" ? r.key : "",
 			source: String(r.source ?? ""),
 			draws: typeof r.draws === "boolean" ? r.draws : null,
 			classes: Array.isArray(r.classes) ? r.classes.map(String) : [],

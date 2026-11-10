@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- See, copy, set and remove a cell's id and key from its controls
 - An empty plane list shows just New plane, its shortcut always visible
 - The boot screen says Booting your space instead of waking up
 - Jump to Home from anywhere with Cmd+Shift+H, shown in the sidebar

@@ -104,10 +104,10 @@ def _cells(plane: nu.StrArg) -> nu.Nu:
 
 
 def plane_cells(plane: nu.StrArg, specs: Iterable[CellSpec] = ()) -> nu.List:
-    """A plane's cells as ``{id, name, source, spec, draws, classes}``, in order. Bare read.
+    """A plane's cells as ``{id, name, key, source, spec, draws, classes}``, in order. Bare read.
 
-    ``spec`` is the CellSpec the cell was made from, ``""`` when none.
-    ``draws`` is whether its prog draws (``"ui"`` among its fabrics).
+    ``key`` is ``""`` when the cell has none. ``spec`` is the CellSpec the
+    cell was made from, ``""`` when none. ``draws`` is whether its prog draws (``"ui"`` among its fabrics).
     ``classes`` are those of the spec in ``specs`` that ``spec`` names,
     ``[]`` when none does. Cost: O(cells), a few reads each.
     """
@@ -120,6 +120,7 @@ def plane_cells(plane: nu.StrArg, specs: Iterable[CellSpec] = ()) -> nu.List:
         return nu.Dict.of(
             id=cid,
             name=row.name.fallback(""),
+            key=row.key.fallback(""),
             source=nu.str(row.prog.fallback("")),
             spec=made,
             draws=nu.List(row.fabrics.fallback([])).contains("ui"),
@@ -385,6 +386,16 @@ def _events(arms: Arms, viewer: Ref, sid: nu.StrArg, specs: Sequence[CellSpec]) 
             "restart_plane",
             interactions.on_restart_plane(viewer),
             lambda p, _: atomic(web.restart_pane(sid, p)),
+        ),
+        on_cell(
+            "cell_key",
+            interactions.on_set_cell_key(viewer),
+            lambda c, ev: atomic(nuspace.cell.set_key(c, field_str(ev, "key"))),
+        ),
+        on_cell(
+            "cell_remove_key",
+            interactions.on_remove_cell_key(viewer),
+            lambda c, _: atomic(nuspace.cell.remove_key(c)),
         ),
         arms.plane_event("web", interactions.on_set_web(viewer), _web_flags),
     ]

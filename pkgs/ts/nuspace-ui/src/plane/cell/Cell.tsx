@@ -26,7 +26,9 @@
 
 import type { Path } from "@nustackdev/ui-core";
 import type * as React from "react";
+import { useState } from "react";
 import { docCell, docCellRow, docDropIndicator } from "../../design";
+import { Identity } from "../Identity";
 import type { FocusReq } from "../state";
 import type { Cell as CellValue, ExitDir } from "../types";
 import { LeftGutter, RightGutter } from "./Gutter";
@@ -55,6 +57,7 @@ export function Cell({
 	onFocusConsumed,
 	onDrawn,
 	onCommit,
+	onKey,
 	onExit,
 	onCaret,
 }: {
@@ -90,6 +93,8 @@ export function Cell({
 	/** What the program draws has mounted. */
 	onDrawn?: () => void;
 	onCommit: (source: string) => void;
+	/** Set or change the cell's key, "" to remove it. Left out on a read-only plane. */
+	onKey?: (key: string) => void;
 	onExit: (dir: ExitDir, column: number | undefined) => void;
 	/**
 	 * The caret arrived in what the cell draws ("ui") or elsewhere in its
@@ -97,6 +102,9 @@ export function Cell({
 	 */
 	onCaret?: (where: "ui" | "row" | null, nowhere?: boolean) => void;
 }) {
+	// The identity block is the cell's own business, like a menu being open:
+	// nothing else reads it, so it is held here.
+	const [identity, setIdentity] = useState(false);
 	return (
 		// biome-ignore lint/a11y/noStaticElementInteractions: a mousedown anywhere in a cell hands control to that cell's own editor
 		<div
@@ -123,6 +131,7 @@ export function Cell({
 			<LeftGutter
 				editable={editable}
 				cellId={cell.id}
+				cellKey={cell.key}
 				editing={editing}
 				onSetEditing={onSetEditing}
 				onDrag={onDrag}
@@ -134,9 +143,27 @@ export function Cell({
 			{/* Before the body in the DOM, though the grid puts it on the right: the
 			    row's controls come first in the tab order, so Tab out of what the
 			    cell draws goes on to the next row, not back to its own toggle. */}
-			<RightGutter state={cell.status.state} editing={editing} onSetEditing={onSetEditing} />
+			<RightGutter
+				state={cell.status.state}
+				editing={editing}
+				onSetEditing={onSetEditing}
+				identity={identity}
+				onSetIdentity={setIdentity}
+			/>
 			<div className={docCell({ selected })} data-cell-body="">
 				{dropAbove ? <span className={`${docDropIndicator} top-0`} /> : null}
+				{identity ? (
+					<Identity
+						kind="cell"
+						id={cell.id}
+						value={cell.key}
+						onSave={onKey}
+						onClose={() => {
+							setIdentity(false);
+							onSelect();
+						}}
+					/>
+				) : null}
 				<ProgramCell
 					source={cell.source}
 					draws={cell.draws}

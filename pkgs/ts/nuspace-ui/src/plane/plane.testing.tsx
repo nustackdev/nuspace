@@ -107,6 +107,7 @@ export function cell(id: string, classes: string[] = ["prose"], error: string | 
 	return {
 		id,
 		name: id,
+		key: "",
 		source: "",
 		draws: null,
 		classes,

@@ -52,6 +52,11 @@ export type Ops = {
 	 *  id is unique across the space, so it is the whole address. */
 	"cell.update": { cell_id: string; source: string };
 	"cell.delete": { cell_id: string };
+	/** Set or change the cell's key. A key taken or misspelled is refused
+	 *  server side, and the refusal toasts. */
+	"cell.key": { cell_id: string; key: string };
+	/** Drop the cell's key, free for another cell. */
+	"cell.remove_key": { cell_id: string };
 	/** One cell before or after another of its plane, neither for the end. */
 	"cell.move": { cell_id: string; before?: string; after?: string };
 	/** Run the cell again in this pane's run. With the run over, the whole

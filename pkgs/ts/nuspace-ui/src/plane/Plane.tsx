@@ -365,6 +365,14 @@ export function Plane({
 								if (source) drop((r) => r.id === source.id);
 							}}
 							onCommit={(src) => commitSource(cell.id, src)}
+							onKey={
+								editable
+									? (key) =>
+											key === ""
+												? notify("cell.remove_key", { cell_id: cell.id })
+												: notify("cell.key", { cell_id: cell.id, key })
+									: undefined
+							}
 							onExit={(dir, column) => step(cell.id, dir, column)}
 							onCaret={(where, nowhere) => caret(cell, where, nowhere)}
 						/>

@@ -32,6 +32,7 @@ function render(
 					cell={{
 						id: "c1",
 						name: "",
+						key: "",
 						source: "",
 						draws,
 						classes: [],
@@ -125,12 +126,13 @@ describe("the controls", () => {
 			b.getAttribute("aria-label"),
 		);
 
-	it("puts add and the grip left of the cell, the source toggle right", () => {
+	it("puts add and the grip left of the cell, the source and identity toggles right", () => {
 		render(true, "running");
 		expect(labels()).toEqual([
 			"Add a line below",
 			"Drag to reorder, click for options",
 			"Show source · running",
+			"Show id and key",
 		]);
 		// The right gutter comes before the body, so the body is last in the tab order.
 		const [left, right, body] = host.querySelectorAll("[data-cell] > *");
@@ -139,10 +141,22 @@ describe("the controls", () => {
 		expect(right.hasAttribute("data-cell-gutter")).toBe(true);
 	});
 
-	it("keeps only the menu and the source toggle on a read-only plane", () => {
+	it("keeps only the menu and the right toggles on a read-only plane", () => {
 		render(false, "running");
-		expect(labels()).toEqual(["Cell options", "Show source · running"]);
+		expect(labels()).toEqual(["Cell options", "Show source · running", "Show id and key"]);
 		expect(host.querySelector("[data-cell-grip]")?.classList.contains("cursor-grab")).toBe(false);
+	});
+
+	it("toggles the identity block above what the cell draws, and pins the lane", () => {
+		render(true, "idle");
+		const toggle = () => host.querySelector<HTMLButtonElement>("[data-cell-identity]");
+		expect(host.querySelector("[data-identity]")).toBeNull();
+		act(() => toggle()?.click());
+		expect(host.querySelector("[data-cell-body] > [data-identity]")).not.toBeNull();
+		expect(host.querySelector("[data-identity-id]")?.textContent).toBe("c1");
+		expect(toggle()?.closest("[data-cell-gutter]")?.hasAttribute("data-pinned")).toBe(true);
+		act(() => toggle()?.click());
+		expect(host.querySelector("[data-identity]")).toBeNull();
 	});
 
 	it("marks the one selected cell, not a cell in a wider selection", () => {

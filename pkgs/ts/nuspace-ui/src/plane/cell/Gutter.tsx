@@ -2,7 +2,8 @@
 //
 // Left, what you do to the cell's place on the plane: add a line below, and
 // the grip, which drags and, clicked, opens the cell's menu. Right, what the
-// cell is: the source toggle, its glyph tinted by the cell's status. A
+// cell is: the source toggle, its glyph tinted by the cell's status, and
+// beside it the identity toggle, which opens the cell's id and key. A
 // read-only plane has no place to change, so its left gutter keeps only the
 // menu.
 //
@@ -28,7 +29,17 @@ import {
 	TooltipContent,
 	TooltipTrigger,
 } from "@nustackdev/ui-kit";
-import { Check, Code, Ellipsis, GripVertical, Hash, Plus, RotateCw, Trash2 } from "lucide-react";
+import {
+	Check,
+	Code,
+	Ellipsis,
+	GripVertical,
+	Hash,
+	KeyRound,
+	Plus,
+	RotateCw,
+	Trash2,
+} from "lucide-react";
 import type * as React from "react";
 import { useRef, useState } from "react";
 import { useCopyRow } from "../../core/clipboard";
@@ -49,6 +60,7 @@ const LOUD: ReadonlySet<CellState> = new Set(["invalid", "failed"]);
 export function LeftGutter({
 	editable,
 	cellId,
+	cellKey,
 	editing,
 	onSetEditing,
 	onDrag,
@@ -60,6 +72,8 @@ export function LeftGutter({
 	/** The plane's setting. Off, only the menu remains, and it cannot delete. */
 	editable: boolean;
 	cellId: string;
+	/** The cell's key, "" for none: no row copies it then. */
+	cellKey: string;
 	editing: boolean;
 	onSetEditing: (on: boolean) => void;
 	/** A press on the grip. `onClick` runs when it never becomes a drag. */
@@ -92,6 +106,7 @@ export function LeftGutter({
 	// The bare cell id, not the `cells.<id>` mount prefix: the id is what every
 	// op on the wire is keyed by. See ./address.ts for the prefix.
 	const copy = useCopyRow(cellId);
+	const copyKey = useCopyRow(cellKey);
 
 	const label = editable ? "Drag to reorder, click for options" : "Cell options";
 	return (
@@ -153,6 +168,12 @@ export function LeftGutter({
 							{copy.copied ? <Check /> : <Hash />}
 							{copy.copied ? "Copied" : "Copy cell id"}
 						</DropdownMenuItem>
+						{cellKey ? (
+							<DropdownMenuItem onSelect={copyKey.onSelect}>
+								{copyKey.copied ? <Check /> : <KeyRound />}
+								{copyKey.copied ? "Copied" : "Copy cell key"}
+							</DropdownMenuItem>
+						) : null}
 						{editable ? (
 							<>
 								<DropdownMenuSeparator />
@@ -175,23 +196,29 @@ export function LeftGutter({
 	);
 }
 
-/** The right gutter: the source toggle, which says the cell's state. */
+/** The right gutter: the source toggle, which says the cell's state, and the identity toggle. */
 export function RightGutter({
 	state,
 	editing,
 	onSetEditing,
+	identity,
+	onSetIdentity,
 }: {
 	state: CellState;
 	editing: boolean;
 	onSetEditing: (on: boolean) => void;
+	/** The cell's id and key are open (../Identity.tsx). */
+	identity: boolean;
+	onSetIdentity: (on: boolean) => void;
 }) {
+	const idLabel = identity ? "Hide id and key" : "Show id and key";
 	const status = CELL_STATUS[state].label.toLowerCase();
 	const label = `${editing ? "Hide source" : "Show source"} · ${status}`;
 	return (
 		<div
 			className={docGutterLane("right")}
 			data-cell-gutter=""
-			data-pinned={editing || LOUD.has(state) ? "" : undefined}
+			data-pinned={editing || identity || LOUD.has(state) ? "" : undefined}
 		>
 			<div className={docGutterControls}>
 				<Tooltip>
@@ -208,6 +235,21 @@ export function RightGutter({
 						</Toggle>
 					</TooltipTrigger>
 					<TooltipContent side="top">{label}</TooltipContent>
+				</Tooltip>
+				<Tooltip>
+					<TooltipTrigger asChild>
+						<Toggle
+							size="sm"
+							pressed={identity}
+							onPressedChange={onSetIdentity}
+							aria-label={idLabel}
+							data-cell-identity=""
+							className={docGutterToggle}
+						>
+							<Hash />
+						</Toggle>
+					</TooltipTrigger>
+					<TooltipContent side="top">{idLabel}</TooltipContent>
 				</Tooltip>
 			</div>
 		</div>

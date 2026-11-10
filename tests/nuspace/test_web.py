@@ -223,10 +223,19 @@ async def test_viewer_plane(store):
         "icon": "lucide:book",
     }
     assert got["cells"] == [
-        {"id": "c1", "name": "one", "source": "x = 1", "spec": "", "draws": True, "classes": []},
+        {
+            "id": "c1",
+            "name": "one",
+            "key": "",
+            "source": "x = 1",
+            "spec": "",
+            "draws": True,
+            "classes": [],
+        },
         {
             "id": "c2",
             "name": "text",
+            "key": "",
             "source": TEXT_SRC,
             "spec": TEXT,
             "draws": False,
@@ -382,6 +391,19 @@ async def test_tab_live(store):
             ("viewer", "ops", "plane.web"), {"plane_id": "p1", "flags": {"full_width": True}}
         )
         await _until(lambda: session.writes("set_plane")[-1]["meta"]["full_width"])
+        # A cell's key: set, changed and removed, each reshipped.
+        session.notify(("viewer", "ops", "cell.key"), {"cell_id": "c1", "key": "first"})
+        await _until(
+            lambda: any(c["key"] == "first" for c in session.writes("set_plane")[-1]["cells"])
+        )
+        session.notify(("viewer", "ops", "cell.key"), {"cell_id": "c1", "key": "one-1"})
+        await _until(
+            lambda: any(c["key"] == "one-1" for c in session.writes("set_plane")[-1]["cells"])
+        )
+        assert await store.read(Space.indexes.cell_keys.contains("first")) is False
+        session.notify(("viewer", "ops", "cell.remove_key"), {"cell_id": "c1"})
+        await _until(lambda: all(c["key"] == "" for c in session.writes("set_plane")[-1]["cells"]))
+        assert await store.read(Space.indexes.cell_keys.contains("one-1")) is False
 
         # Sidebar events: a plane made from a spec under p1, an expand loads it.
         session.notify(
@@ -488,14 +510,23 @@ async def test_a_failed_event_toasts_its_type_and_message(store):
         session.notify(("viewer", "ops", "plane.web"), {"plane_id": "p1", "flags": {"wide": True}})
         await _until(lambda: len(session.toasts()) == 4)
         assert session.toasts()[-1]["type"] == "ValueError"
+        # A key taken by another cell, and one not in key chars.
+        await do(store, nuspace.cell.add("p1", "x = 1", id="c1", key="taken", fabrics=[]))
+        await do(store, nuspace.cell.add("p1", "x = 2", id="c2", fabrics=[]))
+        session.notify(("viewer", "ops", "cell.key"), {"cell_id": "c2", "key": "taken"})
+        await _until(lambda: len(session.toasts()) == 5)
+        assert session.toasts()[-1]["type"] == "Exists"
+        session.notify(("viewer", "ops", "cell.key"), {"cell_id": "c2", "key": "no spaces"})
+        await _until(lambda: len(session.toasts()) == 6)
+        assert session.toasts()[-1]["type"] == "Refused"
         # Opening a plane that never lands: Missing, after the wait for it.
         session.notify(("viewer", "ops", "planes.open"), {"plane_ids": ["ghost"], "params": {}})
-        await _until(lambda: len(session.toasts()) == 5, timeout=6.0)
+        await _until(lambda: len(session.toasts()) == 7, timeout=6.0)
         assert session.toasts()[-1]["type"] == "Missing"
         # Nothing of it landed, and the tab still works.
         session.notify(("viewer", "ops", "planes.open"), {"plane_ids": ["p1"], "params": {}})
         await _until(lambda: session.writes("set_plane"))
-        assert len(session.toasts()) == 5
+        assert len(session.toasts()) == 7
     finally:
         task.cancel()
         await asyncio.gather(task, return_exceptions=True)

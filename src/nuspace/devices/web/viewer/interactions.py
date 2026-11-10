@@ -37,8 +37,10 @@ __all__ = [
     "on_delete_cell",
     "on_move_cell",
     "on_open",
+    "on_remove_cell_key",
     "on_restart_cell",
     "on_restart_plane",
+    "on_set_cell_key",
     "on_set_web",
     "on_update_cell",
     "set_absent",
@@ -87,7 +89,7 @@ def set_plane(
 
     ``meta`` is how the pane shows it: its web flags (``editable``,
     ``full_width``, ``compact``) and its ``icon``. A cell is ``{id, name,
-    source, spec, draws, classes}``. Every open plane is answered
+    key, source, spec, draws, classes}``. Every open plane is answered
     with one or with a :func:`set_absent`, or its pane loads forever.
     """
     return write(viewer, "set_plane", plane_id=plane_id, title=title, meta=meta, cells=cells)
@@ -155,6 +157,16 @@ def on_restart_cell(viewer: Ref) -> Changed:
 def on_restart_plane(viewer: Ref) -> Changed:
     """``{plane_id}``. Runs this pane's plane again, a new plane run."""
     return event(viewer, "plane.restart")
+
+
+def on_set_cell_key(viewer: Ref) -> Changed:
+    """``{cell_id, key}``. Sets or changes the cell's key."""
+    return event(viewer, "cell.key")
+
+
+def on_remove_cell_key(viewer: Ref) -> Changed:
+    """``{cell_id}``. Drops the cell's key, free for another cell."""
+    return event(viewer, "cell.remove_key")
 
 
 def on_set_web(viewer: Ref) -> Changed:

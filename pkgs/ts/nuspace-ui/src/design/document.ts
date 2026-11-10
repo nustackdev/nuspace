@@ -442,3 +442,27 @@ export const docSlashMenu = cn(
 
 /** The scrolling rows, between the edge and the footer. */
 export const docSlashList = "min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-1.5";
+
+/* ============================= Identity block ============================= */
+
+/**
+ * A cell's id and key, two small lines the identity toggle opens above what
+ * the cell draws, the way the code toggle opens its source. Muted and dense:
+ * an address, not content.
+ */
+export const docIdentity = cn(
+	"mb-2 flex flex-col gap-1 rounded-md border border-border-default px-2 py-1.5",
+	"text-xs text-text-muted",
+);
+export const docIdentityLine = "flex min-w-0 items-center gap-1.5";
+/** "ID" and "Key", one width, so the two values start on one edge. */
+export const docIdentityLabel = "w-6 shrink-0 select-none";
+/** The id: mono, read-only, selectable. */
+export const docIdentityValue = "min-w-0 flex-1 truncate font-mono text-text-secondary select-text";
+export const docIdentityInput = "min-w-0 flex-1 font-mono text-xs";
+/** Holds a copy glyph, so its tooltip still hears it while it is disabled. */
+export const docIdentityCopy = "inline-flex";
+export const docIdentityError = "text-status-danger";
+/** The rename warning: a quiet note, a small info glyph in front of it. */
+export const docIdentityNote =
+	"flex items-center gap-1 text-[11px] text-text-muted [&_svg]:size-3 [&_svg]:shrink-0";
