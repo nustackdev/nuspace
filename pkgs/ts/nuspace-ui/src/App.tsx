@@ -7,16 +7,18 @@
 //
 // The socket is opened here and nowhere else. What it is doing is read through
 // `useConnectionStatus` by whoever draws it, so a reconnect never re-renders
-// the shell.
+// the shell. A frame for the cell ui of a closed plane is refused at the
+// socket (see ./main/state.ts).
 
 import { TooltipProvider } from "@nustackdev/ui-kit";
 import { useNuspaceConnection } from "./core/connection";
+import { admits } from "./main/state";
 import { ConfirmDialog } from "./shell/ConfirmDialog";
 import { KeysDialog } from "./shell/KeysDialog";
 import { Shell } from "./shell/Shell";
 
 export function App() {
-	useNuspaceConnection();
+	useNuspaceConnection(admits);
 
 	return (
 		<TooltipProvider delayDuration={800} skipDelayDuration={300}>

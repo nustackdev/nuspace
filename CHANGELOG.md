@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Reopened planes no longer flash their old cell output before rendering fresh
 - New and empty planes put the cursor in the cell input right away
 
 ## 0.7.0 - 2026-11-10

@@ -58,8 +58,12 @@ function wsUrl(): string {
  * Opens `/ws` and wires the tree store's send/dispatch. Call it once, at the
  * top. It returns nothing on purpose: the status goes to whoever draws it
  * through `useConnectionStatus`, so a reconnect does not re-render the shell.
+ *
+ * `admits` is asked about every inbound frame before it is dispatched; one it
+ * refuses is dropped. Transport does not know why, the caller does.
  */
-export function useNuspaceConnection(): void {
+export function useNuspaceConnection(admits: (frame: Frame) => boolean = () => true): void {
+	// biome-ignore lint/correctness/useExhaustiveDependencies: opened once; `admits` is a module function.
 	useEffect(() => {
 		let ws: WebSocket | null = null;
 		let attempts = 0;
@@ -113,7 +117,8 @@ export function useNuspaceConnection(): void {
 				scheduleReconnect();
 			});
 			ws.addEventListener("message", (event) => {
-				tree.getState().dispatch(decode(event.data as ArrayBuffer));
+				const frame = decode(event.data as ArrayBuffer);
+				if (admits(frame)) tree.getState().dispatch(frame);
 			});
 		};
 

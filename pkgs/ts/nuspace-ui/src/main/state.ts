@@ -20,11 +20,23 @@
 // the cell list by id, which a prop merge cannot do, and `set_plane` has to
 // prune local state naming cells the new Plane does not carry, which nothing
 // else is in a position to notice.
+//
+// ## A closed plane leaves nothing drawn behind
+//
+// What a cell's run drew stays in the tree under the cell's address after its
+// pane closes: nav stops the run, and nothing on the wire takes the drawing
+// down. Reopened, the plane would draw it again the moment its `set_plane`
+// lands, until the new run erases it and draws afresh. So the browser takes it
+// down itself: a plane's cell ui goes when its pane closes, and a frame from
+// the run that drew it is refused until the pane opens again (`admits`, on the
+// socket). Reopening clears it once more before the plane is asked for, so a
+// reopened plane always starts from nothing drawn.
 
-import type { Path, Props } from "@nustackdev/ui-core";
-import { nodeAt, tree, useProps } from "@nustackdev/ui-kit";
+import type { Frame, Path, Props } from "@nustackdev/ui-core";
+import { nodeAt, pathKey, tree, useProps } from "@nustackdev/ui-kit";
 import { useMemo } from "react";
 import { LOCAL, localOf } from "../core/local";
+import { cellUiPath } from "../plane/cell/address";
 import { type EditorState, EMPTY_EDITOR, pruneEditor } from "../plane/state";
 import {
 	type AbsentReason,
@@ -142,15 +154,67 @@ export function applyViewerWrite(props: Props, payload: unknown, open: string[])
 	props[LOCAL] = { ...panes, [planeId]: pruneEditor(panes[planeId] ?? EMPTY_EDITOR, live) };
 }
 
+// -- Closed planes' cell ui ---------------------------------------------------
+
+/** The cell ui of each closed plane, by plane id: taken down, and refused until it reopens. */
+const closed = new Map<string, Path[]>();
+/** Every path in `closed`, keyed, for the one lookup a frame costs. */
+const refused = new Set<string>();
+/** How deep a cell's ui address is. Every one is the same depth: one viewer. */
+let cellDepth = 0;
+
+function takeDown(ui: Path): void {
+	if (nodeAt(ui)) tree.getState().remove(ui);
+}
+
 /**
- * Drop the planes and editor state of panes that are no longer open. Run when
- * the route changes, so a closed pane's data does not linger until the next
- * `set_plane` happens to prune it.
+ * Whether an inbound frame may land. False for one under the cell ui of a
+ * closed plane: a late frame from the run its pane stopped, which would draw
+ * it back into the tree for the next open to show.
+ */
+export function admits(frame: Frame): boolean {
+	if (refused.size === 0 || frame.ref.length < cellDepth) return true;
+	return !refused.has(pathKey(frame.ref.slice(0, cellDepth)));
+}
+
+/**
+ * Take down the cell ui of planes that closed and refuse what still comes for
+ * it; clear it again for planes that reopened and let them draw. Before the
+ * open planes are asked for, so nothing a reopened plane shows predates it.
+ */
+function settleCellUi(path: Path, planes: Record<string, ActivePlane>, open: string[]): void {
+	for (const id of open) {
+		const uis = closed.get(id);
+		if (!uis) continue;
+		closed.delete(id);
+		for (const ui of uis) {
+			refused.delete(pathKey(ui));
+			takeDown(ui);
+		}
+	}
+	for (const [id, plane] of Object.entries(planes)) {
+		if (open.includes(id)) continue;
+		const uis = plane.cells.map((c) => cellUiPath(path, c.id));
+		closed.set(id, uis);
+		for (const ui of uis) {
+			cellDepth = ui.length;
+			refused.add(pathKey(ui));
+			takeDown(ui);
+		}
+	}
+}
+
+/**
+ * Drop the planes and editor state of panes that are no longer open, and the
+ * cell ui of their planes (see above). Run when the route changes, before the
+ * open planes are asked for, so a closed pane's data does not linger until
+ * the next `set_plane` happens to prune it.
  */
 export function pruneViewer(path: Path, open: string[]): void {
 	const node = nodeAt(path);
 	if (!node) return;
 	const planes = planesOf(node.props);
+	settleCellUi(path, planes, open);
 	const panes = panesOf(node.props);
 	const absent = absentOf(node.props);
 	const nextPlanes = keepOpen(planes, open);

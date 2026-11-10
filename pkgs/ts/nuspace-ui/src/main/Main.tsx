@@ -103,13 +103,14 @@ export function Main({ path }: NodeProps) {
 
 	// The full list with its params, every time either changes and once on
 	// load -- an empty one included, so the server stops shipping a Plane
-	// nobody has open. Planes and editor state of panes that closed go at the
-	// same moment. A focus move changes neither, so it sends nothing.
+	// nobody has open. Planes, editor state and cell ui of panes that closed
+	// go first, and a reopened plane's cell ui is cleared, so nothing it draws
+	// predates the ask. A focus move changes neither, so it sends nothing.
 	// biome-ignore lint/correctness/useExhaustiveDependencies: the panes are compared by their key; path by value.
 	useEffect(() => {
+		pruneViewer(path, routes);
 		const params = Object.fromEntries(layout.panes.map((p) => [p.plane, p.params]));
 		notify("planes.open", { plane_ids: routes, params });
-		pruneViewer(path, routes);
 	}, [panesKey, notify]);
 
 	// A pane that just opened may be off the edge of a scrolled strip: bring
