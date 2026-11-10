@@ -1,9 +1,11 @@
-"""The planes the web device ships with: home, settings, search, and the searches folder.
+"""The planes the web device ships with: home, settings, search, the searches folder and the home indexer.
 
 Home, settings and search are web planes with fixed ids: system (remove
 refuses them), on the async backend, with fixed cells. The sidebar draws
 them in its nav group, out of the tree. ``searches`` is the system plane
-every search hangs under; it is not on the web.
+every search hangs under; it is not on the web. ``home_indexer``
+(:mod:`.indexer`) is not on the web either: a system plane two reactions
+run, counting what Home shows.
 
 :func:`ensure` makes each one where missing, with its cells and its web
 row, and leaves one that is there exactly as it is: after the first open
@@ -20,6 +22,7 @@ from nuspace.ops.brackets import atomic
 from nuspace.shapes.space import Space
 from nuspace.utils.checks import refuse
 
+from . import indexer
 from . import ops as web
 from .home import CELLS as HOME_CELLS
 from .home import ICON as HOME_ICON
@@ -37,7 +40,21 @@ from .settings import PLANE as SETTINGS
 from .shapes import Web
 
 
-__all__ = ["BACKEND", "HOME", "PLANES", "SEARCH", "SEARCHES", "SETTINGS", "cell_id", "ensure"]
+__all__ = [
+    "BACKEND",
+    "HOME",
+    "INDEXER",
+    "PLANES",
+    "SEARCH",
+    "SEARCHES",
+    "SETTINGS",
+    "cell_id",
+    "ensure",
+    "ensure_indexer",
+]
+
+#: The home indexer's plane id.
+INDEXER = indexer.PLANE
 
 
 #: What the web planes' runs execute on: their cells await, they never block.
@@ -67,10 +84,11 @@ def _made(
     *,
     backend: str,
     on_web: bool,
+    fabrics: tuple[str, ...] = ("ui",),
 ) -> nu.Nu:
     """One plane and its cells where missing, one Space commit; then its web row, one Web commit.
 
-    Every cell draws, so its fabrics are ``["ui"]``, with no build.
+    Every web plane's cell draws, so its fabrics are ``["ui"]`` by default, with no build.
 
     Raises:
         Refused: The id is held by a plane that is not system.
@@ -80,7 +98,7 @@ def _made(
     adds = nuspace.plane.add(plane, name=name, icon=icon, backend=backend, system=True)
     for cell, source in cells:
         adds = adds >> nuspace.cell.add(
-            plane, source, id=cell_id(plane, cell), name=cell, fabrics=["ui"]
+            plane, source, id=cell_id(plane, cell), name=cell, fabrics=list(fabrics)
         )
     term = atomic(
         refuse(alien, Refused, "plane ", plane, " is taken by a plane that is not system")
@@ -93,14 +111,33 @@ def _made(
 
 
 def ensure() -> nu.Nu:
-    """The web planes and the searches folder, each made where missing. Idempotent.
+    """The web planes, the searches folder and the home indexer, each made where missing. Idempotent.
 
     A plane that is there is left as it is, its cells included. Two commits
-    per web plane (Space, then Web), one for the folder.
+    per web plane (Space, then Web), one for the folder, one for the
+    indexer, then its two reactions where not kept yet
+    (:func:`~.indexer.ensure_reactions`).
 
     Raises:
         Refused: A web plane's id held by a plane that is not system.
     """
     made = [_made(*spec, backend=BACKEND, on_web=True) for spec in PLANES]
     folder = _made(SEARCHES, SEARCHES_NAME, "", (), backend=SEARCHES_BACKEND, on_web=False)
-    return nu.Sequential(*made, folder)
+    return nu.Sequential(*made, folder, ensure_indexer())
+
+
+def ensure_indexer() -> nu.Nu:
+    """The home indexer where missing, one Space commit, then its two reactions where not kept yet.
+
+    Needs no web store: the indexer is not on the web.
+    """
+    plane = _made(
+        indexer.PLANE,
+        indexer.NAME,
+        indexer.ICON,
+        indexer.CELLS,
+        backend=indexer.BACKEND,
+        on_web=False,
+        fabrics=(),
+    )
+    return plane >> indexer.ensure_reactions()

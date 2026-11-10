@@ -51,6 +51,7 @@ from nuspace.utils import keys_of
 from nustd.ui.core import WsSession
 from nustd.ws_server import SID_ATTR, listen, run_once, session_for, sessions_fold
 
+from . import indexer
 from . import ops as web
 from .env import SESSION_ENV, session_env
 from .nav import nav
@@ -212,8 +213,9 @@ def serve_web(
 ) -> tuple[nu.Nu, dict[str, EnvFactory]]:
     """The web device: the term the host runs, and the envs it registers.
 
-    The term makes the web planes where missing, then runs the server (one
-    arm per tab) and nav side by side. It never returns; it goes beside the
+    The term makes the web planes where missing, asks for one home indexer
+    run (:func:`~.indexer.wake`), then runs the server (one arm per tab)
+    and nav side by side. It never returns; it goes beside the
     kernel, inside the stores (Space, State, Web, Conn) with ``conn.db``
     fresh, so no tab of a previous open is left.
 
@@ -259,5 +261,5 @@ def serve_web(
             )
         ),
     )
-    term = ensure() >> nu.ParallelAsync(server, nav())
+    term = ensure() >> indexer.wake() >> nu.ParallelAsync(server, nav())
     return term, {SESSION_ENV: session_env(session_address)}
