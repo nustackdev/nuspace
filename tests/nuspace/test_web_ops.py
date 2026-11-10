@@ -187,18 +187,24 @@ async def test_set_panes_keeps_a_pane_whose_plane_was_removed_since(store):
     assert await store.read(nu.list(tabs["t"].order)) == ["a", "b"]
 
 
+async def test_set_panes_opens_a_plane_missing_or_with_no_view(store):
+    await plane(store, "off", on_web=False)
+    await do(store, web.open_tab("t"))
+    await do(store, web.set_panes("t", ["ghost", "off"]))
+    tab = await store.read(tabs["t"].extract())
+    assert tab["order"] == ["ghost", "off"]
+    assert tab["panes"]["off"] == {"params": {}, "plane_run": "", "restart": ""}
+
+
 async def test_set_panes_raises(store):
     await plane(store, "a")
-    await plane(store, "off", on_web=False)
     with pytest.raises(Missing):
         await do(store, web.set_panes("nope", ["a"]))
     await do(store, web.open_tab("t"))
-    with pytest.raises(Missing):
-        await do(store, web.set_panes("t", ["ghost"]))
-    with pytest.raises(Missing):
-        await do(store, web.set_panes("t", ["off"]))
     with pytest.raises(Refused):
         await do(store, web.set_panes("t", ["a", "a"]))
+    with pytest.raises(Refused):
+        await do(store, web.set_panes("t", [""]))
     # Nothing landed: each raise aborted its commit.
     assert await store.read(tabs["t"].extract()) == {"order": [], "panes": {}, "expanded": {}}
 

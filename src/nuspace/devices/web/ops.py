@@ -39,6 +39,7 @@ from nuspace.errors import Exists, Missing, Refused
 from nuspace.ops import cell_run
 from nuspace.ops.brackets import atomic
 from nuspace.places import Here
+from nuspace.shapes.plane import ROOT
 from nuspace.shapes.space import Space
 from nuspace.utils import MintId
 from nuspace.utils.checks import live, refuse
@@ -322,16 +323,15 @@ def _pane(sid: nu.StrArg, plane: nu.StrArg) -> nu.Nu:
 def set_panes(sid: nu.StrArg, order: nu.ListArg[str]) -> nu.Nu:
     """The tab's panes, left to right, rewritten whole as the browser sends them.
 
-    A plane new to the list gets its pane (nav starts its run); one left out
-    loses it (nav stops its run). Reordering touches the order only. A
-    plane already open stays open as it is, even when it was removed since,
-    so a tab never gets stuck on a plane another tab removed. Cost:
-    O(its panes).
+    A plane new to the list gets its pane (nav starts its run once the
+    plane is on the web); one left out loses it (nav stops its run).
+    Reordering touches the order only. A plane not in the space, removed,
+    or not on the web gets its pane all the same: the viewer tells it why
+    there is nothing to draw, and a tab never gets stuck on a plane another
+    tab removed. Cost: O(its panes).
 
     Raises:
-        Missing: No tab with that id, or a plane new to the list is not in
-            the space or not on the web.
-        Removed: A plane new to the list is removed.
+        Missing: No tab with that id, or the space's root listed new.
         Refused: A plane listed twice, or an empty id.
     """
     row = _tabs[sid]
@@ -344,8 +344,7 @@ def set_panes(sid: nu.StrArg, order: nu.ListArg[str]) -> nu.Nu:
             plane = nu.Str(at)
             fresh = (
                 refuse(plane == "", Refused, "an empty plane id")
-                >> _plane_live(plane)
-                >> _on_web(plane)
+                >> refuse(plane == ROOT, Missing, "no plane ", plane)
                 >> _pane(sid, plane)
             )
             return nu.IfDo(before.contains(plane).not_(), fresh)

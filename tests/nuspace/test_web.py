@@ -540,14 +540,18 @@ async def test_a_failed_event_toasts_its_type_and_message(store):
         session.notify(("viewer", "ops", "plane.remove_key"), {"plane_id": "p1"})
         await _until(lambda: len(session.toasts()) == 9)
         assert session.toasts()[-1]["type"] == "Missing"
-        # Opening a plane that never lands: Missing, after the wait for it.
+        # Opening a plane that never lands: told it is missing after the wait, no toast.
         session.notify(("viewer", "ops", "planes.open"), {"plane_ids": ["ghost"], "params": {}})
-        await _until(lambda: len(session.toasts()) == 10, timeout=6.0)
-        assert session.toasts()[-1]["type"] == "Missing"
-        # Nothing of it landed, and the tab still works.
+        await _until(lambda: session.writes("set_absent"), timeout=6.0)
+        assert session.writes("set_absent")[-1] == {
+            "op": "set_absent",
+            "plane_id": "ghost",
+            "reason": "missing",
+        }
+        # The tab still works.
         session.notify(("viewer", "ops", "planes.open"), {"plane_ids": ["p1"], "params": {}})
         await _until(lambda: session.writes("set_plane"))
-        assert len(session.toasts()) == 10
+        assert len(session.toasts()) == 9
     finally:
         task.cancel()
         await asyncio.gather(task, return_exceptions=True)
@@ -573,6 +577,30 @@ async def test_a_plane_opened_before_it_lands_is_waited_for(store, monkeypatch):
         await do(store, web.add("late"))
         order = web.Conn.connections["s1"].order
         await _until_store(store, nu.list(order) == nu.Literal(["late"]))
+        assert session.toasts() == []
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+
+
+async def test_a_plane_with_no_view_opens_as_headless_without_the_long_wait(store):
+    """Not on the web: the pane is told so right after the short web wait, and nothing toasts."""
+    from nuspace.devices.web import device
+
+    await plane(store, "off", on_web=False)
+    session = FakeSession()
+    ctx = store.ctx.bind(Session, session)
+    task = asyncio.create_task(nu.arun(device.connection(nu.Str("s1"), registry=REGISTRY), ctx))
+    try:
+        await _until(lambda: session.writes("set_tree"), BOOT_TIMEOUT)
+        session.notify(("viewer", "ops", "planes.open"), {"plane_ids": ["off"], "params": {}})
+        await _until(lambda: session.writes("set_absent"), timeout=device.OPEN_WAIT)
+        assert session.writes("set_absent")[-1] == {
+            "op": "set_absent",
+            "plane_id": "off",
+            "reason": "headless",
+        }
+        assert await store.read(nu.list(web.Conn.connections["s1"].order)) == ["off"]
         assert session.toasts() == []
     finally:
         task.cancel()

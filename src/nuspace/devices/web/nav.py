@@ -14,7 +14,10 @@ its plane inside the tab's session (``plane_run.add`` with
                          output stays. Restarting is the supervisor's job
 
 So a run starts only when a pane opens or its restart token changes, never
-because none is live. Cells added to a live run's plane get their first
+because none is live. A pane on a plane that is not in the space or not on
+the web (one the viewer says is missing or headless) waits for that to
+change before its run: opening a plane in a browser never runs one that
+has no view. Cells added to a live run's plane get their first
 run from reload; a removed plane's runs are stopped by the kernel.
 
 The stop wraps the start, so a pane closed mid start, a tab going and nav
@@ -37,7 +40,7 @@ from nuspace.utils import keys_of
 from nuspace.utils.policies import report, restarting
 
 from .interactions import SESSION_ENV
-from .shapes import Conn
+from .shapes import Conn, Web
 
 
 __all__ = ["BY", "nav", "pane"]
@@ -61,9 +64,14 @@ def _turn(sid: nu.Str, plane: nu.Str, token: nu.Str) -> nu.Nu:
     asked = panes[plane].restart
     envs = nu.List.of(nu.List.of(SESSION_ENV, sid))
 
+    # A plane made in the same breath lands its Space row, then its web row.
+    shown = nuspace.plane.exists(plane).and_(Web.planes.contains(plane))
+    landing = nu.OnAny(nuspace.Space.planes.on_children_change(), Web.planes.on_children_change())
+    on_web = nu.WaitUntil(atomic(landing), atomic(shown), **_RECHECK)
+
     def held(made: nu.ObjectRef) -> nu.Nu:
         run = nu.Str(made)
-        start = atomic(nuspace.plane_run.add(plane, by=BY, envs=envs, into=made))
+        start = on_web >> atomic(nuspace.plane_run.add(plane, by=BY, envs=envs, into=made))
         # The pane may have closed meanwhile: never write a pane back into being.
         open_now = nu.If(panes.exists(), panes.contains(plane), False)
         remember = atomic(nu.IfDo(open_now, panes[plane].plane_run.set(run)))

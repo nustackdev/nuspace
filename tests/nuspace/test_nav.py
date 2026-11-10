@@ -230,6 +230,22 @@ async def test_closing_a_pane_right_after_opening_leaves_no_live_run(space):
 
 
 @module_loop
+async def test_a_pane_on_a_plane_with_no_view_runs_nothing_until_it_is_on_the_web(space):
+    k = space
+    p, _ = await k.plane(FOREVER)
+    await k.do(web.open_tab("h1"))
+    await k.do(web.set_panes("h1", [p]))
+    await asyncio.sleep(1.0)
+    read = web.Conn.connections["h1"].panes[p].plane_run.fallback("")
+    assert await k.read(read) == ""
+    # Put on the web while the pane is open: its run starts then.
+    await k.do(web.add(p))
+    run = await pane_run(k, "h1", p)
+    await k.do(web.close_tab("h1"))
+    await ended(k, run)
+
+
+@module_loop
 async def test_closing_leaves_no_workers(space):
     """Last in the module: the space closed with nav in it leaves no worker up."""
     k = space

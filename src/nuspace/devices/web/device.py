@@ -14,7 +14,8 @@ anyone. Per tab, one arm:
 list of open panes, left to right, and each pane's params. It becomes
 ``web.set_panes`` (the order whole: a new plane gets its pane, nav runs it),
 then ``web.set_pane_params`` for each pane whose params moved, then
-``web.visit`` for each plane newly open (not home, settings or search).
+``web.visit`` for each plane newly open (not home, settings or search, nor
+one missing or headless).
 The cells of every plane leaving the list are erased as drawn first, so
 nothing of a closed pane stays on screen. The browser mints a new plane's
 id and opens it while its create is in flight, so the arm waits a moment
@@ -65,6 +66,8 @@ from .viewer import on_open, slash_entries, viewer_feed
 
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from starlette.requests import Request
 
     from nuspace.kernel import EnvFactory
@@ -76,6 +79,7 @@ __all__ = [
     "BANNER",
     "OPEN_WAIT",
     "ROUTES",
+    "WEB_WAIT",
     "connection",
     "pane_arm",
     "serve_web",
@@ -90,6 +94,11 @@ BANNER = "nuspace"
 #: the browser opens a plane it creates while the create is in flight.
 OPEN_WAIT = 2.0
 
+#: How long it then waits for a plane in the space to be on the web, in
+#: seconds: a create commits its web row right after its Space row, so a
+#: plane still without one is headless and is not waited on longer.
+WEB_WAIT = 0.3
+
 #: Planes a tab opens without a visit: they live in the sidebar's nav group.
 _UNVISITED = (HOME, SETTINGS, SEARCH)
 
@@ -101,20 +110,31 @@ def _erase(viewer: Ref, plane: nu.Str) -> nu.Nu:
 
 
 def _landed(planes: nu.List) -> nu.Nu:
-    """Wait up to :data:`OPEN_WAIT` for every plane to be in the space and on the web.
+    """Wait for every plane to be in the space, then on the web, each wait capped.
 
     A plane made in the same breath lands in two commits, its Space row then
-    its web row, so the wait hears both.
+    its web row, so the wait hears both. Up to :data:`OPEN_WAIT` for the
+    Space rows, since a create may still be in flight; then up to
+    :data:`WEB_WAIT` for the web rows, which follow at once, so a headless
+    plane is not waited on for long. What never lands opens anyway: the
+    viewer says it is missing or headless.
     """
-    there = planes.iter().filter(
-        lambda p: nuspace.plane.exists(nu.Str(p)).and_(web.Web.planes.contains(nu.Str(p))).not_()
-    )
-    ready = nu.Int(nu.Count(there)) == 0
     landing = nu.OnAny(
         nuspace.Space.planes.on_children_change(), web.Web.planes.on_children_change()
     )
-    waited = nu.WaitUntil(atomic(landing), atomic(ready), after=(0.05, 0.2, 0.5))
-    return nu.Timeout(OPEN_WAIT, waited, on_timeout=nu.Noop())
+
+    def wait(left: Callable[[nu.Str], nu.Bool], cap: float) -> nu.Nu:
+        ready = nu.Int(nu.Count(planes.iter().filter(lambda p: left(nu.Str(p))))) == 0
+        waited = nu.WaitUntil(atomic(landing), atomic(ready), after=(0.05, 0.2, 0.5))
+        return nu.Timeout(cap, waited, on_timeout=nu.Noop())
+
+    def absent(p: nu.Str) -> nu.Bool:
+        return nuspace.plane.exists(p).not_()
+
+    def off_web(p: nu.Str) -> nu.Bool:
+        return nuspace.plane.exists(p).and_(web.Web.planes.contains(p).not_())
+
+    return wait(absent, OPEN_WAIT) >> wait(off_web, WEB_WAIT)
 
 
 def pane_arm(viewer: Ref, sid: nu.StrArg, arms: Arms) -> nu.Nu:
@@ -144,7 +164,9 @@ def pane_arm(viewer: Ref, sid: nu.StrArg, arms: Arms) -> nu.Nu:
             def visited(at: nu.Attr) -> nu.Nu:
                 plane = nu.Str(at)
                 skip = nu.List.of(*_UNVISITED).contains(plane)
-                return nu.IfDo(skip.not_(), atomic(web.visit(plane)))
+                # A pane told it is missing or headless is no visit.
+                shown = nuspace.plane.exists(plane).and_(web.Web.planes.contains(plane))
+                return nu.IfDo(skip.not_(), atomic(nu.IfDo(shown, web.visit(plane))))
 
             return (
                 nu.ForEachDo(gone, lambda p: _erase(viewer, nu.Str(p)))
