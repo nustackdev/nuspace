@@ -38,9 +38,11 @@ __all__ = [
     "on_move_cell",
     "on_open",
     "on_remove_cell_key",
+    "on_remove_plane_key",
     "on_restart_cell",
     "on_restart_plane",
     "on_set_cell_key",
+    "on_set_plane_key",
     "on_set_web",
     "on_update_cell",
     "set_absent",
@@ -88,7 +90,7 @@ def set_plane(
     """Replace what one pane draws: one plane and its cells, in order.
 
     ``meta`` is how the pane shows it: its web flags (``editable``,
-    ``full_width``, ``compact``) and its ``icon``. A cell is ``{id, name,
+    ``full_width``, ``compact``), its ``icon`` and its ``key``. A cell is ``{id, name,
     key, source, spec, draws, classes}``. Every open plane is answered
     with one or with a :func:`set_absent`, or its pane loads forever.
     """
@@ -167,6 +169,16 @@ def on_set_cell_key(viewer: Ref) -> Changed:
 def on_remove_cell_key(viewer: Ref) -> Changed:
     """``{cell_id}``. Drops the cell's key, free for another cell."""
     return event(viewer, "cell.remove_key")
+
+
+def on_set_plane_key(viewer: Ref) -> Changed:
+    """``{plane_id, key}``. Sets or changes the plane's key."""
+    return event(viewer, "plane.key")
+
+
+def on_remove_plane_key(viewer: Ref) -> Changed:
+    """``{plane_id}``. Drops the plane's key, free for another plane."""
+    return event(viewer, "plane.remove_key")
 
 
 def on_set_web(viewer: Ref) -> Changed:

@@ -149,7 +149,7 @@ export const docTail = "h-doc-tail w-full shrink-0 cursor-text";
  * anything here.
  */
 export function docTitleHead(wide = false, compact = false): string {
-	return cn(docPlaneWidth(wide), compact ? "pt-3" : "pt-4");
+	return cn(docPlaneWidth(wide), "group/title", compact ? "pt-3" : "pt-4");
 }
 
 /**
@@ -205,6 +205,30 @@ export function docTitle(): string {
 		"empty:before:content-[attr(data-placeholder)]",
 	)} text-doc-title`;
 }
+
+/**
+ * The title row's right gutter, where a cell's identity toggle sits on its
+ * row. Hidden like a cell's controls: out while the head is hovered or the
+ * toggle has the keyboard, and pinned (`data-pinned`) while the block is open.
+ * `pt-3.5` centres the 24px toggle on the title's first line (its 2 of pad
+ * plus half its 48 line).
+ */
+export const docTitleGutter = cn(
+	"col-[gutter-r] row-start-1 flex items-start justify-start pt-3.5 pl-1 select-none",
+	"opacity-0 transition-opacity duration-fast ease-out",
+	"group-hover/title:opacity-100 has-[:focus-visible]:opacity-100 data-[pinned]:opacity-100",
+);
+
+/**
+ * The plane's `@key`, one small muted mono line under the title, there only
+ * when the plane has a key. A kit ghost button pulled out by its own pad, so
+ * the `@` starts on the title's text edge.
+ */
+export const docTitleKeyLine = cn(docContentTrack, "px-doc-cell");
+export const docTitleKey = "-mx-1.5 font-mono font-normal text-text-muted";
+
+/** The identity block under the title, in the content track. */
+export const docTitleIdentity = cn(docContentTrack, "px-doc-cell pt-2");
 
 /** Code inside a cell. Editor tier is 14px mono, per typography.md §1. */
 export const docCode = "font-mono text-lg text-text-primary";
@@ -447,16 +471,21 @@ export const docSlashList = "min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-
 
 /**
  * A cell's id and key, two small lines the identity toggle opens above what
- * the cell draws, the way the code toggle opens its source. Muted and dense:
- * an address, not content.
+ * the cell draws, the way the code toggle opens its source. A plane's opens
+ * the same block under its title (`docTitleIdentity`). Muted and dense: an
+ * address, not content.
  */
 export const docIdentity = cn(
 	"mb-2 flex flex-col gap-1 rounded-md border border-border-default px-2 py-1.5",
 	"text-xs text-text-muted",
 );
 export const docIdentityLine = "flex min-w-0 items-center gap-1.5";
-/** "ID" and "Key", one width, so the two values start on one edge. */
-export const docIdentityLabel = "w-6 shrink-0 select-none";
+/**
+ * "ID" and "Key", each behind its small glyph (`#`, `@`), one width, so the
+ * two values start on one edge.
+ */
+export const docIdentityLabel =
+	"inline-flex w-10 shrink-0 items-center gap-1 select-none [&_svg]:size-3 [&_svg]:shrink-0";
 /** The id: mono, read-only, selectable. */
 export const docIdentityValue = "min-w-0 flex-1 truncate font-mono text-text-secondary select-text";
 export const docIdentityInput = "min-w-0 flex-1 font-mono text-xs";

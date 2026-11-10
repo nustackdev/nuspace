@@ -47,7 +47,7 @@ export type Cell = {
 // where that address is.
 
 /**
- * The Plane's own settings, as `set_plane.meta` ships them. Open-ended: the two
+ * The Plane's own settings, as `set_plane.meta` ships them. Open-ended: the
  * named keys are the ones the browser reads today, and anything else the
  * server adds rides along untouched so a `plane.web` flags merge never drops it.
  */
@@ -59,6 +59,8 @@ export type PlaneMeta = Record<string, unknown> & {
 	full_width: boolean;
 	/** A tight head and no run-off under the last cell. */
 	compact: boolean;
+	/** Its handle, what code and agents reach it by. "" when it has none. */
+	key: string;
 };
 
 export type ActivePlane = {
@@ -106,7 +108,7 @@ export function isLive(s: CellState): boolean {
 
 const STATES: CellState[] = ["invalid", "idle", "starting", "running", "stopped", "failed"];
 
-/** Both named keys default to false when absent, whatever else is there. */
+/** The named flags default to false and the key to "" when absent, whatever else is there. */
 export function coerceMeta(raw: unknown): PlaneMeta {
 	const r =
 		raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
@@ -115,6 +117,7 @@ export function coerceMeta(raw: unknown): PlaneMeta {
 		editable: r.editable === true,
 		full_width: r.full_width === true,
 		compact: r.compact === true,
+		key: typeof r.key === "string" ? r.key : "",
 	};
 }
 

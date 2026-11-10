@@ -136,7 +136,7 @@ def plane_view(plane: nu.StrArg, specs: Iterable[CellSpec] = ()) -> nu.Dict:
     ``absent`` says why the pane has nothing to draw, ``""`` when it has:
     :data:`ABSENT_MISSING` for no plane or a removed one,
     :data:`ABSENT_HEADLESS` for a plane not on the web. ``meta`` is how it
-    shows: its web flags and its icon.
+    shows: its web flags, its icon and its key (``""`` when it has none).
     """
     row, flags = Space.planes[plane], Web.planes[plane]
     there = nuspace.plane.exists(plane)
@@ -148,6 +148,7 @@ def plane_view(plane: nu.StrArg, specs: Iterable[CellSpec] = ()) -> nu.Dict:
         full_width=flags.full_width.fallback(False),
         compact=flags.compact.fallback(False),
         icon=row.icon.fallback(""),
+        key=row.key.fallback(""),
     )
     return nu.Dict(
         nu.If(
@@ -396,6 +397,16 @@ def _events(arms: Arms, viewer: Ref, sid: nu.StrArg, specs: Sequence[CellSpec]) 
             "cell_remove_key",
             interactions.on_remove_cell_key(viewer),
             lambda c, _: atomic(nuspace.cell.remove_key(c)),
+        ),
+        arms.plane_event(
+            "plane_key",
+            interactions.on_set_plane_key(viewer),
+            lambda p, ev: atomic(nuspace.plane.set_key(p, field_str(ev, "key"))),
+        ),
+        arms.plane_event(
+            "plane_remove_key",
+            interactions.on_remove_plane_key(viewer),
+            lambda p, _: atomic(nuspace.plane.remove_key(p)),
         ),
         arms.plane_event("web", interactions.on_set_web(viewer), _web_flags),
     ]

@@ -8,24 +8,27 @@
 //   open      Open, Open on desk, Open in new tab
 //   close     Close, Close others, Close to the right
 //   plane     Add plane inside, Rename, Change icon, Pin / Unpin,
-//             Copy plane id, Restart plane
+//             Copy plane ID, Copy plane key, Restart plane
 //   settings  the caller's rows, eg the pane's switches
 //   delete    Delete plane, last and on its own
 //
 // A group with nothing in it takes no separator. "Open in new tab" and "Copy
-// plane id" need only the id, so they are on every menu with a plane. The
+// plane ID" need only the id, so they are on every menu with a plane. "Copy
+// plane key" needs the key, which only a landed plane's pane knows, so it is
+// on the pane's menu alone, disabled while the plane has no key. The
 // close group shows when `desk` is set, the plane is on the desk, and there is
 // another pane to close it to, with "Close to the right" kept, disabled, on
 // the last pane so the menu keeps its shape from pane to pane.
 
 import {
 	ArrowRightToLine,
+	AtSign,
 	Check,
 	Columns2,
-	Copy,
 	CopyX,
 	ExternalLink,
 	FileText,
+	Hash,
 	PenLine,
 	Pin,
 	PinOff,
@@ -55,6 +58,8 @@ export type PlaneActions = {
 	rename?: () => void;
 	/** Left off where there is no picker to anchor. */
 	changeIcon?: () => void;
+	/** The plane's key, "" for none. Left out where it is not known: no row then. */
+	planeKey?: string;
 	/** Pin / Unpin. Null or left out for a plane the rail does not draw. */
 	pin?: { pinned: boolean; toggle: () => void } | null;
 	restart?: () => void;
@@ -69,6 +74,7 @@ export type PlaneActions = {
 export function PlaneMenuItems({ parts, ...a }: PlaneActions & { parts: MenuParts }) {
 	const { Item, Separator, Shortcut } = parts;
 	const copy = useCopyRow(a.planeId);
+	const copyKey = useCopyRow(a.planeKey ?? "");
 	const routes = useRoutes();
 	const id = a.planeId;
 	const add = a.add ?? (() => openAddPlane({ parent: id }));
@@ -120,9 +126,15 @@ export function PlaneMenuItems({ parts, ...a }: PlaneActions & { parts: MenuPart
 			</Item>
 		) : null,
 		<Item key="copy" onSelect={copy.onSelect}>
-			{copy.copied ? <Check /> : <Copy />}
-			{copy.copied ? "Copied" : "Copy plane id"}
+			{copy.copied ? <Check /> : <Hash />}
+			{copy.copied ? "Copied" : "Copy plane ID"}
 		</Item>,
+		a.planeKey !== undefined ? (
+			<Item key="copy-key" disabled={!a.planeKey} onSelect={copyKey.onSelect}>
+				{copyKey.copied ? <Check /> : <AtSign />}
+				{copyKey.copied ? "Copied" : "Copy plane key"}
+			</Item>
+		) : null,
 		a.restart ? (
 			<Item key="restart" onSelect={a.restart}>
 				<RotateCcw />

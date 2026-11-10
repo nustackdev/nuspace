@@ -57,6 +57,10 @@ export type Ops = {
 	"cell.key": { cell_id: string; key: string };
 	/** Drop the cell's key, free for another cell. */
 	"cell.remove_key": { cell_id: string };
+	/** Set or change the plane's key, refused server side like a cell's. */
+	"plane.key": { plane_id: string; key: string };
+	/** Drop the plane's key, free for another plane. */
+	"plane.remove_key": { plane_id: string };
 	/** One cell before or after another of its plane, neither for the end. */
 	"cell.move": { cell_id: string; before?: string; after?: string };
 	/** Run the cell again in this pane's run. With the run over, the whole

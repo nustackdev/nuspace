@@ -11,27 +11,36 @@
 //
 // A pane whose Plane has not landed yet draws the viewer skeleton, the same
 // one the boot draws, so a switch and a first load look alike.
+//
+// Under the title, the plane's `@key` when it has one, and the identity block
+// its title row's `#` opens (./TitleIdentity.tsx). Like the title, the key is
+// the plane's own, not one of its cells, but unlike the title it changes only
+// on an editable plane.
 
 import type { Path } from "@nustackdev/ui-core";
 import { Button, EmptyState } from "@nustackdev/ui-kit";
-import { useCallback, useRef } from "react";
+import { useCallback, useRef, useState } from "react";
 import { closePane, focusPane } from "../core/router";
 import {
 	docContentTrack,
 	docPlaneAbsent,
+	docRow,
 	docTitleHead,
+	docTitleIdentity,
 	docTitleRow,
 	shellPane,
 	shellPaneDrop,
 	shellPanePlane,
 } from "../design";
 import type { PlaneHandle } from "../plane/api";
+import { Identity } from "../plane/Identity";
 import type { Notify } from "../plane/ops";
 import { Plane } from "../plane/Plane";
 import type { AbsentReason, ActivePlane, CellSpec } from "../plane/types";
 import { PaneBar } from "./PaneBar";
 import { focusTitle, Title } from "./Title";
 import { TitleIcon } from "./TitleIcon";
+import { IdentityToggle, KeyHandle } from "./TitleIdentity";
 import { ViewerSkeleton } from "./ViewerSkeleton";
 
 // The Plane the server inits with no name shows this instead. A placeholder,
@@ -108,6 +117,13 @@ export function Pane({
 	const toTitle = useCallback((at: "start" | "end") => {
 		if (head.current) focusTitle(head.current, at);
 	}, []);
+	// The identity block is this pane's own business, like a cell's is the cell's.
+	const [identity, setIdentity] = useState(false);
+	const key = plane?.meta.key ?? "";
+	const setKey = (next: string) =>
+		next === ""
+			? notify("plane.remove_key", { plane_id: planeId })
+			: notify("plane.key", { plane_id: planeId, key: next });
 
 	return (
 		<section
@@ -158,7 +174,29 @@ export function Pane({
 									onIntent={(i) => planeHandle.current?.title(i) ?? false}
 									headRef={head}
 								/>
+								<IdentityToggle open={identity} onOpenChange={setIdentity} />
 							</div>
+							{key ? (
+								<div className={docRow}>
+									<KeyHandle value={key} />
+								</div>
+							) : null}
+							{identity ? (
+								<div className={docRow}>
+									<div className={docTitleIdentity}>
+										<Identity
+											kind="plane"
+											id={planeId}
+											value={key}
+											onSave={plane.meta.editable ? setKey : undefined}
+											onClose={() => {
+												setIdentity(false);
+												toTitle("end");
+											}}
+										/>
+									</div>
+								</div>
+							) : null}
 						</header>
 						<Plane
 							viewerPath={viewerPath}

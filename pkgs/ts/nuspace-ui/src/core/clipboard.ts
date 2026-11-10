@@ -20,7 +20,10 @@ export async function copyText(text: string): Promise<boolean> {
 	}
 }
 
-/** Copy `text` on a menu row's select, keeping the menu open, and whether it just did. */
+/**
+ * Copy `text` on a menu row's select, keeping the menu open, or on a plain
+ * click (`copy`), and whether it just did.
+ */
 export function useCopyRow(text: string) {
 	const [copied, setCopied] = useState(false);
 
@@ -30,15 +33,20 @@ export function useCopyRow(text: string) {
 		return () => window.clearTimeout(t);
 	}, [copied]);
 
+	// Off a menu row's select or a plain click alike.
+	const copy = useCallback(() => {
+		void copyText(text).then((ok) => {
+			if (ok) setCopied(true);
+		});
+	}, [text]);
+
 	const onSelect = useCallback(
 		(e: Event) => {
 			e.preventDefault();
-			void copyText(text).then((ok) => {
-				if (ok) setCopied(true);
-			});
+			copy();
 		},
-		[text],
+		[copy],
 	);
 
-	return { copied, onSelect };
+	return { copied, copy, onSelect };
 }

@@ -79,7 +79,7 @@ export function render(
 	const plane: ActivePlane = {
 		plane_id: "p1",
 		title: "",
-		meta: { editable, full_width: false, compact: false },
+		meta: { editable, full_width: false, compact: false, key: "" },
 		cells,
 	};
 	act(() => {

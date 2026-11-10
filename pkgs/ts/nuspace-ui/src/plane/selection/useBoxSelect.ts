@@ -23,9 +23,9 @@ import type * as React from "react";
 import { useCallback, useState } from "react";
 import type { PlaneModel } from "../api";
 
-/** Where a press never starts a box: inside a cell's box, or on a control. */
+/** Where a press never starts a box: inside a cell's box, the plane's identity block, or on a control. */
 const NO_BOX =
-	'[data-cell-body], button, a, input, textarea, select, [contenteditable="true"], [role="menu"], [role="dialog"]';
+	'[data-cell-body], [data-identity], button, a, input, textarea, select, [contenteditable="true"], [role="menu"], [role="dialog"]';
 
 export type Box = { left: number; top: number; width: number; height: number };
 

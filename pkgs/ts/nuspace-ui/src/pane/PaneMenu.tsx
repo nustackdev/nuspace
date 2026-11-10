@@ -89,6 +89,7 @@ export function PaneMenuItems({
 		<PlaneMenuItems
 			parts={parts}
 			planeId={planeId}
+			planeKey={meta.key}
 			add={() => openAddPlane({ parent: planeId, pane: planeId })}
 			pin={pin}
 			restart={onRestart}

@@ -8,7 +8,9 @@
 // refuse, and that refusal toasts. Escape in the field closes the block.
 //
 // Without `onSave` (a read-only plane) the key shows and copies, and nothing
-// saves. Kind-blind on purpose, so a plane can show the same block.
+// saves. Kind-blind on purpose: a plane's title opens the same block
+// (../pane/TitleIdentity.tsx). Each label carries the glyph its menu row
+// copies with, `#` for an id and `@` for a key.
 
 import {
 	Button,
@@ -18,7 +20,7 @@ import {
 	TooltipContent,
 	TooltipTrigger,
 } from "@nustackdev/ui-kit";
-import { Copy, Info } from "lucide-react";
+import { AtSign, Copy, Hash, Info } from "lucide-react";
 import { useEffect, useState } from "react";
 import {
 	docIdentity,
@@ -89,14 +91,20 @@ export function Identity({
 	return (
 		<div className={docIdentity} data-identity={kind}>
 			<div className={docIdentityLine}>
-				<span className={docIdentityLabel}>ID</span>
+				<span className={docIdentityLabel}>
+					<Hash aria-hidden="true" />
+					ID
+				</span>
 				<span className={docIdentityValue} data-identity-id="">
 					{id}
 				</span>
 				<CopyButton text={id} label={`Copy ${kind} id`} />
 			</div>
 			<div className={docIdentityLine}>
-				<span className={docIdentityLabel}>Key</span>
+				<span className={docIdentityLabel}>
+					<AtSign aria-hidden="true" />
+					Key
+				</span>
 				<Input
 					size="sm"
 					ring="inset"
