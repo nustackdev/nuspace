@@ -142,7 +142,7 @@ export const railScroll = cn(
  * New plane, at the top level: the tree's first row, under the Planes header,
  * shaped and spaced like the rows under it, so it reads as the place the next
  * plane goes. Its own text one tier back, the `+` in the icon lane, the
- * shortcut on the actions' edge while it is hovered.
+ * shortcut always on the actions' edge, like the nav rows' hints.
  */
 export const railNewPlaneBar = "shrink-0 pb-rail-row-gap";
 
@@ -155,10 +155,7 @@ export const railNewPlaneLabel = cn(
 	"transition-colors duration-fast ease-out group-hover/row:text-text-primary",
 );
 
-export const railNewPlaneKeys = cn(
-	"shrink-0 opacity-0 transition-opacity duration-fast ease-out",
-	"group-hover/row:opacity-100 group-focus-visible/row:opacity-100",
-);
+export const railNewPlaneKeys = "shrink-0";
 
 /** The tree itself: rows a hairline apart, so two fills never merge. */
 export const railTreeList = "flex flex-col gap-rail-row-gap";

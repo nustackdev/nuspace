@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- An empty plane list shows just New plane, its shortcut always visible
 - The boot screen says Booting your space instead of waking up
 - Jump to Home from anywhere with Cmd+Shift+H, shown in the sidebar
 - Reopened planes no longer flash their old cell output before rendering fresh

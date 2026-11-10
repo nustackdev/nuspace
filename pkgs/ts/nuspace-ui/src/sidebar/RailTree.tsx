@@ -168,7 +168,6 @@ export function RailTree({
 						</Fragment>
 					);
 				})}
-				{rows.length === 0 ? <EmptyState size="sm">Nothing here yet</EmptyState> : null}
 			</div>
 			{/* The rest of the rail: a drop here goes to the top level, last. */}
 			<div className={railDropTail} {...tailProps}>
