@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Desk folders list items and strips, save, reset, rename, close and reorder
 - The sidebar is built from uniform sections and rows, nav follows the roles
 - Panes drag by their header and show one not found pane for anything missing
 - The canvas shows one plane or strip, with px column widths and drops
