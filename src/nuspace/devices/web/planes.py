@@ -1,16 +1,23 @@
-"""The planes the web device ships with: home, settings, search, the searches folder and the home indexer.
+"""The planes the web device ships with: home, settings, search, the searches folder, the home indexer and the desk pruner.
 
-Home, settings and search are web planes with fixed ids: system (remove
-refuses them), on the async backend, with fixed cells. The sidebar draws
-them in its nav group, out of the tree. ``searches`` is the system plane
-every search hangs under; it is not on the web. ``home_indexer``
-(:mod:`.indexer`) is not on the web either: a system plane two reactions
-run, counting what Home shows.
+It seeds the Favorites desk too, once per space (:func:`ensure_favorites`).
+
+Home, settings and search are web planes found through roles
+(``Web.roles``), never by id: each has a minted plane id, is system
+(remove refuses it), runs on the async backend and is made with fixed
+cells. The sidebar draws them in its nav section, out of the tree.
+``searches`` is the system plane every search hangs under; it is not on
+the web. ``home_indexer`` (:mod:`.indexer`) is not on the web either: a
+system plane two reactions run, counting what Home shows. Nor is
+``desk_pruner`` (:mod:`.pruner`): a system plane one reaction runs, taking
+removed planes off the desks. Those three keep reserved ids
+(:data:`~nuspace.shapes.plane.RESERVED`).
 
 :func:`ensure` makes each one where missing, with its cells and its web
 row, and leaves one that is there exactly as it is: after the first open
-its cells are the owner's to edit. Their ids are reserved
-(:data:`~nuspace.shapes.plane.RESERVED`), so no user plane takes one.
+its cells are the owner's to edit. A role plane is missing when its role
+is not set, or names a plane with no row (a stale id); one that is
+removed is left alone for now.
 """
 
 from __future__ import annotations
@@ -20,75 +27,109 @@ import nuspace
 from nuspace.errors import Refused
 from nuspace.ops.brackets import atomic
 from nuspace.shapes.space import Space
+from nuspace.utils import MintId
 from nuspace.utils.checks import refuse
 
-from . import indexer
+from . import indexer, pruner
 from . import ops as web
 from .home import CELLS as HOME_CELLS
 from .home import ICON as HOME_ICON
 from .home import NAME as HOME_NAME
-from .home import PLANE as HOME
+from .interactions import Favorites
 from .search import CELLS as SEARCH_CELLS
 from .search import ICON as SEARCH_ICON
 from .search import NAME as SEARCH_NAME
-from .search import PLANE as SEARCH
 from .search import SEARCHES, SEARCHES_BACKEND, SEARCHES_NAME
 from .settings import CELLS as SETTINGS_CELLS
 from .settings import ICON as SETTINGS_ICON
 from .settings import NAME as SETTINGS_NAME
-from .settings import PLANE as SETTINGS
 from .shapes import Web
 
 
 __all__ = [
     "BACKEND",
-    "HOME",
     "INDEXER",
     "PLANES",
-    "SEARCH",
+    "PRUNER",
     "SEARCHES",
-    "SETTINGS",
     "cell_id",
     "ensure",
+    "ensure_favorites",
     "ensure_indexer",
+    "ensure_pruner",
+    "role_plane",
 ]
 
 #: The home indexer's plane id.
 INDEXER = indexer.PLANE
 
+#: The desk pruner's plane id.
+PRUNER = pruner.PLANE
+
 
 #: What the web planes' runs execute on: their cells await, they never block.
 BACKEND = "async"
 
-#: The web planes: ``(plane id, name, icon, ((cell name, source), ...))``, in sidebar order.
+#: The role planes: ``(role, name, icon, ((cell name, source), ...))``, in sidebar order.
 PLANES = (
-    (HOME, HOME_NAME, HOME_ICON, HOME_CELLS),
-    (SEARCH, SEARCH_NAME, SEARCH_ICON, SEARCH_CELLS),
-    (SETTINGS, SETTINGS_NAME, SETTINGS_ICON, SETTINGS_CELLS),
+    ("home", HOME_NAME, HOME_ICON, HOME_CELLS),
+    ("search", SEARCH_NAME, SEARCH_ICON, SEARCH_CELLS),
+    ("settings", SETTINGS_NAME, SETTINGS_ICON, SETTINGS_CELLS),
 )
 
 
 def cell_id(plane: str, name: str) -> str:
-    """The fixed id of a web plane's cell: the plane's id, then the cell's name.
+    """The fixed id of a reserved plane's cell: the plane's id, then the cell's name.
 
     Under the plane's id, so two planes' cells of one name never meet.
     """
     return f"{plane}_{name}"
 
 
-def _made(
+def role_plane(role: nu.StrArg) -> nu.Str:
+    """The plane id a role resolves to, ``""`` when it is not set. A read of Web."""
+    return nu.Str(Web.roles[role].fallback(""))
+
+
+def _cells(plane: nu.StrArg, cells: tuple[tuple[str, str], ...], fabrics: list[str]) -> nu.Nu:
+    """A new plane's cells, in order. Every one draws, so its fabrics are given: no build."""
+    adds: nu.Nu = nu.Noop()
+    for name, source in cells:
+        adds = adds >> nuspace.cell.add(plane, source, name=name, fabrics=list(fabrics))
+    return adds
+
+
+def _role(role: str, name: str, icon: str, cells: tuple[tuple[str, str], ...]) -> nu.Nu:
+    """One role's plane where missing: a plane and its cells, then its web row and the role.
+
+    The plane gets a minted id and lands with its cells in one Space
+    commit; its web row and the role follow in one Web commit.
+
+    Missing is the role not set, or set to a plane with no row. A role whose
+    plane is there leaves it as it is.
+    """
+    held = role_plane(role)
+    there = (held != "").and_(Space.planes.contains(held))
+
+    def made(minted: nu.ObjectRef) -> nu.Nu:
+        plane = nu.Str(minted)
+        adds = nuspace.plane.add(plane, name=name, icon=icon, backend=BACKEND, system=True)
+        on_web = web.add(plane, editable=True) >> web.set_role(role, plane)
+        return atomic(adds >> _cells(plane, cells, ["ui"])) >> atomic(on_web)
+
+    return nu.IfDo(nu.Bool(atomic(there)).not_(), nu.let(MintId("p"), made))
+
+
+def _reserved(
     plane: str,
     name: str,
     icon: str,
     cells: tuple[tuple[str, str], ...],
     *,
     backend: str,
-    on_web: bool,
     fabrics: tuple[str, ...] = ("ui",),
 ) -> nu.Nu:
-    """One plane and its cells where missing, one Space commit; then its web row, one Web commit.
-
-    Every web plane's cell draws, so its fabrics are ``["ui"]`` by default, with no build.
+    """A plane with a reserved id and its cells where missing, one Space commit. Not on the web.
 
     Raises:
         Refused: The id is held by a plane that is not system.
@@ -100,30 +141,28 @@ def _made(
         adds = adds >> nuspace.cell.add(
             plane, source, id=cell_id(plane, cell), name=cell, fabrics=list(fabrics)
         )
-    term = atomic(
+    return atomic(
         refuse(alien, Refused, "plane ", plane, " is taken by a plane that is not system")
         >> nu.IfDo(there.not_(), adds)
     )
-    if on_web:
-        row = nu.IfDo(Web.planes.contains(plane).not_(), web.add(plane, editable=True))
-        term = term >> atomic(row)
-    return term
 
 
 def ensure() -> nu.Nu:
-    """The web planes, the searches folder and the home indexer, each made where missing. Idempotent.
+    """The role planes, the searches folder, the home indexer, the desk pruner and Favorites, each made where missing. Idempotent.
 
     A plane that is there is left as it is, its cells included. Two commits
-    per web plane (Space, then Web), one for the folder, one for the
+    per role plane made (Space, then Web), one for the folder, one for the
     indexer, then its two reactions where not kept yet
-    (:func:`~.indexer.ensure_reactions`).
+    (:func:`~.indexer.ensure_reactions`), one for the pruner, then its
+    reaction where not kept yet (:func:`~.pruner.ensure_reaction`), then
+    one for Favorites on the first open (:func:`ensure_favorites`).
 
     Raises:
-        Refused: A web plane's id held by a plane that is not system.
+        Refused: A reserved id held by a plane that is not system.
     """
-    made = [_made(*spec, backend=BACKEND, on_web=True) for spec in PLANES]
-    folder = _made(SEARCHES, SEARCHES_NAME, "", (), backend=SEARCHES_BACKEND, on_web=False)
-    return nu.Sequential(*made, folder, ensure_indexer())
+    roles = [_role(*spec) for spec in PLANES]
+    folder = _reserved(SEARCHES, SEARCHES_NAME, "", (), backend=SEARCHES_BACKEND)
+    return nu.Sequential(*roles, folder, ensure_indexer(), ensure_pruner(), ensure_favorites())
 
 
 def ensure_indexer() -> nu.Nu:
@@ -131,13 +170,53 @@ def ensure_indexer() -> nu.Nu:
 
     Needs no web store: the indexer is not on the web.
     """
-    plane = _made(
+    plane = _reserved(
         indexer.PLANE,
         indexer.NAME,
         indexer.ICON,
         indexer.CELLS,
         backend=indexer.BACKEND,
-        on_web=False,
         fabrics=(),
     )
     return plane >> indexer.ensure_reactions()
+
+
+def ensure_pruner() -> nu.Nu:
+    """The desk pruner where missing, one Space commit, then its reaction where not kept yet.
+
+    Not on the web: it writes the Web store, it is never shown.
+    """
+    plane = _reserved(
+        pruner.PLANE,
+        pruner.NAME,
+        pruner.ICON,
+        pruner.CELLS,
+        backend=pruner.BACKEND,
+        fabrics=(),
+    )
+    return plane >> pruner.ensure_reaction()
+
+
+# --- Favorites ------------------------------------------------------------------------------
+
+
+def ensure_favorites() -> nu.Nu:
+    """The Favorites desk, made once per space, first in creation order. One Web commit, once.
+
+    Made only while ``Web.seeded`` is not set, and it sets it: a closed
+    Favorites never comes back. It starts empty, its id minted as the
+    browser mints them.
+    """
+
+    def seed(made: nu.Attr) -> nu.Nu:
+        m = nu.Dict(made)
+        desk_id = nu.Str(m["id"])
+        return (
+            Web.desks[desk_id].set(m["desk"])
+            >> Web.desk_order.remove(desk_id, missing_ok=True)
+            >> Web.desk_order.append(desk_id)
+            >> Web.seeded.set(True)
+        )
+
+    fresh = Web.seeded.fallback(False).not_()
+    return atomic(nu.IfDo(fresh, nu.let(Favorites(), seed)))

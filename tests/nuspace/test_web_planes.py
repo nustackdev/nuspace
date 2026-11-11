@@ -140,11 +140,14 @@ async def test_settings_header_draws_the_space_line(store):
 
 async def test_ensure_then_home_is_a_system_web_plane(store):
     await store.run(ensure())
-    assert await store.read(web.Web.planes["home"].editable) is True
+    home_plane = await store.read(web.Web.roles["home"])
+    assert await store.read(web.Web.planes[home_plane].editable) is True
     with pytest.raises(nuspace.errors.Refused):
-        await do(store, nuspace.plane.remove("home"))
+        await do(store, nuspace.plane.remove(home_plane))
     with pytest.raises(nuspace.errors.Refused):
-        await do(store, nuspace.plane.add("search", backend="async"))
+        await do(store, nuspace.plane.add("searches", backend="async"))
+    # The role names are no reserved ids any more: a user plane may take one.
+    await do(store, nuspace.plane.add("home", backend="async"))
 
 
 # --- Search ---------------------------------------------------------------------------
@@ -271,13 +274,16 @@ class _Chosen(nu.Shape):
     shown = nustd.kv.StrRef.slot()
 
 
-CHOSEN = nuspace.at.plane(id=search.PLANE).state(_Chosen)
+#: The viewer plane these tests run its cells in: its id is minted in a space.
+VIEWER = "p_search"
+
+CHOSEN = nuspace.at.plane(id=VIEWER).state(_Chosen)
 
 
 def _viewer(source: str, call: str, *args: object) -> nu.Nu:
     """A viewer cell's ``call``, built from its source and run in the viewer plane."""
     term = _built(source)[call](*args)
-    return inside(term, plane=search.PLANE, cell=f"{search.PLANE}_x")
+    return inside(term, plane=VIEWER, cell=f"{VIEWER}_x")
 
 
 @pytest.fixture

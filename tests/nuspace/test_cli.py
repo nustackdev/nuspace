@@ -22,8 +22,7 @@ import nustd.kv
 from nuspace._cli import _installed, cli
 from nuspace._cli.commands import run as run_command
 from nuspace._telemetry import config
-from nuspace.devices.web import WEB_STORE
-from nuspace.devices.web.planes import HOME
+from nuspace.devices.web import WEB_STORE, Web
 from nuspace.host import CORE, SPACE_STORE, presets
 from nuspace.host.layout import DATA_DIR
 from nuspace.specs import CellSpec, ContentSpec, Extension, PlaneSpec
@@ -349,7 +348,7 @@ def test_init_makes_a_space_and_seeds_it(tmp_path):
     assert result.exit_code == 0, result.output
     assert "Initialized" in result.output
     assert (path / DATA_DIR / SPACE_FILE).is_file()
-    assert _read(path, nuspace.plane.exists(HOME)) is True
+    assert _read(path, nuspace.plane.exists(Web.roles["home"])) is True
 
     again = _invoke("init", str(path))
     assert again.exit_code == 0, again.output

@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- System planes home, search and settings are found by role, not fixed ids
 - Opening a plane with no view or no plane says so instead of hanging
 - A pane's bar shows the plane's breadcrumbs, with parents one click away
 - Plane spacing reduced to one top pad, title gap and end run-off

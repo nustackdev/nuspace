@@ -32,7 +32,6 @@ import nuspace
 import nustd.kv
 from nuspace import host
 from nuspace.devices.web import CONN_STORE, WEB_STORE, Conn, Web
-from nuspace.devices.web.planes import HOME
 from nuspace.errors import Missing, Refused
 from nuspace.host import interactions, presets
 from nuspace.host import lock as lock_module
@@ -394,7 +393,7 @@ def test_make_space_seeds_a_fresh_space_and_keeps_an_existing_one(tmp_path):
     info = _read(root, Space.info.extract())
     assert info["format"] == FORMAT
     planes = set(_read(root, nu.list(Space.planes.keys())))
-    assert {"root", init.PLANE, HOME} <= planes
+    assert {"root", init.PLANE, _read(root, Web.roles["home"])} <= planes
     assert set(_read(root, nu.list(init.boot_list().keys()))) == set(init.BOOTED)
     # A second make keeps what is there: a booted plane stays booted.
     _write(root, host.STATE_STORE, init.boot_list().set_item("mine", True))
@@ -409,7 +408,7 @@ def test_headless_opens_every_device_store_and_seeds_no_device_plane(tmp_path):
     assert is_space(root)
     assert (data_dir(root) / WEB_STORE.file).exists()
     assert (data_dir(root) / CONN_STORE.file).exists()
-    assert HOME not in _read(root, nu.list(Space.planes.keys()))
+    assert _read(root, Web.roles.extract()) == {}
     assert _read(root, nu.list(Web.planes.keys())) == []
     # conn.db is made fresh at a headless open too.
     _write(root, CONN_STORE, Conn.connections["tab"].order.set(["p"]))
@@ -421,10 +420,12 @@ def test_conn_is_made_fresh_at_every_open_web_is_kept(tmp_path):
     root = tmp_path / "space"
     _make(root)
     _write(root, CONN_STORE, Conn.connections["tab"].order.set(["p"]))
-    _write(root, WEB_STORE, nuspace.devices.web.Web.pinned.set([HOME]))
+    home = _read(root, Web.roles["home"])
+    _write(root, WEB_STORE, nuspace.devices.web.Web.recents.set([home]))
     _make(root)
     assert _read(root, Conn.connections.extract()) == {}
-    assert _read(root, nuspace.devices.web.Web.pinned.extract()) == [HOME]
+    assert _read(root, nuspace.devices.web.Web.recents.extract()) == [home]
+    assert _read(root, Web.roles["home"]) == home
 
 
 def test_a_space_of_another_format_is_refused_before_anything_is_written(tmp_path):

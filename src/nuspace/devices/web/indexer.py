@@ -12,11 +12,11 @@ pass walks ``Space.planes`` and ``Space.cells`` in key order past its
 cursors. Minted ids are time ordered (``p_<12 hex ms>_...``, ``c_...``,
 see :func:`~nuspace.utils.interactions.mint_ordered_id`), so key order is
 creation order and the two dicts read as creation logs. Fixed ids (root,
-the system and web planes and their cells) carry no prefix and are
-skipped.
+the system planes and their cells) carry no prefix and are skipped.
 
 Counts are created only: a removed row still counts, a restore adds
-nothing. Cells of a system plane are not counted (the reactions plane's
+nothing. System planes are not counted (home, search and settings have
+minted ids), nor are the cells of a system plane (the reactions plane's
 cells are reactions, the indexer's own two among them). Misses are
 accepted, this feeds a status page: a row added mid run waits for the next
 add, and an id minted long before its row landed sorts behind the cursor.
@@ -195,7 +195,8 @@ def _days(rows: nu.Nu, ids: nu.List, counted) -> nu.List:  # noqa: ANN001
 
 
 def _plane_counted(p: nu.Str) -> nu.Bool:
-    return Space.planes[p].created_at.exists()
+    row = Space.planes[p]
+    return row.created_at.exists().and_(row.system.fallback(False).not_())
 
 
 def _cell_counted(c: nu.Str) -> nu.Bool:

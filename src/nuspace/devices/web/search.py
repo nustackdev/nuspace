@@ -16,12 +16,13 @@ all planes and cells:
 - **what is searched**: every item of the kinds asked, wherever it lives.
   A keyword left out stays ``UNSET``, so ``match`` checks only what was
   asked, and a kind asked nothing lists all its items.
-- **the viewer**: :data:`PLANE`, a system web plane like home. Its ``form``
-  cell asks (the installed kinds, the picked kind's search fields, a Search
-  button), its ``pick`` cell lists the searches, newest first, and its
-  ``results`` cell draws the picked one's hits, live, each with its kind's
-  ``render_hit``. The kinds are read from the installed specs where the cell
-  is built (:func:`kinds`), never from the store.
+- **the viewer**: the plane the ``search`` role names, a system web
+  plane like home. Its ``form`` cell asks (the installed kinds, the
+  picked kind's search fields, a Search button), its ``pick`` cell lists
+  the searches, newest first, and its ``results`` cell draws the picked
+  one's hits, live, each with its kind's ``render_hit``. The kinds are
+  read from the installed specs where the cell is built (:func:`kinds`),
+  never from the store.
 
 A search's cell runs on a worker, where the host's registry is not. Its
 prog names the request, and each kind is found there by its registered
@@ -64,7 +65,6 @@ __all__ = [
     "ICON",
     "NAME",
     "PICK",
-    "PLANE",
     "RESULTS",
     "SEARCHES",
     "SEARCHES_BACKEND",
@@ -90,9 +90,6 @@ SEARCHES_NAME = "Searches"
 
 #: What a search's run executes on: its walk is sync work.
 SEARCHES_BACKEND = "mp"
-
-#: The viewer plane's id, fixed: routed at ``/search``.
-PLANE = "search"
 
 #: What the viewer is called.
 NAME = "Search"

@@ -62,9 +62,13 @@ def day_of(stamp: float) -> str:
 
 
 async def brute(store) -> tuple[int, int]:
-    """Minted planes, and minted cells not on a system plane, counted by walking every row."""
+    """Minted planes not system, and minted cells not on a system plane, counted by walking every row."""
     planes = await store.read(nu.list(Space.planes.keys()))
     cells = await store.read(nu.list(Space.cells.keys()))
+    minted_planes = 0
+    for p in planes:
+        if p.startswith("p_"):
+            minted_planes += not await store.read(Space.planes[p].system.fallback(False))
     on_system = 0
     for c in cells:
         if not c.startswith("c_"):
@@ -72,7 +76,7 @@ async def brute(store) -> tuple[int, int]:
         p = await store.read(Space.cells[c].plane)
         on_system += bool(await store.read(Space.planes[p].system.fallback(False)))
     minted_cells = sum(c.startswith("c_") for c in cells)
-    return sum(p.startswith("p_") for p in planes), minted_cells - on_system
+    return minted_planes, minted_cells - on_system
 
 
 # --- The ordering contract ------------------------------------------------------------------

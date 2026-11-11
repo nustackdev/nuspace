@@ -16,19 +16,19 @@ ROOT = "root"
 
 #: Plane ids only nuspace's own planes take: ``plane.add`` refuses them
 #: unless ``system=True``. The system planes' (``nuspace.system``), then the
-#: web device's (``nuspace.devices.web.planes``): home, search, settings,
-#: the searches folder and the home indexer. Root's id and ``""`` are refused for every add.
+#: web device's (``nuspace.devices.web.planes``): the searches folder, the
+#: home indexer and the desk pruner. Home, search and settings have minted
+#: ids, found through the web device's roles. Root's id and ``""`` are
+#: refused for every add.
 RESERVED = frozenset(
     {
         "init",
         "supervisor",
         "reload",
         "reactions",
-        "home",
-        "search",
-        "settings",
         "searches",
         "home_indexer",
+        "desk_pruner",
     }
 )
 
