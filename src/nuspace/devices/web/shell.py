@@ -1,7 +1,8 @@
 """The frame: what a browser tab holds before any plane is drawn.
 
 :class:`Shell` is the top of the tree and its class body is the two regions,
-the sidebar and the viewer, plus the tab's toaster. A ref's wire address is
+the sidebar and the viewer, plus the tab's toaster and its desks node (the
+desks and roles it keeps, :mod:`.desks`). A ref's wire address is
 its chain and only its chain, so ``Shell.viewer`` resolves at
 ``("viewer",)`` and a cell drawn on it lands two levels below.
 
@@ -24,6 +25,7 @@ from typing import TYPE_CHECKING, Any
 import nu
 from nu.engine.structure import Declared
 from nu.lang import Command
+from nuspace.devices.web.desks.ref import DesksRef
 from nuspace.devices.web.ref import ToastRef
 from nuspace.devices.web.sidebar.ref import SidebarRef
 from nuspace.devices.web.viewer.ref import ViewerRef
@@ -98,11 +100,12 @@ class Boot(Command):
 
 
 class Shell(nu.Shape):
-    """The top of one browser tab: the sidebar, the viewer, and the toaster failures show on."""
+    """The top of one browser tab: the sidebar, the viewer, the toaster failures show on, the desks."""
 
     sidebar = SidebarRef.slot()
     viewer = ViewerRef.slot()
     toast = ToastRef.slot()
+    desks = DesksRef.slot()
 
     @classmethod
     def boot(

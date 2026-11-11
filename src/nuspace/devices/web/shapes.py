@@ -1,4 +1,4 @@
-"""The web device's two stores: Web (web planes, pins, recents) and Conn (browser tabs).
+"""The web device's two stores: Web (web planes, recents, desks, roles) and Conn (browser tabs).
 
 Each its own root and tag, in its own file under ``devices/web/``, so a
 space opened without the web device carries no web data. Core never reads
@@ -6,8 +6,11 @@ them; they name plane and plane run ids only::
 
     Web                                  web_state.db, persistent
       planes[plane_id]                   WebPlane: editable, full_width, compact
-      pinned                             [plane id], user order
       recents                            [plane id], most recent first, capped
+      desks[desk_id]                     desk dict, stored whole
+      desk_order                         [desk id], creation order
+      seeded                             True once Favorites was seeded
+      roles[role]                        plane id: home, settings, search
 
     Conn                                 conn.db, made fresh at every open
       connections[sid]                   Tab
@@ -22,17 +25,21 @@ import nu
 import nustd.kv
 
 
-__all__ = ["RECENTS_CAP", "Conn", "Pane", "Tab", "Web", "WebPlane"]
+__all__ = ["RECENTS_CAP", "ROLES", "Conn", "Pane", "Tab", "Web", "WebPlane"]
 
 
 #: How many plane ids ``Web.recents`` keeps. Past it the oldest drops.
 RECENTS_CAP = 50
 
+#: The jobs a plane fills for the shell, the keys of ``Web.roles``: the nav
+#: section's rows, ``/`` (home) and Cmd+K (search) resolve through them.
+ROLES = ("home", "settings", "search")
+
 
 class WebPlane(nu.Shape):
     """A plane on the web: its row at ``Web.planes[id]``.
 
-    The row existing is the fact: the sidebar and pins list the plane, and a
+    The row existing is the fact: the sidebar lists the plane, and a
     tab opening it runs it with the session wrapper. Planes with no row
     (services, searches) are not on the web. The flags are how it shows:
     ``editable`` (its cells can be edited), ``full_width``, ``compact``.
@@ -46,15 +53,25 @@ class WebPlane(nu.Shape):
 class Web(nu.Shape):
     """The root of ``web_state.db``, and its store's tag.
 
-    ``planes`` is every web plane by plane id. ``pinned`` is the pinned
-    plane ids in the user's order. ``recents`` is plane ids, most recent
-    first, at most :data:`RECENTS_CAP`. Both are small user lists. A removed
+    ``planes`` is every web plane by plane id. ``recents`` is plane ids,
+    most recent first, at most :data:`RECENTS_CAP`, a small list. A removed
     plane keeps its entries; readers skip it.
+
+    ``desks`` is every desk by desk id, each one plain dict read and written
+    whole (name, items), so a desk is one key and one change. The store
+    lists keys sorted, so ``desk_order`` keeps the desk ids in creation
+    order, the order the sidebar draws them in. ``seeded`` is set once the
+    Favorites desk was made, so closing it never brings it back. ``roles``
+    is the plane id each of :data:`ROLES` resolves to, seeded with the
+    system planes; set and changed, never removed.
     """
 
     planes = nustd.kv.DictRef.slot(WebPlane)
-    pinned = nustd.kv.ListRef.slot(str)
     recents = nustd.kv.ListRef.slot(str)
+    desks = nustd.kv.DictRef.slot(nustd.kv.PrimitiveDictRef)
+    desk_order = nustd.kv.ListRef.slot(str)
+    seeded = nustd.kv.BoolRef.slot()
+    roles = nustd.kv.DictRef.slot(str)
 
 
 class Pane(nu.Shape):

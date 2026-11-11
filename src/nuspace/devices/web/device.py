@@ -4,8 +4,8 @@ A device is a way into the space with its own store: it calls ops like
 anyone. Per tab, one arm:
 
 1. ``web.open_tab(sid)``: the tab's ``Conn.connections[sid]`` row;
-2. in parallel: the pane arm, and the shell boot followed by the sidebar
-   and viewer feeds. The pane arm subscribes beside the boot rather than
+2. in parallel: the pane arm, and the shell boot followed by the sidebar,
+   viewer and desks feeds. The pane arm subscribes beside the boot rather than
    after it, so the browser's first ``planes.open`` cannot land before
    anybody listens;
 3. on every way out, ``web.close_tab(sid)``: nav stops its panes' runs.
@@ -14,8 +14,8 @@ anyone. Per tab, one arm:
 list of open panes, left to right, and each pane's params. It becomes
 ``web.set_panes`` (the order whole: a new plane gets its pane, nav runs it),
 then ``web.set_pane_params`` for each pane whose params moved, then
-``web.visit`` for each plane newly open (not home, settings or search, nor
-one missing or headless).
+``web.visit`` for each plane newly open (not a plane a role names, nor one
+missing or headless).
 The cells of every plane leaving the list are erased as drawn first, so
 nothing of a closed pane stays on screen. The browser mints a new plane's
 id and opens it while its create is in flight, so the arm waits a moment
@@ -52,13 +52,14 @@ from nuspace.utils import keys_of
 from nustd.ui.core import WsSession
 from nustd.ws_server import SID_ATTR, listen, run_once, session_for, sessions_fold
 
-from . import indexer
+from . import indexer, pruner
 from . import ops as web
+from .desks import desks_feed
 from .env import SESSION_ENV, session_env
 from .nav import nav
-from .planes import HOME, SEARCH, SETTINGS, ensure
+from .planes import ensure
 from .session import served_sessions
-from .shapes import Conn
+from .shapes import Conn, Web
 from .shell import Shell
 from .sidebar import registered_entries, sidebar_feed
 from .utils import Arms, cell_ui, field_dict, field_ids
@@ -98,9 +99,6 @@ OPEN_WAIT = 2.0
 #: seconds: a create commits its web row right after its Space row, so a
 #: plane still without one is headless and is not waited on longer.
 WEB_WAIT = 0.3
-
-#: Planes a tab opens without a visit: they live in the sidebar's nav group.
-_UNVISITED = (HOME, SETTINGS, SEARCH)
 
 
 def _erase(viewer: Ref, plane: nu.Str) -> nu.Nu:
@@ -162,11 +160,12 @@ def pane_arm(viewer: Ref, sid: nu.StrArg, arms: Arms) -> nu.Nu:
                 return nu.IfDo(moved, web.set_pane_params(sid, plane, pairs))
 
             def visited(at: nu.Attr) -> nu.Nu:
+                # A plane a role names lives in the sidebar's nav section: no visit.
                 plane = nu.Str(at)
-                skip = nu.List.of(*_UNVISITED).contains(plane)
+                skip = nu.list(Web.roles.values()).contains(plane)
                 # A pane told it is missing or headless is no visit.
-                shown = nuspace.plane.exists(plane).and_(web.Web.planes.contains(plane))
-                return nu.IfDo(skip.not_(), atomic(nu.IfDo(shown, web.visit(plane))))
+                shown = nuspace.plane.exists(plane).and_(Web.planes.contains(plane))
+                return atomic(nu.IfDo(skip.not_().and_(shown), web.visit(plane)))
 
             return (
                 nu.ForEachDo(gone, lambda p: _erase(viewer, nu.Str(p)))
@@ -197,6 +196,7 @@ def connection(sid: nu.StrArg, *, registry: Registry | None = None) -> nu.Nu:
     feeds = boot >> nu.ParallelAsync(
         sidebar_feed(Shell.sidebar, sid, planes, Shell.toast),
         viewer_feed(Shell.viewer, sid, cells, Shell.toast),
+        desks_feed(Shell.desks, Shell.toast),
     )
     gone = atomic(nu.IfDo(Conn.connections.contains(sid), web.close_tab(sid)))
     return nu.TryCatch(
@@ -236,7 +236,8 @@ def serve_web(
     """The web device: the term the host runs, and the envs it registers.
 
     The term makes the web planes where missing, asks for one home indexer
-    run (:func:`~.indexer.wake`), then runs the server (one arm per tab)
+    run (:func:`~.indexer.wake`) and one desk pruner run
+    (:func:`~.pruner.wake`), then runs the server (one arm per tab)
     and nav side by side. It never returns; it goes beside the
     kernel, inside the stores (Space, State, Web, Conn) with ``conn.db``
     fresh, so no tab of a previous open is left.
@@ -283,5 +284,5 @@ def serve_web(
             )
         ),
     )
-    term = ensure() >> indexer.wake() >> nu.ParallelAsync(server, nav())
+    term = ensure() >> indexer.wake() >> pruner.wake() >> nu.ParallelAsync(server, nav())
     return term, {SESSION_ENV: session_env(session_address)}

@@ -125,7 +125,7 @@ def test_the_roots_and_records_carry_the_slots_of_the_data_model():
         "content_planes",
         "content_space",
     }
-    assert slots(Web) == {"planes", "pinned", "recents"}
+    assert slots(Web) == {"planes", "recents", "desks", "desk_order", "seeded", "roles"}
     assert slots(WebPlane) == {"editable", "full_width", "compact"}
     assert slots(Tab) == {"order", "panes", "expanded"}
     assert slots(Pane) == {"params", "plane_run", "restart"}
@@ -140,6 +140,8 @@ def test_every_collection_gets_the_view_that_fits_how_it_is_read():
         "plane_keys": (Space.indexes.plane_keys, kv.DictRef),
         "cell_runs": (Space.exec.cell_runs, kv.DictRef),
         "web planes": (Web.planes, kv.DictRef),
+        "desks": (Web.desks, kv.DictRef),
+        "roles": (Web.roles, kv.DictRef),
         "panes": (Conn.connections["s"].panes, kv.DictRef),
         # uncapped user-ordered lists
         "plane cells": (Space.planes["p"].cells, kv.OrderedDictRef),
@@ -156,8 +158,8 @@ def test_every_collection_gets_the_view_that_fits_how_it_is_read():
         "live workers": (LIVE.workers, kv.DictRef),
         "expanded": (Conn.connections["s"].expanded, kv.DictRef),
         # small user lists
-        "pinned": (Web.pinned, kv.ListRef),
         "recents": (Web.recents, kv.ListRef),
+        "desk_order": (Web.desk_order, kv.ListRef),
         "order": (Conn.connections["s"].order, kv.ListRef),
         # a capped log
         "out": (Space.exec.cell_runs["cr"].out, kv.RingRef),
@@ -210,8 +212,8 @@ async def test_a_fresh_space_gets_its_format_and_every_fixed_container(store):
         nu.Not(State.content_planes),
         nu.Not(State.content_space),
         nu.Not(Web.planes),
-        nu.Not(Web.pinned),
         nu.Not(Web.recents),
+        nu.Not(Web.desk_order),
         nu.Not(Conn.connections),
     ]
     assert await store.read(nu.List.of(*empty)) == [False, False, *([True] * (len(empty) - 2))]
@@ -245,14 +247,14 @@ async def test_init_again_keeps_what_is_there(store):
             >> Space.planes[ROOT].name.set("top")
             >> Space.indexes.plane_keys.set_item("notes", "p1")
         )
-        >> nustd.kv.atomic(Web.pinned.append("p1"))
+        >> nustd.kv.atomic(Web.recents.append("p1"))
     )
     await store.run(nustd.kv.atomic(SPACE_STORE.init()) >> nustd.kv.atomic(WEB_STORE.init()))
     assert await store.read(Space.info.created_at) == created
     assert await store.read(nu.list(Space.planes[ROOT].children.keys())) == ["p1"]
     assert await store.read(Space.planes[ROOT].name) == "top"
     assert await store.read(Space.indexes.plane_keys["notes"]) == "p1"
-    assert await store.read(Web.pinned.iter().to_list()) == ["p1"]
+    assert await store.read(Web.recents.iter().to_list()) == ["p1"]
 
 
 async def test_a_store_of_another_format_is_refused(store):

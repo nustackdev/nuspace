@@ -5,18 +5,20 @@ The sdk, what a program calls, is the ops (:mod:`.ops`), flat here::
     import nuspace.devices.web as web
 
     nuspace.atomic(web.add(plane, editable=True))     # put a plane on the web
-    nuspace.atomic(web.pin(plane))                    # pin it in the sidebar
     web.params(), web.on_params()                     # a cell's own pane params
     web.restart_cell(sid, cell)                       # run one cell again, brackets itself
     nuspace.atomic(web.link(row.link, plane))         # draw a link to a plane
+    nuspace.atomic(web.set_desk(desk_id, desk))       # replace a desk whole
+    nuspace.atomic(web.set_role("home", plane))       # make a plane the home
 
-- :mod:`.shapes`: :class:`Web` (web planes, pins, recents) and :class:`Conn`
+- :mod:`.shapes`: :class:`Web` (web planes, recents, desks, roles) and :class:`Conn`
   (browser tabs, their panes and sidebar folds); :mod:`.stores`: their
   files, channels and init terms.
 - :mod:`.ops`: the ops over them.
 - :mod:`.nav`: the driver running what the panes show.
-- :mod:`.device`: the server and one arm per tab, the sidebar and viewer
-  feeds under it, and :mod:`.planes` (home, settings, search) it ships with.
+- :mod:`.device`: the server and one arm per tab, the sidebar, viewer and
+  desks feeds under it, and :mod:`.planes` (the home, settings and search
+  role planes) it ships with.
   Imported by the host only: it pulls in the web server.
 
 Safe for a worker to import: nothing imported here pulls in a server.
@@ -26,29 +28,35 @@ from .ops import (
     add,
     close_tab,
     collapse,
+    create_desk,
+    delete_desk,
+    desk_order,
     expand,
+    get_desk,
     href,
     link,
-    move_pin,
+    list_desks,
+    move_desk,
     on_params,
     open_tab,
     params,
-    pin,
     restart_cell,
     restart_pane,
     set,
+    set_desk,
     set_pane_params,
     set_panes,
-    unpin,
+    set_role,
     visit,
 )
-from .shapes import RECENTS_CAP, Conn, Pane, Tab, Web, WebPlane
+from .shapes import RECENTS_CAP, ROLES, Conn, Pane, Tab, Web, WebPlane
 from .stores import CONN_STORE, WEB_STORE
 
 
 __all__ = [
     "CONN_STORE",
     "RECENTS_CAP",
+    "ROLES",
     "WEB_STORE",
     "Conn",
     "Pane",
@@ -58,19 +66,24 @@ __all__ = [
     "add",
     "close_tab",
     "collapse",
+    "create_desk",
+    "delete_desk",
+    "desk_order",
     "expand",
+    "get_desk",
     "href",
     "link",
-    "move_pin",
+    "list_desks",
+    "move_desk",
     "on_params",
     "open_tab",
     "params",
-    "pin",
     "restart_cell",
     "restart_pane",
     "set",
+    "set_desk",
     "set_pane_params",
     "set_panes",
-    "unpin",
+    "set_role",
     "visit",
 ]

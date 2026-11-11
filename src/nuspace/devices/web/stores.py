@@ -23,11 +23,13 @@ __all__ = ["CONN_STORE", "WEB_STORE", "init_conn", "init_web"]
 
 
 def init_web() -> nu.Nu:
-    """``web_state.db`` ready: web planes, pins and recents made where missing."""
+    """``web_state.db`` ready: web planes, recents, desks, desk order and roles made where missing."""
     return (
         Web.planes.init(nu.Dict.create())
-        >> Web.pinned.init(nu.List.create())
         >> Web.recents.init(nu.List.create())
+        >> Web.desks.init(nu.Dict.create())
+        >> Web.desk_order.init(nu.List.create())
+        >> Web.roles.init(nu.Dict.create())
     )
 
 
@@ -36,7 +38,7 @@ def init_conn() -> nu.Nu:
     return Conn.connections.init(nu.Dict.create())
 
 
-#: Web planes, pins, recents.
+#: Web planes, recents, desks, roles.
 WEB_STORE = Store(Web, "devices/web/web_state.db", "nuspace.web", init_web)
 
 #: Browser tabs: their panes and sidebar folds.

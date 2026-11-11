@@ -71,57 +71,6 @@ async def test_set_changes_only_the_flags_given(store):
         await do(store, web.set("p9", editable=True))
 
 
-# --- Pins --------------------------------------------------------------------------------
-
-
-async def pinned(store):
-    return await store.read(nu.list(web.Web.pinned))
-
-
-async def test_pin_places_last_before_or_after(store):
-    for p in ("a", "b", "c"):
-        await plane(store, p)
-    await do(store, web.pin("a"))
-    await do(store, web.pin("b", before="a"))
-    await do(store, web.pin("c", after="b"))
-    assert await pinned(store) == ["b", "c", "a"]
-
-
-async def test_pin_raises(store):
-    await plane(store, "a")
-    await plane(store, "off", on_web=False)
-    await do(store, web.pin("a"))
-    with pytest.raises(Exists):
-        await do(store, web.pin("a"))
-    with pytest.raises(Missing):
-        await do(store, web.pin("off"))
-    with pytest.raises(Missing):
-        await do(store, web.pin("nope"))
-    await plane(store, "b")
-    with pytest.raises(Missing):
-        await do(store, web.pin("b", before="off"))
-    with pytest.raises(TypeError):
-        web.pin("b", before="a", after="a")
-
-
-async def test_unpin_and_move_pin(store):
-    for p in ("a", "b", "c"):
-        await plane(store, p)
-        await do(store, web.pin(p))
-    await do(store, web.move_pin("c", before="a"))
-    assert await pinned(store) == ["c", "a", "b"]
-    await do(store, web.move_pin("c"))
-    assert await pinned(store) == ["a", "b", "c"]
-    with pytest.raises(Refused):
-        await do(store, web.move_pin("a", after="a"))
-    await do(store, web.unpin("b"))
-    assert await pinned(store) == ["a", "c"]
-    with pytest.raises(Missing):
-        await do(store, web.unpin("b"))
-    with pytest.raises(Missing):
-        await do(store, web.move_pin("b"))
-
-
 # --- Recents ------------------------------------------------------------------------------
 
 

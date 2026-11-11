@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Desks live in the web store and reach every tab live, with a seeded Favorites
 - System planes home, search and settings are found by role, not fixed ids
 - Opening a plane with no view or no plane says so instead of hanging
 - A pane's bar shows the plane's breadcrumbs, with parents one click away

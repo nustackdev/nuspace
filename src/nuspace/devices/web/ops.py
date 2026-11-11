@@ -1,7 +1,7 @@
 """``nuspace.devices.web``: the ops over the web device's stores, Web and Conn.
 
 Web (``web_state.db``) says which planes are on the web and how they show,
-what is pinned and what was opened lately. Conn (``conn.db``, fresh at every
+what was opened lately, the desks, and which plane fills each role. Conn (``conn.db``, fresh at every
 open) holds the open tabs: each one's panes in order, each pane's params,
 the plane run nav keeps for it and its restart token, and the sidebar
 branches it has open. The browser turns clicks into these ops; nav runs
@@ -24,7 +24,7 @@ A cell on a web pane reads its own params and draws links::
 
 A pane's URL is its plane with its params as the query, ``/movie?id=42``
 (:func:`href`). A link a cell draws to it is a real link: a click opens it
-in the focused pane, Option+click beside it, Cmd+click in a browser tab.
+where the cell is, Cmd+click in a browser tab.
 
 Safe for a worker to import: it pulls in no server.
 """
@@ -42,10 +42,19 @@ from nuspace.places import Here
 from nuspace.shapes.plane import ROOT
 from nuspace.shapes.space import Space
 from nuspace.utils import MintId
-from nuspace.utils.checks import live, refuse
+from nuspace.utils.checks import live, refuse, row_known
 
-from .interactions import Href, IconName, Session
-from .shapes import RECENTS_CAP, Conn, Web
+from .interactions import (
+    DeskIdProblem,
+    DeskProblem,
+    Href,
+    IconName,
+    MovedOrder,
+    Session,
+    ShapedDesk,
+    ShapedDesks,
+)
+from .shapes import RECENTS_CAP, ROLES, Conn, Web
 
 
 if TYPE_CHECKING:
@@ -56,20 +65,25 @@ __all__ = [
     "add",
     "close_tab",
     "collapse",
+    "create_desk",
+    "delete_desk",
+    "desk_order",
     "expand",
+    "get_desk",
     "href",
     "link",
-    "move_pin",
+    "list_desks",
+    "move_desk",
     "on_params",
     "open_tab",
     "params",
-    "pin",
     "restart_cell",
     "restart_pane",
     "set",
+    "set_desk",
     "set_pane_params",
     "set_panes",
-    "unpin",
+    "set_role",
     "visit",
 ]
 
@@ -180,90 +194,6 @@ def set(
     return term
 
 
-# --- Pins --------------------------------------------------------------------------------
-
-
-def _spot(
-    listed: nu.Nu, plane: nu.StrArg, before: nu.StrArg | None, after: nu.StrArg | None
-) -> tuple[nu.Nu, nu.Int]:
-    """Check the anchor and say where ``plane`` goes in ``listed``: ``(checks, index)``.
-
-    The index is read with ``plane`` out of the list, so take it out first.
-
-    Raises:
-        TypeError: Both ``before`` and ``after``, at build.
-        Missing: The anchor is not in the list.
-        Refused: The anchor is ``plane`` itself.
-    """
-    if before is not None and after is not None:
-        msg = "give before= or after=, not both"
-        raise TypeError(msg)
-    anchor = before if before is not None else after
-    if anchor is None:
-        return nu.Noop(), nu.Int(listed.len())
-    checks = refuse(nu.Str(anchor) == plane, Refused, "plane ", plane, " cannot go by itself") >> (
-        refuse(listed.contains(anchor).not_(), Missing, "plane ", anchor, " is not pinned")
-    )
-    at = nu.list(listed).index(anchor)
-    return checks, nu.Int(at if before is not None else at + 1)
-
-
-def pin(
-    plane: nu.StrArg, *, before: nu.StrArg | None = None, after: nu.StrArg | None = None
-) -> nu.Nu:
-    """Pin a web plane in the sidebar, before or after a pin, or last. Cost: O(pins), a small list.
-
-    Raises:
-        Missing: No plane with that id, it is not on the web, or the anchor
-            is not pinned.
-        Removed: It is removed.
-        Exists: It is pinned already.
-        Refused: The anchor is the plane itself.
-        TypeError: Both ``before`` and ``after``, at build.
-    """
-    pins = Web.pinned
-    checks, at = _spot(pins, plane, before, after)
-    return (
-        _plane_live(plane)
-        >> _on_web(plane)
-        >> refuse(pins.contains(plane), Exists, "plane ", plane, " is pinned already")
-        >> checks
-        >> pins.insert(at, plane)
-    )
-
-
-def unpin(plane: nu.StrArg) -> nu.Nu:
-    """Take a plane off the pins. The plane itself is left alone. Cost: O(pins).
-
-    Raises:
-        Missing: It is not pinned.
-    """
-    pins = Web.pinned
-    return refuse(pins.contains(plane).not_(), Missing, "plane ", plane, " is not pinned") >> (
-        pins.remove(plane)
-    )
-
-
-def move_pin(
-    plane: nu.StrArg, *, before: nu.StrArg | None = None, after: nu.StrArg | None = None
-) -> nu.Nu:
-    """Move a pin before or after another pin, or last. Cost: O(pins).
-
-    Raises:
-        Missing: It is not pinned, or the anchor is not.
-        Refused: The anchor is the plane itself.
-        TypeError: Both ``before`` and ``after``, at build.
-    """
-    pins = Web.pinned
-    checks, at = _spot(pins, plane, before, after)
-    return (
-        refuse(pins.contains(plane).not_(), Missing, "plane ", plane, " is not pinned")
-        >> checks
-        >> pins.remove(plane)
-        >> pins.insert(at, plane)
-    )
-
-
 # --- Recents ------------------------------------------------------------------------------
 
 
@@ -282,6 +212,128 @@ def visit(plane: nu.StrArg) -> nu.Nu:
         >> recents.remove(plane, missing_ok=True)
         >> recents.insert(0, plane)
         >> nu.IfDo(recents.len() > RECENTS_CAP, recents.del_at(RECENTS_CAP))
+    )
+
+
+# --- Desks ------------------------------------------------------------------------------
+#
+# A desk is one plain dict at ``Web.desks[desk_id]``, read and written whole:
+# its name and its items, plane items and strips (``desk_problem`` in
+# :mod:`.interactions` has the shape). The browser mints the ids and owns the
+# arrangement; these ops check the id and the shape and store it. No plane
+# in it is looked up. ``Web.desk_order`` keeps the ids in creation order. A
+# desk stored in an older shape reads as no desk: the reads leave it out.
+
+
+def _desk_known(desk_id: nu.StrArg) -> nu.Nu:
+    """The desk is there.
+
+    Raises:
+        Missing: No desk with that id.
+    """
+    return row_known(Web.desks, desk_id, "desk")
+
+
+def _desk_shaped(desk: nu.DictArg) -> nu.Nu:
+    """The dict is a desk: a name and its items, as the browser's ``Desk`` has them. Empty is fine.
+
+    Raises:
+        Refused: What is wrong with it, the first thing found.
+    """
+    problem = nu.Str(DeskProblem(desk))
+    return refuse(problem != "", Refused, problem)
+
+
+def create_desk(desk_id: nu.StrArg, desk: nu.DictArg) -> nu.Nu:
+    """Store a new desk at ``Web.desks[desk_id]``, last in creation order. Create only.
+
+    Cost: O(desks), the order list.
+
+    Raises:
+        Refused: The id is not 8 chars of a-z and 0-9, or the dict is not a desk.
+        Exists: A desk with that id is there.
+    """
+    spelled = nu.Str(DeskIdProblem(desk_id))
+    return (
+        refuse(spelled != "", Refused, spelled)
+        >> refuse(Web.desks.contains(desk_id), Exists, "desk ", desk_id, " exists")
+        >> _desk_shaped(desk)
+        >> Web.desks[desk_id].set(desk)
+        >> Web.desk_order.remove(desk_id, missing_ok=True)
+        >> Web.desk_order.append(desk_id)
+    )
+
+
+def get_desk(desk_id: nu.StrArg) -> nu.Dict:
+    """A desk's dict, NULL when there is none or it is not on the desk shape. A read. Cost: O(1), 1 key."""
+    return nu.Dict(ShapedDesk(Web.desks[desk_id]))
+
+
+def set_desk(desk_id: nu.StrArg, desk: nu.DictArg) -> nu.Nu:
+    """Replace a desk whole. Last write wins. Cost: O(1), 1 key.
+
+    Raises:
+        Missing: No desk with that id.
+        Refused: The dict is not a desk.
+    """
+    return _desk_known(desk_id) >> _desk_shaped(desk) >> Web.desks[desk_id].set(desk)
+
+
+def delete_desk(desk_id: nu.StrArg) -> nu.Nu:
+    """Delete a desk, a real delete. Its planes are left alone. Cost: O(desks), the order list.
+
+    Raises:
+        Missing: No desk with that id.
+    """
+    return (
+        _desk_known(desk_id)
+        >> Web.desks.del_item(desk_id)
+        >> Web.desk_order.remove(desk_id, missing_ok=True)
+    )
+
+
+def move_desk(desk_id: nu.StrArg, before: nu.StrArg) -> nu.Nu:
+    """Move a desk in the sidebar's order, in front of desk ``before``, last for ``""``. Cost: O(desks), the order list.
+
+    ``before`` unknown also puts it last.
+
+    Raises:
+        Missing: No desk with that id.
+    """
+    moved = nu.List(MovedOrder(desk_order(), desk_id, before))
+    return _desk_known(desk_id) >> Web.desk_order.set(moved)
+
+
+def desk_order() -> nu.List:
+    """``Web.desk_order``, ``[]`` when the store has none yet. A read. Cost: O(desks)."""
+    return nu.List(nu.If(Web.desk_order.exists(), nu.list(Web.desk_order), []))
+
+
+def list_desks() -> nu.List:
+    """The ids of the desks on the desk shape, in creation order, ``[]`` for none.
+
+    A read. Cost: O(desks), every desk read.
+    """
+    return nu.list(nu.Dict(ShapedDesks(Web.desks.extract(), desk_order())).keys())
+
+
+# --- Roles ------------------------------------------------------------------------------
+
+
+def set_role(role: nu.StrArg, plane: nu.StrArg) -> nu.Nu:
+    """Set or change the plane a role resolves to. There is no remove. Cost: O(1), 1 key.
+
+    Reads Space to check the plane. A removed plane is not refused yet.
+
+    Raises:
+        Refused: ``role`` is none of :data:`~.shapes.ROLES`.
+        Missing: No plane with that id.
+    """
+    known = nu.List.of(*ROLES).contains(role)
+    return (
+        refuse(known.not_(), Refused, "no role ", role, ", the roles are ", ", ".join(ROLES))
+        >> row_known(Space.planes, plane, "plane")
+        >> Web.roles.set_item(role, plane)
     )
 
 

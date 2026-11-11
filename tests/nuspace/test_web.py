@@ -27,7 +27,7 @@ from nuspace.devices.web.env import SessionWrap, session_env
 from nuspace.devices.web.planes import ensure
 from nuspace.devices.web.shapes import Web
 from nuspace.devices.web.shell import Shell
-from nuspace.devices.web.sidebar import pins, registered_entries, rows
+from nuspace.devices.web.sidebar import registered_entries, rows
 from nuspace.devices.web.utils import CellRoot
 from nuspace.devices.web.viewer import PROGRAM, plane_view, slash_entries, statuses
 from nuspace.kernel import build_body
@@ -165,18 +165,15 @@ async def test_sidebar_rows_are_lazy(store):
     assert _row("p3", "Three", parent="p2") in got
 
 
-async def test_sidebar_skips_removed_and_ships_pins_wherever_they_hang(store):
+async def test_sidebar_skips_removed_and_ships_no_row_off_the_walk(store):
     await plane(store, "p1", "One")
     await plane(store, "deep", "Deep", parent="p1")
     await plane(store, "gone", "Gone")
-    await do(store, web.pin("deep"))
-    await do(store, web.pin("gone"))
     await do(store, nuspace.plane.remove("gone"))
     await do(store, web.open_tab("t"))
     got = await _rows(store, "t")
-    assert [r["id"] for r in got] == ["space", "p1", "deep"]
-    assert got[-1] == _row("deep", "Deep", parent="p1")
-    assert await store.read(pins()) == ["deep"]
+    # deep hangs under a closed branch: no row.
+    assert [r["id"] for r in got] == ["space", "p1"]
 
 
 async def test_sidebar_walks_only_branches_under_shipped_rows(store):
@@ -352,6 +349,7 @@ async def test_tab_live(store):
             ("sidebar",),
             ("viewer",),
             ("toast",),
+            ("desks",),
         }
         assert list(_tree(session)) == ["space", "p1"]
         assert await store.read(nu.list(tabs["s1"].order)) == []
@@ -434,15 +432,10 @@ async def test_tab_live(store):
             {"plane_id": "p2", "parent_id": "space", "before": "p1"},
         )
         await _until(lambda: _tree(session)["space"]["children"] == ["p2", "p1"])
-        session.notify(("sidebar", "ops", "plane.pin"), {"plane_id": "p1"})
-        await _until(lambda: session.writes("set_tree")[-1]["pinned"] == ["p1"])
-        session.notify(("sidebar", "ops", "plane.pin"), {"plane_id": "p2", "before": "p1"})
-        await _until(lambda: session.writes("set_tree")[-1]["pinned"] == ["p2", "p1"])
-        session.notify(("sidebar", "ops", "plane.pin_move"), {"plane_id": "p2"})
-        await _until(lambda: session.writes("set_tree")[-1]["pinned"] == ["p1", "p2"])
         session.notify(("sidebar", "ops", "plane.delete"), {"plane_id": "p2"})
         await _until(lambda: "p2" not in _tree(session))
-        assert session.writes("set_tree")[-1]["pinned"] == ["p1"]
+        # The tree ships its rows only.
+        assert set(session.writes("set_tree")[-1]) == {"op", "planes"}
     finally:
         task.cancel()
         await asyncio.gather(task, return_exceptions=True)
@@ -502,14 +495,17 @@ async def test_a_failed_event_toasts_its_type_and_message(store):
     try:
         await _until(lambda: session.writes("set_tree"), BOOT_TIMEOUT)
         # A refused op: home is a system plane.
-        session.notify(("sidebar", "ops", "plane.delete"), {"plane_id": "home"})
+        home = await store.read(Web.roles["home"])
+        session.notify(("sidebar", "ops", "plane.delete"), {"plane_id": home})
         await _until(lambda: session.toasts())
         (shown,) = session.toasts()
         assert shown["op"] == "show" and shown["type"] == "Refused"
         assert "system plane" in shown["message"]
-        # A second pin of one plane: Exists. The arm kept listening.
-        session.notify(("sidebar", "ops", "plane.pin"), {"plane_id": "p1"})
-        session.notify(("sidebar", "ops", "plane.pin"), {"plane_id": "p1"})
+        # A plane made under an id taken: Exists. The arm kept listening.
+        session.notify(
+            ("sidebar", "ops", "plane.create"),
+            {"plane_id": "p1", "parent_id": "space", "spec": "", "title": ""},
+        )
         await _until(lambda: len(session.toasts()) == 2)
         assert session.toasts()[-1]["type"] == "Exists"
         # A malformed event raises and toasts like any other failure.
@@ -609,12 +605,17 @@ async def test_a_plane_with_no_view_opens_as_headless_without_the_long_wait(stor
 
 async def test_ensure_makes_the_web_planes_once(store):
     await store.run(ensure())
-    await do(store, nuspace.plane.rename("home", "My home"))
+    roles = await store.read(Web.roles.extract())
+    assert set(roles) == {"home", "search", "settings"}
+    home = roles["home"]
+    await do(store, nuspace.plane.rename(home, "My home"))
     await store.run(ensure())
-    for pid in ("home", "search", "settings", "searches"):
+    assert await store.read(Web.roles.extract()) == roles
+    for pid in (*roles.values(), "searches"):
         assert await store.read(Space.planes[pid].system) is True
-    assert await store.read(Space.planes["home"].name) == "My home"
-    assert await store.read(web.Web.planes.contains("home")) is True
+    assert await store.read(Space.planes[home].name) == "My home"
+    assert await store.read(web.Web.planes.contains(home)) is True
     assert await store.read(web.Web.planes.contains("searches")) is False
-    cells = await store.read(nu.list(Space.planes["home"].cells.keys()))
-    assert cells == ["home_space", "home_history", "home_now", "home_runs"]
+    cells = await store.read(nu.list(Space.planes[home].cells.keys()))
+    names = [await store.read(Space.cells[c].name) for c in cells]
+    assert names == ["space", "history", "now", "runs"]
