@@ -1,8 +1,8 @@
-// The tab's title and favicon: what the focused plane makes them, and the
-// emoji favicon's data URL.
+// The tab's title and favicon: what the focused plane and its desk make
+// them, and the emoji favicon's data URL.
 
 import { describe, expect, it } from "vitest";
-import { applyTab, DEFAULT_TAB, emojiFavicon, tabOf } from "./tab";
+import { applyTab, DEFAULT_TAB, emojiFavicon, TITLE_SEP, tabFor, tabOf } from "./tab";
 
 function svgOf(url: string): string {
 	expect(url.startsWith("data:image/svg+xml,")).toBe(true);
@@ -24,6 +24,24 @@ describe("tab", () => {
 		expect(tabOf({ title: "a", icon: "lucide:folder" }).emoji).toBeNull();
 		expect(tabOf({ title: "a", icon: "folder" }).emoji).toBeNull();
 		expect(tabOf({ title: "a", icon: undefined }).emoji).toBeNull();
+	});
+
+	it("puts the desk's name after the shown plane's title on a desk item", () => {
+		expect(TITLE_SEP).toBe(" · ");
+		expect(tabFor({ title: "Logs", icon: "emoji:🚀" }, "Favorites")).toEqual({
+			title: "Logs · Favorites",
+			emoji: "🚀",
+		});
+		expect(tabFor({ title: "", icon: "" }, "Work").title).toBe("Untitled · Work");
+	});
+
+	it("shows a solo plane's title alone", () => {
+		expect(tabFor({ title: "Logs", icon: "" }, "")).toEqual({ title: "Logs", emoji: null });
+	});
+
+	it("shows the desk's name alone with no plane to show, else the defaults", () => {
+		expect(tabFor(null, "Favorites")).toEqual({ title: "Favorites", emoji: null });
+		expect(tabFor(null, "")).toEqual(DEFAULT_TAB);
 	});
 
 	it("draws the emoji as one svg text", () => {

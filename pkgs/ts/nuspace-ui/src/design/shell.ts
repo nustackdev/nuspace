@@ -1,133 +1,191 @@
 // Shell class recipes.
 //
 // The shell is the frame the two regions hang inside: the sidebar on the left,
-// the Viewer claiming the rest. It owns only the frame - how the window splits
-// and how each side claims its share.
+// the desk area (the canvas) claiming the rest, both on one ground. It owns only the frame:
+// how the window splits, the gaps, and the frame around each pane.
 //
 // The window has no chrome of its own. The connection dot and the theme flip
-// sit in the rail's bottom bar: they used to float over the canvas, which is
-// two controls with nothing holding them, and the rail already has an edge for
-// them. The one exception is the button that brings a collapsed rail back,
-// which has nowhere else to be.
+// sit in the sidebar footer. The one exception is the button that brings a
+// collapsed sidebar back, which has nowhere else to be.
+//
+// Afterglow (the kit's `accent`) shows only as a line, or a ring on an empty
+// desk: on a drop target and on a resize edge that is hovered or dragged.
 //
 // Colors resolve to kit L2/L4 semantic names or the nuspace-* frame roles
-// in ./theme.css. No raw hex, nothing off the
-// 4px grid.
+// in ./theme.css. No raw hex. Spacing is the 4px grid, except the 6px gaps
+// and desk edges the shell spec sets.
 //
 // Source docs (do not paraphrase without re-reading):
 //   go/projects/nustackdev/design/space-radius.md   §1 grid, §4 row heights
 //   go/projects/nustackdev/design/palette.md        §2.2 text tiers
 
-import { cn } from "@nustackdev/ui-kit";
+import { cn, splitHandleClasses } from "@nustackdev/ui-kit";
 import { docPlaneSurface } from "./document";
 
 /* ============================== The frame ================================ */
 
 /**
- * The window. Owns the viewport height so every region inside can go flex.
- * Its one child is the kit split that puts the rail beside the main strip
- * (shell/Shell.tsx).
+ * The window: one canvas, `ground-deep` (the kit's `bg-sunken`) behind
+ * everything, the sidebar and the desk alike. Owns the viewport height so
+ * every region inside can go flex. Its one child is the kit split that puts
+ * the sidebar and the desk area side by side (shell/Shell.tsx).
  */
-export const shellRoot = "flex h-screen bg-nuspace-page text-text-primary";
+export const shellRoot = "flex h-screen bg-bg-sunken text-text-primary";
 
 /**
- * A kit split panel one region sits in: the rail, the main strip, a pane.
+ * A kit split panel one region sits in: the sidebar, the desk area.
  * The kit sizes it; the region fills it.
  */
 export const shellSlot = "flex min-h-0";
 
 /**
- * A kit split handle on the frame's edge line: between the rail and the
- * strip, and between two panes. It is the divider and the drag strip both.
+ * The kit split handle between the sidebar and the desk area: the 6px gap
+ * itself, no fill. The kit's own line shows on hover and while dragging.
  */
-export const shellSplitHandle = "bg-nuspace-edge";
+export const shellSplitHandle = "w-1.5 bg-transparent";
 
 /**
- * Everything beside the sidebar. `group/main` with `data-rail="collapsed"`
- * while the rail is hidden, so the bars along the top can make room for the
- * reopen button (see `paneBar`).
+ * Everything right of the sidebar. `group/main` with `data-sidebar="collapsed"`
+ * while the sidebar is hidden, so the first pane header can make room for
+ * the reopen button (see `paneHeader`).
  */
 export const shellMain = "group/main relative flex min-h-0 min-w-0 flex-1";
 
-/**
- * The reopen button's slot, over the top left corner of the main strip and
- * centred on the chrome line. Its glyph lands where the rail's collapse
- * button had it. The button is `railChromeButton`.
- */
-export const shellRailOpen = "absolute top-0 left-rail-bar-pad z-20 flex h-chrome items-center";
+/* ============================== The desk ================================= */
 
 /**
- * A full-bleed region. `min-w-0` so a wide child scrolls inside itself instead
- * of pushing the window sideways.
+ * The desk area: 6px from the window's top, right and bottom edges. The 6px
+ * on the left is the sidebar's split handle.
  */
-export const shellSurface = "flex min-h-0 min-w-0 flex-1";
-
-/* ============================== Panes ==================================== */
+export const deskArea = "relative flex min-h-0 min-w-0 flex-1 py-1.5 pr-1.5";
 
 /**
- * A pane's narrowest, px: the plane's reading measure (`max-w-doc`, 40rem in
- * tokens.css), so the desk never squeezes a plane under the width it is written
- * for. A number and not a class because it is the split panel's `minSize`.
+ * A strip's desk area: a size container, so a column's default width is a
+ * part of the canvas in pure css (`deskColumnWidth`), nothing measured.
  */
-export const PANE_MIN_WIDTH = 640;
+export const deskStripArea = cn(deskArea, "@container");
 
 /**
- * The Viewer: the desk, a strip of panes, over the dock (only while the desk
- * scrolls, see ./dock.ts).
+ * A strip's row: the kit's scroll area, sideways only, the desk area's full
+ * height. Its viewport and content keep a plain flex and full height chain
+ * (the kit's horizontal area makes its content a block as tall as the
+ * viewport), so Firefox draws it the same as Chrome.
  */
-export const shellStrip = "flex min-h-0 min-w-0 flex-1 flex-col";
+export const deskRow = "min-h-0 min-w-0 flex-1";
+
+/** A strip's row viewport: no wheel past its ends into the page. */
+export const deskRowViewport = "overscroll-x-contain";
 
 /**
- * The desk: the Viewer's strip of panes, the kit's split in its scrolling
- * mode (main/Main.tsx). When the panes' minimums add up to more than the
- * window has, it scrolls sideways (trackpad, shift-wheel) with no scrollbar
- * drawn: the dock under it is its scrollbar.
+ * The columns, side by side, 6px apart, then the end zone. Nothing shrinks to
+ * fit: the row scrolls instead. At least as wide as the viewport, so the end
+ * zone takes the room the columns leave.
  */
-export const shellPanes = cn(
-	"flex min-h-0 min-w-0 flex-1",
-	"overflow-x-auto overflow-y-hidden overscroll-x-contain scrollbar-none",
+export const deskColumns = "flex h-full gap-1.5";
+
+/**
+ * The end zone after the last column: a drop here is a new column at the end.
+ * It fills the room the columns leave and is nothing once they fill the row:
+ * no strip ends in empty space (a drop on the last pane's right edge is a new
+ * column at the end too). Its negative margin takes back the row's gap. Empty:
+ * its drop line on its left edge is all it ever shows.
+ */
+export const deskEnd = "relative -ml-1.5 h-full min-w-0 flex-1";
+
+/**
+ * A column's width, as an inline style value: `null` for the canvas's full
+ * width (a strip's only column), px when stored, else two thirds of the
+ * canvas, so a second column shows beside the first.
+ */
+export function deskColumnWidth(px: number | null | undefined): string | number {
+	if (px === null) return "100cqw";
+	return px ?? "calc(100cqw * 2 / 3)";
+}
+
+/**
+ * One column: its panes stacked, 6px apart. Its width is set inline. The
+ * column resize handle sits on its right edge.
+ */
+export const deskColumn = "relative flex h-full shrink-0 flex-col gap-1.5";
+
+/**
+ * A pane's place in its column: its share of the height, set inline as flex
+ * grow. Holds the pane's drop line and the share resize handle under it.
+ */
+export const deskShare = "relative flex min-h-0 basis-0";
+
+/**
+ * A column's resize handle: the 6px gap on its right, the kit's split handle
+ * with no hairline, so nothing shows until it is hovered, then the kit's 2px
+ * afterglow line, which stays while dragging (`data-dragging`). The end zone
+ * follows the last column, so its gap is there too.
+ */
+export function deskColumnHandle(last: boolean): string {
+	return cn(
+		splitHandleClasses("horizontal"),
+		"absolute inset-y-0 w-1.5 bg-transparent",
+		// In the gap to the next column; the last column has no gap after it
+		// (the row ends at its edge), so its handle sits just inside it.
+		last ? "right-0" : "-right-1.5",
+	);
+}
+
+/** The share resize handle: the 6px gap under a pane, the same look as the column's. */
+export const deskShareHandle = cn(
+	splitHandleClasses("vertical"),
+	"absolute inset-x-0 -bottom-1.5 h-1.5 bg-transparent",
 );
 
 /**
- * One pane: its top bar over its own scroll host, filling its split panel.
- * `min-w-0` lets a wide cell scroll inside the pane instead of pushing the
- * neighbour out.
- *
- * The pane paints its own background, and that is the focus mark: with more
- * than one pane, every pane but the focused one sits a step down on `nuspace-pane-dim`,
- * and the focused one keeps the page. Only the surface dims, never the content, so text keeps its
- * contrast. A single pane is never dimmed and looks as it always did.
- * `duration-fast`; the kit's reduced-motion rule flattens it to instant.
+ * Where a drag would land: a 2px afterglow line on a pane's edge (a new
+ * column there, or a strip made with a plane item) or on its top or bottom
+ * (stacked there), or on the end zone's left edge (a new column at the end).
  */
-export function shellPane(dimmed: boolean): string {
+export function deskDropLine(edge: "left" | "right" | "top" | "bottom"): string {
 	return cn(
-		"group/pane relative flex min-h-0 min-w-0 flex-1 flex-col",
-		"transition-colors duration-fast ease-out",
-		dimmed ? "bg-nuspace-pane-dim" : "bg-nuspace-page",
+		"pointer-events-none absolute z-20 rounded-full bg-accent",
+		edge === "left" && "inset-y-0 left-0 w-0.5",
+		edge === "right" && "inset-y-0 right-0 w-0.5",
+		edge === "top" && "inset-x-0 top-0 h-0.5",
+		edge === "bottom" && "inset-x-0 bottom-0 h-0.5",
 	);
 }
 
 /**
- * The plane's scroll host inside a pane. Transparent, so the pane's own
- * background (page, or pane-dim when dimmed) is the one that shows.
+ * The one pane of a solo plane or a plane item: the whole desk area. Holds a
+ * plane item's drop line.
+ */
+export const deskSolo = "relative flex min-h-0 min-w-0 flex-1";
+
+/** An empty desk: the kit's `EmptyState`, filling the desk area. */
+export const deskEmpty = "min-h-0 flex-1";
+
+/**
+ * A drag over an empty desk: a 2px afterglow ring inside the desk area's
+ * edges, 8px radius like a pane.
+ */
+export const deskEmptyAim =
+	"pointer-events-none absolute top-1.5 right-1.5 bottom-1.5 left-0 rounded-lg ring-2 ring-accent ring-inset";
+
+/**
+ * One pane on the canvas: 8px radius, a `line-subtle` border, the
+ * `ground-raised` fill. Focus is in the header's title, never on the border.
+ */
+export const shellPane = cn(
+	"group/pane relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden",
+	"rounded-lg border border-border-subtle bg-nuspace-page",
+	"outline-none",
+);
+
+/**
+ * The plane's scroll host for the viewer skeleton the shell draws while it
+ * boots. A pane's own body is `paneBody`.
  */
 export const shellPanePlane = cn(docPlaneSurface, "bg-transparent");
 
-/**
- * Where a plane dragged from the rail would open: the half of the pane it
- * lands beside, washed in the accent, with a line on the edge the new pane
- * goes in at. Over the plane, under nothing it would need to click.
- */
-export function shellPaneDrop(edge: "before" | "after"): string {
-	return cn(
-		"pointer-events-none absolute inset-y-0 z-30 w-1/2 bg-bg-press border-accent",
-		edge === "before" ? "left-0 border-l-2" : "right-0 border-r-2",
-	);
-}
-
 /* ============================== States =================================== */
 
-/** A region the tree does not hold: the kit's `EmptyState`, filling the strip. */
+/** A region the tree does not hold: the kit's `EmptyState`, filling the desk area. */
 export const shellMissing = "min-h-0 flex-1";
 
 /* ========================== Keyboard shortcuts ========================== */

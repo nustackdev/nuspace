@@ -1,13 +1,16 @@
-// The browser tab: its title and its favicon follow the focused pane.
+// The browser tab: its title and its favicon say what the tab shows.
 //
-// With a plane open the tab carries that plane's title (the pane's own
+// The tab follows the plane the canvas focuses: a solo plane, a plane
+// item's shown plane, or a strip's focused pane. On a desk item the desk's
+// name follows the plane's title (`Logs · Favorites`); an empty desk, or a
+// plane the pane cannot draw, shows the desk's name alone.
+//
+// With a plane shown the tab carries that plane's title (the pane's own
 // fallback when it has none) and, when its icon is an emoji, that emoji as
 // the favicon. A lucide icon, or none, keeps the nu logo. No plane open, or
 // one the pane cannot draw: the defaults index.html ships. A plane still
 // loading changes nothing, so a switch goes from one plane straight to the
 // next, like a browser keeping the old title until the new page lands.
-// With a split it is the focused pane's plane, the one a sidebar click
-// replaces.
 //
 // The emoji is an SVG data URL written onto fresh copies of the icon links
 // index.html declares, and each link keeps its original href on a data attribute so
@@ -17,13 +20,16 @@
 import { getNode, type Path } from "@nustackdev/ui-core";
 import { useTree } from "@nustackdev/ui-kit";
 import { useEffect } from "react";
-import { useFocusedRoute } from "../core/router";
+import { useFocusedRoute, useRoute } from "../core/router";
 import { planeIcon } from "../icon/parse";
 import { TITLE_FALLBACK } from "../pane/Pane";
 import type { ActivePlane } from "../plane/types";
 
 /** The product name, the title with nothing open. */
 export const DEFAULT_TITLE = "nuspace";
+
+/** Between a plane's title and its desk's name. */
+export const TITLE_SEP = " · ";
 
 export type Tab = {
 	title: string;
@@ -44,6 +50,17 @@ export function tabOf(plane: { title: string; icon: unknown } | null): Tab {
 		title: plane.title || TITLE_FALLBACK,
 		emoji: icon.kind === "emoji" ? icon.char : null,
 	};
+}
+
+/**
+ * What the tab shows for the focused plane on desk `desk` ("" off a desk):
+ * the desk's name after the plane's title. With no plane to show (an empty
+ * desk, an absent plane), the desk's name alone, else the defaults.
+ */
+export function tabFor(plane: { title: string; icon: unknown } | null, desk: string): Tab {
+	if (!plane) return desk ? { title: desk, emoji: null } : DEFAULT_TAB;
+	const tab = tabOf(plane);
+	return desk ? { ...tab, title: `${tab.title}${TITLE_SEP}${desk}` } : tab;
 }
 
 function escapeXml(text: string): string {
@@ -118,10 +135,13 @@ function focusedPlane(root: Parameters<typeof getNode>[0], viewer: Path | null, 
 }
 
 /**
- * Keep the tab in step with the focused pane. Used once, by the shell.
+ * Keep the tab in step with what the canvas shows. Used once, by the shell.
  * Selects strings, so a cell edit re-renders nothing here.
  */
 export function useTab(viewer: Path | null): void {
+	const route = useRoute();
+	const desk = route.kind === "item" || route.kind === "desk" ? route.name || DEFAULT_TITLE : "";
+	const empty = route.kind === "desk";
 	const focused = useFocusedRoute();
 	// undefined: still loading, leave the tab as it is. null: the defaults.
 	const title = useTree((s) => {
@@ -129,8 +149,8 @@ export function useTab(viewer: Path | null): void {
 		return plane === undefined ? undefined : (plane?.title ?? null);
 	});
 	const icon = useTree((s) => focusedPlane(s.root, viewer, focused)?.meta.icon ?? "");
-	const loading = title === undefined;
-	const tab = tabOf(title == null ? null : { title, icon });
+	const loading = !empty && title === undefined;
+	const tab = tabFor(empty || title == null ? null : { title, icon }, desk);
 	const shownTitle = tab.title;
 	const emoji = tab.emoji;
 

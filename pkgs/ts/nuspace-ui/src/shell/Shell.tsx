@@ -1,40 +1,43 @@
-// The shell: the sidebar and the main strip, side by side, and the toaster
-// a failed interaction shows in (../refs/toast.ts).
+// The shell: the sidebar and the desk area, side by side on one canvas
+// (`ground-deep` behind both, 6px between them), and the toaster a failed
+// interaction shows in (../refs/toast.ts).
 //
-// There is no top strip and no surface switcher, because there is no third
-// region to switch to, and the two controls the window still has (the
+// There is no top bar, because there is no third region, and the two controls the window still has (the
 // connection dot and the theme flip) sit in the sidebar's bottom bar. The one
 // piece of chrome the shell draws itself is the button that brings a collapsed
-// sidebar back, over the main strip's top left corner, since the sidebar's own
-// is hidden with it. The sidebar lists every Plane that draws, under a cell per group,
-// and the main strip draws whichever ones the router has open, so navigation is
-// the sidebar's and the links', and the shell only places the two.
+// sidebar back, over the desk area's top left corner, since the sidebar's own
+// is hidden with it. The sidebar lists every Plane that draws, and the desk
+// area draws whatever the router shows (a solo plane or a desk), so navigation
+// is the sidebar's and the links', and the shell only places the two.
 //
 // Both are found BY TYPE (see core/surfaces.ts), not by a slot name. Where
 // python hangs them is python's call, and the wire type is the one thing about
 // a region both sides already agree on.
 //
 // Every link is a plain anchor whose href is where it goes: a cell's (the
-// kit's LinkRef, PageLinkRef, a markdown link) and the sidebar's rows and pins
+// kit's LinkRef, PageLinkRef, a markdown link) and the sidebar's rows
 // alike. The kit's AnchorCatcher on the shell's root hands an in-app click or
-// Enter to the pane router's rule (core/router.ts `paneRule`): plain opens in
-// the focused pane, Option beside it, and anything that is not a pane URL is
-// left to the browser, as are Cmd, Shift and middle clicks. On the root, not
-// the strip, so a sidebar row and a link in a cell are one gesture.
+// Enter to the router's rule (core/router.ts `paneRule`): a plain click on a
+// plane url navigates the pane it sits in, in place, and opens solo from
+// anywhere else, and anything that is not the app's url is left to the
+// browser, as are Cmd, Shift and middle clicks. The sidebar routes its pane
+// rows first (../sidebar/links.ts): the strip opens with that pane focused.
 //
-// The two sit in the kit's split (`ResizablePanelGroup`): the rail is a
+// The two sit in the kit's split (`ResizablePanelGroup`): the sidebar is a
 // collapsible panel with the kit's sidebar bounds and a px default, so it
-// holds its width while the window resizes and the strip takes the change.
+// holds its width while the window resizes and the desk area takes the
+// change. The split's handle is the 6px gap, no fill.
 // Drag its border to resize it, past its minimum to fold it; Enter on the
-// border, the rail's button, the reopen button and cmd/ctrl+\ fold and
-// unfold it too, all through the one split (../sidebar/collapse.ts), which
-// keeps the layout across reloads.
+// border, the sidebar header's button, the reopen button and cmd/ctrl+\ fold
+// and unfold it too, all through the one split (../sidebar/collapse.ts),
+// which keeps the layout across reloads. Home, search and settings have keys
+// from anywhere, mounted here so they work before the sidebar lands.
 //
 // Before the tree lands neither region is on it. The shell still draws: the
-// rail as its chrome with skeleton rows, the strip as the viewer skeleton, so
+// sidebar as its chrome with skeleton rows, the desk as the viewer skeleton, so
 // the boot and a plane switch look alike. Once anything has landed, a region
 // still missing is a real absence and says so. A boot that runs past
-// `BOOTING_DELAY_MS` (a first start compiling python) swaps the strip's
+// `BOOTING_DELAY_MS` (a first start compiling python) swaps the desk's
 // skeleton for a note, so a long wait reads as booting and not as stuck.
 
 import {
@@ -57,24 +60,25 @@ import {
 	shellMain,
 	shellMissing,
 	shellPanePlane,
-	shellRailOpen,
 	shellRoot,
 	shellSlot,
 	shellSplitHandle,
+	sidebarReopen,
 } from "../design";
+import { useDragScroll } from "../desk/autoscroll";
 import { ViewerSkeleton } from "../pane/ViewerSkeleton";
 import {
-	bindRail,
-	focusRailToggle,
-	migrateRail,
-	publishRail,
-	RAIL_LAYOUT_KEY,
-	RailPlaceholder,
-	RailToggle,
-	setRailCollapsed,
+	bindSidebar,
+	focusSidebarToggle,
+	publishSidebar,
+	SIDEBAR_LAYOUT_KEY,
+	SidebarPlaceholder,
+	SidebarToggle,
+	setSidebarCollapsed,
+	useNavShortcuts,
 	useNewPlaneShortcut,
-	useRailCollapsed,
-	useRailShortcut,
+	useSidebarCollapsed,
+	useSidebarShortcut,
 } from "../sidebar/api";
 import { useTab } from "./tab";
 
@@ -85,19 +89,19 @@ export function Shell() {
 	const booted = useBooted();
 	const slow = useAfter(!booted, BOOTING_DELAY_MS);
 	const split = useRef<ResizablePanelGroupHandle | null>(null);
-	const splitEl = useRef<HTMLDivElement | null>(null);
-	// The rail's panel: the real rail, or its placeholder until the tree lands.
-	const rail = sidebar !== null || !booted;
-	const collapsed = useRailCollapsed() && rail;
-	useRailShortcut();
+	// The sidebar's panel: the real sidebar, or its placeholder until the tree lands.
+	const side = sidebar !== null || !booted;
+	const collapsed = useSidebarCollapsed() && side;
+	useSidebarShortcut();
 	useNewPlaneShortcut();
+	useNavShortcuts();
 	useTab(viewer);
+	useDragScroll();
 
 	// Before the first paint, so the reopen button is right from the start.
 	useLayoutEffect(() => {
-		if (split.current) migrateRail(split.current, splitEl.current);
-		bindRail(split);
-		return () => bindRail(null);
+		bindSidebar(split);
+		return () => bindSidebar(null);
 	}, []);
 
 	useAnchorCatcher(rootRef, paneRule);
@@ -106,41 +110,40 @@ export function Shell() {
 		<div ref={rootRef} className={shellRoot}>
 			<ResizablePanelGroup
 				ref={split}
-				elementRef={splitEl}
-				storageKey={RAIL_LAYOUT_KEY}
+				storageKey={SIDEBAR_LAYOUT_KEY}
 				onLayout={(sizes) => {
-					if (sizes.length > 1) publishRail(sizes[0] <= 0);
+					if (sizes.length > 1) publishSidebar(sizes[0] <= 0);
 				}}
 			>
-				{rail
+				{side
 					? [
 							<ResizablePanel
-								key="rail"
-								id="shell-rail"
+								key="sidebar"
+								id="shell-sidebar"
 								defaultSize={`${SIDEBAR_WIDTH.DEFAULT}px`}
 								minSize={`${SIDEBAR_WIDTH.MIN}px`}
 								maxSize={`${SIDEBAR_WIDTH.MAX}px`}
 								collapsible
 								className={shellSlot}
 							>
-								{sidebar ? <NodeView path={sidebar} /> : <RailPlaceholder />}
+								{sidebar ? <NodeView path={sidebar} /> : <SidebarPlaceholder />}
 							</ResizablePanel>,
 							<ResizableHandle
-								key="rail-edge"
+								key="sidebar-edge"
 								aria-label="Resize sidebar"
 								className={shellSplitHandle}
 							/>,
 						]
 					: null}
 				<ResizablePanel key="main" id="shell-main" className={shellSlot}>
-					<main className={shellMain} data-rail={collapsed ? "collapsed" : undefined}>
+					<main className={shellMain} data-sidebar={collapsed ? "collapsed" : undefined}>
 						{collapsed ? (
-							<div className={shellRailOpen}>
-								<RailToggle
+							<div className={sidebarReopen}>
+								<SidebarToggle
 									label="Show sidebar"
 									onClick={() => {
-										setRailCollapsed(false);
-										focusRailToggle();
+										setSidebarCollapsed(false);
+										focusSidebarToggle();
 									}}
 								/>
 							</div>

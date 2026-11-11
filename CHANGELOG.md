@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- The canvas shows one plane or strip, with px column widths and drops
 - Every desk item has its own url, links inside it remember where you went
 - Desks hold plane items and strips that remember their saved and last plane
 - Pins are gone, a Favorites desk takes their place
