@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Pins are gone, a Favorites desk takes their place
 - Removing a plane takes it off every desk, even with no browser open
 - Desks live in the web store and reach every tab live, with a seeded Favorites
 - System planes home, search and settings are found by role, not fixed ids

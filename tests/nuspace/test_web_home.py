@@ -210,28 +210,15 @@ def _tiles(drawn: dict, group: str) -> list:
 
 async def test_history_on_an_empty_space(store):
     drawn = (await _draw(store, history.draw())).drawn()
-    assert _tiles(drawn, "pinned") == [] and _tiles(drawn, "recent") == []
-    assert drawn[("history", "pinned", "empty")] == "Nothing pinned."
+    assert _tiles(drawn, "recent") == []
     assert drawn[("history", "recent", "empty")] == "Nothing opened yet."
 
 
-async def test_history_pins_past_the_cap_end_in_an_honest_more_tile(store):
-    ids = [await plane(store, name=f"P{i}") for i in range(23)]
-    for p in ids:
-        await do(store, web.add(p) >> web.pin(p))
+async def test_history_shows_recents(store):
+    p = await plane(store, name="Seen")
+    await do(store, web.add(p) >> web.visit(p))
     drawn = (await _draw(store, history.draw())).drawn()
-    tiles = _tiles(drawn, "pinned")
-    assert [t["title"] for t in tiles[:-1]] == [f"P{i}" for i in range(history.TILES - 1)]
-    assert tiles[-1]["icon"] == "+16" and tiles[-1]["title"] == "more pinned"
-    assert drawn[("history", "pinned", "head", "count")] == "23"
-
-
-async def test_history_eight_pins_fit_with_no_more_tile(store):
-    for i in range(history.TILES):
-        p = await plane(store, name=f"P{i}")
-        await do(store, web.add(p) >> web.pin(p))
-    tiles = _tiles((await _draw(store, history.draw())).drawn(), "pinned")
-    assert len(tiles) == history.TILES and all(not t["icon"].startswith("+") for t in tiles)
+    assert [t["title"] for t in _tiles(drawn, "recent")] == ["Seen"]
 
 
 async def test_history_recent_shows_the_newest_eight_still_there_icon_and_title_only(store):

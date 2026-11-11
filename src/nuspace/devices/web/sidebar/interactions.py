@@ -30,12 +30,9 @@ __all__ = [
     "on_create_plane",
     "on_delete_plane",
     "on_expand",
-    "on_move_pin",
     "on_move_plane",
-    "on_pin_plane",
     "on_rename_plane",
     "on_set_icon",
-    "on_unpin_plane",
     "set_tree",
 ]
 
@@ -58,14 +55,13 @@ ROOT_ID = "space"
 # --- Writes: host -> browser --------------------------------------------------
 
 
-def set_tree(sidebar: Ref, rows: ListArg[dict], pinned: ListArg[str]) -> Nu:
+def set_tree(sidebar: Ref, rows: ListArg[dict]) -> Nu:
     """Replace the sidebar. A row is ``{id, kind, title, parent, children, spec, icon, system}``.
 
     The tree is lazy: ``children`` is filled only for the space row and the
-    branches the tab has open; every other row ships ``[]``. ``pinned`` is
-    the pinned plane ids, in order, every one a row too.
+    branches the tab has open; every other row ships ``[]``.
     """
-    return write(sidebar, "set_tree", planes=rows, pinned=pinned)
+    return write(sidebar, "set_tree", planes=rows)
 
 
 # --- Events: browser -> host --------------------------------------------------
@@ -101,21 +97,6 @@ def on_move_plane(sidebar: Ref) -> Changed:
 def on_set_icon(sidebar: Ref) -> Changed:
     """``{plane_id, icon}``. ``icon`` is ``lucide:<name>``, ``emoji:<char>`` or ``""``."""
     return event(sidebar, "plane.icon")
-
-
-def on_pin_plane(sidebar: Ref) -> Changed:
-    """``{plane_id, before?, after?}``: pin before or after a pin, neither the end."""
-    return event(sidebar, "plane.pin")
-
-
-def on_unpin_plane(sidebar: Ref) -> Changed:
-    """``{plane_id}``. The plane stays in the tree."""
-    return event(sidebar, "plane.unpin")
-
-
-def on_move_pin(sidebar: Ref) -> Changed:
-    """``{plane_id, before?, after?}``. Moves a pinned plane, placed as in ``plane.pin``."""
-    return event(sidebar, "plane.pin_move")
 
 
 def on_expand(sidebar: Ref) -> Changed:

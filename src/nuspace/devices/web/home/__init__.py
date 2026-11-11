@@ -1,6 +1,6 @@
-"""Home: the web plane ``/`` redirects to. Made at open when missing (:mod:`..planes`).
+"""Home: the web plane the ``home`` role names, where ``/`` lands. Made at open when missing (:mod:`..planes`).
 
-A system web plane with a fixed id: ``plane.remove`` refuses it, nav runs
+A system web plane with a minted id, found through ``Web.roles``: ``plane.remove`` refuses it, nav runs
 it like any web plane, and the sidebar draws it first in its nav group,
 out of the tree. Its cells are ordinary cells, made once: after that they
 are the owner's to edit, and a space that has a home keeps it as it is
@@ -11,7 +11,7 @@ read only, each a shim over its module here, like a system plane's:
 
 - ``space`` (:mod:`.space`): the info line, the counts and the planes and
   cells added per day, off ``Space.info`` and the home indexer;
-- ``history`` (:mod:`.history`): pinned, then recent pages;
+- ``history`` (:mod:`.history`): recent pages;
 - ``now`` (:mod:`.now`): the Execution heading, then Now, the plane runs
   live now, with a switch for system runs (off by default);
 - ``runs`` (:mod:`.runs`): Recent, under Execution: the last planes that
@@ -35,11 +35,8 @@ extension, so home works with none installed.
 from __future__ import annotations
 
 
-__all__ = ["CELLS", "HEADER", "ICON", "NAME", "PLANE", "prog"]
+__all__ = ["CELLS", "HEADER", "ICON", "NAME", "prog"]
 
-
-#: The plane id, fixed: routed at ``/home``, like any plane.
-PLANE = "home"
 
 #: What the plane is called.
 NAME = "Home"

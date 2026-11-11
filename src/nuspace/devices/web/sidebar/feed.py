@@ -14,8 +14,6 @@ plane with no web row stops the walk: what hangs under it is not listed.
 A row ships its children only when its branch is open, ``[]`` otherwise,
 and the walk goes down from root through shipped rows only, so a branch
 left open under a closed one lists nothing until its parent opens again.
-Pinned planes ship a row too, wherever they hang, so a pin always has its
-title and icon.
 
 **Rows.** A row carries its plane's name, icon, ``spec`` and ``system``
 (the browser offers no delete for a plane ``plane.remove`` refuses). The
@@ -23,8 +21,8 @@ browser falls back to the registered PlaneSpec's icon when the plane has
 none.
 
 **Watches.** The tree ships again when a plane's name, icon, removal or
-children change, a web row comes or goes, the pins change, or the tab
-opens or closes a branch. A cell writing its state or the kernel writing a
+children change, a web row comes or goes, or the tab opens or closes a
+branch. A cell writing its state or the kernel writing a
 run never wakes it. Level, with no re-checks: a missed notification leaves
 the tree stale until the next change.
 """
@@ -55,7 +53,7 @@ if TYPE_CHECKING:
     from nustd.ui.core import Ref
 
 
-__all__ = ["create", "node", "pins", "rows", "sidebar_feed"]
+__all__ = ["create", "node", "rows", "sidebar_feed"]
 
 
 def node(parent_id: nu.Nu) -> nu.Str:
@@ -116,8 +114,7 @@ def rows(sid: nu.StrArg, *, into: nu.Ref) -> nu.Nu:
         sid: The tab.
         into: A ref set to ``[space, *planes]``, each ``{id, kind, title,
             parent, children}``, planes with ``spec``, ``icon`` and
-            ``system`` too. Pinned planes not under a walked branch ship as
-            rows with no children.
+            ``system`` too.
     """
     expanded = Conn.connections[sid].expanded
     space = nu.Dict.of(id=ROOT_ID, kind=KIND_SPACE, title="", parent=ROOT_ID, children=_kids(ROOT))
@@ -141,23 +138,10 @@ def rows(sid: nu.StrArg, *, into: nu.Ref) -> nu.Nu:
             nu.List(level).iter().map(under).flatten().to_list()
         )
         walk = nu.WhileDo(nu.List(level).len() > 0, down)
-
-        def alone(at: nu.Attr) -> nu.Dict:
-            plane = nu.Str(at)
-            return _row(plane, Space.planes[plane].parent.fallback(ROOT), [])
-
-        ids = nu.List(walked).iter().map(lambda r: nu.Dict(r)["id"]).to_list()
-        extra = pins().iter().filter(lambda p: ids.contains(p).not_()).map(alone).to_list()
-        done = into.set(nu.List(walked) + extra)
+        done = into.set(nu.List(walked))
         return nu.Frame(_Walk, walk >> done, level=nu.List.of(space), walked=nu.List.create())
 
     return nu.let(keys_of(expanded), with_open)
-
-
-def pins() -> nu.List:
-    """The pinned plane ids, in order, those listed only (on the web, not removed). Bare read."""
-    pinned = nu.If(Web.pinned.exists(), nu.list(Web.pinned), [])
-    return nu.List(pinned).iter().filter(lambda p: _shown(nu.Str(p))).to_list()
 
 
 def create(
@@ -184,7 +168,7 @@ def create(
 
 
 def _changes(sid: nu.StrArg) -> list[nu.Nu]:
-    """What reships the tree: names, icons, removals and children of planes, web rows, pins, folds."""
+    """What reships the tree: names, icons, removals and children of planes, web rows, folds."""
     planes = Space.planes
     return [
         atomic(planes.on_descendants_change("*", "name")),
@@ -193,20 +177,17 @@ def _changes(sid: nu.StrArg) -> list[nu.Nu]:
         atomic(planes.on_descendants_change("*", "children")),
         atomic(planes.on_descendants_change("*", "children", "*")),
         atomic(Web.planes.on_children_change()),
-        atomic(Web.pinned.on_change()),
-        atomic(Web.pinned.on_children_change()),
         atomic(Conn.connections[sid].expanded.on_change()),
     ]
 
 
 def _ship(sidebar: Ref, sid: nu.StrArg) -> nu.Nu:
-    """The tree and the pins read in one snapshot, then shipped."""
+    """The tree read in one snapshot, then shipped."""
 
-    def ship(tree: nu.ObjectRef, pinned: nu.ObjectRef) -> nu.Nu:
-        read = atomic(rows(sid, into=tree) >> pinned.set(pins()))
-        return read >> interactions.set_tree(sidebar, nu.List(tree), nu.List(pinned))
+    def ship(tree: nu.ObjectRef) -> nu.Nu:
+        return atomic(rows(sid, into=tree)) >> interactions.set_tree(sidebar, nu.List(tree))
 
-    return nu.let([], lambda tree: nu.let([], lambda pinned: ship(tree, pinned)))
+    return nu.let([], ship)
 
 
 def sidebar_feed(sidebar: Ref, sid: nu.StrArg, planes: Sequence[PlaneSpec], toasts: Ref) -> nu.Nu:
@@ -247,19 +228,6 @@ def sidebar_feed(sidebar: Ref, sid: nu.StrArg, planes: Sequence[PlaneSpec], toas
             "icon",
             interactions.on_set_icon(sidebar),
             lambda p, ev: atomic(nuspace.plane.set_icon(p, field_str(ev, "icon"))),
-        ),
-        arms.plane_event(
-            "pin",
-            interactions.on_pin_plane(sidebar),
-            lambda p, ev: placed(ev, lambda **at: atomic(web.pin(p, **at))),
-        ),
-        arms.plane_event(
-            "unpin", interactions.on_unpin_plane(sidebar), lambda p, _: atomic(web.unpin(p))
-        ),
-        arms.plane_event(
-            "pin_move",
-            interactions.on_move_pin(sidebar),
-            lambda p, ev: placed(ev, lambda **at: atomic(web.move_pin(p, **at))),
         ),
         arms.plane_event(
             "expand", interactions.on_expand(sidebar), lambda p, _: atomic(web.expand(sid, p))

@@ -9,7 +9,7 @@
     tree again.
 """
 
-from nuspace.devices.web.sidebar.feed import create, node, pins, rows, sidebar_feed
+from nuspace.devices.web.sidebar.feed import create, node, rows, sidebar_feed
 from nuspace.devices.web.sidebar.interactions import (
     KIND_PLANE,
     KIND_SPACE,
@@ -19,12 +19,9 @@ from nuspace.devices.web.sidebar.interactions import (
     on_create_plane,
     on_delete_plane,
     on_expand,
-    on_move_pin,
     on_move_plane,
-    on_pin_plane,
     on_rename_plane,
     on_set_icon,
-    on_unpin_plane,
     set_tree,
 )
 from nuspace.devices.web.sidebar.ref import SidebarRef, registered_entries
@@ -42,13 +39,9 @@ __all__ = [
     "on_create_plane",
     "on_delete_plane",
     "on_expand",
-    "on_move_pin",
     "on_move_plane",
-    "on_pin_plane",
     "on_rename_plane",
     "on_set_icon",
-    "on_unpin_plane",
-    "pins",
     "registered_entries",
     "rows",
     "set_tree",
