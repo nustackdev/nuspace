@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Every desk item has its own url, links inside it remember where you went
 - Desks hold plane items and strips that remember their saved and last plane
 - Pins are gone, a Favorites desk takes their place
 - Removing a plane takes it off every desk, even with no browser open

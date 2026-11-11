@@ -2,7 +2,7 @@
 // `nuspace/devices/web/utils.py` `ToastRef`.
 //
 // Write-only: it draws nothing of its own. A `show` write is one failed
-// interaction (a click, an edit, a pin the server refused), its error's type
+// interaction (a click, an edit, a move the server refused), its error's type
 // as the title and its message under it, shown in the kit's toaster, which
 // the shell mounts once (../shell/Shell.tsx).
 

@@ -16,11 +16,13 @@
 // socket can dispatch anything.
 
 import { type NodeEntry, register } from "@nustackdev/ui-kit";
+import { DesksRef } from "./desks";
 import { SidebarRef } from "./sidebar";
 import { ToastRef } from "./toast";
 import { ViewerRef } from "./viewer";
 
 export const nuspaceEntries: Record<string, NodeEntry> = {
+	DesksRef,
 	SidebarRef,
 	ToastRef,
 	ViewerRef,

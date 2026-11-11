@@ -1,38 +1,97 @@
-// The pane router in jsdom, on the kit's real History: every move is a push
-// or a replace with the layout as the entry's state, the URL is always the
-// focused pane, back brings a layout back, "/" lands on /home, and the
-// gesture rule sends plain and Option clicks to the right move and leaves
-// the rest native.
+// The router in jsdom, on the kit's real History: url shapes, landing for
+// every row of the url table, navigation inside a desk item writing recent
+// (links, a program's push or query), the strip dedupe, focus per tab per
+// strip, the desk ops by id, back and forward, and the link gestures.
 
 import { catchAnchors, History } from "@nustackdev/ui-kit";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Layout } from "./layout";
+import type { Desk, Item, Link, Pane, PlaneItem, Strip } from "../desk/model";
 import {
+	closeColumn,
+	closeDesk,
+	closeItem,
 	closePane,
-	closePanes,
-	currentLayout,
+	createDesk,
+	currentRoute,
 	currentRoutes,
+	deskHref,
+	deskName,
 	ensureLanding,
 	focusedRoute,
 	focusPane,
 	hrefFor,
-	movePane,
+	isKnownPlane,
+	itemHref,
+	knownDesks,
+	leavePlanes,
+	navigate,
+	onDeskDelete,
+	onDeskWrite,
 	onReveal,
-	openAt,
-	openBeside,
-	openHere,
 	openInNewTab,
+	openItem,
+	openPane,
+	openPlane,
 	paneRule,
+	paramsOf,
+	renameDesk,
+	resetItem,
+	resetRouter,
+	resolve,
+	saveItem,
+	setDesks,
+	setPlanes,
+	setRoles,
+	setShares,
+	setWidth,
+	shapeOf,
+	shapeOfHref,
 } from "./router";
 
-const pane = (plane: string, params: Record<string, string> = {}) => ({ plane, params });
+const DESK = "desk0001";
+const OTHER = "desk0002";
+const P = "pitem1";
+const S = "strip1";
 
-/** Land on `path`, with `layout` as the entry's state (none when left out). */
-function at(path: string, layout: Layout | null = null) {
-	window.history.replaceState(layout, "", path);
+const L = (plane: string, params: Record<string, string> = {}): Link => ({ plane, params });
+
+function pi(id: string, plane: string, recent?: Link): PlaneItem {
+	return recent
+		? { id, kind: "plane", original: L(plane), recent }
+		: { id, kind: "plane", original: L(plane) };
+}
+
+function pn(plane: string, recent?: Link): Pane {
+	return recent ? { share: 1, original: L(plane), recent } : { share: 1, original: L(plane) };
+}
+
+/** A strip of one column per plane. */
+function st(id: string, ...planes: (string | Pane)[]): Strip {
+	return {
+		id,
+		kind: "strip",
+		columns: planes.map((p) => ({ panes: [typeof p === "string" ? pn(p) : p] })),
+	};
+}
+
+function dk(name: string, ...items: Item[]): Desk {
+	return { name, items };
+}
+
+/** The usual desk: a plane item `a`, then a strip of `b` and `c`. */
+const usual = () => dk("Work", pi(P, "a"), st(S, "b", "c"));
+
+function at(path: string) {
+	window.history.replaceState(null, "", path);
 }
 
 const url = () => window.location.pathname + window.location.search;
+
+/** Desks and roles landed. */
+function known(desks: Record<string, Desk>) {
+	setRoles({ home: "p_home" });
+	setDesks(desks);
+}
 
 /** The next History move, once it lands (back and forward land later). */
 function nextMove(): Promise<void> {
@@ -44,147 +103,475 @@ function nextMove(): Promise<void> {
 	});
 }
 
-describe("landing", () => {
-	it("is one pane off a copied link, with its query", () => {
-		at("/movie?id=42");
-		expect(currentLayout()).toEqual({ panes: [pane("movie", { id: "42" })], focus: 0 });
-		expect(focusedRoute()).toBe("movie");
+const tick = () => Promise.resolve();
+
+const desk = (id = DESK) => knownDesks()?.[id] as Desk;
+
+beforeEach(() => {
+	resetRouter();
+	at("/");
+});
+
+describe("url shapes", () => {
+	it("tells root, desk, item, plane and nothing apart", () => {
+		expect(shapeOf("/")).toEqual({ kind: "root" });
+		expect(shapeOf("/ab12cd34")).toEqual({ kind: "desk", desk: "ab12cd34" });
+		expect(shapeOf("/ab12cd34/k3x9ab")).toEqual({ kind: "item", desk: "ab12cd34", item: "k3x9ab" });
+		expect(shapeOf("/p_0190_0001_ab12")).toEqual({ kind: "plane", plane: "p_0190_0001_ab12" });
+		// A plane id is key chars only.
+		expect(shapeOf("/a%20b")).toEqual({ kind: "none" });
+		expect(shapeOf("/ab12cd34/K3X9AB")).toEqual({ kind: "none" });
+		expect(shapeOf("/x/k3x9ab")).toEqual({ kind: "none" });
+		expect(shapeOf("/a/b/c")).toEqual({ kind: "none" });
+		expect(shapeOf("/a/")).toEqual({ kind: "none" });
+		expect(shapeOf("/%E0%A4%A")).toEqual({ kind: "none" });
 	});
 
-	it("replaces / and anything that names no plane with /home", () => {
-		at("/");
-		const before = window.history.length;
-		ensureLanding();
-		expect(url()).toBe("/home");
-		expect(window.history.length).toBe(before);
-		at("/a/b");
-		ensureLanding();
-		expect(url()).toBe("/home");
-		at("/a");
-		ensureLanding();
-		expect(url()).toBe("/a");
+	it("reads a one segment desk shaped id as a desk only once the desks hold it", () => {
+		expect(shapeOf("/settings")).toEqual({ kind: "desk", desk: "settings" });
+		expect(shapeOf("/settings", {})).toEqual({ kind: "plane", plane: "settings" });
+		expect(shapeOf(`/${DESK}`, { [DESK]: usual() })).toEqual({ kind: "desk", desk: DESK });
 	});
 
-	it("redirects a later entry on / too, after it lands", async () => {
-		at("/a");
-		ensureLanding();
-		History.push("/");
-		await Promise.resolve();
-		expect(url()).toBe("/home");
+	it("reads an href, leaving a hash or a deeper path out", () => {
+		expect(shapeOfHref("/movie?id=42")).toEqual({
+			shape: { kind: "plane", plane: "movie" },
+			params: { id: "42" },
+		});
+		expect(shapeOfHref(`/${DESK}/${P}`)?.shape).toEqual({ kind: "item", desk: DESK, item: P });
+		expect(shapeOfHref("/x#top")).toBeNull();
+		expect(shapeOfHref("/x/y/z")).toBeNull();
 	});
 
-	it("brings a reloaded layout back from the entry's state", () => {
-		const layout = { panes: [pane("a"), pane("movie", { id: "1" })], focus: 1 };
-		at("/movie?id=1", layout);
-		expect(currentLayout()).toEqual(layout);
+	it("builds urls", () => {
+		expect(hrefFor("a b", { k: "v" })).toBe("/a%20b?k=v");
+		expect(deskHref(DESK)).toBe(`/${DESK}`);
+		expect(itemHref(DESK, P)).toBe(`/${DESK}/${P}`);
+	});
+
+	it("knows a desk shaped plane id through a role or the planes", () => {
+		expect(isKnownPlane("settings", { settings: "settings" }, null)).toBe(true);
+		expect(isKnownPlane("settings", {}, new Set(["settings"]))).toBe(true);
+		expect(isKnownPlane("settings", {}, new Set())).toBe(false);
+		expect(isKnownPlane("settings", {}, null)).toBeNull();
+	});
+
+	it("resolves pending until desks and roles land, then each row", () => {
+		const desks = { [DESK]: usual(), [OTHER]: dk("Empty") };
+		const e = (path: string, query = {}) => ({ path, query });
+		expect(resolve(e("/m"), null, { home: "h" })).toEqual({ kind: "pending" });
+		expect(resolve(e("/m"), desks, null)).toEqual({ kind: "pending" });
+		const roles = { home: "h" };
+		expect(resolve(e("/"), desks, roles)).toEqual({ kind: "solo", plane: "h", params: {} });
+		expect(resolve(e("/"), desks, {})).toEqual({ kind: "missing", what: "page", id: "/" });
+		expect(resolve(e("/m", { id: "1" }), desks, roles)).toEqual({
+			kind: "solo",
+			plane: "m",
+			params: { id: "1" },
+		});
+		expect(resolve(e(`/${DESK}/${S}`), desks, roles)).toMatchObject({
+			kind: "item",
+			desk: DESK,
+			name: "Work",
+			focus: "b",
+		});
+		expect(resolve(e(`/${DESK}`), desks, roles)).toMatchObject({
+			kind: "item",
+			desk: DESK,
+			item: { id: P },
+		});
+		expect(resolve(e(`/${OTHER}`), desks, roles)).toEqual({
+			kind: "desk",
+			desk: OTHER,
+			name: "Empty",
+		});
+		expect(resolve(e(`/zzzzzzzz/${P}`), desks, roles)).toEqual({
+			kind: "missing",
+			what: "desk",
+			id: "zzzzzzzz",
+		});
+		expect(resolve(e(`/${DESK}/zzzzzz`), desks, roles)).toEqual({
+			kind: "missing",
+			what: "item",
+			id: "Work / zzzzzz",
+		});
+		expect(resolve(e("/a/b/c"), desks, roles)).toEqual({
+			kind: "missing",
+			what: "page",
+			id: "/a/b/c",
+		});
+	});
+
+	it("takes only segments of an id's shape, a page not found for anything else", () => {
+		const desks = { [DESK]: usual() };
+		const roles = { home: "h" };
+		const e = (path: string) => ({ path, query: {} });
+		const page = (path: string) => ({ kind: "missing", what: "page", id: path });
+		// Plane ids: key chars, minted, a system plane's name, an id given in code.
+		for (const ok of ["/p_01a1cb96cbab_0006_3f2d", "/home_indexer", "/My-plane_2"]) {
+			expect(resolve(e(ok), desks, roles).kind).toBe("solo");
+		}
+		for (const bad of ["/a%20b", "/a.b", "/%E2%9C%93", `/${"x".repeat(129)}`]) {
+			expect(resolve(e(bad), desks, roles)).toEqual(page(bad));
+		}
+		// Two segments: a desk id (8) and an item id (6), nothing else.
+		for (const bad of [`/${DESK}/abc`, `/${DESK}/ABCDEF`, `/short/${P}`, `/${DESK}/${P}x`]) {
+			expect(resolve(e(bad), desks, roles)).toEqual(page(bad));
+		}
+		// A desk's shape and no desk: pending until the planes are known, then a desk not found.
+		expect(resolve(e("/zzzzzzzz"), desks, roles)).toEqual({ kind: "pending" });
+		expect(resolve(e("/zzzzzzzz"), desks, roles, new Set())).toEqual({
+			kind: "missing",
+			what: "desk",
+			id: "zzzzzzzz",
+		});
 	});
 });
 
-describe("moves", () => {
-	beforeEach(() => at("/a"));
-
-	it("pushes a link into the focused pane, the URL its target", () => {
-		const before = window.history.length;
-		openHere(pane("movie", { id: "42" }));
-		expect(url()).toBe("/movie?id=42");
-		expect(window.history.length).toBe(before + 1);
-		expect(window.history.state).toEqual({ panes: [pane("movie", { id: "42" })], focus: 0 });
-	});
-
-	it("pushes Option beside the focused pane, focus and URL moving to it", () => {
-		at("/b", { panes: [pane("a"), pane("b"), pane("c")], focus: 1 });
-		openBeside(pane("x", { k: "v" }));
-		expect(currentRoutes()).toEqual(["a", "b", "x", "c"]);
-		expect(url()).toBe("/x?k=v");
-	});
-
-	it("replaces on focus: the URL follows, no entry", () => {
-		at("/a", { panes: [pane("a"), pane("movie", { id: "1" })], focus: 0 });
-		const before = window.history.length;
-		focusPane("movie");
-		expect(url()).toBe("/movie?id=1");
-		expect(window.history.length).toBe(before);
-		expect(currentRoutes()).toEqual(["a", "movie"]);
-	});
-
-	it("pushes a close, a reorder and a drop", () => {
-		at("/a", { panes: [pane("a"), pane("b"), pane("c")], focus: 0 });
-		const before = window.history.length;
-		openAt("d", 1);
-		expect(currentRoutes()).toEqual(["a", "d", "b", "c"]);
-		movePane("a", 3);
-		expect(currentRoutes()).toEqual(["d", "b", "c", "a"]);
-		closePane("b");
-		expect(currentRoutes()).toEqual(["d", "c", "a"]);
-		expect(window.history.length).toBe(before + 3);
-		expect(url()).toBe("/a");
-	});
-
-	it("replaces a close of a deleted plane, and lands home on the last", () => {
-		const before = window.history.length;
-		closePanes(["a"], true);
-		expect(url()).toBe("/home");
-		expect(window.history.length).toBe(before);
-	});
-
-	it("reveals a pane asked for while open", () => {
-		at("/a", { panes: [pane("a"), pane("b")], focus: 0 });
-		const seen: string[] = [];
-		const off = onReveal((id) => seen.push(id));
-		openHere("b");
-		expect(seen).toEqual(["b"]);
-		expect(url()).toBe("/b");
-		off();
-	});
-
-	it("opens a program's push in the focused pane, every other pane kept", async () => {
-		at("/b", { panes: [pane("a"), pane("b")], focus: 1 });
+describe("landing: the url table", () => {
+	it("replaces / with home's plane url once desks and roles land", async () => {
 		ensureLanding();
-		// A program's HistoryRef.push: a URL and no layout.
-		History.push("/movie?id=7");
-		expect(currentLayout()).toEqual({ panes: [pane("a"), pane("movie", { id: "7" })], focus: 1 });
-		expect(url()).toBe("/movie?id=7");
-		// Landing writes the layout into that entry once the move is heard.
-		await Promise.resolve();
-		expect(History.current().state).toEqual(currentLayout());
-		// Back is the desk as it was.
-		const back = nextMove();
-		History.back();
-		await back;
-		expect(currentLayout()).toEqual({ panes: [pane("a"), pane("b")], focus: 1 });
+		expect(currentRoute()).toEqual({ kind: "pending" });
+		const before = window.history.length;
+		known({});
+		await tick();
+		expect(url()).toBe("/p_home");
+		expect(window.history.length).toBe(before);
+		expect(focusedRoute()).toBe("p_home");
 	});
 
-	it("focuses a pane a program pushes to when it is already open", () => {
-		at("/a", { panes: [pane("a"), pane("b")], focus: 0 });
-		History.push("/b?k=v");
-		expect(currentLayout()).toEqual({ panes: [pane("a"), pane("b", { k: "v" })], focus: 1 });
+	it("shows /<plane id> solo, its query as params", () => {
+		known({});
+		at("/movie?id=42");
+		expect(currentRoute()).toEqual({ kind: "solo", plane: "movie", params: { id: "42" } });
+		expect(currentRoutes()).toEqual(["movie"]);
+		expect(paramsOf("movie")).toEqual({ id: "42" });
+		expect(deskName()).toBe("");
 	});
 
-	it("opens a plane in a new browser tab with its pane's params", () => {
-		at("/a b?k=v");
+	it("shows /<desk id>/<item id>: a plane item, a strip", () => {
+		known({ [DESK]: usual() });
+		at(itemHref(DESK, P));
+		expect(currentRoute()).toMatchObject({ kind: "item", desk: DESK, name: "Work", focus: "a" });
+		expect(currentRoutes()).toEqual(["a"]);
+		at(itemHref(DESK, S));
+		expect(currentRoutes()).toEqual(["b", "c"]);
+		expect(focusedRoute()).toBe("b");
+		expect(deskName()).toBe("Work");
+	});
+
+	it("replaces /<desk id> with its first item's url", async () => {
+		known({ [DESK]: usual() });
+		at(deskHref(DESK));
+		ensureLanding();
+		await tick();
+		expect(url()).toBe(itemHref(DESK, P));
+	});
+
+	it("keeps /<desk id> of an empty desk as the empty desk state", async () => {
+		known({ [DESK]: dk("Empty") });
+		at(deskHref(DESK));
+		ensureLanding();
+		await tick();
+		expect(url()).toBe(deskHref(DESK));
+		expect(currentRoute()).toEqual({ kind: "desk", desk: DESK, name: "Empty" });
+		expect(currentRoutes()).toEqual([]);
+		expect(deskName()).toBe("Empty");
+	});
+
+	it("keeps an unknown desk's url and says the desk is not found", async () => {
+		known({ [DESK]: usual() });
+		at(`/zzzzzzzz/${P}`);
+		ensureLanding();
+		await tick();
+		expect(url()).toBe(`/zzzzzzzz/${P}`);
+		expect(currentRoute()).toEqual({ kind: "missing", what: "desk", id: "zzzzzzzz" });
+	});
+
+	it("keeps a known desk's unknown item url and says the item is not found", async () => {
+		known({ [DESK]: usual() });
+		at(`/${DESK}/zzzzzz`);
+		ensureLanding();
+		await tick();
+		await tick();
+		expect(url()).toBe(`/${DESK}/zzzzzz`);
+		expect(currentRoute()).toMatchObject({ kind: "missing", what: "item" });
+	});
+
+	it("says a desk shaped id that is no desk and no plane is a desk not found, once the planes are known", async () => {
+		known({});
+		at("/zzzzzzzz");
+		ensureLanding();
+		await tick();
+		expect(currentRoute()).toEqual({ kind: "pending" });
+		setPlanes(["p_home"]);
+		await tick();
+		expect(url()).toBe("/zzzzzzzz");
+		expect(currentRoute()).toEqual({ kind: "missing", what: "desk", id: "zzzzzzzz" });
+	});
+
+	it("shows a desk shaped plane id a role holds", () => {
+		setRoles({ home: "p_home", settings: "settings" });
+		setDesks({});
+		at("/settings?tab=keys");
+		expect(currentRoute()).toEqual({ kind: "solo", plane: "settings", params: { tab: "keys" } });
+	});
+
+	it("drops a query off an item url", async () => {
+		known({ [DESK]: usual() });
+		at(`${itemHref(DESK, P)}?x=1`);
+		ensureLanding();
+		await tick();
+		expect(url()).toBe(itemHref(DESK, P));
+	});
+
+	it("an item closed elsewhere sends the tab to the desk's first item", async () => {
+		known({ [DESK]: usual() });
+		at(itemHref(DESK, S));
+		ensureLanding();
+		setDesks({ [DESK]: dk("Work", pi(P, "a")) });
+		await tick();
+		await tick();
+		expect(url()).toBe(itemHref(DESK, P));
+	});
+
+	it("a desk closed elsewhere sends the tab home", async () => {
+		known({ [DESK]: usual() });
+		at(itemHref(DESK, P));
+		ensureLanding();
+		setDesks({});
+		await tick();
+		expect(url()).toBe("/p_home");
+	});
+});
+
+describe("navigation inside a desk item", () => {
+	beforeEach(() => known({ [DESK]: usual() }));
+
+	it("writes a plane item's recent, the url kept, one desk write", () => {
+		const wrote = vi.fn();
+		onDeskWrite(wrote);
+		at(itemHref(DESK, P));
+		navigate(L("x", { run: "43" }));
+		expect(url()).toBe(itemHref(DESK, P));
+		expect(desk().items[0]).toEqual(pi(P, "a", L("x", { run: "43" })));
+		expect(currentRoutes()).toEqual(["x"]);
+		expect(paramsOf("x")).toEqual({ run: "43" });
+		expect(wrote).toHaveBeenCalledTimes(1);
+		navigate(L("a"));
+		expect(desk().items[0]).toEqual(pi(P, "a"));
+	});
+
+	it("writes the focused pane's recent in a strip, or the pane named", () => {
+		at(itemHref(DESK, S));
+		focusPane(DESK, S, "c");
+		navigate(L("x"));
+		expect((desk().items[1] as Strip).columns[1].panes[0]).toEqual(pn("c", L("x")));
+		expect(focusedRoute()).toBe("x");
+		navigate(L("y"), "b");
+		expect((desk().items[1] as Strip).columns[0].panes[0]).toEqual(pn("b", L("y")));
+		expect(focusedRoute()).toBe("y");
+		expect(currentRoutes()).toEqual(["y", "x"]);
+	});
+
+	it("focuses the pane that shows the plane already, nothing written, and brings it on screen", () => {
+		const wrote = vi.fn();
+		const shown = vi.fn();
+		onDeskWrite(wrote);
+		onReveal(shown);
+		at(itemHref(DESK, S));
+		navigate(L("c"), "b");
+		expect(wrote).not.toHaveBeenCalled();
+		expect(focusedRoute()).toBe("c");
+		expect(shown).toHaveBeenCalledWith("c");
+	});
+
+	it("just navigates in a solo plane", () => {
+		at("/s");
+		navigate(L("m", { k: "1" }));
+		expect(url()).toBe("/m?k=1");
+		expect(desk()).toEqual(usual());
+	});
+
+	it("reads a program's push to a plane url as navigation, the item url put back", async () => {
+		at(itemHref(DESK, P));
+		ensureLanding();
+		History.push("/x?k=1");
+		expect(currentRoute()).toMatchObject({ kind: "item", desk: DESK });
+		await tick();
+		expect(url()).toBe(itemHref(DESK, P));
+		expect(desk().items[0]).toEqual(pi(P, "a", L("x", { k: "1" })));
+	});
+
+	it("reads a program's query on an item url as the focused pane's params", async () => {
+		at(itemHref(DESK, S));
+		ensureLanding();
+		focusPane(DESK, S, "c");
+		History.push(`${itemHref(DESK, S)}?k=2`);
+		await tick();
+		expect(url()).toBe(itemHref(DESK, S));
+		expect((desk().items[1] as Strip).columns[1].panes[0]).toEqual(pn("c", L("c", { k: "2" })));
+	});
+
+	it("leaves a removed solo plane for home, and a desk item as it is", () => {
+		at("/gone");
+		leavePlanes(["gone"], true);
+		expect(url()).toBe("/p_home");
+		at(itemHref(DESK, P));
+		leavePlanes(["a"]);
+		expect(url()).toBe(itemHref(DESK, P));
+	});
+
+	it("opens a plane in a new tab with the params it is shown with", () => {
 		const open = vi.spyOn(window, "open").mockReturnValue(null);
-		openInNewTab("a b");
-		expect(open).toHaveBeenCalledWith("/a%20b?k=v", "_blank", "noopener");
-		expect(hrefFor("x")).toBe("/x");
+		desk().items[0] = pi(P, "a", L("a", { k: "v" }));
+		at(itemHref(DESK, P));
+		openInNewTab("a");
+		expect(open).toHaveBeenCalledWith("/a?k=v", "_blank", "noopener");
 		open.mockRestore();
 	});
 });
 
-describe("back and forward", () => {
-	it("restores the layout the entry held", async () => {
-		at("/a");
-		openBeside("b");
-		openBeside("c");
-		expect(currentRoutes()).toEqual(["a", "b", "c"]);
-		const landed = nextMove();
+describe("desk ops by id", () => {
+	beforeEach(() => known({ [DESK]: usual() }));
+
+	it("creates an empty desk named Untitled, returning its id", () => {
+		const wrote = vi.fn();
+		onDeskWrite(wrote);
+		const id = createDesk();
+		expect(id).toMatch(/^[a-z0-9]{8}$/);
+		expect(desk(id)).toEqual({ name: "Untitled", items: [] });
+		expect(wrote).toHaveBeenCalledWith(id, { name: "Untitled", items: [] });
+	});
+
+	it("renames a desk", () => {
+		renameDesk(DESK, "Play");
+		expect(desk().name).toBe("Play");
+	});
+
+	it("closes a desk: gone, the delete hook told, a tab on it home", () => {
+		const deleted: string[] = [];
+		onDeskDelete((id) => deleted.push(id));
+		at(itemHref(DESK, S));
+		closeDesk(DESK);
+		expect(knownDesks()).toEqual({});
+		expect(deleted).toEqual([DESK]);
+		expect(url()).toBe("/p_home");
+	});
+
+	it("closing another desk leaves the tab be", () => {
+		known({ [DESK]: usual(), [OTHER]: dk("Other") });
+		at(itemHref(DESK, P));
+		closeDesk(OTHER);
+		expect(url()).toBe(itemHref(DESK, P));
+	});
+
+	it("saves and resets", () => {
+		at(itemHref(DESK, P));
+		navigate(L("x"));
+		saveItem(DESK, P);
+		expect(desk().items[0]).toEqual(pi(P, "x"));
+		navigate(L("y"));
+		resetItem(DESK, P);
+		expect(desk().items[0]).toEqual(pi(P, "x"));
+	});
+
+	it("reset in a strip focuses the pane already showing the original", () => {
+		known({ [DESK]: dk("Work", st(S, pn("b", L("x")), pn("q", L("b")))) });
+		at(itemHref(DESK, S));
+		resetItem(DESK, S, "x");
+		expect(focusedRoute()).toBe("b");
+		expect((desk().items[0] as Strip).columns[0].panes[0]).toEqual(pn("b", L("x")));
+	});
+
+	it("opens an item (pushed), and a strip focusing a pane", () => {
+		const shown = vi.fn();
+		onReveal(shown);
+		at("/s");
+		const before = window.history.length;
+		openItem(DESK, P);
+		expect(url()).toBe(itemHref(DESK, P));
+		expect(window.history.length).toBe(before + 1);
+		openItem(DESK, P);
+		expect(window.history.length).toBe(before + 1);
+		openPane(DESK, S, "c");
+		expect(url()).toBe(itemHref(DESK, S));
+		expect(focusedRoute()).toBe("c");
+		expect(shown).toHaveBeenCalledWith("c");
+	});
+
+	it("closes an item, a pane, a column; a strip of one becomes a plane item", () => {
+		closePane(DESK, S, "c");
+		expect(desk().items[1]).toEqual(pi(S, "b"));
+		known({ [DESK]: dk("Work", pi(P, "a"), st(S, "b", "c", "d")) });
+		closeColumn(DESK, S, 0);
+		expect((desk().items[1] as Strip).columns).toHaveLength(2);
+		closeItem(DESK, P);
+		expect(desk().items.map((i) => i.id)).toEqual([S]);
+	});
+
+	it("resizes columns and sets shares", () => {
+		setWidth(DESK, S, "c", 700);
+		expect((desk().items[1] as Strip).columns[1].width).toBe(700);
+		known({
+			[DESK]: dk("Work", {
+				id: S,
+				kind: "strip",
+				columns: [
+					{
+						panes: [
+							{ share: 0.5, original: L("b") },
+							{ share: 0.5, original: L("c") },
+						],
+					},
+				],
+			}),
+		});
+		setShares(DESK, S, "b", [1, 3]);
+		expect((desk().items[0] as Strip).columns[0].panes.map((p) => p.share)).toEqual([0.25, 0.75]);
+	});
+
+	it("does nothing on an unknown desk", () => {
+		const wrote = vi.fn();
+		onDeskWrite(wrote);
+		renameDesk(OTHER, "x");
+		closeItem(OTHER, P);
+		saveItem(OTHER, P);
+		expect(wrote).not.toHaveBeenCalled();
+	});
+});
+
+describe("focus and history", () => {
+	it("keeps focus per strip, this tab only, through back and forward", async () => {
+		known({ [DESK]: usual(), [OTHER]: dk("Other", st(S, "x", "y")) });
+		at("/s");
+		openItem(DESK, S);
+		focusPane(DESK, S, "c");
+		openItem(OTHER, S);
+		expect(focusedRoute()).toBe("x");
+		const back = nextMove();
 		History.back();
-		await landed;
-		expect(currentRoutes()).toEqual(["a", "b"]);
-		expect(url()).toBe("/b");
+		await back;
+		expect(currentRoute()).toMatchObject({ kind: "item", desk: DESK, focus: "c" });
 		const again = nextMove();
-		History.forward();
+		History.back();
 		await again;
-		expect(currentRoutes()).toEqual(["a", "b", "c"]);
+		expect(currentRoute()).toEqual({ kind: "solo", plane: "s", params: {} });
+	});
+
+	it("ignores focus on a plane the strip does not show", () => {
+		known({ [DESK]: usual() });
+		at(itemHref(DESK, S));
+		focusPane(DESK, S, "zz");
+		expect(focusedRoute()).toBe("b");
+	});
+
+	it("opens a plane solo, pushed", () => {
+		known({ [DESK]: usual() });
+		at(itemHref(DESK, P));
+		openPlane("m");
+		expect(url()).toBe("/m");
+		expect(desk()).toEqual(usual());
 	});
 });
 
@@ -193,7 +580,8 @@ describe("gestures", () => {
 	let release: () => void;
 
 	beforeEach(() => {
-		at("/a", { panes: [pane("a"), pane("b")], focus: 0 });
+		known({ [DESK]: usual() });
+		at(itemHref(DESK, S));
 		root = document.createElement("div");
 		document.body.append(root);
 		release = catchAnchors(root, paneRule);
@@ -204,11 +592,11 @@ describe("gestures", () => {
 		root.remove();
 	});
 
-	function link(href: string, attrs: Record<string, string> = {}) {
+	function link(href: string, attrs: Record<string, string> = {}, inside: HTMLElement = root) {
 		const a = document.createElement("a");
 		a.setAttribute("href", href);
 		for (const [k, v] of Object.entries(attrs)) a.setAttribute(k, v);
-		root.append(a);
+		inside.append(a);
 		return a;
 	}
 
@@ -218,35 +606,57 @@ describe("gestures", () => {
 		return e;
 	}
 
-	it("opens a plain click in the focused pane", () => {
-		const e = click(link("/movie?id=1"));
+	it("navigates the pane holding the link in place", () => {
+		const pane = document.createElement("div");
+		pane.setAttribute("data-pane", "c");
+		root.append(pane);
+		const e = click(link("/movie?id=1", {}, pane));
 		expect(e.defaultPrevented).toBe(true);
-		expect(currentRoutes()).toEqual(["movie", "b"]);
+		expect(url()).toBe(itemHref(DESK, S));
+		expect(currentRoutes()).toEqual(["b", "movie"]);
+	});
+
+	it("opens a plane url outside any pane solo, on a desk item too, Option the same", () => {
+		const writes = vi.fn();
+		const off = onDeskWrite(writes);
+		const e = click(link("/movie?id=1"), { altKey: true });
+		expect(e.defaultPrevented).toBe(true);
+		expect(url()).toBe("/movie?id=1");
+		expect(currentRoute()).toEqual({ kind: "solo", plane: "movie", params: { id: "1" } });
+		expect(desk().items[1]).toEqual(st(S, "b", "c"));
+		expect(writes).not.toHaveBeenCalled();
+		off();
+	});
+
+	it("opens / outside any pane as home's plane, solo", () => {
+		click(link("/"));
+		expect(url()).toBe("/p_home");
+	});
+
+	it("opens an item url as that item, from a pane too", () => {
+		const pane = document.createElement("div");
+		pane.setAttribute("data-pane", "b");
+		root.append(pane);
+		click(link(itemHref(DESK, P), {}, pane));
+		expect(url()).toBe(itemHref(DESK, P));
+		expect(currentRoutes()).toEqual(["a"]);
+		expect(desk().items[1]).toEqual(st(S, "b", "c"));
+	});
+
+	it("pushes a plane url in a solo plane", () => {
+		at("/s");
+		click(link("/movie?id=1"));
 		expect(url()).toBe("/movie?id=1");
 	});
 
-	it("opens an Option click beside", () => {
-		const e = click(link("/movie?id=1"), { altKey: true });
-		expect(e.defaultPrevented).toBe(true);
-		expect(currentRoutes()).toEqual(["a", "movie", "b"]);
-	});
-
-	it("opens Option+Enter beside", () => {
-		const a = link("/x");
-		const e = new KeyboardEvent("keydown", {
-			key: "Enter",
-			altKey: true,
-			bubbles: true,
-			cancelable: true,
-		});
-		a.dispatchEvent(e);
-		expect(e.defaultPrevented).toBe(true);
-		expect(currentRoutes()).toEqual(["a", "x", "b"]);
-	});
-
-	it("opens / as home", () => {
+	it("opens a desk or item url, and / as home", () => {
+		click(link(itemHref(DESK, P)));
+		expect(url()).toBe(itemHref(DESK, P));
+		at("/s");
 		click(link("/"));
-		expect(url()).toBe("/home");
+		expect(url()).toBe("/p_home");
+		click(link(deskHref(DESK)));
+		expect(url()).toBe(deskHref(DESK));
 	});
 
 	it("leaves the rest native", () => {
@@ -254,16 +664,13 @@ describe("gestures", () => {
 			[link("/x"), { metaKey: true }],
 			[link("/x"), { ctrlKey: true }],
 			[link("/x"), { shiftKey: true }],
-			[link("/x/y"), {}],
+			[link("/x/y/z"), {}],
+			[link("/x#top"), {}],
 			[link("/x", { target: "_blank" }), {}],
-			[link("/x", { download: "" }), {}],
 			[link("https://example.com/x"), {}],
 		];
-		for (const [a, init] of cases) {
-			const e = click(a, init);
-			expect(e.defaultPrevented).toBe(false);
-		}
-		expect(currentRoutes()).toEqual(["a", "b"]);
-		expect(url()).toBe("/a");
+		for (const [a, init] of cases) expect(click(a, init).defaultPrevented).toBe(false);
+		expect(currentRoutes()).toEqual(["b", "c"]);
+		expect(url()).toBe(itemHref(DESK, S));
 	});
 });
