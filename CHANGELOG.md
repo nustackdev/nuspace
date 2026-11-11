@@ -2,15 +2,16 @@
 
 ## Packages shipped from this repo
 
-- **nuspace** (the runtime, the `nuspace` command) — 0.7.0
-- **nuspace-ui** (the compiled web bundle) — 0.7.0
+- **nuspace** (the runtime, the `nuspace` command) — 0.7.1
+- **nuspace-ui** (the compiled web bundle) — 0.7.1
 
 Below is the changelog for **nuspace** - the full commit stream. Newest first.
 The `nuspace-ui` wheel is the same source tree's vite output and is not tracked
 separately here.
 
-## Unreleased
+## 0.7.1 - 2026-11-12
 
+- Release nuspace and nuspace-ui 0.7.1
 - Dragging the sidebar folds it straight to its rail and back, no gaps or doubles
 - The sidebar folds to an icon rail, its bars line up with pane headers
 - Desk folders list items and strips, save, reset, rename, close and reorder
