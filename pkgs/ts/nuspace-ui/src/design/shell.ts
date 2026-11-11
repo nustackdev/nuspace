@@ -5,8 +5,7 @@
 // how the window splits, the gaps, and the frame around each pane.
 //
 // The window has no chrome of its own. The connection dot and the theme flip
-// sit in the sidebar footer. The one exception is the button that brings a
-// collapsed sidebar back, which has nowhere else to be.
+// sit in the sidebar footer. Folded, the sidebar is its rail (./sidebar.ts).
 //
 // Afterglow (the kit's `accent`) shows only as a line, or a ring on an empty
 // desk: on a drop target and on a resize edge that is hovered or dragged.
@@ -44,11 +43,7 @@ export const shellSlot = "flex min-h-0";
  */
 export const shellSplitHandle = "w-1.5 bg-transparent";
 
-/**
- * Everything right of the sidebar. `group/main` with `data-sidebar="collapsed"`
- * while the sidebar is hidden, so the first pane header can make room for
- * the reopen button (see `paneHeader`).
- */
+/** Everything right of the sidebar. */
 export const shellMain = "group/main relative flex min-h-0 min-w-0 flex-1";
 
 /* ============================== The desk ================================= */

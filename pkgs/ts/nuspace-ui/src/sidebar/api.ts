@@ -30,7 +30,7 @@ export {
 export { OPEN_KEYS } from "./keys";
 export { HOME_KEYS, SEARCH_KEYS, SETTINGS_KEYS, useNavShortcuts } from "./nav";
 export { SidebarPlaceholder } from "./Sidebar";
-export { SidebarToggle } from "./SidebarHeader";
+export { SidebarRail } from "./SidebarRail";
 
 // -- For the desk ------------------------------------------------------------
 

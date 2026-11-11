@@ -3,10 +3,10 @@
 // interaction shows in (../refs/toast.ts).
 //
 // There is no top bar, because there is no third region, and the two controls the window still has (the
-// connection dot and the theme flip) sit in the sidebar's bottom bar. The one
-// piece of chrome the shell draws itself is the button that brings a collapsed
-// sidebar back, over the desk area's top left corner, since the sidebar's own
-// is hidden with it. The sidebar lists every Plane that draws, and the desk
+// connection dot and the theme flip) sit in the sidebar's bottom bar. Folded,
+// the sidebar does not vanish, it gets thin: the shell draws its rail
+// (../sidebar/SidebarRail.tsx) left of the split, the toggle that brings it
+// back on top and the sidebar's first level as icons under it. The sidebar lists every Plane that draws, and the desk
 // area draws whatever the router shows (a solo plane or a desk), so navigation
 // is the sidebar's and the links', and the shell only places the two.
 //
@@ -63,20 +63,18 @@ import {
 	shellRoot,
 	shellSlot,
 	shellSplitHandle,
-	sidebarReopen,
 } from "../design";
 import { useDragScroll } from "../desk/autoscroll";
 import { ViewerSkeleton } from "../pane/ViewerSkeleton";
 import {
 	bindSidebar,
-	focusSidebarToggle,
 	publishSidebar,
 	SIDEBAR_LAYOUT_KEY,
 	SidebarPlaceholder,
-	SidebarToggle,
-	setSidebarCollapsed,
+	SidebarRail,
 	useNavShortcuts,
 	useNewPlaneShortcut,
+	usePlaneTree,
 	useSidebarCollapsed,
 	useSidebarShortcut,
 } from "../sidebar/api";
@@ -92,6 +90,7 @@ export function Shell() {
 	// The sidebar's panel: the real sidebar, or its placeholder until the tree lands.
 	const side = sidebar !== null || !booted;
 	const collapsed = useSidebarCollapsed() && side;
+	const tree = usePlaneTree(sidebar);
 	useSidebarShortcut();
 	useNewPlaneShortcut();
 	useNavShortcuts();
@@ -108,6 +107,7 @@ export function Shell() {
 
 	return (
 		<div ref={rootRef} className={shellRoot}>
+			{collapsed ? <SidebarRail tree={tree} /> : null}
 			<ResizablePanelGroup
 				ref={split}
 				storageKey={SIDEBAR_LAYOUT_KEY}
@@ -136,18 +136,7 @@ export function Shell() {
 						]
 					: null}
 				<ResizablePanel key="main" id="shell-main" className={shellSlot}>
-					<main className={shellMain} data-sidebar={collapsed ? "collapsed" : undefined}>
-						{collapsed ? (
-							<div className={sidebarReopen}>
-								<SidebarToggle
-									label="Show sidebar"
-									onClick={() => {
-										setSidebarCollapsed(false);
-										focusSidebarToggle();
-									}}
-								/>
-							</div>
-						) : null}
+					<main className={shellMain}>
 						{viewer ? (
 							<NodeView path={viewer} />
 						) : booted ? (

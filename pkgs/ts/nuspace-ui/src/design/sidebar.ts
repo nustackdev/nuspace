@@ -61,6 +61,13 @@ export const sidebarAside = "relative flex min-w-0 flex-1 flex-col";
 export const sidebarScroll = "min-h-0 flex-1";
 
 /**
+ * Its viewport. Radix pins `overflow-y: scroll` inline, a lane the browser may
+ * draw even with nothing to scroll; the kit's overlay bar is the only one we
+ * want, so the viewport scrolls only when it must.
+ */
+export const sidebarScrollViewport = "overflow-y-auto!";
+
+/**
  * The body inside the scroller: the sections, 10px apart, inset 8px from
  * both edges. It holds the focus a click leaves, which shows nowhere.
  */
@@ -68,8 +75,12 @@ export const sidebarBody = "flex flex-col gap-2.5 px-2 py-1 outline-hidden";
 
 /* ============================== Header, footer =========================== */
 
-/** The fixed top bar. `h-chrome`, like the pane header, so the tops line up. */
-export const sidebarHeader = "flex h-chrome shrink-0 items-center gap-0.5 px-3";
+/**
+ * The fixed top bar, lined up with the first pane's header: 6px down like the
+ * desk area (its `py-1.5`), then as tall as a pane's top border and header
+ * (1px + 34px), so its buttons sit on the header's center line.
+ */
+export const sidebarHeader = "mt-1.5 flex h-[35px] shrink-0 items-center gap-0.5 px-3";
 
 /** A header button pushed to the bar's right end. */
 export const sidebarHeaderEnd = "ml-auto";
@@ -79,8 +90,11 @@ export const sidebarWordmark =
 	"ml-1.5 select-none font-semibold text-sm text-text-primary uppercase tracking-wider";
 export const sidebarWordmarkNu = "text-accent-text";
 
-/** The fixed bottom bar: links on the left, the window's own state on the right. No rule. */
-export const sidebarFooter = "flex h-chrome shrink-0 items-center gap-0.5 px-3";
+/**
+ * The fixed bottom bar: links on the left, the window's own state on the
+ * right. No rule. 6px off the bottom edge, like the desk area.
+ */
+export const sidebarFooter = "mb-1.5 flex h-chrome shrink-0 items-center gap-0.5 px-3";
 
 /** The free middle of the bottom bar. */
 export const sidebarFooterSpace = "min-w-0 flex-1";
@@ -97,11 +111,41 @@ export const sidebarStatus = cn(
 	"focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring",
 );
 
-/**
- * The reopen button's slot, over the desk area's top left corner while the
- * sidebar is folded, its glyph where the header's collapse button had it.
+/* ============================== Rail ===================================== */
+
+/*
+ * What the sidebar folds to (../sidebar/SidebarRail.tsx): a 48px column of
+ * 28px icon buttons, centered, on the canvas like the sidebar. Its toggle sits
+ * in a bar as tall as the header, so it stays where the header had it.
  */
-export const sidebarReopen = "absolute top-0 left-3 z-20 flex h-chrome items-center";
+
+/** The rail itself, a fixed column left of the shell's split. */
+export const sidebarRail = "flex w-12 shrink-0 flex-col";
+
+/** The rail's top bar: just the toggle, on the header's line (`sidebarHeader`). */
+export const sidebarRailHead = "mt-1.5 flex h-[35px] shrink-0 items-center justify-center";
+
+/** The rail's scroller: 6px off the bottom edge, like the desk area. */
+export const sidebarRailScroll = "mb-1.5 min-h-0 flex-1";
+
+/** The icons, one column, a hairline apart like the sidebar's rows. */
+export const sidebarRailBody = "flex flex-col items-center gap-px py-1";
+
+/** Between the groups (nav, desks, planes): a short hairline, 8px of room each side. */
+export const sidebarRailDivider = "my-2 h-px w-5 shrink-0 border-0 bg-border-subtle";
+
+/** One icon: a row's look squeezed to its icon, the same selected fill. */
+export function sidebarRailItem(selected: boolean): string {
+	return cn(
+		"text-text-muted hover:text-text-primary",
+		selected
+			? "bg-sidebar-a-fill text-text-primary hover:bg-sidebar-a-hover active:bg-sidebar-a-press"
+			: "hover:bg-sidebar-a-fill active:bg-sidebar-a-hover",
+	);
+}
+
+/** A desk's first letter, where a plane has its icon. */
+export const sidebarRailMonogram = "select-none text-sm font-medium leading-none";
 
 /* ============================== Section ================================== */
 

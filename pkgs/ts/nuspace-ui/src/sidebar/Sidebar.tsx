@@ -60,6 +60,7 @@ import {
 	sidebarBody,
 	sidebarIndent,
 	sidebarScroll,
+	sidebarScrollViewport,
 	sidebarSkeletonBar,
 	sidebarSkeletonRow,
 } from "../design";
@@ -173,6 +174,7 @@ export function Sidebar({ path }: NodeProps) {
 				{/* A click in the empty room under the sections focuses the body too, so the arrows work. */}
 				<ScrollArea
 					className={sidebarScroll}
+					viewportClassName={sidebarScrollViewport}
 					onClick={(e) => {
 						const body = focus.containerRef.current;
 						if (body && !body.contains(e.target as Node)) body.focus({ preventScroll: true });
@@ -266,7 +268,7 @@ export function SidebarPlaceholder() {
 		<aside ref={aside} aria-label="Sidebar" className={sidebarAside}>
 			<SidebarHeader />
 			<SidebarFocusContext value={focus}>
-				<ScrollArea className={sidebarScroll}>
+				<ScrollArea className={sidebarScroll} viewportClassName={sidebarScrollViewport}>
 					<nav
 						aria-label="Planes"
 						ref={focus.containerRef}

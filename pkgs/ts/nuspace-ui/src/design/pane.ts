@@ -11,17 +11,9 @@
 
 import { cn } from "@nustackdev/ui-kit";
 
-/**
- * The header. With the sidebar collapsed its reopen button sits over the desk
- * area's top left corner, so the first pane's header steps right past it.
- * The drag handle of its pane (`data-pane-header`).
- */
-export function paneHeader(first: boolean): string {
-	return cn(
-		"flex h-8.5 shrink-0 items-center gap-1.5 border-b border-border-subtle pr-1 pl-2.5",
-		first && "group-data-[sidebar=collapsed]/main:pl-12",
-	);
-}
+/** The header. The drag handle of its pane (`data-pane-header`). */
+export const paneHeader =
+	"flex h-8.5 shrink-0 items-center gap-1.5 border-b border-border-subtle pr-1 pl-2.5";
 
 /** The plane's icon in the header. */
 export const paneHeaderIcon = "shrink-0 text-text-muted";

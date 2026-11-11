@@ -93,7 +93,6 @@ export function Pane({
 	onIcon,
 	onDelete,
 	trail = [],
-	first = true,
 	focused,
 }: {
 	viewerPath: Path;
@@ -116,8 +115,6 @@ export function Pane({
 	onDelete?: () => void;
 	/** The planes above this one, top first, for the header's trail. */
 	trail?: readonly Crumb[];
-	/** The canvas's first pane, the one the sidebar's reopen button sits over. */
-	first?: boolean;
 	focused: boolean;
 }) {
 	// Capture, so a click that a cell handles and stops still moves focus.
@@ -164,7 +161,6 @@ export function Pane({
 				onDelete={onDelete}
 				onRestart={absent ? undefined : () => notify("plane.restart", { plane_id: planeId })}
 				onClose={close}
-				first={first}
 				focused={focused}
 			/>
 			<div className={paneBodyScroll}>

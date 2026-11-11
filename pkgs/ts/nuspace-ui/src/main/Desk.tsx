@@ -244,7 +244,6 @@ export function Desk({ path }: NodeProps) {
 			onIcon={onIcon}
 			onDelete={deleteOf(id)}
 			trail={trailOf(tree, id)}
-			first={id === routes[0]}
 			focused={id === focused}
 		/>
 	);

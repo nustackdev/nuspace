@@ -63,7 +63,6 @@ export function PaneHeader({
 	onDelete,
 	onRestart,
 	onClose,
-	first = true,
 	focused = false,
 }: {
 	/** Where the pane sits: what the header drags as, and whether the menu has the column group. */
@@ -81,16 +80,10 @@ export function PaneHeader({
 	onRestart?: () => void;
 	/** Close the pane. Left out on a solo plane: no close then. */
 	onClose?: () => void;
-	/** The canvas's first pane, the one the sidebar's reopen button sits over. */
-	first?: boolean;
 	focused?: boolean;
 }) {
 	return (
-		<header
-			className={paneHeader(first)}
-			data-pane-header={planeId}
-			{...headerDragProps(at, planeId)}
-		>
+		<header className={paneHeader} data-pane-header={planeId} {...headerDragProps(at, planeId)}>
 			<span data-drag-icon className="contents">
 				<PlaneIcon icon={planeIcon(meta?.icon)} className={paneHeaderIcon} />
 			</span>
