@@ -1,7 +1,7 @@
-// The plane's icon, beside its title, and the way to change it.
+// The plane's icon, next to its title, and the way to change it.
 //
 // Always there: the plane's own `meta.icon`, which every plane is made with,
-// the same one the rail shows. Removing it puts the default back. A click, or Enter on it,
+// the same one the sidebar shows. Removing it puts the default back. A click, or Enter on it,
 // opens the picker anchored on it; that is its only job. Every plane has
 // this, editable or not: like the title, the icon is not one of its cells.
 

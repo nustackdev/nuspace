@@ -1,4 +1,4 @@
-// What a plane is called by code and agents, beside its title: the `#` toggle
+// What a plane is called by code and agents, next to its title: the `#` toggle
 // in the title row's right gutter, where a cell's sits on its row, opens the
 // identity block (../plane/Identity.tsx) under the title; and the plane's key,
 // when it has one, as a small `@key` line under the title that copies on a

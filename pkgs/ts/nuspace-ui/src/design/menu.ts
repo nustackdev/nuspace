@@ -12,8 +12,8 @@
 import { cn, commandHeadingClasses, commandItemClasses } from "@nustackdev/ui-kit";
 
 /**
- * A plane's menu (../menu/PlaneMenuItems.tsx), off a rail row, a pane's bar or
- * a dock chip: one width for all three, wide enough that a label and its
+ * A plane's menu (../menu/PlaneMenuItems.tsx), off a Planes tree row or a
+ * pane's header: one width for both, wide enough that a label and its
  * shortcut caps never crowd each other, and narrow enough that a pane
  * setting's hint wraps under its label.
  */

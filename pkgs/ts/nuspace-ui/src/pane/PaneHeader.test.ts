@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { coerceTree, ROOT_ID, trailOf } from "../sidebar/types";
-import { crumbsOf } from "./PaneBar";
+import { crumbsOf } from "./PaneHeader";
 
 // a > b > c > d, and e at the top.
 const tree = coerceTree([

@@ -1,13 +1,21 @@
-// One pane: a plane's frame on the desk. Its bar on top (title, settings,
-// remove), the plane under it in its own scroll host.
+// One pane: a plane on the canvas. Its header on top (icon, title,
+// actions), the plane under it in its body, a native scroller.
 //
-// The pane last clicked (or tabbed into) is the focused one: that is the pane
-// a plain sidebar click replaces. With more than one pane on the desk the
-// others sit on a dimmed surface and the focused one keeps the canvas.
+// Where it sits (`at`) is solo, a plane item, or a pane in a strip. In a
+// strip a click focuses it (per tab, never stored), and the focused pane's
+// title is the bright one (`data-focused` on the pane), the others dimmed.
+// Solo and a plane item are always focused: there is nothing else to focus.
+//
+// `data-pane` is the plane the pane shows (its recent, else its original):
+// the router finds the pane a link was clicked in by it, and navigates that
+// pane in place.
+//
+// Close takes the pane out of its strip, or the plane item out of its desk.
+// A solo plane has nothing to close.
 //
 // A pane whose Plane is absent (none by that id, or one that runs without a
-// view) says so in place of the cells, with a way to close it, and offers no
-// title or icon to edit. Its bar and its dock chip carry the plane id.
+// view) says so in place of the cells, with a way to close it where there is
+// one, and offers no title or icon to edit. Its header carries the plane id.
 //
 // A pane whose Plane has not landed yet draws the viewer skeleton, the same
 // one the boot draws, so a switch and a first load look alike.
@@ -18,27 +26,27 @@
 // on an editable plane.
 
 import type { Path } from "@nustackdev/ui-core";
-import { Button, EmptyState } from "@nustackdev/ui-kit";
+import { Button } from "@nustackdev/ui-kit";
 import { useCallback, useRef, useState } from "react";
-import { closePane, focusPane } from "../core/router";
+import { closeItem, closePane, focusPane } from "../core/router";
 import {
-	docContentTrack,
-	docPlaneAbsent,
 	docRow,
 	docTitleHead,
 	docTitleIdentity,
 	docTitleRow,
+	paneBody,
+	paneBodyScroll,
 	shellPane,
-	shellPaneDrop,
-	shellPanePlane,
 } from "../design";
+import type { PaneAt } from "../desk/drag";
 import type { PlaneHandle } from "../plane/api";
 import { Identity } from "../plane/Identity";
 import type { Notify } from "../plane/ops";
 import { Plane } from "../plane/Plane";
 import type { AbsentReason, ActivePlane, CellSpec } from "../plane/types";
 import type { Crumb } from "../sidebar/api";
-import { PaneBar } from "./PaneBar";
+import { GoHome, NOT_FOUND_TEXT, NotFoundBody } from "./NotFound";
+import { PaneHeader } from "./PaneHeader";
 import { focusTitle, Title } from "./Title";
 import { TitleIcon } from "./TitleIcon";
 import { IdentityToggle, KeyHandle } from "./TitleIdentity";
@@ -50,7 +58,7 @@ export const TITLE_FALLBACK = "Untitled";
 
 /** What an absent pane says, per reason. */
 export const ABSENT_TEXT: Record<AbsentReason, string> = {
-	missing: "This plane doesn't exist",
+	missing: NOT_FOUND_TEXT.plane,
 	headless: "This plane runs without a view",
 };
 
@@ -63,8 +71,18 @@ export function paneTitle(
 	return absent ? planeId : plane?.title || TITLE_FALLBACK;
 }
 
+/** What closes the pane showing `planeId` at `at`: undefined on a solo plane. */
+export function closeOf(at: PaneAt, planeId: string): (() => void) | undefined {
+	if (at.kind === "strip") return () => closePane(at.desk, at.item, planeId);
+	if (at.kind === "plane") return () => closeItem(at.desk, at.item);
+	return undefined;
+}
+
+const SOLO: PaneAt = { kind: "solo" };
+
 export function Pane({
 	viewerPath,
+	at = SOLO,
 	planeId,
 	plane,
 	absent = null,
@@ -75,12 +93,12 @@ export function Pane({
 	onIcon,
 	onDelete,
 	trail = [],
-	many,
-	divided,
+	first = true,
 	focused,
-	drop = null,
 }: {
 	viewerPath: Path;
+	/** Where the pane sits: what its header drags as, what a click and close do. */
+	at?: PaneAt;
 	planeId: string;
 	/** Null until this Plane's `set_plane` lands. */
 	plane: ActivePlane | null;
@@ -96,19 +114,18 @@ export function Pane({
 	onIcon: (planeId: string, icon: string) => void;
 	/** Delete this plane. Left out for one that cannot be deleted. */
 	onDelete?: () => void;
-	/** The planes above this one, top first, for the bar's trail. */
+	/** The planes above this one, top first, for the header's trail. */
 	trail?: readonly Crumb[];
-	/** More than one pane on the desk: dim the unfocused, drag by the bar. */
-	many: boolean;
-	/** Not the desk's first pane, so the rail's reopen button is not over its bar. */
-	divided: boolean;
+	/** The canvas's first pane, the one the sidebar's reopen button sits over. */
+	first?: boolean;
 	focused: boolean;
-	/** A plane dragged off the rail would open on this side of it. */
-	drop?: "before" | "after" | null;
 }) {
-	// Capture, so a click that a cell handles and stops still moves focus,
-	// and a caret tabbed into the pane counts the same as a click.
-	const claim = useCallback(() => focusPane(planeId), [planeId]);
+	// Capture, so a click that a cell handles and stops still moves focus.
+	const [deskId, itemId] = at.kind === "strip" ? [at.desk, at.item] : ["", ""];
+	const claim = useCallback(() => {
+		if (deskId) focusPane(deskId, itemId, planeId);
+	}, [deskId, itemId, planeId]);
+	const close = closeOf(at, planeId);
 	const title = paneTitle(planeId, plane, absent);
 	const wide = plane?.meta.full_width === true;
 	const compact = plane?.meta.compact === true;
@@ -131,12 +148,14 @@ export function Pane({
 
 	return (
 		<section
-			className={shellPane(many && !focused)}
+			className={shellPane}
 			aria-label={title}
+			data-pane={planeId}
+			data-focused={focused ? "" : undefined}
 			onPointerDownCapture={claim}
-			onFocusCapture={claim}
 		>
-			<PaneBar
+			<PaneHeader
+				at={at}
 				planeId={planeId}
 				title={title}
 				trail={absent ? [] : trail.map((c) => ({ ...c, title: c.title || TITLE_FALLBACK }))}
@@ -144,81 +163,80 @@ export function Pane({
 				onMeta={(patch) => onMeta(planeId, patch)}
 				onDelete={onDelete}
 				onRestart={absent ? undefined : () => notify("plane.restart", { plane_id: planeId })}
-				onClose={() => closePane(planeId)}
-				first={!divided}
-				movable={many}
-				closable={many}
-				lit={many && focused}
+				onClose={close}
+				first={first}
+				focused={focused}
 			/>
-			{/* A press off the cells starts a box selection over them. */}
-			<div className={shellPanePlane} onPointerDown={(e) => planeHandle.current?.press(e)}>
-				{absent ? (
-					<div className={docPlaneAbsent}>
-						<EmptyState
-							className={docContentTrack}
+			<div className={paneBodyScroll}>
+				{/* A press off the cells starts a box selection over them. */}
+				<div className={paneBody} onPointerDown={(e) => planeHandle.current?.press(e)}>
+					{absent ? (
+						<NotFoundBody
+							text={ABSENT_TEXT[absent]}
 							action={
-								<Button variant="ghost" size="sm" onClick={() => closePane(planeId)}>
-									Close
-								</Button>
+								close ? (
+									<Button variant="ghost" size="sm" onClick={close}>
+										Close
+									</Button>
+								) : (
+									<GoHome />
+								)
 							}
-						>
-							{ABSENT_TEXT[absent]}
-						</EmptyState>
-					</div>
-				) : plane == null ? (
-					<ViewerSkeleton />
-				) : (
-					<>
-						<header className={docTitleHead(wide, compact)}>
-							<div className={docTitleRow}>
-								<TitleIcon value={plane.meta.icon} onChange={(icon) => onIcon(planeId, icon)} />
-								<Title
-									value={plane.title}
-									placeholder={TITLE_FALLBACK}
-									onCommit={(next) => onRename(planeId, next)}
-									onIntent={(i) => planeHandle.current?.title(i) ?? false}
-									headRef={head}
-								/>
-								<IdentityToggle open={identity} onOpenChange={setIdentity} />
-							</div>
-							{key ? (
-								<div className={docRow}>
-									<KeyHandle value={key} />
-								</div>
-							) : null}
-							{identity ? (
-								<div className={docRow}>
-									<div className={docTitleIdentity}>
-										<Identity
-											kind="plane"
-											id={planeId}
-											value={key}
-											onSave={plane.meta.editable ? setKey : undefined}
-											onClose={() => {
-												setIdentity(false);
-												toTitle("end");
-											}}
-										/>
-									</div>
-								</div>
-							) : null}
-						</header>
-						<Plane
-							viewerPath={viewerPath}
-							plane={plane}
-							cellSpecs={cellSpecs}
-							editable={plane.meta.editable}
-							wide={wide}
-							compact={compact}
-							notify={notify}
-							handleRef={planeHandle}
-							onTitle={toTitle}
-							focused={focused}
 						/>
-					</>
-				)}
+					) : plane == null ? (
+						<ViewerSkeleton />
+					) : (
+						<>
+							<header className={docTitleHead(wide, compact)}>
+								<div className={docTitleRow}>
+									<TitleIcon value={plane.meta.icon} onChange={(icon) => onIcon(planeId, icon)} />
+									<Title
+										value={plane.title}
+										placeholder={TITLE_FALLBACK}
+										onCommit={(next) => onRename(planeId, next)}
+										onIntent={(i) => planeHandle.current?.title(i) ?? false}
+										headRef={head}
+									/>
+									<IdentityToggle open={identity} onOpenChange={setIdentity} />
+								</div>
+								{key ? (
+									<div className={docRow}>
+										<KeyHandle value={key} />
+									</div>
+								) : null}
+								{identity ? (
+									<div className={docRow}>
+										<div className={docTitleIdentity}>
+											<Identity
+												kind="plane"
+												id={planeId}
+												value={key}
+												onSave={plane.meta.editable ? setKey : undefined}
+												onClose={() => {
+													setIdentity(false);
+													toTitle("end");
+												}}
+											/>
+										</div>
+									</div>
+								) : null}
+							</header>
+							<Plane
+								viewerPath={viewerPath}
+								plane={plane}
+								cellSpecs={cellSpecs}
+								editable={plane.meta.editable}
+								wide={wide}
+								compact={compact}
+								notify={notify}
+								handleRef={planeHandle}
+								onTitle={toTitle}
+								focused={focused}
+							/>
+						</>
+					)}
+				</div>
 			</div>
-			{drop ? <div className={shellPaneDrop(drop)} aria-hidden="true" /> : null}
 		</section>
 	);
 }

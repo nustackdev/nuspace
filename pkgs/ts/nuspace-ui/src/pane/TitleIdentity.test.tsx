@@ -1,4 +1,4 @@
-// A plane's id and key beside its title, rendered in jsdom: the `@key` line
+// A plane's id and key next to its title, rendered in jsdom: the `@key` line
 // shows only with a key and copies it, the title row's `#` opens and closes
 // the identity block, a save notifies the plane's key ops, and the plane menu
 // copies its id and key.
@@ -14,6 +14,12 @@ import type { ActivePlane } from "../plane/types";
 import { Pane } from "./Pane";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+// The body's scroll area sizes itself with a ResizeObserver, which jsdom lacks.
+globalThis.ResizeObserver ??= class {
+	observe() {}
+	unobserve() {}
+	disconnect() {}
+} as unknown as typeof ResizeObserver;
 
 let host: HTMLDivElement;
 let root: Root;
@@ -39,8 +45,6 @@ function render(key: string, editable = true) {
 					onMeta={() => {}}
 					onRename={() => {}}
 					onIcon={() => {}}
-					many={false}
-					divided={false}
 					focused={false}
 				/>
 			</TooltipProvider>,

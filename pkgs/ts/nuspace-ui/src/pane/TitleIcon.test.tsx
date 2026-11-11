@@ -1,4 +1,4 @@
-// The plane's icon beside its title, rendered in jsdom: always there, and a
+// The plane's icon next to its title, rendered in jsdom: always there, and a
 // click opens the picker.
 
 import { TooltipProvider } from "@nustackdev/ui-kit";

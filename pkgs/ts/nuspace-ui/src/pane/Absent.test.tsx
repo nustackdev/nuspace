@@ -1,40 +1,47 @@
 // A pane with no Plane to draw, rendered in jsdom: the empty state per reason,
-// and its close. The viewer's `set_absent` landing in the node's props is
+// and its close where the pane has one. The viewer's `set_absent` landing in the node's props is
 // ../main/state.test.ts.
 
 import { TooltipProvider } from "@nustackdev/ui-kit";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { currentRoutes } from "../core/router";
+import { currentRoutes, setDesks, setRoles } from "../core/router";
+import type { PaneAt } from "../desk/drag";
 import type { AbsentReason } from "../plane/types";
 import { ABSENT_TEXT, Pane } from "./Pane";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+// The body's scroll area sizes itself with a ResizeObserver, which jsdom lacks.
+globalThis.ResizeObserver ??= class {
+	observe() {}
+	unobserve() {}
+	disconnect() {}
+} as unknown as typeof ResizeObserver;
 
 let host: HTMLDivElement;
 let root: Root;
 
-/** Land on a desk of `path`'s planes, "/a+b", the last one focused. */
+const IN_STRIP: PaneAt = { kind: "strip", desk: "desk0001", item: "strip1" };
+
+/** Land on a strip of `path`'s planes, "/a+b", one column each. */
 function at(path: string) {
-	const panes = path
-		.slice(1)
-		.split("+")
-		.filter(Boolean)
-		.map((plane) => ({ plane, params: {} }));
-	window.history.replaceState(
-		{ panes, focus: panes.length - 1 },
-		"",
-		`/${panes.at(-1)?.plane ?? ""}`,
-	);
+	const planes = path.slice(1).split("+").filter(Boolean);
+	const columns = planes.map((plane) => ({
+		panes: [{ share: 1, original: { plane, params: {} } }],
+	}));
+	setDesks({ desk0001: { name: "", items: [{ id: "strip1", kind: "strip", columns }] } });
+	setRoles({ home: "", settings: "", search: "" });
+	window.history.replaceState(null, "", "/desk0001/strip1");
 }
 
-function render(planeId: string, absent: AbsentReason) {
+function render(planeId: string, absent: AbsentReason, where: PaneAt = IN_STRIP) {
 	act(() => {
 		root.render(
 			<TooltipProvider>
 				<Pane
 					viewerPath={["viewer"]}
+					at={where}
 					planeId={planeId}
 					plane={null}
 					absent={absent}
@@ -43,8 +50,6 @@ function render(planeId: string, absent: AbsentReason) {
 					onMeta={() => {}}
 					onRename={() => {}}
 					onIcon={() => {}}
-					many={false}
-					divided={false}
 					focused
 				/>
 			</TooltipProvider>,
@@ -82,6 +87,12 @@ describe("absent pane", () => {
 		expect(host.querySelector("a")).toBeNull();
 		expect(host.querySelector("h1")).toBeNull();
 		expect(closeButton()).toBeDefined();
+	});
+
+	it("has no close on a solo plane", () => {
+		render("gone", "missing", { kind: "solo" });
+		expect(host.textContent).toContain(ABSENT_TEXT.missing);
+		expect(closeButton()).toBeUndefined();
 	});
 
 	it("closes through the pane's close", () => {

@@ -1,13 +1,12 @@
 // A plane's menu: the one item list behind the menus that act on a Plane,
-// the rail row's (`...` and right-click, ../sidebar/PlaneRow.tsx) and the pane
-// bar's `...` (../pane/PaneMenu.tsx). Each passes the actions it has; the list
-// keeps the same groups, in the same order, with the same icons and labels, so
-// the two read as one menu that shows more or less of itself. The dock chip's
-// right-click (../main/Dock.tsx) is the close group alone.
+// the Planes tree row's (`...` and right-click, ../sidebar/PlanesTree.tsx) and
+// the pane bar's `...` (../pane/PaneMenu.tsx). Each passes the actions it has;
+// the list keeps the same groups, in the same order, with the same icons and
+// labels, so the two read as one menu that shows more or less of itself.
 //
-//   open      Open, Open on desk, Open in new tab
-//   close     Close, Close others, Close to the right
-//   plane     Add plane inside, Rename, Change icon, Pin / Unpin,
+//   open      Open, Open in new tab, New desk with this plane
+//   close     Close
+//   plane     Add plane inside, Rename, Change icon,
 //             Copy plane ID, Copy plane key, Restart plane
 //   settings  the caller's rows, eg the pane's switches
 //   delete    Delete plane, last and on its own
@@ -16,22 +15,18 @@
 // plane ID" need only the id, so they are on every menu with a plane. "Copy
 // plane key" needs the key, which only a landed plane's pane knows, so it is
 // on the pane's menu alone, disabled while the plane has no key. The
-// close group shows when `desk` is set, the plane is on the desk, and there is
-// another pane to close it to, with "Close to the right" kept, disabled, on
-// the last pane so the menu keeps its shape from pane to pane.
+// close group shows when `desk` is set and the tab is on a desk item showing
+// the plane: Close takes the plane item out of its desk, or the pane out of
+// its strip. A solo plane has nothing to close.
 
 import {
-	ArrowRightToLine,
 	AtSign,
 	Check,
-	Columns2,
-	CopyX,
+	Columns3,
 	ExternalLink,
 	FileText,
 	Hash,
-	PenLine,
-	Pin,
-	PinOff,
+	Pen,
 	Plus,
 	RotateCcw,
 	SmilePlus,
@@ -41,17 +36,16 @@ import {
 import type * as React from "react";
 import { Fragment } from "react";
 import { useCopyRow } from "../core/clipboard";
-import { closePane, closePanes, openInNewTab, useRoutes } from "../core/router";
+import { closeItem, closePane, openInNewTab, type Route, useRoute } from "../core/router";
 import { NEW_INSIDE_KEYS, openAddPlane } from "../sidebar/add";
-import { DESK_KEYS, OPEN_KEYS } from "../sidebar/keys";
+import { OPEN_KEYS } from "../sidebar/keys";
+import { newDeskWith } from "../sidebar/newDesk";
 import type { MenuParts } from "./parts";
 
 export type PlaneActions = {
 	planeId: string;
-	/** Open in the focused pane: a rail row, whose plane may not be on the desk. */
+	/** Open the plane solo: a Planes tree row's. */
 	open?: () => void;
-	/** Open in a new pane beside the others. */
-	openOnDesk?: () => void;
 	/** Add plane inside. A child of the plane, opened as usual, when left out. */
 	add?: () => void;
 	/** Left off where the menu cannot rename in place. */
@@ -60,10 +54,8 @@ export type PlaneActions = {
 	changeIcon?: () => void;
 	/** The plane's key, "" for none. Left out where it is not known: no row then. */
 	planeKey?: string;
-	/** Pin / Unpin. Null or left out for a plane the rail does not draw. */
-	pin?: { pinned: boolean; toggle: () => void } | null;
 	restart?: () => void;
-	/** The close group, while the plane is in a pane. */
+	/** The close group, while the plane is a desk item or a pane of one. */
 	desk?: boolean;
 	/** Rows of their own group, after the desk's. */
 	settings?: React.ReactNode;
@@ -75,7 +67,7 @@ export function PlaneMenuItems({ parts, ...a }: PlaneActions & { parts: MenuPart
 	const { Item, Separator, Shortcut } = parts;
 	const copy = useCopyRow(a.planeId);
 	const copyKey = useCopyRow(a.planeKey ?? "");
-	const routes = useRoutes();
+	const route = useRoute();
 	const id = a.planeId;
 	const add = a.add ?? (() => openAddPlane({ parent: id }));
 
@@ -87,20 +79,16 @@ export function PlaneMenuItems({ parts, ...a }: PlaneActions & { parts: MenuPart
 				<Shortcut keys={OPEN_KEYS} />
 			</Item>
 		) : null,
-		a.openOnDesk ? (
-			<Item key="desk" onSelect={a.openOnDesk}>
-				<Columns2 />
-				Open on desk
-				<Shortcut keys={DESK_KEYS} />
-			</Item>
-		) : null,
 		<Item key="tab" onSelect={() => openInNewTab(id)}>
 			<ExternalLink />
 			Open in new tab
 		</Item>,
+		<Item key="new-desk" onSelect={() => newDeskWith(id)}>
+			<Columns3 />
+			New desk with this plane
+		</Item>,
 	];
 
-	const PinIcon = a.pin?.pinned ? PinOff : Pin;
 	const plane = [
 		<Item key="add" onSelect={add}>
 			<Plus />
@@ -109,7 +97,7 @@ export function PlaneMenuItems({ parts, ...a }: PlaneActions & { parts: MenuPart
 		</Item>,
 		a.rename ? (
 			<Item key="rename" onSelect={a.rename}>
-				<PenLine />
+				<Pen />
 				Rename
 			</Item>
 		) : null,
@@ -117,12 +105,6 @@ export function PlaneMenuItems({ parts, ...a }: PlaneActions & { parts: MenuPart
 			<Item key="icon" onSelect={a.changeIcon}>
 				<SmilePlus />
 				Change icon
-			</Item>
-		) : null,
-		a.pin ? (
-			<Item key="pin" onSelect={a.pin.toggle}>
-				<PinIcon />
-				{a.pin.pinned ? "Unpin" : "Pin"}
 			</Item>
 		) : null,
 		<Item key="copy" onSelect={copy.onSelect}>
@@ -143,7 +125,7 @@ export function PlaneMenuItems({ parts, ...a }: PlaneActions & { parts: MenuPart
 		) : null,
 	];
 
-	const desk = a.desk ? deskItems(parts, id, routes) : [];
+	const desk = a.desk ? deskItems(parts, id, route) : [];
 
 	const remove = a.remove
 		? [
@@ -171,30 +153,29 @@ export function PlaneMenuItems({ parts, ...a }: PlaneActions & { parts: MenuPart
 	);
 }
 
-/** The close group alone: the dock chip's, and a pane whose plane has not landed, or is absent. */
-export function DeskMenuItems({ parts, planeId }: { parts: MenuParts; planeId: string }) {
-	return <>{deskItems(parts, planeId, useRoutes())}</>;
+/** What closing `id` does where the tab is, or null: off a desk item, or a plane it does not show. */
+function closerOf(id: string, route: Route): (() => void) | null {
+	if (route.kind !== "item") return null;
+	const { desk, item } = route;
+	if (item.kind === "plane") {
+		const plane = (item.recent ?? item.original).plane;
+		return plane === id ? () => closeItem(desk, item.id) : null;
+	}
+	const shows = item.columns.some((c) =>
+		c.panes.some((p) => (p.recent ?? p.original).plane === id),
+	);
+	return shows ? () => closePane(desk, item.id, id) : null;
 }
 
-/** Close, Close others, Close to the right. None off the desk, or on a lone pane. */
-function deskItems(parts: MenuParts, id: string, routes: string[]): React.ReactNode[] {
+/** Close: the plane item out of its desk, or the pane out of its strip. None anywhere else. */
+function deskItems(parts: MenuParts, id: string, route: Route): React.ReactNode[] {
 	const { Item } = parts;
-	const others = routes.filter((r) => r !== id);
-	if (!routes.includes(id) || others.length === 0) return [];
-	const at = routes.indexOf(id);
-	const right = at < 0 ? [] : routes.slice(at + 1);
+	const close = closerOf(id, route);
+	if (!close) return [];
 	return [
-		<Item key="close" onSelect={() => closePane(id)}>
+		<Item key="close" onSelect={close}>
 			<X />
 			Close
-		</Item>,
-		<Item key="others" onSelect={() => closePanes(others)}>
-			<CopyX />
-			Close others
-		</Item>,
-		<Item key="right" disabled={right.length === 0} onSelect={() => closePanes(right)}>
-			<ArrowRightToLine />
-			Close to the right
 		</Item>,
 	];
 }

@@ -1,15 +1,17 @@
-// The bar across a pane's top: the plane's trail, its settings, and close.
-// Every pane on the desk has one, so the title is part of the pane and scrolls
-// with it; the dock under the desk (../main/Dock.tsx) is only a map.
+// The header across a pane's top: the plane's icon and trail on the left, its
+// actions on the right (the pane menu, and close where the pane has one). The
+// actions show on hover and on the focused pane.
 //
 // The trail is the planes above this one, then its own title. A parent is a
-// link to its plane, so the shell's anchor rule opens it: in this pane, which
-// a press on the bar has just focused, or beside it with Option. Past three
-// steps the middle folds into `...`: the top plane, the parent, the title.
+// link to its plane, so the shell's anchor rule opens it in this pane: in
+// place on a desk item (written as its recent), a plain move on a solo plane.
+// Past two parents the middle folds into `...`: the top plane, the parent,
+// the title.
 //
-// Outside the plane's scroll, so it stays put while the plane moves under it.
-// With more than one pane the bar drags its pane along the desk, the way a
-// window moves by its title bar: the drop is ../main/useCanvasDrop.ts.
+// Outside the body's scroll, so it stays put while the plane moves under it.
+// It is the pane's drag handle (`data-pane-header`) and drags as the pane's
+// row in the sidebar would: the pane in a strip, the item for a plane item,
+// the plane with its params on a solo plane (../desk/drag.ts).
 
 import {
 	Breadcrumb,
@@ -26,28 +28,33 @@ import { X } from "lucide-react";
 import { Fragment } from "react";
 import { hrefFor } from "../core/router";
 import {
-	paneBar,
-	paneBarTitle,
 	paneCrumbHere,
 	paneCrumbLink,
 	paneCrumbList,
 	paneCrumbParent,
 	paneCrumbSep,
 	paneCrumbs,
+	paneHeader,
+	paneHeaderActions,
+	paneHeaderIcon,
+	paneHeaderTitle,
 } from "../design";
+import { headerDragProps, type PaneAt } from "../desk/drag";
+import { PlaneIcon } from "../icon/PlaneIcon";
+import { planeIcon } from "../icon/parse";
 import type { PlaneMeta } from "../plane/types";
 import type { Crumb } from "../sidebar/api";
 import { PaneMenu } from "./PaneMenu";
 
-/** What a pane's drag by its bar carries: its plane id. */
-export const PANE_MIME = "application/x-nuspace-pane";
-
-/** The parents a bar shows: all of them up to two, else the top one, a fold, the nearest. */
+/** The parents a header shows: all of them up to two, else the top one, a fold, the nearest. */
 export function crumbsOf(trail: readonly Crumb[]): (Crumb | "fold")[] {
 	return trail.length > 2 ? [trail[0], "fold", trail[trail.length - 1]] : [...trail];
 }
 
-export function PaneBar({
+const SOLO: PaneAt = { kind: "solo" };
+
+export function PaneHeader({
+	at = SOLO,
 	planeId,
 	title,
 	trail = [],
@@ -57,10 +64,10 @@ export function PaneBar({
 	onRestart,
 	onClose,
 	first = true,
-	movable = false,
-	closable = true,
-	lit = false,
+	focused = false,
 }: {
+	/** Where the pane sits: what the header drags as, and whether the menu has the column group. */
+	at?: PaneAt;
 	planeId: string;
 	title: string;
 	/** The planes above this one, top first, each with a title to show. */
@@ -72,26 +79,21 @@ export function PaneBar({
 	onDelete?: () => void;
 	/** Run the plane again. Left out for an absent pane: nothing runs there. */
 	onRestart?: () => void;
-	onClose: () => void;
-	/** The desk's first pane, the one the rail's reopen button sits over. */
+	/** Close the pane. Left out on a solo plane: no close then. */
+	onClose?: () => void;
+	/** The canvas's first pane, the one the sidebar's reopen button sits over. */
 	first?: boolean;
-	/** More than one pane: the bar drags its pane along the desk. */
-	movable?: boolean;
-	/** Draw the close button. Not on a lone pane: there is nothing to close it to. */
-	closable?: boolean;
-	/** Bring the title up a tier: the focused pane of several. */
-	lit?: boolean;
+	focused?: boolean;
 }) {
 	return (
-		// biome-ignore lint/a11y/noStaticElementInteractions: dragging a pane by its bar is a mouse shortcut; the order is the route's, not the bar's
 		<header
-			className={paneBar(first, movable)}
-			draggable={movable}
-			onDragStart={(e) => {
-				e.dataTransfer.effectAllowed = "move";
-				e.dataTransfer.setData(PANE_MIME, planeId);
-			}}
+			className={paneHeader(first)}
+			data-pane-header={planeId}
+			{...headerDragProps(at, planeId)}
 		>
+			<span data-drag-icon className="contents">
+				<PlaneIcon icon={planeIcon(meta?.icon)} className={paneHeaderIcon} />
+			</span>
 			<Breadcrumb className={paneCrumbs}>
 				<BreadcrumbList className={paneCrumbList}>
 					{crumbsOf(trail).map((c, i) => (
@@ -101,7 +103,7 @@ export function PaneBar({
 									<BreadcrumbEllipsis />
 								) : (
 									<OverflowTooltip label={c.title} side="bottom">
-										{/* Not draggable: a drag on the bar moves the pane, not the link. */}
+										{/* Not draggable: a drag on the header moves the pane, not the link. */}
 										<BreadcrumbLink
 											className={paneCrumbLink}
 											href={hrefFor(c.id)}
@@ -117,23 +119,28 @@ export function PaneBar({
 					))}
 					<BreadcrumbItem className={paneCrumbHere}>
 						<OverflowTooltip label={title} side="right">
-							<BreadcrumbPage className={paneBarTitle(lit)}>{title}</BreadcrumbPage>
+							<BreadcrumbPage data-drag-title className={paneHeaderTitle(focused)}>
+								{title}
+							</BreadcrumbPage>
 						</OverflowTooltip>
 					</BreadcrumbItem>
 				</BreadcrumbList>
 			</Breadcrumb>
-			<PaneMenu
-				planeId={planeId}
-				meta={meta}
-				onChange={onMeta}
-				onDelete={onDelete}
-				onRestart={onRestart}
-			/>
-			{closable ? (
-				<IconButton variant="ghost" size="sm" aria-label={`Close ${title}`} onClick={onClose}>
-					<X />
-				</IconButton>
-			) : null}
+			<div className={paneHeaderActions}>
+				<PaneMenu
+					planeId={planeId}
+					meta={meta}
+					onChange={onMeta}
+					onDelete={onDelete}
+					onRestart={onRestart}
+					onClose={onClose}
+				/>
+				{onClose ? (
+					<IconButton variant="ghost" size="sm" aria-label={`Close ${title}`} onClick={onClose}>
+						<X />
+					</IconButton>
+				) : null}
+			</div>
 		</header>
 	);
 }
