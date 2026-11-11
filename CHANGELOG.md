@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Desks hold plane items and strips that remember their saved and last plane
 - Pins are gone, a Favorites desk takes their place
 - Removing a plane takes it off every desk, even with no browser open
 - Desks live in the web store and reach every tab live, with a seeded Favorites
