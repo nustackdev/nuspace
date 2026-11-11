@@ -4,9 +4,13 @@
 //
 // There is no top bar, because there is no third region, and the two controls the window still has (the
 // connection dot and the theme flip) sit in the sidebar's bottom bar. Folded,
-// the sidebar does not vanish, it gets thin: the shell draws its rail
-// (../sidebar/SidebarRail.tsx) left of the split, the toggle that brings it
-// back on top and the sidebar's first level as icons under it. The sidebar lists every Plane that draws, and the desk
+// the sidebar does not vanish, it gets thin: its panel folds to the rail's
+// width (../sidebar/SidebarRail.tsx), the toggle that brings it back on top
+// and the sidebar's first level as icons under it. The panel holds both the
+// sidebar and the rail and shows one by its own fold state, which the kit
+// updates on every frame of a drag, so dragging past the minimum lands on
+// the rail and dragging out of the rail lands on the sidebar, never both and
+// never neither. The sidebar lists every Plane that draws, and the desk
 // area draws whatever the router shows (a solo plane or a desk), so navigation
 // is the sidebar's and the links', and the shell only places the two.
 //
@@ -57,10 +61,14 @@ import { BOOTING_DELAY_MS, useAfter } from "../core/delay";
 import { paneRule } from "../core/router";
 import { useBooted, useTypePath } from "../core/surfaces";
 import {
+	SIDEBAR_RAIL_PX,
 	shellMain,
 	shellMissing,
 	shellPanePlane,
 	shellRoot,
+	shellSideOpen,
+	shellSideRail,
+	shellSideSlot,
 	shellSlot,
 	shellSplitHandle,
 } from "../design";
@@ -75,7 +83,6 @@ import {
 	useNavShortcuts,
 	useNewPlaneShortcut,
 	usePlaneTree,
-	useSidebarCollapsed,
 	useSidebarShortcut,
 } from "../sidebar/api";
 import { useTab } from "./tab";
@@ -89,7 +96,6 @@ export function Shell() {
 	const split = useRef<ResizablePanelGroupHandle | null>(null);
 	// The sidebar's panel: the real sidebar, or its placeholder until the tree lands.
 	const side = sidebar !== null || !booted;
-	const collapsed = useSidebarCollapsed() && side;
 	const tree = usePlaneTree(sidebar);
 	useSidebarShortcut();
 	useNewPlaneShortcut();
@@ -107,12 +113,11 @@ export function Shell() {
 
 	return (
 		<div ref={rootRef} className={shellRoot}>
-			{collapsed ? <SidebarRail tree={tree} /> : null}
 			<ResizablePanelGroup
 				ref={split}
 				storageKey={SIDEBAR_LAYOUT_KEY}
 				onLayout={(sizes) => {
-					if (sizes.length > 1) publishSidebar(sizes[0] <= 0);
+					if (sizes.length > 1) publishSidebar(split.current?.isCollapsed(0) ?? false);
 				}}
 			>
 				{side
@@ -124,9 +129,15 @@ export function Shell() {
 								minSize={`${SIDEBAR_WIDTH.MIN}px`}
 								maxSize={`${SIDEBAR_WIDTH.MAX}px`}
 								collapsible
-								className={shellSlot}
+								collapsedSize={`${SIDEBAR_RAIL_PX}px`}
+								className={shellSideSlot}
 							>
-								{sidebar ? <NodeView path={sidebar} /> : <SidebarPlaceholder />}
+								<div className={shellSideOpen}>
+									{sidebar ? <NodeView path={sidebar} /> : <SidebarPlaceholder />}
+								</div>
+								<div className={shellSideRail}>
+									<SidebarRail tree={tree} />
+								</div>
 							</ResizablePanel>,
 							<ResizableHandle
 								key="sidebar-edge"

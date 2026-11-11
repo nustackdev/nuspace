@@ -1,6 +1,7 @@
 // The rail: what the sidebar folds to. One narrow column of icons on the
-// window's left edge, drawn by the shell beside its split while the sidebar
-// panel is folded (../shell/Shell.tsx).
+// window's left edge. The shell's sidebar panel folds to its width and holds
+// it next to the open sidebar, showing whichever its fold says
+// (../shell/Shell.tsx).
 //
 // Top to bottom: the toggle that brings the sidebar back, then the sidebar's
 // first level only, a hairline between the groups:

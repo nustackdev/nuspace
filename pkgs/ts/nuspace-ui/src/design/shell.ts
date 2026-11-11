@@ -38,6 +38,19 @@ export const shellRoot = "flex h-screen bg-bg-sunken text-text-primary";
 export const shellSlot = "flex min-h-0";
 
 /**
+ * The sidebar's split panel: a named group, because the kit sets its
+ * `data-state` (expanded / collapsed) on every frame of a drag, so what the
+ * panel shows follows the fold live and never lags a drag.
+ */
+export const shellSideSlot = cn(shellSlot, "group/side");
+
+/** The open sidebar in its panel: gone while the panel is folded. */
+export const shellSideOpen = "flex min-h-0 min-w-0 flex-1 group-data-[state=collapsed]/side:hidden";
+
+/** The rail in the sidebar's panel: there only while the panel is folded. */
+export const shellSideRail = "hidden min-h-0 flex-1 group-data-[state=collapsed]/side:flex";
+
+/**
  * The kit split handle between the sidebar and the desk area: the 6px gap
  * itself, no fill. The kit's own line shows on hover and while dragging.
  */

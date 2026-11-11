@@ -6,13 +6,14 @@
 // and cmd/ctrl+\ ask the split through the handle bound here. The split keeps
 // the fold, the width and the width to unfold to under SIDEBAR_LAYOUT_KEY.
 //
-// The shell's reopen button draws from the fold too, so the fold is mirrored
-// in a module level store like ../core/theme.ts: the split publishes every
-// change it lands.
+// The fold is mirrored here, so the toggle knows which way to flip before the
+// split is bound: the split publishes every change it lands. What the panel
+// shows (sidebar or rail) does not read it: it follows the panel's own state,
+// live through a drag.
 
 import type { ResizablePanelGroupHandle } from "@nustackdev/ui-kit";
 import type * as React from "react";
-import { useEffect, useSyncExternalStore } from "react";
+import { useEffect } from "react";
 
 /** Where the shell's split keeps the sidebar's layout. */
 export const SIDEBAR_LAYOUT_KEY = "nuspace.sidebar.layout";
@@ -20,24 +21,12 @@ export const SIDEBAR_LAYOUT_KEY = "nuspace.sidebar.layout";
 /** The sidebar's place in the split. */
 const SIDEBAR = 0;
 
-const subscribers = new Set<() => void>();
 let split: React.RefObject<ResizablePanelGroupHandle | null> | null = null;
 let current = false;
 
-function subscribe(cb: () => void): () => void {
-	subscribers.add(cb);
-	return () => subscribers.delete(cb);
-}
-
-function getCollapsed(): boolean {
-	return current;
-}
-
-/** The split's fold changed, or it just mounted: tell whoever draws from it. */
+/** The split's fold changed, or it just mounted. */
 export function publishSidebar(collapsed: boolean): void {
-	if (collapsed === current) return;
 	current = collapsed;
-	for (const cb of subscribers) cb();
 }
 
 /**
@@ -59,10 +48,6 @@ export function setSidebarCollapsed(collapsed: boolean): void {
 
 export function toggleSidebar(): void {
 	setSidebarCollapsed(!(split?.current?.isCollapsed(SIDEBAR) ?? current));
-}
-
-export function useSidebarCollapsed(): boolean {
-	return useSyncExternalStore(subscribe, getCollapsed, getCollapsed);
 }
 
 /** The shortcut by key name, for tooltips; the kit `Shortcut` spells it. */

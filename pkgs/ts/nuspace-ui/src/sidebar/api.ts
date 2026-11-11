@@ -24,7 +24,6 @@ export {
 	SIDEBAR_KEYS,
 	SIDEBAR_LAYOUT_KEY,
 	setSidebarCollapsed,
-	useSidebarCollapsed,
 	useSidebarShortcut,
 } from "./collapse";
 export { OPEN_KEYS } from "./keys";

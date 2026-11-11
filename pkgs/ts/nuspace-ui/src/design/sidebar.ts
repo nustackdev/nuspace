@@ -119,7 +119,10 @@ export const sidebarStatus = cn(
  * in a bar as tall as the header, so it stays where the header had it.
  */
 
-/** The rail itself, a fixed column left of the shell's split. */
+/** The rail's width: the size the shell's sidebar panel folds to. */
+export const SIDEBAR_RAIL_PX = 48;
+
+/** The rail itself: the whole of the folded sidebar panel, `SIDEBAR_RAIL_PX` wide. */
 export const sidebarRail = "flex w-12 shrink-0 flex-col";
 
 /** The rail's top bar: just the toggle, on the header's line (`sidebarHeader`). */

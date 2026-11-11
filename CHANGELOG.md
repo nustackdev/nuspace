@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Dragging the sidebar folds it straight to its rail and back, no gaps or doubles
 - The sidebar folds to an icon rail, its bars line up with pane headers
 - Desk folders list items and strips, save, reset, rename, close and reorder
 - The sidebar is built from uniform sections and rows, nav follows the roles
