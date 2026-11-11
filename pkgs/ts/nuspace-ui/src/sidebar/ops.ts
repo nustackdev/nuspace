@@ -15,7 +15,7 @@
 //
 // ## What is NOT here
 //
-// Opening a Plane. The sidebar moves the desk through the router, and which
+// Opening a Plane. The sidebar opens planes and desk items through the router, and which
 // panes are open is a fact about what the Viewer has open, so `planes.open` is
 // the Viewer's op.
 
@@ -38,17 +38,9 @@ export type Ops = {
 	"plane.move": { plane_id: string; parent_id: string } & Anchor;
 	/** `icon` is a stored spelling (../icon/parse.ts), "" for the default. */
 	"plane.icon": { plane_id: string; icon: string };
-	/**
-	 * Pin before or after a pin, neither for the end. The Plane stays in the
-	 * tree. Already pinned, the server refuses it: move it with `pin_move`.
-	 */
-	"plane.pin": { plane_id: string } & Anchor;
-	"plane.unpin": { plane_id: string };
-	/** Move a pinned Plane, placed as in `plane.pin`. */
-	"plane.pin_move": { plane_id: string } & Anchor;
-	/** The rail opened a branch: the server ships its children. The tree is lazy. */
+	/** The sidebar opened a branch: the server ships its children. The tree is lazy. */
 	"plane.expand": { plane_id: string };
-	/** The rail closed a branch. */
+	/** The sidebar closed a branch. */
 	"plane.collapse": { plane_id: string };
 };
 
@@ -60,5 +52,5 @@ export function anchorAt(others: readonly string[], index: number): Anchor {
 	return index >= 0 && index < others.length ? { before: others[index] } : {};
 }
 
-/** Send one op. Threaded down from `Sidebar.tsx` into the rail. */
+/** Send one op. Threaded down from `Sidebar.tsx` into the sections. */
 export type Notify = <K extends keyof Ops>(op: K, args: Ops[K]) => void;

@@ -1,74 +1,75 @@
-// The nav rows' planes: home, search and settings, the system planes that
-// always exist. The host seeds each with a fixed id (nuspace.system.ui), and
-// the rail draws them in its own group under the top bar, out of the tree and
-// out of the pinned: they never move, nest, go or need a shortcut of
-// their own.
+// The nav section's planes: home, search and settings, found through the
+// roles (../core/desks.ts), never by a fixed id. Each is a plane like any
+// other; the role says which. The Planes tree leaves them out, by role.
 //
-// Settings has a key of its own, cmd/ctrl+comma, the one every app uses.
-// Home has cmd/ctrl+shift+H, the browsers' own home key, taken over here.
+// Each has a key from anywhere in the window: home cmd/ctrl+shift+H (the
+// browsers' own home key, taken over here), search cmd/ctrl+K, settings
+// cmd/ctrl+comma (the one every app uses). Home and settings on capture, so
+// they work from inside a cell's editor too, which stops the keys it answers.
+// Before the roles land a key does nothing.
 
+import type { LucideIcon } from "lucide-react";
+import { House, Search, Settings } from "lucide-react";
 import { useEffect } from "react";
-import { openHere } from "../core/router";
-import { SEARCH_PLANE } from "./search";
-
-/** The home Plane's id, fixed by the host. */
-export const HOME_PLANE = "home";
-
-/** The settings Plane's id, fixed by the host. */
-export const SETTINGS_PLANE = "settings";
-
-/** The planes the nav rows draw, in order. Never a tree row nor a pin. */
-export const NAV_PLANES: ReadonlySet<string> = new Set([HOME_PLANE, SEARCH_PLANE, SETTINGS_PLANE]);
+import { currentRoles, type Role, type Roles } from "../core/desks";
+import { openPlane } from "../core/router";
 
 /** The home shortcut by key name; the kit `Shortcut` spells it. */
 export const HOME_KEYS = ["mod", "shift", "H"] as const;
 
-/** The settings shortcut by key name; the kit `Shortcut` spells it. */
+/** The search shortcut by key name. */
+export const SEARCH_KEYS = ["mod", "K"] as const;
+
+/** The settings shortcut by key name. */
 export const SETTINGS_KEYS = ["mod", ","] as const;
 
-/** Open home in the focused pane, or focus it where it is open. */
-export function openHome(): void {
-	openHere(HOME_PLANE);
+export type NavItem = { role: Role; label: string; icon: LucideIcon; keys: readonly string[] };
+
+/** The nav section's rows, in order. */
+export const NAV_ITEMS: readonly NavItem[] = [
+	{ role: "home", label: "Home", icon: House, keys: HOME_KEYS },
+	{ role: "search", label: "Search", icon: Search, keys: SEARCH_KEYS },
+	{ role: "settings", label: "Settings", icon: Settings, keys: SETTINGS_KEYS },
+];
+
+/** The planes the roles point at: what the Planes tree leaves out. */
+export function rolePlanes(roles: Roles | null): ReadonlySet<string> {
+	return new Set(roles ? Object.values(roles).filter(Boolean) : []);
 }
 
-/** Open settings in the focused pane, or focus it where it is open. */
-export function openSettings(): void {
-	openHere(SETTINGS_PLANE);
+/** Open a role's plane solo. */
+export function openRole(role: Role): void {
+	const plane = currentRoles()?.[role];
+	if (plane) openPlane(plane);
 }
 
-/**
- * Cmd/ctrl+comma opens settings from anywhere in the window. Capture, like
- * the new plane key: a cell's editor stops the keys it answers, and this one
- * has to work from inside it too. Mount it once.
- */
-export function useSettingsShortcut(): void {
+/** Which role a key press asks for, or null. */
+function roleOf(e: KeyboardEvent): Role | null {
+	if (!(e.metaKey || e.ctrlKey) || e.altKey) return null;
+	const key = e.key.toLowerCase();
+	if (e.shiftKey) return key === "h" ? "home" : null;
+	if (key === "k") return "search";
+	if (key === ",") return "settings";
+	return null;
+}
+
+/** The three nav keys, from anywhere in the window. Mount it once. */
+export function useNavShortcuts(): void {
 	useEffect(() => {
-		const onKey = (e: KeyboardEvent) => {
-			if (e.key !== "," || !(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey) return;
+		// Search bubbles, as it always has: an editor that answers cmd/ctrl+K keeps it.
+		const on = (capture: boolean) => (e: KeyboardEvent) => {
+			const role = roleOf(e);
+			if (!role || (role === "search") === capture) return;
 			e.preventDefault();
-			openSettings();
+			openRole(role);
 		};
-		window.addEventListener("keydown", onKey, true);
-		return () => window.removeEventListener("keydown", onKey, true);
-	}, []);
-}
-
-/**
- * Cmd/ctrl+shift+H opens home from anywhere in the window, over the
- * browser's own (home page in Chrome and Safari, history in Firefox).
- * Capture, like the settings key, to work from inside a cell's editor too.
- * Mount it once.
- */
-export function useHomeShortcut(): void {
-	useEffect(() => {
-		const onKey = (e: KeyboardEvent) => {
-			if (e.key.toLowerCase() !== "h" || !(e.metaKey || e.ctrlKey) || e.altKey || !e.shiftKey) {
-				return;
-			}
-			e.preventDefault();
-			openHome();
+		const captured = on(true);
+		const bubbled = on(false);
+		window.addEventListener("keydown", captured, true);
+		window.addEventListener("keydown", bubbled);
+		return () => {
+			window.removeEventListener("keydown", captured, true);
+			window.removeEventListener("keydown", bubbled);
 		};
-		window.addEventListener("keydown", onKey, true);
-		return () => window.removeEventListener("keydown", onKey, true);
 	}, []);
 }

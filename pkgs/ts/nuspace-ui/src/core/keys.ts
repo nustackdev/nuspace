@@ -1,12 +1,12 @@
 // The keyboard shortcuts sheet's state: whether it is open, and the key that
 // opens it. What it lists is ../shell/keys.ts.
 //
-// Opened from the rail's bottom bar or with cmd/ctrl+/, from anywhere, so its
+// Opened from the sidebar's footer or with cmd/ctrl+/, from anywhere, so its
 // state is a module level store like ./confirm.ts, and the one dialog that
 // draws it (../shell/KeysDialog.tsx) is mounted once, at the root.
 //
-// In core, under the rail that opens the sheet and the shell that lists the
-// rail's keys, so neither imports the other's folder for it.
+// In core, under the sidebar that opens the sheet and the shell that lists
+// the sidebar's keys, so neither imports the other's folder for it.
 
 import { useEffect, useSyncExternalStore } from "react";
 

@@ -6,18 +6,13 @@
  *   kit components   cards, inputs, buttons, menus, tables, dialogs. They
  *                    keep the kit's own L2 roles, untouched. Nothing here
  *                    reassigns a kit role.
- *   nuspace frame    the shell around them: the page, the sidebar, the
- *                    unfocused panes, the dock, the hairlines between them,
- *                    and the sidebar's quiet fills (search, hover, open,
- *                    selected). Only these read the roles below.
+ *   nuspace frame    the shell around them: the pane fill and the
+ *                    hairlines. Only these read the roles below.
  *
  * The look is the nustack color language: Dusk in dark, Dawn in
- * light (go/projects/nustackdev/design/language/color.md), laid out as
- * products/nuspace.md describes. The sidebar sits on `ground-deep`, the
- * document on `ground-raised`, split by one `line-subtle` hairline. The
- * sidebar uses soft filled boxes, not outlines: search, hover, open and
- * selected are the kit's tree washes, the same ladder every tree row uses.
- * Unfocused panes sit on `ground`, the dock on `ground-deep`.
+ * light (go/projects/nustackdev/design/language/color.md). One canvas,
+ * `ground-deep`, behind the sidebar and the desk alike; panes are tiles on
+ * it, on `ground-raised` with a `line-subtle` border.
  *
  * Every role points at a kit role, so the values flip with the kit's theme.
  * `ground-raised` has no kit role yet (kit palette.md), so it reads the
@@ -34,72 +29,48 @@
 /* ============================== light ====================================*/
 :root {
 	/* --- Grounds --------------------------------------------------------- */
-	--nuspace-page: var(--ground-raised); /* ground-raised: the focused pane     */
-	--nuspace-rail: var(--bg-sunken); /* ground-deep: the sidebar, a step down  */
-	--nuspace-pane-dim: var(--bg-canvas); /* ground: every other pane          */
-	--nuspace-dock: var(--bg-sunken); /* ground-deep: the dock under the desk   */
+	--nuspace-page: var(--ground-raised); /* ground-raised: a pane              */
 
 	/* --- Hairlines ------------------------------------------------------- */
 	--nuspace-edge: var(--border-subtle); /* line-subtle: sidebar edge, pane
-	                                       * dividers, the dock's rules       */
+	                                       * dividers                         */
 
-	/* --- Sidebar fills: two anchors and a step --------------------------- */
-	/* Every fill is ink over the rail, computed from three numbers (ink %), so
-	 * the rail tunes as a whole:
-	 *   a1  the rail's quiet fill: a plane open in some other pane
-	 *   a2  the plane in hand: the focused pane's plane, and a row under the
-	 *       pointer
-	 *   d   one interaction step: hover is +d on whatever the thing rests on,
-	 *       press +2d. A tree row resting on nothing hovers straight to a2.
-	 *   cd  a control's step: a control inside a row (chevron, split, +, ...)
-	 *       paints only cd on hover and 2cd on press, so it climbs from
-	 *       whatever the row shows under it.
-	 * See rail.ts. */
-	--rail-a1: 8;
-	--rail-a2: 12;
-	--rail-d: 3.5;
-	--rail-cd: 5;
-	--rail-a1-fill: color-mix(in oklab, var(--ink-1) calc(var(--rail-a1) * 1%), transparent);
-	--rail-a1-hover: color-mix(
+	/* --- Sidebar fills: an anchor and two steps -------------------------- */
+	/* Every fill is ink over the canvas, from three numbers (ink %), so the
+	 * sidebar tunes as a whole:
+	 *   a   the row in hand: the selected row, and a row under the pointer
+	 *   d   one interaction step: hover is +d on whatever the row rests on,
+	 *       press +2d. A row resting on nothing hovers straight to a.
+	 *   cd  a control's step: a control inside a row or a section title
+	 *       (chevron, +, ...) paints cd on hover and 2cd on press, so it
+	 *       climbs from whatever the row shows under it.
+	 * See sidebar.ts. */
+	--sidebar-a: 12;
+	--sidebar-d: 3.5;
+	--sidebar-cd: 5;
+	--sidebar-a-fill: color-mix(in oklab, var(--ink-1) calc(var(--sidebar-a) * 1%), transparent);
+	--sidebar-a-hover: color-mix(
 		in oklab,
-		var(--ink-1) calc((var(--rail-a1) + var(--rail-d)) * 1%),
+		var(--ink-1) calc((var(--sidebar-a) + var(--sidebar-d)) * 1%),
 		transparent
 	);
-	--rail-a1-press: color-mix(
+	--sidebar-a-press: color-mix(
 		in oklab,
-		var(--ink-1) calc((var(--rail-a1) + 2 * var(--rail-d)) * 1%),
+		var(--ink-1) calc((var(--sidebar-a) + 2 * var(--sidebar-d)) * 1%),
 		transparent
 	);
-	--rail-a2-fill: color-mix(in oklab, var(--ink-1) calc(var(--rail-a2) * 1%), transparent);
-	--rail-a2-hover: color-mix(
-		in oklab,
-		var(--ink-1) calc((var(--rail-a2) + var(--rail-d)) * 1%),
-		transparent
-	);
-	--rail-a2-press: color-mix(
-		in oklab,
-		var(--ink-1) calc((var(--rail-a2) + 2 * var(--rail-d)) * 1%),
-		transparent
-	);
-	--rail-cd1: color-mix(in oklab, var(--ink-1) calc(var(--rail-cd) * 1%), transparent);
-	--rail-cd2: color-mix(in oklab, var(--ink-1) calc(2 * var(--rail-cd) * 1%), transparent);
+	--sidebar-cd1: color-mix(in oklab, var(--ink-1) calc(var(--sidebar-cd) * 1%), transparent);
+	--sidebar-cd2: color-mix(in oklab, var(--ink-1) calc(2 * var(--sidebar-cd) * 1%), transparent);
 }
 
 /* ============================== Tailwind v4 ==============================*/
 @theme inline {
 	--color-nuspace-page: var(--nuspace-page);
-	--color-nuspace-pane-dim: var(--nuspace-pane-dim);
 	--color-nuspace-edge: var(--nuspace-edge);
 
-	--color-nuspace-rail: var(--nuspace-rail);
-	--color-rail-a1-fill: var(--rail-a1-fill);
-	--color-rail-a1-hover: var(--rail-a1-hover);
-	--color-rail-a1-press: var(--rail-a1-press);
-	--color-rail-a2-fill: var(--rail-a2-fill);
-	--color-rail-a2-hover: var(--rail-a2-hover);
-	--color-rail-a2-press: var(--rail-a2-press);
-	--color-rail-cd1: var(--rail-cd1);
-	--color-rail-cd2: var(--rail-cd2);
-
-	--color-nuspace-dock: var(--nuspace-dock);
+	--color-sidebar-a-fill: var(--sidebar-a-fill);
+	--color-sidebar-a-hover: var(--sidebar-a-hover);
+	--color-sidebar-a-press: var(--sidebar-a-press);
+	--color-sidebar-cd1: var(--sidebar-cd1);
+	--color-sidebar-cd2: var(--sidebar-cd2);
 }

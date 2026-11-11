@@ -1,15 +1,15 @@
-// The rail's bottom bar: where nuspace lives on the web and the keyboard
+// The sidebar footer, the fixed bottom bar: where nuspace lives on the web and the keyboard
 // shortcuts on the left, the window's own state on the right.
 //
 // The connection dot and the theme flip belong to the window rather than to
 // the space: the server writes no node for either, and a reconnect is the one
 // thing in the shell nobody on the other end knows about. They live down here
-// because the rail is the only edge the shell has, and two controls floating
+// because the sidebar is the only edge the shell has, and two controls floating
 // over a document you are writing in are two controls with nothing holding
 // them.
 //
-// The free middle stays free: settings is a Plane, reached through its nav
-// row up top or cmd/ctrl+comma. That Plane holds the space's settings only;
+// The free middle stays free: settings is a Plane, reached through its row in
+// the nav section or cmd/ctrl+comma. That Plane holds the space's settings only;
 // the theme is the window's, so it stays down here and in the browser.
 
 import {
@@ -26,11 +26,11 @@ import { useConnectionStatus } from "../core/connection";
 import { KEYS_KEYS, setKeysOpen } from "../core/keys";
 import { toggleTheme, useTheme } from "../core/theme";
 import {
-	railChromeButton,
-	railFooter,
-	railFooterSpace,
-	railStatus,
-	railTooltipHint,
+	sidebarChromeButton,
+	sidebarFooter,
+	sidebarFooterSpace,
+	sidebarStatus,
+	sidebarTooltipHint,
 } from "../design";
 
 const GITHUB_URL = "https://github.com/nustackdev/nuspace";
@@ -53,7 +53,7 @@ const CONNECTION_LABEL: Record<string, string> = {
 };
 
 /** A link out, as a chrome button. Opens in a new tab. */
-function RailLink({
+function FooterLink({
 	href,
 	label,
 	hint,
@@ -66,23 +66,20 @@ function RailLink({
 	icon: LucideIcon;
 }) {
 	return (
-		<Tooltip>
-			<TooltipTrigger asChild>
-				<IconButton
-					variant="ghost"
-					size="sm"
-					ring="inset"
-					aria-label={label}
-					className={railChromeButton}
-					asChild
-				>
-					<a href={href} target="_blank" rel="noreferrer">
-						<Icon />
-					</a>
-				</IconButton>
-			</TooltipTrigger>
-			<TooltipContent side="top">{hint ?? label}</TooltipContent>
-		</Tooltip>
+		<IconButton
+			variant="ghost"
+			size="sm"
+			ring="inset"
+			aria-label={label}
+			tip={hint ?? label}
+			tipSide="top"
+			className={sidebarChromeButton}
+			asChild
+		>
+			<a href={href} target="_blank" rel="noreferrer">
+				<Icon />
+			</a>
+		</IconButton>
 	);
 }
 
@@ -96,7 +93,7 @@ function ConnectionDot() {
 		<Tooltip>
 			<TooltipTrigger asChild>
 				{/* biome-ignore lint/a11y/noNoninteractiveTabindex: a keyboard has to reach the tooltip */}
-				<span role="status" aria-label={label} tabIndex={0} className={railStatus}>
+				<span role="status" aria-label={label} tabIndex={0} className={sidebarStatus}>
 					<StatusDot tone={tone} pulse={busy} />
 				</span>
 			</TooltipTrigger>
@@ -108,25 +105,24 @@ function ConnectionDot() {
 /** Opens the keyboard shortcuts sheet (../shell/KeysDialog.tsx). */
 function KeysButton() {
 	return (
-		<Tooltip>
-			<TooltipTrigger asChild>
-				<IconButton
-					variant="ghost"
-					size="sm"
-					ring="inset"
-					aria-label="Keyboard shortcuts"
-					aria-keyshortcuts="Meta+/ Control+/"
-					onClick={() => setKeysOpen(true)}
-					className={railChromeButton}
-				>
-					<Keyboard />
-				</IconButton>
-			</TooltipTrigger>
-			<TooltipContent side="top">
-				Keyboard shortcuts
-				<Shortcut keys={KEYS_KEYS} size="sm" className={railTooltipHint} />
-			</TooltipContent>
-		</Tooltip>
+		<IconButton
+			variant="ghost"
+			size="sm"
+			ring="inset"
+			aria-label="Keyboard shortcuts"
+			aria-keyshortcuts="Meta+/ Control+/"
+			tip={
+				<>
+					Keyboard shortcuts
+					<Shortcut keys={KEYS_KEYS} size="sm" className={sidebarTooltipHint} />
+				</>
+			}
+			tipSide="top"
+			onClick={() => setKeysOpen(true)}
+			className={sidebarChromeButton}
+		>
+			<Keyboard />
+		</IconButton>
 	);
 }
 
@@ -135,31 +131,28 @@ function ThemeToggle() {
 	const next = theme === "dark" ? "light" : "dark";
 	const Icon = theme === "dark" ? Sun : Moon;
 	return (
-		<Tooltip>
-			<TooltipTrigger asChild>
-				<IconButton
-					variant="ghost"
-					size="sm"
-					ring="inset"
-					aria-label={`Switch to ${next} theme`}
-					onClick={toggleTheme}
-					className={railChromeButton}
-				>
-					<Icon />
-				</IconButton>
-			</TooltipTrigger>
-			<TooltipContent side="top">{next === "dark" ? "Dark" : "Light"} theme</TooltipContent>
-		</Tooltip>
+		<IconButton
+			variant="ghost"
+			size="sm"
+			ring="inset"
+			aria-label={`Switch to ${next} theme`}
+			tip={`${next === "dark" ? "Dark" : "Light"} theme`}
+			tipSide="top"
+			onClick={toggleTheme}
+			className={sidebarChromeButton}
+		>
+			<Icon />
+		</IconButton>
 	);
 }
 
-export function RailFooter() {
+export function SidebarFooter() {
 	return (
-		<div className={railFooter}>
-			<RailLink href={GITHUB_URL} label="GitHub" icon={Github} />
-			<RailLink href={DOCS_URL} label="Docs" icon={BookOpen} />
+		<div className={sidebarFooter}>
+			<FooterLink href={GITHUB_URL} label="GitHub" icon={Github} />
+			<FooterLink href={DOCS_URL} label="Docs" icon={BookOpen} />
 			<KeysButton />
-			<div className={railFooterSpace} />
+			<div className={sidebarFooterSpace} />
 			<ConnectionDot />
 			<ThemeToggle />
 		</div>

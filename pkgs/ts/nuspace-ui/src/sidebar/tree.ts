@@ -1,4 +1,4 @@
-// The rail's rows: the tree flattened into what the fold state shows.
+// The Planes tree's rows: the tree flattened into what the fold state shows.
 //
 // The tree is flattened into the list of currently visible rows before it is
 // rendered. Recursion made every cross-row question (what is below me, who is
@@ -90,8 +90,8 @@ function flatten(
 
 /**
  * Every visible row under `top`, the root's children: the root is walked
- * through rather than drawn, since the header strip stands in for it.
- * `hidden` rows are drawn elsewhere (the nav rows, ./nav.ts), so the tree
+ * through rather than drawn, since the Planes section title stands in for it.
+ * `hidden` rows are drawn elsewhere (the role planes, ./nav.ts), so the tree
  * skips them and draws their children in their place.
  */
 export function visibleRows(

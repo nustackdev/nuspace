@@ -11,11 +11,10 @@
 // Plus the cell status set, which is aliased onto the existing status hues.
 //
 //   tokens.css         document + cell-status tokens, both themes
-//   shell.ts           the window frame: sidebar beside the strip of panes
-//   pane.ts            one pane's top bar and its settings menu
-//   dock.ts            the dock under the desk: a scaled map of the panes
+//   shell.ts           the frame: sidebar beside the desk area, the desk row, columns, panes
+//   pane.ts            one pane: its header, body and settings menu
 //   document.ts        class recipes for the document surface, title included
-//   rail.ts            the sidebar rail
+//   sidebar.ts         the sidebar: header, footer, section, row, action row
 //   icon.ts            plane icons: the glyph at each size, and the picker
 //   menu.ts            a plane's menu, and the registry menus' rows: the / menu, Add plane
 //   cell-status.ts  the six-state vocabulary
@@ -31,10 +30,9 @@
 // Anything in here that turns out to be generic graduates to ui-kit.
 
 export * from "./cell-status";
-export * from "./dock";
 export * from "./document";
 export * from "./icon";
 export * from "./menu";
 export * from "./pane";
-export * from "./rail";
 export * from "./shell";
+export * from "./sidebar";

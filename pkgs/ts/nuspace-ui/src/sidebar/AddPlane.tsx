@@ -1,4 +1,4 @@
-// The Add plane popup: the empty plane pinned on top, every registered Plane
+// The Add plane popup: the empty plane on top, every registered Plane
 // under it, grouped and searchable like the / menu (../menu/), and picking
 // one makes it.
 //
@@ -22,7 +22,7 @@ import {
 	CommandPalette,
 } from "@nustackdev/ui-kit";
 import { useRef, useState } from "react";
-import { focusPane, openHere } from "../core/router";
+import { navigate, openPlane } from "../core/router";
 import { menuItem } from "../design";
 import { DEFAULT_ICON } from "../icon/parse";
 import { MenuEntry, MenuKeys } from "../menu/Entry";
@@ -71,8 +71,9 @@ export function AddPlane({
 		if (!req) return;
 		const planeId = createPlane(notify, entry, req.parent, entry === EMPTY);
 		if (req.parent && req.parent !== ROOT_ID) reveal(req.parent);
-		if (req.pane) focusPane(req.pane);
-		openHere(planeId);
+		// From a pane: a link followed there (in place on a desk item). Else solo.
+		if (req.pane) navigate({ plane: planeId, params: {} }, req.pane);
+		else openPlane(planeId);
 	};
 
 	return (
@@ -97,7 +98,7 @@ export function AddPlane({
 			<CommandList className="max-h-[26rem]">
 				<CommandEmpty>Nothing matches “{query.trim()}”</CommandEmpty>
 				{sections.map((section) => (
-					// The pinned empty plane and an ungrouped list are both headless.
+					// The empty plane on top and an ungrouped list are both headless.
 					<CommandGroup
 						key={section.heading ?? `_${section.items[0]?.name}`}
 						heading={section.heading ?? undefined}

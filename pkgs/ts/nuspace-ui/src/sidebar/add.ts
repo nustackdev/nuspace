@@ -5,7 +5,7 @@
 // a pane's `...` menu (a child of that pane's Plane) and cmd/ctrl+alt+shift+N
 // from anywhere (a child of the Plane you are on, see `currentPlane`). The pane is in the Viewer, not the sidebar, so
 // the request is a module level store like the router rather than a prop, and
-// the one popup lives with the rail, which holds the registered list.
+// the one popup lives with the sidebar, which holds the registered list.
 
 import { isMac } from "@nustackdev/ui-kit";
 import { useEffect, useSyncExternalStore } from "react";
@@ -17,7 +17,7 @@ import { type Registered, ROOT_ID } from "./types";
 export type AddRequest = {
 	/** Where the new Plane hangs: a Plane id, or `ROOT_ID`. */
 	parent: string;
-	/** The pane to open it in. The focused pane when left out. */
+	/** The pane it was asked from (its plane): the new plane opens there as a link would. Solo when left out. */
 	pane?: string;
 };
 

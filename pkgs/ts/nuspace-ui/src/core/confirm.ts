@@ -5,8 +5,8 @@
 // dialog that draws it (../shell/ConfirmDialog.tsx) is mounted once, at the root. Asking
 // again while a question is open answers the first one no.
 //
-// In core, under everything that asks: the rail asks, and the shell that
-// mounts the dialog sits above the rail.
+// In core, under everything that asks: the sidebar asks, and the shell that
+// mounts the dialog sits above the sidebar.
 
 import { useSyncExternalStore } from "react";
 

@@ -1,15 +1,15 @@
 // The Add plane popup, rendered in jsdom: picking an entry sends the create
-// and opens the new Plane's pane. What it runs on is the server's business.
+// and opens the new Plane: solo from the sidebar, as a link from a pane. What it runs on is the server's business.
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { openHere } from "../core/router";
+import { navigate, openPlane } from "../core/router";
 import { AddPlane } from "./AddPlane";
 import { closeAddPlane, openAddPlane } from "./add";
 import { ROOT_ID } from "./types";
 
-vi.mock("../core/router", () => ({ focusPane: vi.fn(), openHere: vi.fn() }));
+vi.mock("../core/router", () => ({ navigate: vi.fn(), openPlane: vi.fn() }));
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -38,7 +38,8 @@ const notify = vi.fn();
 
 beforeEach(() => {
 	notify.mockClear();
-	vi.mocked(openHere).mockClear();
+	vi.mocked(openPlane).mockClear();
+	vi.mocked(navigate).mockClear();
 	host = document.createElement("div");
 	document.body.append(host);
 	root = createRoot(host);
@@ -57,7 +58,7 @@ const item = (label: string) =>
 	);
 
 describe("AddPlane", () => {
-	it("sends the create for the entry picked and opens its pane", () => {
+	it("sends the create for the entry picked and opens it solo", () => {
 		act(() => openAddPlane({ parent: ROOT_ID }));
 		act(() => item("Jobs")?.click());
 		expect(notify).toHaveBeenCalledTimes(1);
@@ -69,11 +70,20 @@ describe("AddPlane", () => {
 			spec: "nuverse.jobs",
 			title: "Jobs",
 		});
-		expect(openHere).toHaveBeenCalledWith(args.plane_id);
+		expect(openPlane).toHaveBeenCalledWith(args.plane_id);
+		expect(navigate).not.toHaveBeenCalled();
 		expect(document.querySelector('[cmdk-item=""]')).toBeNull();
 	});
 
-	it("pins the empty plane on top, made by none and named Untitled", () => {
+	it("opens it from a pane as a link followed in that pane", () => {
+		act(() => openAddPlane({ parent: "p1", pane: "p1" }));
+		act(() => item("Jobs")?.click());
+		const [, args] = notify.mock.calls[0];
+		expect(navigate).toHaveBeenCalledWith({ plane: args.plane_id, params: {} }, "p1");
+		expect(openPlane).not.toHaveBeenCalled();
+	});
+
+	it("puts the empty plane on top, made by none and named Untitled", () => {
 		act(() => openAddPlane({ parent: ROOT_ID }));
 		expect(document.querySelector('[cmdk-item=""]')?.textContent).toContain("Empty");
 		act(() => item("Empty")?.click());

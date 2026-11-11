@@ -1,4 +1,4 @@
-// The specs, the body's last section, under the planes: what the installed
+// The Specs section's body, under the Planes: what the installed
 // packages offer, one folding group per package, its registered Planes under
 // it. Not planes: a row here is a kind of plane, and clicking it makes a new
 // one from it at the top of the tree and opens it, the same as picking it in
@@ -10,31 +10,24 @@
 // group is folded until opened; its fold state lives with the tree's, under
 // `ext:<package>`, so it never meets a plane id.
 //
-// A group row looks like a tree row (./PlaneRow.tsx): a package icon at rest
+// A group row is a tree row (./SidebarRow.tsx): a package icon at rest
 // that turns into the fold chevron on hover. But a package is nothing to
 // open, so the whole row is one button: a click anywhere on it, Enter or
 // Space folds and unfolds it, and so do the arrows. An entry row makes its
 // plane with a click anywhere on it, Enter or Space, and its description
-// shows in a tooltip off the rail's right edge.
+// shows in a tooltip off the sidebar's right edge.
 
 import { Tooltip, TooltipContent, TooltipTrigger } from "@nustackdev/ui-kit";
 import { ChevronRight, Package } from "lucide-react";
-import { openHere } from "../core/router";
-import {
-	railGroupLabel,
-	railIcon,
-	railLaneChevron,
-	railTooltipWide,
-	railTreeList,
-} from "../design";
+import { openPlane } from "../core/router";
+import { sidebarIcon, sidebarLaneChevron, sidebarTooltipWide } from "../design";
 import { PlaneIcon } from "../icon/PlaneIcon";
 import { planeIcon } from "../icon/parse";
 import { createPlane } from "./add";
+import { useSidebarNav } from "./focus";
 import type { Notify } from "./ops";
-import { RailRow } from "./RailRow";
-import { RailSection } from "./RailSection";
+import { SidebarRow } from "./SidebarRow";
 import type { Registered } from "./types";
-import { useRailNav } from "./useRailFocus";
 
 /** One package's group: its name, and the Planes it registers, in order. */
 export type SpecGroup = { pkg: string; entries: Registered[] };
@@ -84,103 +77,74 @@ export function Specs({
 	notify,
 }: {
 	groups: SpecGroup[];
-	/** `specLines` of `groups`, worked out once in ./Rail.tsx for the body's focus order. */
+	/** `specLines` of `groups`, worked out once in ./Sidebar.tsx for the body's focus order. */
 	lines: SpecLine[];
 	expanded: Set<string>;
 	onToggle: (key: string) => void;
 	notify: Notify;
 }) {
-	const { tabKey, setActiveKey, focusKey, arrows } = useRailNav();
+	const { focusKey } = useSidebarNav();
+	const make = (entry: Registered) => openPlane(createPlane(notify, entry));
 
-	if (!groups.length) return null;
-
-	const make = (entry: Registered) => openHere(createPlane(notify, entry));
-
-	return (
-		<>
-			<RailSection label="Specs" />
-			<div role="tree" aria-label="Specs" className={railTreeList}>
-				{lines.map(({ key, group, entry }) => {
-					const gKey = groupKey(group.pkg);
-					if (!entry) {
-						const open = expanded.has(gKey);
-						return (
-							<RailRow
-								key={key}
-								rowKey={key}
-								selected={false}
-								tabbable={key === tabKey}
-								indent={0}
-								level={1}
-								posinset={groups.indexOf(group) + 1}
-								setsize={groups.length}
-								expanded={open}
-								onFocus={() => setActiveKey(key)}
-								onKeyDown={(e) => {
-									if (arrows(e, key)) return;
-									const flips =
-										e.key === "Enter" ||
-										e.key === " " ||
-										(e.key === "ArrowRight" && !open) ||
-										(e.key === "ArrowLeft" && open);
-									if (!flips) return;
-									e.preventDefault();
-									onToggle(gKey);
-								}}
-								onClick={() => onToggle(gKey)}
-								lane={
-									<>
-										<Package aria-hidden="true" className={railIcon(true)} />
-										<ChevronRight aria-hidden="true" className={railLaneChevron(open)} />
-									</>
-								}
-								label={<span className={railGroupLabel}>{group.pkg}</span>}
-								actions={null}
-								menu={null}
-							/>
-						);
+	return lines.map(({ key, group, entry }) => {
+		const gKey = groupKey(group.pkg);
+		if (!entry) {
+			const open = expanded.has(gKey);
+			return (
+				<SidebarRow
+					key={key}
+					rowKey={key}
+					label={group.pkg}
+					depth={0}
+					level={1}
+					posinset={groups.indexOf(group) + 1}
+					setsize={groups.length}
+					expanded={open}
+					onClick={() => onToggle(gKey)}
+					onKeyDown={(e) => {
+						if ((e.key === "ArrowRight" && !open) || (e.key === "ArrowLeft" && open)) {
+							e.preventDefault();
+							onToggle(gKey);
+						}
+					}}
+					icon={
+						<>
+							<Package aria-hidden="true" className={sidebarIcon(true)} />
+							<ChevronRight aria-hidden="true" className={sidebarLaneChevron(open)} />
+						</>
 					}
-					const row = (
-						<RailRow
-							key={key}
-							rowKey={key}
-							selected={false}
-							tabbable={key === tabKey}
-							indent={1}
-							level={2}
-							posinset={group.entries.indexOf(entry) + 1}
-							setsize={group.entries.length}
-							onFocus={() => setActiveKey(key)}
-							onKeyDown={(e) => {
-								if (arrows(e, key)) return;
-								if (e.key === "ArrowLeft") {
-									e.preventDefault();
-									focusKey(gKey);
-								} else if (e.key === "Enter" || e.key === " ") {
-									e.preventDefault();
-									make(entry);
-								}
-							}}
-							lane={<PlaneIcon icon={planeIcon(entry.icon)} className={railIcon(false)} />}
-							onClick={() => make(entry)}
-							label={<span className={railGroupLabel}>{entry.label}</span>}
-							actions={null}
-							menu={null}
-						/>
-					);
-					// Off the rail's right edge, anchored on the whole row.
-					return entry.description ? (
-						<Tooltip key={key}>
-							<TooltipTrigger asChild>{row}</TooltipTrigger>
-							<TooltipContent side="right" className={railTooltipWide}>
-								{entry.description}
-							</TooltipContent>
-						</Tooltip>
-					) : (
-						row
-					);
-				})}
-			</div>
-		</>
-	);
+				/>
+			);
+		}
+		const row = (
+			<SidebarRow
+				key={key}
+				rowKey={key}
+				label={entry.label}
+				depth={1}
+				level={2}
+				posinset={group.entries.indexOf(entry) + 1}
+				setsize={group.entries.length}
+				onClick={() => make(entry)}
+				onKeyDown={(e) => {
+					if (e.key === "ArrowLeft") {
+						e.preventDefault();
+						focusKey(gKey);
+					}
+				}}
+				icon={<PlaneIcon icon={planeIcon(entry.icon)} className={sidebarIcon(false)} />}
+			/>
+		);
+		// Off the sidebar's right edge, anchored on the whole row.
+		return entry.description ? (
+			<Tooltip key={key}>
+				<TooltipTrigger asChild>{row}</TooltipTrigger>
+				<TooltipContent side="right" className={sidebarTooltipWide}>
+					{entry.description}
+				</TooltipContent>
+			</Tooltip>
+		) : (
+			row
+		);
+	});
 }

@@ -1,7 +1,7 @@
 // The keyboard shortcuts sheet: what it lists. Whether it is open, and the
 // key that opens it, are ../core/keys.ts.
 //
-// The list is written by hand, beside the handlers it describes rather than
+// The list is written by hand, next to the handlers it describes rather than
 // read off them: a binding is a few lines in a keydown handler, scattered
 // over the features that own them, and most of what a reader needs (where
 // the focus has to be, what the key does there) is not in the code at all.
@@ -9,15 +9,13 @@
 
 import { KEYS_KEYS } from "../core/keys";
 import {
-	DESK_CLICK,
-	DESK_KEYS,
 	HOME_KEYS,
 	NEW_INSIDE_KEYS,
 	NEW_PLANE_KEYS,
 	OPEN_KEYS,
-	RAIL_KEYS,
 	SEARCH_KEYS,
 	SETTINGS_KEYS,
+	SIDEBAR_KEYS,
 } from "../sidebar/api";
 
 /**
@@ -38,7 +36,7 @@ export const BINDINGS: BindingGroup[] = [
 			{ does: "Settings", keys: [SETTINGS_KEYS] },
 			{ does: "New plane", keys: [NEW_PLANE_KEYS] },
 			{ does: "New plane inside the current one", keys: [NEW_INSIDE_KEYS] },
-			{ does: "Show or hide the sidebar", keys: [RAIL_KEYS] },
+			{ does: "Show or hide the sidebar", keys: [SIDEBAR_KEYS] },
 			{ does: "Keyboard shortcuts", keys: [KEYS_KEYS] },
 		],
 	},
@@ -49,7 +47,6 @@ export const BINDINGS: BindingGroup[] = [
 			{ does: "Unfold, or step in", keys: [["right"]] },
 			{ does: "Fold, or step out", keys: [["left"]] },
 			{ does: "Open", keys: [OPEN_KEYS, ["space"]] },
-			{ does: "Open on desk", keys: [DESK_KEYS, DESK_CLICK] },
 			{ does: "Open in a browser tab", keys: [["mod", "Click"]] },
 		],
 	},

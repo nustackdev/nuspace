@@ -1,4 +1,5 @@
-// The rail's icon and chevron slot, rendered in jsdom.
+// The Planes tree, rendered in jsdom: the icon and chevron slot, the row's
+// one trailing action, its menus, rename, drop and the links.
 //
 // jsdom applies no stylesheet, so the CSS swap itself (icon at rest, chevron on
 // hover, one row at a time) is checked in a real browser. What is checked here
@@ -13,13 +14,29 @@ import { catchAnchors, TooltipProvider } from "@nustackdev/ui-kit";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { paneRule } from "../core/router";
-import { RailTree } from "./RailTree";
-import { RailBody } from "./railHarness";
+import { currentRoutes, focusPane, knownDesks, setDesks, setRoles } from "../core/router";
+import type { Desk } from "../desk/model";
+import { PLANE_MIME } from "./drag";
+import { SidebarBody } from "./harness";
+import { sidebarRule } from "./links";
+import { PlanesTree } from "./PlanesTree";
 import { visibleRows } from "./tree";
 import { childrenOf, coerceTree, ROOT_ID } from "./types";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+
+/** Land on a strip of `planes`, one column each, the last one focused. */
+function onDesk(...planes: string[]): Desk {
+	const columns = planes.map((plane) => ({
+		panes: [{ share: 1, original: { plane, params: {} } }],
+	}));
+	const desk: Desk = { name: "", items: [{ id: "strip1", kind: "strip", columns }] };
+	setRoles({ home: "h", settings: "", search: "" });
+	setDesks({ desk0001: desk });
+	window.history.replaceState(null, "", "/desk0001/strip1");
+	focusPane("desk0001", "strip1", planes.at(-1) ?? "");
+	return desk;
+}
 
 // a (with a1), b at the top.
 const tree = coerceTree([
@@ -37,35 +54,33 @@ const emojiTree = coerceTree([
 
 let host: HTMLDivElement;
 let root: Root;
-// The shell's anchor catcher, which is where a row's link goes.
+// The sidebar's anchor catcher, which is where a row's link goes.
 let release: () => void;
 const onToggle = vi.fn();
-const pins = { ids: ["a"], pin: vi.fn(), unpin: vi.fn(), move: vi.fn() };
+const notify = vi.fn();
 
-function render(expanded: string[], on = tree) {
+function render(expanded: string[], on = tree, selKey = "") {
 	const rows = visibleRows(on, childrenOf(on, ROOT_ID), new Set(expanded));
 	act(() => {
 		root.render(
 			<TooltipProvider>
-				<RailBody keys={rows.map((r) => r.key)}>
-					<RailTree
+				<SidebarBody keys={rows.map((r) => r.key)}>
+					<PlanesTree
 						tree={on}
 						rows={rows}
-						routes={[]}
-						selKey=""
+						selKey={selKey}
 						onToggle={onToggle}
 						reveal={() => {}}
-						notify={() => {}}
-						pins={pins}
+						notify={notify}
 					/>
-				</RailBody>
+				</SidebarBody>
 			</TooltipProvider>,
 		);
 	});
 }
 
 const rowOf = (key: string) =>
-	host.querySelector<HTMLElement>(`[role="treeitem"][data-rail-key="${key}"]`);
+	host.querySelector<HTMLElement>(`[role="treeitem"][data-key="${key}"]`);
 const chevronOf = (key: string) => rowOf(key)?.querySelector<HTMLButtonElement>("button");
 const linkOf = (key: string) => rowOf(key)?.querySelector<HTMLAnchorElement>("a");
 const moreOf = (key: string) =>
@@ -84,7 +99,7 @@ beforeEach(() => {
 	window.history.replaceState({}, "", "/");
 	host = document.createElement("div");
 	document.body.append(host);
-	release = catchAnchors(host, paneRule);
+	release = catchAnchors(host, sidebarRule);
 	root = createRoot(host);
 	onToggle.mockClear();
 	vi.clearAllMocks();
@@ -96,7 +111,7 @@ afterEach(() => {
 	host.remove();
 });
 
-describe("rail icon and chevron slot", () => {
+describe("tree row icon and chevron slot", () => {
 	it("gives every row, leaf or not, its icon and a chevron button", () => {
 		render(["a"]);
 		for (const key of ["a", "a1", "b"]) {
@@ -142,25 +157,7 @@ describe("rail icon and chevron slot", () => {
 		expect(items).toContain("Change icon");
 	});
 
-	it("offers Pin or Unpin in the row's menu, as the plane is", () => {
-		const menu = (key: string) => {
-			act(() => {
-				moreOf(key)?.dispatchEvent(
-					new PointerEvent("pointerdown", { bubbles: true, button: 0, pointerType: "mouse" }),
-				);
-			});
-			return [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')];
-		};
-		render([]);
-		const unpin = menu("a").find((i) => i.textContent === "Unpin");
-		act(() => unpin?.click());
-		expect(pins.unpin).toHaveBeenCalledWith("a");
-		const pin = menu("b").find((i) => i.textContent === "Pin");
-		act(() => pin?.click());
-		expect(pins.pin).toHaveBeenCalledWith("b");
-	});
-
-	it("offers the close items while the plane is in one of several panes", () => {
+	it("offers no Close: a tree row is the plane, not a desk item", () => {
 		const labels = (key: string) => {
 			act(() => {
 				moreOf(key)?.dispatchEvent(
@@ -169,25 +166,10 @@ describe("rail icon and chevron slot", () => {
 			});
 			return [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].map(itemLabel);
 		};
-		window.history.replaceState(
-			{
-				panes: [
-					{ plane: "a", params: {} },
-					{ plane: "b", params: {} },
-				],
-				focus: 1,
-			},
-			"",
-			"/b",
-		);
+		// Even while the plane is a pane of the strip the tab shows: its desk row closes it.
+		onDesk("a", "b");
 		render([]);
-		expect(labels("a")).toContain("Close others");
-		act(() =>
-			document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })),
-		);
-		window.history.replaceState({ panes: [{ plane: "b", params: {} }], focus: 0 }, "", "/b");
-		render([]);
-		expect(labels("b")).not.toContain("Close");
+		expect(labels("a")).not.toContain("Close");
 	});
 
 	it("opens a plane in a new browser tab from both menus", () => {
@@ -200,7 +182,8 @@ describe("rail icon and chevron slot", () => {
 		});
 		const items = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')];
 		const labels = items.map(itemLabel);
-		expect(labels.indexOf("Open in new tab")).toBe(labels.indexOf("Open on desk") + 1);
+		expect(labels.indexOf("Open in new tab")).toBe(labels.indexOf("Open") + 1);
+		expect(labels).not.toContain("Open on desk");
 		act(() => items.find((i) => itemLabel(i) === "Open in new tab")?.click());
 		expect(open).toHaveBeenLastCalledWith("/b", "_blank", "noopener");
 
@@ -237,8 +220,8 @@ describe("rail icon and chevron slot", () => {
 		expect(window.location.pathname).toBe("/b");
 	});
 
-	it("opens an Option-click on a row beside the focused pane", () => {
-		window.history.replaceState({ panes: [{ plane: "a", params: {} }], focus: 0 }, "", "/a");
+	it("reads an Option-click on a row as a plain one: the plane solo", () => {
+		window.history.replaceState(null, "", "/a");
 		render([]);
 		act(() => {
 			linkOf("b")?.dispatchEvent(
@@ -246,13 +229,15 @@ describe("rail icon and chevron slot", () => {
 			);
 		});
 		expect(window.location.pathname).toBe("/b");
-		expect(window.history.state).toEqual({
-			panes: [
-				{ plane: "a", params: {} },
-				{ plane: "b", params: {} },
-			],
-			focus: 1,
-		});
+	});
+
+	it("opens a plain click on a desk item as the plane solo, the desk untouched", () => {
+		const desk = onDesk("x", "y");
+		render([]);
+		act(() => linkOf("b")?.click());
+		expect(window.location.pathname).toBe("/b");
+		expect(currentRoutes()).toEqual(["b"]);
+		expect(knownDesks()?.desk0001).toEqual(desk);
 	});
 
 	it("folds on a chevron click and never navigates", () => {
@@ -311,36 +296,108 @@ describe("rail icon and chevron slot", () => {
 	});
 });
 
-describe("rail actions", () => {
-	it("hangs open-on-desk, add and more, in that order, in a lane sized only when shown", () => {
+describe("tree row trailing action", () => {
+	it("carries the `+` and the `...` on hover, sized only when shown", () => {
 		render([]);
 		const lane = moreOf("b")?.parentElement;
 		const labels = [...(lane?.querySelectorAll("button") ?? [])].map((b) =>
 			b.getAttribute("aria-label"),
 		);
-		expect(labels).toEqual(["Open B on desk", "Add plane in B", "Actions for B"]);
-		// Zero wide at rest, so a title runs to the row's edge; sized for all
-		// three once revealed. Still in the DOM either way, for the keyboard.
+		expect(labels).toEqual(["Add plane in B", "Actions for B"]);
+		// Zero wide at rest, so a title runs to the row's edge. Still in the
+		// DOM, for the keyboard.
 		const cls = lane?.className.split(" ") ?? [];
 		expect(cls).toContain("w-0");
-		expect(cls).not.toContain("w-rail-actions");
-		expect(cls).toContain("group-hover/row:w-rail-actions");
-		expect(cls).toContain("has-focus-visible:w-rail-actions");
+		expect(cls).toContain("group-hover/row:w-auto");
+		expect(cls).toContain("has-focus-visible:w-auto");
 	});
 
-	it("gives open-on-desk and add a tooltip", () => {
+	it("keeps Add plane inside in the menu, and no open on desk", () => {
 		render([]);
-		const lane = moreOf("b")?.parentElement;
-		const [desk, add] = lane?.querySelectorAll("button") ?? [];
-		act(() => (desk as HTMLElement).focus());
-		expect(tooltip()).toMatch(/^Open on desk.+/);
-		act(() => (add as HTMLElement).focus());
-		// The label, then its shortcut's caps.
-		expect(tooltip()).toMatch(/^Add plane inside.+N/);
+		act(() => {
+			moreOf("b")?.dispatchEvent(
+				new PointerEvent("pointerdown", { bubbles: true, button: 0, pointerType: "mouse" }),
+			);
+		});
+		const items = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].map(itemLabel);
+		expect(items).not.toContain("Open on desk");
+		expect(items).toContain("Add plane inside");
 	});
 });
 
-describe("rail tooltips", () => {
+describe("tree row selection", () => {
+	it("selects the focused pane's plane with the quiet fill, and only it", () => {
+		render([], tree, "b");
+		expect(rowOf("b")?.getAttribute("aria-selected")).toBe("true");
+		expect(rowOf("b")?.className).toContain(" bg-sidebar-a-fill");
+		expect(rowOf("a")?.getAttribute("aria-selected")).toBe("false");
+		expect(rowOf("a")?.className).not.toContain(" bg-sidebar-a-fill");
+		expect(rowOf("a")?.className).toContain("hover:bg-sidebar-a-fill");
+	});
+
+	it("opens the row's plane with Enter", () => {
+		window.history.replaceState(null, "", "/a");
+		render([]);
+		act(() => {
+			rowOf("b")?.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+		});
+		expect(window.location.pathname).toBe("/b");
+	});
+});
+
+describe("tree row rename, delete and drop", () => {
+	it("renames in place on a double click, and sends it on Enter", () => {
+		render([]);
+		act(() => {
+			linkOf("b")?.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+		});
+		const input = rowOf("b")?.querySelector<HTMLInputElement>("input");
+		expect(input?.getAttribute("aria-label")).toBe("Rename B");
+		act(() => {
+			if (input) input.value = "Bee";
+			input?.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+		});
+		expect(notify).toHaveBeenCalledWith("plane.rename", { plane_id: "b", title: "Bee" });
+		expect(rowOf("b")?.querySelector("input")).toBeNull();
+	});
+
+	it("offers Delete in the menu", () => {
+		render([]);
+		act(() => {
+			moreOf("b")?.dispatchEvent(
+				new PointerEvent("pointerdown", { bubbles: true, button: 0, pointerType: "mouse" }),
+			);
+		});
+		const items = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].map(itemLabel);
+		expect(items).toContain("Delete plane");
+	});
+
+	it("drags a row with the plane mime and drops it into another", () => {
+		render([]);
+		const data = new Map<string, string>();
+		const dataTransfer = {
+			setData: (k: string, v: string) => data.set(k, v),
+			getData: (k: string) => data.get(k) ?? "",
+			effectAllowed: "",
+			dropEffect: "",
+		};
+		const drag = (type: string, el: HTMLElement | null) => {
+			const e = new Event(type, { bubbles: true, cancelable: true });
+			Object.assign(e, { dataTransfer, clientY: 0 });
+			act(() => {
+				el?.dispatchEvent(e);
+			});
+		};
+		expect(rowOf("b")?.getAttribute("draggable")).toBe("true");
+		drag("dragstart", rowOf("b"));
+		expect(JSON.parse(data.get(PLANE_MIME) ?? "")).toEqual({ plane: "b", params: {} });
+		drag("dragover", rowOf("a"));
+		drag("drop", rowOf("a"));
+		expect(notify).toHaveBeenCalledWith("plane.move", { plane_id: "b", parent_id: "a" });
+	});
+});
+
+describe("tree row tooltips", () => {
 	it("drops the native title for a kit tooltip", () => {
 		render([]);
 		expect(host.querySelector("[title]")).toBeNull();

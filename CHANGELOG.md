@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- The sidebar is built from uniform sections and rows, nav follows the roles
 - Panes drag by their header and show one not found pane for anything missing
 - The canvas shows one plane or strip, with px column widths and drops
 - Every desk item has its own url, links inside it remember where you went

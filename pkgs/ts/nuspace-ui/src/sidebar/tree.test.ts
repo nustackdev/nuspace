@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { dropMove } from "./drag";
 import { showsNoPlanes, visibleRows } from "./tree";
 import { childrenOf, coerceTree, ROOT_ID } from "./types";
-import { dropMove } from "./useRailDrag";
 
 // home, a (with a1, a2), b at the top.
 const tree = coerceTree([

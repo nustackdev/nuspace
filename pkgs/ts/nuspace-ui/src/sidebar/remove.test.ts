@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { confirm } from "../core/confirm";
+import { resetRouter, setDesks, setRoles } from "../core/router";
 import { canDelete, deletePlane } from "./remove";
 import { coerceTree, ROOT_ID } from "./types";
 
@@ -23,12 +24,11 @@ describe("deleting a plane", () => {
 		expect(canDelete(tree, "a")).toBe(true);
 	});
 
-	it("sends one op and closes the subtree, landing home when nothing is left", async () => {
-		const panes = [
-			{ plane: "a", params: {} },
-			{ plane: "a1", params: {} },
-		];
-		window.history.replaceState({ panes, focus: 1 }, "", "/a1");
+	it("sends one op and closes the subtree, a tab on one of them going home", async () => {
+		resetRouter();
+		setDesks({});
+		setRoles({ home: "home", settings: "", search: "" });
+		window.history.replaceState(null, "", "/a1");
 		vi.mocked(confirm).mockResolvedValue(true);
 		const notify = vi.fn();
 		await deletePlane(notify, tree, "a", "A");

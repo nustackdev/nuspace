@@ -1,5 +1,5 @@
-// Drag and drop in the rail: reorder, nest and move to the top, all as one
-// `plane.move`.
+// Drag and drop in the Planes tree: reorder, nest and move to the top, all as
+// one `plane.move`.
 //
 // Native HTML5 drag and drop: the browser owns the threshold that tells a
 // drag from a click, so a row stays an ordinary link until it is dragged.
@@ -17,13 +17,14 @@
 // no drop at all. Everything else moves, home and system Planes too. The
 // server is the one that holds that rule; this only keeps from asking.
 //
-// A row can also be dropped on the pinned rows, which pins it and leaves it
-// here (./Pinned.tsx reads the drag's `PLANE_MIME`), or on the panes, which
-// opens it as a split (../main/useCanvasDrop.ts). A pin dragged over the
-// tree is not one of its rows, so nothing here takes it.
+// A row can also be dropped on the desk or a desk folder, which read the
+// drag's `PLANE_MIME` (../desk/dnd.ts). A nav row drags its plane the same way
+// (`planeDragProps`), but never moves in the tree.
 
 import type * as React from "react";
 import { useCallback, useMemo, useState } from "react";
+import { endDrag, PLANE_MIME, writePlane } from "../desk/dnd";
+import { setDragChip } from "../desk/drag";
 import { anchorAt, type Notify } from "./ops";
 import { subtreeOf, type VisibleRow } from "./tree";
 import { childrenOf, type PlaneTree, ROOT_ID } from "./types";
@@ -33,11 +34,11 @@ export type DropEdge = "before" | "after" | "into";
 /** Where the dragged row would land right now. `key` "" is below the rows. */
 export type DropTarget = { key: string; edge: DropEdge };
 
-/** What a row's drag carries: its id. The pinned rows and the panes take it too. */
-export const PLANE_MIME = "application/x-nuspace-plane";
+/** What a row's drag carries: its plane id. The desk takes it too. */
+export { PLANE_MIME };
 
-/** The edge a pointer at `clientY` picks on `el`. */
-function edgeAt(el: HTMLElement, clientY: number): DropEdge {
+/** The edge a pointer at `clientY` picks on `el`: top quarter, middle half, bottom quarter. */
+export function edgeAt(el: HTMLElement, clientY: number): DropEdge {
 	const r = el.getBoundingClientRect();
 	const y = clientY - r.top;
 	if (y < r.height / 4) return "before";
@@ -82,7 +83,7 @@ export function dropMove(
 	return { parent, index };
 }
 
-export function useRailDrag({
+export function useTreeDrag({
 	tree,
 	rows,
 	notify,
@@ -130,11 +131,14 @@ export function useRailDrag({
 		(key: string) => ({
 			draggable: true,
 			onDragStart: (e: React.DragEvent) => {
-				e.dataTransfer.effectAllowed = "move";
-				e.dataTransfer.setData(PLANE_MIME, key);
+				setDragChip(e);
+				writePlane(e.dataTransfer, key);
 				setDragKey(key);
 			},
-			onDragEnd: end,
+			onDragEnd: () => {
+				endDrag();
+				end();
+			},
 			onDragOver: (e: React.DragEvent) => {
 				if (!dragKey) return;
 				if (barred.has(key)) {
@@ -175,7 +179,7 @@ export function useRailDrag({
 		[dragKey, target, drop],
 	);
 
-	/** Handlers around the rows and the tail: leaving them, eg for the pinned rows, drops the mark. */
+	/** Handlers around the rows and the tail: leaving them, eg for the desk, drops the mark. */
 	const leaveProps = useMemo(
 		() => ({
 			onDragLeave: (e: React.DragEvent) => {
@@ -186,4 +190,16 @@ export function useRailDrag({
 	);
 
 	return { dragKey, target, rowProps, tailProps, leaveProps };
+}
+
+/** A row that drags its plane onto the desk or a desk folder, and nowhere in the tree. */
+export function planeDragProps(plane: string) {
+	return {
+		draggable: true,
+		onDragStart: (e: React.DragEvent) => {
+			setDragChip(e);
+			writePlane(e.dataTransfer, plane);
+		},
+		onDragEnd: endDrag,
+	};
 }

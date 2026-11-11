@@ -4,7 +4,7 @@
  * This file adds NO colors. Every value below either points at a kit L2
  * semantic role (which already flips per theme) or is a geometry value picked
  * off the 4px grid in space-radius.md. The frame's own colors (page, sidebar,
- * panes, dock, the sidebar's fills) live in ./theme.css.
+ * panes, the sidebar's fills) live in ./theme.css.
  *
  * Why this file exists at all: the kit is a compact, IDE-like kit for
  * devtools and dashboards, and it describes panels. A nuspace plane is a
@@ -52,52 +52,6 @@
 
 	/* The caret's cell: no fill, just a hairline rail in the gutter */
 	--doc-focus-rail: var(--border-strong);
-
-	/* --- Dock window ------------------------------------------------------
-	 * The on-screen window over the dock's chips, and the grip that drags the
-	 * desk. A neutral wash off --text-primary like the tiers above, but
-	 * stronger: it sits on the dock's own fill, where the hover tier all but
-	 * vanishes.
-	 * --------------------------------------------------------------------- */
-	--dock-window: color-mix(in oklab, var(--text-primary) 12%, transparent);
-	--dock-window-hover: color-mix(in oklab, var(--text-primary) 17%, transparent);
-
-	/* --- Sidebar rail geometry --------------------------------------------
-	 * Every length the rail is laid out by, in one place so it can be tuned
-	 * without touching a recipe. Not theme dependent; here in :root and not
-	 * only in @theme because design/rail.ts computes the indent and the drop
-	 * line from them inline (depth is data).
-	 *
-	 * One left edge runs down the whole rail: a top bar button's glyph, a
-	 * row's icon and a bottom bar button's glyph all sit 18px in.
-	 *   row:  inset 8 + row pad 8 + (lane 20 - icon 16) / 2 = 18
-	 *   bars: bar pad 12 + (button 28 - glyph 16) / 2      = 18
-	 * And one right edge, 18px in, for a section's `+`, a row's `...` and the
-	 * theme flip:
-	 *   row:  inset 8 + row pad end 6 + (button 24 - glyph 16) / 2 = 18
-	 *   bars: bar pad 12 + 6                                       = 18
-	 *
-	 * Measured off Notion's sidebar: a 30px row on a 31px pitch, the fill
-	 * inset 8px from both rail edges, 8px of air between icon and title.
-	 * --------------------------------------------------------------------- */
-	--rail-inset: 0.5rem; /* 8   the fill's inset from the rail's edges     */
-	--rail-row: 1.875rem; /* 30  row height                                 */
-	--rail-row-gap: 1px; /*  1   between rows, so two fills never touch     */
-	--rail-row-pad: 0.5rem; /* 8 row inner pad, before the icon lane        */
-	--rail-row-pad-end: 0.375rem; /* 6 row inner pad after the actions     */
-	--rail-actions: 4.625rem; /* 74 the action lane, revealed: split, add,
-	                           * more, at 24 each with a 1px gap between   */
-	--rail-lane: 1.25rem; /* 20  icon / chevron lane, the chevron's box     */
-	--rail-gap: 0.5rem; /* 8     lane to title                              */
-	--rail-indent: 1.25rem; /* 20 per level: a child's icon clears its
-	                         * parent's by a whole lane                     */
-	--rail-bar-pad: 0.75rem; /* 12 top and bottom bar side padding          */
-	/* The rail's one small step, 4: the top bar to the nav rows, and once
-	 * each side of the divider, so the line sits centred between them. */
-	--rail-top-gap: 0.25rem;
-	/* Air above a section header (Pinned, Planes), so each section reads
-	 * as its own group without a rule between them. */
-	--rail-section-gap: 0.75rem;
 
 	/* --- Plane grid -------------------------------------------------------
 	 * Every row of a plane (the title, each cell, a ghost, a draft, a drop
@@ -178,9 +132,6 @@
 	--doc-hover: color-mix(in oklab, var(--text-primary) 6%, transparent);
 	--doc-active: color-mix(in oklab, var(--text-primary) 10%, transparent);
 	--doc-box: color-mix(in oklab, var(--accent) 14%, transparent);
-
-	--dock-window: color-mix(in oklab, var(--text-primary) 11%, transparent);
-	--dock-window-hover: color-mix(in oklab, var(--text-primary) 16%, transparent);
 }
 
 /* ============================== L3: Tailwind v4 ===========================*/
@@ -192,23 +143,6 @@
 	--color-doc-box-line: var(--doc-box-line);
 	--color-doc-drop-line: var(--doc-drop-line);
 	--color-doc-focus-rail: var(--doc-focus-rail);
-
-	/* --- Dock --> bg-dock-window, hover:bg-dock-window-hover ------------- */
-	--color-dock-window: var(--dock-window);
-	--color-dock-window-hover: var(--dock-window-hover);
-
-	/* --- Sidebar rail geometry --> h-rail-row, px-rail-inset, ... -------- */
-	--spacing-rail-inset: var(--rail-inset);
-	--spacing-rail-row: var(--rail-row);
-	--spacing-rail-row-gap: var(--rail-row-gap);
-	--spacing-rail-row-pad: var(--rail-row-pad);
-	--spacing-rail-row-pad-end: var(--rail-row-pad-end);
-	--spacing-rail-actions: var(--rail-actions);
-	--spacing-rail-lane: var(--rail-lane);
-	--spacing-rail-gap: var(--rail-gap);
-	--spacing-rail-bar-pad: var(--rail-bar-pad);
-	--spacing-rail-top-gap: var(--rail-top-gap);
-	--spacing-rail-section-gap: var(--rail-section-gap);
 
 	/* --- Cell status --> text-cell-running, bg-cell-failed-wash --*/
 	--color-cell-invalid: var(--cell-invalid);
@@ -250,7 +184,7 @@
 	 * --------------------------------------------------------------------- */
 
 	/* h-chrome: the one height every strip of window chrome shares - the
-	 * rail's header and footer, every pane's bar, the dock under the desk.
+	 * rail's header and footer, every pane's bar.
 	 * One token so the rules across the top of the window line up by
 	 * construction, not by two files happening to say h-9. 36 = spacing 9. */
 	--spacing-chrome: 2.25rem;
