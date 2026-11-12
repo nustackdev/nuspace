@@ -36,7 +36,8 @@ import nustd.ui
 from nuspace.ops.brackets import atomic
 from nuspace.shapes import Space
 
-from .common import HISTORY, LIVE, Compact, Head, page
+from ..ops import page
+from .common import HISTORY, LIVE, Compact, Head
 
 
 __all__ = [

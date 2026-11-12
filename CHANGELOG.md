@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Home, settings and search follow the new layout model; plane links share one helper
 - New planes get a default icon when created without one
 - Home, settings and search planes get clean sectioned layouts with real tables
 - Drops show the region they make, and single planes stack anywhere

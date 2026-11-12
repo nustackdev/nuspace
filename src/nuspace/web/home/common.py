@@ -1,6 +1,6 @@
-"""What Home's cells share, settings too: the stores, a page, the space's name, the versions.
+"""What Home's cells share, settings too: the stores, the space's name, the versions.
 
-The stores they read, a page's link, the space's name and path, the
+The stores they read, the space's name and path, the
 versions this process runs, and the shaping helpers. Reads are bare nu terms, bracketed by the caller. Shaping is plain Python
 over plain data, run as a host call once the read is done: it never reads a
 store. Workers import this module: nothing here may pull in a server.
@@ -15,9 +15,6 @@ import nu
 import nustd.ui
 from nuspace.shapes import Space
 
-from ..interactions import IconName
-from ..ops import href
-
 
 __all__ = [
     "HISTORY",
@@ -29,7 +26,6 @@ __all__ = [
     "SpaceWhere",
     "compact",
     "ids",
-    "page",
     "title",
     "version",
 ]
@@ -51,19 +47,6 @@ def title(plane: nu.StrArg) -> nu.Str:
     """A plane's title: its name, else its id. 1 read."""
     name = Space.planes[plane].name.fallback("")
     return nu.Str(nu.If(name == "", plane, name))
-
-
-def page(plane: nu.StrArg) -> nu.Dict:
-    """A plane as a page shows it: ``{id, title, icon, href}``. Icon and title only, no parents.
-
-    The title is the plane's name, else its id. Cost: O(1), 2 reads.
-    """
-    return nu.Dict.of(
-        id=plane,
-        title=title(plane),
-        icon=IconName(Space.planes[plane].icon.fallback("")),
-        href=href(plane),
-    )
 
 
 def compact(n: object) -> str:

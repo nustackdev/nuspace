@@ -62,6 +62,7 @@ __all__ = [
     "link",
     "on_params",
     "open_tab",
+    "page",
     "params",
     "restart_cell",
     "restart_pane",
@@ -436,6 +437,22 @@ def href(plane: nu.StrArg, params: nu.DictArg[str, object] | None = None) -> nu.
     return nu.Str(Href(plane, {} if params is None else params))
 
 
+def page(plane: nu.StrArg, params: nu.DictArg[str, object] | None = None) -> nu.Dict:
+    """A plane as a link shows it: ``{id, title, icon, href}``. Never raises at run time.
+
+    The value a ``PageLinkRef`` table cell takes, and what :func:`link` draws.
+    The title is the plane's name, else its id; the icon is its ``icon``.
+    Reads Space: bracket it with ``nuspace.atomic``. Cost: O(1), 2 reads.
+    """
+    name = Space.planes[plane].name.fallback("")
+    return nu.Dict.of(
+        id=plane,
+        title=nu.Str(nu.If(name == "", plane, name)),
+        icon=nu.Str(IconName(Space.planes[plane].icon.fallback(""))),
+        href=href(plane, params),
+    )
+
+
 def link(
     ref: Ref,
     plane: nu.StrArg,
@@ -456,14 +473,12 @@ def link(
     Raises:
         TypeError: ``ref`` is neither, at build.
     """
-    url = href(plane, params)
-    name = Space.planes[plane].name.fallback("")
-    title = nu.Str(nu.If(name == "", plane, name)) if label is None else nu.Str(label)
+    shown = page(plane, params)
+    title = nu.Str(shown["title"]) if label is None else nu.Str(label)
     if isinstance(ref, nustd.ui.PageLinkRef):
-        icon = nu.Str(IconName(Space.planes[plane].icon.fallback("")))
         extra = {} if description is None else {"description": description}
-        return ref.set(href=url, title=title, icon=icon, **extra)
+        return ref.set(href=shown["href"], title=title, icon=shown["icon"], **extra)
     if isinstance(ref, nustd.ui.LinkRef):
-        return ref.set(href=url, label=title)
+        return ref.set(href=shown["href"], label=title)
     msg = f"link draws on a PageLinkRef or a LinkRef, not {type(ref).__name__}"
     raise TypeError(msg)

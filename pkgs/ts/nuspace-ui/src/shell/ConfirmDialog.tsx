@@ -24,7 +24,7 @@ export function ConfirmDialog() {
 	return (
 		<Dialog open={open !== null} onOpenChange={(next) => next || answer(false)}>
 			{q ? (
-				<DialogContent size="sm" showClose={false}>
+				<DialogContent width={384} showClose={false}>
 					<DialogHeader>
 						<DialogTitle>{q.title}</DialogTitle>
 						<DialogDescription>{q.description}</DialogDescription>

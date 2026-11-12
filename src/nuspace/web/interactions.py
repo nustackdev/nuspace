@@ -3,7 +3,7 @@
 - :data:`ErrorType`, :data:`ErrorMessage`: a caught error's type name and
   its message, what a toast says.
 - :data:`Session`: the tab a plane run draws on, read off its env specs.
-- :data:`Href`: a pane's URL, encoded the way the browser does.
+- :func:`url`, :data:`Href`: a pane's URL, encoded the way the browser does, plain and as a term.
 - :data:`IconName`: a stored icon as a page link takes it.
 - :class:`EventField`: one field off a browser event, strict.
 - :class:`Drawing`: the term drawing one content item found at run time,
@@ -43,6 +43,7 @@ __all__ = [
     "Href",
     "IconName",
     "Session",
+    "url",
 ]
 
 
@@ -87,16 +88,18 @@ def _session(envs: object) -> str:
 Session = nu.host(_session, name="Session")
 
 
-def _href(plane: object, given: object) -> str:
-    pairs = given if isinstance(given, Mapping) else {}
+def url(plane: str, params: Mapping | None = None) -> str:
+    """The plain python form of ``web.href``, for code that builds rows outside a term."""
+    pairs = params if isinstance(params, Mapping) else {}
     search = nustd.ui.encode_query(dict(pairs))
     # encodeURIComponent's set, so a plane id reads the same on both sides.
     path = "/" + quote(str(plane), safe="!*'()")
     return f"{path}?{search}" if search else path
 
 
-#: ``Href(plane, params)``: ``/<plane>``, or ``/<plane>?<params>``; a None param drops its key.
-Href = nu.host(_href, name="Href")
+#: ``Href(plane, params)``: :func:`url` as a term. ``/<plane>``, or ``/<plane>?<params>``;
+#: a None param drops its key.
+Href = nu.host(url, name="Href")
 
 
 def _icon_name(icon: object) -> str:

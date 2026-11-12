@@ -10,8 +10,9 @@ Removed planes are skipped. Cost: O(50), two reads each.
 Reconciliation, two flows side by side:
 
 - the list: drawn again when it changes or a plane is removed (one append
-  to ``Space.indexes.removed``): the tiles go and come back in list order,
-  each keyed by its plane;
+  to ``Space.indexes.removed``): each tile written in place, keyed by its
+  plane, the tiles of planes no longer listed dropped, the rest put in
+  list order;
 - the tiles: one arm per plane shown (:class:`nu.ReconcileLatestEach`),
   each redrawing its own tile when its plane's name or icon changes. A
   rename elsewhere in the space wakes nothing here.
@@ -25,11 +26,11 @@ import nustd.ui
 from nuspace.ops.brackets import atomic
 from nuspace.shapes import Space
 
+from ..ops import page
 from ..shapes import Web
-from .common import page
 
 
-__all__ = ["TILES", "View", "draw", "out", "read", "shown", "tiles"]
+__all__ = ["TILES", "View", "draw", "first", "out", "read", "shown", "tiles"]
 
 
 #: Most tiles the group draws.
@@ -55,14 +56,15 @@ def read() -> nu.Dict:
 class Section(nustd.ui.PageSection):
     """The ``history`` cell's node: recent pages as tiles, or an empty state when there are none."""
 
-    tiles = nustd.ui.GridRef.slot(nustd.ui.PageLinkRef, max_columns=4, min_width=160, gap=1)
+    tiles = nustd.ui.GridRef.slot(nustd.ui.PageLinkRef, max_columns=4, min_cell_width=160, gap=1)
     empty = nustd.ui.EmptyStateRef.slot(icon="history", size="sm")
 
 
 class View(nu.Shape):
-    """The ``history`` cell's root."""
+    """The ``history`` cell's root: a hairline over its section, as after any section on home."""
 
-    history = Section.slot(title="History", description="Recently opened", bordered=True, gap=3)
+    rule = nustd.ui.DividerRef.slot()
+    history = Section.slot(title="History", description="Recently opened", gap=3)
 
 
 #: The tiles, keyed by plane id: a tile is one plane's, wherever it lands in the list.
@@ -75,13 +77,16 @@ def _tile(plane: nu.StrArg, got: nu.Nu) -> nu.Nu:
 
 
 def show(got: nu.ObjectRef) -> nu.Nu:
-    """Draw one read of :func:`read`: the tiles again from none, in list order, or the empty line.
+    """Draw one read of :func:`read`: the tiles in list order, or the empty line.
 
-    The tiles go as one erase, then each is written: a write brings the grid
-    back as declared, and the tiles draw in the order they are written.
+    Each tile is written in place, then the grid keeps only the listed
+    planes and puts them in list order: a tile still listed is never redrawn
+    from none.
     """
     recent = nu.List(nu.Dict(got)["recent"])
-    tiles = nu.ForEachDo(recent, lambda p: _tile(nu.Str(nu.Dict(p)["id"]), p))
+    shown = recent.iter().map(lambda p: nu.Str(nu.Dict(p)["id"])).to_list()
+    written = nu.ForEachDo(recent, lambda p: _tile(nu.Str(nu.Dict(p)["id"]), p))
+    tiles = written >> TILES_REF.keep(shown) >> TILES_REF.set_order(shown)
     empty = nu.IfDo(
         recent.len() == 0,
         View.history.empty.set(
@@ -89,12 +94,17 @@ def show(got: nu.ObjectRef) -> nu.Nu:
         ),
         View.history.empty.erase(),
     )
-    return TILES_REF.erase() >> tiles >> empty
+    return tiles >> empty
 
 
 def draw() -> nu.Nu:
     """One read, then its drawing."""
     return nu.let(atomic(read()), show)
+
+
+def first() -> nu.Nu:
+    """The hairline over the section, drawn once."""
+    return View.rule.init()
 
 
 # --- Per tile ------------------------------------------------------------------------------
@@ -125,7 +135,7 @@ def _lists() -> nu.Nu:
 
 def out() -> nu.Nu:
     """The cell's program: the list, and one arm per tile drawn."""
-    return nu.ParallelAsync(
+    return first() >> nu.ParallelAsync(
         nu.Reconcile(atomic(_lists()), draw()),
         nu.ReconcileLatestEach(atomic(shown()), atomic(_lists()), tiles),
     )

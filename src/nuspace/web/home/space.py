@@ -137,7 +137,7 @@ BOARD = View.space.board
 
 #: Plain counts, nothing temporal: one card, a stat each, wrapping by width.
 COUNTS = BOARD[0, 0].to(nustd.ui.CardRef.slot(size="sm"))
-STATS = COUNTS["stats"].to(nustd.ui.GridRef.slot(max_columns=3, min_width=96, gap=4))
+STATS = COUNTS["stats"].to(nustd.ui.GridRef.slot(max_columns=3, min_cell_width=96, gap=4))
 
 PLANES = STATS["planes"].to(nustd.ui.StatRef.slot(label="Planes"))
 CELLS = STATS["cells"].to(nustd.ui.StatRef.slot(label="Cells"))

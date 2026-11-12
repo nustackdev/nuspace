@@ -8,6 +8,8 @@ The sdk, what a program calls, is the ops (:mod:`.ops`), flat here::
     web.params(), web.on_params()                     # a cell's own pane params
     web.restart_cell(sid, cell)                       # run one cell again, brackets itself
     nuspace.atomic(web.link(row.link, plane))         # draw a link to a plane
+    nuspace.atomic(web.page(plane))                   # {id, title, icon, href}: a PageLink table cell
+    web.url(plane, {"id": 3})                         # its URL, plain python, for rows built outside a term
     nuspace.atomic(web.set_role("home", plane))       # make a plane the home
 
 - :mod:`.shapes`: :class:`Web` (web planes, recents, desks, roles) and :class:`Conn`
@@ -27,6 +29,7 @@ Safe for a worker to import: nothing imported here pulls in a server.
 """
 
 from . import desks
+from .interactions import url
 from .ops import (
     add,
     close_tab,
@@ -36,6 +39,7 @@ from .ops import (
     link,
     on_params,
     open_tab,
+    page,
     params,
     restart_cell,
     restart_pane,
@@ -68,6 +72,7 @@ __all__ = [
     "link",
     "on_params",
     "open_tab",
+    "page",
     "params",
     "restart_cell",
     "restart_pane",
@@ -75,5 +80,6 @@ __all__ = [
     "set_pane_params",
     "set_panes",
     "set_role",
+    "url",
     "visit",
 ]

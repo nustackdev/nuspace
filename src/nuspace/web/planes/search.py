@@ -365,7 +365,7 @@ class View(nu.Shape):
 # The query bar: the kind, its main question, the button. The kind's other
 # filters sit on a line under it. Each kind's parts are drawn once and shown
 # while it is the kind picked, so what was typed for one stays when it comes back.
-BAR = View.ask[0].to(ui.RowRef.slot(gap=2, grow={1: 1}, basis={0: 160}))
+BAR = View.ask[0].to(ui.RowRef.slot(gap=2, grow={1: 1}, basis={0: 160, 1: 200}))
 KIND = BAR[0].to(ui.SelectRef)
 MAIN = BAR[1].to(ui.ColumnRef.slot(gap=0))
 GO = BAR[2].to(ui.ButtonRef.slot(label="Search", icon="search"))
@@ -386,8 +386,8 @@ def primary(kind):
 
 
 def filters(i):
-    # One kind's other filters, on the line under the bar.
-    return MORE[i].to(ui.RowRef.slot(gap=4, align="end", wrap=True, min_width=120))
+    # One kind's other filters, on the line under the bar, sharing its width; stacked when narrow.
+    return MORE[i].to(ui.RowRef.slot(gap=4, align="end", stack_below=320))
 
 
 def control(i, kind, f):
@@ -613,7 +613,7 @@ EMPTY = View.results[1].to(ui.EmptyStateRef.slot(icon="search", size="sm"))
 WAITING = View.results[2].to(ui.SkeletonRef.slot(lines=3))
 # The hits, a row each: what the kind draws, the kind, where it lives.
 HITS = View.results[3].to(
-    ui.TableRef.slot(header=["Hit", "Kind", "Where"], align=["left", "left", "left"], label="Hits")
+    ui.TableRef.slot(columns=[{"label": "Hit"}, {"label": "Kind"}, {"label": "Where"}], label="Hits")
 )
 
 

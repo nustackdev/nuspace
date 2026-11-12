@@ -29,7 +29,8 @@ from nuspace.ops.brackets import atomic
 from nuspace.shapes import Space
 
 from ..home import common
-from ..home.common import SpaceName, SpaceWhere, page
+from ..home.common import SpaceName, SpaceWhere
+from ..ops import page
 from ..shapes import Web
 
 
@@ -96,24 +97,20 @@ class Page(ui.Column):
 
     space = ui.PageSectionRef.slot(title="Space", description="This space, and where it lives")
     software = ui.PageSectionRef.slot(
-        title="Software", description="What the process serving this space runs", bordered=True
+        title="Software", description="What the process serving this space runs"
     )
     navigation = ui.PageSectionRef.slot(
-        title="Navigation",
-        description="The planes the sidebar's nav row opens, from anywhere",
-        bordered=True,
+        title="Navigation", description="The planes the sidebar's nav row opens, from anywhere"
     )
     elsewhere = ui.PageSectionRef.slot(
-        title="Kept elsewhere",
-        description="Settings that are not the space's, and where they are",
-        bordered=True,
+        title="Kept elsewhere", description="Settings that are not the space's, and where they are"
     )
 
 
 class View(nu.Shape):
     """The ``settings`` cell's root."""
 
-    settings = Page.slot(gap=3)
+    settings = Page.slot(gap=6, divided=True)
 
 
 page_ = View.settings
@@ -130,7 +127,7 @@ def _field(cell: ItemRef, label: str, help: str = "") -> ui.FieldRef:
 
 
 # Space
-space = _board(page_.space, spans={(1, 0): (2, 1)})  # location: two columns, one row
+space = _board(page_.space, span={(1, 0): 2})  # location: two columns
 name = _field(space[0, 0], "Name").control.to(ui.TextRef.slot(weight="medium"))
 store_format = _field(space[0, 1], "Store format").control.to(ui.TextRef.slot(mono=True))
 location = _field(space[1, 0], "Location", "The space directory: space.db and its stores")
@@ -150,12 +147,12 @@ versions = {
 docs = software_card.footer[0].to(ui.LinkRef.slot(target="_blank", icon="book-open"))
 source = software_card.footer[1].to(ui.LinkRef.slot(target="_blank", icon="github"))
 
-# Navigation
-nav_list = page_.navigation[0].to(ui.CardRef.slot(size="sm"))[0].to(ui.ColumnRef.slot(gap=1))
+# Navigation: the card stacks the rows itself
+nav_list = page_.navigation[0].to(ui.CardRef.slot(size="sm", gap=1))
 
 
 def _nav_row(role: str) -> ui.RowRef:
-    return nav_list[role].to(ui.RowRef.slot(gap=3, align="center", grow={0: 1}, min_width=0))
+    return nav_list[role].to(ui.RowRef.slot(gap=3, grow={0: 1}))
 
 
 # Kept elsewhere

@@ -43,14 +43,16 @@ from nuspace.ops.brackets import atomic
 from nuspace.shapes import Space
 
 from ..nav import BY as NAV
+from ..ops import page
 from . import runs
-from .common import LIVE, Compact, Head, compact, ids, page, title
+from .common import LIVE, Compact, Head, compact, ids, title
 
 
 __all__ = [
     "COLUMNS",
     "GAP",
     "LABELS",
+    "NARROW",
     "ROWS",
     "SAMPLE",
     "SQUARES",
@@ -232,18 +234,22 @@ def _column(key: str, label: str, cell: object = None, **more: object) -> dict:
     return column
 
 
+#: Under this table width (px) the backend and who asked are left out: a narrow pane keeps
+#: the plane, its cells, the failed count and the time up.
+NARROW = 560
+
 #: The table's columns, each cell drawn by its spec. Nothing sorts: the rows keep run order.
 COLUMNS = [
-    _column("plane", "Plane", nustd.ui.PageLinkRef.slot(variant="inline")),
+    _column("plane", "Plane", nustd.ui.PageLinkRef.slot(variant="inline"), wrap="nowrap"),
     _column(
         "cells",
         "Cells",
         nustd.ui.StatusSquaresRef.slot(max_items=SQUARES, labels=LABELS, total="always"),
     ),
-    _column("failed", "Failed", nustd.ui.BadgeRef.slot(variant="danger", size="sm"), align="right"),
-    _column("backend", "Backend"),
-    _column("up", "Up", nustd.ui.RelativeTimeRef.slot(mode="duration"), align="right"),
-    _column("by", "By"),
+    _column("failed", "Failed", nustd.ui.BadgeRef.slot(variant="danger", size="sm"), align="end"),
+    _column("backend", "Backend", wrap="nowrap", hide_below=NARROW),
+    _column("up", "Up", nustd.ui.RelativeTimeRef.slot(mode="duration"), align="end"),
+    _column("by", "By", hide_below=NARROW),
 ]
 
 
@@ -252,7 +258,7 @@ class Now(nustd.ui.Column):
 
     head = Head.slot(gap=3, align="baseline")
     table = nustd.ui.DataTableRef.slot(
-        columns=COLUMNS, row_key="run", label="Plane runs live now", striped=False
+        columns=COLUMNS, row_key="run", label="Plane runs live now", variant="default"
     )
     more = nustd.ui.TextRef.slot(size="sm", tone="muted")
     empty = nustd.ui.EmptyStateRef.slot(icon="activity", size="sm")
@@ -267,13 +273,11 @@ class Section(nustd.ui.PageSection):
 
 
 class View(nu.Shape):
-    """The ``now`` cell's root."""
+    """The ``now`` cell's root: a hairline over its section, as after any section on home."""
 
+    rule = nustd.ui.DividerRef.slot()
     execution = Section.slot(
-        title="Execution",
-        description="Plane runs live now, and the last planes that ran",
-        bordered=True,
-        gap=8,
+        title="Execution", description="Plane runs live now, and the last planes that ran", gap=8
     )
 
 
@@ -330,7 +334,8 @@ def first() -> nu.Nu:
     """The heads, the switch off: drawn once, so a redraw never flips the viewer's switch back."""
     section = View.execution
     return (
-        section.now.head.title.set("Now", level=3)
+        View.rule.init()
+        >> section.now.head.title.set("Now", level=3)
         >> section.recent.head.title.set("Recent", level=3)
         >> SWITCH.set(False)
     )

@@ -29,7 +29,7 @@ export function KeysDialog() {
 	useKeysShortcut();
 	return (
 		<Dialog open={open} onOpenChange={setKeysOpen}>
-			<DialogContent size="lg" className={keysDialog}>
+			<DialogContent width={672} className={keysDialog}>
 				<DialogHeader>
 					<DialogTitle>Keyboard shortcuts</DialogTitle>
 					<DialogDescription>Grouped by where the focus is.</DialogDescription>

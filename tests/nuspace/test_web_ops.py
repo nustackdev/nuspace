@@ -343,6 +343,18 @@ async def test_href_encodes_like_the_browser():
     assert got == "/p%201?q=a+b" or got == "/p%201?q=a%20b"
 
 
+def test_url_is_href_in_plain_python():
+    assert web.url("p 1") == "/p%201"
+    assert web.url("p", {"id": 3, "gone": None}) == "/p?id=3"
+    assert web.url("p", None) == "/p"
+
+
+async def test_href_and_url_spell_one_url():
+    params = {"q": "a b", "n": 2, "gone": None}
+    got, _ = await nu.arun(web.href("p 1", params))
+    assert got == web.url("p 1", params)
+
+
 #: nu's shared query cases, the ones the browser's encoder is checked against too.
 FIXTURES = Path(__file__).resolve().parents[3] / "nu" / "tests" / "fixtures" / "query.json"
 
@@ -393,6 +405,14 @@ async def test_link_to_a_plane_not_there_still_draws(store):
     assert got[("k",)] == {"href": "/nowhere", "label": "Gone"}
     got = await _drawn(store, web.link(nustd.ui.PageLinkRef("l"), "nowhere"))
     assert got[("l",)]["title"] == "nowhere"
+
+
+async def test_page_is_a_link_cell_value(store):
+    await plane(store, "a", name="Movies", icon="emoji:🎬")
+    got = await store.read(web.page("a", {"id": 1}))
+    assert got == {"id": "a", "title": "Movies", "icon": "🎬", "href": "/a?id=1"}
+    got = await store.read(web.page("nowhere"))
+    assert got == {"id": "nowhere", "title": "nowhere", "icon": "", "href": "/nowhere"}
 
 
 async def test_root_is_never_a_pane(store):

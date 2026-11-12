@@ -133,8 +133,8 @@ async def test_settings_draws_the_space_versions_and_nav(store):
     await store.run(ensure())
     await do(store, Space.info.path.set("/tmp/garden") >> Space.info.opened_at.set(1.0))
     drawn = list((await _frames(store, settings.draw())).values())
-    assert "garden" in drawn and "/tmp/garden" in drawn
-    assert settings.VERSIONS["nuspace"] in drawn
+    assert {"value": "garden"} in drawn and {"value": "/tmp/garden"} in drawn
+    assert {"value": settings.VERSIONS["nuspace"]} in drawn
     assert {"ts": 1000.0, "mode": "duration"} in drawn
     links = [p for p in drawn if isinstance(p, dict) and "href" in p]
     assert [p["title"] for p in links if "description" in p] == ["Home", "Search", "Settings"]
@@ -331,7 +331,7 @@ async def test_the_form_offers_the_kinds_and_the_picked_ones_fields(store):
     assert got[(*FORM_MORE, "0", "min_stars", "control")] == ""
     assert got[(*FORM_MORE, "0", "done", "control")] is False
     # A kind that asks nothing says so in the bar.
-    assert got[(*FORM_MAIN, "1")] == "Asks nothing: lists every item"
+    assert got[(*FORM_MAIN, "1")] == {"value": "Asks nothing: lists every item"}
 
 
 async def test_the_form_says_so_when_no_kind_is_installed(store, monkeypatch):
@@ -413,22 +413,22 @@ async def test_results_follow_hits_as_they_land_and_end_once_done(store):
     session, task = await _live(store, _viewer(search.RESULTS, "shown", nu.Str(pid)))
     state = nuspace.at.plane(id=pid).state(search.Search)
     try:
-        await _until(lambda: session.last(RESULTS_COUNT) == "0 hits")
+        await _until(lambda: session.last(RESULTS_COUNT) == {"value": "0 hits"})
         assert session.last(RESULTS_STATE) == {"label": "Searching", "tone": "info"}
         assert not task.done()
         await do(store, state.hits.append(address(NoteContent, (CELL, "c1"), "a")))
-        await _until(lambda: session.last(RESULTS_COUNT) == "1 hit")
+        await _until(lambda: session.last(RESULTS_COUNT) == {"value": "1 hit"})
         await do(store, state.finished_at.set(1.0))
         await asyncio.wait_for(task, 3.0)
         assert session.last(RESULTS_STATE) == {"label": "Done", "tone": "ok"}
-        assert session.last(RESULTS_COUNT) == "1 hit"
+        assert session.last(RESULTS_COUNT) == {"value": "1 hit"}
         # Row 0 of the hits table: what the kind draws, its kind, where it lives.
-        assert session.last((*RESULTS_HITS, "0", "0", "0", "body")) == "Tomato needs sun"
+        assert session.last((*RESULTS_HITS, "0", "0", "0", "body")) == {"value": "Tomato needs sun"}
         assert session.last((*RESULTS_HITS, "0", "1")) == {"label": "Note"}
         # The hit links to its cell's plane, titled by its id: p1 has no name.
         link = session.last((*RESULTS_HITS, "0", "2", "0"))
         assert link["href"] == "/p1" and link["title"] == "p1"
-        assert session.last((*RESULTS_HITS, "0", "2", "1")) == "cell \u00b7 a"
+        assert session.last((*RESULTS_HITS, "0", "2", "1")) == {"value": "cell \u00b7 a"}
     finally:
         await _stop(task)
 
@@ -437,7 +437,7 @@ async def test_results_say_when_nothing_was_found_or_searched(store):
     pid = await _searched(store, {NOTE: {"text": "zzz"}})
     await _run(store, pid)
     got = await _frames(store, _viewer(search.RESULTS, "shown", nu.Str(pid)))
-    assert got[RESULTS_COUNT] == "0 hits"
+    assert got[RESULTS_COUNT] == {"value": "0 hits"}
     assert got[RESULTS_EMPTY]["label"] == "Nothing found"
     none = await _frames(store, _viewer(search.RESULTS, "none"))
     assert none[RESULTS_EMPTY]["label"] == "No searches yet"
