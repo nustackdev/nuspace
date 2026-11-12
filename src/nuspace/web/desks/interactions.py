@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from nuspace.devices.web.utils import event, write
+from nuspace.web.utils import event, write
 
 
 if TYPE_CHECKING:

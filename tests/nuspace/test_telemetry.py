@@ -289,7 +289,7 @@ def test_opened_breaks_nothing_when_home_is_unwritable(monkeypatch, posted):
 
 
 async def test_the_web_device_queues_space_loaded(posted):
-    from nuspace.devices.web import device
+    from nuspace.web import device
 
     (route,) = device.ROUTES
     assert (route.path, route.methods >= {"POST"}) == ("/api/telemetry/space-loaded", True)

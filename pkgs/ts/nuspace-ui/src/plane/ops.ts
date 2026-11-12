@@ -1,5 +1,5 @@
 // The Viewer op table, browser side. Mirrors
-// `nuspace/devices/web/viewer/interactions.py`.
+// `nuspace/web/viewer/interactions.py`.
 //
 // One ref per op: a notify goes to `<viewer ref>.ops.<name>` and the payload
 // carries that op's arguments and nothing else. There is no `op` key, because

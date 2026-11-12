@@ -28,7 +28,7 @@ for a cell run's output.
 
 Each store is a :class:`Store` record (root, file, channel, init), declared
 by the host for the core stores. The web device keeps its own stores and
-shapes, in :mod:`nuspace.devices.web.shapes`. Core never reads them.
+shapes, in :mod:`nuspace.web.shapes`. Core never reads them.
 """
 
 from .cell import Cell

@@ -1,4 +1,4 @@
-"""``nuspace.devices.web``: the ops over the web device's stores, Web and Conn.
+"""``nuspace.web``: the ops over the web device's stores, Web and Conn.
 
 Web (``web_state.db``) says which planes are on the web and how they show,
 what was opened lately and which plane fills each role (the desk ops are
@@ -17,7 +17,7 @@ reads that may find nothing give NULL or a default.
 
 A cell on a web pane reads its own params and draws links::
 
-    import nuspace.devices.web as web
+    import nuspace.web as web
 
     movie = web.params()["id"]
     nu.Reconcile(web.on_params(), draw(web.params()))

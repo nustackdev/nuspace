@@ -10,8 +10,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, ClassVar
 
-from nuspace.devices.web.desks import interactions
-from nuspace.devices.web.utils import SpaceRef
+from nuspace.web.desks import interactions
+from nuspace.web.utils import SpaceRef
 
 
 if TYPE_CHECKING:

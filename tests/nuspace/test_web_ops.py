@@ -1,4 +1,4 @@
-"""``nuspace.devices.web``: each op's writes, its raises, and the reads a cell on a pane makes.
+"""``nuspace.web``: each op's writes, its raises, and the reads a cell on a pane makes.
 
 Every op is a bare term, run here inside ``nuspace.atomic`` as a caller
 would.
@@ -14,7 +14,7 @@ import pytest
 
 import nu
 import nuspace
-import nuspace.devices.web as web
+import nuspace.web as web
 import nustd.ui
 from nu.lang import is_null
 from nuspace.errors import Exists, Missing, Refused, Removed

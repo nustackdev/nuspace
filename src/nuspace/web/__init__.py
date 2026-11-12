@@ -1,8 +1,8 @@
-"""``nuspace.devices.web``: the web device, the browser's way into the space, with its own stores.
+"""``nuspace.web``: the web device, the browser's way into the space, with its own stores.
 
 The sdk, what a program calls, is the ops (:mod:`.ops`), flat here::
 
-    import nuspace.devices.web as web
+    import nuspace.web as web
 
     nuspace.atomic(web.add(plane, editable=True))     # put a plane on the web
     web.params(), web.on_params()                     # a cell's own pane params

@@ -29,7 +29,7 @@
 // that does not apply, or changes nothing, returns its input (same object).
 //
 // The contract with the server: the web device's `desk_problem`
-// (nuspace/devices/web/interactions.py) is the authority on the shape, and
+// (nuspace/web/desks/model.py) is the authority on the shape, and
 // every desk a move returns passes it. Reading (`readDesk`) is lenient on top
 // of that: it fixes what it can (shares, a duplicate pane, a strip of one
 // pane) and refuses the rest.

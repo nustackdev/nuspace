@@ -16,15 +16,15 @@ import pytest
 
 import nu
 import nuspace
-import nuspace.devices.web as web
+import nuspace.web as web
 from nu.lang import ScalarQuery
 from nuspace import host, system
-from nuspace.devices.web.desks import pruner
-from nuspace.devices.web.desks.model import desk_problem
-from nuspace.devices.web.planes import ensure, ensure_pruner
 from nuspace.errors import Refused
 from nuspace.shapes import Space
 from nuspace.system import reactions
+from nuspace.web.desks import pruner
+from nuspace.web.desks.model import desk_problem
+from nuspace.web.planes import ensure, ensure_pruner
 
 
 if TYPE_CHECKING:

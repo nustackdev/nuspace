@@ -126,9 +126,6 @@ class Warmed:
         Never the web device's server.
         """
         import nu.prog  # noqa: F401 -- imported for the module cache
-        import nuspace.devices.web.env
-        import nuspace.kernel.body
-        import nuspace.kernel.out  # noqa: F401
         import nustd.ui  # noqa: F401
 
     async def asetup(self, ctx: Context) -> None:

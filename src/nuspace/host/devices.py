@@ -56,11 +56,11 @@ class Device:
 
 def _web() -> Device:
     """The web device. Its stores and planes import no server; :func:`serve` does, when called."""
-    from nuspace.devices.web.planes import ensure
-    from nuspace.devices.web.stores import CONN_STORE, WEB_STORE
+    from nuspace.web.planes import ensure
+    from nuspace.web.stores import CONN_STORE, WEB_STORE
 
     def serve(*, registry: Registry, **options: object) -> tuple[nu.Nu, Mapping[str, EnvFactory]]:
-        from nuspace.devices.web.device import serve_web
+        from nuspace.web.device import serve_web
 
         return serve_web(registry=registry, **options)
 

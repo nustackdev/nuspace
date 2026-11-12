@@ -22,10 +22,10 @@ import nustd.kv
 from nuspace._cli import _installed, cli
 from nuspace._cli.commands import run as run_command
 from nuspace._telemetry import config
-from nuspace.devices.web import WEB_STORE, Web
 from nuspace.host import CORE, SPACE_STORE, presets
 from nuspace.host.layout import DATA_DIR
 from nuspace.specs import CellSpec, ContentSpec, Extension, PlaneSpec
+from nuspace.web import WEB_STORE, Web
 
 
 #: The Space store's file in a space's data dir: the mark of a space.

@@ -1,7 +1,7 @@
 """Store: one store of a space, as a record: its root shape, its file, its channel, its init.
 
 The core stores are declared in :mod:`nuspace.host.stores`, a device's
-beside its shapes (the web device: :mod:`nuspace.devices.web.stores`). The
+beside its shapes (the web device: :mod:`nuspace.web.stores`). The
 record sits here, with the roots, so the host and the devices both read it
 and neither imports the other for it. A store has no ops of its own: its
 init term is the one thing it runs, and the store's declaration builds it.

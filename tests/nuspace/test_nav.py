@@ -19,12 +19,12 @@ from _support.made import MADE_STORE
 
 import nu
 import nuspace
-import nuspace.devices.web as web
+import nuspace.web as web
 import nustd.kv
-from nuspace.devices.web.nav import BY, nav
-from nuspace.devices.web.stores import CONN_STORE, WEB_STORE
 from nuspace.kernel import Env
 from nuspace.shapes import Space
+from nuspace.web.nav import BY, nav
+from nuspace.web.stores import CONN_STORE, WEB_STORE
 
 
 module_loop = pytest.mark.asyncio(loop_scope="module")

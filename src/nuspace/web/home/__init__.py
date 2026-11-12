@@ -46,8 +46,8 @@ ICON = "emoji:🏠"
 
 
 def prog(cell: str) -> str:
-    """A home cell's prog: a shim importing its program from :mod:`nuspace.devices.web.home`."""
-    return f"from nuspace.devices.web.home.{cell} import out\n"
+    """A home cell's prog: a shim importing its program from :mod:`nuspace.web.home`."""
+    return f"from nuspace.web.home.{cell} import out\n"
 
 
 #: The cells home is made with, in order, as ``(name, source)``.

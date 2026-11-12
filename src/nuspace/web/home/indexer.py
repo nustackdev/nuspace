@@ -1,7 +1,7 @@
 """The home indexer: counts the planes and cells added to the space, by day, for Home to read.
 
 A plane with the fixed id :data:`PLANE`, made at open where missing
-(:mod:`...planes`). It is system (remove refuses it), runs on ``async``, and
+(:mod:`nuspace.web.planes`). It is system (remove refuses it), runs on ``async``, and
 is not on the web, so the sidebar never lists it. Two reactions wake it:
 one on planes added, one on cells added. Runs never do.
 
@@ -94,7 +94,7 @@ CELL = "main"
 
 #: The cell's prog: a shim, the code is here.
 PROG = """\
-from nuspace.devices.web.home.indexer import out
+from nuspace.web.home.indexer import out
 """
 
 #: The plane's cells, as ``(name, source)``.

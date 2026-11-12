@@ -1,5 +1,5 @@
 // DesksRef: where the server ships the desks and the roles. Mirrors
-// `nuspace/devices/web/desks/ref.py` `DesksRef`.
+// `nuspace/web/desks/ref.py` `DesksRef`.
 //
 // Write-only: it draws nothing. `set_desks` and `set_roles` feed ../core/desks.ts,
 // which keeps them and hands them to the router; the desk ops go back out

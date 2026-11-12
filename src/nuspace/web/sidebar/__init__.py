@@ -9,8 +9,8 @@
     tree again.
 """
 
-from nuspace.devices.web.sidebar.feed import create, node, rows, sidebar_feed
-from nuspace.devices.web.sidebar.interactions import (
+from nuspace.web.sidebar.feed import create, node, rows, sidebar_feed
+from nuspace.web.sidebar.interactions import (
     KIND_PLANE,
     KIND_SPACE,
     KINDS,
@@ -24,7 +24,7 @@ from nuspace.devices.web.sidebar.interactions import (
     on_set_icon,
     set_tree,
 )
-from nuspace.devices.web.sidebar.ref import SidebarRef, registered_entries
+from nuspace.web.sidebar.ref import SidebarRef, registered_entries
 
 
 __all__ = [

@@ -8,11 +8,11 @@ from _support.made import MADE
 import nu
 import nuspace
 import nustd.kv
-from nuspace.devices.web.shapes import Web
 from nuspace.errors import Exists, Missing
 from nuspace.ops.interactions import Fabrics
 from nuspace.shapes import ROOT, Space, State
 from nuspace.specs import EMPTY_PLANE, CellSpec, PlaneSpec, SpecCells, WebOptions
+from nuspace.web.shapes import Web
 
 
 STORES = ("memory", "sqlite")

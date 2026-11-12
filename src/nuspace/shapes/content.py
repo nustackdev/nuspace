@@ -13,7 +13,7 @@ Finding reads one kind's subtree, scope by scope, all bare reads:
 the items ``match`` holds for in one scope, :meth:`Content.find` both
 together. A search reads per kind, so it never touches another kind's
 items; the web device's search drives it a place at a time
-(:mod:`nuspace.devices.web.planes.search`).
+(:mod:`nuspace.web.planes.search`).
 
 Workers import this module: nothing here may pull in a server.
 """
@@ -219,7 +219,7 @@ class Content(Generic[S]):
       only the checks asked for.
     - :meth:`render`, :meth:`render_hit`: how an item draws in full and as a
       search hit. Bare ui chains, landed under wherever the drawing goes
-      (:class:`~nuspace.devices.web.interactions.Drawing`).
+      (:class:`~nuspace.web.interactions.Drawing`).
     - :meth:`form`: the search form, generated from ``match``'s keywords.
     - :meth:`find`: every item ``match`` holds for, from every place.
 

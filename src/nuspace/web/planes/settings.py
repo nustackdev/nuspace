@@ -1,4 +1,4 @@
-"""Settings: the space's own settings plane. Made at open when missing (:mod:`nuspace.devices.web.planes`).
+"""Settings: the space's own settings plane. Made at open when missing (:mod:`nuspace.web.planes`).
 
 Like home (:mod:`..home`): a system web plane the ``settings`` role names, made once,
 its cells the owner's after that. The sidebar's nav row and Cmd+, are the

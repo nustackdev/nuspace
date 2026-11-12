@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- The web device moves to nuspace.web, the devices package is gone
 - Group the web device by area: desk ops under desks, shipped planes together
 
 ## 0.7.1 - 2026-11-12

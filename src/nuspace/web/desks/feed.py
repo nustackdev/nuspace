@@ -2,7 +2,7 @@
 
 - **browser to store.** A desk event runs one op over its own fields, in
   its own Web commit. A failure toasts on the tab
-  (:meth:`~nuspace.devices.web.utils.Arms.event`).
+  (:meth:`~nuspace.web.utils.Arms.event`).
 - **store to browser.** The desks changed (any desk created, set, moved
   or deleted, by any tab or program): every desk ships again, whole, in
   creation order, with that order as a list. The roles changed: the roles
@@ -25,14 +25,14 @@ from typing import TYPE_CHECKING
 
 import nu
 import nuspace
-from nuspace.devices.web import ops as web
-from nuspace.devices.web.desks import interactions
-from nuspace.devices.web.desks import ops as desk_ops
-from nuspace.devices.web.desks.model import DeskPlanes, ShapedDesks
-from nuspace.devices.web.shapes import Web
-from nuspace.devices.web.utils import Arms, field_dict, field_str
 from nuspace.ops.brackets import atomic
 from nuspace.shapes.space import Space
+from nuspace.web import ops as web
+from nuspace.web.desks import interactions
+from nuspace.web.desks import ops as desk_ops
+from nuspace.web.desks.model import DeskPlanes, ShapedDesks
+from nuspace.web.shapes import Web
+from nuspace.web.utils import Arms, field_dict, field_str
 
 
 if TYPE_CHECKING:

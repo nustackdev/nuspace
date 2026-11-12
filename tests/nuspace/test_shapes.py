@@ -19,8 +19,6 @@ from virtuals.container import ContainerNotFoundError
 import nu
 import nustd.kv
 from nu.lang import is_null
-from nuspace.devices.web.shapes import RECENTS_CAP, Conn, Pane, Tab, Web, WebPlane
-from nuspace.devices.web.stores import CONN_STORE, WEB_STORE
 from nuspace.errors import Refused
 from nuspace.host.stores import SPACE_STORE, STATE_STORE, init_live
 from nuspace.shapes import (
@@ -37,6 +35,8 @@ from nuspace.shapes import (
     State,
     Worker,
 )
+from nuspace.web.shapes import RECENTS_CAP, Conn, Pane, Tab, Web, WebPlane
+from nuspace.web.stores import CONN_STORE, WEB_STORE
 
 
 #: Run every ``store`` test on both backends: in memory, and the space's sqlite files.
@@ -78,7 +78,7 @@ def test_each_store_has_its_own_root_file_and_channel():
 def test_a_devices_stores_load_without_the_host():
     """The host opens the devices, never the other way round: a fresh import keeps them apart."""
     check = (
-        "import sys, nuspace.devices.web.stores; "
+        "import sys, nuspace.web.stores; "
         "sys.exit(any(m.startswith('nuspace.host') for m in sys.modules))"
     )
     assert subprocess.run([sys.executable, "-c", check], check=False).returncode == 0  # noqa: S603

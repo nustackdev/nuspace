@@ -25,10 +25,10 @@ from typing import TYPE_CHECKING, Any
 import nu
 from nu.engine.structure import Declared
 from nu.lang import Command
-from nuspace.devices.web.desks.ref import DesksRef
-from nuspace.devices.web.ref import ToastRef
-from nuspace.devices.web.sidebar.ref import SidebarRef
-from nuspace.devices.web.viewer.ref import ViewerRef
+from nuspace.web.desks.ref import DesksRef
+from nuspace.web.ref import ToastRef
+from nuspace.web.sidebar.ref import SidebarRef
+from nuspace.web.viewer.ref import ViewerRef
 from nustd.ui.core import Chain, boot_chains
 from nustd.ui.core.protocol import OP_INIT, OP_REMOVE, Frame
 from nustd.ui.core.session import Session

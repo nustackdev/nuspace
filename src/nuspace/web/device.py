@@ -23,10 +23,10 @@ for a plane new to the list before it asks.
 
 **A failed interaction toasts.** Every browser event, ``planes.open``
 included, runs under one guard: its error's type and message show on the
-tab (:meth:`~nuspace.devices.web.utils.Arms.event`).
+tab (:meth:`~nuspace.web.utils.Arms.event`).
 
 **The device term** (:func:`serve_web`): the web planes made where missing
-(:func:`~nuspace.devices.web.planes.ensure`), then the server and nav side
+(:func:`~nuspace.web.planes.ensure`), then the server and nav side
 by side. nav runs here, in the host, beside the tabs it serves.
 
 Beside the socket the server answers one plain route,

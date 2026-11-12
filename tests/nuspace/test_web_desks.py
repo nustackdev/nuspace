@@ -1,4 +1,4 @@
-"""``nuspace.devices.web`` desks and roles: the ops, the role planes' seeding, and the desks feed.
+"""``nuspace.web`` desks and roles: the ops, the role planes' seeding, and the desks feed.
 
 Every op is a bare term, run here inside ``nuspace.atomic`` as a caller
 would. The feed runs in one tab over a fake session, as ``test_web.py``.
@@ -13,13 +13,13 @@ import pytest
 
 import nu
 import nuspace
-import nuspace.devices.web as web
+import nuspace.web as web
 from nu.lang import is_null
-from nuspace.devices.web.desks.model import DESK_ID, desk_problem, favorites, moved_order
-from nuspace.devices.web.planes import ensure
 from nuspace.errors import Exists, Missing, Refused
 from nuspace.shapes import Space
 from nuspace.specs import space_registry
+from nuspace.web.desks.model import DESK_ID, desk_problem, favorites, moved_order
+from nuspace.web.planes import ensure
 from nustd.ui.core import OP_NOTIFY, Frame, WsSession
 from nustd.ui.core.session import Session
 
@@ -412,7 +412,7 @@ async def _until(check, timeout: float = 3.0) -> None:
 
 
 def _tab(store, sid):
-    from nuspace.devices.web.device import connection
+    from nuspace.web.device import connection
 
     session = FakeSession()
     ctx = store.ctx.bind(Session, session)
@@ -491,7 +491,7 @@ async def test_two_tabs_get_desks_and_roles_live(store):
 
 
 async def test_titles_cover_the_planes_on_a_desk_originals_and_recents(store):
-    from nuspace.devices.web.desks.feed import titles
+    from nuspace.web.desks.feed import titles
 
     await do(store, nuspace.plane.add("p1", name="Train run 42", icon="lucide:flame"))
     await do(store, nuspace.plane.add("p4", name="Train run 43"))

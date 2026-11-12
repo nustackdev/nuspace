@@ -13,7 +13,7 @@ repository keeps ``.git/``::
         infra/valkey/              the notification server's dir, per open
 
 The store files are the store records' (:mod:`.stores`,
-:mod:`nuspace.devices.web.stores`). The Space store's file is the mark of a
+:mod:`nuspace.web.stores`). The Space store's file is the mark of a
 space: ``~/.nuspace`` holds the user's config whether or not home is a space.
 """
 

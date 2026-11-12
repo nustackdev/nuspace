@@ -2,7 +2,7 @@
 
 Every op is a bare term the caller brackets, as the core ops are::
 
-    import nuspace.devices.web.desks as desks
+    import nuspace.web.desks as desks
 
     nuspace.atomic(desks.set_desk(desk_id, desk))     # replace a desk whole
 

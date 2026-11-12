@@ -14,11 +14,11 @@ from _support.made import MADE
 
 import nu
 import nuspace
-import nuspace.devices.web as web
-from nuspace.devices.web import home
-from nuspace.devices.web.home import history, indexer, now, runs, space
+import nuspace.web as web
 from nuspace.places import inside
 from nuspace.shapes import Space
+from nuspace.web import home
+from nuspace.web.home import history, indexer, now, runs, space
 from nustd.ui import Session
 
 
@@ -127,7 +127,7 @@ async def run(store, p: str, **kwargs) -> str:
 def test_the_cells_are_shims_in_draw_order():
     assert [name for name, _ in home.CELLS] == ["space", "history", "now", "runs"]
     for name, prog in home.CELLS:
-        assert prog == f"from nuspace.devices.web.home.{name} import out\n"
+        assert prog == f"from nuspace.web.home.{name} import out\n"
 
 
 @pytest.mark.parametrize("module", [space, history, now, runs], ids=lambda m: m.__name__)

@@ -21,12 +21,12 @@ import nu
 import nuspace
 import nustd.kv
 from nuspace import host, system
-from nuspace.devices.web import CONN_STORE, WEB_STORE
-from nuspace.devices.web.home import indexer
-from nuspace.devices.web.planes import ensure, ensure_indexer
 from nuspace.host.layout import data_dir
 from nuspace.shapes import Space
 from nuspace.system import reactions
+from nuspace.web import CONN_STORE, WEB_STORE
+from nuspace.web.home import indexer
+from nuspace.web.planes import ensure, ensure_indexer
 
 
 STORES = ("memory", "sqlite")
@@ -225,7 +225,7 @@ async def test_ensure_makes_the_indexer_off_the_web_with_two_reactions_once(stor
     await store.run(system.ensure() >> ensure())
     row = await store.read(Space.planes[indexer.PLANE].extract())
     assert row["system"] is True and row["backend"] == indexer.BACKEND
-    assert await store.read(nuspace.devices.web.Web.planes.contains(indexer.PLANE)) is False
+    assert await store.read(nuspace.web.Web.planes.contains(indexer.PLANE)) is False
     with pytest.raises(nuspace.errors.Refused):
         await do(store, nuspace.plane.remove(indexer.PLANE))
     kept = await store.read(STATE.reactions.extract())

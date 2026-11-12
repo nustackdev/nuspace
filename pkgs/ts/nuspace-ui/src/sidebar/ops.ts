@@ -1,5 +1,5 @@
 // The sidebar op table, browser side. Mirrors
-// `nuspace/devices/web/sidebar/interactions.py`.
+// `nuspace/web/sidebar/interactions.py`.
 //
 // One ref per op: a notify goes to `<sidebar ref>.ops.<name>` and the payload
 // carries that op's arguments and nothing else. There is no `op` key, because

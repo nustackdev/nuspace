@@ -20,19 +20,19 @@ from _support.specs import TEXT_SRC
 
 import nu
 import nuspace
-import nuspace.devices.web as web
+import nuspace.web as web
 import nustd.ui
 from nu.lang import wire
-from nuspace.devices.web.env import SessionWrap, session_env
-from nuspace.devices.web.planes import ensure
-from nuspace.devices.web.shapes import Web
-from nuspace.devices.web.shell import Shell
-from nuspace.devices.web.sidebar import registered_entries, rows
-from nuspace.devices.web.utils import CellRoot
-from nuspace.devices.web.viewer import PROGRAM, plane_view, slash_entries, statuses
 from nuspace.kernel import build_body
 from nuspace.shapes import EXIT_FAILED, EXIT_INTERRUPTED, EXIT_OK, Space
 from nuspace.specs import space_registry
+from nuspace.web.env import SessionWrap, session_env
+from nuspace.web.planes import ensure
+from nuspace.web.shapes import Web
+from nuspace.web.shell import Shell
+from nuspace.web.sidebar import registered_entries, rows
+from nuspace.web.utils import CellRoot
+from nuspace.web.viewer import PROGRAM, plane_view, slash_entries, statuses
 from nustd.ui.core import OP_NOTIFY, Frame, WsSession
 from nustd.ui.core.session import Session
 
@@ -100,7 +100,7 @@ def test_worker_unpickling_imports_no_web_server(tmp_path):
     path.write_bytes(wire.dumps((body, env.rewrite)))
     code = (
         "import pickle, sys\n"
-        "import nuspace.devices.web\n"
+        "import nuspace.web\n"
         f"pickle.loads(open({str(path)!r}, 'rb').read())\n"
         "bad = [m for m in ('uvicorn', 'starlette') if m in sys.modules]\n"
         "print(bad)\n"
@@ -113,7 +113,7 @@ def test_worker_unpickling_imports_no_web_server(tmp_path):
 
 
 def test_device_term_compiles_and_validates():
-    from nuspace.devices.web.device import serve_web
+    from nuspace.web.device import serve_web
 
     term, envs = serve_web(registry=REGISTRY, open_browser=False, port=0, static=None)
     assert set(envs) == {"session"}
@@ -333,7 +333,7 @@ def _tree(session):
 
 
 async def test_tab_live(store):
-    from nuspace.devices.web.device import connection
+    from nuspace.web.device import connection
 
     await plane(store, "p1", "Notes")
     await do(store, nuspace.cell.add("p1", "x = 1", id="c1", name="one", fabrics=[]))
@@ -445,7 +445,7 @@ async def test_tab_live(store):
 
 async def test_a_cell_made_or_edited_in_a_finished_pane_restarts_it(store):
     """nav starts runs only on open or a restart token: the device asks for one when the run is over."""
-    from nuspace.devices.web.device import connection
+    from nuspace.web.device import connection
 
     await plane(store, "p1", "Notes")
     await do(store, nuspace.cell.add("p1", "x = 1", id="c1", fabrics=[]))
@@ -485,7 +485,7 @@ async def test_a_cell_made_or_edited_in_a_finished_pane_restarts_it(store):
 
 
 async def test_a_failed_event_toasts_its_type_and_message(store):
-    from nuspace.devices.web.device import connection
+    from nuspace.web.device import connection
 
     await plane(store, "p1", "One")
     await store.run(ensure())
@@ -555,7 +555,7 @@ async def test_a_failed_event_toasts_its_type_and_message(store):
 
 async def test_a_plane_opened_before_it_lands_is_waited_for(store, monkeypatch):
     """The browser opens a plane while its create is in flight: Space row, then web row."""
-    from nuspace.devices.web import device
+    from nuspace.web import device
 
     # Room for both commits to land well past the wait's early looks.
     monkeypatch.setattr(device, "OPEN_WAIT", 8.0)
@@ -581,7 +581,7 @@ async def test_a_plane_opened_before_it_lands_is_waited_for(store, monkeypatch):
 
 async def test_a_plane_with_no_view_opens_as_headless_without_the_long_wait(store):
     """Not on the web: the pane is told so right after the short web wait, and nothing toasts."""
-    from nuspace.devices.web import device
+    from nuspace.web import device
 
     await plane(store, "off", on_web=False)
     session = FakeSession()

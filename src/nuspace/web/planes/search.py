@@ -218,7 +218,7 @@ def run(request: Mapping[str, Mapping[str, Any]]) -> nu.Nu:
 
 
 _SOURCE = """\
-from nuspace.devices.web.planes import search
+from nuspace.web.planes import search
 
 #: What this search asks, as it was made: per kind name, the match keywords.
 REQUEST = {request!r}
@@ -343,7 +343,7 @@ import nu
 import nustd.kv
 import nustd.ui
 import nuspace
-from nuspace.devices.web.planes import search
+from nuspace.web.planes import search
 
 # Every installed kind, read off the registry as the cell is built: name to {label, fields}.
 KINDS = search.kinds()
@@ -463,7 +463,7 @@ import nu
 import nustd.kv
 import nustd.ui
 import nuspace
-from nuspace.devices.web.planes import search
+from nuspace.web.planes import search
 
 #: How many searches the picker lists, newest first.
 LISTED = 50
@@ -546,9 +546,9 @@ import nu
 import nustd.kv
 import nustd.ui
 import nuspace
-import nuspace.devices.web as web
-from nuspace.devices.web.planes import search
-from nuspace.devices.web.interactions import Drawing
+import nuspace.web as web
+from nuspace.web.planes import search
+from nuspace.web.interactions import Drawing
 
 #: Hits drawn at most. The rest are counted.
 SHOWN = 200

@@ -15,7 +15,7 @@ The top level holds the everyday names only:
 - ``nuspace.specs`` (PlaneSpec, CellSpec, the registry, add_plane,
   add_cell) and ``nuspace.errors`` (what an op raises).
 
-``nuspace.kernel``, ``nuspace.system.*``, ``nuspace.devices.web``,
+``nuspace.kernel``, ``nuspace.system.*``, ``nuspace.web``,
 ``nuspace.host`` and ``nuspace.utils`` stay namespaced.
 
 Workers import this package: nothing here may pull in a server.

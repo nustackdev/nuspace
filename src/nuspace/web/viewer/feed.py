@@ -3,7 +3,7 @@
 Two families:
 
 - **browser to store.** A viewer event runs one op over its own fields.
-  A failure toasts on the tab (:meth:`~nuspace.devices.web.utils.Arms.event`).
+  A failure toasts on the tab (:meth:`~nuspace.web.utils.Arms.event`).
 - **store to browser.** An open plane or its pane's run changed; its arm
   ships the plane or the statuses again, keyed by ``plane_id``.
 
@@ -45,11 +45,16 @@ from typing import TYPE_CHECKING
 import nu
 import nuspace
 from nuspace import specs as spec_ops
-from nuspace.devices.web import ops as web
-from nuspace.devices.web.shapes import Conn, Web
-from nuspace.devices.web.utils import Arms, field_dict, field_str, placed
-from nuspace.devices.web.viewer import interactions
-from nuspace.devices.web.viewer.interactions import (
+from nuspace.ops.brackets import atomic
+from nuspace.ops.interactions import Fabrics
+from nuspace.shapes import EXIT_FAILED, EXIT_INTERRUPTED, EXIT_KILLED, Space
+from nuspace.specs import registered_name
+from nuspace.utils import keys_of
+from nuspace.web import ops as web
+from nuspace.web.shapes import Conn, Web
+from nuspace.web.utils import Arms, field_dict, field_str, placed
+from nuspace.web.viewer import interactions
+from nuspace.web.viewer.interactions import (
     ABSENT_HEADLESS,
     ABSENT_MISSING,
     STATE_FAILED,
@@ -58,11 +63,6 @@ from nuspace.devices.web.viewer.interactions import (
     STATE_STARTING,
     STATE_STOPPED,
 )
-from nuspace.ops.brackets import atomic
-from nuspace.ops.interactions import Fabrics
-from nuspace.shapes import EXIT_FAILED, EXIT_INTERRUPTED, EXIT_KILLED, Space
-from nuspace.specs import registered_name
-from nuspace.utils import keys_of
 
 
 if TYPE_CHECKING:
@@ -268,7 +268,7 @@ def _rerun(sid: nu.StrArg, plane: nu.StrArg) -> nu.Nu:
     """The tab's pane on ``plane`` runs again when its run is over, so a cell made or edited there runs.
 
     nav starts a run only when a pane opens or its restart token moves, so
-    the device asks for one itself (:func:`~nuspace.devices.web.restart_pane`)
+    the device asks for one itself (:func:`~nuspace.web.restart_pane`)
     once the pane's run ended. A live run is reload's: it gives the cell its
     run. No run recorded yet is nav's: it is starting one. No pane on the
     plane in the tab, nothing. One Conn commit, reading Space.

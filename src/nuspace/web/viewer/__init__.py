@@ -9,7 +9,7 @@
     plane or the statuses again.
 """
 
-from nuspace.devices.web.viewer.feed import (
+from nuspace.web.viewer.feed import (
     PROGRAM,
     WEB_FLAGS,
     plane_cells,
@@ -17,7 +17,7 @@ from nuspace.devices.web.viewer.feed import (
     statuses,
     viewer_feed,
 )
-from nuspace.devices.web.viewer.interactions import (
+from nuspace.web.viewer.interactions import (
     ABSENT_HEADLESS,
     ABSENT_MISSING,
     STATE_FAILED,
@@ -38,7 +38,7 @@ from nuspace.devices.web.viewer.interactions import (
     set_plane,
     set_status,
 )
-from nuspace.devices.web.viewer.ref import ViewerRef, slash_entries
+from nuspace.web.viewer.ref import ViewerRef, slash_entries
 
 
 __all__ = [

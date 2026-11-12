@@ -10,7 +10,7 @@ so stores never wake each other's subscribers. Each is declared as a
     store/state.db     State   nuspace.state   what programs keep
 
 A device keeps its own stores beside these (the web device:
-:mod:`nuspace.devices.web.stores`).
+:mod:`nuspace.web.stores`).
 
 A container never written is absent, and reading one (its length, its keys,
 whether it holds an id) raises. So each store's fixed containers are made

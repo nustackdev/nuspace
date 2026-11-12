@@ -173,7 +173,7 @@ class Arms:
 
     Args:
         label: What its failures print under.
-        toasts: The tab's :class:`~nuspace.devices.web.ref.ToastRef`. None for a feed with no events.
+        toasts: The tab's :class:`~nuspace.web.ref.ToastRef`. None for a feed with no events.
     """
 
     __slots__ = ("label", "toasts")

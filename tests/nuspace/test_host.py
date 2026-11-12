@@ -31,7 +31,6 @@ import nu
 import nuspace
 import nustd.kv
 from nuspace import host
-from nuspace.devices.web import CONN_STORE, WEB_STORE, Conn, Web
 from nuspace.errors import Missing, Refused
 from nuspace.host import interactions, presets
 from nuspace.host import lock as lock_module
@@ -55,6 +54,7 @@ from nuspace.specs import (
 )
 from nuspace.specs import registry as registry_module
 from nuspace.system import init
+from nuspace.web import CONN_STORE, WEB_STORE, Conn, Web
 
 
 if TYPE_CHECKING:
@@ -421,10 +421,10 @@ def test_conn_is_made_fresh_at_every_open_web_is_kept(tmp_path):
     _make(root)
     _write(root, CONN_STORE, Conn.connections["tab"].order.set(["p"]))
     home = _read(root, Web.roles["home"])
-    _write(root, WEB_STORE, nuspace.devices.web.Web.recents.set([home]))
+    _write(root, WEB_STORE, nuspace.web.Web.recents.set([home]))
     _make(root)
     assert _read(root, Conn.connections.extract()) == {}
-    assert _read(root, nuspace.devices.web.Web.recents.extract()) == [home]
+    assert _read(root, nuspace.web.Web.recents.extract()) == [home]
     assert _read(root, Web.roles["home"]) == home
 
 

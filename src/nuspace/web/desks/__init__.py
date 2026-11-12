@@ -3,7 +3,7 @@
 ``ops``
     The desk ops a program calls, re-exported here::
 
-        import nuspace.devices.web.desks as desks
+        import nuspace.web.desks as desks
 
         nuspace.atomic(desks.set_desk(desk_id, desk))
 
@@ -22,7 +22,7 @@
 The wire contract is ``task-167/contract.md`` in Go.
 """
 
-from nuspace.devices.web.desks.ops import (
+from nuspace.web.desks.ops import (
     create_desk,
     delete_desk,
     desk_order,

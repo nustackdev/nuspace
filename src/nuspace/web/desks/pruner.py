@@ -1,7 +1,7 @@
 """The desk pruner: takes removed planes off every desk, with no browser open.
 
 A plane with the fixed id :data:`PLANE`, made at open where missing
-(:mod:`...planes`). It is system (remove refuses it), runs on ``async``, and
+(:mod:`nuspace.web.planes`). It is system (remove refuses it), runs on ``async``, and
 is not on the web, so the sidebar never lists it. One reaction wakes it:
 on ``Space.indexes.removed``, the log every plane remove appends to. The
 web driver also asks for one run at every open (:func:`wake`), for what
@@ -87,7 +87,7 @@ CELL = "main"
 
 #: The cell's prog: a shim, the code is here.
 PROG = """\
-from nuspace.devices.web.desks.pruner import out
+from nuspace.web.desks.pruner import out
 """
 
 #: The plane's cells, as ``(name, source)``.

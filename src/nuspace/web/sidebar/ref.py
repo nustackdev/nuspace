@@ -15,9 +15,9 @@ from typing import TYPE_CHECKING, ClassVar
 
 from typing_extensions import Self
 
-from nuspace.devices.web.sidebar import interactions
-from nuspace.devices.web.utils import SpaceRef
 from nuspace.specs import registered_name
+from nuspace.web.sidebar import interactions
+from nuspace.web.utils import SpaceRef
 
 
 if TYPE_CHECKING:

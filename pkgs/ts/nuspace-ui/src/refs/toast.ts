@@ -1,5 +1,5 @@
 // ToastRef: where the server tells this tab something went wrong. Mirrors
-// `nuspace/devices/web/utils.py` `ToastRef`.
+// `nuspace/web/utils.py` `ToastRef`.
 //
 // Write-only: it draws nothing of its own. A `show` write is one failed
 // interaction (a click, an edit, a move the server refused), its error's type

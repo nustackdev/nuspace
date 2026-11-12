@@ -15,13 +15,13 @@ from _support.made import MADE
 
 import nu
 import nuspace
-import nuspace.devices.web as web
+import nuspace.web as web
 import nustd.kv
-from nuspace.devices.web import home
-from nuspace.devices.web.planes import ensure, search, settings
 from nuspace.places import inside
 from nuspace.shapes import Space
 from nuspace.shapes.content import CELL, PLANE, SPACE, address
+from nuspace.web import home
+from nuspace.web.planes import ensure, search, settings
 from nustd.ui import Session
 
 

@@ -16,7 +16,7 @@ ROOT = "root"
 
 #: Plane ids only nuspace's own planes take: ``plane.add`` refuses them
 #: unless ``system=True``. The system planes' (``nuspace.system``), then the
-#: web device's (``nuspace.devices.web.planes``): the searches folder, the
+#: web device's (``nuspace.web.planes``): the searches folder, the
 #: home indexer and the desk pruner. Home, search and settings have minted
 #: ids, found through the web device's roles. Root's id and ``""`` are
 #: refused for every add.

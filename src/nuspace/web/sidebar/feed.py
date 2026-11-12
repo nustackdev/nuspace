@@ -3,7 +3,7 @@
 Two families:
 
 - **browser to store.** A sidebar event runs one op over its own fields.
-  A failure toasts on the tab (:meth:`~nuspace.devices.web.utils.Arms.event`).
+  A failure toasts on the tab (:meth:`~nuspace.web.utils.Arms.event`).
 - **store to browser.** What the tree shows changed; the arm ships it again.
 
 **A lazy tree.** The tab sees the web planes under root, and under each
@@ -33,17 +33,17 @@ from typing import TYPE_CHECKING
 
 import nu
 import nuspace
-from nuspace.devices.web import ops as web
-from nuspace.devices.web.shapes import Conn, Web
-from nuspace.devices.web.sidebar import interactions
-from nuspace.devices.web.sidebar.interactions import KIND_PLANE, KIND_SPACE, ROOT_ID
-from nuspace.devices.web.utils import Arms, field_str, placed
 from nuspace.errors import Missing
 from nuspace.ops.brackets import atomic
 from nuspace.shapes.plane import ROOT
 from nuspace.shapes.space import Space
 from nuspace.specs import EMPTY_PLANE, add_plane, registered_name
 from nuspace.utils import keys_of
+from nuspace.web import ops as web
+from nuspace.web.shapes import Conn, Web
+from nuspace.web.sidebar import interactions
+from nuspace.web.sidebar.interactions import KIND_PLANE, KIND_SPACE, ROOT_ID
+from nuspace.web.utils import Arms, field_str, placed
 
 
 if TYPE_CHECKING:
