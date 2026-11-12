@@ -7,9 +7,9 @@ Home, settings and search are web planes found through roles
 (remove refuses it), runs on the async backend and is made with fixed
 cells. The sidebar draws them in its nav section, out of the tree.
 ``searches`` is the system plane every search hangs under; it is not on
-the web. ``home_indexer`` (:mod:`.indexer`) is not on the web either: a
+the web. ``home_indexer`` (:mod:`..home.indexer`) is not on the web either: a
 system plane two reactions run, counting what Home shows. Nor is
-``desk_pruner`` (:mod:`.pruner`): a system plane one reaction runs, taking
+``desk_pruner`` (:mod:`..desks.pruner`): a system plane one reaction runs, taking
 removed planes off the desks. Those three keep reserved ids
 (:data:`~nuspace.shapes.plane.RESERVED`).
 
@@ -30,12 +30,14 @@ from nuspace.shapes.space import Space
 from nuspace.utils import MintId
 from nuspace.utils.checks import refuse
 
-from . import indexer, pruner
-from . import ops as web
-from .home import CELLS as HOME_CELLS
-from .home import ICON as HOME_ICON
-from .home import NAME as HOME_NAME
-from .interactions import Favorites
+from .. import ops as web
+from ..desks import pruner
+from ..desks.model import Favorites
+from ..home import CELLS as HOME_CELLS
+from ..home import ICON as HOME_ICON
+from ..home import NAME as HOME_NAME
+from ..home import indexer
+from ..shapes import Web
 from .search import CELLS as SEARCH_CELLS
 from .search import ICON as SEARCH_ICON
 from .search import NAME as SEARCH_NAME
@@ -43,7 +45,6 @@ from .search import SEARCHES, SEARCHES_BACKEND, SEARCHES_NAME
 from .settings import CELLS as SETTINGS_CELLS
 from .settings import ICON as SETTINGS_ICON
 from .settings import NAME as SETTINGS_NAME
-from .shapes import Web
 
 
 __all__ = [
@@ -153,8 +154,8 @@ def ensure() -> nu.Nu:
     A plane that is there is left as it is, its cells included. Two commits
     per role plane made (Space, then Web), one for the folder, one for the
     indexer, then its two reactions where not kept yet
-    (:func:`~.indexer.ensure_reactions`), one for the pruner, then its
-    reaction where not kept yet (:func:`~.pruner.ensure_reaction`), then
+    (:func:`~..home.indexer.ensure_reactions`), one for the pruner, then its
+    reaction where not kept yet (:func:`~..desks.pruner.ensure_reaction`), then
     one for Favorites on the first open (:func:`ensure_favorites`).
 
     Raises:

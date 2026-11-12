@@ -1,5 +1,14 @@
-"""The desks node: the tab's copy of the desks and the roles, and the desk ops it sends.
+"""The desks: their ops, the tab's copy of the desks and the roles, and the pruner.
 
+``ops``
+    The desk ops a program calls, re-exported here::
+
+        import nuspace.devices.web.desks as desks
+
+        nuspace.atomic(desks.set_desk(desk_id, desk))
+
+``model``
+    The desk shape in plain python, and the hosts running it.
 ``ref``
     The node the browser keeps, write only: it draws nothing.
 ``interactions``
@@ -7,33 +16,29 @@
 ``feed``
     One arm per interaction. An event runs one op, a store change ships
     the desks, the roles or the desk planes' titles again.
+``pruner``
+    The system plane taking removed planes off every desk.
 
 The wire contract is ``task-167/contract.md`` in Go.
 """
 
-from nuspace.devices.web.desks.feed import desks_feed
-from nuspace.devices.web.desks.interactions import (
-    on_create_desk,
-    on_delete_desk,
-    on_move_desk,
-    on_set_desk,
-    on_set_role,
-    set_desks,
-    set_roles,
-    set_titles,
+from nuspace.devices.web.desks.ops import (
+    create_desk,
+    delete_desk,
+    desk_order,
+    get_desk,
+    list_desks,
+    move_desk,
+    set_desk,
 )
-from nuspace.devices.web.desks.ref import DesksRef
 
 
 __all__ = [
-    "DesksRef",
-    "desks_feed",
-    "on_create_desk",
-    "on_delete_desk",
-    "on_move_desk",
-    "on_set_desk",
-    "on_set_role",
-    "set_desks",
-    "set_roles",
-    "set_titles",
+    "create_desk",
+    "delete_desk",
+    "desk_order",
+    "get_desk",
+    "list_desks",
+    "move_desk",
+    "set_desk",
 ]

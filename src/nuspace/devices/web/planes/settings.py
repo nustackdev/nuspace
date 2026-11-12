@@ -1,6 +1,6 @@
-"""Settings: the space's own settings plane. Made at open when missing (:mod:`.planes`).
+"""Settings: the space's own settings plane. Made at open when missing (:mod:`nuspace.devices.web.planes`).
 
-Like home (:mod:`.home`): a system web plane the ``settings`` role names, made once,
+Like home (:mod:`..home`): a system web plane the ``settings`` role names, made once,
 its cells the owner's after that. The sidebar's nav row and Cmd+, are the
 way to it. One cell so far, ``header``: home's header, the same source.
 
@@ -11,7 +11,7 @@ telemetry, lives in ``~/.nuspace`` (``nuspace telemetry``).
 
 from __future__ import annotations
 
-from .home import HEADER
+from ..home import HEADER
 
 
 __all__ = ["CELLS", "ICON", "NAME"]

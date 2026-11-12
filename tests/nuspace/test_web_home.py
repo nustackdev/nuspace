@@ -15,8 +15,8 @@ from _support.made import MADE
 import nu
 import nuspace
 import nuspace.devices.web as web
-from nuspace.devices.web import home, indexer
-from nuspace.devices.web.home import history, now, runs, space
+from nuspace.devices.web import home
+from nuspace.devices.web.home import history, indexer, now, runs, space
 from nuspace.places import inside
 from nuspace.shapes import Space
 from nustd.ui import Session

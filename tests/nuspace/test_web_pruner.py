@@ -19,8 +19,8 @@ import nuspace
 import nuspace.devices.web as web
 from nu.lang import ScalarQuery
 from nuspace import host, system
-from nuspace.devices.web import pruner
-from nuspace.devices.web.interactions import desk_problem
+from nuspace.devices.web.desks import pruner
+from nuspace.devices.web.desks.model import desk_problem
 from nuspace.devices.web.planes import ensure, ensure_pruner
 from nuspace.errors import Refused
 from nuspace.shapes import Space
@@ -103,7 +103,9 @@ async def test_a_removed_plane_comes_off_both_desks_it_sits_on_and_both_desks_st
     await planes(store, "x", "b", "c", "e", "d", "r")
     await planes(store, "y", parent="x")
     # All x: left empty, and kept.
-    await do(store, web.create_desk("deska001", desk(item("x", "aaaaaa"), item("y", "bbbbbb"))))
+    await do(
+        store, web.desks.create_desk("deska001", desk(item("x", "aaaaaa"), item("y", "bbbbbb")))
+    )
     two = desk(
         # Navigated to x: the recent drops, it shows b again.
         item("b", "cccccc", recent="x"),
@@ -118,10 +120,10 @@ async def test_a_removed_plane_comes_off_both_desks_it_sits_on_and_both_desks_st
         # Every pane gone: the strip goes.
         strip("hhhhhh", [pane("x", 0.5), pane("y", 0.5)]),
     )
-    await do(store, web.create_desk("deskb002", two))
+    await do(store, web.desks.create_desk("deskb002", two))
     # No removed plane on it: never written.
     untouched = desk(item("c", "iiiiii"), strip("jjjjjj", [pane("c")], [pane("d")]))
-    await do(store, web.create_desk("deskc003", untouched))
+    await do(store, web.desks.create_desk("deskc003", untouched))
 
     await do(store, nuspace.plane.remove("x"))  # y is below x: removed with it
     assert await store.read(pruner.pending()) is True
@@ -145,9 +147,11 @@ async def test_a_removed_plane_comes_off_both_desks_it_sits_on_and_both_desks_st
 
 async def test_a_bulk_removal_is_one_pass(store):
     await planes(store, "p1", "p2", "p3", "p4", "p5")
-    await do(store, web.create_desk("deska001", desk(item("p1", "aaaaaa"), item("p4", "bbbbbb"))))
+    await do(
+        store, web.desks.create_desk("deska001", desk(item("p1", "aaaaaa"), item("p4", "bbbbbb")))
+    )
     bulk = desk(strip("cccccc", [pane("p2", 0.5), pane("p5", 0.5)], [pane("p3")], [pane("p4")]))
-    await do(store, web.create_desk("deskb002", bulk))
+    await do(store, web.desks.create_desk("deskb002", bulk))
     for p in ("p1", "p2", "p3"):
         await do(store, nuspace.plane.remove(p))
     await do(store, pruner.step())
@@ -163,7 +167,7 @@ async def test_a_system_plane_is_never_pruned(store):
     home = await store.read(web.Web.roles["home"])
     await planes(store, "b")
     kept = desk(item(home, "aaaaaa"), strip("bbbbbb", [pane("b")], [pane("ghost")]))
-    await do(store, web.create_desk("deska001", kept))
+    await do(store, web.desks.create_desk("deska001", kept))
     with pytest.raises(Refused, match="system plane"):
         await do(store, nuspace.plane.remove(home))
     assert await store.read(pruner.pending()) is False
@@ -187,7 +191,9 @@ async def test_a_desk_in_an_older_shape_is_left_as_it_is(store):
 
 async def test_nothing_to_prune_writes_nothing(store):
     await planes(store, "a", "b")
-    await do(store, web.create_desk("deska001", desk(item("a", "aaaaaa"), item("b", "bbbbbb"))))
+    await do(
+        store, web.desks.create_desk("deska001", desk(item("a", "aaaaaa"), item("b", "bbbbbb")))
+    )
     assert await store.read(pruner.pending()) is False
     await prune(store)
     assert set(await desks(store)) == {"deska001"}
@@ -352,7 +358,9 @@ async def test_a_removal_prunes_with_no_browser_and_a_bulk_removal_is_one_run(tm
         for i in range(1000):
             probe, mine = f"probe{i}", f"probe{i:03d}"
             await s.do(nuspace.plane.add(probe, backend="async"))
-            await s.do(web.create_desk(mine, desk(item(probe, "aaaaaa"), item("p5", "bbbbbb"))))
+            await s.do(
+                web.desks.create_desk(mine, desk(item(probe, "aaaaaa"), item("p5", "bbbbbb")))
+            )
             await s.do(nuspace.plane.remove(probe))
             with contextlib.suppress(AssertionError):
                 await s.until(s.desks, lambda d, m=mine: shown(d[m]) == ["p5"], 3.0)
@@ -361,9 +369,11 @@ async def test_a_removal_prunes_with_no_browser_and_a_bulk_removal_is_one_run(tm
         await s.until(s.live_runs, lambda r: r == [])
         before = len(await s.runs())
 
-        await s.do(web.create_desk("deska001", desk(item("p1", "aaaaaa"), item("p4", "bbbbbb"))))
+        await s.do(
+            web.desks.create_desk("deska001", desk(item("p1", "aaaaaa"), item("p4", "bbbbbb")))
+        )
         bulk = desk(strip("cccccc", [pane("p2", 0.5), pane("p5", 0.5)], [pane("p3")], [pane("p4")]))
-        await s.do(web.create_desk("deskb002", bulk))
+        await s.do(web.desks.create_desk("deskb002", bulk))
         for p in ("p1", "p2", "p3"):
             await s.do(nuspace.plane.remove(p))
         held = await s.until(s.desks, lambda d: shown(d["deska001"]) == ["p4"])

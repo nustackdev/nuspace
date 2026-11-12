@@ -5,7 +5,7 @@ Everything here is a cached value or a bounded read, never a scan:
 - the info line off ``Space.info`` (3 reads), the versions read once when
   the cell is built, the uptime a stamp the browser ticks;
 - planes, cells, specs and planes from specs off the home indexer's totals
-  (:mod:`..indexer`, 4 reads);
+  (:mod:`.indexer`, 4 reads);
 - the calendar off the indexer's ``calendar``, one page of the days in the
   window, at most :data:`DAYS` rows.
 
@@ -25,7 +25,7 @@ import nustd.ui
 from nuspace.ops.brackets import atomic
 from nuspace.shapes import Space
 
-from .. import indexer
+from . import indexer
 from .common import Compact
 
 

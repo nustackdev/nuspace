@@ -21,7 +21,8 @@ import nu
 import nuspace
 import nustd.kv
 from nuspace import host, system
-from nuspace.devices.web import CONN_STORE, WEB_STORE, indexer
+from nuspace.devices.web import CONN_STORE, WEB_STORE
+from nuspace.devices.web.home import indexer
 from nuspace.devices.web.planes import ensure, ensure_indexer
 from nuspace.host.layout import data_dir
 from nuspace.shapes import Space

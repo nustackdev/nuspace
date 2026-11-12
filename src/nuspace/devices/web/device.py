@@ -52,10 +52,11 @@ from nuspace.utils import keys_of
 from nustd.ui.core import WsSession
 from nustd.ws_server import SID_ATTR, listen, run_once, session_for, sessions_fold
 
-from . import indexer, pruner
 from . import ops as web
-from .desks import desks_feed
+from .desks import pruner
+from .desks.feed import desks_feed
 from .env import SESSION_ENV, session_env
+from .home import indexer
 from .nav import nav
 from .planes import ensure
 from .session import served_sessions
@@ -236,8 +237,8 @@ def serve_web(
     """The web device: the term the host runs, and the envs it registers.
 
     The term makes the web planes where missing, asks for one home indexer
-    run (:func:`~.indexer.wake`) and one desk pruner run
-    (:func:`~.pruner.wake`), then runs the server (one arm per tab)
+    run (:func:`~.home.indexer.wake`) and one desk pruner run
+    (:func:`~.desks.pruner.wake`), then runs the server (one arm per tab)
     and nav side by side. It never returns; it goes beside the
     kernel, inside the stores (Space, State, Web, Conn) with ``conn.db``
     fresh, so no tab of a previous open is left.

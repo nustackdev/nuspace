@@ -1,7 +1,7 @@
 """The desk pruner: takes removed planes off every desk, with no browser open.
 
 A plane with the fixed id :data:`PLANE`, made at open where missing
-(:mod:`.planes`). It is system (remove refuses it), runs on ``async``, and
+(:mod:`...planes`). It is system (remove refuses it), runs on ``async``, and
 is not on the web, so the sidebar never lists it. One reaction wakes it:
 on ``Space.indexes.removed``, the log every plane remove appends to. The
 web driver also asks for one run at every open (:func:`wake`), for what
@@ -43,8 +43,8 @@ from nuspace.places import at
 from nuspace.shapes import Space
 from nuspace.system import reactions
 
-from .interactions import DeskPlanes, desk_problem, pruned_desk
-from .shapes import Web
+from ..shapes import Web
+from .model import DeskPlanes, desk_problem, pruned_desk
 
 
 __all__ = [
@@ -87,7 +87,7 @@ CELL = "main"
 
 #: The cell's prog: a shim, the code is here.
 PROG = """\
-from nuspace.devices.web.pruner import out
+from nuspace.devices.web.desks.pruner import out
 """
 
 #: The plane's cells, as ``(name, source)``.
@@ -118,7 +118,7 @@ def plan(desks: object, removed: object) -> dict:
     """What one pass writes: ``{desk_id: desk}``, each desk to set whole. Plain python.
 
     A desk on the desk shape holding a link to a ``removed`` plane is in it,
-    pruned (:func:`~.interactions.pruned_desk`). Every other desk is not:
+    pruned (:func:`~.model.pruned_desk`). Every other desk is not:
     nothing is written for it, and nothing is ever deleted. A pruned desk
     that is no desk (which pruning never makes) is not written either.
     """

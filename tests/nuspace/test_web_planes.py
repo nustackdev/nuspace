@@ -17,8 +17,8 @@ import nu
 import nuspace
 import nuspace.devices.web as web
 import nustd.kv
-from nuspace.devices.web import home, search, settings
-from nuspace.devices.web.planes import ensure
+from nuspace.devices.web import home
+from nuspace.devices.web.planes import ensure, search, settings
 from nuspace.places import inside
 from nuspace.shapes import Space
 from nuspace.shapes.content import CELL, PLANE, SPACE, address

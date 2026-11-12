@@ -9,6 +9,10 @@ Below is the changelog for **nuspace** - the full commit stream. Newest first.
 The `nuspace-ui` wheel is the same source tree's vite output and is not tracked
 separately here.
 
+## Unreleased
+
+- Group the web device by area: desk ops under desks, shipped planes together
+
 ## 0.7.1 - 2026-11-12
 
 - Release nuspace and nuspace-ui 0.7.1

@@ -15,7 +15,7 @@ import nu
 import nuspace
 import nuspace.devices.web as web
 from nu.lang import is_null
-from nuspace.devices.web.interactions import DESK_ID, desk_problem, favorites, moved_order
+from nuspace.devices.web.desks.model import DESK_ID, desk_problem, favorites, moved_order
 from nuspace.devices.web.planes import ensure
 from nuspace.errors import Exists, Missing, Refused
 from nuspace.shapes import Space
@@ -96,17 +96,17 @@ def _broken(path, value, desk=DESK):
 
 
 async def test_create_get_list_set_delete_a_desk(store):
-    assert await store.read(web.list_desks()) == []
-    await do(store, web.create_desk("abcd1234", DESK))
-    assert await store.read(web.get_desk("abcd1234")) == DESK
-    assert await store.read(web.list_desks()) == ["abcd1234"]
+    assert await store.read(web.desks.list_desks()) == []
+    await do(store, web.desks.create_desk("abcd1234", DESK))
+    assert await store.read(web.desks.get_desk("abcd1234")) == DESK
+    assert await store.read(web.desks.list_desks()) == ["abcd1234"]
     renamed = {**DESK, "name": "Logs", "items": DESK["items"][:1]}
-    await do(store, web.set_desk("abcd1234", renamed))
-    assert await store.read(web.get_desk("abcd1234")) == renamed
-    await do(store, web.delete_desk("abcd1234"))
-    assert await store.read(web.list_desks()) == []
-    assert await store.read(web.desk_order()) == []
-    assert is_null(await store.read(web.get_desk("abcd1234")))
+    await do(store, web.desks.set_desk("abcd1234", renamed))
+    assert await store.read(web.desks.get_desk("abcd1234")) == renamed
+    await do(store, web.desks.delete_desk("abcd1234"))
+    assert await store.read(web.desks.list_desks()) == []
+    assert await store.read(web.desks.desk_order()) == []
+    assert is_null(await store.read(web.desks.get_desk("abcd1234")))
 
 
 ACCEPTED = [
@@ -121,38 +121,43 @@ ACCEPTED = [
 @pytest.mark.parametrize("desk", ACCEPTED)
 async def test_a_desk_of_items_is_accepted_empty_or_not(store, desk):
     assert desk_problem(desk) == ""
-    await do(store, web.create_desk("abcd1234", desk))
-    assert await store.read(web.get_desk("abcd1234")) == desk
-    await do(store, web.set_desk("abcd1234", EMPTY))
-    assert await store.read(web.get_desk("abcd1234")) == EMPTY
+    await do(store, web.desks.create_desk("abcd1234", desk))
+    assert await store.read(web.desks.get_desk("abcd1234")) == desk
+    await do(store, web.desks.set_desk("abcd1234", EMPTY))
+    assert await store.read(web.desks.get_desk("abcd1234")) == EMPTY
 
 
 async def test_desks_list_in_creation_order_not_by_id(store):
     for desk_id in ("zzzz0001", "aaaa0002", "mmmm0003"):
-        await do(store, web.create_desk(desk_id, EMPTY))
-    assert await store.read(web.list_desks()) == ["zzzz0001", "aaaa0002", "mmmm0003"]
-    await do(store, web.delete_desk("aaaa0002"))
-    await do(store, web.create_desk("aaaa0002", EMPTY))
-    assert await store.read(web.list_desks()) == ["zzzz0001", "mmmm0003", "aaaa0002"]
+        await do(store, web.desks.create_desk(desk_id, EMPTY))
+    assert await store.read(web.desks.list_desks()) == ["zzzz0001", "aaaa0002", "mmmm0003"]
+    await do(store, web.desks.delete_desk("aaaa0002"))
+    await do(store, web.desks.create_desk("aaaa0002", EMPTY))
+    assert await store.read(web.desks.list_desks()) == ["zzzz0001", "mmmm0003", "aaaa0002"]
     # A desk a program stored straight, with no place in the order: after, by id.
     await do(store, web.Web.desks["bbbb0004"].set(EMPTY))
-    assert await store.read(web.list_desks()) == ["zzzz0001", "mmmm0003", "aaaa0002", "bbbb0004"]
+    assert await store.read(web.desks.list_desks()) == [
+        "zzzz0001",
+        "mmmm0003",
+        "aaaa0002",
+        "bbbb0004",
+    ]
 
 
 async def test_move_desk_puts_it_before_another_or_last(store):
     for desk_id in ("aaaa0001", "bbbb0002", "cccc0003"):
-        await do(store, web.create_desk(desk_id, EMPTY))
-    await do(store, web.move_desk("cccc0003", "aaaa0001"))
-    assert await store.read(web.list_desks()) == ["cccc0003", "aaaa0001", "bbbb0002"]
-    await do(store, web.move_desk("cccc0003", ""))
-    assert await store.read(web.list_desks()) == ["aaaa0001", "bbbb0002", "cccc0003"]
+        await do(store, web.desks.create_desk(desk_id, EMPTY))
+    await do(store, web.desks.move_desk("cccc0003", "aaaa0001"))
+    assert await store.read(web.desks.list_desks()) == ["cccc0003", "aaaa0001", "bbbb0002"]
+    await do(store, web.desks.move_desk("cccc0003", ""))
+    assert await store.read(web.desks.list_desks()) == ["aaaa0001", "bbbb0002", "cccc0003"]
     # Before an unknown desk, or before itself: last too.
-    await do(store, web.move_desk("aaaa0001", "nope0000"))
-    assert await store.read(web.list_desks()) == ["bbbb0002", "cccc0003", "aaaa0001"]
-    await do(store, web.move_desk("cccc0003", "cccc0003"))
-    assert await store.read(web.list_desks()) == ["bbbb0002", "aaaa0001", "cccc0003"]
+    await do(store, web.desks.move_desk("aaaa0001", "nope0000"))
+    assert await store.read(web.desks.list_desks()) == ["bbbb0002", "cccc0003", "aaaa0001"]
+    await do(store, web.desks.move_desk("cccc0003", "cccc0003"))
+    assert await store.read(web.desks.list_desks()) == ["bbbb0002", "aaaa0001", "cccc0003"]
     with pytest.raises(Missing):
-        await do(store, web.move_desk("zzzz9999", ""))
+        await do(store, web.desks.move_desk("zzzz9999", ""))
 
 
 def test_moved_order_places_a_desk_the_order_lacks_once():
@@ -164,22 +169,22 @@ def test_moved_order_places_a_desk_the_order_lacks_once():
 @pytest.mark.parametrize("desk_id", ["abc", "ABCD1234", "abcd-123", "abcd12345", ""])
 async def test_create_refuses_an_id_spelled_wrong(store, desk_id):
     with pytest.raises(Refused, match="8 chars"):
-        await do(store, web.create_desk(desk_id, DESK))
+        await do(store, web.desks.create_desk(desk_id, DESK))
 
 
 async def test_create_refuses_a_taken_id(store):
-    await do(store, web.create_desk("abcd1234", DESK))
+    await do(store, web.desks.create_desk("abcd1234", DESK))
     with pytest.raises(Exists):
-        await do(store, web.create_desk("abcd1234", EMPTY))
-    assert await store.read(web.get_desk("abcd1234")) == DESK
-    assert await store.read(web.desk_order()) == ["abcd1234"]
+        await do(store, web.desks.create_desk("abcd1234", EMPTY))
+    assert await store.read(web.desks.get_desk("abcd1234")) == DESK
+    assert await store.read(web.desks.desk_order()) == ["abcd1234"]
 
 
 async def test_set_and_delete_raise_for_a_missing_desk(store):
     with pytest.raises(Missing):
-        await do(store, web.set_desk("abcd1234", DESK))
+        await do(store, web.desks.set_desk("abcd1234", DESK))
     with pytest.raises(Missing):
-        await do(store, web.delete_desk("abcd1234"))
+        await do(store, web.desks.delete_desk("abcd1234"))
 
 
 STRIP = ("items", 1, "columns")
@@ -233,11 +238,11 @@ async def test_create_and_set_refuse_a_dict_that_is_not_a_desk(store, path, valu
     desk = value if not path else _broken(path, value)
     assert desk_problem(desk) != ""
     with pytest.raises(Refused):
-        await do(store, web.create_desk("abcd1234", desk))
-    await do(store, web.create_desk("abcd1234", DESK))
+        await do(store, web.desks.create_desk("abcd1234", desk))
+    await do(store, web.desks.create_desk("abcd1234", DESK))
     with pytest.raises(Refused):
-        await do(store, web.set_desk("abcd1234", desk))
-    assert await store.read(web.get_desk("abcd1234")) == DESK
+        await do(store, web.desks.set_desk("abcd1234", desk))
+    assert await store.read(web.desks.get_desk("abcd1234")) == DESK
 
 
 def test_a_strip_shows_a_plane_its_panes_navigated_away_from():
@@ -250,18 +255,18 @@ def test_a_strip_shows_a_plane_its_panes_navigated_away_from():
 async def test_a_desk_in_an_older_shape_reads_as_no_desk(store):
     await do(store, web.Web.desks["olddesk1"].set(OLD_DESK))
     await do(store, web.Web.desks["olddesk2"].set(OLD_COLUMNS))
-    await do(store, web.create_desk("abcd1234", DESK))
-    assert await store.read(web.list_desks()) == ["abcd1234"]
-    assert is_null(await store.read(web.get_desk("olddesk1")))
-    assert is_null(await store.read(web.get_desk("olddesk2")))
+    await do(store, web.desks.create_desk("abcd1234", DESK))
+    assert await store.read(web.desks.list_desks()) == ["abcd1234"]
+    assert is_null(await store.read(web.desks.get_desk("olddesk1")))
+    assert is_null(await store.read(web.desks.get_desk("olddesk2")))
     with pytest.raises(Refused):
-        await do(store, web.set_desk("olddesk2", OLD_COLUMNS))
+        await do(store, web.desks.set_desk("olddesk2", OLD_COLUMNS))
 
 
 async def test_a_desk_never_looks_up_its_planes(store):
     """No plane in DESK exists: the shape is all that is checked."""
-    await do(store, web.create_desk("abcd1234", DESK))
-    assert await store.read(web.list_desks()) == ["abcd1234"]
+    await do(store, web.desks.create_desk("abcd1234", DESK))
+    assert await store.read(web.desks.list_desks()) == ["abcd1234"]
 
 
 # --- Roles -------------------------------------------------------------------------------
@@ -336,8 +341,8 @@ async def test_ensure_mints_a_role_plane_even_with_a_plane_named_like_the_role(s
 
 
 async def _favorites(store) -> tuple[str, dict]:
-    (desk_id,) = await store.read(web.list_desks())
-    return desk_id, await store.read(web.get_desk(desk_id))
+    (desk_id,) = await store.read(web.desks.list_desks())
+    return desk_id, await store.read(web.desks.get_desk(desk_id))
 
 
 async def test_ensure_seeds_an_empty_favorites_once_and_a_closed_one_stays_closed(store):
@@ -347,18 +352,18 @@ async def test_ensure_seeds_an_empty_favorites_once_and_a_closed_one_stays_close
     assert DESK_ID.fullmatch(desk_id)
     assert await store.read(web.Web.seeded) is True
     await store.run(ensure())
-    assert await store.read(web.list_desks()) == [desk_id]
+    assert await store.read(web.desks.list_desks()) == [desk_id]
     # Closed, it never comes back.
-    await do(store, web.delete_desk(desk_id))
+    await do(store, web.desks.delete_desk(desk_id))
     await store.run(ensure())
-    assert await store.read(web.list_desks()) == []
+    assert await store.read(web.desks.list_desks()) == []
 
 
 async def test_favorites_comes_first_in_creation_order(store):
     await store.run(ensure())
     desk_id, _ = await _favorites(store)
-    await do(store, web.create_desk("aaaa0001", EMPTY))
-    assert await store.read(web.list_desks()) == [desk_id, "aaaa0001"]
+    await do(store, web.desks.create_desk("aaaa0001", EMPTY))
+    assert await store.read(web.desks.list_desks()) == [desk_id, "aaaa0001"]
 
 
 def test_favorites_is_empty_its_id_minted_as_the_browser_does():
@@ -473,7 +478,7 @@ async def test_two_tabs_get_desks_and_roles_live(store):
         await _until(lambda: len(one.toasts()) == 5)
         assert one.toasts()[-1]["type"] == "ValueError"
         assert two.toasts() == []
-        assert await store.read(web.list_desks()) == [fav]
+        assert await store.read(web.desks.list_desks()) == [fav]
         shipped = one.writes("set_desks")
         assert all({"olddesk1", "olddesk2"}.isdisjoint(w["desks"]) for w in shipped)
     finally:
@@ -499,7 +504,7 @@ async def test_titles_cover_the_planes_on_a_desk_originals_and_recents(store):
     # r1 only a pane's: both in.
     desk = _broken((*STRIP, 0, "panes", 0, "original", "plane"), "kid")
     desk = _broken((*STRIP, 0, "panes", 1, "recent"), link("r1"), desk)
-    await do(store, web.create_desk("abcd1234", desk))
+    await do(store, web.desks.create_desk("abcd1234", desk))
     # Desks in an older shape are skipped, their planes with them.
     await do(
         store,

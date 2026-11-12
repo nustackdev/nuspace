@@ -27,7 +27,8 @@ import nu
 import nuspace
 from nuspace.devices.web import ops as web
 from nuspace.devices.web.desks import interactions
-from nuspace.devices.web.interactions import DeskPlanes, ShapedDesks
+from nuspace.devices.web.desks import ops as desk_ops
+from nuspace.devices.web.desks.model import DeskPlanes, ShapedDesks
 from nuspace.devices.web.shapes import Web
 from nuspace.devices.web.utils import Arms, field_dict, field_str
 from nuspace.ops.brackets import atomic
@@ -83,7 +84,7 @@ def desks_feed(desks: Ref, toasts: Ref) -> nu.Nu:
     def role(ev: nu.Attr) -> nu.Nu:
         return atomic(web.set_role(field_str(ev, "role"), field_str(ev, "plane_id")))
 
-    shown = ShapedDesks(Web.desks.extract(), web.desk_order())
+    shown = ShapedDesks(Web.desks.extract(), desk_ops.desk_order())
 
     def send_desks(held: nu.Dict) -> nu.Nu:
         return interactions.set_desks(desks, held, nu.list(held.keys()))
@@ -115,18 +116,18 @@ def desks_feed(desks: Ref, toasts: Ref) -> nu.Nu:
         desk(
             "create",
             interactions.on_create_desk(desks),
-            lambda d, ev: web.create_desk(d, field_dict(ev, "desk")),
+            lambda d, ev: desk_ops.create_desk(d, field_dict(ev, "desk")),
         ),
         desk(
             "set",
             interactions.on_set_desk(desks),
-            lambda d, ev: web.set_desk(d, field_dict(ev, "desk")),
+            lambda d, ev: desk_ops.set_desk(d, field_dict(ev, "desk")),
         ),
-        desk("delete", interactions.on_delete_desk(desks), lambda d, _: web.delete_desk(d)),
+        desk("delete", interactions.on_delete_desk(desks), lambda d, _: desk_ops.delete_desk(d)),
         desk(
             "move",
             interactions.on_move_desk(desks),
-            lambda d, ev: web.move_desk(d, field_str(ev, "before")),
+            lambda d, ev: desk_ops.move_desk(d, field_str(ev, "before")),
         ),
         arms.event("role", interactions.on_set_role(desks), role),
     )

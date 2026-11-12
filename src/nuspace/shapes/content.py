@@ -13,7 +13,7 @@ Finding reads one kind's subtree, scope by scope, all bare reads:
 the items ``match`` holds for in one scope, :meth:`Content.find` both
 together. A search reads per kind, so it never touches another kind's
 items; the web device's search drives it a place at a time
-(:mod:`nuspace.devices.web.search`).
+(:mod:`nuspace.devices.web.planes.search`).
 
 Workers import this module: nothing here may pull in a server.
 """
