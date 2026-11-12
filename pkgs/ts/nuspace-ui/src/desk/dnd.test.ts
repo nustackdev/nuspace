@@ -165,7 +165,7 @@ describe("the drag table", () => {
 	it("tree row onto a plane item: a strip in its place, same id", () => {
 		const out = plan(
 			{ kind: "plane", link: L("n") },
-			{ kind: "onto", desk: DESK, item: "dddddd", side: "right" },
+			{ kind: "onto", desk: DESK, item: "dddddd", edge: "right" },
 		);
 		expect(sketch(out?.[DESK])[2]).toEqual({ dddddd: [["d"], ["n"]] });
 	});
@@ -200,7 +200,7 @@ describe("the drag table", () => {
 	it("plane item row onto a plane item: a strip, the dragged one gone, its recent kept", () => {
 		const out = plan(
 			{ kind: "item", desk: DESK, item: "aaaaaa" },
-			{ kind: "onto", desk: DESK, item: "dddddd", side: "left" },
+			{ kind: "onto", desk: DESK, item: "dddddd", edge: "left" },
 		);
 		expect(sketch(out?.[DESK])).toEqual([{ ssssss: [["b"], ["e"]] }, { dddddd: [["x"], ["d"]] }]);
 		expect((out?.[DESK].items[1] as Strip | undefined)?.columns[0].panes[0]).toMatchObject({
@@ -247,7 +247,7 @@ describe("the drag table", () => {
 		expect(
 			plan(
 				{ kind: "item", desk: DESK, item: "ssssss" },
-				{ kind: "onto", desk: DESK, item: "dddddd", side: "left" },
+				{ kind: "onto", desk: DESK, item: "dddddd", edge: "left" },
 			),
 		).toBeNull();
 		expect(
@@ -262,7 +262,7 @@ describe("the drag table", () => {
 		expect(
 			plan(
 				{ kind: "item", desk: DESK, item: "dddddd" },
-				{ kind: "onto", desk: DESK, item: "dddddd", side: "left" },
+				{ kind: "onto", desk: DESK, item: "dddddd", edge: "left" },
 			),
 		).toBeNull();
 	});
@@ -290,7 +290,7 @@ describe("the drag table", () => {
 	it("a pane onto a plane item: a strip, the pane keeping its links", () => {
 		const out = plan(
 			{ kind: "pane", desk: DESK, item: "ssssss", plane: "e" },
-			{ kind: "onto", desk: DESK, item: "dddddd", side: "right" },
+			{ kind: "onto", desk: DESK, item: "dddddd", edge: "right" },
 		);
 		expect(sketch(out?.[DESK])).toEqual(["aaaaaa:x", "ssssss:b", { dddddd: [["d"], ["e"]] }]);
 	});
@@ -364,11 +364,11 @@ describe("dropOn", () => {
 			false,
 		);
 		const item = { kind: "item", desk: DESK, item: "dddddd" } as const;
-		expect(canDrop(item, { kind: "onto", desk: DESK, item: "dddddd", side: "left" })).toBe(false);
-		expect(canDrop(item, { kind: "onto", desk: DESK, item: "aaaaaa", side: "left" })).toBe(true);
+		expect(canDrop(item, { kind: "onto", desk: DESK, item: "dddddd", edge: "left" })).toBe(false);
+		expect(canDrop(item, { kind: "onto", desk: DESK, item: "aaaaaa", edge: "left" })).toBe(true);
 		// A strip lands only between items.
 		const s = { kind: "item", desk: DESK, item: "ssssss" } as const;
-		expect(canDrop(s, { kind: "onto", desk: DESK, item: "aaaaaa", side: "left" })).toBe(false);
+		expect(canDrop(s, { kind: "onto", desk: DESK, item: "aaaaaa", edge: "left" })).toBe(false);
 		expect(canDrop(s, { kind: "between", desk: OTHER, index: 0 })).toBe(true);
 		expect(canDrop(null, strip({ at: 0 }))).toBe(true);
 	});

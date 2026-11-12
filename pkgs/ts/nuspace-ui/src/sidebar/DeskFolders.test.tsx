@@ -644,14 +644,14 @@ describe("drop targets", () => {
 			kind: "onto",
 			desk: W,
 			item: "item02",
-			side: "left",
+			edge: "left",
 		});
 		dropAt(row, plane, 14, 150);
 		expect(dropOn).toHaveBeenLastCalledWith(PLANE, {
 			kind: "onto",
 			desk: W,
 			item: "item02",
-			side: "right",
+			edge: "right",
 		});
 	});
 

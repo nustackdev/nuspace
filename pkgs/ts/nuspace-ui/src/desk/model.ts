@@ -449,17 +449,24 @@ function place(s: Strip, x: Links, drop: Drop, width?: number): boolean {
 
 /**
  * The plane item `id` and `x` (a dropped link, item or pane) made a strip in
- * its place, same id: `x` in a new column on `side`. Unchanged when `id` is
- * no plane item or `x` shows the plane it shows.
+ * its place, same id: `x` in a new column on the `edge` side (left / right),
+ * or stacked with it in one column above or below it (top / bottom).
+ * Unchanged when `id` is no plane item or `x` shows the plane it shows.
  */
-export function makeStrip(desk: Desk, id: string, x: Links, side: Side): Desk {
+export function makeStrip(desk: Desk, id: string, x: Links, edge: Edge): Desk {
 	const at = desk.items.findIndex((i) => i.id === id);
 	const target = desk.items[at];
 	if (target?.kind !== "plane" || shown(target).plane === shown(x).plane) return desk;
 	const own = soloColumn(target);
 	const add = soloColumn(x);
 	const d = draft(desk);
-	d.items[at] = { id, kind: "strip", columns: side === "left" ? [add, own] : [own, add] };
+	const columns =
+		edge === "left"
+			? [add, own]
+			: edge === "right"
+				? [own, add]
+				: [{ panes: edge === "top" ? [...add.panes, ...own.panes] : [...own.panes, ...add.panes] }];
+	d.items[at] = { id, kind: "strip", columns };
 	return done(desk, d);
 }
 

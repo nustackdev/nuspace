@@ -7,8 +7,8 @@
 // The window has no chrome of its own. The connection dot and the theme flip
 // sit in the sidebar footer. Folded, the sidebar is its rail (./sidebar.ts).
 //
-// Afterglow (the kit's `accent`) shows only as a line, or a ring on an empty
-// desk: on a drop target and on a resize edge that is hovered or dragged.
+// Afterglow (the kit's `accent`) shows only on a drop target, as the region
+// the drop makes, and as a line on a resize edge that is hovered or dragged.
 //
 // Colors resolve to kit L2/L4 semantic names or the nuspace-* frame roles
 // in ./theme.css. No raw hex. Spacing is the 4px grid, except the 6px gaps
@@ -85,20 +85,11 @@ export const deskRow = "min-h-0 min-w-0 flex-1";
 export const deskRowViewport = "overscroll-x-contain";
 
 /**
- * The columns, side by side, 6px apart, then the end zone. Nothing shrinks to
- * fit: the row scrolls instead. At least as wide as the viewport, so the end
- * zone takes the room the columns leave.
+ * The columns, side by side, 6px apart. Nothing shrinks to fit: the row
+ * scrolls instead. Holds the drop region, so it scrolls with the columns.
+ * A new column at the end is a drop on the last pane's right edge.
  */
-export const deskColumns = "flex h-full gap-1.5";
-
-/**
- * The end zone after the last column: a drop here is a new column at the end.
- * It fills the room the columns leave and is nothing once they fill the row:
- * no strip ends in empty space (a drop on the last pane's right edge is a new
- * column at the end too). Its negative margin takes back the row's gap. Empty:
- * its drop line on its left edge is all it ever shows.
- */
-export const deskEnd = "relative -ml-1.5 h-full min-w-0 flex-1";
+export const deskColumns = "relative flex h-full gap-1.5";
 
 /**
  * A column's width, as an inline style value: `null` for the canvas's full
@@ -118,15 +109,14 @@ export const deskColumn = "relative flex h-full shrink-0 flex-col gap-1.5";
 
 /**
  * A pane's place in its column: its share of the height, set inline as flex
- * grow. Holds the pane's drop line and the share resize handle under it.
+ * grow. Holds the share resize handle under it.
  */
 export const deskShare = "relative flex min-h-0 basis-0";
 
 /**
  * A column's resize handle: the 6px gap on its right, the kit's split handle
  * with no hairline, so nothing shows until it is hovered, then the kit's 2px
- * afterglow line, which stays while dragging (`data-dragging`). The end zone
- * follows the last column, so its gap is there too.
+ * afterglow line, which stays while dragging (`data-dragging`).
  */
 export function deskColumnHandle(last: boolean): string {
 	return cn(
@@ -145,23 +135,28 @@ export const deskShareHandle = cn(
 );
 
 /**
- * Where a drag would land: a 2px afterglow line on a pane's edge (a new
- * column there, or a strip made with a plane item) or on its top or bottom
- * (stacked there), or on the end zone's left edge (a new column at the end).
+ * Where a drag would land, drawn as the region the drop makes: the half of a
+ * column's full height for a new column beside it (every pane stacked in it),
+ * the half of a pane for one stacked there or for a plane item made a strip.
+ * A light Afterglow wash inside a 1.5px Afterglow line, 8px radius like a
+ * pane, no elevation. Placed inline, 2px inside the region (main/DropRegion.tsx).
+ * Its label is the kit's Badge, centered.
  */
-export function deskDropLine(edge: "left" | "right" | "top" | "bottom"): string {
-	return cn(
-		"pointer-events-none absolute z-20 rounded-full bg-accent",
-		edge === "left" && "inset-y-0 left-0 w-0.5",
-		edge === "right" && "inset-y-0 right-0 w-0.5",
-		edge === "top" && "inset-x-0 top-0 h-0.5",
-		edge === "bottom" && "inset-x-0 bottom-0 h-0.5",
-	);
-}
+export const deskDropRegion = cn(
+	"pointer-events-none absolute z-20 flex items-center justify-center rounded-lg",
+	"bg-doc-drop ring-[1.5px] ring-doc-drop-line ring-inset",
+);
 
 /**
- * The one pane of a solo plane or a plane item: the whole desk area. Holds a
- * plane item's drop line.
+ * The region gliding from one target to the next. Only once shown: a region
+ * that appears is placed, not flown in.
+ */
+export const deskDropGlide =
+	"transition-[left,top,width,height] duration-fast ease-out motion-reduce:transition-none";
+
+/**
+ * The one pane of a solo plane or a plane item: the whole desk area. Holds
+ * its drop region.
  */
 export const deskSolo = "relative flex min-h-0 min-w-0 flex-1";
 
@@ -169,11 +164,10 @@ export const deskSolo = "relative flex min-h-0 min-w-0 flex-1";
 export const deskEmpty = "min-h-0 flex-1";
 
 /**
- * A drag over an empty desk: a 2px afterglow ring inside the desk area's
- * edges, 8px radius like a pane.
+ * A drag over an empty desk: the drop region over the whole desk, inside the
+ * desk area's edges.
  */
-export const deskEmptyAim =
-	"pointer-events-none absolute top-1.5 right-1.5 bottom-1.5 left-0 rounded-lg ring-2 ring-accent ring-inset";
+export const deskEmptyAim = cn(deskDropRegion, "top-1.5 right-1.5 bottom-1.5 left-0");
 
 /**
  * One pane on the canvas: 8px radius, a `line-subtle` border, the

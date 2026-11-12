@@ -154,7 +154,7 @@ afterEach(() => {
 });
 
 describe("a strip", () => {
-	it("draws one row of columns, then the end zone", () => {
+	it("draws one row of columns and nothing after them", () => {
 		feed(DESKS);
 		draw(STRIP_URL);
 		const row = one(`[data-desk="${ID}"]`);
@@ -165,9 +165,7 @@ describe("a strip", () => {
 		expect(new Set(columns.map((c) => c.parentElement))).toEqual(
 			new Set([columns[0].parentElement]),
 		);
-		const end = columns[0].parentElement?.lastElementChild as HTMLElement;
-		expect(end.dataset.end).toBe("3");
-		expect(end.querySelector("[data-pane]")).toBeNull();
+		expect(columns[0].parentElement?.lastElementChild).toBe(columns[2]);
 	});
 
 	it("draws columns side by side, panes stacked by share", () => {
@@ -302,7 +300,6 @@ describe("a plane item", () => {
 		draw(LONE_URL);
 		expect(all("[data-pane]").map((p) => p.dataset.pane)).toEqual(["f"]);
 		expect(all("[data-column]")).toEqual([]);
-		expect(all("[data-end]")).toEqual([]);
 		expect(one(`[data-desk="${ID}"]`).dataset.item).toBe("lone01");
 		expect(all("[data-focused]")).toHaveLength(1);
 	});
@@ -322,7 +319,6 @@ describe("solo, the empty desk, pending and not found", () => {
 		draw("/p_one");
 		expect(all("[data-pane]").map((p) => p.dataset.pane)).toEqual(["p_one"]);
 		expect(all("[data-column]")).toEqual([]);
-		expect(all("[data-end]")).toEqual([]);
 		expect(host.querySelector('[aria-label^="Close"]')).toBeNull();
 		expect(all("[data-focused]")).toHaveLength(1);
 	});
@@ -570,7 +566,7 @@ describe("dropping", () => {
 
 	afterEach(() => dnd.endDrag());
 
-	it("in a strip: a pane's edge as a new column there, drawn as a line", () => {
+	it("in a strip: a pane's edge as a new column there, drawn as its region", () => {
 		const dropOn = vi.spyOn(dnd, "dropOn");
 		feed(DESKS);
 		draw(STRIP_URL);
@@ -578,9 +574,7 @@ describe("dropping", () => {
 		rect(c);
 		const over = drag(c, "dragover", PLANE_MIME, "", 380, 100);
 		expect(over.defaultPrevented).toBe(true);
-		const line = c.parentElement?.querySelector(":scope > span[aria-hidden]");
-		expect(line?.className).toContain("bg-accent");
-		expect(line?.className).toContain("right-0");
+		expect(one("[data-drop-region]").textContent).toBe("New column");
 		drag(c, "drop", PLANE_MIME, plane("z"), 380, 100);
 		expect(dropOn).toHaveBeenCalledWith(
 			{ kind: "plane", link: link("z") },
@@ -588,7 +582,7 @@ describe("dropping", () => {
 		);
 		const item = shownItem();
 		expect(item.kind === "strip" && locate(item, "z")).toEqual({ column: 2, pane: 0 });
-		expect(host.querySelector("span.bg-accent")).toBeNull();
+		expect(host.querySelector("[data-drop-region]")).toBeNull();
 	});
 
 	it("in a strip: a pane's half as stacked there, for a pane from another desk", () => {
@@ -599,6 +593,7 @@ describe("dropping", () => {
 		rect(a);
 		const payload = JSON.stringify({ desk: OTHER, item: "other1", plane: "x" });
 		drag(a, "dragover", PANE_MIME, payload, 200, 150);
+		expect(one("[data-drop-region]").textContent).toBe("Stack below");
 		drag(a, "drop", PANE_MIME, payload, 200, 150);
 		expect(dropOn).toHaveBeenCalledWith(
 			{ kind: "pane", desk: OTHER, item: "other1", plane: "x" },
@@ -608,22 +603,22 @@ describe("dropping", () => {
 		expect(item.kind === "strip" && locate(item, "x")).toEqual({ column: 0, pane: 1 });
 	});
 
-	it("in a strip: the end zone as a new column at the end", () => {
+	it("in a strip: nothing off the panes, the last pane's right edge is the end", () => {
 		const dropOn = vi.spyOn(dnd, "dropOn");
 		feed(DESKS);
 		draw(STRIP_URL);
-		const end = one("[data-end]");
-		expect(end.querySelector("span")).toBeNull();
-		drag(end, "dragover", ITEM_MIME, "", 10, 10);
-		expect(end.querySelector("span")?.className).toContain("left-0");
+		const columns = one("[data-column]").parentElement as Element;
+		expect(drag(columns, "dragover", ITEM_MIME, "", 10, 10).defaultPrevented).toBe(false);
+		const d = one('[data-pane="d"]');
+		rect(d);
+		drag(d, "dragover", ITEM_MIME, "", 390, 100);
 		const payload = JSON.stringify({ desk: OTHER, item: "other2" });
-		drag(end, "drop", ITEM_MIME, payload, 10, 10);
+		drag(d, "drop", ITEM_MIME, payload, 390, 100);
 		expect(dropOn).toHaveBeenCalledWith(
 			{ kind: "item", desk: OTHER, item: "other2" },
-			{ kind: "strip", desk: ID, item: "strip1", drop: { at: 3 } },
+			{ kind: "strip", desk: ID, item: "strip1", drop: { plane: "d", edge: "right" } },
 		);
 		expect(shownLinks(shownItem()).map((l) => l.plane)).toEqual(["a", "b", "c", "d", "w"]);
-		expect(end.querySelector("span")).toBeNull();
 	});
 
 	it("on a plane item: its left or right edge, the two made a strip", () => {
@@ -633,52 +628,66 @@ describe("dropping", () => {
 		const f = one('[data-pane="f"]');
 		rect(f);
 		drag(f, "dragover", PLANE_MIME, "", 20, 100);
-		expect(f.parentElement?.querySelector(":scope > span[aria-hidden]")?.className).toContain(
-			"left-0",
-		);
+		expect(one("[data-drop-region]").textContent).toBe("Side by side");
 		drag(f, "drop", PLANE_MIME, plane("z"), 20, 100);
 		expect(dropOn).toHaveBeenCalledWith(
 			{ kind: "plane", link: link("z") },
-			{ kind: "onto", desk: ID, item: "lone01", side: "left" },
+			{ kind: "onto", desk: ID, item: "lone01", edge: "left" },
 		);
 		const item = shownItem();
 		expect(item.kind).toBe("strip");
 		expect(shownLinks(item).map((l) => l.plane)).toEqual(["z", "f"]);
 	});
 
-	it("on a plane item: the right edge for an item, nothing in the middle", () => {
+	it("on a plane item: its middle stacks the two in one column", () => {
 		const dropOn = vi.spyOn(dnd, "dropOn");
 		feed(DESKS);
 		draw(LONE_URL);
 		const f = one('[data-pane="f"]');
 		rect(f);
-		const middle = drag(f, "dragover", ITEM_MIME, "", 200, 100);
-		expect(middle.defaultPrevented).toBe(false);
-		expect(host.querySelector("span.bg-accent")).toBeNull();
+		const over = drag(f, "dragover", PLANE_MIME, "", 200, 20);
+		expect(over.defaultPrevented).toBe(true);
+		expect(one("[data-drop-region]").textContent).toBe("Stack above");
+		drag(f, "drop", PLANE_MIME, plane("z"), 200, 20);
+		expect(dropOn).toHaveBeenCalledWith(
+			{ kind: "plane", link: link("z") },
+			{ kind: "onto", desk: ID, item: "lone01", edge: "top" },
+		);
+		const item = shownItem();
+		expect(item.kind === "strip" && item.columns.length).toBe(1);
+		expect(shownLinks(item).map((l) => l.plane)).toEqual(["z", "f"]);
+	});
+
+	it("on a plane item: the right edge for an item", () => {
+		const dropOn = vi.spyOn(dnd, "dropOn");
+		feed(DESKS);
+		draw(LONE_URL);
+		const f = one('[data-pane="f"]');
+		rect(f);
 		const payload = JSON.stringify({ desk: OTHER, item: "other2" });
 		drag(f, "dragover", ITEM_MIME, "", 390, 100);
 		drag(f, "drop", ITEM_MIME, payload, 390, 100);
 		expect(dropOn).toHaveBeenCalledWith(
 			{ kind: "item", desk: OTHER, item: "other2" },
-			{ kind: "onto", desk: ID, item: "lone01", side: "right" },
+			{ kind: "onto", desk: ID, item: "lone01", edge: "right" },
 		);
 	});
 
-	it("on an empty desk: anywhere, the end of the desk, drawn as a ring", () => {
+	it("on an empty desk: anywhere, the end of the desk, drawn as the whole desk", () => {
 		const dropOn = vi.spyOn(dnd, "dropOn");
 		feed(DESKS);
 		draw(`/${EMPTY}`);
 		const area = one(`[data-desk="${EMPTY}"]`);
 		const over = drag(area.firstElementChild as Element, "dragover", PLANE_MIME, "", 5, 5);
 		expect(over.defaultPrevented).toBe(true);
-		expect(area.querySelector("span.ring-accent")).not.toBeNull();
+		expect(area.querySelector("span.bg-doc-drop")).not.toBeNull();
 		drag(area, "drop", PLANE_MIME, plane("z"), 5, 5);
 		expect(dropOn).toHaveBeenCalledWith(
 			{ kind: "plane", link: link("z") },
 			{ kind: "end", desk: EMPTY },
 		);
 		expect(window.location.pathname).toBe(`/${EMPTY}`);
-		expect(area.querySelector("span.ring-accent")).toBeNull();
+		expect(area.querySelector("span.bg-doc-drop")).toBeNull();
 	});
 
 	it("on a solo plane: its left or right edge, a new desk of the two", () => {
@@ -720,7 +729,7 @@ describe("dropping", () => {
 			rect(b);
 			const over = drag(b, "dragover", PANE_MIME, "", 10, 100);
 			expect(over.defaultPrevented).toBe(false);
-			expect(host.querySelector("span.bg-accent")).toBeNull();
+			expect(host.querySelector("[data-drop-region]")).toBeNull();
 		});
 
 		it("on a plane item carries the item, and offers no drop onto itself", () => {

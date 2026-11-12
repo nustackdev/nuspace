@@ -15,7 +15,8 @@
 //
 //   { kind: "end", desk }                  a desk title: the end of the desk
 //   { kind: "between", desk, index }       between items in a folder
-//   { kind: "onto", desk, item, side }     a plane item's row or canvas edge
+//   { kind: "onto", desk, item, edge }     a plane item's row, or its canvas
+//                                          edge or half (top / bottom stacks)
 //   { kind: "strip", desk, item, drop }    inside a strip (../desk/model.ts `Drop`)
 //
 // `planDrop` is the drag table of the task's iteration-3.md, pure: a link,
@@ -37,7 +38,7 @@
 // needs to know what is coming. `endDrag` forgets it.
 
 import { focusPane, knownDesks, openDesk, writeDesks } from "../core/router";
-import type { Desk, Drop, Item, Link, Links, Side } from "./model";
+import type { Desk, Drop, Edge, Item, Link, Links } from "./model";
 import * as M from "./model";
 
 /** A bare link dragged from the Planes tree or the nav section. */
@@ -65,7 +66,7 @@ export type Payload =
 export type Target =
 	| { kind: "end"; desk: string }
 	| { kind: "between"; desk: string; index: number }
-	| { kind: "onto"; desk: string; item: string; side: Side }
+	| { kind: "onto"; desk: string; item: string; edge: Edge }
 	| { kind: "strip"; desk: string; item: string; drop: Drop };
 
 let current: Payload | null = null;
@@ -231,7 +232,7 @@ export function planDrop(
 			next = M.addItem(base, { id, kind: "plane", ...lifted.links }, index);
 		}
 	} else if (target.kind === "onto") {
-		next = M.makeStrip(base, target.item, lifted.links, target.side);
+		next = M.makeStrip(base, target.item, lifted.links, target.edge);
 	} else {
 		next = M.addPane(base, target.item, lifted.links, target.drop, lifted.width);
 	}
@@ -251,8 +252,9 @@ export function canDrop(payload: Payload | null, target: Target): boolean {
 }
 
 /**
- * The desks a drop on a solo plane's `side` edge writes: desk `id`, new, of
- * the solo plane and the dropped one side by side in a strip, and the desk
+ * The desks a drop on a solo plane's `edge` writes: desk `id`, new, of the
+ * solo plane and the dropped one in a strip (side by side, or stacked for
+ * top / bottom), and the desk
  * the dragged item or pane leaves. Null when no strip comes of it (the solo
  * plane itself, a whole strip).
  */
@@ -260,7 +262,7 @@ export function planSolo(
 	desks: Record<string, Desk>,
 	payload: Payload,
 	solo: Link,
-	side: Side,
+	edge: Edge,
 	id: string,
 	random: () => number = Math.random,
 ): Record<string, Desk> | null {
@@ -270,7 +272,7 @@ export function planSolo(
 	const plan = planDrop(
 		{ ...desks, [id]: fresh },
 		payload,
-		{ kind: "onto", desk: id, item: first, side },
+		{ kind: "onto", desk: id, item: first, edge },
 		random,
 	);
 	return plan?.[id]?.items[0]?.kind === "strip" ? plan : null;
@@ -299,14 +301,14 @@ export function canDropOnSolo(payload: Payload | null, plane: string): boolean {
 }
 
 /**
- * A drag dropped on a solo plane's `side` edge: the new desk of the two
+ * A drag dropped on a solo plane's `edge`: the new desk of the two
  * (`planSolo`) written, opened with the dropped one focused.
  */
-export function dropOnSolo(payload: Payload, solo: Link, side: Side): void {
+export function dropOnSolo(payload: Payload, solo: Link, edge: Edge): void {
 	const desks = knownDesks();
 	if (!desks) return;
 	const id = M.mintDeskId((x) => !!desks[x]);
-	const plan = planSolo(desks, payload, solo, side, id);
+	const plan = planSolo(desks, payload, solo, edge, id);
 	if (!plan) return;
 	writeDesks(plan);
 	focusDropped(desks, payload, id, (plan[id].items[0] as M.Item).id);

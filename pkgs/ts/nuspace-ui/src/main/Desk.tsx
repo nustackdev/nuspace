@@ -4,8 +4,8 @@
 //   solo     a plane outside any desk: one pane, the whole canvas
 //   item     a desk item. A plane item: its plane alone, full size, like
 //            solo. A strip: one row of columns left to right, each the
-//            canvas's full height with its panes stacked in it, then the end
-//            zone. The row scrolls sideways only, in the kit's scroll area
+//            canvas's full height with its panes stacked in it. The row
+//            scrolls sideways only, in the kit's scroll area
 //   desk     an empty desk: a hint to drag a plane in
 //   pending  a spinner, until the desks or the roles land
 //   missing  not found: a desk, a desk's item or a url that is none of
@@ -21,10 +21,12 @@
 // row in the sidebar opening the strip (`openPane`) reveals its pane the same
 // way, smoothly.
 //
-// The canvas takes drops (./drop.tsx): onto a plane item's left or right
-// edge (the two become a strip), inside a strip onto a pane's edge or half or
-// the end zone, anywhere on an empty desk, and onto a solo plane's left or
-// right edge, which makes a new desk of the two (`dropOnSolo`).
+// The canvas takes drops (./drop.tsx) anywhere on a pane: its left or right
+// quarter, else its top or bottom half. Onto a plane item the two become a
+// strip, side by side or stacked; inside a strip a pane there; anywhere on an
+// empty desk; and onto a solo plane, which
+// makes a new desk of the two (`dropOnSolo`). Where it lands is drawn as the
+// region the drop makes (./DropRegion.tsx).
 //
 // The effect here ships `planes.open` with every shown plane in order and its
 // params whenever either changes, and once on load. One way: the server
@@ -60,10 +62,8 @@ import { notifyOp } from "../core/wire";
 import {
 	deskArea,
 	deskColumns,
-	deskDropLine,
 	deskEmpty,
 	deskEmptyAim,
-	deskEnd,
 	deskRow,
 	deskRowViewport,
 	deskSolo,
@@ -84,7 +84,8 @@ import {
 	usePlaneTree,
 } from "../sidebar/api";
 import { Column } from "./Column";
-import { DropAim, useCanvasDrop, useDropAim } from "./drop";
+import { DropRegion } from "./DropRegion";
+import { useCanvasDrop } from "./drop";
 import {
 	patchPlaneMeta,
 	patchPlaneTitle,
@@ -128,6 +129,8 @@ export function Desk({ path }: NodeProps) {
 	// What `planes.open` says, as a key: the panes in order with their params.
 	const panesKey = JSON.stringify(routes.map((id) => [id, paramsOf(id)]));
 	const areaRef = useRef<HTMLDivElement | null>(null);
+	// What the drop region measures against: the strip's columns, or the solo pane's box.
+	const dropHost = useRef<HTMLDivElement | null>(null);
 	const drop = useCanvasDrop(surfaceOf(route));
 
 	// One ref per op: the op name is the tail of the wire path, not a key in
@@ -267,11 +270,9 @@ export function Desk({ path }: NodeProps) {
 	if (route.kind === "solo") {
 		return (
 			<div className={deskArea}>
-				<div className={deskSolo} {...drop.props}>
+				<div ref={dropHost} className={deskSolo} {...drop.props}>
 					{pane(route.plane)}
-					{drop.aim?.kind === "onto" ? (
-						<span aria-hidden className={deskDropLine(drop.aim.side)} />
-					) : null}
+					<DropRegion aim={drop.aim} host={dropHost} />
 				</div>
 			</div>
 		);
@@ -290,11 +291,15 @@ export function Desk({ path }: NodeProps) {
 		const plane = shown(route.item).plane;
 		return (
 			<div className={deskArea}>
-				<div className={deskSolo} data-desk={route.desk} data-item={route.item.id} {...drop.props}>
+				<div
+					ref={dropHost}
+					className={deskSolo}
+					data-desk={route.desk}
+					data-item={route.item.id}
+					{...drop.props}
+				>
 					{pane(plane)}
-					{drop.aim?.kind === "onto" ? (
-						<span aria-hidden className={deskDropLine(drop.aim.side)} />
-					) : null}
+					<DropRegion aim={drop.aim} host={dropHost} />
 				</div>
 			</div>
 		);
@@ -314,35 +319,21 @@ export function Desk({ path }: NodeProps) {
 				data-item={item}
 				{...drop.props}
 			>
-				<DropAim value={drop.aim}>
-					<div className={deskColumns}>
-						{columns.map((column, i) => (
-							<Column
-								key={column.panes[0] ? shown(column.panes[0]).plane : i}
-								desk={desk}
-								item={item}
-								column={column}
-								only={columns.length === 1}
-								last={i === columns.length - 1}
-								pane={pane}
-							/>
-						))}
-						<EndZone at={columns.length} />
-					</div>
-				</DropAim>
+				<div ref={dropHost} className={deskColumns}>
+					{columns.map((column, i) => (
+						<Column
+							key={column.panes[0] ? shown(column.panes[0]).plane : i}
+							desk={desk}
+							item={item}
+							column={column}
+							only={columns.length === 1}
+							last={i === columns.length - 1}
+							pane={pane}
+						/>
+					))}
+					<DropRegion aim={drop.aim} host={dropHost} />
+				</div>
 			</ScrollArea>
-		</div>
-	);
-}
-
-/** The end zone after the last column: a drop here is a new column at `at`, the end. */
-function EndZone({ at }: { at: number }) {
-	const aim = useDropAim();
-	return (
-		<div className={deskEnd} data-end={at}>
-			{aim?.kind === "strip" && "at" in aim.drop && aim.drop.at === at ? (
-				<span aria-hidden className={deskDropLine("left")} />
-			) : null}
 		</div>
 	);
 }

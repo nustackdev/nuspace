@@ -1,6 +1,6 @@
 // The canvas as a drop target: one set of handlers on what the canvas shows,
-// and the target they aim at, handed down to the parts that draw its line
-// (../desk/drag.ts has where a drop lands).
+// and the target they aim at, which ./DropRegion.tsx draws (../desk/drag.ts
+// has where a drop lands).
 //
 // Every kind of drag is taken (../desk/dnd.ts): a plane (a Planes tree or nav
 // row, a solo pane's header), an item (a desk item row, a plane item's
@@ -8,10 +8,10 @@
 // dragged over the canvas (a file, a cell) passes through untouched. A drop
 // goes out through `dropOn`, which does the drag table, and is offered only
 // where the table writes something (`canDrop`, `canDropOnSolo`).
-// Leaving the canvas, dropping or ending the drag anywhere clears the line.
+// Leaving the canvas, dropping or ending the drag anywhere clears the region.
 
 import type * as React from "react";
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { paramsOf } from "../core/router";
 import {
 	canDrop,
@@ -25,15 +25,6 @@ import {
 } from "../desk/dnd";
 import { type Surface, sameTarget, targetAt } from "../desk/drag";
 
-const Aim = createContext<Target | null>(null);
-
-/** Where the drag in flight would land now, null at rest. */
-export function useDropAim(): Target | null {
-	return useContext(Aim);
-}
-
-export const DropAim = Aim.Provider;
-
 /** The target a drag event over `surface` points at, or null when it offers none. */
 function aimOf(surface: Surface, e: React.DragEvent): Target | null {
 	if (!dragKind(e.dataTransfer)) return null;
@@ -46,7 +37,7 @@ function aimOf(surface: Surface, e: React.DragEvent): Target | null {
 /**
  * The canvas's drop handlers and the target they aim at. `surface` is what
  * the canvas shows, null for what takes no drop. A solo plane takes a drop
- * on its left or right edge, making a new desk of the two.
+ * anywhere, making a new desk of the two.
  */
 export function useCanvasDrop(surface: Surface | null): {
 	aim: Target | null;
@@ -58,7 +49,7 @@ export function useCanvasDrop(surface: Surface | null): {
 		[],
 	);
 
-	// A drag that ends anywhere (Esc, a drop elsewhere) clears the line.
+	// A drag that ends anywhere (Esc, a drop elsewhere) clears the region.
 	useEffect(() => {
 		const clear = () => setAim(null);
 		document.addEventListener("dragend", clear);
@@ -97,7 +88,7 @@ export function useCanvasDrop(surface: Surface | null): {
 						dropOnSolo(
 							payload,
 							{ plane: surface.plane, params: paramsOf(surface.plane) },
-							target.side,
+							target.edge,
 						);
 					}
 				} else dropOn(payload, target);

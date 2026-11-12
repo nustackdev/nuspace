@@ -266,7 +266,7 @@ export function rowAim(desk: string, row: FolderRow, band: DropEdge, side: Side)
 			return { target: { kind: "between", desk, index: row.index + 1 }, mark: line("after", 0) };
 		}
 		if (row.kind === "plane") {
-			return { target: { kind: "onto", desk, item: row.item, side }, mark: ring };
+			return { target: { kind: "onto", desk, item: row.item, edge: side }, mark: ring };
 		}
 	}
 	if (row.kind === "strip") {

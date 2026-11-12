@@ -6,7 +6,7 @@ import type * as React from "react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { resetRouter, setDesks, setRoles } from "../core/router";
 import { dragging, endDrag, ITEM_MIME, PANE_MIME, PLANE_MIME, type Target } from "./dnd";
-import { dropAt, edgeAt, headerDragProps, sameDrop, sameTarget, sideAt, targetAt } from "./drag";
+import { dropAt, edgeAt, headerDragProps, sameDrop, sameTarget, targetAt } from "./drag";
 
 const RECT = { left: 100, top: 50, width: 400, height: 200 };
 const DESK = "desk0001";
@@ -22,23 +22,17 @@ describe("the drop target off the pointer", () => {
 		expect(edgeAt(RECT, 300, 151)).toBe("bottom");
 	});
 
-	it("is a side of a plane item in its outer quarters only", () => {
-		expect(sideAt(RECT, 110)).toBe("left");
-		expect(sideAt(RECT, 490)).toBe("right");
-		expect(sideAt(RECT, 300)).toBeNull();
-	});
-
-	it("reads the pane under the pointer, else the end zone, else nothing", () => {
+	it("reads the pane under the pointer, else nothing", () => {
 		const desk = document.createElement("div");
 		desk.innerHTML = `
-			<div class="cols"><section data-pane="a"><p>x</p></section><div data-end="1"></div></div>`;
+			<div class="cols"><section data-pane="a"><p>x</p></section><div class="rest"></div></div>`;
 		document.body.append(desk);
 		const pane = desk.querySelector<HTMLElement>("[data-pane]") as HTMLElement;
 		pane.getBoundingClientRect = () => ({ ...RECT }) as DOMRect;
 		const inner = pane.querySelector("p");
 		expect(dropAt(inner, 120, 60, desk)).toEqual({ plane: "a", edge: "left" });
 		expect(dropAt(inner, 300, 200, desk)).toEqual({ plane: "a", edge: "bottom" });
-		expect(dropAt(desk.querySelector("[data-end]"), 0, 0, desk)).toEqual({ at: 1 });
+		expect(dropAt(desk.querySelector(".rest"), 0, 0, desk)).toBeNull();
 		expect(dropAt(desk.querySelector(".cols"), 0, 0, desk)).toBeNull();
 		expect(dropAt(desk, 0, 0, desk)).toBeNull();
 		desk.remove();
@@ -46,14 +40,14 @@ describe("the drop target off the pointer", () => {
 
 	it("reads nothing outside the canvas", () => {
 		const outer = document.createElement("div");
-		outer.innerHTML = `<div data-end="0"><div class="desk"></div></div>`;
+		outer.innerHTML = `<section data-pane="a"><div class="desk"></div></section>`;
 		const desk = outer.querySelector(".desk") as HTMLElement;
 		expect(dropAt(desk, 0, 0, desk)).toBeNull();
 	});
 
 	it("builds the target for each surface", () => {
 		const canvas = document.createElement("div");
-		canvas.innerHTML = `<section data-pane="a"><p>x</p></section><div data-end="1"></div>`;
+		canvas.innerHTML = `<section data-pane="a"><p>x</p></section>`;
 		document.body.append(canvas);
 		const pane = canvas.querySelector<HTMLElement>("[data-pane]") as HTMLElement;
 		pane.getBoundingClientRect = () => ({ ...RECT }) as DOMRect;
@@ -67,21 +61,20 @@ describe("the drop target off the pointer", () => {
 			item: "strip1",
 			drop: { plane: "a", edge: "left" },
 		});
-		expect(targetAt(strip, canvas.querySelector("[data-end]"), 0, 0, canvas)).toEqual({
-			kind: "strip",
-			desk: DESK,
-			item: "strip1",
-			drop: { at: 1 },
-		});
 		expect(targetAt(strip, canvas, 0, 0, canvas)).toBeNull();
 
 		expect(targetAt(plane, inner, 490, 60, canvas)).toEqual({
 			kind: "onto",
 			desk: DESK,
 			item: "lone01",
-			side: "right",
+			edge: "right",
 		});
-		expect(targetAt(plane, inner, 300, 60, canvas)).toBeNull();
+		expect(targetAt(plane, inner, 300, 60, canvas)).toEqual({
+			kind: "onto",
+			desk: DESK,
+			item: "lone01",
+			edge: "top",
+		});
 		expect(targetAt(plane, canvas, 0, 0, canvas)).toBeNull();
 
 		expect(targetAt({ kind: "desk", desk: DESK }, canvas, 0, 0, canvas)).toEqual({
@@ -101,10 +94,10 @@ describe("the drop target off the pointer", () => {
 		expect(sameDrop({ at: 0 }, null)).toBe(false);
 		expect(sameDrop(null, null)).toBe(true);
 
-		const onto: Target = { kind: "onto", desk: DESK, item: "lone01", side: "left" };
+		const onto: Target = { kind: "onto", desk: DESK, item: "lone01", edge: "left" };
 		const strip: Target = { kind: "strip", desk: DESK, item: "strip1", drop: { at: 2 } };
 		expect(sameTarget(onto, { ...onto })).toBe(true);
-		expect(sameTarget(onto, { ...onto, side: "right" })).toBe(false);
+		expect(sameTarget(onto, { ...onto, edge: "right" })).toBe(false);
 		expect(sameTarget(strip, { ...strip, drop: { at: 2 } })).toBe(true);
 		expect(sameTarget(strip, { ...strip, drop: { at: 1 } })).toBe(false);
 		expect(sameTarget({ kind: "end", desk: DESK }, { kind: "end", desk: DESK })).toBe(true);

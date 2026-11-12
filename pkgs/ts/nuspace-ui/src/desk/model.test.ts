@@ -247,6 +247,16 @@ describe("strips", () => {
 		expect(makeStrip(s, "ssssss", { original: L("d") }, "right")).toBe(s);
 	});
 
+	it("makes a strip of a plane item and a dropped link stacked in one column", () => {
+		const desk = dk(pi("aaaaaa", "a", L("x")));
+		const below = makeStrip(desk, "aaaaaa", { original: L("b") }, "bottom");
+		expect(below.items[0]).toEqual(st("aaaaaa", [pn("a", 0.5, L("x")), pn("b", 0.5)]));
+		expect(sketch(makeStrip(desk, "aaaaaa", { original: L("b") }, "top"))).toEqual([
+			{ aaaaaa: [["b", "x"]] },
+		]);
+		expect(makeStrip(desk, "aaaaaa", { original: L("x") }, "top")).toBe(desk);
+	});
+
 	it("adds a pane at a strip drop: new column, stacked, at a pane's edge", () => {
 		const desk = AB();
 		const x = { original: L("x") };

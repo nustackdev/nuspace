@@ -47,8 +47,10 @@
 	--doc-box-line: var(--accent-line);
 
 	/* Drag + drop. The handles themselves are kit IconButtons and bring their
-	 * own text and hover tiers; only the drop line is ours. */
+	 * own text and hover tiers; only the drop line and the canvas's drop
+	 * region (a light wash of the primary inside that line) are ours. */
 	--doc-drop-line: var(--accent);
+	--doc-drop: color-mix(in oklab, var(--accent) 10%, transparent);
 
 	/* The caret's cell: no fill, just a hairline rail in the gutter */
 	--doc-focus-rail: var(--border-strong);
@@ -124,7 +126,7 @@
 }
 
 /* ============================== L2.5: document roles (dark) ===============
- * Only the neutral interaction tiers and the drag box need a per-theme value: the same alpha
+ * Only the neutral interaction tiers, the drag box and the drop region need a per-theme value: the same alpha
  * that reads on Dawn is invisible on Dusk. Everything else is an alias
  * onto a kit role that already flipped.
  * ==========================================================================*/
@@ -132,6 +134,7 @@
 	--doc-hover: color-mix(in oklab, var(--text-primary) 6%, transparent);
 	--doc-active: color-mix(in oklab, var(--text-primary) 10%, transparent);
 	--doc-box: color-mix(in oklab, var(--accent) 14%, transparent);
+	--doc-drop: color-mix(in oklab, var(--accent) 16%, transparent);
 }
 
 /* ============================== L3: Tailwind v4 ===========================*/
@@ -142,6 +145,7 @@
 	--color-doc-box: var(--doc-box);
 	--color-doc-box-line: var(--doc-box-line);
 	--color-doc-drop-line: var(--doc-drop-line);
+	--color-doc-drop: var(--doc-drop);
 	--color-doc-focus-rail: var(--doc-focus-rail);
 
 	/* --- Cell status --> text-cell-running, bg-cell-failed-wash --*/

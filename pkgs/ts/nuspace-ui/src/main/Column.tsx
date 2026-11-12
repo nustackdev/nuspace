@@ -12,15 +12,11 @@
 // gap between its panes (./Resize.tsx). A drag starts from the width drawn,
 // previews here and writes the desk once on release: `setWidth` with the
 // px, `setShares` with the column's shares.
-//
-// The drop target's line (./drop.tsx) is drawn here too: on the edge or half
-// of the pane it names.
 
 import { type ReactNode, useRef, useState } from "react";
 import { setShares, setWidth } from "../core/router";
-import { deskColumn, deskColumnWidth, deskDropLine, deskShare } from "../design";
+import { deskColumn, deskColumnWidth, deskShare } from "../design";
 import { type Column as ColumnShape, MIN_WIDTH, shown } from "../desk/model";
-import { useDropAim } from "./drop";
 import { ColumnHandle, ShareHandle } from "./Resize";
 import { GAP, resizeShares } from "./sizes";
 
@@ -48,7 +44,6 @@ export function Column({
 	/** Draw the pane showing a plane. */
 	pane: (plane: string) => ReactNode;
 }) {
-	const aim = useDropAim();
 	const ref = useRef<HTMLDivElement | null>(null);
 	const [livePx, setLivePx] = useState<number | null>(null);
 	const [liveShares, setLiveShares] = useState<number[] | null>(null);
@@ -103,9 +98,6 @@ export function Column({
 			{planes.map((plane, i) => (
 				<div key={plane} className={deskShare} style={{ flexGrow: shares[i] }} data-share="">
 					{pane(plane)}
-					{aim?.kind === "strip" && "plane" in aim.drop && aim.drop.plane === plane ? (
-						<span aria-hidden className={deskDropLine(aim.drop.edge)} />
-					) : null}
 					{i < planes.length - 1 ? (
 						<ShareHandle
 							onLive={(delta) => setLiveShares(shareAt(i, delta))}

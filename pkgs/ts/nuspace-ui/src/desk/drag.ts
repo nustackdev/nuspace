@@ -13,12 +13,12 @@
 // (`Surface`) and what is under the pointer:
 //
 //   the empty desk                    the end of the desk
-//   a plane item, left / right edge   onto it: the two become a strip
-//   in a strip, a pane's left / right quarter   a new column on that side
-//   in a strip, a pane's middle half  its top or bottom half: stacked there
-//   in a strip, the end zone (`[data-end]`)     a new column at the end
+//   a pane's left / right quarter     a new column on that side
+//   a pane's middle half              its top or bottom half: stacked there
 //
-//   a solo plane, left / right edge   a new desk of the two (dnd `dropOnSolo`)
+// The same zones on every pane, all of it taken: in a strip a pane there; on
+// a plane item onto it, the two become a strip (side by side or stacked); on
+// a solo plane a new desk of the two (dnd `dropOnSolo`).
 //
 // Whether a target takes the drag is the drag table's (dnd `canDrop`).
 
@@ -26,7 +26,7 @@ import type * as React from "react";
 import { paramsOf } from "../core/router";
 import { dragChip } from "../design";
 import { endDrag, type Target, writeItem, writePane, writePlane } from "./dnd";
-import type { Drop, Edge, Side } from "./model";
+import type { Drop, Edge } from "./model";
 
 /** Where a pane sits: solo, as a plane item, or in a strip. */
 export type PaneAt =
@@ -55,14 +55,6 @@ export function edgeAt(rect: Rect, x: number, y: number): Edge {
 	return y - rect.top < rect.height / 2 ? "top" : "bottom";
 }
 
-/** The side of a plane item a pointer at `x` is on: its outer quarters only, null in the middle. */
-export function sideAt(rect: Pick<Rect, "left" | "width">, x: number): Side | null {
-	const fx = rect.width > 0 ? (x - rect.left) / rect.width : 0.5;
-	if (fx < EDGE_BAND) return "left";
-	if (fx > 1 - EDGE_BAND) return "right";
-	return null;
-}
-
 /** The closest `sel` from `el`, kept only inside `within` when given. */
 function inside(el: Element | null, sel: string, within?: Element): HTMLElement | null {
 	const hit = el?.closest<HTMLElement>(sel) ?? null;
@@ -71,18 +63,16 @@ function inside(el: Element | null, sel: string, within?: Element): HTMLElement 
 
 /**
  * Where a drop at (`x`, `y`) on `el` lands in a strip: an edge or half of the
- * pane it is in (`[data-pane]`), else the end zone (`[data-end]`, its column
- * index). Null off both. `within` bounds the lookup, so nothing outside the
- * canvas is read.
+ * pane it is in (`[data-pane]`). Null off every pane: a new column at the end
+ * is the last pane's right edge. `within` bounds the lookup, so nothing
+ * outside the canvas is read.
  */
 export function dropAt(el: Element | null, x: number, y: number, within?: Element): Drop | null {
 	const pane = inside(el, "[data-pane]", within);
 	if (pane?.dataset.pane) {
 		return { plane: pane.dataset.pane, edge: edgeAt(pane.getBoundingClientRect(), x, y) };
 	}
-	const end = inside(el, "[data-end]", within);
-	const at = Number(end?.dataset.end);
-	return end && Number.isInteger(at) && at >= 0 ? { at } : null;
+	return null;
 }
 
 /** Where a drop at (`x`, `y`) on `el` lands on `surface`, or null where it offers none. */
@@ -96,11 +86,11 @@ export function targetAt(
 	if (surface.kind === "desk") return { kind: "end", desk: surface.desk };
 	if (surface.kind === "solo" || surface.kind === "plane") {
 		const pane = inside(el, "[data-pane]", within);
-		const side = pane ? sideAt(pane.getBoundingClientRect(), x) : null;
-		if (!side) return null;
-		// A solo plane has no desk yet: the target only says the side.
-		if (surface.kind === "solo") return { kind: "onto", desk: "", item: "", side };
-		return { kind: "onto", desk: surface.desk, item: surface.item, side };
+		if (!pane) return null;
+		const edge = edgeAt(pane.getBoundingClientRect(), x, y);
+		// A solo plane has no desk yet: the target only says the edge.
+		if (surface.kind === "solo") return { kind: "onto", desk: "", item: "", edge };
+		return { kind: "onto", desk: surface.desk, item: surface.item, edge };
 	}
 	const drop = dropAt(el, x, y, within);
 	return drop ? { kind: "strip", desk: surface.desk, item: surface.item, drop } : null;
@@ -120,7 +110,7 @@ export function sameTarget(a: Target | null, b: Target | null): boolean {
 	if (a.kind !== b.kind || a.desk !== b.desk) return false;
 	if (a.kind === "end") return true;
 	if (a.kind === "between") return b.kind === "between" && a.index === b.index;
-	if (a.kind === "onto") return b.kind === "onto" && a.item === b.item && a.side === b.side;
+	if (a.kind === "onto") return b.kind === "onto" && a.item === b.item && a.edge === b.edge;
 	return b.kind === "strip" && a.item === b.item && sameDrop(a.drop, b.drop);
 }
 
