@@ -14,7 +14,7 @@ The sdk, what a program calls, is the ops (:mod:`.ops`), flat here::
   (browser tabs, their panes and sidebar folds); :mod:`.stores`: their
   files, channels and init terms.
 - :mod:`.ops`: the ops over them, all but the desks'.
-- :mod:`.desks`: the desks: their ops (``web.desks.set_desk``, ...), the
+- :mod:`.desks`: the desks: their ops (``web.desks.add_plane``, ...), the
   browser node and feed, the desk pruner.
 - :mod:`.home`: Home and the home indexer; :mod:`.planes`: every plane
   the device ships with, made at open (search and settings live there).

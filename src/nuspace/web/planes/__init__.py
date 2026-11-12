@@ -30,9 +30,10 @@ from nuspace.shapes.space import Space
 from nuspace.utils import MintId
 from nuspace.utils.checks import refuse
 
+from .. import desks
 from .. import ops as web
 from ..desks import pruner
-from ..desks.model import Favorites
+from ..desks.model import FAVORITES
 from ..home import CELLS as HOME_CELLS
 from ..home import ICON as HOME_ICON
 from ..home import NAME as HOME_NAME
@@ -202,22 +203,12 @@ def ensure_pruner() -> nu.Nu:
 
 
 def ensure_favorites() -> nu.Nu:
-    """The Favorites desk, made once per space, first in creation order. One Web commit, once.
+    """The Favorites desk, made once per space, empty, last among the desks (first on a new space). One Web commit, once.
 
-    Made only while ``Web.seeded`` is not set, and it sets it: a closed
-    Favorites never comes back. It starts empty, its id minted as the
-    browser mints them.
+    Made only while ``Web.desks_seeded`` is not set, and it sets it: a
+    closed Favorites never comes back. Its id is minted as the browser
+    mints them.
     """
-
-    def seed(made: nu.Attr) -> nu.Nu:
-        m = nu.Dict(made)
-        desk_id = nu.Str(m["id"])
-        return (
-            Web.desks[desk_id].set(m["desk"])
-            >> Web.desk_order.remove(desk_id, missing_ok=True)
-            >> Web.desk_order.append(desk_id)
-            >> Web.seeded.set(True)
-        )
-
-    fresh = Web.seeded.fallback(False).not_()
-    return atomic(nu.IfDo(fresh, nu.let(Favorites(), seed)))
+    fresh = Web.desks_seeded.fallback(False).not_()
+    made = desks.create_desk(FAVORITES) >> Web.desks_seeded.set(True)
+    return atomic(nu.IfDo(fresh, made))

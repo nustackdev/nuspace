@@ -1,11 +1,14 @@
 """The desk shape in plain python, and the hosts the desk ops, the feed and the pruner run it through.
 
-- :data:`DeskIdProblem`, :data:`DeskProblem`: what is wrong with a desk id
-  or a desk dict, ``""`` for nothing. :data:`ShapedDesk`,
-  :data:`ShapedDesks`: stored desks with any not on the desk shape left out,
-  in creation order. :data:`DeskPlanes`: every plane on those desks.
-  :func:`pruned_desk`: a desk with the links to removed planes taken out.
-  :data:`Favorites`: a new empty Favorites desk, its id minted.
+- Checks: :data:`DeskIdProblem`, :data:`ItemIdProblem`, :data:`ItemProblem`
+  (one stored item), :data:`WriteProblem` (one desk's items write), each
+  ``""`` for nothing wrong.
+- Reads: :data:`DeskView`, :data:`DesksView` (a stored desk as it is read,
+  ``{name, items}``), :data:`DeskPlanes` (every plane on the desks).
+- Placing: :data:`OrderMoves` (the moves putting items in an order),
+  :data:`Items` (a desk's items list as entries), :data:`NewId`.
+- Changing items: :data:`SavedEntries`, :data:`ResetItem`,
+  :data:`PrunedEntries`.
 
 Safe for a worker to import: nothing here pulls in a server.
 """
@@ -18,7 +21,6 @@ import secrets
 from collections.abc import Mapping, Sequence
 
 import nu
-from nu.lang import NULL
 
 
 __all__ = [
@@ -29,27 +31,40 @@ __all__ = [
     "KIND_STRIP",
     "DeskIdProblem",
     "DeskPlanes",
-    "DeskProblem",
-    "Favorites",
-    "MovedOrder",
-    "ShapedDesk",
-    "ShapedDesks",
+    "DeskView",
+    "DesksView",
+    "ItemIdProblem",
+    "ItemProblem",
+    "Items",
+    "NewId",
+    "OrderMoves",
+    "PrunedEntries",
+    "ResetItem",
+    "SavedEntries",
+    "WriteProblem",
     "desk_planes",
-    "desk_problem",
-    "favorites",
+    "desk_view",
+    "desks_view",
+    "item_problem",
+    "items_of",
     "mint_id",
-    "moved_order",
-    "ordered_desks",
-    "pruned_desk",
+    "order_moves",
+    "pruned_entries",
+    "pruned_item",
+    "reset_item",
+    "saved_entries",
     "shown_plane",
+    "write_problem",
 ]
 
 
-# A desk is ``{name, items}``. An item is a plane item or a strip, each with
-# an ``id``. A plane item and a strip's pane each hold ``original`` (the link
-# it was saved with) and, when navigated away, ``recent`` (the link it shows
-# now). A link is ``{plane, params}``. The plain python checks and the plain
-# python pruning live here; the ops and the pruner run them through hosts.
+# A desk is stored as :class:`~nuspace.web.shapes.Desk`: a name and its entries,
+# item id to item, in desk order. An item is a plane item or a strip, its id
+# the key, never in the value. A plane item and a strip's pane each hold
+# ``original`` (the link it was saved with) and, when navigated away,
+# ``recent`` (the link it shows now). A link is ``{plane, params}``. Read
+# back, a desk is ``{name, items}``: its items in order, each with its ``id``,
+# the shape the browser's ``Desk`` has.
 
 #: A desk id: 8 chars ``[a-z0-9]``, minted by the browser.
 DESK_ID = re.compile(r"[a-z0-9]{8}")
@@ -57,14 +72,14 @@ DESK_ID = re.compile(r"[a-z0-9]{8}")
 #: An item id: 6 chars ``[a-z0-9]``, minted by the browser, unique within its desk.
 ITEM_ID = re.compile(r"[a-z0-9]{6}")
 
-#: The id chars, what :func:`mint_desk` draws from.
+#: The id chars, what :func:`mint_id` draws from.
 _ID_CHARS = "abcdefghijklmnopqrstuvwxyz0123456789"
 
 #: The two kinds of item.
 KIND_PLANE = "plane"
 KIND_STRIP = "strip"
 
-#: The name of the desk seeded once per space (:func:`mint_desk`).
+#: The name of the desk seeded once per space.
 FAVORITES = "Favorites"
 
 #: How far a column's shares may be off 1, for floats the browser added up.
@@ -77,8 +92,17 @@ def _desk_id_problem(desk_id: object) -> str:
     return f"desk id {desk_id!r} is not 8 chars of a-z and 0-9"
 
 
+def _item_id_problem(item_id: object) -> str:
+    if isinstance(item_id, str) and ITEM_ID.fullmatch(item_id):
+        return ""
+    return f"item id {item_id!r} is not 6 chars of a-z and 0-9"
+
+
 #: ``DeskIdProblem(id)``: why a desk id is spelled wrong, ``""`` when it is right.
 DeskIdProblem = nu.host(_desk_id_problem, name="DeskIdProblem")
+
+#: ``ItemIdProblem(id)``: why an item id is spelled wrong, ``""`` when it is right.
+ItemIdProblem = nu.host(_item_id_problem, name="ItemIdProblem")
 
 
 def _fraction(value: object) -> bool:
@@ -180,121 +204,153 @@ def _strip_problem(strip: Mapping, at: str) -> str:
     return f"{at} shows plane {twice[0]} twice" if twice else ""
 
 
-def _item_problem(item: object, at: str) -> str:
-    if not isinstance(item, Mapping):
-        return f"{at} is not a dict"
-    kind = item.get("kind")
-    if kind == KIND_PLANE:
-        said = _keys(item, {"id", "kind", "original"}, at, optional=_RECENT)
-    elif kind == KIND_STRIP:
-        said = _keys(item, {"id", "kind", "columns"}, at)
-    else:
-        return f"{at} kind is not {KIND_PLANE!r} or {KIND_STRIP!r}"
-    if said:
-        return said
-    item_id = item["id"]
-    if not isinstance(item_id, str) or not ITEM_ID.fullmatch(item_id):
-        return f"{at} id {item_id!r} is not 6 chars of a-z and 0-9"
-    return _links_problem(item, at) if kind == KIND_PLANE else _strip_problem(item, at)
+def item_problem(item: object) -> str:
+    """Why ``item`` is not a stored item, ``""`` when it is. Plain python, what :data:`ItemProblem` runs.
 
-
-def desk_problem(desk: object) -> str:
-    """Why ``desk`` is not a desk, ``""`` when it is. Plain python, what :data:`DeskProblem` runs.
-
-    A desk is ``{name, items}``: ``name`` a string, ``items`` a list, empty
-    or not. An item is a plane item ``{id, kind: "plane", original,
-    recent?}`` or a strip ``{id, kind: "strip", columns}``, its id 6 chars
-    of a-z and 0-9 and unique in the desk. A strip has columns ``{width?,
-    panes}``, each with panes ``{share, original, recent?}``. A link
-    (``original``, ``recent``) is ``{plane, params}``, ``params`` str to
-    str. A width is a positive number of px (none: the default width),
-    shares are numbers in ``(0, 1]``, a column's shares sum
-    to 1, a column is never empty, a strip holds two panes or more, and a
-    strip never shows one plane twice (what a pane shows: its recent, else its original). The
+    A plane item ``{kind: "plane", original, recent?}`` or a strip ``{kind:
+    "strip", columns}``, no id (the id is its key). A strip has columns
+    ``{width?, panes}``, each with panes ``{share, original, recent?}``. A
+    link (``original``, ``recent``) is ``{plane, params}``, ``params`` str
+    to str. A width is a positive number of px (none: the default width),
+    shares are numbers in ``(0, 1]``, a column's shares sum to 1, a column
+    is never empty, a strip holds two panes or more, and a strip never shows
+    one plane twice (what a pane shows: its recent, else its original). The
     same plane may sit in any number of items. No plane is looked up.
     """
-    said = _keys(desk, {"name", "items"}, "desk")
+    if not isinstance(item, Mapping):
+        return "item is not a dict"
+    kind = item.get("kind")
+    if kind == KIND_PLANE:
+        said = _keys(item, {"kind", "original"}, "item", optional=_RECENT)
+    elif kind == KIND_STRIP:
+        said = _keys(item, {"kind", "columns"}, "item")
+    else:
+        return f"item kind is not {KIND_PLANE!r} or {KIND_STRIP!r}"
     if said:
         return said
-    items = desk["items"]  # type: ignore[index]
-    if not isinstance(desk["name"], str):  # type: ignore[index]
-        return "desk name is not a string"
-    if not isinstance(items, list):
-        return "desk items is not a list"
-    for i, item in enumerate(items):
-        said = _item_problem(item, f"item {i}")
-        if said:
-            return said
-    ids = [item["id"] for item in items]
-    twice = sorted({i for i in ids if ids.count(i) > 1})
-    return f"item id {twice[0]} is twice in the desk" if twice else ""
+    return _links_problem(item, "item") if kind == KIND_PLANE else _strip_problem(item, "strip")
 
 
-#: ``DeskProblem(desk)``: why a desk dict is not the desk shape, ``""`` when it is
-#: (:func:`desk_problem`). The shape the browser's ``Desk`` type mirrors.
-DeskProblem = nu.host(desk_problem, name="DeskProblem")
-
-
-def _shaped_desk(desk: object) -> object:
-    return NULL if desk_problem(desk) else desk
+#: ``ItemProblem(item)``: why an item is not the stored item shape, ``""`` when it is (:func:`item_problem`).
+ItemProblem = nu.host(item_problem, name="ItemProblem")
 
 
 def _listed(held: object) -> list:
     return list(held) if isinstance(held, Sequence) and not isinstance(held, str) else []
 
 
-def ordered_desks(desks: object, order: object) -> dict:
-    """``{desk_id: desk}`` of the desks on the desk shape, in creation order. Plain python.
+def _ids(held: object) -> bool:
+    return isinstance(held, list) and all(isinstance(i, str) for i in held)
 
-    ``order`` is ``Web.desk_order``, the ids as they were created. A desk
-    it lacks (one a program stored straight) comes after, by id. A desk not
-    on the desk shape (one stored in an older shape) is left out: dropped
-    on read, never migrated.
+
+def write_problem(write: object) -> str:
+    """Why ``write`` is not one desk's items write, ``""`` when it is. Plain python, what :data:`WriteProblem` runs.
+
+    ``{desk_id, sets, deletes, order?}``: ``sets`` item id to item, each
+    id spelled right and each item on the item shape; ``deletes`` and
+    ``order`` lists of ids. A ``sets`` alone (no ``desk_id``) is checked the
+    same, the way :func:`~.ops.write_items` takes it.
     """
+    if not isinstance(write, Mapping):
+        return "write is not a dict"
+    said = _keys(write, {"desk_id", "sets", "deletes"}, "write", optional=frozenset({"order"}))
+    if said:
+        return said
+    if not isinstance(write["desk_id"], str):
+        return "write desk_id is not a string"
+    if not _ids(write["deletes"]):
+        return "write deletes is not a list of ids"
+    if "order" in write and write["order"] is not None and not _ids(write["order"]):
+        return "write order is not a list of ids"
+    return _sets_problem(write["sets"])
+
+
+def _sets_problem(sets: object) -> str:
+    if not isinstance(sets, Mapping):
+        return "sets is not a dict"
+    for item_id, item in sets.items():
+        said = _item_id_problem(item_id) or item_problem(item)
+        if said:
+            return f"{said} (item {item_id})" if not said.startswith("item id") else said
+    return ""
+
+
+#: ``WriteProblem(write)``: why a write is not one desk's items write, ``""`` when it is (:func:`write_problem`).
+WriteProblem = nu.host(write_problem, name="WriteProblem")
+
+
+def items_of(items: object) -> dict:
+    """``{item_id: item}`` from a desk's ``items`` list, each item without its id. Plain python, what :data:`Items` runs.
+
+    What turns the browser's ``Desk`` back into entries. Anything not a list
+    of dicts with an ``id`` gives what it can, and the write's check
+    refuses the rest.
+    """
+    out: dict = {}
+    for held in _listed(items):
+        if isinstance(held, Mapping) and "id" in held:
+            out[held["id"]] = {k: v for k, v in held.items() if k != "id"}
+    return out
+
+
+#: ``Items(items)``: :func:`items_of`, a desk's items list as entries.
+Items = nu.host(items_of, name="Items")
+
+
+# --- Reads ------------------------------------------------------------------------------
+
+
+def desk_view(desk: object) -> object:
+    """A stored desk as it is read: ``{name, items}``, its items in order, each with its ``id``. Plain python.
+
+    An entry off the item shape (one a program wrote straight) is left out.
+    """
+    if not isinstance(desk, Mapping):
+        return None
+    entries = desk.get("entries")
+    held = entries if isinstance(entries, Mapping) else {}
+    items = [{"id": i, **item} for i, item in held.items() if not item_problem(item)]
+    name = desk.get("name")
+    return {"name": name if isinstance(name, str) else "", "items": items}
+
+
+def desks_view(desks: object) -> dict:
+    """``{desk_id: desk}`` of every stored desk as it is read (:func:`desk_view`), in sidebar order. Plain python."""
     if not isinstance(desks, Mapping):
         return {}
-    listed = [d for d in dict.fromkeys(_listed(order)) if d in desks]
-    rest = sorted(d for d in desks if d not in listed)
-    return {d: desks[d] for d in [*listed, *rest] if not desk_problem(desks[d])}
+    return {d: desk_view(desk) for d, desk in desks.items() if isinstance(desk, Mapping)}
 
 
-#: ``ShapedDesk(desk)``: the desk as it is when it has the desk shape, NULL when not.
-ShapedDesk = nu.host(_shaped_desk, name="ShapedDesk")
+#: ``DeskView(desk)``: :func:`desk_view`.
+DeskView = nu.host(desk_view, name="DeskView")
 
-#: ``ShapedDesks(desks, order)``: :func:`ordered_desks`, the desks shipped and listed.
-ShapedDesks = nu.host(ordered_desks, name="ShapedDesks")
-
-
-def moved_order(order: object, desk_id: str, before: str) -> list[str]:
-    """``order`` with ``desk_id`` moved in front of ``before``, last when ``before`` is ``""`` or not there. Plain python.
-
-    ``desk_id`` is placed even when ``order`` lacks it (a desk a program
-    stored straight), and appears once.
-    """
-    ids = [d for d in dict.fromkeys(_listed(order)) if d != desk_id]
-    at = ids.index(before) if before in ids else len(ids)
-    ids.insert(at, desk_id)
-    return ids
+#: ``DesksView(desks)``: :func:`desks_view`, what ships and lists.
+DesksView = nu.host(desks_view, name="DesksView")
 
 
-#: ``MovedOrder(order, desk_id, before)``: :func:`moved_order`, the creation order after a move.
-MovedOrder = nu.host(moved_order, name="MovedOrder")
+def _entries(desk: object) -> Mapping:
+    entries = desk.get("entries") if isinstance(desk, Mapping) else None
+    return entries if isinstance(entries, Mapping) else {}
+
+
+def _links(item: Mapping) -> list[Mapping]:
+    """The plane item itself, or every pane of a strip: what holds links."""
+    return [item] if item["kind"] == KIND_PLANE else _panes(item)
 
 
 def desk_planes(desks: object) -> list[str]:
-    """Every plane id a desk of ``{desk_id: desk}`` holds, original or recent, once each, sorted.
+    """Every plane id a stored desk of ``{desk_id: desk}`` holds, original or recent, once each, sorted.
 
-    A desk not on the desk shape is skipped. Plain python.
+    An entry off the item shape is skipped. Plain python.
     """
     if not isinstance(desks, Mapping):
         return []
     found: set[str] = set()
     for desk in desks.values():
-        if desk_problem(desk):
-            continue
-        for item in desk["items"]:
-            held = [item] if item["kind"] == KIND_PLANE else _panes(item)
-            for h in held:
+        for item in _entries(desk).values():
+            if item_problem(item):
+                continue
+            for h in _links(item):
                 found.add(h["original"]["plane"])
                 if "recent" in h:
                     found.add(h["recent"]["plane"])
@@ -303,6 +359,48 @@ def desk_planes(desks: object) -> list[str]:
 
 #: ``DeskPlanes(desks)``: :func:`desk_planes`, every plane on a desk, original or recent.
 DeskPlanes = nu.host(desk_planes, name="DeskPlanes")
+
+
+# --- Placing ------------------------------------------------------------------------------
+
+
+def order_moves(current: object, order: object) -> list[list[str]]:
+    """The moves putting ``current`` (item ids, in order) into ``order``: ``[[id, "before" | "after", anchor]]``. Plain python.
+
+    The ids of ``order`` that are in ``current`` come first, in that order;
+    the rest keep their order after them. An id ``order`` names that is not
+    there, or names twice, is skipped. Only the moves that change something
+    are given, each one an ``OrderedDictRef.move``.
+    """
+    now = list(dict.fromkeys(_listed(current)))
+    wanted = [i for i in dict.fromkeys(_listed(order)) if i in now]
+    moves: list[list[str]] = []
+    for at, item_id in enumerate(wanted):
+        if now.index(item_id) == at:
+            continue
+        now.remove(item_id)
+        if at == 0:
+            moves.append([item_id, "before", now[0]])
+        else:
+            moves.append([item_id, "after", wanted[at - 1]])
+        now.insert(at, item_id)
+    return moves
+
+
+#: ``OrderMoves(current, order)``: :func:`order_moves`.
+OrderMoves = nu.host(order_moves, name="OrderMoves")
+
+
+def mint_id(size: int) -> str:
+    """A fresh id of ``size`` chars of a-z and 0-9, as the browser mints desk and item ids."""
+    return "".join(secrets.choice(_ID_CHARS) for _ in range(size))
+
+
+#: ``NewId(size)``: :func:`mint_id`, 8 for a desk, 6 for an item. Free checks are the caller's.
+NewId = nu.host(mint_id, name="NewId")
+
+
+# --- Save, reset, prune --------------------------------------------------------------------
 
 
 def _panes(strip: Mapping) -> list[Mapping]:
@@ -328,7 +426,7 @@ def _pruned_strip(strip: Mapping, gone: set[str]) -> Mapping | None:
     strip shows goes too: a strip never shows one plane twice. A column
     left empty goes, the shares left in a column are scaled back to sum 1
     (widths stay). A strip left with one pane becomes a plane item in its
-    place, its id kept, with that pane's links.
+    place (the caller keeps its id), with that pane's links.
     """
     columns = []
     seen: set[str] = set()
@@ -352,40 +450,93 @@ def _pruned_strip(strip: Mapping, gone: set[str]) -> Mapping | None:
     if len(left) == 1:
         (pane,) = left
         links = {k: pane[k] for k in ("original", "recent") if k in pane}
-        return {"id": strip["id"], "kind": KIND_PLANE, **links}
+        return {"kind": KIND_PLANE, **links}
     return {**strip, "columns": columns}
 
 
-def pruned_desk(desk: Mapping, removed: object) -> Mapping:
-    """``desk`` with every link to a ``removed`` plane taken out. Plain python, what the pruner runs.
+def pruned_item(item: Mapping, removed: object) -> Mapping | None:
+    """``item`` with every link to a ``removed`` plane taken out, None when nothing is left. Plain python.
 
     A plane item or a pane whose original is removed comes out; a recent on
-    a removed plane is dropped (the item shows its original again). Then the
-    strip rules: a column left empty goes, a strip left with one pane is a
-    plane item in its place, a strip left empty goes. The desk itself
-    stays, empty or not. The same dict comes back when nothing changed.
+    a removed plane is dropped (it shows its original again). Then the strip
+    rules: a column left empty goes, a strip left with one pane is a plane
+    item, a strip left empty goes.
     """
     gone = set(_listed(removed))
-    items = []
-    for item in desk["items"]:
+    if item["kind"] == KIND_PLANE:
+        return _unlinked(item, gone)
+    return _pruned_strip(item, gone)
+
+
+def pruned_entries(desk: object, removed: object) -> dict:
+    """``{sets, deletes}`` taking ``removed`` planes off one stored desk. Plain python, what :data:`PrunedEntries` runs.
+
+    Only what changes: an item pruned (:func:`pruned_item`) is in ``sets``,
+    one left empty in ``deletes``. An entry off the item shape is left
+    alone. The desk itself always stays.
+    """
+    sets: dict = {}
+    deletes: list[str] = []
+    for item_id, item in _entries(desk).items():
+        if item_problem(item):
+            continue
+        kept = pruned_item(item, removed)
+        if kept is None:
+            deletes.append(item_id)
+        elif kept != item:
+            sets[item_id] = kept
+    return {"sets": sets, "deletes": deletes}
+
+
+#: ``PrunedEntries(desk, removed)``: :func:`pruned_entries`.
+PrunedEntries = nu.host(pruned_entries, name="PrunedEntries")
+
+
+def _saved(held: Mapping) -> Mapping:
+    if "recent" not in held:
+        return held
+    return {**{k: v for k, v in held.items() if k != "recent"}, "original": held["recent"]}
+
+
+def saved_entries(desk: object) -> dict:
+    """``{item_id: item}`` of every item of a stored desk with a recent, each recent made its original. Plain python.
+
+    What save writes: an item with no recent anywhere is left out.
+    """
+    out: dict = {}
+    for item_id, item in _entries(desk).items():
+        if item_problem(item):
+            continue
         if item["kind"] == KIND_PLANE:
-            kept = _unlinked(item, gone)
+            saved = _saved(item)
         else:
-            kept = _pruned_strip(item, gone)
-        if kept is not None:
-            items.append(kept)
-    return desk if items == desk["items"] else {**desk, "items": items}
+            columns = [{**c, "panes": [_saved(p) for p in c["panes"]]} for c in item["columns"]]
+            saved = {**item, "columns": columns}
+        if saved != item:
+            out[item_id] = saved
+    return out
 
 
-def mint_id(size: int) -> str:
-    """A fresh id of ``size`` chars of a-z and 0-9, as the browser mints desk and item ids."""
-    return "".join(secrets.choice(_ID_CHARS) for _ in range(size))
+#: ``SavedEntries(desk)``: :func:`saved_entries`, what :func:`~.ops.save_desk` writes.
+SavedEntries = nu.host(saved_entries, name="SavedEntries")
 
 
-def favorites() -> dict:
-    """``{id, desk}``: a new, empty Favorites desk, its id (8 chars) minted here. Plain python, what :data:`Favorites` runs."""
-    return {"id": mint_id(8), "desk": {"name": FAVORITES, "items": []}}
+def reset_item(item: object) -> object:
+    """``item`` with every recent dropped: it shows its originals. Plain python, what :data:`ResetItem` runs.
+
+    A strip whose panes then show one plane twice keeps the first and drops
+    the later ones, as pruning does, so it may come back a plane item.
+    """
+    if not isinstance(item, Mapping) or item_problem(item):
+        return item
+    if item["kind"] == KIND_PLANE:
+        return {k: v for k, v in item.items() if k != "recent"}
+    columns = [
+        {**c, "panes": [{k: v for k, v in p.items() if k != "recent"} for p in c["panes"]]}
+        for c in item["columns"]
+    ]
+    return _pruned_strip({**item, "columns": columns}, set())
 
 
-#: ``Favorites()``: :func:`favorites`, a new empty Favorites desk, its id minted.
-Favorites = nu.host(favorites, name="Favorites")
+#: ``ResetItem(item)``: :func:`reset_item`.
+ResetItem = nu.host(reset_item, name="ResetItem")

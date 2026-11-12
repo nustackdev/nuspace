@@ -5,7 +5,7 @@
 
         import nuspace.web.desks as desks
 
-        nuspace.atomic(desks.set_desk(desk_id, desk))
+        nuspace.atomic(desks.add_plane(desk_id, plane))
 
 ``model``
     The desk shape in plain python, and the hosts running it.
@@ -23,22 +23,36 @@ The wire contract is ``task-167/contract.md`` in Go.
 """
 
 from nuspace.web.desks.ops import (
+    add_item,
+    add_plane,
     create_desk,
     delete_desk,
-    desk_order,
     get_desk,
     list_desks,
     move_desk,
-    set_desk,
+    move_item,
+    remove_item,
+    rename_desk,
+    reset_item,
+    save_desk,
+    set_item,
+    write_items,
 )
 
 
 __all__ = [
+    "add_item",
+    "add_plane",
     "create_desk",
     "delete_desk",
-    "desk_order",
     "get_desk",
     "list_desks",
     "move_desk",
-    "set_desk",
+    "move_item",
+    "remove_item",
+    "rename_desk",
+    "reset_item",
+    "save_desk",
+    "set_item",
+    "write_items",
 ]

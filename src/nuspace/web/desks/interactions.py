@@ -25,8 +25,9 @@ __all__ = [
     "on_create_desk",
     "on_delete_desk",
     "on_move_desk",
-    "on_set_desk",
+    "on_rename_desk",
     "on_set_role",
+    "on_write_items",
     "set_desks",
     "set_roles",
     "set_titles",
@@ -37,7 +38,7 @@ __all__ = [
 
 
 def set_desks(desks: Ref, held: DictArg, order: ListArg[str]) -> Nu:
-    """Replace every desk: ``{desk_id: desk}``, each desk the whole dict, and ``order``, their ids in creation order."""
+    """Replace every desk: ``{desk_id: {name, items}}``, each desk whole, and ``order``, their ids in sidebar order."""
     return write(desks, "set_desks", desks=held, order=order)
 
 
@@ -55,13 +56,23 @@ def set_titles(desks: Ref, titles: DictArg) -> Nu:
 
 
 def on_create_desk(desks: Ref) -> Changed:
-    """``{desk_id, desk}``. The browser minted ``desk_id``."""
+    """``{desk_id, desk}``, ``desk`` as ``{name, items}``, last among the desks. The browser minted ``desk_id``."""
     return event(desks, "desk.create")
 
 
-def on_set_desk(desks: Ref) -> Changed:
-    """``{desk_id, desk}``. The desk whole, last write wins."""
-    return event(desks, "desk.set")
+def on_rename_desk(desks: Ref) -> Changed:
+    """``{desk_id, name}``."""
+    return event(desks, "desk.rename")
+
+
+def on_write_items(desks: Ref) -> Changed:
+    """``{writes: [{desk_id, sets, deletes, order}]}``: item writes on one desk or more, as one commit.
+
+    ``sets`` item id to item (no id in it), ``deletes`` and ``order`` item
+    ids. A move across desks is one event: a delete on one desk, a set on
+    the other.
+    """
+    return event(desks, "items.write")
 
 
 def on_delete_desk(desks: Ref) -> Changed:

@@ -28,9 +28,9 @@
 // Every move is `(desk, ...) -> desk` and never mutates its input. A move
 // that does not apply, or changes nothing, returns its input (same object).
 //
-// The contract with the server: the web device's `desk_problem`
-// (nuspace/web/desks/model.py) is the authority on the shape, and
-// every desk a move returns passes it. Reading (`readDesk`) is lenient on top
+// The contract with the server: the web device's `item_problem`
+// (nuspace/web/desks/model.py) is the authority on an item's shape, and
+// every item a move returns passes it. Reading (`readDesk`) is lenient on top
 // of that: it fixes what it can (shares, a duplicate pane, a strip of one
 // pane) and refuses the rest.
 

@@ -7,9 +7,10 @@ them; they name plane and plane run ids only::
     Web                                  web_state.db, persistent
       planes[plane_id]                   WebPlane: editable, full_width, compact
       recents                            [plane id], most recent first, capped
-      desks[desk_id]                     desk dict, stored whole
-      desk_order                         [desk id], creation order
-      seeded                             True once Favorites was seeded
+      desks[desk_id]                     Desk, in sidebar order
+        name                             the desk's name
+        entries[item_id]                 plane item or strip, in desk order
+      desks_seeded                       True once Favorites was seeded
       roles[role]                        plane id: home, settings, search
 
     Conn                                 conn.db, made fresh at every open
@@ -25,7 +26,7 @@ import nu
 import nustd.kv
 
 
-__all__ = ["RECENTS_CAP", "ROLES", "Conn", "Pane", "Tab", "Web", "WebPlane"]
+__all__ = ["RECENTS_CAP", "ROLES", "Conn", "Desk", "Pane", "Tab", "Web", "WebPlane"]
 
 
 #: How many plane ids ``Web.recents`` keeps. Past it the oldest drops.
@@ -50,6 +51,20 @@ class WebPlane(nu.Shape):
     compact = nustd.kv.BoolRef.slot()
 
 
+class Desk(nu.Shape):
+    """A desk: ``Web.desks[desk_id]``. A named, ordered collection of items.
+
+    ``entries`` is every item by item id, in the desk's order: each a plain
+    dict read and written whole, a plane item ``{kind: "plane", original,
+    recent?}`` or a strip ``{kind: "strip", columns}``. The id is the key,
+    never in the value. The slot is ``entries`` because a shape ref has
+    ``items`` of its own; the vocab and the ops say item.
+    """
+
+    name = nustd.kv.StrRef.slot()
+    entries = nustd.kv.OrderedDictRef.slot(nustd.kv.PrimitiveDictRef)
+
+
 class Web(nu.Shape):
     """The root of ``web_state.db``, and its store's tag.
 
@@ -57,20 +72,18 @@ class Web(nu.Shape):
     most recent first, at most :data:`RECENTS_CAP`, a small list. A removed
     plane keeps its entries; readers skip it.
 
-    ``desks`` is every desk by desk id, each one plain dict read and written
-    whole (name, items), so a desk is one key and one change. The store
-    lists keys sorted, so ``desk_order`` keeps the desk ids in creation
-    order, the order the sidebar draws them in. ``seeded`` is set once the
-    Favorites desk was made, so closing it never brings it back. ``roles``
+    ``desks`` is every desk by desk id (:class:`Desk`), ordered: the order
+    the sidebar draws them in, set by placement, not by id.
+    ``desks_seeded`` is set once the Favorites desk was made, so closing it
+    never brings it back. ``roles``
     is the plane id each of :data:`ROLES` resolves to, seeded with the
     system planes; set and changed, never removed.
     """
 
     planes = nustd.kv.DictRef.slot(WebPlane)
     recents = nustd.kv.ListRef.slot(str)
-    desks = nustd.kv.DictRef.slot(nustd.kv.PrimitiveDictRef)
-    desk_order = nustd.kv.ListRef.slot(str)
-    seeded = nustd.kv.BoolRef.slot()
+    desks = nustd.kv.OrderedDictRef.slot(Desk)
+    desks_seeded = nustd.kv.BoolRef.slot()
     roles = nustd.kv.DictRef.slot(str)
 
 

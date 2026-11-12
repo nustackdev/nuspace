@@ -11,12 +11,15 @@
 // included: last write wins.
 //
 // Out: a desk move in the router writes the desk here at once and hands it
-// to `onDeskWrite`, which lands in `push` below: `desk.create` for a desk the
-// server does not have yet, `desk.set` otherwise. A create is "pending" until
-// a `set_desks` carries its id, so a second move before the echo is a set,
-// not a second create, and the desk stays on screen while it waits. A desk
-// the router closes comes through `onDeskDelete` and goes out as
-// `desk.delete`.
+// to `onDeskWrite`, which lands in `push` below. A desk the server does not
+// have yet goes out as `desk.create`, whole. Otherwise only what changed
+// goes: a new name as `desk.rename`, the items as `items.write` (the items
+// set or added, the ids gone, and the new order). Every desk written in one
+// tick goes in one `items.write`, so a drag between desks is one commit on
+// the server. A create is "pending" until a `set_desks` carries its id, so a
+// second move before the echo is a write, not a second create, and the desk
+// stays on screen while it waits. A desk the router closes comes through
+// `onDeskDelete` and goes out as `desk.delete`.
 //
 // Desks are read in the items shape only (plane items and strips, each with
 // its original and recent links): a desk stored in an older shape (`strips`,
@@ -28,7 +31,7 @@
 
 import type { Path } from "@nustackdev/ui-core";
 import { useSyncExternalStore } from "react";
-import type { Desk } from "../desk/model";
+import type { Desk, Item, PlaneItem, Strip } from "../desk/model";
 import { readDesk } from "../desk/model";
 import { onDeskDelete, onDeskWrite, setDesks, setRoles } from "./router";
 import { notifyOp } from "./wire";
@@ -38,12 +41,24 @@ export const ROLES = ["home", "settings", "search"] as const;
 export type Role = (typeof ROLES)[number];
 export type Roles = Record<Role, string>;
 
+/** An item as the server stores it: its id is the key, not in the value. */
+export type StoredItem = Omit<PlaneItem, "id"> | Omit<Strip, "id">;
+
+/** One desk's item writes: set or added, gone, and the ids in their new order. */
+export type ItemsWrite = {
+	desk_id: string;
+	sets: Record<string, StoredItem>;
+	deletes: string[];
+	order: string[];
+};
+
 /** The ops on the `DesksRef` node, by name, with their payloads. */
 export type DeskOps = {
 	"desk.create": { desk_id: string; desk: Desk };
-	"desk.set": { desk_id: string; desk: Desk };
+	"desk.rename": { desk_id: string; name: string };
 	"desk.delete": { desk_id: string };
 	"desk.move": { desk_id: string; before: string };
+	"items.write": { writes: ItemsWrite[] };
 	"role.set": { role: Role; plane_id: string };
 };
 
@@ -88,14 +103,64 @@ function send<K extends keyof DeskOps & string>(op: K, args: DeskOps[K]): void {
 	if (at) notifyOp<DeskOps, K>(at, op, args);
 }
 
+function stored(item: Item): StoredItem {
+	const { id: _, ...rest } = item;
+	return rest;
+}
+
+/**
+ * What changed between two versions of one desk's items, as one write, or
+ * null for nothing. Pure.
+ */
+export function itemsWrite(id: string, was: Desk, now: Desk): ItemsWrite | null {
+	const before = new Map(was.items.map((i) => [i.id, JSON.stringify(stored(i))]));
+	const sets: Record<string, StoredItem> = {};
+	for (const item of now.items) {
+		const value = stored(item);
+		if (before.get(item.id) !== JSON.stringify(value)) sets[item.id] = value;
+	}
+	const kept = new Set(now.items.map((i) => i.id));
+	const deletes = was.items.map((i) => i.id).filter((i) => !kept.has(i));
+	const order = now.items.map((i) => i.id);
+	// Where the server would put them with no order: the old ones in place, new ones last.
+	const placed = was.items.map((i) => i.id).filter((i) => kept.has(i));
+	for (const i of order) if (!before.has(i)) placed.push(i);
+	const moved = placed.some((i, at) => i !== order[at]);
+	if (!Object.keys(sets).length && !deletes.length && !moved) return null;
+	return { desk_id: id, sets, deletes, order };
+}
+
+/** The desks written this tick, each as it was before the first write. Flushed as one `items.write`. */
+const batch = new Map<string, Desk>();
+
+function flush(): void {
+	const writes: ItemsWrite[] = [];
+	for (const [id, was] of batch) {
+		const now = desks?.[id];
+		if (!now) continue;
+		if (now.name !== was.name) send("desk.rename", { desk_id: id, name: now.name });
+		const write = itemsWrite(id, was, now);
+		if (write) writes.push(write);
+	}
+	batch.clear();
+	if (writes.length) send("items.write", { writes });
+}
+
 /** A desk this tab wrote, on its way to the store. */
 function push(id: string, desk: Desk): void {
 	const known = !!shipped?.[id] || pending.has(id);
+	const was = desks?.[id];
 	if (!known || pending.has(id)) pending.set(id, desk);
 	desks = { ...(desks ?? {}), [id]: desk };
 	reorder();
 	emit();
-	send(known ? "desk.set" : "desk.create", { desk_id: id, desk });
+	if (!known) {
+		send("desk.create", { desk_id: id, desk });
+		return;
+	}
+	if (!was) return;
+	if (!batch.size) queueMicrotask(flush);
+	if (!batch.has(id)) batch.set(id, was);
 }
 
 function readDesks(raw: unknown): Record<string, Desk> {
@@ -219,6 +284,7 @@ export function currentRoles(): Roles | null {
  */
 export function deleteDesk(id: string): void {
 	pending.delete(id);
+	batch.delete(id);
 	if (desks?.[id]) {
 		const { [id]: _, ...rest } = desks;
 		desks = rest;
@@ -255,6 +321,7 @@ export function resetDesks(): void {
 	at = null;
 	shipped = null;
 	pending.clear();
+	batch.clear();
 	desks = null;
 	roles = null;
 	titles = NO_TITLES;

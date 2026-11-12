@@ -23,12 +23,11 @@ __all__ = ["CONN_STORE", "WEB_STORE", "init_conn", "init_web"]
 
 
 def init_web() -> nu.Nu:
-    """``web_state.db`` ready: web planes, recents, desks, desk order and roles made where missing."""
+    """``web_state.db`` ready: web planes, recents, desks and roles made where missing."""
     return (
         Web.planes.init(nu.Dict.create())
         >> Web.recents.init(nu.List.create())
         >> Web.desks.init(nu.Dict.create())
-        >> Web.desk_order.init(nu.List.create())
         >> Web.roles.init(nu.Dict.create())
     )
 

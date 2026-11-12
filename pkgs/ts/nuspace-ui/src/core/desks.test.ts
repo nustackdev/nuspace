@@ -1,7 +1,8 @@
 // The browser side of desks and roles: a feed lands in the router (older
 // shape desks skipped), a desk op goes out as a create for a desk the server
-// does not have yet and as a set after, a closed desk goes out as a delete,
-// and a role as its op.
+// does not have yet and as what changed after (a rename, item writes, every
+// desk of one tick in one write), a closed desk goes out as a delete, and a
+// role as its op.
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { dropOn } from "../desk/dnd";
@@ -12,6 +13,7 @@ import {
 	currentTitles,
 	deleteDesk,
 	deskOrder,
+	itemsWrite,
 	moveDesk,
 	resetDesks,
 	setRole,
@@ -188,8 +190,46 @@ describe("moving a desk", () => {
 	});
 });
 
+describe("items write", () => {
+	const plane = (id: string, p: string) => ({
+		id,
+		kind: "plane" as const,
+		original: { plane: p, params: {} },
+	});
+	const desk = (...items: ReturnType<typeof plane>[]): Desk => ({ name: "D", items });
+
+	it("is null when nothing changed", () => {
+		expect(itemsWrite(DESK, desk(plane("aaaaaa", "a")), desk(plane("aaaaaa", "a")))).toBeNull();
+	});
+
+	it("sets a changed or new item, without its id, and deletes one gone", () => {
+		const was = desk(plane("aaaaaa", "a"), plane("bbbbbb", "b"));
+		const now = desk(plane("aaaaaa", "x"), plane("cccccc", "c"));
+		expect(itemsWrite(DESK, was, now)).toEqual({
+			desk_id: DESK,
+			sets: {
+				aaaaaa: { kind: "plane", original: { plane: "x", params: {} } },
+				cccccc: { kind: "plane", original: { plane: "c", params: {} } },
+			},
+			deletes: ["bbbbbb"],
+			order: ["aaaaaa", "cccccc"],
+		});
+	});
+
+	it("sends a reorder alone", () => {
+		const was = desk(plane("aaaaaa", "a"), plane("bbbbbb", "b"));
+		const now = desk(plane("bbbbbb", "b"), plane("aaaaaa", "a"));
+		expect(itemsWrite(DESK, was, now)).toEqual({
+			desk_id: DESK,
+			sets: {},
+			deletes: [],
+			order: ["bbbbbb", "aaaaaa"],
+		});
+	});
+});
+
 describe("writes out", () => {
-	it("sets a desk the server has, through the node's path", () => {
+	it("writes only the items that changed, through the node's path, after the tick", async () => {
 		applyDesksWrite(AT, { op: "set_desks", desks: { [DESK]: row("a", "b") } });
 		dropOn(
 			{ kind: "pane", desk: DESK, item: STRIP, plane: "a" },
@@ -200,12 +240,22 @@ describe("writes out", () => {
 				drop: { plane: "b", edge: "right" },
 			},
 		);
+		expect(sent()).toEqual([]);
+		await Promise.resolve();
+		const strip = knownDesks()?.[DESK]?.items[0];
+		const { id: _, ...value } = strip as NonNullable<typeof strip>;
 		expect(sent()).toEqual([
-			{ path: AT, op: "desk.set", args: { desk_id: DESK, desk: knownDesks()?.[DESK] } },
+			{
+				path: AT,
+				op: "items.write",
+				args: {
+					writes: [{ desk_id: DESK, sets: { [STRIP]: value }, deletes: [], order: [STRIP] }],
+				},
+			},
 		]);
 	});
 
-	it("creates a desk the server does not have, then sets it until the echo", () => {
+	it("creates a desk the server does not have, then writes what changes until the echo", async () => {
 		applyDesksWrite(AT, { op: "set_desks", desks: {} });
 		const id = createDesk();
 		expect(sent().map((s) => s.op)).toEqual(["desk.create"]);
@@ -214,7 +264,11 @@ describe("writes out", () => {
 		applyDesksWrite(AT, { op: "set_desks", desks: {} });
 		expect(knownDesks()?.[id]).toEqual({ name: "Untitled", items: [] });
 		renameDesk(id, "Mine");
-		expect(sent().map((s) => s.op)).toEqual(["desk.create", "desk.set"]);
+		await Promise.resolve();
+		expect(sent().map((s) => [s.op, s.args])).toEqual([
+			["desk.create", { desk_id: id, desk: { name: "Untitled", items: [] } }],
+			["desk.rename", { desk_id: id, name: "Mine" }],
+		]);
 		// The echo lands: from now on it is the store's.
 		applyDesksWrite(AT, { op: "set_desks", desks: { [id]: { name: "Mine", items: [] } } });
 		applyDesksWrite(AT, { op: "set_desks", desks: {} });
@@ -245,6 +299,17 @@ describe("writes out", () => {
 		expect(sent()).toEqual([
 			{ path: AT, op: "role.set", args: { role: "home", plane_id: "p_new" } },
 		]);
+	});
+
+	it("sends a move between desks as one items.write", async () => {
+		const two = { [DESK]: row("a", "b"), desk0002: { name: "Other", items: [] } };
+		applyDesksWrite(AT, { op: "set_desks", desks: two });
+		vi.mocked(notifyOp).mockClear();
+		dropOn({ kind: "item", desk: DESK, item: STRIP }, { kind: "end", desk: "desk0002" });
+		await Promise.resolve();
+		expect(sent().map((s) => s.op)).toEqual(["items.write"]);
+		const writes = (sent()[0].args as { writes: { desk_id: string }[] }).writes;
+		expect(writes.map((w) => w.desk_id).sort()).toEqual([DESK, "desk0002"].sort());
 	});
 
 	it("sends nothing before the node has fed it", () => {

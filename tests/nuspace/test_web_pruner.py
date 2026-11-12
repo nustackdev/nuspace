@@ -23,7 +23,7 @@ from nuspace.errors import Refused
 from nuspace.shapes import Space
 from nuspace.system import reactions
 from nuspace.web.desks import pruner
-from nuspace.web.desks.model import desk_problem
+from nuspace.web.desks.model import item_problem, items_of
 from nuspace.web.planes import ensure, ensure_pruner
 
 
@@ -88,8 +88,27 @@ async def planes(store, *ids: str, parent: str | None = None) -> None:
         await do(store, nuspace.plane.add(p, backend="async", **kwargs))
 
 
+def made(desk_id: str, held: dict) -> nu.Nu:
+    """A desk stored as the browser's create would: the desk, then its items."""
+    return web.desks.create_desk(held["name"], id=desk_id) >> web.desks.write_items(
+        desk_id, items_of(held["items"])
+    )
+
+
+def _read_desks() -> nu.Nu:
+    from nuspace.web.desks.model import DesksView
+
+    return DesksView(web.Web.desks.extract())
+
+
+def stored(held: dict) -> dict:
+    """A desk as it is stored: its name and its entries, no ids in them."""
+    entries = {i["id"]: {k: v for k, v in i.items() if k != "id"} for i in held["items"]}
+    return {"name": held["name"], "entries": entries}
+
+
 async def desks(store) -> dict:
-    return await store.read(web.Web.desks.extract()) or {}
+    return await store.read(_read_desks()) or {}
 
 
 async def prune(store) -> None:
@@ -103,9 +122,7 @@ async def test_a_removed_plane_comes_off_both_desks_it_sits_on_and_both_desks_st
     await planes(store, "x", "b", "c", "e", "d", "r")
     await planes(store, "y", parent="x")
     # All x: left empty, and kept.
-    await do(
-        store, web.desks.create_desk("deska001", desk(item("x", "aaaaaa"), item("y", "bbbbbb")))
-    )
+    await do(store, made("deska001", desk(item("x", "aaaaaa"), item("y", "bbbbbb"))))
     two = desk(
         # Navigated to x: the recent drops, it shows b again.
         item("b", "cccccc", recent="x"),
@@ -120,10 +137,10 @@ async def test_a_removed_plane_comes_off_both_desks_it_sits_on_and_both_desks_st
         # Every pane gone: the strip goes.
         strip("hhhhhh", [pane("x", 0.5), pane("y", 0.5)]),
     )
-    await do(store, web.desks.create_desk("deskb002", two))
+    await do(store, made("deskb002", two))
     # No removed plane on it: never written.
     untouched = desk(item("c", "iiiiii"), strip("jjjjjj", [pane("c")], [pane("d")]))
-    await do(store, web.desks.create_desk("deskc003", untouched))
+    await do(store, made("deskc003", untouched))
 
     await do(store, nuspace.plane.remove("x"))  # y is below x: removed with it
     assert await store.read(pruner.pending()) is True
@@ -141,17 +158,19 @@ async def test_a_removed_plane_comes_off_both_desks_it_sits_on_and_both_desks_st
     assert [p["share"] for p in kept[0]["panes"]] == pytest.approx([0.375, 0.625])
     assert items[2] == item("d", "ffffff", recent="r")
     assert items[3] == strip("gggggg", [pane("c")], [pane("e")])
-    assert all(desk_problem(d) == "" for d in held.values())
+    assert all(
+        item_problem({k: v for k, v in i.items() if k != "id"}) == ""
+        for d in held.values()
+        for i in d["items"]
+    )
     assert await store.read(pruner.pending()) is False
 
 
 async def test_a_bulk_removal_is_one_pass(store):
     await planes(store, "p1", "p2", "p3", "p4", "p5")
-    await do(
-        store, web.desks.create_desk("deska001", desk(item("p1", "aaaaaa"), item("p4", "bbbbbb")))
-    )
+    await do(store, made("deska001", desk(item("p1", "aaaaaa"), item("p4", "bbbbbb"))))
     bulk = desk(strip("cccccc", [pane("p2", 0.5), pane("p5", 0.5)], [pane("p3")], [pane("p4")]))
-    await do(store, web.desks.create_desk("deskb002", bulk))
+    await do(store, made("deskb002", bulk))
     for p in ("p1", "p2", "p3"):
         await do(store, nuspace.plane.remove(p))
     await do(store, pruner.step())
@@ -167,7 +186,7 @@ async def test_a_system_plane_is_never_pruned(store):
     home = await store.read(web.Web.roles["home"])
     await planes(store, "b")
     kept = desk(item(home, "aaaaaa"), strip("bbbbbb", [pane("b")], [pane("ghost")]))
-    await do(store, web.desks.create_desk("deska001", kept))
+    await do(store, made("deska001", kept))
     with pytest.raises(Refused, match="system plane"):
         await do(store, nuspace.plane.remove(home))
     assert await store.read(pruner.pending()) is False
@@ -176,50 +195,53 @@ async def test_a_system_plane_is_never_pruned(store):
     assert (await desks(store))["deska001"] == kept
 
 
-async def test_a_desk_in_an_older_shape_is_left_as_it_is(store):
+async def test_an_item_off_the_shape_is_left_as_it_is(store):
     await planes(store, "a", "b")
-    old = {
-        "name": "Old",
-        "columns": [{"width": 1, "panes": [{"plane": "a", "share": 1, "params": {}}]}],
-    }
-    await do(store, web.Web.desks["olddesk1"].set(old))
+    await do(store, made("deska001", desk(item("b", "aaaaaa"))))
+    old = {"kind": "plane", "plane": "a"}
+    await do(store, web.Web.desks["deska001"].entries.set_item("bbbbbb", old))
     await do(store, nuspace.plane.remove("a"))
     assert await store.read(pruner.pending()) is False
     await prune(store)
-    assert (await desks(store))["olddesk1"] == old
+    assert await store.read(web.Web.desks["deska001"].entries["bbbbbb"].extract()) == old
 
 
 async def test_nothing_to_prune_writes_nothing(store):
     await planes(store, "a", "b")
-    await do(
-        store, web.desks.create_desk("deska001", desk(item("a", "aaaaaa"), item("b", "bbbbbb")))
-    )
+    await do(store, made("deska001", desk(item("a", "aaaaaa"), item("b", "bbbbbb"))))
     assert await store.read(pruner.pending()) is False
     await prune(store)
     assert set(await desks(store)) == {"deska001"}
 
 
 def test_the_plan_is_plain_python():
-    two = desk(strip("aaaaaa", [pane("a", 0.25), pane("b", 0.75)], [pane("c")]))
+    two = stored(desk(strip("aaaaaa", [pane("a", 0.25), pane("b", 0.75)], [pane("c")])))
+
+    def change(*sets: dict, deletes: tuple = ()) -> dict:
+        written = {i["id"]: {k: v for k, v in i.items() if k != "id"} for i in sets}
+        return {"sets": written, "deletes": list(deletes)}
+
     assert pruner.plan({"d1": two}, ["b"]) == {
-        "d1": desk(strip("aaaaaa", [pane("a", 1.0)], [pane("c")])),
+        "d1": change(strip("aaaaaa", [pane("a", 1.0)], [pane("c")])),
     }
-    assert pruner.plan({"d1": two}, ["a", "b"]) == {"d1": desk(item("c", "aaaaaa"))}
-    assert pruner.plan({"d1": two}, ["a", "b", "c"]) == {"d1": desk()}
+    assert pruner.plan({"d1": two}, ["a", "b"]) == {"d1": change(item("c", "aaaaaa"))}
+    assert pruner.plan({"d1": two}, ["a", "b", "c"]) == {"d1": change(deletes=("aaaaaa",))}
     assert pruner.plan({"d1": two}, []) == {}
-    assert pruner.plan({"d1": desk(item("a", "bbbbbb", recent="z"))}, ["z"]) == {
-        "d1": desk(item("a", "bbbbbb")),
-    }
+    navigated = stored(desk(item("a", "bbbbbb", recent="z"), item("c", "cccccc")))
+    assert pruner.plan({"d1": navigated}, ["z"]) == {"d1": change(item("a", "bbbbbb"))}
     # Panes falling back to their original can show one plane twice: the later one goes.
-    back = desk(strip("aaaaaa", [pane("a", recent="r")], [pane("b")], [pane("a", recent="s")]))
+    back = stored(
+        desk(strip("aaaaaa", [pane("a", recent="r")], [pane("b")], [pane("a", recent="s")]))
+    )
     assert pruner.plan({"d1": back}, ["s"]) == {
-        "d1": desk(strip("aaaaaa", [pane("a", recent="r")], [pane("b")], [pane("a")])),
+        "d1": change(strip("aaaaaa", [pane("a", recent="r")], [pane("b")], [pane("a")])),
     }
     assert pruner.plan({"d1": back}, ["r", "s"]) == {
-        "d1": desk(strip("aaaaaa", [pane("a")], [pane("b")])),
+        "d1": change(strip("aaaaaa", [pane("a")], [pane("b")])),
     }
     # Off the shape: never written, never deleted.
-    assert pruner.plan({"d1": {"name": "x", "columns": []}}, ["a"]) == {}
+    off = {"name": "x", "entries": {"aaaaaa": {"kind": "plane", "plane": "a"}}}
+    assert pruner.plan({"d1": off}, ["a"]) == {}
 
 
 # --- Made at open ---------------------------------------------------------------------------
@@ -322,7 +344,7 @@ class Served:
         return await self.read(_listed(ids))
 
     async def desks(self) -> dict:
-        return await self.read(web.Web.desks.extract()) or {}
+        return await self.read(_read_desks()) or {}
 
 
 async def test_a_removal_prunes_with_no_browser_and_a_bulk_removal_is_one_run(tmp_path):
@@ -358,9 +380,7 @@ async def test_a_removal_prunes_with_no_browser_and_a_bulk_removal_is_one_run(tm
         for i in range(1000):
             probe, mine = f"probe{i}", f"probe{i:03d}"
             await s.do(nuspace.plane.add(probe, backend="async"))
-            await s.do(
-                web.desks.create_desk(mine, desk(item(probe, "aaaaaa"), item("p5", "bbbbbb")))
-            )
+            await s.do(made(mine, desk(item(probe, "aaaaaa"), item("p5", "bbbbbb"))))
             await s.do(nuspace.plane.remove(probe))
             with contextlib.suppress(AssertionError):
                 await s.until(s.desks, lambda d, m=mine: shown(d[m]) == ["p5"], 3.0)
@@ -369,11 +389,9 @@ async def test_a_removal_prunes_with_no_browser_and_a_bulk_removal_is_one_run(tm
         await s.until(s.live_runs, lambda r: r == [])
         before = len(await s.runs())
 
-        await s.do(
-            web.desks.create_desk("deska001", desk(item("p1", "aaaaaa"), item("p4", "bbbbbb")))
-        )
+        await s.do(made("deska001", desk(item("p1", "aaaaaa"), item("p4", "bbbbbb"))))
         bulk = desk(strip("cccccc", [pane("p2", 0.5), pane("p5", 0.5)], [pane("p3")], [pane("p4")]))
-        await s.do(web.desks.create_desk("deskb002", bulk))
+        await s.do(made("deskb002", bulk))
         for p in ("p1", "p2", "p3"):
             await s.do(nuspace.plane.remove(p))
         held = await s.until(s.desks, lambda d: shown(d["deska001"]) == ["p4"])

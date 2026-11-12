@@ -57,6 +57,7 @@ __all__ = [
     "cells_ui",
     "event",
     "field_dict",
+    "field_dicts",
     "field_ids",
     "field_str",
     "placed",
@@ -259,6 +260,11 @@ def field_str(row: nu.Nu, field: str) -> nu.Str:
 def field_ids(row: nu.Nu, field: str) -> nu.List:
     """One list of ids off an event. Absent or not a list of strings raises ``ValueError``."""
     return nu.List(EventField(row, field, "ids"))
+
+
+def field_dicts(row: nu.Nu, field: str) -> nu.List:
+    """One list of dicts off an event. Absent or not a list of dicts raises ``ValueError``."""
+    return nu.List(EventField(row, field, "dicts"))
 
 
 def field_dict(row: nu.Nu, field: str) -> nu.Dict:

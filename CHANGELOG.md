@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Desks keep each item on its own, programs get item ops, cross-desk drags commit once
 - The web device moves to nuspace.web, the devices package is gone
 - Group the web device by area: desk ops under desks, shipped planes together
 

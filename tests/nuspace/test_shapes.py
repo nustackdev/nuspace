@@ -35,7 +35,7 @@ from nuspace.shapes import (
     State,
     Worker,
 )
-from nuspace.web.shapes import RECENTS_CAP, Conn, Pane, Tab, Web, WebPlane
+from nuspace.web.shapes import RECENTS_CAP, Conn, Desk, Pane, Tab, Web, WebPlane
 from nuspace.web.stores import CONN_STORE, WEB_STORE
 
 
@@ -125,7 +125,8 @@ def test_the_roots_and_records_carry_the_slots_of_the_data_model():
         "content_planes",
         "content_space",
     }
-    assert slots(Web) == {"planes", "recents", "desks", "desk_order", "seeded", "roles"}
+    assert slots(Web) == {"planes", "recents", "desks", "desks_seeded", "roles"}
+    assert slots(Desk) == {"name", "entries"}
     assert slots(WebPlane) == {"editable", "full_width", "compact"}
     assert slots(Tab) == {"order", "panes", "expanded"}
     assert slots(Pane) == {"params", "plane_run", "restart"}
@@ -140,12 +141,13 @@ def test_every_collection_gets_the_view_that_fits_how_it_is_read():
         "plane_keys": (Space.indexes.plane_keys, kv.DictRef),
         "cell_runs": (Space.exec.cell_runs, kv.DictRef),
         "web planes": (Web.planes, kv.DictRef),
-        "desks": (Web.desks, kv.DictRef),
         "roles": (Web.roles, kv.DictRef),
         "panes": (Conn.connections["s"].panes, kv.DictRef),
         # uncapped user-ordered lists
         "plane cells": (Space.planes["p"].cells, kv.OrderedDictRef),
         "children": (Space.planes["p"].children, kv.OrderedDictRef),
+        "desks": (Web.desks, kv.OrderedDictRef),
+        "desk items": (Web.desks["d"].entries, kv.OrderedDictRef),
         # append-only paged lists
         "spec_planes": (Space.indexes.spec_planes["s"].ids, kv.LogDictRef),
         "spec_cells": (Space.indexes.spec_cells["s"].ids, kv.LogDictRef),
@@ -159,7 +161,6 @@ def test_every_collection_gets_the_view_that_fits_how_it_is_read():
         "expanded": (Conn.connections["s"].expanded, kv.DictRef),
         # small user lists
         "recents": (Web.recents, kv.ListRef),
-        "desk_order": (Web.desk_order, kv.ListRef),
         "order": (Conn.connections["s"].order, kv.ListRef),
         # a capped log
         "out": (Space.exec.cell_runs["cr"].out, kv.RingRef),
@@ -213,7 +214,7 @@ async def test_a_fresh_space_gets_its_format_and_every_fixed_container(store):
         nu.Not(State.content_space),
         nu.Not(Web.planes),
         nu.Not(Web.recents),
-        nu.Not(Web.desk_order),
+        nu.Not(Web.desks),
         nu.Not(Conn.connections),
     ]
     assert await store.read(nu.List.of(*empty)) == [False, False, *([True] * (len(empty) - 2))]

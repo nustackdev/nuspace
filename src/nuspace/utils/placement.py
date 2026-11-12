@@ -1,8 +1,8 @@
 """Placing an id in an ordered list: before an anchor, after one, or at the end.
 
 The one spelling of "placement is ``before=`` / ``after=`` an id, neither
-means the end" that ops share. Generic: it works on any ``OrderedDictRef``
-of bool. The checks that make an anchor valid (it is there, it is a
+means the end" that ops share. Generic: it works on any ``OrderedDictRef``,
+of bool (membership, the default) or of values. The checks that make an anchor valid (it is there, it is a
 sibling) are the caller's, made before this runs.
 """
 
@@ -37,17 +37,19 @@ def place(
     *,
     before: nu.StrArg | None = None,
     after: nu.StrArg | None = None,
+    value: object = True,
 ) -> nu.Nu:
     """Put ``id`` into ``listed`` before or after an anchor, or at the end. One view call.
 
-    ``id`` must not be listed yet: to move one, take it out first. No bracket.
+    ``value`` is what ``id`` holds, ``True`` for a membership list. ``id``
+    must not be listed yet: to move one, take it out first. No bracket.
 
     Raises:
         TypeError: Both ``before`` and ``after`` are given, at build.
     """
     anchor_of(before, after)
     if before is not None:
-        return listed.insert_before(before, id)
+        return listed.insert_before(before, id, value)
     if after is not None:
-        return listed.insert_after(after, id)
-    return listed.set_item(id, True)
+        return listed.insert_after(after, id, value)
+    return listed.set_item(id, value)

@@ -13,14 +13,14 @@ A run waits :data:`SETTLE` seconds, then passes. While it is live the
 reaction asks for no other run (:func:`~nuspace.system.reactions.up_plane`),
 so every remove landing in that wait, a bulk removal, is handled by one
 pass. A pass is one ``nuspace.atomic``: Space read from a snapshot, one Web
-commit. For every desk on the desk shape, each plane item and pane whose
-original is a removed plane comes out, and a recent on a removed plane is
-dropped (the item shows its original again). Then the strip rules: a
-column left empty goes, the shares left in a column are scaled back to sum
-1 (widths stay), a strip left with one pane becomes a plane item in its
-place, a strip left empty goes. A desk is never deleted, empty or not, and
-a desk not on the desk shape is left as it is (the reads skip it). The
-pass keeps no cursor: it reads every desk, so a run reads what is there,
+commit, writing only the items it changes. On every desk, each plane item
+and pane whose original is a removed plane comes out, and a recent on a
+removed plane is dropped (the item shows its original again). Then the
+strip rules: a column left empty goes, the shares left in a column are
+scaled back to sum 1 (widths stay), a strip left with one pane becomes a
+plane item in its place, a strip left empty goes. A desk is never deleted,
+empty or not, and an item off the item shape is left as it is (the reads
+skip it). The pass keeps no cursor: it reads every desk, so a run reads what is there,
 whatever woke it. After a pass the run checks again and passes once more
 when a remove landed during it, so nothing waits for the next remove.
 
@@ -44,7 +44,8 @@ from nuspace.shapes import Space
 from nuspace.system import reactions
 
 from ..shapes import Web
-from .model import DeskPlanes, desk_problem, pruned_desk
+from .model import DeskPlanes, pruned_entries
+from .ops import write_items
 
 
 __all__ = [
@@ -115,23 +116,20 @@ def pruner() -> Pruner:
 
 
 def plan(desks: object, removed: object) -> dict:
-    """What one pass writes: ``{desk_id: desk}``, each desk to set whole. Plain python.
+    """What one pass writes: ``{desk_id: {sets, deletes}}``, only the items that change. Plain python.
 
-    A desk on the desk shape holding a link to a ``removed`` plane is in it,
-    pruned (:func:`~.model.pruned_desk`). Every other desk is not:
-    nothing is written for it, and nothing is ever deleted. A pruned desk
-    that is no desk (which pruning never makes) is not written either.
+    A desk holding a link to a ``removed`` plane is in it, with its pruned
+    items in ``sets`` and its emptied ones in ``deletes``
+    (:func:`~.model.pruned_entries`). Every other desk is not: nothing is
+    written for it, and no desk is ever deleted.
     """
-    gone = list(removed) if isinstance(removed, (list, tuple, set)) else []
     if not isinstance(desks, Mapping):
         return {}
     written = {}
     for desk_id, desk in desks.items():
-        if desk_problem(desk):
-            continue
-        pruned = pruned_desk(desk, gone)
-        if pruned is not desk and not desk_problem(pruned):
-            written[desk_id] = pruned
+        change = pruned_entries(desk, removed)
+        if change["sets"] or change["deletes"]:
+            written[desk_id] = change
     return written
 
 
@@ -160,17 +158,19 @@ def step() -> nu.Nu:
     """One pass: a bare term, the caller brackets it in one ``atomic``. Cost: O(desks + their planes).
 
     Reads every desk and the removed stamp of every plane linked from one,
-    then sets each desk :func:`plan` names, whole.
+    then writes the items :func:`plan` names on each desk
+    (:func:`~.ops.write_items`).
     """
 
     def wrote(held: nu.Attr) -> nu.Nu:
-        sets = nu.Dict(held)
+        changes = nu.Dict(held)
 
-        def one_set(desk_id: nu.Attr) -> nu.Nu:
+        def one(desk_id: nu.Attr) -> nu.Nu:
             d = nu.Str(desk_id)
-            return Web.desks[d].set(sets[d])
+            change = nu.Dict(changes[d])
+            return write_items(d, change["sets"], change["deletes"])
 
-        return nu.ForEachDo(nu.list(sets.keys()), one_set)
+        return nu.ForEachDo(nu.list(changes.keys()), one)
 
     return nu.let(_plan(), wrote)
 
