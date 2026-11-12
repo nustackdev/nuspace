@@ -329,10 +329,10 @@ describe("tree row selection", () => {
 	it("selects the focused pane's plane with the quiet fill, and only it", () => {
 		render([], tree, "b");
 		expect(rowOf("b")?.getAttribute("aria-selected")).toBe("true");
-		expect(rowOf("b")?.className).toContain(" bg-sidebar-a-fill");
+		expect(rowOf("b")?.className).toContain(" bg-bg-press");
 		expect(rowOf("a")?.getAttribute("aria-selected")).toBe("false");
-		expect(rowOf("a")?.className).not.toContain(" bg-sidebar-a-fill");
-		expect(rowOf("a")?.className).toContain("hover:bg-sidebar-a-fill");
+		expect(rowOf("a")?.className).not.toContain(" bg-bg-press");
+		expect(rowOf("a")?.className).toContain("hover:bg-bg-hover");
 	});
 
 	it("opens the row's plane with Enter", () => {

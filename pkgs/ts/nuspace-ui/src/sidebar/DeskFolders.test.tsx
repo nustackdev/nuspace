@@ -188,7 +188,7 @@ describe("desk folders", () => {
 		act(() => titleOf("Work")?.click());
 		expect(keysIn("Work").length).toBeGreaterThan(0);
 		expect(titleOf("Work")?.hasAttribute("aria-current")).toBe(false);
-		expect(headOf("Work")?.className).not.toMatch(/(^|\s)bg-sidebar-a-fill/);
+		expect(headOf("Work")?.className).not.toMatch(/(^|\s)bg-bg-press/);
 	});
 
 	it("makes a desk holding a plane from newDeskWith, named Untitled, no rename open", () => {
@@ -496,7 +496,7 @@ describe("selection", () => {
 		window.history.replaceState(null, "", `/${W}/item02`);
 		drawSidebar();
 		expect(selected()).toEqual([itemKey(W, "item02")]);
-		expect(headOf("Work")?.className).not.toMatch(/(^|\s)bg-sidebar-a-fill/);
+		expect(headOf("Work")?.className).not.toMatch(/(^|\s)bg-bg-press/);
 	});
 
 	it("a strip: the focused pane's row", () => {

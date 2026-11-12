@@ -189,7 +189,7 @@ describe("the section", () => {
 		const title = host.querySelector<HTMLButtonElement>("button[aria-expanded]");
 		expect(title?.textContent).toBe("Desk");
 		expect(title?.hasAttribute("aria-current")).toBe(false);
-		expect(title?.parentElement?.className).not.toMatch(/(^|\s)bg-sidebar-a-fill/);
+		expect(title?.parentElement?.className).not.toMatch(/(^|\s)bg-bg-press/);
 		act(() => title?.click());
 		expect(onFold).toHaveBeenCalledWith(true);
 	});

@@ -34,43 +34,10 @@
 	/* --- Hairlines ------------------------------------------------------- */
 	--nuspace-edge: var(--border-subtle); /* line-subtle: sidebar edge, pane
 	                                       * dividers                         */
-
-	/* --- Sidebar fills: an anchor and two steps -------------------------- */
-	/* Every fill is ink over the canvas, from three numbers (ink %), so the
-	 * sidebar tunes as a whole:
-	 *   a   the row in hand: the selected row, and a row under the pointer
-	 *   d   one interaction step: hover is +d on whatever the row rests on,
-	 *       press +2d. A row resting on nothing hovers straight to a.
-	 *   cd  a control's step: a control inside a row or a section title
-	 *       (chevron, +, ...) paints cd on hover and 2cd on press, so it
-	 *       climbs from whatever the row shows under it.
-	 * See sidebar.ts. */
-	--sidebar-a: 12;
-	--sidebar-d: 3.5;
-	--sidebar-cd: 5;
-	--sidebar-a-fill: color-mix(in oklab, var(--ink-1) calc(var(--sidebar-a) * 1%), transparent);
-	--sidebar-a-hover: color-mix(
-		in oklab,
-		var(--ink-1) calc((var(--sidebar-a) + var(--sidebar-d)) * 1%),
-		transparent
-	);
-	--sidebar-a-press: color-mix(
-		in oklab,
-		var(--ink-1) calc((var(--sidebar-a) + 2 * var(--sidebar-d)) * 1%),
-		transparent
-	);
-	--sidebar-cd1: color-mix(in oklab, var(--ink-1) calc(var(--sidebar-cd) * 1%), transparent);
-	--sidebar-cd2: color-mix(in oklab, var(--ink-1) calc(2 * var(--sidebar-cd) * 1%), transparent);
 }
 
 /* ============================== Tailwind v4 ==============================*/
 @theme inline {
 	--color-nuspace-page: var(--nuspace-page);
 	--color-nuspace-edge: var(--nuspace-edge);
-
-	--color-sidebar-a-fill: var(--sidebar-a-fill);
-	--color-sidebar-a-hover: var(--sidebar-a-hover);
-	--color-sidebar-a-press: var(--sidebar-a-press);
-	--color-sidebar-cd1: var(--sidebar-cd1);
-	--color-sidebar-cd2: var(--sidebar-cd2);
 }

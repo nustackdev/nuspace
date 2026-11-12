@@ -8,10 +8,10 @@
 // Five pieces, one variant each (../sidebar/): the header, the footer, the
 // section, the row and the action row. Every row is the same 28px line: an
 // icon lane, a truncating label in `ink-2`, and one optional trailing thing
-// (a shortcut, a count or a hover action). One selected state for all: a
-// quiet gray fill (`sidebar-a`, theme.css), which is also where a row under
-// the pointer lands. The text never changes hue, it steps up to the primary
-// tier. A tree row is the same row, indented.
+// (a shortcut, a count or a hover action). The kit's state washes: hover is
+// `bg-hover`, press and selected `bg-press`, a selected row holds under the
+// pointer and presses to `bg-press-strong`. The text never changes hue, it
+// steps up to the primary tier. A tree row is the same row, indented.
 //
 // The lengths are stated once, here, on the 4px grid:
 //
@@ -41,13 +41,11 @@ export function sidebarIndent(depth: number): { paddingLeft: string } {
 
 /**
  * A control inside a row or a section title (chevron, `+`, `...`, a section
- * action): over the kit's ghost wash, it paints only the control step
- * (`sidebar-cd`, theme.css), one on hover, two on press and while its menu is
- * open. The step lands on the row's own fill, so a control always climbs from
- * whatever the row shows.
+ * action): the kit's ghost washes (`bg-hover`, `bg-press`), held on press
+ * while its menu is open. Washes stack, so a control always climbs from
+ * whatever the row shows under it.
  */
-const sidebarControlWash =
-	"hover:bg-sidebar-cd1 active:bg-sidebar-cd2 data-[state=open]:bg-sidebar-cd2";
+const sidebarControlWash = "data-[state=open]:bg-bg-press";
 
 /* ============================== The sidebar ============================== */
 
@@ -142,8 +140,8 @@ export function sidebarRailItem(selected: boolean): string {
 	return cn(
 		"text-text-muted hover:text-text-primary",
 		selected
-			? "bg-sidebar-a-fill text-text-primary hover:bg-sidebar-a-hover active:bg-sidebar-a-press"
-			: "hover:bg-sidebar-a-fill active:bg-sidebar-a-hover",
+			? "bg-bg-press text-text-primary active:bg-bg-press-strong"
+			: "hover:bg-bg-hover active:bg-bg-press",
 	);
 }
 
@@ -163,7 +161,7 @@ export const sidebarSection = "flex shrink-0 flex-col gap-px";
 export const sidebarSectionHead = cn(
 	"group/section relative flex h-7 shrink-0 items-center gap-1 rounded-md pr-1.5",
 	"transition-colors duration-fast ease-out",
-	"hover:bg-sidebar-a-fill has-[>button[aria-expanded]:active]:bg-sidebar-a-hover",
+	"hover:bg-bg-hover has-[>button[aria-expanded]:active]:bg-bg-press",
 );
 
 /**
@@ -218,8 +216,9 @@ export const sidebarRows = "flex flex-col gap-px";
 
 /**
  * The row. This is what paints hover and selection, not the link inside it,
- * so the wash spans the whole line. A row rests on nothing and hovers to the
- * selected fill; the selected row climbs a step on hover and two on press.
+ * so the wash spans the whole line. Kit states: `bg-hover` on hover,
+ * `bg-press` on press and while selected; a selected row holds under the
+ * pointer and presses to `bg-press-strong`.
  */
 export function sidebarRow(selected: boolean, inset = false): string {
 	return cn(
@@ -230,8 +229,8 @@ export function sidebarRow(selected: boolean, inset = false): string {
 		// Offset 0: the kit's 2px offset gets clipped by the scroller.
 		"focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0",
 		selected
-			? "bg-sidebar-a-fill text-text-primary hover:bg-sidebar-a-hover active:bg-sidebar-a-press"
-			: "hover:bg-sidebar-a-fill active:bg-sidebar-a-hover",
+			? "bg-bg-press text-text-primary active:bg-bg-press-strong"
+			: "hover:bg-bg-hover active:bg-bg-press",
 	);
 }
 
