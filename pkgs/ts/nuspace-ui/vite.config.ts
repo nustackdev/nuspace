@@ -24,9 +24,15 @@ const KIT =
 		: null;
 if (KIT) console.log(`ui-kit: local (${KIT})`);
 
-/** The kit's entry points, as its package.json exports them, off its source. */
+/** The kit's entry points, as its package.json exports them, off its source. The
+ * kit's wire core (ui-core) comes from the same checkout: a local kit can need
+ * ui-core exports no npm release has yet, and one copy keeps one store. */
 const LOCAL_KIT = KIT
 	? [
+			{
+				find: /^@nustackdev\/ui-core$/,
+				replacement: path.resolve(KIT, "../ui-core/src/index.ts"),
+			},
 			{ find: /^@nustackdev\/ui-kit$/, replacement: `${KIT}/src/index.ts` },
 			{ find: /^@nustackdev\/ui-kit\/(tree|nodes)$/, replacement: `${KIT}/src/$1/index.ts` },
 			{ find: /^@nustackdev\/ui-kit\/styles$/, replacement: `${KIT}/dist/styles.css` },
@@ -66,7 +72,7 @@ export default defineConfig({
 	},
 	server: {
 		// The local kit sits outside this package; let the dev server read it.
-		fs: KIT ? { allow: [__dirname, KIT] } : undefined,
+		fs: KIT ? { allow: [__dirname, KIT, path.resolve(KIT, "../ui-core")] } : undefined,
 		proxy: {
 			"/ws": {
 				target: "ws://localhost:8080",

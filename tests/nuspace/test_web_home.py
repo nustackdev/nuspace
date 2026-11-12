@@ -1,4 +1,4 @@
-"""Home: its four cells' reads stay bounded and honest, and each draws again only on a change.
+"""Home: its cells' reads stay bounded and honest, and each draws again only on a change.
 
 A cell's read runs here against the store; its draw with a recording
 session bound, so what it would draw is read off the frames it sends. The
@@ -67,6 +67,14 @@ class _Recording:
                 return None if frame.op == "remove" else frame.payload
         return None
 
+    def chained(self, ref: tuple) -> dict:
+        """The props the last frame through ``ref`` carried for it on its chain, ``{}`` when none."""
+        for frame in reversed(self.frames):
+            for i, (_, _, props) in enumerate(frame.chain):
+                if frame.ref[: i + 1] == ref:
+                    return props
+        return {}
+
     def drawn(self) -> dict:
         """Every ref's last payload, erased ones left out."""
         out: dict = {}
@@ -125,9 +133,15 @@ async def run(store, p: str, **kwargs) -> str:
 
 
 def test_the_cells_are_shims_in_draw_order():
-    assert [name for name, _ in home.CELLS] == ["space", "history", "now", "runs"]
+    assert [name for name, _ in home.CELLS] == ["space", "history", "now"]
     for name, prog in home.CELLS:
         assert prog == f"from nuspace.web.home.{name} import out\n"
+
+
+async def test_an_older_homes_runs_cell_draws_nothing(store):
+    """Recent sits under Execution in the ``now`` cell: an older home's ``runs`` cell keeps quiet."""
+    await run(store, await plane(store, name="P"))
+    assert (await _draw(store, runs.out())).frames == []
 
 
 @pytest.mark.parametrize("module", [space, history, now, runs], ids=lambda m: m.__name__)
@@ -139,16 +153,23 @@ def test_each_cell_builds_and_validates(module):
 # --- Space --------------------------------------------------------------------------------
 
 
+#: The counts card's stats and its footer line, on the board's first place.
+STATS = ("space", "board", "0,0", "stats")
+FROM_SPECS = ("space", "board", "0,0", "footer", "0")
+
+
 async def test_space_on_a_space_never_indexed_reads_counting(store):
     await do(store, Space.info.path.set("/tmp/garden") >> Space.info.opened_at.set(1000.0))
     got = await store.read(space.read())
     assert got["counting"] is True
     assert got["days"] == []
     drawn = (await _draw(store, space.draw())).drawn()
-    stats = ("space", "body", "stats", "counts")
-    assert drawn[(*stats, "planes")]["value"] == "…"
-    assert drawn[(*stats, "specs", "from_specs")] == "counting"
-    assert drawn[("space", "info", "name")] == "garden"
+    assert drawn[(*STATS, "planes")]["value"] == "…"
+    assert drawn[FROM_SPECS] == "counting"
+    assert drawn[("space",)]["description"] == "/tmp/garden"
+    # Each run but the last ends in its dot: a wrapped line never starts with one.
+    assert drawn[("space", "info", "name")] == "garden ·"
+    assert drawn[("space", "info", "versions")].endswith(" ·")
     assert drawn[("space", "info", "uptime")]["ts"] == 1_000_000
 
 
@@ -160,17 +181,15 @@ async def test_space_reads_the_indexer_totals_and_calendar(store):
     assert got["counting"] is False
     assert (got["planes"], got["cells"], got["specs"], got["from_specs"]) == (3, 3, 4, 0)
     drawn = (await _draw(store, space.draw())).drawn()
-    values = drawn[("space", "body", "calendar")]["values"]
+    values = drawn[("space", "board", "0,1", "calendar")]["values"]
     assert sum(v.get("planes", 0) for v in values.values()) == 3
-    assert (
-        drawn[("space", "body", "stats", "counts", "specs", "from_specs")] == "0 planes from specs"
-    )
+    assert drawn[FROM_SPECS] == "0 planes from specs"
 
 
 async def test_space_counts_go_compact_past_ten_thousand(store):
     await do(store, STATE.totals.cells.set(1_184_220) >> STATE.cursor.cell.set("c_x"))
     drawn = (await _draw(store, space.draw())).drawn()
-    assert drawn[("space", "body", "stats", "counts", "cells")]["value"] == "1.2M"
+    assert drawn[(*STATS, "cells")]["value"] == "1.2M"
 
 
 async def test_space_calendar_reads_only_the_window(store):
@@ -184,7 +203,7 @@ async def test_space_calendar_reads_only_the_window(store):
 async def test_space_draws_again_on_totals_and_not_while_idle(store):
     session, task = await _live(store, space.out())
     try:
-        planes = ("space", "body", "stats", "counts", "planes")
+        planes = (*STATS, "planes")
         await _until(lambda: (session.last(planes) or {}).get("value") == "…")
         idle = await _quiet(session, 0.5)
         assert await _quiet(session, 0.5) == idle
@@ -202,23 +221,27 @@ async def test_space_draws_again_on_totals_and_not_while_idle(store):
 # --- History ------------------------------------------------------------------------------
 
 
-def _tiles(drawn: dict, group: str) -> list:
-    tiles = ("history", group, "tiles")
-    keys = [k for k in drawn if k[:3] == tiles and len(k) == 4]
-    return [drawn[k] for k in keys]
+def _tiles(drawn: dict) -> list:
+    """The tiles drawn, in the order they were written: the order the grid draws them."""
+    return [v for k, v in drawn.items() if k[:2] == ("history", "tiles") and len(k) == 3]
+
+
+def _tile(plane: str) -> tuple:
+    return ("history", "tiles", plane)
 
 
 async def test_history_on_an_empty_space(store):
     drawn = (await _draw(store, history.draw())).drawn()
-    assert _tiles(drawn, "recent") == []
-    assert drawn[("history", "recent", "empty")] == "Nothing opened yet."
+    assert _tiles(drawn) == []
+    assert drawn[("history", "empty")]["label"] == "Nothing opened yet"
 
 
 async def test_history_shows_recents(store):
     p = await plane(store, name="Seen")
     await do(store, web.add(p) >> web.visit(p))
     drawn = (await _draw(store, history.draw())).drawn()
-    assert [t["title"] for t in _tiles(drawn, "recent")] == ["Seen"]
+    assert [t["title"] for t in _tiles(drawn)] == ["Seen"]
+    assert ("history", "empty") not in drawn
 
 
 async def test_history_recent_shows_the_newest_eight_still_there_icon_and_title_only(store):
@@ -226,7 +249,7 @@ async def test_history_recent_shows_the_newest_eight_still_there_icon_and_title_
     for p in ids:
         await do(store, web.visit(p))
     await do(store, nuspace.plane.remove(ids[-1]))
-    tiles = _tiles((await _draw(store, history.draw())).drawn(), "recent")
+    tiles = _tiles((await _draw(store, history.draw())).drawn())
     assert [t["title"] for t in tiles] == [f"R{i}" for i in range(10, 2, -1)]
     assert set(tiles[0]) == {"href", "title", "icon"}
     assert tiles[0]["icon"] == "rocket"
@@ -236,24 +259,27 @@ async def test_history_redraws_on_a_visit_and_a_shown_rename_only(store):
     a, b, c = [await plane(store, name=n) for n in ("Alpha", "Beta", "Gamma")]
     await do(store, web.visit(a))
     session, task = await _live(store, history.out())
-    tile0 = ("history", "recent", "tiles", "t0")
+
+    def titles() -> list:
+        return [t["title"] for t in _tiles(session.drawn())]
+
     try:
-        await _until(lambda: (session.last(tile0) or {}).get("title") == "Alpha")
+        await _until(lambda: (session.last(_tile(a)) or {}).get("title") == "Alpha")
         idle = await _quiet(session, 0.5)
         assert await _quiet(session, 0.5) == idle
         # A plane it does not show, renamed: nothing drawn.
         await do(store, nuspace.plane.rename(c, "Gee"))
         assert await _quiet(session, 0.5) == idle
-        # A shown one, renamed: its tile again.
+        # A shown one, renamed: its own tile again, keyed by the plane.
         await do(store, nuspace.plane.rename(a, "Ay"))
-        await _until(lambda: (session.last(tile0) or {}).get("title") == "Ay")
+        await _until(lambda: (session.last(_tile(a)) or {}).get("title") == "Ay")
+        # A visit: the tiles again, newest first.
         await do(store, web.visit(b))
-        await _until(lambda: (session.last(tile0) or {}).get("title") == "Beta")
-        assert (session.last(("history", "recent", "tiles", "t1")) or {}).get("title") == "Ay"
+        await _until(lambda: titles() == ["Beta", "Ay"])
         # A shown plane removed: its tile goes.
         await do(store, nuspace.plane.remove(b))
-        await _until(lambda: (session.last(tile0) or {}).get("title") == "Ay")
-        await _until(lambda: session.last(("history", "recent", "tiles", "t1")) is None)
+        await _until(lambda: titles() == ["Ay"])
+        assert _tile(b) not in session.drawn()
     finally:
         await _stop(task)
 
@@ -262,35 +288,50 @@ async def test_history_redraws_on_a_visit_and_a_shown_rename_only(store):
 
 
 async def test_headings_nest_under_the_page_title(store):
-    """The page title is the h1: Space, History and Execution are h2, Now and Recent sit under Execution as h3."""
-    drawn: dict = {}
-    for cell_ in (space, history, now, runs):
-        drawn.update((await _draw(store, cell_.draw())).drawn())
+    """The page title is the h1: Space, History and Execution are section titles (h2), Now and Recent h3 under Execution."""
+    sections = {}
+    for cell_ in (space.draw(), history.draw(), now.draw()):
+        session = await _draw(store, cell_)
+        for name in ("space", "history", "execution"):
+            if title := session.chained((name,)).get("title"):
+                sections[name] = title
+    assert sections == {"space": "Space", "history": "History", "execution": "Execution"}
     first = (await _draw(store, now.first())).drawn()
-    first.update((await _draw(store, runs.first())).drawn())
-
-    def heading(ref: tuple) -> tuple:
-        got = drawn.get(ref) or first[ref]
-        return got["label"], got["level"]
-
-    assert heading(("space", "title")) == ("Space", 2)
-    assert heading(("history", "title")) == ("History", 2)
-    assert heading(("now", "title")) == ("Execution", 2)
-    assert heading(("now", "head", "title", "title")) == ("Now", 3)
-    assert heading(("runs", "head", "title", "title")) == ("Recent", 3)
-    assert first[("now", "head", "system")] is False
-    assert first[("runs", "head", "system")] is False
+    heads = {k[1]: (v["label"], v["level"]) for k, v in first.items() if k[2:] == ("head", "title")}
+    assert heads == {"now": ("Now", 3), "recent": ("Recent", 3)}
+    # One switch, on the section's head, for both.
+    assert first[SWITCH] is False
 
 
-def _rows(drawn: dict) -> list:
-    return sorted({k[2] for k in drawn if k[:2] == ("now", "rows") and len(k) > 2})
+#: Where Now and Recent draw, under Execution, and the one switch.
+NOW = ("execution", "now")
+RECENT = ("execution", "recent")
+SWITCH = ("execution", "actions")
+
+
+def _table(session: _Recording) -> list:
+    """The rows last shipped to Now's table, ``[]`` when none."""
+    for frame in reversed(session.frames):
+        if (
+            frame.ref == (*NOW, "table")
+            and isinstance(frame.payload, dict)
+            and "rows" in frame.payload
+        ):
+            return frame.payload["rows"]
+    return []
+
+
+def _rows(session: _Recording) -> list:
+    """The titles of the planes in Now's table, in row order."""
+    return [row["plane"]["title"] for row in _table(session)]
 
 
 async def test_now_on_an_empty_space(store):
-    drawn = (await _draw(store, now.draw())).drawn()
-    assert _rows(drawn) == []
-    assert drawn[("now", "empty")] == "Nothing running."
-    assert ("now", "more") not in drawn
+    session = await _draw(store, now.draw())
+    drawn = session.drawn()
+    assert _rows(session) == []
+    assert drawn[(*NOW, "empty")]["label"] == "Nothing running"
+    assert (*NOW, "more") not in drawn
 
 
 async def test_now_draws_ten_rows_then_an_honest_more(store):
@@ -298,14 +339,16 @@ async def test_now_draws_ten_rows_then_an_honest_more(store):
         p = await plane(store, name=f"N{i}")
         await cell(store, p)
         await run(store, p, by="supervisor")
-    drawn = (await _draw(store, now.draw())).drawn()
-    assert _rows(drawn) == [f"r{i}" for i in range(now.ROWS)]
-    assert drawn[("now", "more")] == "+3 more running"
-    assert drawn[("now", "head", "title", "count")] == "13 plane runs"
-    row = ("now", "rows", "r0")
-    assert drawn[(*row, "plane")]["title"] == "N0"
-    assert drawn[(*row, "by")] == "supervisor"
-    assert drawn[(*row, "backend", "name")] == "async"
+    session = await _draw(store, now.draw())
+    drawn = session.drawn()
+    assert _rows(session) == [f"N{i}" for i in range(now.ROWS)]
+    assert drawn[(*NOW, "more")] == "+3 more running"
+    assert drawn[(*NOW, "head", "count")] == "13 plane runs"
+    row = _table(session)[0]
+    assert row["by"] == "supervisor"
+    assert row["backend"] == "async, 0 workers"
+    # Keyed by run: a run that ends takes its row with it, no erase of its own.
+    assert len({r["run"] for r in _table(session)}) == now.ROWS
 
 
 async def test_now_squares_count_every_cell_and_put_failures_first(store):
@@ -316,13 +359,11 @@ async def test_now_squares_count_every_cell_and_put_failures_first(store):
         await do(store, nuspace.cell_run.add(r, c))
     # A failure past the first cells still draws first: it is counted, not sampled.
     await do(store, LIVE.plane_run_to_failed_cells[r].ids[cells[-1]].set(True))
-    drawn = (await _draw(store, now.draw())).drawn()
-    row = ("now", "rows", "r0")
-    counts = drawn[(*row, "cells")]["counts"]
+    (row,) = _table(await _draw(store, now.draw()))
+    counts = row["cells"]["counts"]
     assert counts == {"danger": 1, "info": 5, "ok": 0, "empty": 24}
     assert sum(counts.values()) == 30
-    assert drawn[(*row, "count", "failed")] == "1 failed"
-    assert drawn[(*row, "count", "total")] == "30"
+    assert row["failed"] == "1"
 
 
 @pytest.mark.parametrize(
@@ -341,9 +382,8 @@ async def test_now_names_a_cell_on_any_system_plane_by_that_plane(store):
     other = await cell(store, mine)
     await run(store, mine, by=asker)
     await run(store, mine, by=other)
-    drawn = (await _draw(store, now.draw())).drawn()
-    assert drawn[("now", "rows", "r0", "by")] == "Watchers"
-    assert drawn[("now", "rows", "r1", "by")] == other
+    rows = _table(await _draw(store, now.draw()))
+    assert [r["by"] for r in rows] == ["Watchers", other]
 
 
 class _Switched(_Recording):
@@ -354,7 +394,7 @@ class _Switched(_Recording):
         self.on = on
 
     async def aread(self, path: tuple[str, ...]) -> object:
-        return self.on if tuple(path)[-3:] == ("now", "head", "system") else nu.lang.NULL
+        return self.on if tuple(path)[-2:] == SWITCH else nu.lang.NULL
 
 
 async def _system_space(store) -> None:
@@ -368,21 +408,17 @@ async def _system_space(store) -> None:
 
 async def test_now_switch_off_leaves_system_runs_out_on_counts_them_honestly(store):
     await _system_space(store)
-    off = (await _draw(store, now.draw())).drawn()
-    assert off[("now", "head", "title", "count")] == "3 plane runs"
-    assert _rows(off) == ["r0", "r1", "r2"]
-    assert ("now", "more") not in off
-    assert {off[("now", "rows", f"r{i}", "plane")]["title"] for i in range(3)} == {
-        "mine0",
-        "mine1",
-        "mine2",
-    }
+    session = await _draw(store, now.draw())
+    off = session.drawn()
+    assert off[(*NOW, "head", "count")] == "3 plane runs"
+    assert _rows(session) == ["mine0", "mine1", "mine2"]
+    assert (*NOW, "more") not in off
     session = _Switched(True)
     await nu.arun(now.draw(), store.ctx.bind(Session, session))
     on = session.drawn()
-    assert on[("now", "head", "title", "count")] == "15 plane runs"
-    assert _rows(on) == [f"r{i}" for i in range(now.ROWS)]
-    assert on[("now", "more")] == "+5 more running"
+    assert on[(*NOW, "head", "count")] == "15 plane runs"
+    assert len(_rows(session)) == now.ROWS
+    assert on[(*NOW, "more")] == "+5 more running"
 
 
 async def test_now_read_takes_the_switch(store):
@@ -396,17 +432,16 @@ async def test_now_flipping_the_switch_redraws_and_a_redraw_never_flips_it_back(
     session = _Switched(False)
     task = asyncio.create_task(nu.arun(now.out(), store.ctx.bind(Session, session)))
     await asyncio.sleep(0)
-    count = ("now", "head", "title", "count")
-    switch = ("now", "head", "system")
+    count = (*NOW, "head", "count")
     try:
         await _until(lambda: session.last(count) == "3 plane runs")
-        assert session.last(switch) is False
+        assert session.last(SWITCH) is False
         session.on = True
-        for cb in list(session.notifies[switch].callbacks):
+        for cb in list(session.notifies[SWITCH].callbacks):
             cb({"value": True})
         await _until(lambda: session.last(count) == "15 plane runs")
         # The switch was written once, off, at the start: never again.
-        assert [f.payload for f in session.frames if f.ref == switch] == [False]
+        assert [f.payload for f in session.frames if f.ref == SWITCH] == [False]
     finally:
         await _stop(task)
 
@@ -416,15 +451,21 @@ async def test_now_redraws_on_a_live_change_and_not_while_idle(store):
     c = await cell(store, p)
     session, task = await _live(store, now.out())
     try:
-        await _until(lambda: session.last(("now", "empty")) == "Nothing running.")
-        idle = await _quiet(session, 1.5)
+        await _until(
+            lambda: (session.last((*NOW, "empty")) or {}).get("label") == "Nothing running"
+        )
+        idle = await _quiet(session, 2.5)
         assert await _quiet(session, 1.0) == idle
         r = await run(store, p)
-        await _until(lambda: session.last(("now", "head", "title", "count")) == "1 plane run")
+        await _until(lambda: session.last((*NOW, "head", "count")) == "1 plane run")
         await do(store, nuspace.cell_run.add(r, c))
-        squares = ("now", "rows", "r0", "cells")
-        await _until(lambda: (session.last(squares) or {}).get("counts", {}).get("info") == 1)
-        seen = await _quiet(session, 1.5)
+
+        def starting() -> int:
+            rows = _table(session)
+            return rows[0]["cells"]["counts"].get("info", 0) if rows else 0
+
+        await _until(lambda: starting() == 1)
+        seen = await _quiet(session, 2.5)
         # A write it does not show wakes nothing.
         await do(store, Space.info.path.set("/elsewhere"))
         assert await _quiet(session, 1.0) == seen
@@ -451,9 +492,9 @@ async def ended(store, p: str, exit_: str = "ok") -> str:
 async def test_runs_on_an_empty_space(store):
     got = await collected(store)
     assert got == {"lanes": [], "read": 0, "cut": False}
-    drawn = (await _draw(store, runs.draw())).drawn()
-    assert drawn[("runs", "empty")] == "Nothing has run yet."
-    assert ("runs", "timeline") not in drawn
+    drawn = (await _draw(store, now.recent())).drawn()
+    assert drawn[(*RECENT, "empty")]["label"] == "Nothing has run yet"
+    assert (*RECENT, "timeline") not in drawn
 
 
 async def test_runs_lanes_are_the_last_distinct_planes_newest_first(store):
@@ -540,22 +581,22 @@ async def test_runs_and_now_leave_system_planes_out_but_count_their_runs_in_the_
     got = await collected(store, system=True, budget=5, size=5)
     assert [lane["page"]["title"] for lane in got["lanes"]] == ["sys"]
     assert got["read"] == 5 and got["cut"] is True
-    drawn = (await _draw(store, now.draw())).drawn()
-    assert drawn[("now", "head", "title", "count")] == "1 plane run"
-    assert drawn[("now", "rows", "r0", "plane")]["title"] == "mine"
+    session = await _draw(store, now.draw())
+    assert session.drawn()[(*NOW, "head", "count")] == "1 plane run"
+    assert _rows(session) == ["mine"]
 
 
 async def test_runs_redraw_on_a_new_run_and_not_while_idle(store):
     p = await plane(store, name="P")
-    session, task = await _live(store, runs.out())
+    session, task = await _live(store, now.out())
     try:
-        await _until(lambda: session.last(("runs", "empty")) == "Nothing has run yet.")
+        await _until(
+            lambda: (session.last((*RECENT, "empty")) or {}).get("label") == "Nothing has run yet"
+        )
         idle = await _quiet(session, 2.5)
         assert await _quiet(session, 1.0) == idle
         await run(store, p)
-        await _until(
-            lambda: session.last(("runs", "head", "title", "count")) == "1 plane", timeout=8.0
-        )
+        await _until(lambda: session.last((*RECENT, "head", "count")) == "1 plane", timeout=8.0)
         seen = await _quiet(session, 2.5)
         await do(store, Space.info.path.set("/elsewhere"))
         assert await _quiet(session, 1.0) == seen
@@ -593,20 +634,21 @@ async def test_runs_flipping_the_switch_walks_again_and_never_flips_it_back(stor
         on = False
 
         async def aread(self, path: tuple[str, ...]) -> object:
-            return self.on if tuple(path)[-3:] == ("runs", "head", "system") else nu.lang.NULL
+            return self.on if tuple(path)[-2:] == SWITCH else nu.lang.NULL
 
     session = Switched()
-    task = asyncio.create_task(nu.arun(runs.out(), store.ctx.bind(Session, session)))
+    task = asyncio.create_task(nu.arun(now.out(), store.ctx.bind(Session, session)))
     await asyncio.sleep(0)
-    count = ("runs", "head", "title", "count")
-    switch = ("runs", "head", "system")
+    count = (*RECENT, "head", "count")
     try:
         await _until(lambda: session.last(count) == "1 plane", timeout=8.0)
         session.on = True
-        for cb in list(session.notifies[switch].callbacks):
+        for cb in list(session.notifies[SWITCH].callbacks):
             cb({"value": True})
         await _until(lambda: session.last(count) == "2 planes", timeout=8.0)
-        assert [f.payload for f in session.frames if f.ref == switch] == [False]
+        # One switch: Now took it too.
+        await _until(lambda: session.last((*NOW, "head", "count")) == "2 plane runs")
+        assert [f.payload for f in session.frames if f.ref == SWITCH] == [False]
     finally:
         await _stop(task)
 
@@ -616,22 +658,22 @@ def _lanes(session: _Recording) -> list:
     shipped = [
         f.payload
         for f in session.frames
-        if f.ref == ("runs", "timeline") and isinstance(f.payload, dict) and "lanes" in f.payload
+        if f.ref == (*RECENT, "timeline") and isinstance(f.payload, dict) and "lanes" in f.payload
     ]
     return [lane["title"] for lane in shipped[-1]["lanes"]] if shipped else []
 
 
 class _Flip(_Recording):
-    """A session whose system runs switches (Now's and Recent's) read ``on``, flipped by :meth:`flip`."""
+    """A session whose system runs switch reads ``on``, flipped by :meth:`flip`."""
 
     on = False
 
     async def aread(self, path: tuple[str, ...]) -> object:
-        return self.on if tuple(path)[-2:] == ("head", "system") else nu.lang.NULL
+        return self.on if tuple(path)[-2:] == SWITCH else nu.lang.NULL
 
-    def flip(self, ref: tuple, on: bool) -> None:
+    def flip(self, on: bool) -> None:
         self.on = on
-        for cb in list(self.notifies[ref].callbacks):
+        for cb in list(self.notifies[SWITCH].callbacks):
             cb({"value": on})
 
 
@@ -641,14 +683,14 @@ async def test_runs_toggling_the_switch_replaces_the_lanes_every_time(store):
     await do(store, nuspace.plane.add("sys", name="sys", backend="async", system=True))
     await run(store, "sys")
     session = _Flip()
-    task = asyncio.create_task(nu.arun(runs.out(), store.ctx.bind(Session, session)))
+    task = asyncio.create_task(nu.arun(now.out(), store.ctx.bind(Session, session)))
     await asyncio.sleep(0)
-    count = ("runs", "head", "title", "count")
+    count = (*RECENT, "head", "count")
     try:
         await _until(lambda: session.last(count) == "1 plane", timeout=8.0)
         assert _lanes(session) == ["mine"]
         for on in (True, False, True, False):
-            session.flip(("runs", "head", "system"), on)
+            session.flip(on)
             want = ["sys", "mine"] if on else ["mine"]
             await _until(lambda want=want: _lanes(session) == want, timeout=8.0)
             assert session.last(count) == ("2 planes" if on else "1 plane")
@@ -661,7 +703,7 @@ async def test_runs_one_built_draw_walks_fresh_each_time(store):
     await run(store, await plane(store, name="mine"))
     await do(store, nuspace.plane.add("sys", name="sys", backend="async", system=True))
     await run(store, "sys")
-    term = runs.draw()
+    term = now.recent()
     for on in (True, False, True, False):
         session = _Flip()
         session.on = on
@@ -674,22 +716,20 @@ async def test_now_toggling_the_switch_replaces_the_rows_every_time(store):
     session = _Flip()
     task = asyncio.create_task(nu.arun(now.out(), store.ctx.bind(Session, session)))
     await asyncio.sleep(0)
-    count = ("now", "head", "title", "count")
+    count = (*NOW, "head", "count")
     try:
         await _until(lambda: session.last(count) == "3 plane runs")
         for on in (True, False, True, False):
-            session.flip(("now", "head", "system"), on)
+            session.flip(on)
             await _until(
                 lambda on=on: session.last(count) == ("15 plane runs" if on else "3 plane runs")
             )
             drawn = session.drawn()
             if on:
-                assert _rows(drawn) == [f"r{i}" for i in range(now.ROWS)]
-                assert drawn[("now", "more")] == "+5 more running"
+                assert len(_rows(session)) == now.ROWS
+                assert drawn[(*NOW, "more")] == "+5 more running"
             else:
-                assert _rows(drawn) == ["r0", "r1", "r2"]
-                assert ("now", "more") not in drawn
-                titles = {drawn[("now", "rows", f"r{i}", "plane")]["title"] for i in range(3)}
-                assert titles == {"mine0", "mine1", "mine2"}
+                assert _rows(session) == ["mine0", "mine1", "mine2"]
+                assert (*NOW, "more") not in drawn
     finally:
         await _stop(task)

@@ -17,16 +17,14 @@ only when they moved). No timer.
 from __future__ import annotations
 
 import datetime
-import importlib.metadata
-from pathlib import Path
 
 import nu
 import nustd.ui
 from nuspace.ops.brackets import atomic
 from nuspace.shapes import Space
 
-from . import indexer
-from .common import Compact
+from . import common, indexer
+from .common import Compact, SpaceName, SpaceWhere
 
 
 __all__ = ["DAYS", "View", "draw", "out", "read", "show", "versions"]
@@ -37,17 +35,8 @@ DAYS = 53 * 7 + 7
 
 
 def versions() -> str:
-    """``nuspace 0.6.3, nu 0.1.14``: the installed versions, read in this process."""
-
-    def version(name: str) -> str:
-        try:
-            return importlib.metadata.version(name)
-        except importlib.metadata.PackageNotFoundError:
-            return ""
-
-    # nu ships as the ``nucore`` distribution.
-    found = ((label, version(dist)) for label, dist in (("nuspace", "nuspace"), ("nu", "nucore")))
-    return ", ".join(f"{label} {v}" for label, v in found if v)
+    """``nuspace 0.6.3, nu 0.1.14``: the installed versions (:data:`.common.VERSIONS`), the missing left out."""
+    return ", ".join(f"{label} {v}" for label, v in common.VERSIONS.items() if v)
 
 
 def _since() -> str:
@@ -59,17 +48,6 @@ def _since() -> str:
 Since = nu.host(_since, name="HomeCalendarSince")
 
 
-def _name(path: object) -> str:
-    text = str(path or "").rstrip("/")
-    return Path(text).name if text else "Throwaway store"
-
-
-def _where(path: object) -> str:
-    text = str(path or "")
-    home = str(Path.home())
-    return "~" + text[len(home) :] if text == home or text.startswith(home + "/") else text
-
-
 def _days(rows: object) -> dict:
     """``[[day, planes, cells], ...]`` as the heatmap takes it: ``{day: {planes, cells}}``."""
     values: dict[str, dict[str, int]] = {}
@@ -79,12 +57,6 @@ def _days(rows: object) -> dict:
             values[str(day)] = parts
     return values
 
-
-#: ``SpaceName(path)``: the space's name, its directory's base name.
-SpaceName = nu.host(_name, name="HomeSpaceName")
-
-#: ``SpaceWhere(path)``: the path with the home directory as ``~``.
-SpaceWhere = nu.host(_where, name="HomeSpaceWhere")
 
 #: ``CalendarValues(rows)``: the calendar rows as the heatmap's values.
 CalendarValues = nu.host(_days, name="HomeCalendarValues")
@@ -130,67 +102,63 @@ CALENDAR_TITLE = "Added per day, past year"
 # --- The view ------------------------------------------------------------------------------
 
 
-class Info(nustd.ui.Row):
-    """The first line: name, path, versions, uptime."""
+class Info(nustd.ui.Line):
+    """The line under the title: name, versions, uptime.
+
+    One sentence: each run but the last ends in its own `` ·``, so on a
+    narrow pane it wraps between runs and a line never starts with a dot.
+    """
 
     name = nustd.ui.TextRef.slot(size="sm", weight="medium", tone="secondary")
-    dot1 = nustd.ui.TextRef.slot(value="·", size="sm", tone="muted")
-    path = nustd.ui.TextRef.slot(size="sm", tone="muted", mono=True)
-    dot2 = nustd.ui.TextRef.slot(value="·", size="sm", tone="muted")
     versions = nustd.ui.TextRef.slot(size="sm", tone="muted")
-    dot3 = nustd.ui.TextRef.slot(value="·", size="sm", tone="muted")
     up = nustd.ui.TextRef.slot(value="up", size="sm", tone="muted")
     uptime = nustd.ui.RelativeTimeRef.slot(mode="duration")
 
 
-class Specs(nustd.ui.Column):
-    """The specs count, and how many planes came from one under it, plain (a stat's delta is a trend)."""
+class Section(nustd.ui.PageSection):
+    """The ``space`` cell's node: the path as its description, the info line, then a board.
 
-    stat = nustd.ui.StatRef.slot(label="Specs")
-    from_specs = nustd.ui.TextRef.slot(size="sm", tone="muted")
+    The board puts the counts beside the calendar where the pane is wide,
+    one under the other where it is not.
+    """
 
-
-class Counts(nustd.ui.Grid):
-    """Plain counts, nothing temporal."""
-
-    planes = nustd.ui.StatRef.slot(label="Planes")
-    cells = nustd.ui.StatRef.slot(label="Cells")
-    specs = Specs.slot(gap=1)
-
-
-class Stats(nustd.ui.Box):
-    """The counts in a frame."""
-
-    counts = Counts.slot(columns=3, min_width=120, gap=4)
-
-
-class Body(nustd.ui.Row):
-    """Counts on the left, the calendar beside them; the calendar wraps under on a narrow pane."""
-
-    stats = Stats.slot()
-    calendar = nustd.ui.CalendarHeatmapRef.slot(
-        title=CALENDAR_TITLE, suffix="added", peak_label="Busiest"
-    )
-
-
-class Block(nustd.ui.Column):
-    """The ``space`` cell's node."""
-
-    title = nustd.ui.HeadingRef.slot(label="Space", level=2)
-    info = Info.slot(gap=2, wrap=True, align="baseline")
-    body = Body.slot(gap=7, wrap=True, align="start", min_width=280)
+    info = Info.slot()
+    board = nustd.ui.GridRef.slot(cols="minmax(0, 1fr) auto", gap=4, align="start", stack_below=760)
 
 
 class View(nu.Shape):
     """The ``space`` cell's root."""
 
-    space = Block.slot(gap=3)
+    space = Section.slot(title="Space", gap=4)
+
+
+#: The board: the counts first, then the calendar.
+BOARD = View.space.board
+
+#: Plain counts, nothing temporal: one card, a stat each, wrapping by width.
+COUNTS = BOARD[0, 0].to(nustd.ui.CardRef.slot(size="sm"))
+STATS = COUNTS["stats"].to(nustd.ui.GridRef.slot(max_columns=3, min_width=96, gap=4))
+
+PLANES = STATS["planes"].to(nustd.ui.StatRef.slot(label="Planes"))
+CELLS = STATS["cells"].to(nustd.ui.StatRef.slot(label="Cells"))
+SPECS = STATS["specs"].to(nustd.ui.StatRef.slot(label="Specs"))
+
+#: How many planes came from a spec, plain in the card's footer (a stat's delta is a trend).
+FROM_SPECS = COUNTS.footer[0].to(nustd.ui.TextRef.slot(size="sm", tone="muted"))
+
+#: The planes and cells added per day: a card the calendar scrolls inside when it runs out of room.
+CALENDAR = (
+    BOARD[0, 1]
+    .to(nustd.ui.CardRef.slot(size="sm"))["calendar"]
+    .to(
+        nustd.ui.CalendarHeatmapRef.slot(title=CALENDAR_TITLE, suffix="added", peak_label="Busiest")
+    )
+)
 
 
 def show(got: nu.ObjectRef) -> nu.Nu:
     """Draw one read of :func:`read`. Writes only what the read says, no clock."""
     d = nu.Dict(got)
-    view = View.space
     counting = nu.Bool(d["counting"])
 
     def value(key: str) -> nu.Str:
@@ -203,26 +171,26 @@ def show(got: nu.ObjectRef) -> nu.Nu:
         nu.Str(Compact(from_specs)) + nu.If(from_specs == 1, " plane", " planes") + " from specs",
     )
     opened = nu.Float(d["opened_at"])
-    info = view.info
-    # The versions are a constant of this process: an empty one is left out at build.
-    shown = (info.dot2.set("·") >> info.versions.set(VERSIONS)) if VERSIONS else nu.Noop()
-    return (
-        view.title.set("Space", level=2)
-        >> info.name.set(SpaceName(d["path"]))
-        >> info.dot1.set("·")
-        >> info.path.set(SpaceWhere(d["path"]))
-        >> shown
-        >> nu.IfDo(
-            opened > 0,
-            info.dot3.set("·")
-            >> info.up.set("up")
-            >> info.uptime.set(opened * 1000, mode="duration"),
+    up = opened > 0
+    info = View.space.info
+    # Every run but the last ends in a dot. The versions are a constant of this
+    # process: empty, they are left out at build.
+    name = nu.Str(SpaceName(d["path"]))
+    if VERSIONS:
+        runs = info.name.set(name + " ·") >> info.versions.set(
+            nu.Str(VERSIONS) + nu.If(up, " ·", "")
         )
-        >> view.body.stats.counts.planes.set(value("planes"), label="Planes")
-        >> view.body.stats.counts.cells.set(value("cells"), label="Cells")
-        >> view.body.stats.counts.specs.stat.set(value("specs"), label="Specs")
-        >> view.body.stats.counts.specs.from_specs.set(nu.Str(delta))
-        >> view.body.calendar.set(CalendarValues(d["days"]), title=CALENDAR_TITLE)
+    else:
+        runs = info.name.set(name + nu.If(up, " ·", ""))
+    return (
+        View.space.set_description(nu.Str(SpaceWhere(d["path"])))
+        >> runs
+        >> nu.IfDo(up, info.up.set("up") >> info.uptime.set(opened * 1000, mode="duration"))
+        >> PLANES.set(value("planes"), label="Planes")
+        >> CELLS.set(value("cells"), label="Cells")
+        >> SPECS.set(value("specs"), label="Specs")
+        >> FROM_SPECS.set(nu.Str(delta))
+        >> CALENDAR.set(CalendarValues(d["days"]), title=CALENDAR_TITLE)
     )
 
 

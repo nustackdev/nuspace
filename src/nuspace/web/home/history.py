@@ -10,11 +10,11 @@ Removed planes are skipped. Cost: O(50), two reads each.
 Reconciliation, two flows side by side:
 
 - the list: drawn again when it changes or a plane is removed (one append
-  to ``Space.indexes.removed``), tiles written in order and the ones past
-  the end erased, so the browser keeps them in order;
-- the tiles: one arm per tile shown (:class:`nu.ReconcileLatestEach`), each
-  redrawing its own tile when its plane's name or icon changes. A rename
-  elsewhere in the space wakes nothing here.
+  to ``Space.indexes.removed``): the tiles go and come back in list order,
+  each keyed by its plane;
+- the tiles: one arm per plane shown (:class:`nu.ReconcileLatestEach`),
+  each redrawing its own tile when its plane's name or icon changes. A
+  rename elsewhere in the space wakes nothing here.
 """
 
 from __future__ import annotations
@@ -52,61 +52,44 @@ def read() -> nu.Dict:
 # --- The view ------------------------------------------------------------------------------
 
 
-class GroupHead(nustd.ui.Row):
-    """A group's icon and name."""
+class Section(nustd.ui.PageSection):
+    """The ``history`` cell's node: recent pages as tiles, or an empty state when there are none."""
 
-    icon = nustd.ui.IconRef.slot()
-    label = nustd.ui.TextRef.slot(size="sm", weight="medium", tone="muted")
-
-
-class Group(nustd.ui.Column):
-    """A group of page tiles."""
-
-    head = GroupHead.slot(gap=2)
-    tiles = nustd.ui.GridRef.slot(nustd.ui.PageLinkRef, columns=4, min_width=160, gap=1)
-    empty = nustd.ui.TextRef.slot(size="sm", tone="muted")
-
-
-class Block(nustd.ui.Column):
-    """The ``history`` cell's node."""
-
-    title = nustd.ui.HeadingRef.slot(label="History", level=2)
-    recent = Group.slot(gap=1)
+    tiles = nustd.ui.GridRef.slot(nustd.ui.PageLinkRef, max_columns=4, min_width=160, gap=1)
+    empty = nustd.ui.EmptyStateRef.slot(icon="history", size="sm")
 
 
 class View(nu.Shape):
     """The ``history`` cell's root."""
 
-    history = Block.slot(gap=3)
+    history = Section.slot(title="History", description="Recently opened", bordered=True, gap=3)
 
 
-def tile(group: Group, i: nu.IntArg) -> nustd.ui.PageLinkRef:
-    """Tile ``i`` of a group: a computed key, so tiles are as many as drawn."""
-    return group.tiles[nu.Str("t") + nu.str(i)]
+#: The tiles, keyed by plane id: a tile is one plane's, wherever it lands in the list.
+TILES_REF = View.history.tiles
 
 
-def _tile(group: Group, i: nu.IntArg, got: nu.Nu) -> nu.Nu:
+def _tile(plane: nu.StrArg, got: nu.Nu) -> nu.Nu:
     d = nu.Dict(got)
-    return tile(group, i).set(href=d["href"], title=d["title"], icon=d["icon"])
-
-
-def _group(group: Group, pages: nu.List, label: str, icon: str, none: str) -> nu.Nu:
-    """One group: its head, its tiles in order, the rest erased, an empty line."""
-    n = pages.len()
-    tiles_ = nu.Sequential(
-        *[nu.IfDo(n > i, _tile(group, i, pages[i]), tile(group, i).erase()) for i in range(TILES)]
-    )
-    empty = nu.IfDo(n == 0, group.empty.set(none), group.empty.erase())
-    head = group.head.icon.set(icon) >> group.head.label.set(label)
-    return head >> tiles_ >> empty
+    return TILES_REF[plane].set(href=d["href"], title=d["title"], icon=d["icon"])
 
 
 def show(got: nu.ObjectRef) -> nu.Nu:
-    """Draw one read of :func:`read`."""
+    """Draw one read of :func:`read`: the tiles again from none, in list order, or the empty line.
+
+    The tiles go as one erase, then each is written: a write brings the grid
+    back as declared, and the tiles draw in the order they are written.
+    """
     recent = nu.List(nu.Dict(got)["recent"])
-    return View.history.title.set("History", level=2) >> _group(
-        View.history.recent, recent, "Recent", "clock", "Nothing opened yet."
+    tiles = nu.ForEachDo(recent, lambda p: _tile(nu.Str(nu.Dict(p)["id"]), p))
+    empty = nu.IfDo(
+        recent.len() == 0,
+        View.history.empty.set(
+            label="Nothing opened yet", description="Planes you open show here."
+        ),
+        View.history.empty.erase(),
     )
+    return TILES_REF.erase() >> tiles >> empty
 
 
 def draw() -> nu.Nu:
@@ -118,21 +101,16 @@ def draw() -> nu.Nu:
 
 
 def shown() -> nu.List:
-    """The tiles drawn now, as ``"<index>|<plane>"``: one arm each. Bare read."""
-    ids = _live(Web.recents, TILES)
-    keyed = nu.List.of(
-        *[nu.If(ids.len() > i, nu.Str(f"{i}|") + nu.Str(ids[i]), "") for i in range(TILES)]
-    )
-    return nu.List(keyed.iter().filter(lambda k: nu.Str(k) != "").to_list())
+    """The planes whose tiles are drawn now: one arm each. Bare read."""
+    return _live(Web.recents, TILES)
 
 
 def tiles(at: nu.Attr) -> nu.Nu:
     """One tile's arm: redraw it when its plane's name or icon changes. Event: a miss is only stale."""
-    parts = nu.List(nu.Str(at).split("|", 1))
-    i, plane = nu.Str(parts[0]), nu.Str(parts[1])
+    plane = nu.Str(at)
     row = Space.planes[plane]
     changes = nu.OnAny(row.name.on_change(), row.icon.on_change())
-    body = nu.let(atomic(page(plane)), lambda got: _tile(View.history.recent, i, got))
+    body = nu.let(atomic(page(plane)), lambda got: _tile(plane, got))
     return nu.ReactEvery(atomic(changes), body)
 
 

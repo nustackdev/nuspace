@@ -13,6 +13,7 @@
 			"@/*": ["./src/*"],
 			"react": ["./node_modules/@types/react"],
 			"react/*": ["./node_modules/@types/react/*"],
+			"@nustackdev/ui-core": ["../../../../nu/pkgs/ts/ui-core/src/index.ts"],
 			"@nustackdev/ui-kit": ["../../../../nu/pkgs/ts/ui-kit/src/index.ts"],
 			"@nustackdev/ui-kit/tree": ["../../../../nu/pkgs/ts/ui-kit/src/tree/index.ts"],
 			"@nustackdev/ui-kit/nodes": ["../../../../nu/pkgs/ts/ui-kit/src/nodes/index.ts"]

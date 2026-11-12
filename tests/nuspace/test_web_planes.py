@@ -129,13 +129,26 @@ def test_each_cell_builds_and_validates(cell):
     nu.validate(nu.compile(term))
 
 
-async def test_settings_header_draws_the_space_line(store):
+async def test_settings_draws_the_space_versions_and_nav(store):
+    await store.run(ensure())
     await do(store, Space.info.path.set("/tmp/garden") >> Space.info.opened_at.set(1.0))
-    (line,) = (await _frames(store, _built(home.HEADER)["draw"]())).values()
-    parts = line.split("  ·  ")
-    assert parts[0] == "nuspace" and parts[1] == "/tmp/garden"
-    assert parts[2].startswith("nuspace ")
-    assert parts[-1].startswith("Up ")
+    drawn = list((await _frames(store, settings.draw())).values())
+    assert "garden" in drawn and "/tmp/garden" in drawn
+    assert settings.VERSIONS["nuspace"] in drawn
+    assert {"ts": 1000.0, "mode": "duration"} in drawn
+    links = [p for p in drawn if isinstance(p, dict) and "href" in p]
+    assert [p["title"] for p in links if "description" in p] == ["Home", "Search", "Settings"]
+    assert {p["href"] for p in links} >= {settings.DOCS, settings.SOURCE}
+    assert {"keys": ["mod", ","]} in drawn
+
+
+async def test_settings_leaves_out_a_role_not_set(store):
+    await store.run(ensure())
+    await do(store, web.Web.roles.set_item("search", ""))
+    frames = await _framed(store, settings.draw())
+    links = [p for _, p in frames if isinstance(p, dict) and "description" in p]
+    assert {p["title"] for p in links} == {"Home", "Settings"}
+    assert any(p is None for _, p in frames)  # the search row erased
 
 
 async def test_ensure_then_home_is_a_system_web_plane(store):
@@ -279,6 +292,16 @@ VIEWER = "p_search"
 
 CHOSEN = nuspace.at.plane(id=VIEWER).state(_Chosen)
 
+# Where the viewer's cells draw, as the browser is sent it.
+FORM_KIND = ("ask", "0", "0")
+FORM_MAIN = ("ask", "0", "1")
+FORM_MORE = ("ask", "1")
+PICK_SELECT = ("head", "1")
+RESULTS_STATE = ("results", "0", "0")
+RESULTS_COUNT = ("results", "0", "1")
+RESULTS_EMPTY = ("results", "1")
+RESULTS_HITS = ("results", "3")
+
 
 def _viewer(source: str, call: str, *args: object) -> nu.Nu:
     """A viewer cell's ``call``, built from its source and run in the viewer plane."""
@@ -298,26 +321,36 @@ async def test_the_form_offers_the_kinds_and_the_picked_ones_fields(store):
     await store.run(ensure())
     framed = await _framed(store, _viewer(search.FORM, "draw"))
     got = dict(framed)
-    options = next(p for r, p in framed if r == ("head", "kind"))
+    options = next(p for r, p in framed if r == FORM_KIND)
     assert options == {
         "options": [{"value": NOTE, "label": "Note"}, {"value": PLAIN, "label": "Plain note"}]
     }
-    assert got[("head", "kind")] == NOTE
-    assert got[("fields", "f_text", "label")] == "Text"
-    assert got[("fields", "f_text", "text")] == ""
-    assert got[("fields", "f_min_stars", "number")] == ""
-    assert got[("fields", "f_done", "switch")] is False
-    assert ("fields", "f_done", "text") not in got
+    assert got[FORM_KIND] == NOTE
+    # The note's first text keyword is the bar's own input, the rest are filters under it.
+    assert got[(*FORM_MAIN, "0")] == ""
+    assert got[(*FORM_MORE, "0", "min_stars", "control")] == ""
+    assert got[(*FORM_MORE, "0", "done", "control")] is False
+    # A kind that asks nothing says so in the bar.
+    assert got[(*FORM_MAIN, "1")] == "Asks nothing: lists every item"
+
+
+async def test_the_form_says_so_when_no_kind_is_installed(store, monkeypatch):
+    monkeypatch.setattr(search, "kinds", dict)
+    await store.run(ensure())
+    got = await _frames(store, _viewer(search.FORM, "out"))
+    # The empty state is drawn as declared, and the bar never is.
+    assert ("ask", "2") in got
+    assert FORM_KIND not in got
 
 
 @pytest.mark.usefixtures("ours")
 async def test_the_forms_button_makes_a_search_of_what_was_filled_in(store):
     await store.run(ensure())
     values = {
-        ("head", "kind"): NOTE,
-        ("fields", "f_text", "text"): "  tomato ",
-        ("fields", "f_min_stars", "number"): "",
-        ("fields", "f_done", "switch"): True,
+        FORM_KIND: NOTE,
+        (*FORM_MAIN, "0"): "  tomato ",
+        (*FORM_MORE, "0", "min_stars", "control"): "",
+        (*FORM_MORE, "0", "done", "control"): True,
     }
     await _framed(store, _viewer(search.FORM, "go"), values)
     kids = Space.planes[search.SEARCHES].children
@@ -325,7 +358,11 @@ async def test_the_forms_button_makes_a_search_of_what_was_filled_in(store):
     state = nuspace.at.plane(id=pid).state(search.Search)
     assert await store.read(state.request) == {NOTE: {"text": "tomato", "done": True}}
     assert await store.read(nuspace.plane.title(pid)) == "Note: tomato, done"
-    stars = {**values, ("fields", "f_text", "text"): "", ("fields", "f_min_stars", "number"): "3"}
+    stars = {
+        **values,
+        (*FORM_MAIN, "0"): "",
+        (*FORM_MORE, "0", "min_stars", "control"): "3",
+    }
     await _framed(store, _viewer(search.FORM, "go"), stars)
     newest = (await store.read(nu.list(kids.keys())))[-1]
     newest_state = nuspace.at.plane(id=newest).state(search.Search)
@@ -336,7 +373,7 @@ async def test_pick_lists_searches_newest_first_and_shows_the_newest(store):
     old = await _searched(store, {NOTE: {}}, name="old")
     new = await _searched(store, {NOTE: {}}, name="new")
     framed = await _framed(store, _viewer(search.PICK, "draw"))
-    select = [payload for ref, payload in framed if ref == ("pick", "search")]
+    select = [payload for ref, payload in framed if ref == PICK_SELECT]
     assert select == [
         {"options": [{"value": new, "label": "new"}, {"value": old, "label": "old"}]},
         new,
@@ -347,7 +384,7 @@ async def test_pick_lists_searches_newest_first_and_shows_the_newest(store):
 async def test_pick_lists_nothing_before_any_search(store):
     await store.run(ensure())
     framed = await _framed(store, _viewer(search.PICK, "draw"))
-    select = [payload for ref, payload in framed if ref == ("pick", "search")]
+    select = [payload for ref, payload in framed if ref == PICK_SELECT]
     assert select == [{"options": []}, ""]
 
 
@@ -356,14 +393,14 @@ async def test_pick_follows_a_search_made_while_it_runs(store):
     session, task = await _live(store, _viewer(search.PICK, "out"))
 
     def options() -> list:
-        sent = [f.payload for f in session.frames if f.ref == ("pick", "search")]
+        sent = [f.payload for f in session.frames if f.ref == PICK_SELECT]
         return [p["options"] for p in sent if isinstance(p, dict)]
 
     try:
         await _until(lambda: options() and options()[-1] == [{"value": old, "label": "old"}])
         new = await _searched(store, {NOTE: {}}, name="new")
         await _until(lambda: [o["value"] for o in options()[-1]] == [new, old])
-        await _until(lambda: session.last(("pick", "search")) == new)
+        await _until(lambda: session.last(PICK_SELECT) == new)
         assert not task.done()
         assert await store.read(CHOSEN.shown) == new
     finally:
@@ -376,16 +413,22 @@ async def test_results_follow_hits_as_they_land_and_end_once_done(store):
     session, task = await _live(store, _viewer(search.RESULTS, "shown", nu.Str(pid)))
     state = nuspace.at.plane(id=pid).state(search.Search)
     try:
-        await _until(lambda: session.last(("status",)) == "Searching: 0 hits")
+        await _until(lambda: session.last(RESULTS_COUNT) == "0 hits")
+        assert session.last(RESULTS_STATE) == {"label": "Searching", "tone": "info"}
         assert not task.done()
         await do(store, state.hits.append(address(NoteContent, (CELL, "c1"), "a")))
-        await _until(lambda: session.last(("status",)) == "Searching: 1 hit")
+        await _until(lambda: session.last(RESULTS_COUNT) == "1 hit")
         await do(store, state.finished_at.set(1.0))
         await asyncio.wait_for(task, 3.0)
-        assert session.last(("status",)) == "Done: 1 hit"
-        assert session.last(("hits", "h0", "item", "body")) == "Tomato needs sun"
+        assert session.last(RESULTS_STATE) == {"label": "Done", "tone": "ok"}
+        assert session.last(RESULTS_COUNT) == "1 hit"
+        # Row 0 of the hits table: what the kind draws, its kind, where it lives.
+        assert session.last((*RESULTS_HITS, "0", "0", "0", "body")) == "Tomato needs sun"
+        assert session.last((*RESULTS_HITS, "0", "1")) == {"label": "Note"}
         # The hit links to its cell's plane, titled by its id: p1 has no name.
-        assert session.last(("hits", "h0", "head", "link")) == {"href": "/p1", "label": "p1"}
+        link = session.last((*RESULTS_HITS, "0", "2", "0"))
+        assert link["href"] == "/p1" and link["title"] == "p1"
+        assert session.last((*RESULTS_HITS, "0", "2", "1")) == "cell \u00b7 a"
     finally:
         await _stop(task)
 
@@ -394,7 +437,7 @@ async def test_results_say_when_nothing_was_found_or_searched(store):
     pid = await _searched(store, {NOTE: {"text": "zzz"}})
     await _run(store, pid)
     got = await _frames(store, _viewer(search.RESULTS, "shown", nu.Str(pid)))
-    assert got[("status",)] == "Done: 0 hits"
-    assert got[("empty",)]["label"] == "Nothing found"
+    assert got[RESULTS_COUNT] == "0 hits"
+    assert got[RESULTS_EMPTY]["label"] == "Nothing found"
     none = await _frames(store, _viewer(search.RESULTS, "none"))
-    assert none[("empty",)]["label"] == "No searches yet"
+    assert none[RESULTS_EMPTY]["label"] == "No searches yet"

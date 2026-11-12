@@ -1,13 +1,18 @@
-"""What Home's cells share: the stores they read, a page's link, and the shaping helpers.
+"""What Home's cells share, settings too: the stores, a page, the space's name, the versions.
 
-Reads are bare nu terms, bracketed by the caller. Shaping is plain Python
+The stores they read, a page's link, the space's name and path, the
+versions this process runs, and the shaping helpers. Reads are bare nu terms, bracketed by the caller. Shaping is plain Python
 over plain data, run as a host call once the read is done: it never reads a
 store. Workers import this module: nothing here may pull in a server.
 """
 
 from __future__ import annotations
 
+import importlib.metadata
+from pathlib import Path
+
 import nu
+import nustd.ui
 from nuspace.shapes import Space
 
 from ..interactions import IconName
@@ -17,11 +22,16 @@ from ..ops import href
 __all__ = [
     "HISTORY",
     "LIVE",
+    "VERSIONS",
     "Compact",
+    "Head",
+    "SpaceName",
+    "SpaceWhere",
     "compact",
     "ids",
     "page",
     "title",
+    "version",
 ]
 
 
@@ -70,3 +80,41 @@ def compact(n: object) -> str:
 
 #: ``Compact(n)``: :func:`compact` as a term.
 Compact = nu.host(compact, name="HomeCompact")
+
+
+def version(dist: str) -> str:
+    """An installed distribution's version, ``""`` when it is not installed."""
+    try:
+        return importlib.metadata.version(dist)
+    except importlib.metadata.PackageNotFoundError:
+        return ""
+
+
+#: ``{label: version}`` of what this process runs, read once as the module is imported:
+#: a running term does not ask importlib. nu ships as the ``nucore`` distribution.
+VERSIONS = {"nuspace": version("nuspace"), "nu": version("nucore")}
+
+
+def _name(path: object) -> str:
+    text = str(path or "").rstrip("/")
+    return Path(text).name if text else "Throwaway store"
+
+
+def _where(path: object) -> str:
+    text = str(path or "")
+    home = str(Path.home())
+    return "~" + text[len(home) :] if text == home or text.startswith(home + "/") else text
+
+
+#: ``SpaceName(path)``: the space's name, its directory's base name.
+SpaceName = nu.host(_name, name="HomeSpaceName")
+
+#: ``SpaceWhere(path)``: the path with the home directory as ``~``.
+SpaceWhere = nu.host(_where, name="HomeSpaceWhere")
+
+
+class Head(nustd.ui.Row):
+    """A subsection's head, under a section's title: its own title, and how many it shows."""
+
+    title = nustd.ui.HeadingRef.slot(level=3)
+    count = nustd.ui.TextRef.slot(size="sm", tone="muted")

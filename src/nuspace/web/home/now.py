@@ -1,4 +1,4 @@
-"""Home's ``now`` cell: the plane runs live right now, a row each.
+"""Home's ``now`` cell, Execution: Now, the plane runs live right now, a row each, then Recent.
 
 Read off ``Space.exec.indexes.live`` alone, never history:
 
@@ -17,7 +17,12 @@ Read off ``Space.exec.indexes.live`` alone, never history:
   idle the plane's cells with no live run. The total is the plane's cells,
   a walk of that one plane's list.
 
-- **The switch.** "System runs", off by default. Its state is the
+- **The table.** One data table keyed by run, each column drawing its
+  cells as a kind (a page link, status squares, a badge, a ticking
+  duration): a draw replaces the rows whole, so a run that ended goes
+  with no erase of its own.
+- **The switch.** "System runs", off by default, on the section's head:
+  one switch for Now and Recent (:mod:`.runs`). Its state is the
   viewer's, kept in the browser like any switch (one per pane run), never
   in the space: two tabs can each have it their own way.
 
@@ -26,8 +31,8 @@ fails, or the switch flips, at most once a :data:`GAP`: a draw, then a
 rest, changes during the rest merged into one more draw. With nothing
 changing, nothing draws.
 
-The section's top heading, Execution, is drawn here: Now and Recent
-(:mod:`.runs`) sit under it.
+The whole Execution section is this cell: Now and Recent sit under its
+title, each drawn again on its own changes, both on the switch.
 """
 
 from __future__ import annotations
@@ -38,22 +43,27 @@ from nuspace.ops.brackets import atomic
 from nuspace.shapes import Space
 
 from ..nav import BY as NAV
-from .common import LIVE, Compact, ids, page, title
+from . import runs
+from .common import LIVE, Compact, Head, compact, ids, page, title
 
 
 __all__ = [
+    "COLUMNS",
     "GAP",
     "LABELS",
     "ROWS",
     "SAMPLE",
     "SQUARES",
     "SWITCH",
+    "Now",
     "View",
     "by",
     "draw",
     "first",
     "out",
     "read",
+    "recent",
+    "rows",
     "squares",
     "system",
     "user_run",
@@ -177,162 +187,128 @@ def read(system: nu.BoolArg = False) -> nu.Dict:
     return nu.Dict.of(total=runs.len(), rows=shown.iter().map(_row).to_list())
 
 
+# --- Shaping -------------------------------------------------------------------------------
+
+
+def rows(got: object) -> list:
+    """A read's rows as the table takes them: one mapping per run, keyed ``run``.
+
+    Each value is what its column's cell draws (:data:`COLUMNS`): the plane a
+    page link, the cells status square counts, a count of failed cells only
+    when there are some (a blank cell draws nothing), the backend with the
+    workers the run holds, the time up in ms.
+    """
+    out = []
+    for raw in (dict(got or {})).get("rows") or ():
+        row = dict(raw)
+        failed = int(row.get("failed") or 0)
+        workers = int(row.get("workers") or 0)
+        held = f"{compact(workers)} {'worker' if workers == 1 else 'workers'}"
+        out.append(
+            {
+                "run": str(row.get("run", "")),
+                "plane": dict(row.get("page") or {}),
+                "cells": {"counts": dict(row.get("squares") or {})},
+                "failed": compact(failed) if failed else "",
+                "backend": f"{row.get('backend') or ''}, {held}",
+                "up": round(float(row.get("started_at") or 0.0) * 1000),
+                "by": str(row.get("by") or ""),
+            }
+        )
+    return out
+
+
+#: ``Rows(read)``: :func:`rows` as a term.
+Rows = nu.host(rows, name="HomeNowRows")
+
+
 # --- The view ------------------------------------------------------------------------------
 
 
-class Title(nustd.ui.Row):
-    """Now and how many runs it counts."""
-
-    title = nustd.ui.HeadingRef.slot(label="Now", level=3)
-    count = nustd.ui.TextRef.slot(size="sm", tone="muted")
-
-
-class Head(nustd.ui.Row):
-    """The Now subsection's head: its title on the left, the system runs switch on the right."""
-
-    title = Title.slot(gap=3, align="baseline")
-    system = nustd.ui.SwitchRef.slot(label="System runs")
+def _column(key: str, label: str, cell: object = None, **more: object) -> dict:
+    column: dict = {"key": key, "label": label, "sortable": False, **more}
+    if cell is not None:
+        column["cell"] = cell
+    return column
 
 
-class Columns(nustd.ui.Grid):
-    """The column names, on the same grid as a row."""
-
-    plane = nustd.ui.TextRef.slot(value="Plane", size="xs", tone="muted")
-    cells = nustd.ui.TextRef.slot(value="Cells", size="xs", tone="muted")
-    count = nustd.ui.TextRef.slot(value="Count", size="xs", tone="muted")
-    backend = nustd.ui.TextRef.slot(value="Backend", size="xs", tone="muted")
-    up = nustd.ui.TextRef.slot(value="Up", size="xs", tone="muted")
-    by = nustd.ui.TextRef.slot(value="By", size="xs", tone="muted")
-
-
-class Count(nustd.ui.Row):
-    """Failed, then the cells counted."""
-
-    failed = nustd.ui.TextRef.slot(size="sm", tone="danger")
-    total = nustd.ui.TextRef.slot(size="sm")
+#: The table's columns, each cell drawn by its spec. Nothing sorts: the rows keep run order.
+COLUMNS = [
+    _column("plane", "Plane", nustd.ui.PageLinkRef.slot(variant="inline")),
+    _column(
+        "cells",
+        "Cells",
+        nustd.ui.StatusSquaresRef.slot(max_items=SQUARES, labels=LABELS, total="always"),
+    ),
+    _column("failed", "Failed", nustd.ui.BadgeRef.slot(variant="danger", size="sm"), align="right"),
+    _column("backend", "Backend"),
+    _column("up", "Up", nustd.ui.RelativeTimeRef.slot(mode="duration"), align="right"),
+    _column("by", "By"),
+]
 
 
-class Backend(nustd.ui.Row):
-    """The backend and the workers held."""
+class Now(nustd.ui.Column):
+    """Now, under Execution: its head, then the table and an honest more, or an empty state."""
 
-    name = nustd.ui.TextRef.slot(size="sm", mono=True)
-    workers = nustd.ui.TextRef.slot(size="sm", tone="muted")
-
-
-#: Each row's columns as grid spans: the plane, the cells and the backend take three, the count two.
-SPANS = {"plane": 3, "cells": 3, "count": 2, "backend": 3}
-
-#: Columns on a row's grid: the six columns, four of them wider.
-COLUMNS = 13
-
-#: A row's grid, the column names' too, so the two line up.
-GRID = {"columns": COLUMNS, "min_width": 24, "gap": 2, "spans": SPANS}
-
-
-class RunRow(nustd.ui.Grid):
-    """One live plane run. Its grid props are its own, so a templated row carries them."""
-
-    plane = nustd.ui.PageLinkRef.slot(variant="inline")
-    cells = nustd.ui.StatusSquaresRef.slot(max_items=SQUARES, labels=LABELS, total="never")
-    count = Count.slot(gap=2, justify="end")
-    backend = Backend.slot(gap=2, align="baseline")
-    up = nustd.ui.RelativeTimeRef.slot(mode="duration")
-    by = nustd.ui.TextRef.slot(size="sm", tone="secondary")
-
-    @classmethod
-    def slot(cls, item: object = None, /, **props: object) -> RunRow:  # type: ignore[override]
-        """The row's slot, its grid props filled in: ``ref[key]`` builds a row from this."""
-        return super().slot(item, **{**GRID, **props})  # type: ignore[arg-type]
-
-
-class Block(nustd.ui.Column):
-    """The ``now`` cell's node."""
-
-    title = nustd.ui.HeadingRef.slot(label="Execution", level=2)
-    head = Head.slot(gap=3, align="center", justify="between")
-    columns = Columns.slot(**GRID)
-    rows = nustd.ui.ColumnRef.slot(RunRow, gap=1)
+    head = Head.slot(gap=3, align="baseline")
+    table = nustd.ui.DataTableRef.slot(
+        columns=COLUMNS, row_key="run", label="Plane runs live now", striped=False
+    )
     more = nustd.ui.TextRef.slot(size="sm", tone="muted")
-    empty = nustd.ui.TextRef.slot(size="sm", tone="muted")
+    empty = nustd.ui.EmptyStateRef.slot(icon="activity", size="sm")
+
+
+class Section(nustd.ui.PageSection):
+    """The ``now`` cell's node, Execution: Now, then Recent (:mod:`.runs`), one switch for both."""
+
+    actions = nustd.ui.SwitchRef.slot(label="System runs")
+    now = Now.slot(gap=3)
+    recent = runs.Recent.slot(gap=3)
 
 
 class View(nu.Shape):
     """The ``now`` cell's root."""
 
-    now = Block.slot(gap=2)
-
-
-def _drawn(i: int, got: nu.Nu) -> nu.Nu:
-    d = nu.Dict(got)
-    p = nu.Dict(d["page"])
-    row = View.now.rows[f"r{i}"]
-    failed = nu.Int(d["failed"])
-    workers = nu.Int(d["workers"])
-    return (
-        row.plane.set(href=p["href"], title=p["title"], icon=p["icon"])
-        >> row.cells.set(d["squares"])
-        >> nu.IfDo(
-            failed > 0,
-            row.count.failed.set(nu.Str(Compact(failed)) + " failed"),
-            row.count.failed.erase(),
-        )
-        >> row.count.total.set(nu.Str(Compact(d["total"])))
-        >> row.backend.name.set(nu.Str(d["backend"]))
-        >> row.backend.workers.set(
-            nu.Str(Compact(workers)) + nu.If(workers == 1, " worker", " workers")
-        )
-        >> row.up.set(nu.Float(d["started_at"]) * 1000, mode="duration")
-        >> row.by.set(nu.Str(d["by"]))
+    execution = Section.slot(
+        title="Execution",
+        description="Plane runs live now, and the last planes that ran",
+        bordered=True,
+        gap=8,
     )
+
+
+#: The switch: system runs shown or not, in Now and Recent both. Its state lives in the
+#: browser, the viewer's own.
+SWITCH = View.execution.actions
 
 
 def show(got: nu.ObjectRef) -> nu.Nu:
-    """Draw one read of :func:`read`: rows in order, the ones past the end erased."""
+    """Draw one read of :func:`read`: the rows replaced whole, keyed by run, and the counts."""
     d = nu.Dict(got)
-    view = View.now
-    rows = nu.List(d["rows"])
+    part = View.execution.now
+    shown = nu.List(d["rows"])
     total = nu.Int(d["total"])
-    left = total - rows.len()
-    drawn = nu.Sequential(
-        *[
-            nu.IfDo(rows.len() > i, _drawn(i, rows[i]), view.rows[f"r{i}"].erase())
-            for i in range(ROWS)
-        ]
+    left = total - shown.len()
+    count = nu.If(
+        total == 0, "", nu.Str(Compact(total)) + nu.If(total == 1, " plane run", " plane runs")
     )
-    head = view.head.title.title.set("Now", level=3) >> view.head.title.count.set(
-        nu.If(
-            total == 0,
-            "",
-            nu.Str(Compact(total)) + nu.If(total == 1, " plane run", " plane runs"),
-        )
-    )
-    names = view.columns
-    columns = nu.IfDo(
+    table = nu.IfDo(
         total > 0,
-        names.plane.set("Plane")
-        >> names.cells.set("Cells")
-        >> names.count.set("Count")
-        >> names.backend.set("Backend")
-        >> names.up.set("Up")
-        >> names.by.set("By"),
-        names.erase(),
+        part.table.set_rows(Rows(got)) >> part.table.display() >> part.empty.erase(),
+        part.table.hide()
+        >> part.empty.set(
+            label="Nothing running", description="Plane runs show here while they run."
+        ),
     )
     return (
-        view.title.set("Execution", level=2)
-        >> head
-        >> columns
-        >> drawn
+        part.head.count.set(nu.Str(count))
+        >> table
         >> nu.IfDo(
             left > 0,
-            view.more.set(nu.Str("+") + nu.Str(Compact(left)) + " more running"),
-            view.more.erase(),
+            part.more.set(nu.Str("+") + nu.Str(Compact(left)) + " more running"),
+            part.more.erase(),
         )
-        >> nu.IfDo(total == 0, view.empty.set("Nothing running."), view.empty.erase())
     )
-
-
-#: The switch: system runs shown or not. Its state lives in the browser, the viewer's own.
-SWITCH = View.now.head.system
 
 
 def system() -> nu.Bool:
@@ -341,27 +317,39 @@ def system() -> nu.Bool:
 
 
 def draw() -> nu.Nu:
-    """The switch, one read, then its drawing."""
+    """Now: the switch, one read, then its drawing."""
     return nu.let(system(), lambda on: nu.let(atomic(read(nu.Bool(on))), show))
 
 
+def recent() -> nu.Nu:
+    """Recent: the switch, then the walk and its drawing (:func:`.runs.draw`)."""
+    return nu.let(system(), lambda on: runs.draw(View.execution.recent, nu.Bool(on)))
+
+
 def first() -> nu.Nu:
-    """The heads, in order, the switch off: drawn once, so a redraw never flips the viewer's switch back."""
-    view = View.now
+    """The heads, the switch off: drawn once, so a redraw never flips the viewer's switch back."""
+    section = View.execution
     return (
-        view.title.set("Execution", level=2)
-        >> view.head.title.title.set("Now", level=3)
+        section.now.head.title.set("Now", level=3)
+        >> section.recent.head.title.set("Recent", level=3)
         >> SWITCH.set(False)
     )
 
 
 def out() -> nu.Nu:
-    """The cell's program: the heads, then a draw on every change to the live sets or the switch, a :data:`GAP` apart."""
-    changes = nu.OnAny(
+    """The cell's program: the heads, then Now and Recent, each drawn again on its own changes or the switch.
+
+    Now at most once a :data:`GAP`, Recent once a :data:`.runs.GAP`.
+    """
+    live = nu.OnAny(
         LIVE.plane_runs.on_children_change(),
         LIVE.plane_run_to_cell_runs.on_descendants_change("*", "ids", "*"),
         LIVE.plane_run_to_failed_cells.on_descendants_change("*", "ids", "*"),
         LIVE.plane_run_to_workers.on_descendants_change("*", "ids", "*"),
     )
-    flipped = SWITCH.on_change()
-    return first() >> nu.Reconcile(nu.OnAny(atomic(changes), flipped), draw() >> nu.Delay(GAP))
+    return first() >> nu.ParallelAsync(
+        nu.Reconcile(nu.OnAny(atomic(live), SWITCH.on_change()), draw() >> nu.Delay(GAP)),
+        nu.Reconcile(
+            nu.OnAny(atomic(runs.changes()), SWITCH.on_change()), recent() >> nu.Delay(runs.GAP)
+        ),
+    )

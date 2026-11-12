@@ -1,4 +1,4 @@
-"""Home's ``runs`` cell, Recent under Execution: the last planes that ran, their runs on a timeline.
+"""Home's Recent, under Execution: the last planes that ran, their runs on a timeline.
 
 No run index of its own, read straight from ``Space.exec``, with caps:
 
@@ -18,10 +18,13 @@ No run index of its own, read straight from ``Space.exec``, with caps:
 - **Window.** From the oldest lane's newest run to now: variable, as long
   as it takes to show every lane.
 
-The switch is the viewer's, kept in the browser like Now's, never in the
-space. No live styling: Now (:mod:`.now`) is the live view. It draws again
-when a run is added, a live one ends or the switch flips, at most once a
-:data:`GAP`.
+Drawn by the ``now`` cell (:mod:`.now`), under Execution, beside Now:
+one "System runs" switch, the section's, sets both. No live styling: Now
+is the live view. It draws again when a run is added, a live one ends or
+the switch flips, at most once a :data:`GAP`.
+
+A home made before Recent moved has a ``runs`` cell of its own: its
+:func:`out` draws nothing, so Recent shows once.
 """
 
 from __future__ import annotations
@@ -33,7 +36,7 @@ import nustd.ui
 from nuspace.ops.brackets import atomic
 from nuspace.shapes import Space
 
-from .common import HISTORY, LIVE, Compact, page
+from .common import HISTORY, LIVE, Compact, Head, page
 
 
 __all__ = [
@@ -43,16 +46,14 @@ __all__ = [
     "LEGEND",
     "PAGE",
     "PER_LANE",
-    "SWITCH",
     "TONES",
-    "View",
+    "Recent",
+    "changes",
     "collect",
     "draw",
-    "first",
     "lanes",
     "out",
     "shape",
-    "system",
 ]
 
 
@@ -247,88 +248,58 @@ Clock = nu.host(_now, name="HomeRunsClock")
 # --- The view ------------------------------------------------------------------------------
 
 
-class Title(nustd.ui.Row):
-    """The subsection title, under Execution (drawn by :mod:`.now`), and how many planes it shows."""
+class Recent(nustd.ui.Column):
+    """Recent, under Execution (:mod:`.now` places it): its head, then the timeline or an empty state."""
 
-    title = nustd.ui.HeadingRef.slot(label="Recent", level=3)
-    count = nustd.ui.TextRef.slot(size="sm", tone="muted")
-
-
-class Head(nustd.ui.Row):
-    """Recent's head: its title on the left, the system runs switch on the right."""
-
-    title = Title.slot(gap=3, align="baseline")
-    system = nustd.ui.SwitchRef.slot(label="System runs")
-
-
-class Block(nustd.ui.Column):
-    """The ``runs`` cell's node."""
-
-    head = Head.slot(gap=3, align="center", justify="between")
+    head = Head.slot(gap=3, align="baseline")
     timeline = nustd.ui.TimelineRef.slot(
         max_lanes=0, max_items=PER_LANE, noun="run", axis="clock", legend=LEGEND
     )
-    empty = nustd.ui.TextRef.slot(size="sm", tone="muted")
+    empty = nustd.ui.EmptyStateRef.slot(icon="clock", size="sm")
 
 
-class View(nu.Shape):
-    """The ``runs`` cell's root."""
-
-    runs = Block.slot(gap=2)
-
-
-def show(got: nu.ObjectRef) -> nu.Nu:
-    """Draw one read: the shaped lanes on the timeline, or a line when nothing ran."""
-    view = View.runs
+def show(got: nu.ObjectRef, part: Recent) -> nu.Nu:
+    """Draw one read into ``part``: the shaped lanes on the timeline, or an empty state when nothing ran."""
 
     def drawn(held: nu.ObjectRef) -> nu.Nu:
         s = nu.Dict(held)
         n = nu.List(s["lanes"]).len()
         timeline = (
-            view.timeline.set(s["lanes"], start=s["start"], end=s["end"])
-            >> view.timeline.set_note(nu.Str(s["note"]))
-            >> view.empty.erase()
+            part.timeline.set(s["lanes"], start=s["start"], end=s["end"])
+            >> part.timeline.set_note(nu.Str(s["note"]))
+            >> part.empty.erase()
         )
         count = nu.Str(Compact(n)) + nu.If(n == 1, " plane", " planes")
-        return view.head.title.title.set("Recent", level=3) >> nu.IfDo(
+        return nu.IfDo(
             n > 0,
-            view.head.title.count.set(count) >> timeline,
-            view.head.title.count.set("")
-            >> view.timeline.erase()
-            >> view.empty.set("Nothing has run yet."),
+            part.head.count.set(count) >> timeline,
+            part.head.count.set("")
+            >> part.timeline.erase()
+            >> part.empty.set(
+                label="Nothing has run yet", description="The last planes that ran show here."
+            ),
         )
 
     return nu.let(Shaped(got, Clock()), drawn)
 
 
-#: The switch: system planes walked as lanes or not. Its state lives in the browser, the viewer's own.
-SWITCH = View.runs.head.system
+def draw(part: Recent, system: nu.BoolArg = False) -> nu.Nu:
+    """One read into a mem slot, in one snapshot, then its drawing into ``part``.
+
+    ``system`` is the walk's predicate (:func:`collect`): the viewer's switch,
+    read by the caller.
+    """
+    return nu.let(None, lambda got: atomic(collect(got, system=system)) >> show(got, part))
 
 
-def system() -> nu.Bool:
-    """Whether the viewer asked for system runs: the switch, off when not drawn yet. Reads the browser."""
-    return nu.Bool(nu.bool(SWITCH).fallback(False))
-
-
-def draw() -> nu.Nu:
-    """The switch, then one read into a mem slot, in one snapshot, then its drawing."""
-
-    def walked(on: nu.ObjectRef) -> nu.Nu:
-        return nu.let(None, lambda got: atomic(collect(got, system=nu.Bool(on))) >> show(got))
-
-    return nu.let(system(), walked)
-
-
-def first() -> nu.Nu:
-    """The head, the switch off: drawn once, so a redraw never flips the viewer's switch back."""
-    return View.runs.head.title.title.set("Recent", level=3) >> SWITCH.set(False)
-
-
-def out() -> nu.Nu:
-    """The cell's program: the head, then a draw when a run is added, a live one ends or the switch flips, a :data:`GAP` apart."""
-    changes = nu.OnAny(
+def changes() -> nu.Nu:
+    """What Recent draws again on: a run added, or a live one ending."""
+    return nu.OnAny(
         Space.exec.plane_runs.on_children_change(),
         LIVE.plane_runs.on_children_change(),
     )
-    flipped = SWITCH.on_change()
-    return first() >> nu.Reconcile(nu.OnAny(atomic(changes), flipped), draw() >> nu.Delay(GAP))
+
+
+def out() -> nu.Nu:
+    """An older home's ``runs`` cell: draws nothing, Recent is drawn under Execution by :mod:`.now`."""
+    return nu.Noop()

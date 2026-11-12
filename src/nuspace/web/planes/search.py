@@ -17,12 +17,13 @@ all planes and cells:
   A keyword left out stays ``UNSET``, so ``match`` checks only what was
   asked, and a kind asked nothing lists all its items.
 - **the viewer**: the plane the ``search`` role names, a system web
-  plane like home. Its ``form`` cell asks (the installed kinds, the
-  picked kind's search fields, a Search button), its ``pick`` cell lists
-  the searches, newest first, and its ``results`` cell draws the picked
-  one's hits, live, each with its kind's ``render_hit``. The kinds are
-  read from the installed specs where the cell is built (:func:`kinds`),
-  never from the store.
+  plane like home. Its ``form`` cell asks: a query bar of the installed
+  kinds, the picked kind's first text keyword and a Search button, its
+  other keywords on a line under it. Its ``pick`` cell heads the results
+  with the searches, newest first, and its ``results`` cell draws the
+  picked one's hits, live, a table row each: its kind's ``render_hit``,
+  the kind, where the item lives. The kinds are read from the installed
+  specs where the cell is built (:func:`kinds`), never from the store.
 
 A search's cell runs on a worker, where the host's registry is not. Its
 prog names the request, and each kind is found there by its registered
@@ -341,13 +342,12 @@ def search(
 FORM = """\
 import nu
 import nustd.kv
-import nustd.ui
+import nustd.ui as ui
 import nuspace
 from nuspace.web.planes import search
 
 # Every installed kind, read off the registry as the cell is built: name to {label, fields}.
 KINDS = search.kinds()
-FIELDS = nu.Dict(nu.Literal({name: kind["fields"] for name, kind in KINDS.items()}))
 
 
 class Asked(nu.Shape):
@@ -358,22 +358,92 @@ class Asked(nu.Shape):
 ASKED = nuspace.here(Asked)
 
 
-class Head(nustd.ui.Row):
-    kind = nustd.ui.SelectRef.slot(placeholder="No content kinds registered")
-    go = nustd.ui.ButtonRef.slot(label="Search", icon="search")
+class View(nu.Shape):
+    ask = ui.CardRef.slot(size="sm")
 
 
-class Ask(nustd.ui.Column):
-    # One search field: only the input it asks with is drawn.
-    label = nustd.ui.TextRef.slot()
-    text = nustd.ui.InputRef.slot()
-    number = nustd.ui.InputRef.slot(type="number")
-    switch = nustd.ui.SwitchRef.slot()
+# The query bar: the kind, its main question, the button. The kind's other
+# filters sit on a line under it. Each kind's parts are drawn once and shown
+# while it is the kind picked, so what was typed for one stays when it comes back.
+BAR = View.ask[0].to(ui.RowRef.slot(gap=2, grow={1: 1}, basis={0: 160}))
+KIND = BAR[0].to(ui.SelectRef)
+MAIN = BAR[1].to(ui.ColumnRef.slot(gap=0))
+GO = BAR[2].to(ui.ButtonRef.slot(label="Search", icon="search"))
+MORE = View.ask[1].to(ui.ColumnRef.slot(gap=0))
+NONE = View.ask[2].to(
+    ui.EmptyStateRef.slot(
+        label="No content kinds installed",
+        description="Search finds the items of the kinds extensions register. Install one to search it.",
+        icon="search-x",
+        size="sm",
+    )
+)
 
 
-class View(nustd.ui.Column):
-    head = Head.slot(gap=2, align="center")
-    fields = nustd.ui.Column.slot(gap=3)
+def primary(kind):
+    # The field the bar asks with: the kind's first text one, None when it has none.
+    return next((f for f in kind["fields"] if f["input"] == "text"), None)
+
+
+def filters(i):
+    # One kind's other filters, on the line under the bar.
+    return MORE[i].to(ui.RowRef.slot(gap=4, align="end", wrap=True, min_width=120))
+
+
+def control(i, kind, f):
+    # A filter's input: the main one in the bar, the others labelled under it.
+    if f is primary(kind):
+        return MAIN[i].to(ui.InputRef.slot(placeholder="Search by " + f["label"].lower()))
+    field = filters(i)[f["name"]].to(ui.FieldRef.slot(label=f["label"]))
+    if f["input"] == "number":
+        return field.control.to(ui.InputRef.slot(type="number", placeholder="Any"))
+    if f["input"] == "switch":
+        return field.control.to(ui.SwitchRef)
+    return field.control.to(ui.InputRef.slot(placeholder="Anything"))
+
+
+def draw_kind(i, kind):
+    blank = [
+        control(i, kind, f).set(False if f["input"] == "switch" else "") for f in kind["fields"]
+    ]
+    if primary(kind) is None:
+        said = "Asks nothing: lists every item" if not kind["fields"] else "Set the filters below"
+        blank.insert(0, MAIN[i].to(ui.TextRef.slot(tone="muted", size="sm")).set(said))
+    return nu.Sequential(*blank)
+
+
+def show(kind):
+    # The picked kind's parts shown, every other kind's hidden.
+    each = []
+    for i, (name, k) in enumerate(KINDS.items()):
+        parts = [MAIN[i]]
+        if any(f is not primary(k) for f in k["fields"]):
+            parts.append(filters(i))
+        for part in parts:
+            each.append(nu.IfDo(kind == name, part.display(), part.hide()))
+    return nu.Sequential(*each) if each else nu.Noop()
+
+
+def draw():
+    if not KINDS:
+        return BAR.hide() >> MORE.hide() >> NONE.init()
+    options = [{"value": name, "label": kind["label"]} for name, kind in KINDS.items()]
+    names = nu.List(nu.Literal(list(KINDS)))
+    kept = nuspace.atomic(ASKED.kind.fallback(""))
+    kind = nu.If(names.contains(kept), kept, next(iter(KINDS)))
+    kinds = nu.Sequential(*[draw_kind(i, k) for i, k in enumerate(KINDS.values())])
+
+    def picked(k):
+        # Hidden before drawn, so another kind's parts never flash.
+        shown = show(nu.Str(k)) >> kinds
+        return shown >> KIND.set_options(options) >> KIND.set(k) >> GO.init()
+
+    return nu.let(kind, picked)
+
+
+def pick():
+    kind = nu.Str(KIND)
+    return nuspace.atomic(ASKED.kind.set(kind)) >> show(kind)
 
 
 class Building(nu.Shape):
@@ -382,78 +452,41 @@ class Building(nu.Shape):
     request = nu.DictRef.slot(object)
 
 
-def ask(name):
-    return nustd.ui.core.SectionRef(
-        nu.Str("f_") + nu.str(name), section_cls=Ask, parent_ref=View.fields
-    )
+def read_field(i, kind, f):
+    put, given = Building.keywords[f["name"]], control(i, kind, f)
+    if f["input"] == "number":
+        number = nu.Str(given).fallback("").strip()
+        return nu.IfDo(number != "", put.set(nu.float(number)))
+    if f["input"] == "switch":
+        return nu.IfDo(nu.bool(given).fallback(False), put.set(True))
+    text = nu.Str(given).fallback("").strip()
+    return nu.IfDo(text != "", put.set(text))
 
 
-def fields_of(kind):
-    return nu.List(FIELDS.get_item(kind, []))
-
-
-def draw_field(f):
-    d = nu.Dict(f)
-    row, given = ask(d["name"]), nu.str(d["input"])
-    drawn = nu.IfDo(
-        given == "number",
-        row.number.set(""),
-        nu.IfDo(given == "switch", row.switch.set(False), row.text.set("")),
-    )
-    return row.label.set(nu.str(d["label"])) >> drawn
-
-
-def draw_fields(kind):
-    return View.fields.erase() >> nu.ForEachDo(fields_of(kind), draw_field)
-
-
-def draw():
-    options = [{"value": name, "label": kind["label"]} for name, kind in KINDS.items()]
-    names = nu.List(nu.Literal(list(KINDS)))
-    kept = nuspace.atomic(ASKED.kind.fallback(""))
-    kind = nu.If(names.contains(kept), kept, next(iter(KINDS), ""))
-
-    def picked(k):
-        return (
-            View.head.kind.set_options(options)
-            >> View.head.kind.set(k)
-            >> View.head.go.set_disabled(nu.Str(k) == "")
-            >> draw_fields(nu.Str(k))
-        )
-
-    return nu.let(kind, picked)
-
-
-def pick():
-    kind = nu.Str(View.head.kind)
-    return nuspace.atomic(ASKED.kind.set(kind)) >> draw_fields(kind)
-
-
-def read_field(f):
-    d = nu.Dict(f)
-    name, given = nu.str(d["name"]), nu.str(d["input"])
-    row, put = ask(name), Building.keywords[name]
-    text = nu.Str(row.text).fallback("").strip()
-    number = nu.Str(row.number).fallback("").strip()
-    on = nu.bool(row.switch).fallback(False)
-    return nu.IfDo(
-        given == "number",
-        nu.IfDo(number != "", put.set(nu.float(number))),
-        nu.IfDo(given == "switch", nu.IfDo(on, put.set(True)), nu.IfDo(text != "", put.set(text))),
-    )
+def asked(kind):
+    # The picked kind's filters read into its request.
+    chosen = nu.Noop()
+    for i, (name, k) in reversed(list(enumerate(KINDS.items()))):
+        reads = [read_field(i, k, f) for f in k["fields"]]
+        read = nu.Sequential(*reads) if reads else nu.Noop()
+        filled = read >> Building.request[name].set(Building.keywords.extract())
+        chosen = nu.IfDo(kind == name, filled, chosen)
+    return chosen
 
 
 def go():
-    kind = nu.Str(View.head.kind)
-    read = nu.ForEachDo(fields_of(kind), read_field) >> Building.request[kind].set(Building.keywords.extract())
-    asked = read >> search.search(Building.request.extract())
-    return nu.IfDo(kind != "", nu.Frame(Building, asked, keywords=nu.Dict.of(), request=nu.Dict.of()))
+    kind = nu.Str(KIND)
+    made = asked(kind) >> search.search(Building.request.extract())
+    building = nu.Frame(Building, made, keywords=nu.Dict.of(), request=nu.Dict.of())
+    return nu.IfDo(kind != "", building)
 
 
 def out():
+    if not KINDS:
+        return draw()
     return draw() >> nu.ParallelAsync(
-        nu.ReactEvery(View.head.kind.on_change(), pick()),
-        nu.ReactEvery(View.head.go.on_click(), go()),
+        nu.ReactEvery(KIND.on_change(), pick()),
+        nu.ReactEvery(GO.on_click(), go()),
     )
 """
 
@@ -461,7 +494,7 @@ def out():
 PICK = """\
 import nu
 import nustd.kv
-import nustd.ui
+import nustd.ui as ui
 import nuspace
 from nuspace.web.planes import search
 
@@ -481,12 +514,13 @@ class Chosen(nu.Shape):
 CHOSEN = nuspace.at.plane.state(Chosen)
 
 
-class Pick(nustd.ui.Field):
-    search = nustd.ui.SelectRef.slot(placeholder="No searches yet")
+class View(nu.Shape):
+    # The results' head: what they are, and which search they are of.
+    head = ui.RowRef.slot(gap=3, align="center", grow={0: 1}, basis={1: 300})
 
 
-class View(nustd.ui.Column):
-    pick = Pick.slot(label="Searches")
+TITLE = View.head[0].to(ui.HeadingRef.slot(label="Results", level=2))
+SEARCH = View.head[1].to(ui.SelectRef.slot(placeholder="No searches yet"))
 
 
 def newest_first():
@@ -500,7 +534,7 @@ def first_of(ids):
 
 
 def draw():
-    return nu.let(nuspace.atomic(newest_first()), draw_ids)
+    return TITLE.init() >> nu.let(nuspace.atomic(newest_first()), draw_ids)
 
 
 def draw_ids(ids):
@@ -516,8 +550,8 @@ def draw_ids(ids):
     def show(shown):
         write = nu.IfDo(CHOSEN.shown.fallback("") != shown, CHOSEN.shown.set(shown))
         return (
-            View.pick.search.set_options(nuspace.atomic(options))
-            >> View.pick.search.set(shown)
+            SEARCH.set_options(nuspace.atomic(options))
+            >> SEARCH.set(shown)
             >> nuspace.atomic(write)
         )
 
@@ -525,7 +559,7 @@ def draw_ids(ids):
 
 
 def pick():
-    value = nu.Str(View.pick.search)
+    value = nu.Str(SEARCH)
     newest = nuspace.atomic(first_of(newest_first()))
     keep = nu.let(newest, lambda n: nuspace.atomic(CHOSEN.picked.set(value) >> CHOSEN.newest.set(nu.Str(n))))
     return keep >> draw()
@@ -535,7 +569,7 @@ def out():
     # Searches are made anywhere: redraw when the list of them may have changed.
     made = nuspace.Space.planes[search.SEARCHES].children.on_change()
     return nu.ParallelAsync(
-        nu.ReactEvery(View.pick.search.on_change(), pick()),
+        nu.ReactEvery(SEARCH.on_change(), pick()),
         nu.Reconcile(nuspace.atomic(made), draw()),
     )
 """
@@ -544,7 +578,7 @@ def out():
 RESULTS = """\
 import nu
 import nustd.kv
-import nustd.ui
+import nustd.ui as ui
 import nuspace
 import nuspace.web as web
 from nuspace.web.planes import search
@@ -565,24 +599,22 @@ class Chosen(nu.Shape):
 CHOSEN = nuspace.at.plane.state(Chosen)
 
 
-class Head(nustd.ui.Row):
-    link = nustd.ui.LinkRef.slot()
-    where = nustd.ui.TextRef.slot()
-    kind = nustd.ui.BadgeRef.slot()
+class View(nu.Shape):
+    results = ui.ColumnRef.slot(gap=3)
 
 
-class Hit(nustd.ui.Column):
-    head = Head.slot(gap=2, align="center")
-    # Where the kind's render_hit draws.
-    item = nustd.ui.Column.slot()
-    note = nustd.ui.TextRef.slot()
-
-
-class Results(nustd.ui.Column):
-    title = nustd.ui.HeadingRef.slot(level=3)
-    status = nustd.ui.TextRef.slot()
-    empty = nustd.ui.EmptyStateRef.slot()
-    hits = nustd.ui.Column.slot(gap=4)
+# One line over the hits: searching or done, how many, since when.
+SUMMARY = View.results[0].to(ui.LineRef)
+STATE = SUMMARY[0].to(ui.StatusPillRef)
+COUNT = SUMMARY[1].to(ui.TextRef.slot(size="sm", weight="medium"))
+SINCE = SUMMARY[2].to(ui.TextRef.slot(size="sm", tone="muted"))
+WHEN = SUMMARY[3].to(ui.RelativeTimeRef)
+EMPTY = View.results[1].to(ui.EmptyStateRef.slot(icon="search", size="sm"))
+WAITING = View.results[2].to(ui.SkeletonRef.slot(lines=3))
+# The hits, a row each: what the kind draws, the kind, where it lives.
+HITS = View.results[3].to(
+    ui.TableRef.slot(header=["Hit", "Kind", "Where"], align=["left", "left", "left"], label="Hits")
+)
 
 
 def of(sel):
@@ -591,12 +623,15 @@ def of(sel):
 
 
 def hit(i, h):
-    row = nustd.ui.core.SectionRef(nu.Str("h") + nu.str(i), section_cls=Hit, parent_ref=Results.hits)
     got = nu.Dict(h)
     scope = nu.List(got.get_item("scope", ["", ""]))
     level, at, kind = nu.str(scope[0]), nu.str(scope[1]), nu.str(got.get_item("kind", ""))
+    key = nu.str(got.get_item("key", ""))
+    body = HITS[i, 0].to(ui.ColumnRef.slot(gap=1))
+    item = body[0].to(ui.ColumnRef.slot(gap=0))
+    where = HITS[i, 2].to(ui.ColumnRef.slot(gap=0))
     # The plane a hit opens: its cell's, its own, none for the space's.
-    where = nuspace.atomic(
+    place = nuspace.atomic(
         nu.Dict.of(
             plane=nu.If(
                 level == "cell",
@@ -607,19 +642,27 @@ def hit(i, h):
         )
     )
 
-    def head(place):
-        plane, label = nu.str(place["plane"]), nu.str(place["label"])
-        linked = nuspace.atomic(web.link(row.head.link, plane))
-        return nu.IfDo(plane != "", linked, row.head.where.set("Space")) >> row.head.kind.set(label)
+    def head(found):
+        plane, label = nu.str(found["plane"]), nu.str(found["label"])
+        page = where[0].to(ui.PageLinkRef.slot(variant="inline"))
+        linked = nuspace.atomic(web.link(page, plane))
+        space = where[0].to(ui.TextRef.slot(size="sm", weight="medium")).set("Space")
+        # Under it, the level it is kept at and its key: "cell · t1".
+        said = level + nu.Str(" \\u00b7 ") + key
+        return (
+            HITS[i, 1].to(ui.BadgeRef.slot(size="sm")).set(label)
+            >> nu.IfDo(plane != "", linked, space)
+            >> where[1].to(ui.TextRef.slot(size="xs", tone="muted")).set(said)
+        )
 
     # One draw of what the item holds now, read in a snapshot. The drawing is
     # built at run time, where atomic cannot see its reads: the snapshot is
     # named, on State, where the items live.
-    key = nu.str(got.get_item("key", ""))
-    drawing = nu.Eval(Drawing(kind, level, at, key, row.item, hit=True))
+    drawing = nu.Eval(Drawing(kind, level, at, key, item, hit=True))
     drawn = nustd.kv.Snapshot(drawing, scope=nuspace.State)
-    failed = lambda err: row.note.set(nu.Str("Cannot draw this hit: ") + nu.str(err))
-    return nu.let(where, head) >> nu.TryCatch(drawn, catch=failed)
+    note = body[1].to(ui.TextRef.slot(size="sm", tone="danger"))
+    failed = lambda err: note.set(nu.Str("Cannot draw this hit: ") + nu.str(err))
+    return nu.let(place, head) >> nu.TryCatch(drawn, catch=failed)
 
 
 def more(sel, drawn, upto):
@@ -630,25 +673,42 @@ def more(sel, drawn, upto):
     return nu.WhileDo(n < upto, draw)
 
 
-def status(total, done):
+def status(total, done, at):
     hits = nu.str(total) + nu.If(total == 1, " hit", " hits")
     cut = nu.If(total > SHOWN, f", the first {SHOWN} shown", "")
-    line = nu.Str(nu.If(done, "Done: ", "Searching: ")) + hits + cut
-    empty = Results.empty.set(label="Nothing found", description="Try asking less, or another kind.")
-    return Results.status.set(line) >> nu.IfDo(done.and_(total == 0), empty)
+    state = nu.IfDo(
+        done,
+        STATE.set("Done", tone="ok") >> SINCE.set("finished"),
+        STATE.set("Searching", tone="info") >> SINCE.set("started"),
+    )
+    nothing = EMPTY.set(label="Nothing found", description="Ask less, or search another kind.")
+    waiting = nu.IfDo(done.or_(total > 0), WAITING.erase(), WAITING.init())
+    return (
+        state
+        >> COUNT.set(nu.Str(hits) + cut)
+        >> nu.IfDo(at > 0, WHEN.set(at * 1000))
+        >> waiting
+        >> nu.IfDo(done.and_(total == 0), nothing)
+    )
 
 
 def look(sel, drawn):
-    hits = of(sel).hits
+    state = of(sel)
+    hits = state.hits
     read = nu.Dict.of(
         total=nu.If(hits.exists(), hits.len(), 0),
-        done=of(sel).finished_at.exists(),
+        done=state.finished_at.exists(),
+        at=nu.If(
+            state.finished_at.exists(),
+            state.finished_at.fallback(0.0),
+            state.started_at.fallback(0.0),
+        ),
     )
 
     def show(got):
         total, done = nu.int(got["total"]), nu.bool(got["done"])
         upto = nu.If(total > SHOWN, SHOWN, total)
-        return more(sel, drawn, upto) >> status(total, done)
+        return more(sel, drawn, upto) >> status(total, done, nu.float(got["at"]))
 
     return nu.let(nuspace.atomic(read), show)
 
@@ -664,7 +724,6 @@ def landed(sel):
 
 
 def shown(sel):
-    said = nuspace.atomic(nuspace.plane.title(sel))
     # Hits land while it runs: look on each that lands until it is done, then once more.
     done = nuspace.atomic(of(sel).finished_at.exists())
 
@@ -672,22 +731,15 @@ def shown(sel):
         looking = nu.ReconcileWhile(nuspace.atomic(landed(sel)), nu.Not(done), look(sel, drawn))
         return looking >> look(sel, drawn)
 
-    return (
-        Results.hits.erase()
-        >> Results.empty.erase()
-        >> Results.title.set(nu.Str("Results for \\u201c") + said + nu.Str("\\u201d"))
-        >> nu.let(0, watch)
-    )
+    return HITS.erase() >> EMPTY.erase() >> nu.let(0, watch)
 
 
 def none():
     return (
-        Results.title.erase()
-        >> Results.status.erase()
-        >> Results.hits.erase()
-        >> Results.empty.set(
-            label="No searches yet", description="Pick a kind above and press Search."
-        )
+        SUMMARY.erase()
+        >> HITS.erase()
+        >> WAITING.erase()
+        >> EMPTY.set(label="No searches yet", description="Pick a kind above and press Search.")
     )
 
 
