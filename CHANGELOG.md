@@ -2,15 +2,16 @@
 
 ## Packages shipped from this repo
 
-- **nuspace** (the runtime, the `nuspace` command) — 0.7.1
-- **nuspace-ui** (the compiled web bundle) — 0.7.1
+- **nuspace** (the runtime, the `nuspace` command) — 0.7.2
+- **nuspace-ui** (the compiled web bundle) — 0.7.2
 
 Below is the changelog for **nuspace** - the full commit stream. Newest first.
 The `nuspace-ui` wheel is the same source tree's vite output and is not tracked
 separately here.
 
-## Unreleased
+## 0.7.2 - 2026-11-13
 
+- Release nuspace and nuspace-ui 0.7.2
 - Home, settings and search follow the new layout model; plane links share one helper
 - New planes get a default icon when created without one
 - Home, settings and search planes get clean sectioned layouts with real tables
