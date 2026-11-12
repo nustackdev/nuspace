@@ -56,6 +56,9 @@ __all__ = [
 #: The prefixes an icon is spelled with, a lucide name or an emoji after it.
 ICON_PREFIXES = ("lucide:", "emoji:")
 
+#: The icon a plane is made with when none is given.
+DEFAULT_ICON = "lucide:file-text"
+
 
 def _icon_spelled(icon: nu.StrArg) -> None:
     """A literal icon is ``""`` or a prefix with something after it. A term is stored as it is.
@@ -138,7 +141,7 @@ def add(
         name: Display text only.
         key: An optional handle in key chars (letters, digits, ``_``, ``-``),
             case-sensitive, ``""`` for none.
-        icon: ``lucide:<name>``, ``emoji:<char>`` or ``""``.
+        icon: ``lucide:<name>`` or ``emoji:<char>``. ``""``: :data:`DEFAULT_ICON`.
         backend: What its runs execute on. ``""``: it does not run.
         system: Protected: ``remove`` refuses it. Only a system plane takes
             a :data:`~nuspace.shapes.plane.RESERVED` id.
@@ -169,7 +172,7 @@ def add(
             return (
                 row.name.set(name)
                 >> row.key.set(key)
-                >> row.icon.set(icon)
+                >> row.icon.set(icon or DEFAULT_ICON if isinstance(icon, str) else icon)
                 >> row.parent.set(parent)
                 >> row.version.set(0)
                 >> row.cells.set(nu.Dict.create())

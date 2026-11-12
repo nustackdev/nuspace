@@ -24,6 +24,7 @@ import nuspace.web as web
 import nustd.ui
 from nu.lang import wire
 from nuspace.kernel import build_body
+from nuspace.ops.plane import DEFAULT_ICON
 from nuspace.shapes import EXIT_FAILED, EXIT_INTERRUPTED, EXIT_OK, Space
 from nuspace.specs import space_registry
 from nuspace.web.env import SessionWrap, session_env
@@ -124,7 +125,7 @@ def test_device_term_compiles_and_validates():
 # --- Sidebar rows ------------------------------------------------------------------
 
 
-def _row(pid, title, parent="space", children=(), spec="", icon="", system=False):
+def _row(pid, title, parent="space", children=(), spec="", icon=DEFAULT_ICON, system=False):
     return {
         "id": pid,
         "kind": "plane",

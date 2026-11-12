@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- New planes get a default icon when created without one
 - Home, settings and search planes get clean sectioned layouts with real tables
 - Drops show the region they make, and single planes stack anywhere
 - Sidebar states use the kit hover, press and selected washes in both themes

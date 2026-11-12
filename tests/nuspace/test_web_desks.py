@@ -16,6 +16,7 @@ import nuspace
 import nuspace.web as web
 from nu.lang import is_null
 from nuspace.errors import Exists, Missing, Refused
+from nuspace.ops.plane import DEFAULT_ICON
 from nuspace.shapes import Space
 from nuspace.specs import space_registry
 from nuspace.web.desks.model import (
@@ -676,9 +677,9 @@ async def test_titles_cover_the_planes_on_a_desk_originals_and_recents(store):
     )
     assert await store.read(titles()) == {
         "p1": {"title": "Train run 42", "icon": "lucide:flame"},
-        "p4": {"title": "Train run 43", "icon": ""},
-        "kid": {"title": "Logs", "icon": ""},
-        "r1": {"title": "Only a recent", "icon": ""},
+        "p4": {"title": "Train run 43", "icon": DEFAULT_ICON},
+        "kid": {"title": "Logs", "icon": DEFAULT_ICON},
+        "r1": {"title": "Only a recent", "icon": DEFAULT_ICON},
     }
 
 
@@ -696,7 +697,7 @@ async def test_titles_ship_live_and_again_on_a_rename_or_an_icon(store):
         await _until(lambda: shipped() is not None, BOOT_TIMEOUT)
         assert shipped() == {}
         one.notify("desk.create", {"desk_id": "abcd1234", "desk": DESK})
-        looks = {p: {"title": p.upper(), "icon": ""} for p in ("p1", "p2", "p3")}
+        looks = {p: {"title": p.upper(), "icon": DEFAULT_ICON} for p in ("p1", "p2", "p3")}
         await _until(lambda: shipped() == looks)
         await do(store, nuspace.plane.rename("p2", "Logs"))
         await _until(lambda: shipped()["p2"]["title"] == "Logs")
