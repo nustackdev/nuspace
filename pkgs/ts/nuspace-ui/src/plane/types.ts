@@ -1,4 +1,5 @@
-// Plane wire types + coercion: what a `set_plane` carries.
+// Plane wire types + coercion: what a pane's writes carry (`set_head`,
+// `set_cells`, `set_status`, `set_trail`, `set_absent`).
 //
 // msgpack payloads arrive untyped, so every field is narrowed here and nowhere
 // else. Everything downstream can assume these shapes.
@@ -49,7 +50,7 @@ export type Cell = {
 // where that address is.
 
 /**
- * The Plane's own settings, as `set_plane.meta` ships them. Open-ended: the
+ * The Plane's own settings, as the pane's `set_head` ships them. Open-ended: the
  * named keys are the ones the browser reads today, and anything else the
  * server adds rides along untouched so a `plane.web` flags merge never drops it.
  */
@@ -63,6 +64,34 @@ export type PlaneMeta = Record<string, unknown> & {
 	key: string;
 };
 
+/**
+ * How a pane heads its plane, as `set_head` ships it: its title, whether
+ * remove refuses it (`system`, so the pane offers no delete), and its
+ * settings (icon, key and web flags).
+ */
+export type PaneHead = {
+	title: string;
+	system: boolean;
+	meta: PlaneMeta;
+};
+
+/** A wire head. Its flat fields fold into `meta`, which keeps them by name. */
+export function coerceHead(raw: unknown): PaneHead {
+	const r =
+		raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
+	return {
+		title: String(r.title ?? ""),
+		system: r.system === true,
+		meta: coerceMeta({
+			editable: r.editable,
+			width: r.width,
+			key: r.key,
+			icon: typeof r.icon === "string" ? r.icon : "",
+		}),
+	};
+}
+
+/** What a pane's plane draws with: its head and its cells, once both have landed. */
 export type ActivePlane = {
 	plane_id: string;
 	title: string;

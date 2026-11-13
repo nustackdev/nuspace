@@ -1,22 +1,42 @@
-"""The viewer feed: one arm per interaction, all in parallel, for one tab. Host only.
-
-Two families:
-
-- **browser to store.** A viewer event runs one op over its own fields.
-  A failure toasts on the tab (:meth:`~nuspace.web.utils.Arms.event`).
-- **store to browser.** An open plane, its pane's run or the planes above
-  it changed; its arm ships the plane, the statuses or the trail again,
-  keyed by ``plane_id``.
+"""The viewer feed: one arm per open pane, each writing to its own pane node. Host only.
 
 **Which planes are open** is the tab's pane order,
 ``Conn.connections[sid].order``, written by the device from the browser's
-``planes.open``. One arm per plane in it: its subscriptions die with it
-when the plane leaves the order.
+``planes.open``. One arm per open of a pane, under ``ReconcileLatestEach``:
+a pane opened gets its arm, a pane closed has its arm cancelled and drained,
+and the other panes' arms are untouched.
+
+**An arm is one open, not one plane.** Each arm is keyed by the plane and
+its pane's ``opened`` token, minted every time the pane opens. The browser
+drops a closed pane's node at once, and a close and reopen sent back to back
+can leave the order reading the same by the time the reconcile reads it: keyed
+on the plane alone, the arm would live on and never ship the node again.
+Keyed on the open, the reopen is a new element, so the old arm is cancelled
+and drained (its erase goes first) and a new one ships the pane whole.
+
+**A pane is its own node**, ``viewer/panes/<plane>``
+(:func:`~nuspace.web.viewer.ref.pane_ref`). Its arm's first write mounts
+it, and the arm erases it on its way out, however it goes, so a closed pane
+leaves nothing behind. Everything the pane shows rides that node, and
+everything it says too: its events are subscribed inside the arm, on the
+pane's own path, so none carries a ``plane_id`` and a late event for a
+closed pane has nobody listening.
+
+Two families per pane:
+
+- **browser to store.** A pane event runs one op on the pane's plane or
+  on one of its cells. A failure toasts on the tab
+  (:meth:`~nuspace.web.utils.Arms.event`).
+- **store to browser.** Four watches, each shipping what it changes and
+  nothing more: the head (name, icon, key, ``system`` and the web row), the
+  cells (the plane's ``version``, which counts every write to its cells),
+  the statuses and the trail. So a rename never reships a cell's source,
+  and a cell edit never reships the head.
 
 **A pane with nothing to draw is told why.** A plane not in the space, or
-removed, ships ``set_absent`` ``missing``; one with no web row ``headless``.
-The same arm reships, so a plane removed from another tab turns its pane
-absent.
+removed, ships ``set_absent`` ``missing``; one with no web row
+``headless``. The head watch decides it, so a plane removed from another
+tab turns its pane absent, and a restore brings the head back.
 
 **Statuses come from records, never stored.** A pane shows the plane run
 nav keeps for it (``Pane.plane_run``), so two tabs on one plane each see
@@ -24,20 +44,16 @@ their own. Per cell: its newest cell run in that run, one seek on its
 history list. Live and not started is starting, live and started is
 running. Ended, it is idle when it exited ``ok``, stopped when
 ``interrupted`` or ``killed``, failed (with its error) when ``failed``. No
-run, or no cell run of the cell, is idle.
-
-**Narrow watches.** A plane ships again when its row changes (its
-``version`` counts every write to its cells) or its web row does. The
-statuses ship again when the pane's run changes, the plane's cells change,
-one of the run's cell runs comes or goes, or one of its live cell runs
-starts: one small arm per live cell run watches its ``started_at``.
-Nothing of another plane or run wakes either. The trail is the exception:
-any rename or move reships it (:func:`_trail`).
+run, or no cell run of the cell, is idle. They ship again when the pane's
+run changes, the plane's cells change, one of the run's cell runs comes or
+goes, or one of its live cell runs starts: one small arm per live cell run
+watches its ``started_at``.
 
 **The trail is read here, not off the sidebar.** The sidebar ships only the
 branches a tab has open, so a pane under a closed branch would lose its
-crumbs. The pane climbs ``parent`` itself (:func:`trail`). Level, no re-checks: a
-missed notification leaves the display stale until the next change.
+crumbs. The pane climbs ``parent`` itself (:func:`trail`), on any rename or
+move anywhere. Level, no re-checks: a missed notification leaves the display
+stale until the next change.
 
 **A cell's classes are read off its spec, here.** Each shipped cell carries
 the classes of the installed CellSpec its ``spec`` names, so the browser
@@ -70,6 +86,7 @@ from nuspace.web.viewer.interactions import (
     STATE_STARTING,
     STATE_STOPPED,
 )
+from nuspace.web.viewer.ref import pane_ref
 
 
 if TYPE_CHECKING:
@@ -83,7 +100,7 @@ __all__ = [
     "PROGRAM",
     "WEB_FLAGS",
     "plane_cells",
-    "plane_view",
+    "plane_head",
     "statuses",
     "trail",
     "viewer_feed",
@@ -99,11 +116,15 @@ out = nustd.ui.TextRef("out").set("Hello, cell!")
 #: The web flags a ``plane.web`` event may set, each with how its value reads.
 WEB_FLAGS = {"editable": nu.Bool, "width": nu.Str}
 
+#: Between a plane and its pane's ``opened`` token in an arm's key. Never in a
+#: plane id, which is key chars only.
+_OPEN = ":"
+
 _live = Space.exec.indexes.live
 _history = Space.exec.indexes.history
 
 
-def _cells(plane: nu.StrArg) -> nu.Nu:
+def _cell_ids(plane: nu.StrArg) -> nu.Nu:
     """A plane's cell ids, in order. ``[]`` for a plane with no row."""
     return keys_of(Space.planes[plane].cells)
 
@@ -135,36 +156,29 @@ def plane_cells(plane: nu.StrArg, specs: Iterable[CellSpec] = ()) -> nu.List:
             classes=nu.Switch(made, classes, default=[]),
         )
 
-    return nu.List(_cells(plane)).iter().map(cell).to_list()
+    return nu.List(_cell_ids(plane)).iter().map(cell).to_list()
 
 
-def plane_view(plane: nu.StrArg, specs: Iterable[CellSpec] = ()) -> nu.Dict:
-    """``{absent, title, meta, cells}`` for a pane on a plane. Bare read.
+def plane_head(plane: nu.StrArg) -> nu.Dict:
+    """``{absent, title, icon, key, system, editable, width}`` for a pane on a plane. Bare read.
 
     ``absent`` says why the pane has nothing to draw, ``""`` when it has:
     :data:`ABSENT_MISSING` for no plane or a removed one,
-    :data:`ABSENT_HEADLESS` for a plane not on the web. ``meta`` is how it
-    shows: its web flags, its icon and its key (``""`` when it has none).
+    :data:`ABSENT_HEADLESS` for a plane not on the web. ``key`` is ``""``
+    when the plane has none, ``system`` whether remove refuses it.
+    ``editable`` and ``width`` are its web flags. Cost: O(1), a few reads.
     """
     row, flags = Space.planes[plane], Web.planes[plane]
     there = nuspace.plane.exists(plane)
-    absent = nu.Str(
-        nu.If(there, nu.If(Web.planes.contains(plane), "", ABSENT_HEADLESS), ABSENT_MISSING)
-    )
-    meta = nu.Dict.of(
-        editable=flags.editable.fallback(False),
-        width=flags.width.fallback("page"),
+    absent = nu.If(there, nu.If(Web.planes.contains(plane), "", ABSENT_HEADLESS), ABSENT_MISSING)
+    return nu.Dict.of(
+        absent=absent,
+        title=row.name.fallback(""),
         icon=row.icon.fallback(""),
         key=row.key.fallback(""),
-    )
-    return nu.Dict(
-        nu.If(
-            absent == "",
-            nu.Dict.of(
-                absent="", title=row.name.fallback(""), meta=meta, cells=plane_cells(plane, specs)
-            ),
-            nu.Dict.of(absent=absent, title="", meta={}, cells=[]),
-        )
+        system=row.system.fallback(False),
+        editable=flags.editable.fallback(False),
+        width=flags.width.fallback("page"),
     )
 
 
@@ -235,34 +249,52 @@ def statuses(plane: nu.StrArg, run: nu.StrArg) -> nu.List:
     def idle(at: nu.Attr) -> nu.Dict:
         return nu.Dict.of(cell_id=at, state=STATE_IDLE, error="", started_at=0)
 
-    cells = nu.List(_cells(plane)).iter()
+    cells = nu.List(_cell_ids(plane)).iter()
     return nu.List(nu.If(nu.Str(run) == "", cells.map(idle).to_list(), cells.map(status).to_list()))
 
 
 # --- Shipping ------------------------------------------------------------------
 
 
-def _plane(arms: Arms, viewer: Ref, plane: nu.Str, specs: Sequence[CellSpec]) -> nu.Nu:
-    """The pane's plane, shipped again when its row or its web row changes."""
+def _head(arms: Arms, pane: Ref, plane: nu.Str) -> nu.Nu:
+    """The pane's head, or why it has none, shipped again on what changes it.
+
+    Watched from ``Space.planes``, which always exists, so a plane that
+    lands after its pane opened, or comes back from removal, is heard.
+    """
 
     def show(held: nu.ObjectRef) -> nu.Nu:
         got = nu.Dict(held)
         why = nu.Str(got["absent"])
-        shown = interactions.set_plane(
-            viewer,
-            plane,
+        shown = interactions.set_head(
+            pane,
             title=nu.Str(got["title"]),
-            meta=nu.Dict(got["meta"]),
-            cells=nu.List(got["cells"]),
+            icon=nu.Str(got["icon"]),
+            key=nu.Str(got["key"]),
+            system=nu.Bool(got["system"]),
+            editable=nu.Bool(got["editable"]),
+            width=nu.Str(got["width"]),
         )
-        return nu.IfDo(why == "", shown, interactions.set_absent(viewer, plane, why))
+        return nu.IfDo(why == "", shown, interactions.set_absent(pane, why))
 
-    ship = nu.let(atomic(plane_view(plane, specs)), show)
-    changes = [atomic(Space.planes[plane].on_change()), atomic(Web.planes[plane].on_change())]
-    return arms.states("plane", changes, ship)
+    ship = nu.let(atomic(plane_head(plane)), show)
+    rows = Space.planes
+    fields = ("name", "icon", "key", "system", "removed_at")
+    changes = [atomic(rows.on_descendants_change(plane, f)) for f in fields]
+    changes.append(atomic(Web.planes[plane].on_change()))
+    return arms.states("head", changes, ship)
 
 
-def _trail(arms: Arms, viewer: Ref, plane: nu.Str) -> nu.Nu:
+def _cells(arms: Arms, pane: Ref, plane: nu.Str, specs: Sequence[CellSpec]) -> nu.Nu:
+    """The pane's cells, shipped again when the plane's ``version`` moves: every cell write."""
+    ship = nu.let(
+        atomic(plane_cells(plane, specs)), lambda held: interactions.set_cells(pane, nu.List(held))
+    )
+    changes = [atomic(Space.planes.on_descendants_change(plane, "version"))]
+    return arms.states("cells", changes, ship)
+
+
+def _trail(arms: Arms, pane: Ref, plane: nu.Str) -> nu.Nu:
     """The pane's trail, shipped again when any plane is renamed or moved.
 
     Broad on purpose: which planes sit above this one is itself what a move
@@ -271,9 +303,7 @@ def _trail(arms: Arms, viewer: Ref, plane: nu.Str) -> nu.Nu:
     """
 
     def ship(held: nu.ObjectRef) -> nu.Nu:
-        return atomic(trail(plane, into=held)) >> interactions.set_trail(
-            viewer, plane, nu.List(held)
-        )
+        return atomic(trail(plane, into=held)) >> interactions.set_trail(pane, nu.List(held))
 
     changes = [
         atomic(Space.planes.on_descendants_change("*", "name")),
@@ -282,7 +312,7 @@ def _trail(arms: Arms, viewer: Ref, plane: nu.Str) -> nu.Nu:
     return arms.states("trail", changes, nu.let([], ship))
 
 
-def _status(arms: Arms, viewer: Ref, sid: nu.StrArg, plane: nu.Str) -> nu.Nu:
+def _status(arms: Arms, pane: Ref, sid: nu.StrArg, plane: nu.Str) -> nu.Nu:
     """The statuses, following the pane's run, shipped again on what changes them.
 
     No run yet reads ``""``: every cell idle, so a pane nav has not brought
@@ -295,8 +325,8 @@ def _status(arms: Arms, viewer: Ref, sid: nu.StrArg, plane: nu.Str) -> nu.Nu:
         # Watched from its parent, which always exists: an ended run's set is erased.
         moved = _live.plane_run_to_cell_runs.on_child_change(run)
         read = nu.If(nuspace.plane.exists(plane), statuses(plane, run), [])
-        ship = nu.let(atomic(read), lambda held: interactions.set_status(viewer, plane, held))
-        changes = [atomic(Space.planes[plane].version.on_change()), atomic(moved)]
+        ship = nu.let(atomic(read), lambda held: interactions.set_status(pane, held))
+        changes = [atomic(Space.planes.on_descendants_change(plane, "version")), atomic(moved)]
 
         def started(cr: nu.Attr) -> nu.Nu:
             begun = atomic(Space.exec.cell_runs[nu.Str(cr)].started_at.on_change())
@@ -306,8 +336,8 @@ def _status(arms: Arms, viewer: Ref, sid: nu.StrArg, plane: nu.Str) -> nu.Nu:
         each = nu.ReconcileLatestEach(atomic(keys_of(held_runs)), atomic(moved_again), started)
         return nu.ParallelAsync(arms.states("status", changes, ship), arms.guard(each, "started"))
 
-    pane = Conn.connections[sid].panes[plane].plane_run
-    followed = nu.ReconcileLatest(atomic(pane.fallback("")), atomic(pane.on_change()), watch)
+    run_of = Conn.connections[sid].panes[plane].plane_run
+    followed = nu.ReconcileLatest(atomic(run_of.fallback("")), atomic(run_of.on_change()), watch)
     return arms.guard(followed, "status")
 
 
@@ -403,88 +433,126 @@ def _web_flags(plane: nu.Str, event: nu.Attr) -> nu.Nu:
     return nu.IfDo(stray, bad, atomic(writes))
 
 
-def _events(arms: Arms, viewer: Ref, sid: nu.StrArg, specs: Sequence[CellSpec]) -> list[nu.Nu]:
-    """Browser to store: one arm per viewer op. A restart is this tab's, not another's."""
+def _events(
+    arms: Arms, pane: Ref, sid: nu.StrArg, plane: nu.Str, specs: Sequence[CellSpec]
+) -> list[nu.Nu]:
+    """Browser to store: one arm per pane op. A restart is this tab's, not another's."""
 
     def on_cell(name: str, change: nu.Nu, op: Callable[[nu.Str, nu.Attr], nu.Nu]) -> nu.Nu:
         return arms.event(name, change, lambda ev: op(field_str(ev, "cell_id"), ev))
 
     return [
-        arms.plane_event(
-            "create",
-            interactions.on_create_cell(viewer),
-            lambda p, ev: _create(specs, sid, p, ev),
+        arms.event(
+            "rename",
+            interactions.on_rename_plane(pane),
+            lambda ev: atomic(nuspace.plane.rename(plane, field_str(ev, "title"))),
         ),
-        on_cell("update", interactions.on_update_cell(viewer), lambda c, ev: _update(sid, c, ev)),
-        on_cell(
+        arms.event(
+            "icon",
+            interactions.on_set_icon(pane),
+            lambda ev: atomic(nuspace.plane.set_icon(plane, field_str(ev, "icon"))),
+        ),
+        arms.event(
             "delete",
-            interactions.on_delete_cell(viewer),
+            interactions.on_delete_plane(pane),
+            lambda _: atomic(nuspace.plane.remove(plane)),
+        ),
+        arms.event(
+            "plane_key",
+            interactions.on_set_plane_key(pane),
+            lambda ev: atomic(nuspace.plane.set_key(plane, field_str(ev, "key"))),
+        ),
+        arms.event(
+            "plane_remove_key",
+            interactions.on_remove_plane_key(pane),
+            lambda _: atomic(nuspace.plane.remove_key(plane)),
+        ),
+        arms.event("web", interactions.on_set_web(pane), lambda ev: _web_flags(plane, ev)),
+        arms.event(
+            "restart_plane",
+            interactions.on_restart_plane(pane),
+            lambda _: atomic(web.restart_pane(sid, plane)),
+        ),
+        arms.event(
+            "create",
+            interactions.on_create_cell(pane),
+            lambda ev: _create(specs, sid, plane, ev),
+        ),
+        on_cell("update", interactions.on_update_cell(pane), lambda c, ev: _update(sid, c, ev)),
+        on_cell(
+            "delete_cell",
+            interactions.on_delete_cell(pane),
             lambda c, _: atomic(nuspace.cell.remove(c)),
         ),
         on_cell(
             "move",
-            interactions.on_move_cell(viewer),
+            interactions.on_move_cell(pane),
             lambda c, ev: placed(ev, lambda **at: atomic(nuspace.cell.move(c, **at))),
         ),
         on_cell(
             "restart_cell",
-            interactions.on_restart_cell(viewer),
+            interactions.on_restart_cell(pane),
             lambda c, _: web.restart_cell(sid, c),
-        ),
-        arms.plane_event(
-            "restart_plane",
-            interactions.on_restart_plane(viewer),
-            lambda p, _: atomic(web.restart_pane(sid, p)),
         ),
         on_cell(
             "cell_key",
-            interactions.on_set_cell_key(viewer),
+            interactions.on_set_cell_key(pane),
             lambda c, ev: atomic(nuspace.cell.set_key(c, field_str(ev, "key"))),
         ),
         on_cell(
             "cell_remove_key",
-            interactions.on_remove_cell_key(viewer),
+            interactions.on_remove_cell_key(pane),
             lambda c, _: atomic(nuspace.cell.remove_key(c)),
         ),
-        arms.plane_event(
-            "plane_key",
-            interactions.on_set_plane_key(viewer),
-            lambda p, ev: atomic(nuspace.plane.set_key(p, field_str(ev, "key"))),
-        ),
-        arms.plane_event(
-            "plane_remove_key",
-            interactions.on_remove_plane_key(viewer),
-            lambda p, _: atomic(nuspace.plane.remove_key(p)),
-        ),
-        arms.plane_event("web", interactions.on_set_web(viewer), _web_flags),
     ]
+
+
+def _pane(
+    arms: Arms, viewer: Ref, sid: nu.StrArg, plane: nu.Str, specs: Sequence[CellSpec]
+) -> nu.Nu:
+    """One open pane, live: its watches and its events, on its own node. Never ends.
+
+    Cancelled when the pane closes, and on its way out it erases its node,
+    whatever it drew with it. An erase that cannot reach the tab (it closed,
+    which is what cancelled the arm) has nothing left to clean.
+    """
+    pane = pane_ref(viewer, plane)
+    live = nu.ParallelAsync(
+        _head(arms, pane, plane),
+        _cells(arms, pane, plane, specs),
+        _status(arms, pane, sid, plane),
+        _trail(arms, pane, plane),
+        *_events(arms, pane, sid, plane, specs),
+    )
+    erased = nu.TryCatch(pane.erase(), catch=lambda _: nu.Noop())
+    return nu.TryCatch(live, finally_=erased)
 
 
 def viewer_feed(viewer: Ref, sid: nu.StrArg, specs: Iterable[CellSpec], toasts: Ref) -> nu.Nu:
     """The viewer of one tab, live, as one term. Built per tab, never ends.
 
     Args:
-        viewer: The shell's viewer ref.
+        viewer: The shell's viewer ref, the panes' parent.
         sid: The tab, whose row must exist before this runs.
         specs: The registered CellSpecs, what a created cell stores and the
             classes a shipped cell carries.
         toasts: The tab's toast ref, where a failed event shows.
     """
     specs = list(specs)
-    arms = Arms("viewer", toasts)
-    order = Conn.connections[sid].order
+    arms = Arms("pane", toasts)
+    tab = Conn.connections[sid]
 
-    def shown(at: nu.Attr) -> nu.Nu:
+    def opening(at: nu.Attr) -> nu.Str:
         plane = nu.Str(at)
-        return nu.ParallelAsync(
-            _plane(arms, viewer, plane, specs),
-            _status(arms, viewer, sid, plane),
-            _trail(arms, viewer, plane),
-        )
+        return plane + _OPEN + nu.Str(tab.panes[plane].opened.fallback(""))
 
-    # One arm per open pane: a pane opened gets its plane and statuses
-    # shipped, a pane closed has its subscriptions torn down, and the other
-    # panes' arms are untouched.
-    listed = nu.If(order.exists(), nu.list(order), nu.Literal([]))
-    panes = nu.ReconcileLatestEach(atomic(listed), atomic(order.on_change()), shown)
-    return nu.ParallelAsync(arms.guard(panes, "panes"), *_events(arms, viewer, sid, specs))
+    def arm(at: nu.Attr) -> nu.Nu:
+        plane = nu.Str(nu.Str(at).partition(_OPEN)[0])
+        return _pane(arms, viewer, sid, plane, specs)
+
+    listed = nu.If(
+        tab.order.exists(), nu.list(tab.order).iter().map(opening).to_list(), nu.Literal([])
+    )
+    changed = nu.OnAny(tab.order.on_change(), tab.panes.on_descendants_change("*", "opened"))
+    panes = nu.ReconcileLatestEach(atomic(listed), atomic(changed), arm)
+    return Arms("viewer", toasts).guard(panes, "panes")

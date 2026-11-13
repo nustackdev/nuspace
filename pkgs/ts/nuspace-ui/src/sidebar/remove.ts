@@ -1,6 +1,7 @@
-// Deleting a Plane: one way in, from a sidebar row or a pane's `...`.
+// Deleting a Plane from a sidebar row. A pane's `...` has its own delete,
+// on the pane's own node, off the pane's own head (../pane/Pane.tsx).
 //
-// The server refuses a system Plane's delete, so neither place offers one.
+// The server refuses a system Plane's delete, so the row offers none.
 
 import { confirm } from "../core/confirm";
 import { leavePlanes } from "../core/router";

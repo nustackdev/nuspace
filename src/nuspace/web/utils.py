@@ -49,6 +49,7 @@ if TYPE_CHECKING:
 __all__ = [
     "CELLS",
     "OPS",
+    "PANES",
     "Arms",
     "CellRoot",
     "ChannelRef",
@@ -75,6 +76,11 @@ OPS = "ops"
 #: browser's spelling (``pkgs/ts/nuspace-ui/src/plane/cell/address.ts``):
 #: moving it here without moving it there breaks drawing.
 CELLS = "cells"
+
+#: The segment every open pane's node sits under, one level below the viewer:
+#: ``viewer/panes/<plane>``. The browser's spelling is
+#: ``pkgs/ts/nuspace-ui/src/pane/state.ts``.
+PANES = "panes"
 
 
 class SpaceRef(Ref):

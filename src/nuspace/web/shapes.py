@@ -98,11 +98,15 @@ class Pane(nu.Shape):
     ``params`` is what the pane's cells read as their own, str to str,
     written whole. ``plane_run`` is the plane run nav keeps for the pane.
     ``restart`` is a token: a new one asks nav to restart that run.
+    ``opened`` is a token minted when the pane opens, never changed after:
+    a pane closed and opened again is a new open, even when the tab's order
+    reads the same before and after (the viewer keys its arms on it).
     """
 
     params = nustd.kv.PrimitiveDictRef.slot()
     plane_run = nustd.kv.StrRef.slot()
     restart = nustd.kv.StrRef.slot()
+    opened = nustd.kv.StrRef.slot()
 
 
 class Tab(nu.Shape):

@@ -1,17 +1,10 @@
 // ViewerRef: the node type the desk area is mounted as. Mirrors
-// `nuspace/web/viewer`. The component is ../main/Desk.tsx and the write body is
-// ../main/state.ts; the only thing said here is that a write is judged against
-// the Planes the router has open right now.
+// `nuspace/web/viewer`. The component is ../main/Desk.tsx.
+//
+// No write handler: the viewer is written once, at boot, with the `/` menu,
+// and everything a pane shows lands on the pane's own node (./pane.ts).
 
 import type { NodeEntry } from "@nustackdev/ui-kit";
-import { currentRoutes } from "../core/router";
 import { Desk } from "../main/Desk";
-import { applyViewerWrite } from "../main/state";
 
-export const ViewerRef: NodeEntry = {
-	component: Desk,
-	handlers: {
-		write: (ctx, payload) =>
-			ctx.update((props) => applyViewerWrite(props, payload, currentRoutes())),
-	},
-};
+export const ViewerRef: NodeEntry = { component: Desk };

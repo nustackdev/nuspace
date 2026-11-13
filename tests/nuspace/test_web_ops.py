@@ -130,11 +130,18 @@ async def test_set_panes_adds_new_panes_drops_closed_and_keeps_order(store):
     tab = await store.read(tabs["t"].extract())
     assert tab["order"] == ["b", "a", "c"]
     assert tab["panes"]["a"]["params"] == {"row": "1"}
+    opened = tab["panes"]["c"].pop("opened")
+    assert opened.startswith("po_")
     assert tab["panes"]["c"] == {"params": {}, "plane_run": "", "restart": ""}
     await do(store, web.set_panes("t", ["c"]))
     tab = await store.read(tabs["t"].extract())
     assert tab["order"] == ["c"]
     assert set(tab["panes"]) == {"c"}
+    # A pane kept keeps its open; one closed and opened again is a new open.
+    assert tab["panes"]["c"]["opened"] == opened
+    await do(store, web.set_panes("t", []))
+    await do(store, web.set_panes("t", ["c"]))
+    assert await store.read(tabs["t"].panes["c"].opened) not in ("", opened)
 
 
 async def test_set_panes_keeps_a_pane_whose_plane_was_removed_since(store):
@@ -153,6 +160,8 @@ async def test_set_panes_opens_a_plane_missing_or_with_no_view(store):
     await do(store, web.set_panes("t", ["ghost", "off"]))
     tab = await store.read(tabs["t"].extract())
     assert tab["order"] == ["ghost", "off"]
+    opened = tab["panes"]["off"].pop("opened")
+    assert opened.startswith("po_")
     assert tab["panes"]["off"] == {"params": {}, "plane_run": "", "restart": ""}
 
 

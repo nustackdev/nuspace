@@ -2,12 +2,13 @@
 //
 // Caret intent, cell selection, which cells are open in code mode, the slash
 // menu, the drag in flight. The server never sees any of it, none of it
-// survives a reload, and none of it should. It lives in the ViewerRef node's
-// `local` prop (see core/local.ts), as a map by plane id, so each pane's
-// selection, ghost, slash menu and code toggles are its own.
+// survives a reload, and none of it should. It lives in the pane's own
+// PaneRef node, in its `local` prop (see core/local.ts), so each pane's
+// selection, ghost, slash menu and code toggles are its own, and a keystroke
+// in one copies no other pane's state.
 //
-// The node's wire half (the planes themselves) is ../main/state.ts, which also
-// prunes this when a `set_plane` drops the cells it names.
+// The node's wire half (head, cells, statuses, trail) is ../pane/state.ts,
+// which also prunes this when a `set_cells` drops the cells it names.
 
 import type { Path } from "@nustackdev/ui-core";
 import type { FocusAt } from "@nustackdev/ui-kit";
@@ -154,7 +155,7 @@ export type EditorPatch = Partial<EditorState> | ((e: EditorState) => Partial<Ed
  * `live`. Drag is dropped outright -- a re-ship means the document moved
  * under it and guessing is worse than nothing. A focus request for a cell
  * asked for here and not shipped yet stays: the cell is on its way, and the
- * first `set_plane` that carries it makes it an ordinary request.
+ * first `set_cells` that carries it makes it an ordinary request.
  */
 export function pruneEditor(local: EditorState, live: Set<string>): EditorState {
 	return {
@@ -183,35 +184,27 @@ export function pruneEditor(local: EditorState, live: Set<string>): EditorState 
 
 // -- Reads -------------------------------------------------------------------
 
-/** One pane's editor state. Keyed by the Plane the pane shows. */
-function paneOf(local: Record<string, EditorState>, planeId: string): EditorState {
-	return local[planeId] ?? EMPTY_EDITOR;
+/** The pane's editor state, off its PaneRef node. */
+export function useEditorState(panePath: Path): EditorState {
+	return useLocalSlot(panePath, EMPTY_EDITOR, (local) => local);
 }
 
-const NO_PANES: Record<string, EditorState> = {};
-
-export function useEditorState(path: Path, planeId: string): EditorState {
-	return useLocalSlot(path, NO_PANES, (local) => paneOf(local, planeId));
-}
-
-/** One pane's editor state as it is now, outside a render: for a handler
+/** The pane's editor state as it is now, outside a render: for a handler
  *  that patched a moment ago and must not act on the render's copy. */
-export function readEditor(path: Path, planeId: string): EditorState {
-	const local = nodeAt(path)?.props[LOCAL] as Record<string, EditorState> | undefined;
-	return paneOf(local ?? NO_PANES, planeId);
+export function readEditor(panePath: Path): EditorState {
+	return (nodeAt(panePath)?.props[LOCAL] as EditorState | undefined) ?? EMPTY_EDITOR;
 }
 
 // -- Writes ------------------------------------------------------------------
 
 /**
- * Patch one pane's browser-owned editor state. Module-level rather than a
+ * Patch the pane's browser-owned editor state. Module-level rather than a
  * hook so event handlers deep in the tree can call it without prop-drilling,
- * and so it never participates in a render.
+ * and so it never participates in a render. A pane whose node has not
+ * landed has no state to patch.
  */
-export function patchEditor(path: Path, planeId: string, patch: EditorPatch): void {
-	patchLocal<Record<string, EditorState>>(path, NO_PANES, (local) => {
-		const current = paneOf(local, planeId);
-		const next = typeof patch === "function" ? patch(current) : patch;
-		return { [planeId]: { ...current, ...next } };
-	});
+export function patchEditor(panePath: Path, patch: EditorPatch): void {
+	patchLocal<EditorState>(panePath, EMPTY_EDITOR, (current) =>
+		typeof patch === "function" ? patch(current) : patch,
+	);
 }

@@ -1,181 +1,37 @@
-// The ViewerRef node: what the wire writes into it.
+// The ViewerRef node: what every pane shares, and what goes when a pane closes.
 //
-// Every open Plane and its cells, as a map by plane id in `props.planes`: one
-// entry replaced wholesale by that plane's `set_plane` and patched by its
-// `set_status`. A pane with no Plane to draw gets a `set_absent` instead, kept
-// by plane id in `props.absent`; either op replaces the other. Entries for
-// Planes no longer open are dropped. The browser half of the node (each pane's
-// editor state) is ../plane/state.ts.
+// Each open plane is its own PaneRef node under `<viewer>/panes/<plane>`
+// (../pane/state.ts): its head, cells, statuses, trail and editor state. The
+// viewer keeps only what all panes share: the `/` menu's entries
+// (`cell_specs`, seeded at boot) and the cell ui root, `<viewer>/cells/<cell>`,
+// where every cell's refs autovivify (../plane/cell/address.ts).
 //
-// ## Cells are not registered here
+// ## A closed pane goes at once
 //
-// A cell's refs autovivify under the cell's own address the first time
-// something writes to one, and the store disposes a subtree when it goes. All
-// the browser knows about that address is ../plane/cell/address.ts.
-//
-// ## Why this type keeps a write handler
-//
-// Four ops ride one payload, told apart by an `op` key, and the store's default
-// write has nothing to dispatch on. `set_status` also patches statuses into
-// the cell list by id, which a prop merge cannot do, and `set_plane` has to
-// prune local state naming cells the new Plane does not carry, which nothing
-// else is in a position to notice.
-//
-// ## The trail is the viewer's, not the sidebar's
-//
-// The planes above each pane's ride `set_trail`, kept by plane id in
-// `props.trails`, apart from the plane so either may land first. The sidebar's
-// tree holds only the branches a tab has open, so it cannot say.
-
+// The route changes first, here: a pane no longer open has its node dropped
+// at once (`settlePanes`), before the server's erase comes back a round trip
+// later. Both are safe; a write for it in between brings an empty node back
+// for the erase to take.
 //
 // ## A closed plane leaves nothing drawn behind
 //
 // What a cell's run drew stays in the tree under the cell's address after its
 // pane closes: nav stops the run, and nothing on the wire takes the drawing
-// down. Reopened, the plane would draw it again the moment its `set_plane`
-// lands, until the new run erases it and draws afresh. So the browser takes it
+// down. Reopened, the plane would draw it again the moment its cells land,
+// until the new run erases it and draws afresh. So the browser takes it
 // down itself: a plane's cell ui goes when its pane closes, and a frame from
 // the run that drew it is refused until the pane opens again (`admits`, on the
 // socket). Reopening clears it once more before the plane is asked for, so a
 // reopened plane always starts from nothing drawn.
 
-import type { Frame, Path, Props } from "@nustackdev/ui-core";
+import type { Frame, Path } from "@nustackdev/ui-core";
 import { nodeAt, pathKey, tree, useProps } from "@nustackdev/ui-kit";
 import { useMemo } from "react";
-import { LOCAL, localOf } from "../core/local";
+import { PANES } from "../pane/state";
 import { cellUiPath } from "../plane/cell/address";
-import { type EditorState, EMPTY_EDITOR, pruneEditor } from "../plane/state";
-import {
-	type AbsentReason,
-	type ActivePlane,
-	type CellSpec,
-	type CellStatus,
-	type Crumb,
-	coerceAbsent,
-	coerceCells,
-	coerceMeta,
-	coerceStatus,
-	coerceTrail,
-} from "../plane/types";
+import type { Cell, CellSpec } from "../plane/types";
 
-/** Every open Plane that has landed, by id, off the node's props. */
-function planesOf(props: Props): Record<string, ActivePlane> {
-	return (props.planes as Record<string, ActivePlane> | undefined) ?? {};
-}
-
-/** Why each open pane has no Plane, by id, off the node's props. */
-function absentOf(props: Props): Record<string, AbsentReason> {
-	return (props.absent as Record<string, AbsentReason> | undefined) ?? {};
-}
-
-/** The planes above each open pane's, by id, off the node's props. */
-function trailsOf(props: Props): Record<string, Crumb[]> {
-	return (props.trails as Record<string, Crumb[]> | undefined) ?? {};
-}
-
-/** Every pane's editor state, by Plane id, off the node's props. */
-function panesOf(props: Props): Record<string, EditorState> {
-	return localOf<Record<string, EditorState>>(props, {});
-}
-
-/** Drop one entry. Same object when it is not there. */
-function without<T>(byId: Record<string, T>, id: string): Record<string, T> {
-	if (!(id in byId)) return byId;
-	const { [id]: _, ...rest } = byId;
-	return rest;
-}
-
-/** Keep only the entries for Planes in `open`. Same object when nothing goes. */
-function keepOpen<T>(byId: Record<string, T>, open: string[]): Record<string, T> {
-	const keys = Object.keys(byId);
-	if (keys.every((k) => open.includes(k))) return byId;
-	const out: Record<string, T> = {};
-	for (const k of keys) if (open.includes(k)) out[k] = byId[k];
-	return out;
-}
-
-// -- The write handler's body ------------------------------------------------
-
-/**
- * Apply one inbound payload to this node's props. Pure given `open`, the
- * Planes open on the desk, so it is testable.
- *
- * Every op is keyed by plane. A `set_plane` or `set_absent` for a Plane that is
- * no longer open is a reply to a pane already closed and is dropped, and every
- * such write prunes what belongs to closed panes.
- */
-export function applyViewerWrite(props: Props, payload: unknown, open: string[]): void {
-	const p = (payload ?? {}) as Record<string, unknown>;
-	const op = String(p.op ?? "");
-	const planeId = String(p.plane_id ?? "");
-
-	if (op === "set_trail") {
-		if (!planeId || !open.includes(planeId)) return;
-		props.trails = { ...keepOpen(trailsOf(props), open), [planeId]: coerceTrail(p.trail) };
-		return;
-	}
-
-	if (op === "set_status") {
-		const planes = planesOf(props);
-		const plane = planes[planeId];
-		if (!plane) return;
-		const byId = new Map<string, CellStatus>();
-		for (const raw of Array.isArray(p.statuses) ? p.statuses : []) {
-			const st = coerceStatus(raw);
-			if (st?.cell_id) byId.set(st.cell_id, st);
-		}
-		if (byId.size === 0) return;
-		props.planes = {
-			...planes,
-			[planeId]: {
-				...plane,
-				cells: plane.cells.map((b) =>
-					byId.has(b.id) ? { ...b, status: byId.get(b.id) ?? b.status } : b,
-				),
-			} satisfies ActivePlane,
-		};
-		return;
-	}
-
-	if (op !== "set_plane" && op !== "set_absent") return;
-
-	const planes = keepOpen(planesOf(props), open);
-	const panes = keepOpen(panesOf(props), open);
-	const absent = keepOpen(absentOf(props), open);
-	props.trails = keepOpen(trailsOf(props), open);
-	if (!planeId || !open.includes(planeId)) {
-		props.planes = planes;
-		props.absent = absent;
-		props[LOCAL] = panes;
-		return;
-	}
-
-	if (op === "set_absent") {
-		const reason = coerceAbsent(p.reason);
-		if (!reason) return;
-		props.planes = without(planes, planeId);
-		props.absent = { ...absent, [planeId]: reason };
-		props[LOCAL] = without(panes, planeId);
-		return;
-	}
-
-	const cells = coerceCells(p.cells);
-	props.planes = {
-		...planes,
-		[planeId]: {
-			plane_id: planeId,
-			title: String(p.title ?? ""),
-			meta: coerceMeta(p.meta),
-			cells,
-		} satisfies ActivePlane,
-	};
-	props.absent = without(absent, planeId);
-
-	const live = new Set(cells.map((b) => b.id));
-	props[LOCAL] = { ...panes, [planeId]: pruneEditor(panes[planeId] ?? EMPTY_EDITOR, live) };
-}
-
-// -- Closed planes' cell ui ---------------------------------------------------
+// -- Closed panes --------------------------------------------------------------
 
 /** The cell ui of each closed plane, by plane id: taken down, and refused until it reopens. */
 const closed = new Map<string, Path[]>();
@@ -199,11 +55,14 @@ export function admits(frame: Frame): boolean {
 }
 
 /**
- * Take down the cell ui of planes that closed and refuse what still comes for
- * it; clear it again for planes that reopened and let them draw. Before the
- * open planes are asked for, so nothing a reopened plane shows predates it.
+ * Settle the panes against `open`, the planes the route shows now. Run when
+ * the route changes, before the open planes are asked for.
+ *
+ * A pane no longer open has its node dropped, and its plane's cell ui taken
+ * down and refused. A plane open again has its refusal lifted and what is
+ * left of its cell ui cleared, so nothing a reopened plane shows predates it.
  */
-function settleCellUi(path: Path, planes: Record<string, ActivePlane>, open: string[]): void {
+export function settlePanes(viewerPath: Path, open: string[]): void {
 	for (const id of open) {
 		const uis = closed.get(id);
 		if (!uis) continue;
@@ -213,100 +72,22 @@ function settleCellUi(path: Path, planes: Record<string, ActivePlane>, open: str
 			takeDown(ui);
 		}
 	}
-	for (const [id, plane] of Object.entries(planes)) {
+	const panes = [...viewerPath, PANES];
+	for (const [id, node] of nodeAt(panes)?.children ?? []) {
 		if (open.includes(id)) continue;
-		const uis = plane.cells.map((c) => cellUiPath(path, c.id));
+		const cells = (node.props.cells as Cell[] | undefined) ?? [];
+		const uis = cells.map((c) => cellUiPath(viewerPath, c.id));
 		closed.set(id, uis);
 		for (const ui of uis) {
 			cellDepth = ui.length;
 			refused.add(pathKey(ui));
 			takeDown(ui);
 		}
+		tree.getState().remove([...panes, id]);
 	}
 }
 
-/**
- * Drop the planes and editor state of panes that are no longer open, and the
- * cell ui of their planes (see above). Run when the route changes, before the
- * open planes are asked for, so a closed pane's data does not linger until
- * the next `set_plane` happens to prune it.
- */
-export function pruneViewer(path: Path, open: string[]): void {
-	const node = nodeAt(path);
-	if (!node) return;
-	const planes = planesOf(node.props);
-	settleCellUi(path, planes, open);
-	const panes = panesOf(node.props);
-	const absent = absentOf(node.props);
-	const trails = trailsOf(node.props);
-	const nextPlanes = keepOpen(planes, open);
-	const nextPanes = keepOpen(panes, open);
-	const nextAbsent = keepOpen(absent, open);
-	const nextTrails = keepOpen(trails, open);
-	const same =
-		nextPlanes === planes && nextPanes === panes && nextAbsent === absent && nextTrails === trails;
-	if (same) return;
-	tree.getState().setProps(path, {
-		planes: nextPlanes,
-		absent: nextAbsent,
-		trails: nextTrails,
-		[LOCAL]: nextPanes,
-	});
-}
-
-/**
- * Merge `meta` into one plane's settings, locally. The optimistic half of a
- * `plane.web` flags write: the switch moves now, and the server's next `set_plane`
- * replaces the whole plane with what it actually stored.
- */
-export function patchPlaneMeta(path: Path, planeId: string, meta: Record<string, unknown>): void {
-	const node = nodeAt(path);
-	if (!node) return;
-	const planes = planesOf(node.props);
-	const plane = planes[planeId];
-	if (!plane) return;
-	tree.getState().setProps(path, {
-		planes: { ...planes, [planeId]: { ...plane, meta: coerceMeta({ ...plane.meta, ...meta }) } },
-	});
-}
-
-/**
- * Set one plane's title, locally. The optimistic half of a rename from a tab:
- * the tab and the plane's heading change now, and the server's next
- * `set_plane` replaces the plane with what it actually stored.
- */
-export function patchPlaneTitle(path: Path, planeId: string, title: string): void {
-	const node = nodeAt(path);
-	if (!node) return;
-	const planes = planesOf(node.props);
-	const plane = planes[planeId];
-	if (!plane || plane.title === title) return;
-	tree.getState().setProps(path, { planes: { ...planes, [planeId]: { ...plane, title } } });
-}
-
 // -- Reads -------------------------------------------------------------------
-
-const NO_PLANES: Record<string, ActivePlane> = {};
-
-/** Every open Plane that has landed, by id. A pane whose id is missing is
- *  still loading. */
-export function usePlanes(path: Path): Record<string, ActivePlane> {
-	return (useProps(path).planes as Record<string, ActivePlane> | undefined) ?? NO_PLANES;
-}
-
-const NO_ABSENT: Record<string, AbsentReason> = {};
-
-/** Why each open pane has no Plane to draw, by id. */
-export function useAbsent(path: Path): Record<string, AbsentReason> {
-	return (useProps(path).absent as Record<string, AbsentReason> | undefined) ?? NO_ABSENT;
-}
-
-const NO_TRAILS: Record<string, Crumb[]> = {};
-
-/** The planes above each open pane's, top first, by id. A pane with none landed has no entry. */
-export function useTrails(path: Path): Record<string, Crumb[]> {
-	return (useProps(path).trails as Record<string, Crumb[]> | undefined) ?? NO_TRAILS;
-}
 
 const EMPTY_CELL_SPECS: CellSpec[] = [];
 

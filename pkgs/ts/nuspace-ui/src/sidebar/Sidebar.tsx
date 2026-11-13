@@ -194,7 +194,7 @@ export function Sidebar({ path }: NodeProps) {
 							<SidebarSkeleton />
 						) : (
 							<>
-								<DeskFolders folders={folders} tree={tree} selected={selected} />
+								<DeskFolders folders={folders} selected={selected} />
 								<SidebarSection
 									id="planes"
 									title="Planes"

@@ -14,8 +14,8 @@
 //   reorder  a desk dragged by its title, and where it would land
 //   rename   which folder's title is a rename field
 //
-// The looks of every plane the folders link to are resolved once, here
-// (../core/looks.ts).
+// The looks of every plane the folders link to are resolved once, here, off
+// the desks' own titles (../core/looks.ts), never the Planes tree.
 
 import type * as React from "react";
 import { useEffect, useMemo, useState } from "react";
@@ -28,7 +28,6 @@ import { type Aimed, type AimHit, DeskFolder } from "./DeskFolder";
 import type { DragProps, DropProps } from "./DeskRows";
 import { doesHint, refusedHint, useSettle } from "./drag";
 import { type FolderRow, folderKey, folderRows, useFolds } from "./folders";
-import type { PlaneTree } from "./types";
 
 /** One desk's folder, as drawn. */
 export type Folder = { id: string; desk: Desk; folded: boolean; rows: FolderRow[] };
@@ -75,16 +74,14 @@ const sameAim = (a: Aimed, b: Aimed) => JSON.stringify(a) === JSON.stringify(b);
 
 export function DeskFolders({
 	folders,
-	tree,
 	selected,
 }: {
 	folders: Folder[];
-	tree: PlaneTree;
 	/** The selected row's key (./folders.ts `selectedKey`), null for none here. */
 	selected: string | null;
 }) {
 	const planes = useMemo(() => planesOf(folders), [folders]);
-	const looks = usePlaneLooks(planes, tree);
+	const looks = usePlaneLooks(planes);
 	const [aim, setAim] = useState<Aimed>(null);
 	// The row being dragged, dimmed while it travels.
 	const [lifted, setLifted] = useState<string | null>(null);

@@ -1,15 +1,17 @@
 // A pane with no Plane to draw, rendered in jsdom: the empty state per reason,
-// and its close where the pane has one. The viewer's `set_absent` landing in the node's props is
-// ../main/state.test.ts.
+// and its close where the pane has one, and a pane that had its plane leaving
+// once it turns missing. The `set_absent` landing in the pane node's props is
+// ./state.test.ts.
 
-import { TooltipProvider } from "@nustackdev/ui-kit";
+import { TooltipProvider, tree } from "@nustackdev/ui-kit";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { currentRoutes, setDesks, setRoles } from "../core/router";
+import { currentRoute, currentRoutes, setDesks, setRoles } from "../core/router";
 import type { PaneAt } from "../desk/drag";
-import type { AbsentReason } from "../plane/types";
+import { type AbsentReason, coerceHead } from "../plane/types";
 import { ABSENT_TEXT, Pane } from "./Pane";
+import { applyPaneWrite, panePath } from "./state";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 // The body's scroll area sizes itself with a ResizeObserver, which jsdom lacks.
@@ -35,26 +37,32 @@ function at(path: string) {
 	window.history.replaceState(null, "", "/d/desk0001/strip1");
 }
 
-function render(planeId: string, absent: AbsentReason, where: PaneAt = IN_STRIP) {
+const VIEWER = ["viewer"];
+
+/** One write onto the pane's node, through its own write body. */
+function land(planeId: string, payload: Record<string, unknown>) {
+	act(() => {
+		const path = panePath(VIEWER, planeId);
+		tree.getState().write(path.map((s) => [s, null]));
+		const props = { ...(tree.getState().getIn(path)?.props ?? {}) };
+		applyPaneWrite(props, payload);
+		tree.getState().setProps(path, props);
+	});
+}
+
+function draw(planeId: string, where: PaneAt) {
 	act(() => {
 		root.render(
 			<TooltipProvider>
-				<Pane
-					viewerPath={["viewer"]}
-					at={where}
-					planeId={planeId}
-					plane={null}
-					absent={absent}
-					cellSpecs={[]}
-					notify={() => {}}
-					onMeta={() => {}}
-					onRename={() => {}}
-					onIcon={() => {}}
-					focused
-				/>
+				<Pane viewerPath={VIEWER} at={where} planeId={planeId} cellSpecs={[]} focused />
 			</TooltipProvider>,
 		);
 	});
+}
+
+function render(planeId: string, absent: AbsentReason, where: PaneAt = IN_STRIP) {
+	land(planeId, { op: "set_absent", reason: absent });
+	draw(planeId, where);
 }
 
 const closeButton = () =>
@@ -69,6 +77,7 @@ beforeEach(() => {
 afterEach(() => {
 	act(() => root.unmount());
 	host.remove();
+	tree.getState().remove(VIEWER);
 });
 
 describe("absent pane", () => {
@@ -100,5 +109,25 @@ describe("absent pane", () => {
 		render("gone", "missing");
 		act(() => closeButton()?.click());
 		expect(currentRoutes()).toEqual(["a"]);
+	});
+
+	it("leaves once its plane goes: a solo pane goes home", () => {
+		setDesks({});
+		setRoles({ home: "", settings: "", search: "" });
+		window.history.replaceState(null, "", "/p/gone");
+		land("gone", { op: "set_head", ...coerceHead({}), title: "Gone" });
+		draw("gone", { kind: "solo" });
+		expect(currentRoute().kind).toBe("solo");
+		land("gone", { op: "set_absent", reason: "missing" });
+		expect(window.location.pathname).toBe("/");
+	});
+
+	it("stays when it never had its plane: a link to nothing says so", () => {
+		setDesks({});
+		setRoles({ home: "", settings: "", search: "" });
+		window.history.replaceState(null, "", "/p/never");
+		render("never", "missing", { kind: "solo" });
+		expect(window.location.pathname).toBe("/p/never");
+		expect(host.textContent).toContain(ABSENT_TEXT.missing);
 	});
 });

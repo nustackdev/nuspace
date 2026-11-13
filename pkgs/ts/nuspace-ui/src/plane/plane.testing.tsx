@@ -42,6 +42,8 @@ Range.prototype.getClientRects = () => [] as unknown as DOMRectList;
 Range.prototype.getBoundingClientRect = () => new DOMRect();
 
 export const VIEWER = ["viewer"];
+/** The pane the plane under test is drawn in: its editor state lives here. */
+export const PANE = ["viewer", "panes", "p1"];
 
 /** A prose spec, installed but no class default. */
 export const PLAIN: CellSpec[] = [
@@ -87,6 +89,7 @@ export function render(
 			<TooltipProvider>
 				<Plane
 					viewerPath={VIEWER}
+					panePath={PANE}
 					plane={plane}
 					cellSpecs={specs}
 					editable={editable}
@@ -260,7 +263,7 @@ export const planeRoot = () => endLine().parentElement?.parentElement as HTMLEle
 export const row = (id: string) =>
 	host.querySelector<HTMLElement>(`[data-cell="${id}"]`) as HTMLElement;
 export const menu = () => document.querySelector("[role='listbox'][aria-label='Insert a cell']");
-export const selected = () => readEditor(VIEWER, "p1").selected;
+export const selected = () => readEditor(PANE).selected;
 export const ops = () => notify.mock.calls.map(([op, args]) => [op, args.cell_id ?? args.cell_ids]);
 
 export const title = (i: TitleIntent) => {
@@ -272,7 +275,7 @@ export const title = (i: TitleIntent) => {
 };
 
 beforeEach(() => {
-	tree.getState().write([["viewer"]], {});
+	tree.getState().write([["viewer"], ["panes"], ["p1", "PaneRef"]], {});
 	host = document.createElement("div");
 	document.body.appendChild(host);
 	root = createRoot(host);

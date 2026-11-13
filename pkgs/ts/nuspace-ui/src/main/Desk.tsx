@@ -39,7 +39,9 @@
 // so it sends nothing.
 //
 // One Viewer, and it never asks what kind of thing it is drawing. Each pane
-// renders one Plane's Cells and roots their refs, every Cell the same way.
+// reads its own node (`<viewer>/panes/<plane>`, ../pane/state.ts), renders
+// one Plane's Cells and roots their refs, every Cell the same way. Nothing
+// here reads what a pane shows: the desk only says where each pane sits.
 // A pane is keyed by its plane, so one that stays in its column is never
 // remounted.
 //
@@ -65,7 +67,6 @@ import {
 	useRoute,
 	useRoutes,
 } from "../core/router";
-import { useTypePath } from "../core/surfaces";
 import { notifyOp } from "../core/wire";
 import {
 	deskArea,
@@ -84,29 +85,12 @@ import type { PaneAt, Surface } from "../desk/drag";
 import { locate, shown } from "../desk/model";
 import { NotFound } from "../pane/NotFound";
 import { Pane } from "../pane/Pane";
-import type { Ops } from "../plane/ops";
-import {
-	canDelete,
-	deletePlane,
-	type Notify as SidebarNotify,
-	type Ops as SidebarOps,
-	usePlaneTree,
-} from "../sidebar/api";
+import type { ViewerOps } from "../plane/ops";
 import { Column } from "./Column";
 import { DeskHeader } from "./DeskHeader";
 import { DropRegion } from "./DropRegion";
 import { useCanvasDrop } from "./drop";
-import {
-	patchPlaneMeta,
-	patchPlaneTitle,
-	pruneViewer,
-	useAbsent,
-	useCellSpecs,
-	usePlanes,
-	useTrails,
-} from "./state";
-
-/** A path that is no plane or desk url, or "/" with no home role. */
+import { settlePanes, useCellSpecs } from "./state";
 
 /** What an empty desk says, and the hint under it. */
 export const EMPTY_DESK = "This desk is empty";
@@ -128,15 +112,10 @@ function paneAt(route: Route): PaneAt {
 }
 
 export function Desk({ path }: NodeProps) {
-	const planes = usePlanes(path);
-	const absent = useAbsent(path);
-	const trails = useTrails(path);
 	const cellSpecs = useCellSpecs(path);
 	const route = useRoute();
 	const routes = useRoutes();
 	const focused = useFocusedRoute();
-	const sidebar = useTypePath("SidebarRef");
-	const tree = usePlaneTree(sidebar);
 	const desks = useDesks();
 	const key = pathKey(path);
 	// What `planes.open` says, as a key: the panes in order with their params.
@@ -146,26 +125,26 @@ export function Desk({ path }: NodeProps) {
 	const dropHost = useRef<HTMLDivElement | null>(null);
 	const drop = useCanvasDrop(surfaceOf(route));
 
-	// One ref per op: the op name is the tail of the wire path, not a key in
-	// the payload. `path` is this node's own address in the tree.
+	// The viewer's one op. The op name is the tail of the wire path, not a key
+	// in the payload. `path` is this node's own address in the tree.
 	// biome-ignore lint/correctness/useExhaustiveDependencies: path is compared by value.
-	const notify = useCallback(
-		<K extends keyof Ops & string>(op: K, args: Ops[K]) => notifyOp<Ops, K>(path, op, args),
+	const open = useCallback(
+		(args: ViewerOps["planes.open"]) =>
+			notifyOp<ViewerOps, "planes.open">(path, "planes.open", args),
 		[key],
 	);
 
 	// The full list with its params, every time either changes and once on
 	// load, an empty one included, so the server stops shipping a Plane nobody
-	// has open. Planes, editor state and cell ui of panes that closed go first,
-	// and a reopened plane's cell ui is cleared, so nothing it draws predates
-	// the ask.
+	// has open. Panes that closed go first, node and cell ui, and a reopened
+	// plane's cell ui is cleared, so nothing it draws predates the ask.
 	// biome-ignore lint/correctness/useExhaustiveDependencies: the panes are compared by their key; path by value.
 	useEffect(() => {
-		const open = currentRoutes();
-		pruneViewer(path, open);
-		const params = Object.fromEntries(open.map((id) => [id, paramsOf(id)]));
-		notify("planes.open", { plane_ids: open, params });
-	}, [panesKey, notify]);
+		const shown = currentRoutes();
+		settlePanes(path, shown);
+		const params = Object.fromEntries(shown.map((id) => [id, paramsOf(id)]));
+		open({ plane_ids: shown, params });
+	}, [panesKey, open]);
 
 	// The focused pane on screen. On every focus change, when the panes change
 	// under it, and when its place changes (a move, a drop).
@@ -184,74 +163,9 @@ export function Desk({ path }: NodeProps) {
 		if (reveal) show(areaRef.current, reveal.id, true);
 	}, [reveal]);
 
-	// Optimistic: the switch moves now, the next `set_plane` confirms it.
-	// biome-ignore lint/correctness/useExhaustiveDependencies: path is compared by value.
-	const onMeta = useCallback(
-		(planeId: string, meta: Record<string, unknown>) => {
-			patchPlaneMeta(path, planeId, meta);
-			// The pane's settings are the plane's web flags, all switches.
-			const flags = Object.fromEntries(
-				Object.entries(meta).filter(([, v]) => typeof v === "boolean"),
-			) as Record<string, boolean>;
-			notify("plane.web", { plane_id: planeId, flags });
-		},
-		[key, notify],
-	);
-
-	// Optimistic like `onMeta`. The op is the sidebar's: it is the one that
-	// already renames a Plane, and the tree it reships carries the new title.
-	// biome-ignore lint/correctness/useExhaustiveDependencies: paths are compared by value.
-	const onRename = useCallback(
-		(planeId: string, title: string) => {
-			patchPlaneTitle(path, planeId, title);
-			if (sidebar) {
-				notifyOp<SidebarOps, "plane.rename">(sidebar, "plane.rename", { plane_id: planeId, title });
-			}
-		},
-		[key, sidebar ? pathKey(sidebar) : ""],
-	);
-
-	// Optimistic like `onMeta`, and through the sidebar's op like `onRename`:
-	// the sidebar's is the one that sets an icon, and both the tree and the
-	// plane it reships carry it.
-	// biome-ignore lint/correctness/useExhaustiveDependencies: paths are compared by value.
-	const onIcon = useCallback(
-		(planeId: string, icon: string) => {
-			patchPlaneMeta(path, planeId, { icon });
-			if (sidebar) {
-				notifyOp<SidebarOps, "plane.icon">(sidebar, "plane.icon", { plane_id: planeId, icon });
-			}
-		},
-		[key, sidebar ? pathKey(sidebar) : ""],
-	);
-
-	// Through the sidebar's op and its confirm, like `onRename`: a delete from
-	// a pane's `...` is the sidebar's delete. Undefined for a system Plane.
-	const deleteOf = (planeId: string): (() => void) | undefined => {
-		if (!sidebar || !canDelete(tree, planeId)) return undefined;
-		const notifySidebar: SidebarNotify = (op, args) =>
-			notifyOp<SidebarOps, typeof op>(sidebar, op, args);
-		const title = planes[planeId]?.title || tree[planeId]?.title || planeId;
-		return () => void deletePlane(notifySidebar, tree, planeId, title);
-	};
-
 	const at = paneAt(route);
 	const pane = (id: string): ReactNode => (
-		<Pane
-			viewerPath={path}
-			at={at}
-			planeId={id}
-			plane={planes[id] ?? null}
-			absent={absent[id] ?? null}
-			cellSpecs={cellSpecs}
-			notify={notify}
-			onMeta={onMeta}
-			onRename={onRename}
-			onIcon={onIcon}
-			onDelete={deleteOf(id)}
-			trail={trails[id]}
-			focused={id === focused}
-		/>
+		<Pane viewerPath={path} at={at} planeId={id} cellSpecs={cellSpecs} focused={id === focused} />
 	);
 
 	if (route.kind === "pending") {

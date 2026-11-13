@@ -2,7 +2,7 @@
 //
 // Each one is a web flag of the Plane, shipped in its `meta` (see
 // ../plane/types.ts). Changing one sends `plane.web` with just that flag,
-// applied optimistically; the server's next `set_plane` confirms it. Adding a
+// applied optimistically; the server's next `set_head` confirms it. Adding a
 // setting is adding a row here, plus reading its key wherever it takes
 // effect. A switch flips a boolean; a choice picks one of a few values, each
 // drawn as a small picture of what it does (./PaneMenu.tsx).

@@ -64,6 +64,7 @@ const NO_CELL_SPECS: CellSpec[] = [];
 
 export function Plane({
 	viewerPath,
+	panePath,
 	plane,
 	cellSpecs = NO_CELL_SPECS,
 	editable,
@@ -74,9 +75,10 @@ export function Plane({
 	focused = false,
 	sugars = SUGARS,
 }: {
-	/** The ViewerRef node, which holds every pane's editor state and roots
-	 *  every cell's refs. */
+	/** The ViewerRef node, which roots every cell's refs. */
 	viewerPath: Path;
+	/** The pane's own PaneRef node, which holds this plane's editor state. */
+	panePath: Path;
 	plane: ActivePlane;
 	/** The registered Cells, in order: the `/` menu's rows. */
 	cellSpecs?: CellSpec[];
@@ -98,8 +100,9 @@ export function Plane({
 	const cells = plane.cells;
 	const planeId = plane.plane_id;
 	// Per pane: two planes side by side never share a selection or a ghost.
-	const editor = useEditorState(viewerPath, planeId);
+	const editor = useEditorState(panePath);
 	const viewerKey = pathKey(viewerPath);
+	const paneKey = pathKey(panePath);
 
 	const rootRef = useRef<HTMLDivElement | null>(null);
 	const elRefs = useRef(new Map<string, HTMLElement>());
@@ -109,12 +112,9 @@ export function Plane({
 	const index = useCallback((id: string) => cells.findIndex((b) => b.id === id), [cells]);
 
 	// biome-ignore lint/correctness/useExhaustiveDependencies: path is compared by value.
-	const patch = useCallback(
-		(p: EditorPatch) => patchEditor(viewerPath, planeId, p),
-		[viewerKey, planeId],
-	);
+	const patch = useCallback((p: EditorPatch) => patchEditor(panePath, p), [paneKey]);
 	// biome-ignore lint/correctness/useExhaustiveDependencies: path is compared by value.
-	const read = useCallback(() => readEditor(viewerPath, planeId), [viewerKey, planeId]);
+	const read = useCallback(() => readEditor(panePath), [paneKey]);
 	// biome-ignore lint/correctness/useExhaustiveDependencies: path is compared by value.
 	const editorOf = useCallback(
 		(id: string) => markdownAt(cellUiPath(viewerPath, id))?.handle ?? null,

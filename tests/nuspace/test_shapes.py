@@ -129,7 +129,7 @@ def test_the_roots_and_records_carry_the_slots_of_the_data_model():
     assert slots(Desk) == {"name", "entries"}
     assert slots(WebPlane) == {"editable", "width"}
     assert slots(Tab) == {"order", "panes", "expanded"}
-    assert slots(Pane) == {"params", "plane_run", "restart"}
+    assert slots(Pane) == {"params", "plane_run", "restart", "opened"}
 
 
 def test_every_collection_gets_the_view_that_fits_how_it_is_read():

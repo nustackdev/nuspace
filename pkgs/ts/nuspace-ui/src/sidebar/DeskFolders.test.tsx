@@ -104,10 +104,16 @@ let host: HTMLDivElement;
 let root: Root;
 let release: () => void;
 
+/** The desk planes' looks, as `set_titles` ships them: where the folders read them. */
+const TITLES = Object.fromEntries(
+	PLANES.map((id) => [id, { title: id.toUpperCase(), icon: `emoji:${id}` }]),
+);
+
 function feed(desks: Record<string, Desk>, order = Object.keys(desks)) {
 	act(() => {
 		applyDesksWrite(null, { op: "set_roles", roles: { home: "h", settings: "", search: "" } });
 		applyDesksWrite(null, { op: "set_desks", desks, order });
+		applyDesksWrite(null, { op: "set_titles", titles: TITLES });
 	});
 }
 
@@ -115,7 +121,7 @@ function Folders({ selected = null }: { selected?: string | null }) {
 	const folders = useFolders();
 	return (
 		<SidebarBody keys={folderKeys(folders)}>
-			<DeskFolders folders={folders} tree={tree} selected={selected} />
+			<DeskFolders folders={folders} selected={selected} />
 		</SidebarBody>
 	);
 }

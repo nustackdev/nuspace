@@ -33,7 +33,7 @@ from nuspace.web.shapes import Web
 from nuspace.web.shell import Shell
 from nuspace.web.sidebar import registered_entries, rows
 from nuspace.web.utils import CellRoot
-from nuspace.web.viewer import PROGRAM, plane_view, slash_entries, statuses, trail
+from nuspace.web.viewer import PROGRAM, plane_cells, plane_head, slash_entries, statuses, trail
 from nustd.ui.core import OP_NOTIFY, Frame, WsSession
 from nustd.ui.core.session import Session
 
@@ -207,20 +207,21 @@ def test_registered_entries():
 # --- Viewer reads ------------------------------------------------------------------
 
 
-async def test_viewer_plane(store):
+async def test_viewer_head_and_cells(store):
     await plane(store, "p1", "Notes", icon="lucide:book", key="notes")
     await do(store, web.set("p1", width="full"))
     await do(store, nuspace.cell.add("p1", "x = 1", id="c1", name="one", fabrics=["ui"]))
     await do(store, nuspace.specs.add_cell("p1", TEXT, id="c2", fabrics=[]))
-    got = await store.read(plane_view("p1", CELLS))
-    assert got["absent"] == "" and got["title"] == "Notes"
-    assert got["meta"] == {
-        "editable": True,
-        "width": "full",
+    assert await store.read(plane_head("p1")) == {
+        "absent": "",
+        "title": "Notes",
         "icon": "lucide:book",
         "key": "notes",
+        "system": False,
+        "editable": True,
+        "width": "full",
     }
-    assert got["cells"] == [
+    assert await store.read(plane_cells("p1", CELLS)) == [
         {
             "id": "c1",
             "name": "one",
@@ -242,13 +243,16 @@ async def test_viewer_plane(store):
     ]
 
 
-async def test_viewer_plane_absent(store):
+async def test_viewer_head_absent(store):
     await plane(store, "off", on_web=False)
     await plane(store, "gone")
     await do(store, nuspace.plane.remove("gone"))
-    assert (await store.read(plane_view("nope")))["absent"] == "missing"
-    assert (await store.read(plane_view("gone")))["absent"] == "missing"
-    assert (await store.read(plane_view("off")))["absent"] == "headless"
+    assert (await store.read(plane_head("nope")))["absent"] == "missing"
+    assert (await store.read(plane_head("gone")))["absent"] == "missing"
+    assert (await store.read(plane_head("off")))["absent"] == "headless"
+    await store.run(ensure())
+    home = await store.read(Web.roles["home"])
+    assert (await store.read(plane_head(home)))["system"] is True
 
 
 async def test_viewer_trail_climbs_whatever_the_sidebar_shows(store):
@@ -316,8 +320,24 @@ class FakeSession(WsSession):
             if isinstance(f.payload, dict) and f.payload.get("op") == op
         ]
 
+    def pane(self, plane: str, op: str) -> list[dict]:
+        """The writes of ``op`` on the pane's own node, in order."""
+        at = ("viewer", "panes", plane)
+        return [p for p in self.writes(op) if self._ref_of(p) == at]
+
+    def erased(self, *path: str) -> bool:
+        """Whether a ``remove`` went out for ``path``."""
+        return any(f.op == "remove" and tuple(f.ref) == path for f in self.frames)
+
+    def _ref_of(self, payload: dict) -> tuple[str, ...]:
+        return next(tuple(f.ref) for f in self.frames if f.payload is payload)
+
     def toasts(self) -> list[dict]:
         return [f.payload for f in self.frames if f.ref == ("toast",) and f.payload]
+
+
+#: Where the pane on p1 hears its events.
+PANE = ("viewer", "panes", "p1", "ops")
 
 
 # A tab compiles and validates its whole term before the first frame, which
@@ -352,6 +372,13 @@ async def test_tab_live(store):
     ctx = store.ctx.bind(Session, session)
     task = asyncio.create_task(nu.arun(connection(nu.Str("s1"), registry=REGISTRY), ctx))
     tabs = web.Conn.connections
+
+    def on(op):
+        return ("viewer", "panes", "p1", "ops", op)
+
+    def cells():
+        return session.pane("p1", "set_cells")[-1]["cells"]
+
     try:
         # Boot: the tab's row, the shell seeded, the sidebar shipped.
         await _until(lambda: session.writes("set_tree"), BOOT_TIMEOUT)
@@ -365,64 +392,77 @@ async def test_tab_live(store):
         assert list(_tree(session)) == ["space", "p1"]
         assert await store.read(nu.list(tabs["s1"].order)) == []
 
-        # planes.open: the panes written, the plane and its statuses shipped, a visit.
+        # planes.open: the panes written, the pane's head, cells and statuses shipped, a visit.
         session.notify(
             ("viewer", "ops", "planes.open"), {"plane_ids": ["p1"], "params": {"p1": {"q": "x"}}}
         )
-        await _until(lambda: session.writes("set_status"))
+        await _until(lambda: session.pane("p1", "set_status") and session.pane("p1", "set_cells"))
+        await _until(lambda: session.pane("p1", "set_head"))
         assert await store.read(nu.list(tabs["s1"].order)) == ["p1"]
         assert await store.read(tabs["s1"].panes["p1"].params) == {"q": "x"}
         assert await store.read(nu.list(web.Web.recents)) == ["p1"]
-        shown = session.writes("set_plane")[-1]
-        assert shown["plane_id"] == "p1" and shown["title"] == "Notes"
-        assert [c["id"] for c in shown["cells"]] == ["c1"]
-        assert session.writes("set_status")[-1]["statuses"][0]["state"] == "idle"
+        head = session.pane("p1", "set_head")[-1]
+        assert head == {
+            "op": "set_head",
+            "title": "Notes",
+            "icon": DEFAULT_ICON,
+            "key": "",
+            "system": False,
+            "editable": True,
+            "width": "page",
+        }
+        assert [c["id"] for c in cells()] == ["c1"]
+        assert session.pane("p1", "set_status")[-1]["statuses"][0]["state"] == "idle"
+        assert "plane_id" not in session.pane("p1", "set_status")[-1]
 
-        # Viewer events run ops: a cell from a spec, a starter cell, a move, web flags.
-        session.notify(
-            ("viewer", "ops", "cell.create"),
-            {"plane_id": "p1", "cell_id": "c2", "name": TEXT, "before": "c1"},
-        )
-        await _until(lambda: session.writes("set_plane")[-1]["cells"][0]["id"] == "c2")
-        made = session.writes("set_plane")[-1]["cells"][0]
-        assert made["source"] == TEXT_SRC and made["spec"] == TEXT
-        session.notify(
-            ("viewer", "ops", "cell.create"), {"plane_id": "p1", "cell_id": "c3", "name": ""}
-        )
-        await _until(lambda: session.writes("set_plane")[-1]["cells"][-1]["id"] == "c3")
-        assert session.writes("set_plane")[-1]["cells"][-1]["source"] == PROGRAM
-        session.notify(("viewer", "ops", "cell.move"), {"cell_id": "c3", "before": "c2"})
-        await _until(lambda: session.writes("set_plane")[-1]["cells"][0]["id"] == "c3")
-        session.notify(("viewer", "ops", "cell.update"), {"cell_id": "c1", "source": "y = 2"})
-        await _until(
-            lambda: any(c["source"] == "y = 2" for c in session.writes("set_plane")[-1]["cells"])
-        )
-        session.notify(
-            ("viewer", "ops", "plane.web"), {"plane_id": "p1", "flags": {"width": "board"}}
-        )
-        await _until(lambda: session.writes("set_plane")[-1]["meta"]["width"] == "board")
+        # Pane events run ops on the pane's own path: a cell from a spec, a
+        # starter cell, a move, web flags.
+        session.notify(on("cell.create"), {"cell_id": "c2", "name": TEXT, "before": "c1"})
+        await _until(lambda: cells()[0]["id"] == "c2")
+        assert cells()[0]["source"] == TEXT_SRC and cells()[0]["spec"] == TEXT
+        session.notify(on("cell.create"), {"cell_id": "c3", "name": ""})
+        await _until(lambda: cells()[-1]["id"] == "c3")
+        assert cells()[-1]["source"] == PROGRAM
+        session.notify(on("cell.move"), {"cell_id": "c3", "before": "c2"})
+        await _until(lambda: cells()[0]["id"] == "c3")
+        session.notify(on("cell.update"), {"cell_id": "c1", "source": "y = 2"})
+        await _until(lambda: any(c["source"] == "y = 2" for c in cells()))
+        session.notify(on("plane.web"), {"flags": {"width": "board"}})
+        await _until(lambda: session.pane("p1", "set_head")[-1]["width"] == "board")
         # A cell's key: set, changed and removed, each reshipped.
-        session.notify(("viewer", "ops", "cell.key"), {"cell_id": "c1", "key": "first"})
-        await _until(
-            lambda: any(c["key"] == "first" for c in session.writes("set_plane")[-1]["cells"])
-        )
-        session.notify(("viewer", "ops", "cell.key"), {"cell_id": "c1", "key": "one-1"})
-        await _until(
-            lambda: any(c["key"] == "one-1" for c in session.writes("set_plane")[-1]["cells"])
-        )
+        session.notify(on("cell.key"), {"cell_id": "c1", "key": "first"})
+        await _until(lambda: any(c["key"] == "first" for c in cells()))
+        session.notify(on("cell.key"), {"cell_id": "c1", "key": "one-1"})
+        await _until(lambda: any(c["key"] == "one-1" for c in cells()))
         assert await store.read(Space.indexes.cell_keys.contains("first")) is False
-        session.notify(("viewer", "ops", "cell.remove_key"), {"cell_id": "c1"})
-        await _until(lambda: all(c["key"] == "" for c in session.writes("set_plane")[-1]["cells"]))
+        session.notify(on("cell.remove_key"), {"cell_id": "c1"})
+        await _until(lambda: all(c["key"] == "" for c in cells()))
         assert await store.read(Space.indexes.cell_keys.contains("one-1")) is False
         # The plane's key, the same way: set, changed and removed, each reshipped.
-        session.notify(("viewer", "ops", "plane.key"), {"plane_id": "p1", "key": "first"})
-        await _until(lambda: session.writes("set_plane")[-1]["meta"]["key"] == "first")
-        session.notify(("viewer", "ops", "plane.key"), {"plane_id": "p1", "key": "notes-1"})
-        await _until(lambda: session.writes("set_plane")[-1]["meta"]["key"] == "notes-1")
+        session.notify(on("plane.key"), {"key": "first"})
+        await _until(lambda: session.pane("p1", "set_head")[-1]["key"] == "first")
+        session.notify(on("plane.key"), {"key": "notes-1"})
+        await _until(lambda: session.pane("p1", "set_head")[-1]["key"] == "notes-1")
         assert await store.read(Space.indexes.plane_keys.contains("first")) is False
-        session.notify(("viewer", "ops", "plane.remove_key"), {"plane_id": "p1"})
-        await _until(lambda: session.writes("set_plane")[-1]["meta"]["key"] == "")
+        session.notify(on("plane.remove_key"), {})
+        await _until(lambda: session.pane("p1", "set_head")[-1]["key"] == "")
         assert await store.read(Space.indexes.plane_keys.contains("notes-1")) is False
+
+        # A rename and an icon reship the head and the trail's readers, never the cells.
+        shipped = len(session.pane("p1", "set_cells"))
+        session.notify(on("plane.rename"), {"title": "Notes 2"})
+        await _until(lambda: session.pane("p1", "set_head")[-1]["title"] == "Notes 2")
+        session.notify(on("plane.icon"), {"icon": "emoji:📓"})
+        await _until(lambda: session.pane("p1", "set_head")[-1]["icon"] == "emoji:📓")
+        await asyncio.sleep(0.2)
+        assert len(session.pane("p1", "set_cells")) == shipped
+        # A cell edit reships the cells, never the head.
+        heads = len(session.pane("p1", "set_head"))
+        session.notify(on("cell.update"), {"cell_id": "c1", "source": "y = 3"})
+        await _until(lambda: any(c["source"] == "y = 3" for c in cells()))
+        await asyncio.sleep(0.2)
+        assert len(session.pane("p1", "set_head")) == heads
+        assert await store.read(Space.planes["p1"].name) == "Notes 2"
 
         # Sidebar events: a plane made from a spec under p1, an expand loads it.
         session.notify(
@@ -454,6 +494,100 @@ async def test_tab_live(store):
     assert await store.read(tabs.contains("s1")) is False
 
 
+async def test_a_pane_is_its_own_node(store):
+    """Each pane hears its own events, a delete turns it absent, a close erases its node."""
+    from nuspace.web.device import connection
+
+    await plane(store, "p1", "One")
+    await plane(store, "p2", "Two")
+    session = FakeSession()
+    ctx = store.ctx.bind(Session, session)
+    task = asyncio.create_task(nu.arun(connection(nu.Str("s1"), registry=REGISTRY), ctx))
+
+    def on(plane, op):
+        return ("viewer", "panes", plane, "ops", op)
+
+    try:
+        await _until(lambda: session.writes("set_tree"), BOOT_TIMEOUT)
+        session.notify(("viewer", "ops", "planes.open"), {"plane_ids": ["p1", "p2"], "params": {}})
+        await _until(lambda: session.pane("p1", "set_head") and session.pane("p2", "set_head"))
+        assert session.pane("p2", "set_trail")[-1] == {"op": "set_trail", "trail": []}
+
+        # p2's rename on p2's path renames p2 alone, and only p2's head reships.
+        p1_heads = len(session.pane("p1", "set_head"))
+        session.notify(on("p2", "plane.rename"), {"title": "Deux"})
+        await _until(lambda: session.pane("p2", "set_head")[-1]["title"] == "Deux")
+        assert await store.read(Space.planes["p1"].name) == "One"
+        await asyncio.sleep(0.2)
+        assert len(session.pane("p1", "set_head")) == p1_heads
+
+        # A delete from the pane: the plane goes, the pane is told it is missing.
+        session.notify(on("p2", "plane.delete"), {})
+        await _until(lambda: session.pane("p2", "set_absent"))
+        assert session.pane("p2", "set_absent")[-1] == {"op": "set_absent", "reason": "missing"}
+        assert await store.read(Space.planes["p2"].removed_at.exists()) is True
+
+        # Closed: its node erased, the other pane's kept.
+        session.notify(("viewer", "ops", "planes.open"), {"plane_ids": ["p1"], "params": {}})
+        await _until(lambda: session.erased("viewer", "panes", "p2"))
+        assert not session.erased("viewer", "panes", "p1")
+
+        # A late event for the closed pane has nobody listening: nothing runs, nothing toasts.
+        session.notify(on("p2", "plane.rename"), {"title": "Late"})
+        await asyncio.sleep(0.2)
+        assert await store.read(Space.planes["p2"].name) == "Deux"
+        assert session.toasts() == []
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+
+
+async def test_a_pane_closed_and_reopened_at_once_is_shipped_again(store):
+    """The browser drops a closed pane's node at once: a reopen gets its head and cells again.
+
+    The close and the reopen go back to back, before the server settles, so
+    the tab's pane order may read the same before and after.
+    """
+    from nuspace.web.device import connection
+
+    await plane(store, "p1", "One")
+    await plane(store, "p2", "Two")
+    session = FakeSession()
+    ctx = store.ctx.bind(Session, session)
+    task = asyncio.create_task(nu.arun(connection(nu.Str("s1"), registry=REGISTRY), ctx))
+    opened = ("viewer", "ops", "planes.open")
+    try:
+        await _until(lambda: session.writes("set_tree"), BOOT_TIMEOUT)
+        session.notify(opened, {"plane_ids": ["p1", "p2"], "params": {}})
+        await _until(lambda: session.pane("p1", "set_head") and session.pane("p1", "set_cells"))
+        await asyncio.sleep(0.3)
+        heads, cells = len(session.pane("p1", "set_head")), len(session.pane("p1", "set_cells"))
+        session.notify(opened, {"plane_ids": ["p2"], "params": {}})
+        session.notify(opened, {"plane_ids": ["p1", "p2"], "params": {}})
+        await _until(lambda: len(session.pane("p1", "set_head")) > heads)
+        await _until(lambda: len(session.pane("p1", "set_cells")) > cells)
+        # Whatever erase went out for p1 went before its new head.
+        last_erase = max(
+            (
+                i
+                for i, f in enumerate(session.frames)
+                if f.op == "remove" and tuple(f.ref) == ("viewer", "panes", "p1")
+            ),
+            default=-1,
+        )
+        last_head = max(
+            i
+            for i, f in enumerate(session.frames)
+            if isinstance(f.payload, dict)
+            and f.payload.get("op") == "set_head"
+            and tuple(f.ref) == ("viewer", "panes", "p1")
+        )
+        assert last_erase < last_head
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+
+
 async def test_a_cell_made_or_edited_in_a_finished_pane_restarts_it(store):
     """nav starts runs only on open or a restart token: the device asks for one when the run is over."""
     from nuspace.web.device import connection
@@ -470,24 +604,22 @@ async def test_a_cell_made_or_edited_in_a_finished_pane_restarts_it(store):
         await _until_store(store, web.Conn.connections["s1"].panes.contains("p1"))
 
         # No run recorded yet: nav is starting one, nothing asked.
-        session.notify(("viewer", "ops", "cell.update"), {"cell_id": "c1", "source": "x = 2"})
+        session.notify((*PANE, "cell.update"), {"cell_id": "c1", "source": "x = 2"})
         await _until_store(store, Space.cells["c1"].prog == "x = 2")
         # A live run: reload's to rerun the cell, nothing asked.
         run = await store.made(nuspace.atomic(nuspace.plane_run.add("p1", into=MADE)))
         await do(store, pane.plane_run.set(run))
-        session.notify(("viewer", "ops", "cell.update"), {"cell_id": "c1", "source": "x = 3"})
+        session.notify((*PANE, "cell.update"), {"cell_id": "c1", "source": "x = 3"})
         await _until_store(store, Space.cells["c1"].prog == "x = 3")
         await asyncio.sleep(0.2)
         assert await store.read(pane.restart) == ""
 
         # The run is over: an edit restarts the pane, and so does a new cell.
         await do(store, nuspace.plane_run.end(run, EXIT_OK))
-        session.notify(("viewer", "ops", "cell.update"), {"cell_id": "c1", "source": "x = 4"})
+        session.notify((*PANE, "cell.update"), {"cell_id": "c1", "source": "x = 4"})
         await _until_store(store, pane.restart != "")
         first = await store.read(pane.restart)
-        session.notify(
-            ("viewer", "ops", "cell.create"), {"plane_id": "p1", "cell_id": "c2", "name": ""}
-        )
+        session.notify((*PANE, "cell.create"), {"cell_id": "c2", "name": ""})
         await _until_store(store, pane.restart != first)
         assert session.toasts() == []
     finally:
@@ -524,40 +656,40 @@ async def test_a_failed_event_toasts_its_type_and_message(store):
         await _until(lambda: len(session.toasts()) == 3)
         assert session.toasts()[-1]["type"] == "ValueError"
         assert "'title'" in session.toasts()[-1]["message"]
-        session.notify(("viewer", "ops", "plane.web"), {"plane_id": "p1", "flags": {"wide": True}})
+        # Pane events need the pane open: they ride its own path.
+        session.notify(("viewer", "ops", "planes.open"), {"plane_ids": ["p1"], "params": {}})
+        await _until(lambda: session.pane("p1", "set_head"))
+        session.notify((*PANE, "plane.web"), {"flags": {"wide": True}})
         await _until(lambda: len(session.toasts()) == 4)
         assert session.toasts()[-1]["type"] == "ValueError"
         # A key taken by another cell, and one not in key chars.
         await do(store, nuspace.cell.add("p1", "x = 1", id="c1", key="taken", fabrics=[]))
         await do(store, nuspace.cell.add("p1", "x = 2", id="c2", fabrics=[]))
-        session.notify(("viewer", "ops", "cell.key"), {"cell_id": "c2", "key": "taken"})
+        session.notify((*PANE, "cell.key"), {"cell_id": "c2", "key": "taken"})
         await _until(lambda: len(session.toasts()) == 5)
         assert session.toasts()[-1]["type"] == "Exists"
-        session.notify(("viewer", "ops", "cell.key"), {"cell_id": "c2", "key": "no spaces"})
+        session.notify((*PANE, "cell.key"), {"cell_id": "c2", "key": "no spaces"})
         await _until(lambda: len(session.toasts()) == 6)
         assert session.toasts()[-1]["type"] == "Refused"
         # A plane key taken by another plane, one not in key chars, and none to remove.
         await plane(store, "p2", key="held")
-        session.notify(("viewer", "ops", "plane.key"), {"plane_id": "p1", "key": "held"})
+        session.notify((*PANE, "plane.key"), {"key": "held"})
         await _until(lambda: len(session.toasts()) == 7)
         assert session.toasts()[-1]["type"] == "Exists"
-        session.notify(("viewer", "ops", "plane.key"), {"plane_id": "p1", "key": "no spaces"})
+        session.notify((*PANE, "plane.key"), {"key": "no spaces"})
         await _until(lambda: len(session.toasts()) == 8)
         assert session.toasts()[-1]["type"] == "Refused"
-        session.notify(("viewer", "ops", "plane.remove_key"), {"plane_id": "p1"})
+        session.notify((*PANE, "plane.remove_key"), {})
         await _until(lambda: len(session.toasts()) == 9)
         assert session.toasts()[-1]["type"] == "Missing"
         # Opening a plane that never lands: told it is missing after the wait, no toast.
         session.notify(("viewer", "ops", "planes.open"), {"plane_ids": ["ghost"], "params": {}})
         await _until(lambda: session.writes("set_absent"), timeout=6.0)
-        assert session.writes("set_absent")[-1] == {
-            "op": "set_absent",
-            "plane_id": "ghost",
-            "reason": "missing",
-        }
+        assert session.pane("ghost", "set_absent")[-1] == {"op": "set_absent", "reason": "missing"}
         # The tab still works.
+        heads = len(session.pane("p1", "set_head"))
         session.notify(("viewer", "ops", "planes.open"), {"plane_ids": ["p1"], "params": {}})
-        await _until(lambda: session.writes("set_plane"))
+        await _until(lambda: len(session.pane("p1", "set_head")) > heads)
         assert len(session.toasts()) == 9
     finally:
         task.cancel()
@@ -584,6 +716,8 @@ async def test_a_plane_opened_before_it_lands_is_waited_for(store, monkeypatch):
         await do(store, web.add("late"))
         order = web.Conn.connections["s1"].order
         await _until_store(store, nu.list(order) == nu.Literal(["late"]))
+        await _until(lambda: session.pane("late", "set_head"))
+        assert session.pane("late", "set_head")[-1]["title"] == "Late"
         assert session.toasts() == []
     finally:
         task.cancel()
@@ -602,11 +736,7 @@ async def test_a_plane_with_no_view_opens_as_headless_without_the_long_wait(stor
         await _until(lambda: session.writes("set_tree"), BOOT_TIMEOUT)
         session.notify(("viewer", "ops", "planes.open"), {"plane_ids": ["off"], "params": {}})
         await _until(lambda: session.writes("set_absent"), timeout=device.OPEN_WAIT)
-        assert session.writes("set_absent")[-1] == {
-            "op": "set_absent",
-            "plane_id": "off",
-            "reason": "headless",
-        }
+        assert session.pane("off", "set_absent")[-1] == {"op": "set_absent", "reason": "headless"}
         assert await store.read(nu.list(web.Conn.connections["s1"].order)) == ["off"]
         assert session.toasts() == []
     finally:

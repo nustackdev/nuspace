@@ -1,17 +1,20 @@
 // A plane's id and key next to its title, rendered in jsdom: the `@key` line
 // shows only with a key and copies it, the title row's `#` opens and closes
-// the identity block, a save notifies the plane's key ops, and the plane menu
+// the identity block, a save sends the plane's key ops on the pane's own
+// node, and the plane menu
 // copies its id and key.
 
-import { TooltipProvider } from "@nustackdev/ui-kit";
+import type { Frame } from "@nustackdev/ui-core";
+import { TooltipProvider, tree } from "@nustackdev/ui-kit";
 import type * as React from "react";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PlaneMenuItems } from "../menu/PlaneMenuItems";
 import type { MenuParts } from "../menu/parts";
-import type { ActivePlane } from "../plane/types";
+import { coerceHead } from "../plane/types";
 import { Pane } from "./Pane";
+import { panePath } from "./state";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 // The body's scroll area sizes itself with a ResizeObserver, which jsdom lacks.
@@ -23,30 +26,26 @@ globalThis.ResizeObserver ??= class {
 
 let host: HTMLDivElement;
 let root: Root;
-const notify = vi.fn();
 const writeText = vi.fn(() => Promise.resolve());
+const VIEWER = ["viewer"];
+const PANE = panePath(VIEWER, "p1");
+/** What the pane sent, as the socket would have it. */
+let sent: Frame[] = [];
+/** The last op sent and its payload. */
+const last = () => {
+	const frame = sent.at(-1);
+	return frame ? [frame.ref, frame.payload] : null;
+};
 
 function render(key: string, editable = true) {
-	const plane: ActivePlane = {
-		plane_id: "p1",
-		title: "Notes",
-		meta: { editable, width: "page", key },
-		cells: [],
-	};
 	act(() => {
+		tree.getState().write(
+			PANE.map((s) => [s, null]),
+			{ head: coerceHead({ title: "Notes", editable, width: "page", key }), cells: [] },
+		);
 		root.render(
 			<TooltipProvider>
-				<Pane
-					viewerPath={["viewer"]}
-					planeId="p1"
-					plane={plane}
-					cellSpecs={[]}
-					notify={notify}
-					onMeta={() => {}}
-					onRename={() => {}}
-					onIcon={() => {}}
-					focused={false}
-				/>
+				<Pane viewerPath={VIEWER} planeId="p1" cellSpecs={[]} focused={false} />
 			</TooltipProvider>,
 		);
 	});
@@ -71,7 +70,8 @@ beforeEach(() => {
 	host = document.createElement("div");
 	document.body.append(host);
 	root = createRoot(host);
-	notify.mockReset();
+	sent = [];
+	tree.getState().setSender((f) => sent.push(f));
 	writeText.mockClear();
 	Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
 });
@@ -79,6 +79,8 @@ beforeEach(() => {
 afterEach(() => {
 	act(() => root.unmount());
 	host.remove();
+	tree.getState().setSender(null);
+	tree.getState().remove(VIEWER);
 });
 
 describe("the key line", () => {
@@ -140,10 +142,11 @@ describe("the identity toggle", () => {
 		act(() => toggle()?.click());
 		type("journal");
 		act(() => saveButton()?.click());
-		expect(notify).toHaveBeenLastCalledWith("plane.key", { plane_id: "p1", key: "journal" });
+		// On the pane's own path: no plane id, the path says it.
+		expect(last()).toEqual([[...PANE, "ops", "plane.key"], { key: "journal" }]);
 		type("");
 		act(() => saveButton()?.click());
-		expect(notify).toHaveBeenLastCalledWith("plane.remove_key", { plane_id: "p1" });
+		expect(last()).toEqual([[...PANE, "ops", "plane.remove_key"], {}]);
 	});
 
 	it("shows the key read-only on a read-only plane", () => {

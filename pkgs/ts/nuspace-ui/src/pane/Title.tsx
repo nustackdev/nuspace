@@ -8,7 +8,7 @@
 // Two rules make contenteditable behave under React:
 //
 //  1. React never owns the text. The element renders empty and an effect
-//     writes `textContent`, and only while it is not focused, so a `set_plane`
+//     writes `textContent`, and only while it is not focused, so a `set_head`
 //     that lands mid-edit never clobbers the draft or jumps the caret.
 //  2. Escape and a no-op blur restore from the latest server value, read off
 //     a ref, so a rename that landed while the field was focused shows up the

@@ -1,7 +1,8 @@
 // The browser tab: its title and its favicon say what the tab shows.
 //
 // The tab follows the plane the canvas focuses: a solo plane, a plane
-// item's shown plane, or a strip's focused pane. On a desk item the desk's
+// item's shown plane, or a strip's focused pane. It reads that pane's head
+// off the pane's own node (../pane/state.ts), nothing else. On a desk item the desk's
 // name follows the plane's title (`Logs · Favorites`); an empty desk, or a
 // plane the pane cannot draw, shows the desk's name alone.
 //
@@ -23,7 +24,8 @@ import { useEffect } from "react";
 import { useFocusedRoute, useRoute } from "../core/router";
 import { planeIcon } from "../icon/parse";
 import { TITLE_FALLBACK } from "../pane/Pane";
-import type { ActivePlane } from "../plane/types";
+import { panePath } from "../pane/state";
+import type { PaneHead } from "../plane/types";
 
 /** The product name, the title with nothing open. */
 export const DEFAULT_TITLE = "nuspace";
@@ -124,14 +126,18 @@ export function applyTab(tab: Tab): void {
 // -- The hook ----------------------------------------------------------------
 
 /**
- * The focused pane's plane, off the viewer node. Null when there is none to
+ * The focused pane's head, off its own node. Null when there is none to
  * show (nothing open, absent), undefined while it is still loading.
  */
-function focusedPlane(root: Parameters<typeof getNode>[0], viewer: Path | null, id: string) {
+function focusedHead(
+	root: Parameters<typeof getNode>[0],
+	viewer: Path | null,
+	id: string,
+): PaneHead | null | undefined {
 	if (!viewer || !id) return null;
-	const props = getNode(root, viewer)?.props;
-	if ((props?.absent as Record<string, unknown> | undefined)?.[id]) return null;
-	return (props?.planes as Record<string, ActivePlane> | undefined)?.[id];
+	const props = getNode(root, panePath(viewer, id))?.props;
+	if (props?.absent) return null;
+	return props?.head as PaneHead | undefined;
 }
 
 /**
@@ -145,10 +151,10 @@ export function useTab(viewer: Path | null): void {
 	const focused = useFocusedRoute();
 	// undefined: still loading, leave the tab as it is. null: the defaults.
 	const title = useTree((s) => {
-		const plane = focusedPlane(s.root, viewer, focused);
-		return plane === undefined ? undefined : (plane?.title ?? null);
+		const head = focusedHead(s.root, viewer, focused);
+		return head === undefined ? undefined : (head?.title ?? null);
 	});
-	const icon = useTree((s) => focusedPlane(s.root, viewer, focused)?.meta.icon ?? "");
+	const icon = useTree((s) => focusedHead(s.root, viewer, focused)?.meta.icon ?? "");
 	const loading = !empty && title === undefined;
 	const tab = tabFor(empty || title == null ? null : { title, icon }, desk);
 	const shownTitle = tab.title;

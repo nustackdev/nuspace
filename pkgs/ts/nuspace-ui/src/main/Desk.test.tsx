@@ -5,7 +5,7 @@
 // the shown planes, resizing, each drop target through `dropOn`, and what a
 // pane header's drag carries per view.
 
-import { catchAnchors, TooltipProvider } from "@nustackdev/ui-kit";
+import { catchAnchors, nodeAt, TooltipProvider, tree } from "@nustackdev/ui-kit";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -24,25 +24,17 @@ import {
 	shownLinks,
 } from "../desk/model";
 import { NOT_FOUND_TEXT } from "../pane/NotFound";
-import type { Ops } from "../plane/ops";
-import { usePlaneTree } from "../sidebar/api";
+import { panePath } from "../pane/state";
+import type { ViewerOps } from "../plane/ops";
+import { coerceHead } from "../plane/types";
 import { Desk, EMPTY_DESK, EMPTY_DESK_HINT } from "./Desk";
-import { useTrails } from "./state";
 
 const { currentRoute, focusPane, onDeskWrite, openPane, paneRule, resetRouter } = router;
 const { ITEM_MIME, PANE_MIME, PLANE_MIME } = dnd;
 
 vi.mock("../core/wire", () => ({ notifyOp: vi.fn() }));
-// The trails the viewer feed ships: none unless a test says.
-vi.mock("./state", async (real) => ({
-	...(await real<typeof import("./state")>()),
-	useTrails: vi.fn(() => ({})),
-}));
-// The sidebar's tree and delete: not what is tested here.
+// What the desk header reads off the sidebar: not what is tested here.
 vi.mock("../sidebar/api", () => ({
-	usePlaneTree: vi.fn(() => ({})),
-	canDelete: () => false,
-	deletePlane: vi.fn(),
 	deskLabel: (name: string) => name.trim() || "Desk",
 	STRIP_TITLE: "Strip",
 }));
@@ -146,7 +138,17 @@ const opened = () =>
 	vi
 		.mocked(notifyOp)
 		.mock.calls.filter(([, op]) => op === "planes.open")
-		.map(([, , args]) => args as Ops["planes.open"]);
+		.map(([, , args]) => args as ViewerOps["planes.open"]);
+
+/** Land props on the pane node for `plane`, as its writes would. */
+function landPane(plane: string, props: Record<string, unknown>) {
+	act(() => {
+		tree.getState().write(
+			panePath(VIEWER, plane).map((s) => [s, null]),
+			props,
+		);
+	});
+}
 
 /** The item the canvas shows, from the route. */
 function shownItem(): Item {
@@ -159,8 +161,6 @@ beforeEach(() => {
 	resetRouter();
 	resetDesks();
 	vi.mocked(notifyOp).mockClear();
-	vi.mocked(usePlaneTree).mockImplementation(() => ({}));
-	vi.mocked(useTrails).mockImplementation(() => ({}));
 	host = document.createElement("div");
 	document.body.append(host);
 	root = createRoot(host);
@@ -169,6 +169,7 @@ beforeEach(() => {
 afterEach(() => {
 	act(() => root.unmount());
 	host.remove();
+	tree.getState().remove(VIEWER);
 	vi.restoreAllMocks();
 });
 
@@ -277,6 +278,43 @@ describe("a strip", () => {
 		act(() => x.click());
 		expect(closePane).toHaveBeenCalledWith(ID, "strip1", "b");
 		expect(all("[data-pane]").map((p) => p.dataset.pane)).toEqual(["a", "c", "d"]);
+	});
+
+	it("draws each pane off its own node: the head's title, nothing from the viewer", () => {
+		feed(DESKS);
+		landPane("b", { head: coerceHead({ title: "Bee" }) });
+		draw(STRIP_URL);
+		expect(one('[data-pane-header="b"]').textContent).toContain("Bee");
+		expect(one('[data-pane-header="a"]').textContent).toContain("Untitled");
+	});
+
+	it("drops a closed pane's node at once, the others kept", () => {
+		feed(DESKS);
+		landPane("a", { head: coerceHead({ title: "A" }) });
+		landPane("b", { head: coerceHead({ title: "B" }) });
+		draw(STRIP_URL);
+		closeFromMenu("a");
+		expect(nodeAt(panePath(VIEWER, "a"))).toBeNull();
+		expect(nodeAt(panePath(VIEWER, "b"))).not.toBeNull();
+	});
+
+	it("asks again for a pane closed and reopened at once, and draws what lands for it", () => {
+		feed(DESKS);
+		landPane("a", { head: coerceHead({ title: "A" }) });
+		draw(STRIP_URL);
+		closeFromMenu("a");
+		act(() =>
+			dnd.dropOn(
+				{ kind: "plane", link: link("a") },
+				{ kind: "strip", desk: ID, item: "strip1", drop: { plane: "b", edge: "left" } },
+			),
+		);
+		// Back in the strip, nothing of the closed open left: it waits for the server.
+		expect(all("[data-pane]").map((p) => p.dataset.pane)).toContain("a");
+		expect(nodeAt(panePath(VIEWER, "a"))).toBeNull();
+		expect(opened().at(-1)?.plane_ids).toContain("a");
+		landPane("a", { head: coerceHead({ title: "A again" }) });
+		expect(one('[data-pane-header="a"]').textContent).toContain("A again");
 	});
 
 	describe("scrolling a pane into view", () => {
@@ -431,9 +469,9 @@ describe("links inside the canvas", () => {
 	let release: () => void;
 	beforeEach(() => {
 		release = catchAnchors(host, paneRule);
-		// Every pane has the one parent.
+		// Every pane a link is followed from has the one parent, on its own node.
 		const trail = [{ id: "par", title: "Parent" }];
-		vi.mocked(useTrails).mockImplementation(() => new Proxy({}, { get: () => trail }));
+		for (const plane of ["c", "f", "p_one"]) landPane(plane, { trail });
 	});
 	afterEach(() => release());
 

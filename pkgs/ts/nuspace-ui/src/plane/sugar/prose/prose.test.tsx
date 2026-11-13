@@ -22,6 +22,7 @@ import {
 	notify,
 	onTitle,
 	ops,
+	PANE,
 	PLAIN,
 	planeRoot,
 	press,
@@ -32,7 +33,6 @@ import {
 	title,
 	typeInto,
 	undraw,
-	VIEWER,
 	WITH_DEFAULT,
 } from "../../plane.testing";
 import { readEditor } from "../../state";
@@ -234,7 +234,7 @@ describe("A. the input line", () => {
 		const id = created()[0].cell_id as string;
 		plane([cell(id, ["prose"], "boom")]);
 		expect(endLine().value).toBe("hi");
-		expect(readEditor(VIEWER, "p1").requests).toEqual([]);
+		expect(readEditor(PANE).requests).toEqual([]);
 	});
 
 	it("row 25 read_only_no_sugar: a read-only plane routes nothing to the set", () => {
@@ -633,7 +633,7 @@ describe("E. Shift+arrows spill into cell selection", () => {
 		const b = mountDoc("b");
 		expect(b.say(leave("up", 0, true))).toBe(true);
 		expect(selected()).toEqual(["a", "b"]);
-		expect(readEditor(VIEWER, "p1").anchor).toBe("b");
+		expect(readEditor(PANE).anchor).toBe("b");
 		expect(document.activeElement).toBe(planeRoot());
 		expect(b.say(leave("down", 0, true))).toBe(true);
 		expect(selected()).toEqual(["b", "c"]);
@@ -961,7 +961,7 @@ describe("K. split", () => {
 		expect(row(id).hidden).toBe(true);
 		plane([cell("a"), { ...cell(id), draws: false }, cell("z")]);
 		expect(row(id).hidden).toBe(false);
-		expect(readEditor(VIEWER, "p1").requests).toEqual([]);
+		expect(readEditor(PANE).requests).toEqual([]);
 		expect(a.doc.cut).not.toHaveBeenCalled();
 		expect(a.at.blocks).toEqual(["one", "two"]);
 	});
@@ -1070,7 +1070,7 @@ describe("a document opened in two frames: read-only first, editing later", () =
 		// Drawn, read-only: the request waits, nothing cut, and the cell stays
 		// out of sight, the tail still in sight in the cell it is cut from.
 		expect(row(id).hidden).toBe(true);
-		expect(readEditor(VIEWER, "p1").requests).toHaveLength(1);
+		expect(readEditor(PANE).requests).toHaveLength(1);
 		expect(a.doc.cut).not.toHaveBeenCalled();
 		expect(a.at.blocks).toEqual(["one", "two"]);
 		const into = mountDoc(id, paper([]));
@@ -1088,7 +1088,7 @@ describe("a document opened in two frames: read-only first, editing later", () =
 		const id = created()[0].cell_id as string;
 		plane([cell(id)]);
 		await drawReadOnly(id);
-		expect(readEditor(VIEWER, "p1").requests).toHaveLength(1);
+		expect(readEditor(PANE).requests).toHaveLength(1);
 		expect(endLine().value).toBe("hi");
 		const d = mountDoc(id);
 		expect(d.doc.focus).toHaveBeenCalledWith("end");
@@ -1114,7 +1114,7 @@ describe("a document opened in two frames: read-only first, editing later", () =
 		plane([cell(id)]);
 		await drawReadOnly(id);
 		undraw(id);
-		expect(readEditor(VIEWER, "p1").requests).toEqual([]);
+		expect(readEditor(PANE).requests).toEqual([]);
 		expect(endLine().value).toBe("hi");
 		expect(row(id).hidden).toBe(false);
 	});

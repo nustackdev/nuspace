@@ -2,7 +2,7 @@
 //
 // A create round-trips through the server. The id does not: the browser mints
 // it and sends it, so focus is aimed at a known id rather than guessed at from
-// a position once `set_plane` comes back.
+// a position once `set_cells` comes back.
 //
 // A create that asks for focus parks its request at once (../focus), and
 // the new cell's markdown editor takes it, and whatever text it carries,
@@ -27,7 +27,7 @@ import { cellMoves } from "../ops";
 import type { FocusReq, InputLine } from "../state";
 
 export function useStructure(
-	{ planeId, cells, patch, read, notify, index, rootRef, elRefs }: PlaneModel,
+	{ cells, patch, read, notify, index, rootRef, elRefs }: PlaneModel,
 	{
 		request,
 		drop,
@@ -41,7 +41,7 @@ export function useStructure(
 	},
 ) {
 	/** A cell created with nothing asked for, landed on once it arrives.
-	 *  `set_plane` prunes selection naming a cell it does not carry, so this
+	 *  `set_cells` prunes selection naming a cell it does not carry, so this
 	 *  waits here rather than in the editor state. */
 	const landing = useRef<{ id: string; open: boolean } | null>(null);
 
@@ -91,7 +91,7 @@ export function useStructure(
 					: i < 0
 						? {}
 						: { after: at.after };
-			notify("cell.create", { plane_id: planeId, cell_id: id, name: spec, ...place });
+			notify("cell.create", { cell_id: id, name: spec, ...place });
 			if (want) {
 				const { landed, ...carry } = want;
 				request(id, { ...carry, to: "document", fresh: true, line }, landed);
@@ -100,7 +100,7 @@ export function useStructure(
 			}
 			return id;
 		},
-		[cells, index, notify, planeId, request],
+		[cells, index, notify, request],
 	);
 
 	/** The cells out of sight: hidden, their sources closed, out of the selection. */

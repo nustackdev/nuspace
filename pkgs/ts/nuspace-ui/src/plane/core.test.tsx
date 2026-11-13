@@ -28,6 +28,7 @@ import {
 	notify,
 	onTitle,
 	ops,
+	PANE,
 	planeRoot,
 	press,
 	registerEditable,
@@ -37,7 +38,6 @@ import {
 	selected,
 	title,
 	typeInto,
-	VIEWER,
 	WITH_DEFAULT,
 } from "./plane.testing";
 import { readEditor } from "./state";
@@ -139,7 +139,7 @@ describe("the input line, with no sugar", () => {
 		press(endLine(), "Enter");
 		expect(notify).toHaveBeenCalledWith(
 			"cell.create",
-			expect.objectContaining({ plane_id: "p1", name: "", after: "b" }),
+			expect.objectContaining({ name: "", after: "b" }),
 		);
 		expect(menu()).toBeNull();
 	});
@@ -556,7 +556,7 @@ describe("the plane api, from a sugar", () => {
 			"cell.create",
 			expect.objectContaining({ cell_id: made, after: "a" }),
 		);
-		// A set_plane without the new cell yet must not drop its request.
+		// A set_cells without the new cell yet must not drop its request.
 		render([cell("a"), cell("z")], { sugars: [] });
 		render([cell("a"), cell(made), cell("z")], { sugars: [] });
 		const d = mountDoc(made);
@@ -679,7 +679,7 @@ describe("a create fed by the input line", () => {
 		render([cell(id, ["prose"], "boom")], { sugars: [write], specs: WITH_DEFAULT });
 		// Its error shows; the line holds the text again, plain, no longer pending.
 		expect(row(id).hidden).toBe(false);
-		expect(readEditor(VIEWER, "p1").requests).toEqual([]);
+		expect(readEditor(PANE).requests).toEqual([]);
 		expect(endLine().value).toBe("hi");
 		press(endLine(), "Escape");
 		expect(endLine().value).toBe("");
@@ -712,7 +712,7 @@ describe("a create fed by the input line", () => {
 		expect(row(id).hidden).toBe(true);
 		await draw(id, "TestPlain");
 		expect(row(id).hidden).toBe(false);
-		expect(readEditor(VIEWER, "p1").requests).toEqual([]);
+		expect(readEditor(PANE).requests).toEqual([]);
 		expect(endLine().value).toBe("hello there");
 	});
 
@@ -742,9 +742,9 @@ describe("one request pulls", () => {
 		render([cell("a"), cell(id)]);
 		expect(selected()).toEqual([id]);
 		// Tab from the selection into the end line: nothing else settles it.
-		expect(readEditor(VIEWER, "p1").requests.some((r) => r.pull)).toBe(true);
+		expect(readEditor(PANE).requests.some((r) => r.pull)).toBe(true);
 		act(() => endLine().focus());
-		expect(readEditor(VIEWER, "p1").requests.some((r) => r.pull)).toBe(false);
+		expect(readEditor(PANE).requests.some((r) => r.pull)).toBe(false);
 		const doc = mountDoc(id);
 		expect(doc.doc.focus).not.toHaveBeenCalled();
 		expect(document.activeElement).toBe(endLine());
@@ -762,9 +762,9 @@ describe("one request pulls", () => {
 		act(() => endLine().focus());
 		typeInto(endLine(), "hi");
 		act(() => endLine().blur());
-		expect(readEditor(VIEWER, "p1").requests.map((r) => r.pull)).toEqual([false]);
+		expect(readEditor(PANE).requests.map((r) => r.pull)).toEqual([false]);
 		act(() => endLine().focus());
-		const pulls = readEditor(VIEWER, "p1").requests.filter((r) => r.pull);
+		const pulls = readEditor(PANE).requests.filter((r) => r.pull);
 		expect(pulls.map((r) => r.line)).toEqual(["end"]);
 	});
 });

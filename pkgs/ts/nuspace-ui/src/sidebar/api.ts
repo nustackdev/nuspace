@@ -31,11 +31,9 @@ export { HOME_KEYS, SEARCH_KEYS, SETTINGS_KEYS, useNavShortcuts } from "./nav";
 export { SidebarPlaceholder } from "./Sidebar";
 export { SidebarRail } from "./SidebarRail";
 
-// -- For the desk ------------------------------------------------------------
+// -- For the desk and the shell ------------------------------------------------
 
 export { PLANE_MIME } from "./drag";
 export { deskLabel, STRIP_TITLE } from "./folders";
-export type { Notify, Ops } from "./ops";
-export { canDelete, deletePlane } from "./remove";
 export { usePlaneTree } from "./state";
 export type { PlaneTree } from "./types";

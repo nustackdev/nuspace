@@ -1,7 +1,7 @@
 // A plane on the way: its title row and a few cells as kit `Skeleton` bars,
 // on the grid the real plane uses. One component for both waits, the boot
 // (before the viewer is on the tree) and a plane switch (before its
-// `set_plane` lands), so the two look the same.
+// `set_head` and `set_cells` land), so the two look the same.
 //
 // It holds its fire for `SKELETON_DELAY_MS`, so a plane that lands fast
 // never flashes it. See ../core/delay.ts.

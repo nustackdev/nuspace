@@ -1,16 +1,19 @@
-"""The viewer as one node on the browser's tree.
+"""The viewer and its panes as nodes on the browser's tree.
 
-A component ref like ``ButtonRef``, only wider: it renders the open planes'
-cells, one pane per plane.
-It never asks what kind of plane it draws; what it reads off the plane is
-its web flags (``editable``, ``width``), which arrive with
-the plane like anything else, and go back through ``plane.web``.
-
-It is mounted with one prop off the registered Cells (D19):
+:class:`ViewerRef` is the desk area. It keeps only what every pane shares:
 ``cell_specs``, the ``/`` menu's entries in order, each with its classes and
 the classes it is the default of, which is how the input line finds what
-typing creates. Seeded when the shell boots,
-since the Cells are the host's registry and the shell is a static class.
+typing creates. It is mounted with them when the shell boots (D19), since the
+Cells are the host's registry and the shell is a static class. It hears
+``planes.open``, the tab's layout, and every cell's own ui hangs under it at
+``viewer/cells/<cell>``.
+
+:class:`PaneRef` is one open plane, at ``viewer/panes/<plane>``: everything
+that pane shows, and everything it says. Its first write mounts it, the
+feed erases it when the pane closes. It never asks what kind of plane it
+draws; what it reads off the plane is its head (name, icon, key, ``system``)
+and its web flags (``editable``, ``width``), and those go back through the
+pane's own ops.
 """
 
 from __future__ import annotations
@@ -20,19 +23,19 @@ from typing import TYPE_CHECKING, ClassVar
 from typing_extensions import Self
 
 from nuspace.specs import registered_name
-from nuspace.web.utils import SpaceRef
+from nuspace.web.utils import PANES, SpaceRef
 from nuspace.web.viewer import interactions
 
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping, Sequence
 
-    from nu.lang import DictArg, ListArg, Nu, StrArg
+    from nu.lang import BoolArg, ListArg, Nu, StrArg
     from nuspace.specs import CellSpec
-    from nustd.ui.core import Changed
+    from nustd.ui.core import Changed, Ref
 
 
-__all__ = ["ViewerRef", "slash_entries"]
+__all__ = ["PaneRef", "PanesRef", "ViewerRef", "pane_ref", "slash_entries"]
 
 
 def slash_entries(cells: Iterable[CellSpec]) -> list[dict]:
@@ -62,7 +65,7 @@ def slash_entries(cells: Iterable[CellSpec]) -> list[dict]:
 
 
 class ViewerRef(SpaceRef):
-    """The open planes' cells, as one browser node."""
+    """The desk area: what every pane shares, as one browser node."""
 
     _wire_type: ClassVar[str] = "ViewerRef"
 
@@ -71,31 +74,83 @@ class ViewerRef(SpaceRef):
         """Mount the viewer, seeded with the ``/`` menu."""
         return super().slot(cell_specs=[dict(s) for s in cell_specs or ()])
 
-    def set_plane(
-        self,
-        plane_id: StrArg,
-        *,
-        title: StrArg,
-        meta: DictArg[str, object],
-        cells: ListArg[dict],
-    ) -> Nu:
-        """Replace what one pane draws: one plane, its meta, and its cells in order."""
-        return interactions.set_plane(self, plane_id, title=title, meta=meta, cells=cells)
-
-    def set_absent(self, plane_id: StrArg, reason: StrArg) -> Nu:
-        """Say one pane has nothing to draw: its plane is missing or headless."""
-        return interactions.set_absent(self, plane_id, reason)
-
-    def set_status(self, plane_id: StrArg, statuses: ListArg[dict]) -> Nu:
-        """Patch what one pane says about its cells."""
-        return interactions.set_status(self, plane_id, statuses)
-
     def on_open(self) -> Changed:
-        """``{plane_ids}``, the full ordered list."""
+        """``{plane_ids, params}``, the full ordered list."""
         return interactions.on_open(self)
 
+
+class PanesRef(SpaceRef):
+    """The level every open pane hangs under. Holds nothing, draws nothing."""
+
+    _wire_type: ClassVar[str] = "PanesRef"
+
+
+class PaneRef(SpaceRef):
+    """One open plane, as one browser node: its head, cells, statuses and trail."""
+
+    _wire_type: ClassVar[str] = "PaneRef"
+
+    def set_head(
+        self,
+        *,
+        title: StrArg,
+        icon: StrArg,
+        key: StrArg,
+        system: BoolArg,
+        editable: BoolArg,
+        width: StrArg,
+    ) -> Nu:
+        """Replace how the pane heads its plane. Clears an absent."""
+        return interactions.set_head(
+            self, title=title, icon=icon, key=key, system=system, editable=editable, width=width
+        )
+
+    def set_cells(self, cells: ListArg[dict]) -> Nu:
+        """Replace the pane's cells, in order."""
+        return interactions.set_cells(self, cells)
+
+    def set_absent(self, reason: StrArg) -> Nu:
+        """Say the pane has nothing to draw: its plane is missing or headless."""
+        return interactions.set_absent(self, reason)
+
+    def set_status(self, statuses: ListArg[dict]) -> Nu:
+        """Say what each of the pane's cells is doing."""
+        return interactions.set_status(self, statuses)
+
+    def set_trail(self, trail: ListArg[dict]) -> Nu:
+        """Say which planes sit above the pane's, top first."""
+        return interactions.set_trail(self, trail)
+
+    def on_rename_plane(self) -> Changed:
+        """``{title}``."""
+        return interactions.on_rename_plane(self)
+
+    def on_set_icon(self) -> Changed:
+        """``{icon}``."""
+        return interactions.on_set_icon(self)
+
+    def on_delete_plane(self) -> Changed:
+        """``{}``."""
+        return interactions.on_delete_plane(self)
+
+    def on_set_plane_key(self) -> Changed:
+        """``{key}``."""
+        return interactions.on_set_plane_key(self)
+
+    def on_remove_plane_key(self) -> Changed:
+        """``{}``."""
+        return interactions.on_remove_plane_key(self)
+
+    def on_set_web(self) -> Changed:
+        """``{flags}``."""
+        return interactions.on_set_web(self)
+
+    def on_restart_plane(self) -> Changed:
+        """``{}``."""
+        return interactions.on_restart_plane(self)
+
     def on_create_cell(self) -> Changed:
-        """``{plane_id, cell_id, name, before?, after?}``."""
+        """``{cell_id, name, before?, after?}``."""
         return interactions.on_create_cell(self)
 
     def on_update_cell(self) -> Changed:
@@ -114,10 +169,20 @@ class ViewerRef(SpaceRef):
         """``{cell_id}``."""
         return interactions.on_restart_cell(self)
 
-    def on_restart_plane(self) -> Changed:
-        """``{plane_id}``."""
-        return interactions.on_restart_plane(self)
+    def on_set_cell_key(self) -> Changed:
+        """``{cell_id, key}``."""
+        return interactions.on_set_cell_key(self)
 
-    def on_set_web(self) -> Changed:
-        """``{plane_id, flags}``."""
-        return interactions.on_set_web(self)
+    def on_remove_cell_key(self) -> Changed:
+        """``{cell_id}``."""
+        return interactions.on_remove_cell_key(self)
+
+
+def pane_ref(viewer: Ref, plane: StrArg) -> PaneRef:
+    """The pane on ``plane`` under ``viewer``: ``viewer/panes/<plane>``.
+
+    Args:
+        viewer: The ref panes are drawn on, bound to its place on the shell.
+        plane: The plane id, any ``StrArg`` (eg ``Here.plane``).
+    """
+    return PaneRef(plane, parent_ref=PanesRef(PANES, parent_ref=viewer))

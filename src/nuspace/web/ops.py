@@ -259,9 +259,14 @@ def close_tab(sid: nu.StrArg) -> nu.Nu:
 
 
 def _pane(sid: nu.StrArg, plane: nu.StrArg) -> nu.Nu:
-    """A new pane on ``plane``: no params, no run yet, no restart asked."""
+    """A new pane on ``plane``: no params, no run yet, no restart asked, a fresh ``opened`` token."""
     pane = _tabs[sid].panes[plane]
-    return pane.params.set({}) >> pane.plane_run.set("") >> pane.restart.set("")
+    return (
+        pane.params.set({})
+        >> pane.plane_run.set("")
+        >> pane.restart.set("")
+        >> pane.opened.set(MintId("po"))
+    )
 
 
 def set_panes(sid: nu.StrArg, order: nu.ListArg[str]) -> nu.Nu:

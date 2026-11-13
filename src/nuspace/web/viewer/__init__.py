@@ -1,19 +1,20 @@
-"""The viewer: the open panes' planes, drawn, one pane per plane. One, never one per kind.
+"""The viewer and its panes: the open planes, drawn, one pane per plane. One, never one per kind.
 
 ``ref``
-    The node the browser draws, mounted with the registered CellSpecs, its ``/`` menu.
+    The nodes the browser draws: the viewer, mounted with the registered
+    CellSpecs (its ``/`` menu), and one pane per open plane under it.
 ``interactions``
-    Everything that node says and hears, in the browser's words.
+    Everything those nodes say and hear, in the browser's words.
 ``feed``
-    One arm per interaction. An event runs one op, a store change ships the
-    plane or the statuses again.
+    One arm per open pane. An event runs one op, a store change ships the
+    head, the cells, the statuses or the trail again.
 """
 
 from nuspace.web.viewer.feed import (
     PROGRAM,
     WEB_FLAGS,
     plane_cells,
-    plane_view,
+    plane_head,
     statuses,
     trail,
     viewer_feed,
@@ -29,18 +30,26 @@ from nuspace.web.viewer.interactions import (
     STATES,
     on_create_cell,
     on_delete_cell,
+    on_delete_plane,
     on_move_cell,
     on_open,
+    on_remove_cell_key,
+    on_remove_plane_key,
+    on_rename_plane,
     on_restart_cell,
     on_restart_plane,
+    on_set_cell_key,
+    on_set_icon,
+    on_set_plane_key,
     on_set_web,
     on_update_cell,
     set_absent,
-    set_plane,
+    set_cells,
+    set_head,
     set_status,
     set_trail,
 )
-from nuspace.web.viewer.ref import ViewerRef, slash_entries
+from nuspace.web.viewer.ref import PaneRef, PanesRef, ViewerRef, pane_ref, slash_entries
 
 
 __all__ = [
@@ -54,19 +63,30 @@ __all__ = [
     "STATE_STARTING",
     "STATE_STOPPED",
     "WEB_FLAGS",
+    "PaneRef",
+    "PanesRef",
     "ViewerRef",
     "on_create_cell",
     "on_delete_cell",
+    "on_delete_plane",
     "on_move_cell",
     "on_open",
+    "on_remove_cell_key",
+    "on_remove_plane_key",
+    "on_rename_plane",
     "on_restart_cell",
     "on_restart_plane",
+    "on_set_cell_key",
+    "on_set_icon",
+    "on_set_plane_key",
     "on_set_web",
     "on_update_cell",
+    "pane_ref",
     "plane_cells",
-    "plane_view",
+    "plane_head",
     "set_absent",
-    "set_plane",
+    "set_cells",
+    "set_head",
     "set_status",
     "set_trail",
     "slash_entries",
