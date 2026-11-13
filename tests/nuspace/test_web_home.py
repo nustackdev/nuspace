@@ -323,8 +323,8 @@ async def test_headings_nest_under_the_page_title(store):
     first = (await _draw(store, now.first())).drawn()
     heads = {k[1]: (v["label"], v["level"]) for k, v in first.items() if k[2:] == ("head", "title")}
     assert heads == {"now": ("Now", 3), "recent": ("Recent", 3)}
-    # One switch, on the section's head, for both.
-    assert first[SWITCH] is False
+    # One switch, on the section's head, for both: drawn as declared, no value written.
+    assert SWITCH in first and first[SWITCH] is None
 
 
 #: Where Now and Recent draw, under Execution, and the one switch.
@@ -459,13 +459,13 @@ async def test_now_flipping_the_switch_redraws_and_a_redraw_never_flips_it_back(
     count = (*NOW, "head", "count")
     try:
         await _until(lambda: session.last(count) == {"value": "3 plane runs"})
-        assert session.last(SWITCH) is False
+        assert [f.op for f in session.frames if f.ref == SWITCH] == ["init"]
         session.on = True
         for cb in list(session.notifies[SWITCH].callbacks):
-            cb({"value": True})
+            cb({"event": "change"})
         await _until(lambda: session.last(count) == {"value": "15 plane runs"})
-        # The switch was written once, off, at the start: never again.
-        assert [f.payload for f in session.frames if f.ref == SWITCH] == [False]
+        # The switch was drawn once, as declared, at the start: never written.
+        assert [f.op for f in session.frames if f.ref == SWITCH] == ["init"]
     finally:
         await _stop(task)
 
@@ -670,11 +670,11 @@ async def test_runs_flipping_the_switch_walks_again_and_never_flips_it_back(stor
         await _until(lambda: session.last(count) == {"value": "1 plane"}, timeout=8.0)
         session.on = True
         for cb in list(session.notifies[SWITCH].callbacks):
-            cb({"value": True})
+            cb({"event": "change"})
         await _until(lambda: session.last(count) == {"value": "2 planes"}, timeout=8.0)
         # One switch: Now took it too.
         await _until(lambda: session.last((*NOW, "head", "count")) == {"value": "2 plane runs"})
-        assert [f.payload for f in session.frames if f.ref == SWITCH] == [False]
+        assert [f.op for f in session.frames if f.ref == SWITCH] == ["init"]
     finally:
         await _stop(task)
 
@@ -700,7 +700,7 @@ class _Flip(_Recording):
     def flip(self, on: bool) -> None:
         self.on = on
         for cb in list(self.notifies[SWITCH].callbacks):
-            cb({"value": on})
+            cb({"event": "change"})
 
 
 async def test_runs_toggling_the_switch_replaces_the_lanes_every_time(store):

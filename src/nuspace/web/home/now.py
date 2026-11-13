@@ -331,13 +331,13 @@ def recent() -> nu.Nu:
 
 
 def first() -> nu.Nu:
-    """The heads, the switch off: drawn once, so a redraw never flips the viewer's switch back."""
+    """The heads and the switch as declared: drawn once, so a redraw never flips the viewer's switch back."""
     section = View.execution
     return (
         View.rule.init()
         >> section.now.head.title.set("Now", level=3)
         >> section.recent.head.title.set("Recent", level=3)
-        >> SWITCH.set(False)
+        >> SWITCH.init()
     )
 
 

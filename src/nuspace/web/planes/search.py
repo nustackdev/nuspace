@@ -403,9 +403,7 @@ def control(i, kind, f):
 
 
 def draw_kind(i, kind):
-    blank = [
-        control(i, kind, f).set(False if f["input"] == "switch" else "") for f in kind["fields"]
-    ]
+    blank = [control(i, kind, f).init() for f in kind["fields"]]
     if primary(kind) is None:
         said = "Asks nothing: lists every item" if not kind["fields"] else "Set the filters below"
         blank.insert(0, MAIN[i].to(ui.TextRef.slot(tone="muted", size="sm")).set(said))
@@ -481,12 +479,23 @@ def go():
     return nu.IfDo(kind != "", building)
 
 
+def asks():
+    # Search, or Enter in any of the kinds' text and number filters.
+    typed = [
+        control(i, k, f).on_submit()
+        for i, k in enumerate(KINDS.values())
+        for f in k["fields"]
+        if f["input"] != "switch"
+    ]
+    return nu.OnAny(GO.on_click(), *typed)
+
+
 def out():
     if not KINDS:
         return draw()
     return draw() >> nu.ParallelAsync(
         nu.ReactEvery(KIND.on_change(), pick()),
-        nu.ReactEvery(GO.on_click(), go()),
+        nu.ReactEvery(asks(), go()),
     )
 """
 

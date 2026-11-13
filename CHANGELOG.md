@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Search runs on Enter in any filter, on the new nu input contract
 - Option Cmd click opens a plane to the side; panes get a close button again
 - Desks get a header to switch items and leave; panes close from their menu
 - Sidebar drops say what they do, refuse with a reason, and never shift rows

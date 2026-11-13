@@ -327,9 +327,10 @@ async def test_the_form_offers_the_kinds_and_the_picked_ones_fields(store):
     }
     assert got[FORM_KIND] == NOTE
     # The note's first text keyword is the bar's own input, the rest are filters under it.
-    assert got[(*FORM_MAIN, "0")] == ""
-    assert got[(*FORM_MORE, "0", "min_stars", "control")] == ""
-    assert got[(*FORM_MORE, "0", "done", "control")] is False
+    # Each control is drawn as declared (an init, no value), so what was typed stays.
+    assert got[(*FORM_MAIN, "0")] is None
+    assert got[(*FORM_MORE, "0", "min_stars", "control")] is None
+    assert got[(*FORM_MORE, "0", "done", "control")] is None
     # A kind that asks nothing says so in the bar.
     assert got[(*FORM_MAIN, "1")] == {"value": "Asks nothing: lists every item"}
 
