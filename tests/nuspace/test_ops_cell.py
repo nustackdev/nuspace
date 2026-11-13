@@ -116,6 +116,17 @@ async def test_keys_take_uppercase_and_keep_case(plane):
         nuspace.cell.set_key("a", "sum.2")
 
 
+async def test_add_takes_only_key_chars_ids(plane):
+    store = plane
+    for bad in ("a b", "a/b", "a.b", ""):
+        with pytest.raises(Refused, match="cell ids are key chars"):
+            nuspace.cell.add("p", "s", id=bad)
+    with pytest.raises(Refused, match="cell ids are key chars"):
+        await do(store, nuspace.cell.add("p", "s", id=nu.Str("a b"), fabrics=[]))
+    await do(store, nuspace.cell.add("p", "s", id="My-cell_2", fabrics=[]))
+    assert await listed(store) == ["My-cell_2"]
+
+
 async def test_add_places_and_raises(plane):
     store = plane
     await do(store, nuspace.cell.add("p", "s", id="a") >> nuspace.cell.add("p", "s", id="c"))

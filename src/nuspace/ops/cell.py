@@ -21,6 +21,7 @@ from nuspace.shapes.space import Space
 from nuspace.utils import MintId, Require, anchor_of, place
 from nuspace.utils.checks import (
     anchored,
+    id_spelled,
     key_free,
     key_spelled,
     live,
@@ -91,7 +92,7 @@ def add(
     Args:
         plane: The plane it goes on.
         prog: Its source.
-        id: Its id. Minted when the op evaluates when absent.
+        id: Its id, key chars. Minted when the op evaluates when absent.
         before: A cell of the plane to place it before.
         after: A cell of the plane to place it after. Neither: the end.
         name: Display text only.
@@ -109,8 +110,8 @@ def add(
         Exists: The id or the key is taken.
         Missing: No plane or anchor with that id.
         Removed: The plane or the anchor is removed.
-        Refused: An anchor on another plane, a key that is not key chars
-            (a literal at build).
+        Refused: An anchor on another plane, an id or a key that is not
+            key chars (a literal at build).
         TypeError: Both ``before`` and ``after``, at build.
     """
     anchor = anchor_of(before, after)
@@ -136,7 +137,8 @@ def add(
             )
 
         writes = (
-            refuse(rows.contains(cid), Exists, "cell ", cid, " exists")
+            id_spelled(cid, "cell")
+            >> refuse(rows.contains(cid), Exists, "cell ", cid, " exists")
             >> live(Space.planes, plane, "plane")
             >> anchored(listed, rows, anchor, cid, "cell", text("plane ", plane))
             >> spelled

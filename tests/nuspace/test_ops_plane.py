@@ -119,6 +119,17 @@ async def test_add_refuses_a_key_term_not_in_key_chars(store):
     assert await store.read(keys["My_Notes-2"]) == "b"
 
 
+async def test_add_takes_only_key_chars_ids(store):
+    # Ids are slugs, as keys are: a literal at build, a term when it runs.
+    for bad in ("a b", "a/b", "a.b", "ü"):
+        with pytest.raises(Refused, match="plane ids are key chars"):
+            nuspace.plane.add(bad)
+    with pytest.raises(Refused, match="plane ids are key chars"):
+        await do(store, nuspace.plane.add(nu.Str("a b")))
+    await do(store, nuspace.plane.add("My-plane_2") >> nuspace.plane.add(nu.Str("settings")))
+    assert await store.read(planes.contains("My-plane_2")) is True
+
+
 async def test_keys_take_uppercase_and_keep_case(store):
     # Literals and terms alike; Notes and notes are two keys.
     await do(store, nuspace.plane.add("a", key="Notes") >> nuspace.plane.add("b", key="notes"))

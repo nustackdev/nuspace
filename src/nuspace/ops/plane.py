@@ -25,6 +25,7 @@ from nuspace.shapes.space import Space
 from nuspace.utils import MintId, Require, anchor_of, place
 from nuspace.utils.checks import (
     anchored,
+    id_spelled,
     key_free,
     key_spelled,
     live,
@@ -134,7 +135,7 @@ def add(
     when given. Cost: O(1), about 20 keys.
 
     Args:
-        id: Its id. Minted when the op evaluates when absent.
+        id: Its id, key chars. Minted when the op evaluates when absent.
         parent: The plane it hangs under.
         before: A sibling to place it before.
         after: A sibling to place it after. Neither: the end.
@@ -155,8 +156,8 @@ def add(
         Removed: The parent or the anchor is removed.
         Refused: A reserved id (root's, ``""``, or one of
             :data:`~nuspace.shapes.plane.RESERVED` unless ``system``), an
-            anchor that is not a sibling, a key that is not key chars, an
-            icon spelled wrong. A literal at build.
+            id or a key that is not key chars, an anchor that is not a
+            sibling, an icon spelled wrong. A literal at build.
         TypeError: Both ``before`` and ``after``, at build.
     """
     anchor = anchor_of(before, after)
@@ -187,6 +188,7 @@ def add(
 
         writes = (
             _reserved(pid, system)
+            >> id_spelled(pid, "plane")
             >> refuse(rows.contains(pid), Exists, "plane ", pid, " exists")
             >> live(rows, parent, "plane")
             >> anchored(siblings, rows, anchor, pid, "plane", text("plane ", parent))

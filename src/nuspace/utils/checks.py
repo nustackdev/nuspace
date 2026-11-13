@@ -32,6 +32,7 @@ if TYPE_CHECKING:
 __all__ = [
     "anchored",
     "exit_known",
+    "id_spelled",
     "key_free",
     "key_spelled",
     "live",
@@ -140,6 +141,25 @@ def key_spelled(key: nu.StrArg, what: str, *, empty_ok: bool) -> nu.Nu:
     else:
         bad = (nu.Str(key) == "").or_(bad)
     return refuse(bad, Refused, what, " key ", key, ": ", spelled)
+
+
+def id_spelled(id: nu.StrArg, what: str) -> nu.Nu:
+    """A caller given ``id`` is key chars, as keys are: ids are slugs.
+
+    An id lands in urls (``/p/<plane>``) and paths, so it holds only what
+    reads the same everywhere. Minted ids (``p_<hex>_<hex>_<hex>``) and the
+    system and reserved ones pass. A literal id is checked at build, a term
+    when it evaluates.
+
+    Raises:
+        Refused: The id is empty or not key chars.
+    """
+    spelled = f"{what} ids are key chars: letters, digits, _ and -"
+    if isinstance(id, str):
+        if not in_key_chars(id):
+            raise Refused(f"{what} id {id!r}: {spelled}")
+        return nu.Noop()
+    return refuse(nu.Bool(InKeyChars(id)).not_(), Refused, what, " id ", id, ": ", spelled)
 
 
 def key_free(index: nustd.kv.DictRef, key: nu.StrArg, owner: nu.StrArg | None, what: str) -> nu.Nu:

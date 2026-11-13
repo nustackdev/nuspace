@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Plane and cell ids given from outside must be slugs, so they read cleanly in urls
 - Pane breadcrumbs come from the server, so they show under collapsed sidebar branches
 - Desk header shows only the desk name and close; items stay in the sidebar
 - Search runs on Enter in any filter, on the new nu input contract
