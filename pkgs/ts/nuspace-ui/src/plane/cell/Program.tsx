@@ -20,7 +20,7 @@
 //
 // The chrome still consumes the fixed status contract:
 //
-//   { cell_id, state, error, started_at }
+//   { cell_id, state, error }
 //
 // How those six states *look* is not decided here -- `../../design` owns the
 // vocabulary (hue, silhouette, label, payload well) so the editor never picks

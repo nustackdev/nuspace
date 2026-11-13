@@ -23,12 +23,10 @@ export type CellStatus = {
 	cell_id: string;
 	state: CellState;
 	error: string | null;
-	started_at: number | null;
 };
 
 export type Cell = {
 	id: string;
-	name: string;
 	/** Its handle, what code and agents reach it by. "" when it has none. */
 	key: string;
 	/** The Nu program this cell stores. */
@@ -176,7 +174,6 @@ export function coerceStatus(raw: unknown): CellStatus | null {
 		cell_id: String(r.cell_id ?? ""),
 		state: STATES.includes(state) ? state : "idle",
 		error: r.error ? String(r.error) : null,
-		started_at: typeof r.started_at === "number" && r.started_at > 0 ? r.started_at : null,
 	};
 }
 
@@ -190,7 +187,6 @@ export function coerceCells(raw: unknown): Cell[] {
 		if (!id) continue;
 		out.push({
 			id,
-			name: String(r.name ?? id),
 			key: typeof r.key === "string" ? r.key : "",
 			source: String(r.source ?? ""),
 			draws: typeof r.draws === "boolean" ? r.draws : null,
@@ -199,7 +195,6 @@ export function coerceCells(raw: unknown): Cell[] {
 				cell_id: id,
 				state: "idle",
 				error: null,
-				started_at: null,
 			},
 		});
 	}

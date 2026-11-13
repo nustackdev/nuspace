@@ -108,12 +108,11 @@ export function render(
 export function cell(id: string, classes: string[] = ["prose"], error: string | null = null): Cell {
 	return {
 		id,
-		name: id,
 		key: "",
 		source: "",
 		draws: null,
 		classes,
-		status: { cell_id: id, state: error ? "failed" : "running", error, started_at: null },
+		status: { cell_id: id, state: error ? "failed" : "running", error },
 	};
 }
 

@@ -75,6 +75,10 @@ class SidebarRef(SpaceRef):
         """``{plane_id, parent_id, before?, after?}``."""
         return interactions.on_move_plane(self)
 
+    def on_set_icon(self) -> Changed:
+        """``{plane_id, icon}``."""
+        return interactions.on_set_icon(self)
+
     def on_expand(self) -> Changed:
         """``{plane_id}``."""
         return interactions.on_expand(self)

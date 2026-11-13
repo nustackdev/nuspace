@@ -5,9 +5,13 @@ A failed interaction shows here (:meth:`~nuspace.web.utils.Arms.event`).
 
 from __future__ import annotations
 
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
-from nuspace.web.utils import SpaceRef
+from nuspace.web.utils import SpaceRef, toast
+
+
+if TYPE_CHECKING:
+    from nu.lang import Nu, StrArg
 
 
 __all__ = ["ToastRef"]
@@ -20,3 +24,7 @@ class ToastRef(SpaceRef):
     """
 
     _wire_type: ClassVar[str] = "ToastRef"
+
+    def show(self, kind: StrArg, message: StrArg) -> Nu:
+        """Show a toast: ``kind`` as its title, ``message`` under it."""
+        return toast(self, kind, message)

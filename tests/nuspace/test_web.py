@@ -224,19 +224,15 @@ async def test_viewer_head_and_cells(store):
     assert await store.read(plane_cells("p1", CELLS)) == [
         {
             "id": "c1",
-            "name": "one",
             "key": "",
             "source": "x = 1",
-            "spec": "",
             "draws": True,
             "classes": [],
         },
         {
             "id": "c2",
-            "name": "text",
             "key": "",
             "source": TEXT_SRC,
-            "spec": TEXT,
             "draws": False,
             "classes": ["prose"],
         },
@@ -288,7 +284,7 @@ async def test_viewer_statuses(store):
     await do(store, nuspace.cell_run.end(made["c3"], EXIT_FAILED, "boom"))
     got = {s["cell_id"]: s for s in await store.read(statuses("p1", run))}
     assert got["c1"]["state"] == "starting"
-    assert got["c2"]["state"] == "running" and got["c2"]["started_at"] > 0
+    assert got["c2"]["state"] == "running" and "started_at" not in got["c2"]
     assert got["c3"]["state"] == "failed" and got["c3"]["error"] == "boom"
     assert got["c4"]["state"] == "idle"
     await do(store, nuspace.cell_run.end(made["c2"], EXIT_INTERRUPTED))
@@ -419,7 +415,7 @@ async def test_tab_live(store):
         # starter cell, a move, web flags.
         session.notify(on("cell.create"), {"cell_id": "c2", "name": TEXT, "before": "c1"})
         await _until(lambda: cells()[0]["id"] == "c2")
-        assert cells()[0]["source"] == TEXT_SRC and cells()[0]["spec"] == TEXT
+        assert cells()[0]["source"] == TEXT_SRC and cells()[0]["classes"] == ["prose"]
         session.notify(on("cell.create"), {"cell_id": "c3", "name": ""})
         await _until(lambda: cells()[-1]["id"] == "c3")
         assert cells()[-1]["source"] == PROGRAM

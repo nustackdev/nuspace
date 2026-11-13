@@ -143,7 +143,7 @@ def set_head(
 
 
 def set_cells(pane: Ref, cells: ListArg[dict]) -> Nu:
-    """Replace the pane's cells, in order, each ``{id, name, key, source, spec, draws, classes}``."""
+    """Replace the pane's cells, in order, each ``{id, key, source, draws, classes}``."""
     return write(pane, "set_cells", cells=cells)
 
 
@@ -157,7 +157,7 @@ def set_absent(pane: Ref, reason: StrArg) -> Nu:
 
 
 def set_status(pane: Ref, statuses: ListArg[dict]) -> Nu:
-    """Say what each of the pane's cells is doing, each ``{cell_id, state, error, started_at}``."""
+    """Say what each of the pane's cells is doing, each ``{cell_id, state, error}``."""
     return write(pane, "set_status", statuses=statuses)
 
 

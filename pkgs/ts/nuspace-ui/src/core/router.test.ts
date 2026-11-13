@@ -249,7 +249,7 @@ describe("landing: the url table", () => {
 		expect(focusedRoute()).toBe("p_home");
 	});
 
-	it("shows /<plane id> solo, its query as params", () => {
+	it("shows /p/<plane id> solo, its query as params", () => {
 		known({});
 		at("/p/movie?id=42");
 		expect(currentRoute()).toEqual({ kind: "solo", plane: "movie", params: { id: "42" } });
@@ -258,7 +258,7 @@ describe("landing: the url table", () => {
 		expect(deskName()).toBe("");
 	});
 
-	it("shows /<desk id>/<item id>: a plane item, a strip", () => {
+	it("shows /d/<desk id>/<item id>: a plane item, a strip", () => {
 		known({ [DESK]: usual() });
 		at(itemHref(DESK, P));
 		expect(currentRoute()).toMatchObject({ kind: "item", desk: DESK, name: "Work", focus: "a" });
@@ -269,7 +269,7 @@ describe("landing: the url table", () => {
 		expect(deskName()).toBe("Work");
 	});
 
-	it("replaces /<desk id> with its first item's url", async () => {
+	it("replaces /d/<desk id> with its first item's url", async () => {
 		known({ [DESK]: usual() });
 		at(deskHref(DESK));
 		ensureLanding();
@@ -277,7 +277,7 @@ describe("landing: the url table", () => {
 		expect(url()).toBe(itemHref(DESK, P));
 	});
 
-	it("keeps /<desk id> of an empty desk as the empty desk state", async () => {
+	it("keeps /d/<desk id> of an empty desk as the empty desk state", async () => {
 		known({ [DESK]: dk("Empty") });
 		at(deskHref(DESK));
 		ensureLanding();

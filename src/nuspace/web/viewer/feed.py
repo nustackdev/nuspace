@@ -56,8 +56,9 @@ move anywhere. Level, no re-checks: a missed notification leaves the display
 stale until the next change.
 
 **A cell's classes are read off its spec, here.** Each shipped cell carries
-the classes of the installed CellSpec its ``spec`` names, so the browser
-binds behaviour to a class and never to who made a cell.
+the classes of the installed CellSpec it was made from, and not the spec
+itself, so the browser binds behaviour to a class and never to who made a
+cell.
 """
 
 from __future__ import annotations
@@ -133,12 +134,13 @@ def _cell_ids(plane: nu.StrArg) -> nu.Nu:
 
 
 def plane_cells(plane: nu.StrArg, specs: Iterable[CellSpec] = ()) -> nu.List:
-    """A plane's cells as ``{id, name, key, source, spec, draws, classes}``, in order. Bare read.
+    """A plane's cells as ``{id, key, source, draws, classes}``, in order. Bare read.
 
-    ``key`` is ``""`` when the cell has none. ``spec`` is the CellSpec the
-    cell was made from, ``""`` when none. ``draws`` is whether its prog draws (``"ui"`` among its fabrics).
-    ``classes`` are those of the spec in ``specs`` that ``spec`` names,
-    ``[]`` when none does. Cost: O(cells), a few reads each.
+    ``key`` is ``""`` when the cell has none. ``draws`` is whether its prog
+    draws (``"ui"`` among its fabrics). ``classes`` are those of the spec in
+    ``specs`` the cell was made from, ``[]`` when none matches. The cell's
+    name and spec stay home: the browser reads neither.
+    Cost: O(cells), a few reads each.
     """
     classes = {registered_name(s): list(s.classes) for s in specs}
 
@@ -148,10 +150,8 @@ def plane_cells(plane: nu.StrArg, specs: Iterable[CellSpec] = ()) -> nu.List:
         made = nu.Str(row.spec.fallback(""))
         return nu.Dict.of(
             id=cid,
-            name=row.name.fallback(""),
             key=row.key.fallback(""),
             source=nu.str(row.prog.fallback("")),
-            spec=made,
             draws=nu.List(row.fabrics.fallback([])).contains("ui"),
             classes=nu.Switch(made, classes, default=[]),
         )
@@ -221,7 +221,7 @@ def _state(run: nu.StrArg, picked: nu.Str) -> nu.Str:
 
 
 def statuses(plane: nu.StrArg, run: nu.StrArg) -> nu.List:
-    """A plane's cells as ``{cell_id, state, error, started_at}`` in one plane run, in order. Bare read.
+    """A plane's cells as ``{cell_id, state, error}`` in one plane run, in order. Bare read.
 
     Per cell, its newest cell run in the run, one seek on its history list:
     never a walk of the run's cell runs. A ``run`` of ``""`` is every cell
@@ -240,14 +240,13 @@ def statuses(plane: nu.StrArg, run: nu.StrArg) -> nu.List:
                 cell_id=cell,
                 state=said,
                 error=nu.If(said == STATE_FAILED, cr.error.fallback(""), ""),
-                started_at=nu.If(picked == "", 0, cr.started_at.fallback(0)),
             )
 
         # A mem slot holds no NULL: no cell run of the cell reads "".
         return nu.let(node.last(default=""), entry)
 
     def idle(at: nu.Attr) -> nu.Dict:
-        return nu.Dict.of(cell_id=at, state=STATE_IDLE, error="", started_at=0)
+        return nu.Dict.of(cell_id=at, state=STATE_IDLE, error="")
 
     cells = nu.List(_cell_ids(plane)).iter()
     return nu.List(nu.If(nu.Str(run) == "", cells.map(idle).to_list(), cells.map(status).to_list()))

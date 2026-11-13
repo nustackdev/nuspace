@@ -11,10 +11,12 @@ separately here.
 
 ## Unreleased
 
+- Drop unused cell and status wire fields; ref classes cover every feed op
 - Cells can make their pane follow the bottom or scroll, for chat style output
 - Opening a deep plane opens its sidebar folders, and only the sidebar reads its tree
 - Each open pane is its own node, so a rename no longer resends its cells
-- Urls are /p/<plane> and /d/<desk>, so routing never waits on a plane list
+- Pane menu Width choice now reaches the server and sticks
+- Urls are /p/<plane> and /d/<desk>; old plane links now read page not found
 - Plane and cell ids given from outside must be slugs, so they read cleanly in urls
 - Pane breadcrumbs come from the server, so they show under collapsed sidebar branches
 - Desk header shows only the desk name and close; items stay in the sidebar

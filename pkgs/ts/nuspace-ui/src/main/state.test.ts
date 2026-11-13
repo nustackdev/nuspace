@@ -12,7 +12,7 @@ import { admits, settlePanes } from "./state";
 
 describe("a closed pane", () => {
 	const viewer = ["closed-ui", "viewer"];
-	const cell = { id: "c1", name: "", key: "", source: "", draws: true, classes: [] };
+	const cell = { id: "c1", key: "", source: "", draws: true, classes: [] };
 	const ui = [...cellUiPath(viewer, "c1"), "out"];
 	const draw = (value: string) => ({ op: OPS.write, ref: ui, payload: { value } });
 	const pane = (id: string) => [...panePath(viewer, id)].map((s) => [s, null] as [string, null]);

@@ -16,17 +16,14 @@ from nuspace.web.utils import SpaceRef
 
 if TYPE_CHECKING:
     from nu.lang import DictArg, ListArg, Nu
+    from nustd.ui.core import Changed
 
 
 __all__ = ["DesksRef"]
 
 
 class DesksRef(SpaceRef):
-    """The desks and the roles, as one browser node.
-
-    Its writes only, like the sidebar's: what it hears is in
-    :mod:`.interactions`, which the feed listens with.
-    """
+    """The desks and the roles, as one browser node: its writes and what it hears."""
 
     _wire_type: ClassVar[str] = "DesksRef"
 
@@ -41,3 +38,27 @@ class DesksRef(SpaceRef):
     def set_titles(self, titles: DictArg) -> Nu:
         """Replace the looks of the desk planes: plane id to ``{title, icon}``."""
         return interactions.set_titles(self, titles)
+
+    def on_create_desk(self) -> Changed:
+        """``{desk_id, desk}``, ``desk`` as ``{name, items}``."""
+        return interactions.on_create_desk(self)
+
+    def on_rename_desk(self) -> Changed:
+        """``{desk_id, name}``."""
+        return interactions.on_rename_desk(self)
+
+    def on_write_items(self) -> Changed:
+        """``{writes: [{desk_id, sets, deletes, order}]}``, one commit."""
+        return interactions.on_write_items(self)
+
+    def on_delete_desk(self) -> Changed:
+        """``{desk_id}``."""
+        return interactions.on_delete_desk(self)
+
+    def on_move_desk(self) -> Changed:
+        """``{desk_id, before}``."""
+        return interactions.on_move_desk(self)
+
+    def on_set_role(self) -> Changed:
+        """``{role, plane_id}``."""
+        return interactions.on_set_role(self)

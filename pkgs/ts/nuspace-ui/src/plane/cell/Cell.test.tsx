@@ -31,12 +31,11 @@ function render(
 				<Cell
 					cell={{
 						id: "c1",
-						name: "",
 						key: "",
 						source: "",
 						draws,
 						classes: [],
-						status: { cell_id: "c1", state, error, started_at: 0 },
+						status: { cell_id: "c1", state, error },
 					}}
 					uiPath={["viewer", "cells", "c1"]}
 					editable={editable}
