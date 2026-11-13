@@ -83,7 +83,7 @@ describe("sidebar links", () => {
 				items: [{ id: P, kind: "plane", original: L("a"), recent: L("z") }, WORK.items[1]],
 			},
 		});
-		const icon = row("/a");
+		const icon = row("/p/a");
 		icon.setAttribute(RESET_ATTR, resetAttr(DESK, P));
 		icon.click();
 		expect(url()).toBe(itemHref(DESK, P));
@@ -91,7 +91,7 @@ describe("sidebar links", () => {
 	});
 
 	it("leaves a Cmd click on the icon link to the browser", () => {
-		const icon = row("/a");
+		const icon = row("/p/a");
 		icon.setAttribute(RESET_ATTR, resetAttr(DESK, P));
 		const e = new MouseEvent("click", { bubbles: true, cancelable: true, metaKey: true });
 		icon.dispatchEvent(e);
@@ -105,8 +105,8 @@ describe("sidebar links", () => {
 	});
 
 	it("opens a plane row solo on a desk item, the desk untouched", () => {
-		row("/t?x=1").click();
-		expect(url()).toBe("/t?x=1");
+		row("/p/t?x=1").click();
+		expect(url()).toBe("/p/t?x=1");
 		expect(currentRoute()).toEqual({ kind: "solo", plane: "t", params: { x: "1" } });
 		expect(knownDesks()?.[DESK]).toEqual(WORK);
 	});

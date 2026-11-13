@@ -379,7 +379,7 @@ describe("dropOn", () => {
 	});
 
 	it("focuses a pane dropped into the strip the tab shows", () => {
-		window.history.replaceState(null, "", `/${DESK}/ssssss`);
+		window.history.replaceState(null, "", `/d/${DESK}/ssssss`);
 		expect(currentRoute()).toMatchObject({ kind: "item", focus: "b" });
 		dropOn(
 			{ kind: "plane", link: L("n") },
@@ -394,7 +394,7 @@ describe("dropOnSolo", () => {
 		resetRouter();
 		setRoles({ home: "p_home" });
 		setDesks(world());
-		window.history.replaceState(null, "", "/solo");
+		window.history.replaceState(null, "", "/p/solo");
 	});
 
 	const made = () =>
@@ -407,7 +407,7 @@ describe("dropOnSolo", () => {
 		expect(sketch(desk)).toEqual([{ [desk.items[0].id]: [["solo"], ["n"]] }]);
 		const strip = desk.items[0] as Strip;
 		expect(strip.columns[0].panes[0].original).toEqual(L("solo", { k: "v" }));
-		expect(window.location.pathname).toBe(`/${id}/${desk.items[0].id}`);
+		expect(window.location.pathname).toBe(`/d/${id}/${desk.items[0].id}`);
 		expect(focusedRoute()).toBe("n");
 	});
 
@@ -431,7 +431,7 @@ describe("dropOnSolo", () => {
 		dropOnSolo({ kind: "plane", link: L("solo") }, L("solo"), "right");
 		dropOnSolo({ kind: "item", desk: DESK, item: "ssssss" }, L("solo"), "right");
 		expect(made()).toEqual([]);
-		expect(window.location.pathname).toBe("/solo");
+		expect(window.location.pathname).toBe("/p/solo");
 	});
 });
 

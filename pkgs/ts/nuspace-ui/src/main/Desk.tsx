@@ -38,9 +38,6 @@
 // (`nuspace.ui.on_params`); nothing runs again. A focus move changes neither,
 // so it sends nothing.
 //
-// The router learns the plane ids that exist (a deleted desk's url, a given
-// short id) from here: the sidebar's tree and the open planes.
-//
 // One Viewer, and it never asks what kind of thing it is drawing. Each pane
 // renders one Plane's Cells and roots their refs, every Cell the same way.
 // A pane is keyed by its plane, so one that stays in its column is never
@@ -64,7 +61,6 @@ import {
 	onReveal,
 	paramsOf,
 	type Route,
-	setPlanes,
 	useFocusedRoute,
 	useRoute,
 	useRoutes,
@@ -170,16 +166,6 @@ export function Desk({ path }: NodeProps) {
 		const params = Object.fromEntries(open.map((id) => [id, paramsOf(id)]));
 		notify("planes.open", { plane_ids: open, params });
 	}, [panesKey, notify]);
-
-	// The plane ids that exist: the tree's and the open planes'. Unknown
-	// (null) until the tree lands, so a short id is not sent home early.
-	const known = Object.keys(tree).length
-		? [...new Set([...Object.keys(tree), ...Object.keys(planes)])].sort().join(" ")
-		: null;
-	useEffect(() => {
-		setPlanes(known === null ? null : known.split(" ").filter(Boolean));
-	}, [known]);
-	useEffect(() => () => setPlanes(null), []);
 
 	// The focused pane on screen. On every focus change, when the panes change
 	// under it, and when its place changes (a move, a drop).

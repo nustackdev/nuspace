@@ -428,7 +428,7 @@ async def test_results_follow_hits_as_they_land_and_end_once_done(store):
         assert session.last((*RESULTS_HITS, "0", "1")) == {"label": "Note"}
         # The hit links to its cell's plane, titled by its id: p1 has no name.
         link = session.last((*RESULTS_HITS, "0", "2", "0"))
-        assert link["href"] == "/p1" and link["title"] == "p1"
+        assert link["href"] == "/p/p1" and link["title"] == "p1"
         assert session.last((*RESULTS_HITS, "0", "2", "1")) == {"value": "cell \u00b7 a"}
     finally:
         await _stop(task)

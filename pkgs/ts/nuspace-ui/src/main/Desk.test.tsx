@@ -2,8 +2,8 @@
 // at their px width, the end zone, panes by share), a plane item, a solo
 // plane, the empty desk, pending and not found. Click focus, reveal, close per
 // view, links navigating in place through the router, `planes.open` getting
-// the shown planes, resizing, the plane list fed to the router, each drop
-// target through `dropOn`, and what a pane header's drag carries per view.
+// the shown planes, resizing, each drop target through `dropOn`, and what a
+// pane header's drag carries per view.
 
 import { catchAnchors, TooltipProvider } from "@nustackdev/ui-kit";
 import { act } from "react";
@@ -99,8 +99,8 @@ const ELSEWHERE: DeskShape = {
 	],
 };
 
-const STRIP_URL = `/${ID}/strip1`;
-const LONE_URL = `/${ID}/lone01`;
+const STRIP_URL = `/d/${ID}/strip1`;
+const LONE_URL = `/d/${ID}/lone01`;
 
 let host: HTMLDivElement;
 let root: Root;
@@ -356,13 +356,13 @@ describe("the desk header", () => {
 
 	it("is there on an empty desk", () => {
 		feed(DESKS);
-		draw(`/${EMPTY}`);
+		draw(`/d/${EMPTY}`);
 		expect(header()?.textContent).toContain("Empty");
 	});
 
 	it("is not on a solo plane", () => {
 		feed(DESKS);
-		draw("/p_one");
+		draw("/p/p_one");
 		expect(header()).toBeNull();
 	});
 
@@ -381,7 +381,7 @@ describe("the desk header", () => {
 describe("solo, the empty desk, pending and not found", () => {
 	it("draws a solo plane as one pane, no row, no close", () => {
 		feed(DESKS);
-		draw("/p_one");
+		draw("/p/p_one");
 		expect(all("[data-pane]").map((p) => p.dataset.pane)).toEqual(["p_one"]);
 		expect(all("[data-column]")).toEqual([]);
 		expect(host.querySelector('[aria-label^="Close"]')).toBeNull();
@@ -390,7 +390,7 @@ describe("solo, the empty desk, pending and not found", () => {
 
 	it("draws an empty desk as the kit's empty state with a hint to drag a plane in", () => {
 		feed(DESKS);
-		draw(`/${EMPTY}`);
+		draw(`/d/${EMPTY}`);
 		expect(currentRoute().kind).toBe("desk");
 		expect(host.querySelector("[data-pane]")).toBeNull();
 		const empty = one('[data-slot="empty-state"]');
@@ -416,11 +416,11 @@ describe("solo, the empty desk, pending and not found", () => {
 
 	it("draws a not found pane for an unknown desk and a known desk's unknown item", () => {
 		feed(DESKS);
-		draw(`/zzzzzzzz/${LONE.id}`);
+		draw(`/d/zzzzzzzz/${LONE.id}`);
 		expect(host.querySelector('section[data-not-found="desk"]')?.textContent).toContain(
 			NOT_FOUND_TEXT.desk,
 		);
-		draw(`/${ID}/zzzzzz`);
+		draw(`/d/${ID}/zzzzzz`);
 		expect(host.querySelector('section[data-not-found="item"]')?.textContent).toContain(
 			NOT_FOUND_TEXT.item,
 		);
@@ -439,7 +439,7 @@ describe("links inside the canvas", () => {
 
 	const follow = (inPane: string) =>
 		act(() =>
-			(host.querySelector(`[data-pane="${inPane}"] a[href="/par"]`) as HTMLElement).click(),
+			(host.querySelector(`[data-pane="${inPane}"] a[href="/p/par"]`) as HTMLElement).click(),
 		);
 
 	it("navigate the pane they are in, in place, writing its recent", () => {
@@ -469,9 +469,9 @@ describe("links inside the canvas", () => {
 		const writes = vi.fn();
 		const off = onDeskWrite(writes);
 		feed(DESKS);
-		draw("/p_one");
+		draw("/p/p_one");
 		follow("p_one");
-		expect(window.location.pathname).toBe("/par");
+		expect(window.location.pathname).toBe("/p/par");
 		expect(writes).not.toHaveBeenCalled();
 		off();
 	});
@@ -580,21 +580,6 @@ describe("resizing", () => {
 		pointer(handle, "pointerdown", { clientX: 600 });
 		pointer(window, "pointerup", { clientX: 600 });
 		expect(writes).toHaveLength(0);
-	});
-});
-
-describe("the plane list", () => {
-	it("tells the router which planes exist once the tree lands, so a short id resolves", () => {
-		const setPlanes = vi.spyOn(router, "setPlanes");
-		feed({});
-		draw("/abcd1234");
-		expect(currentRoute().kind).toBe("pending");
-		expect(setPlanes).toHaveBeenLastCalledWith(null);
-		const row = { id: "abcd1234", title: "Logs", parent: "abcd1234", children: [] };
-		vi.mocked(usePlaneTree).mockImplementation(() => ({ abcd1234: row }) as never);
-		draw("/abcd1234");
-		expect(setPlanes).toHaveBeenLastCalledWith(["abcd1234"]);
-		expect(currentRoute().kind).toBe("solo");
 	});
 });
 
@@ -743,7 +728,7 @@ describe("dropping", () => {
 	it("on an empty desk: anywhere, the end of the desk, drawn as the whole desk", () => {
 		const dropOn = vi.spyOn(dnd, "dropOn");
 		feed(DESKS);
-		draw(`/${EMPTY}`);
+		draw(`/d/${EMPTY}`);
 		const area = one(`[data-desk="${EMPTY}"]`);
 		const over = drag(area.firstElementChild as Element, "dragover", PLANE_MIME, "", 5, 5);
 		expect(over.defaultPrevented).toBe(true);
@@ -754,7 +739,7 @@ describe("dropping", () => {
 			{ kind: "plane", link: link("z") },
 			{ kind: "end", desk: EMPTY },
 		);
-		expect(window.location.pathname).toBe(`/${EMPTY}`);
+		expect(window.location.pathname).toBe(`/d/${EMPTY}`);
 		expect(area.querySelector("span.bg-doc-drop")).toBeNull();
 	});
 
@@ -778,7 +763,7 @@ describe("dropping", () => {
 	it("on a solo plane: its left or right edge, a new desk of the two", () => {
 		const dropOnSolo = vi.spyOn(dnd, "dropOnSolo");
 		feed(DESKS);
-		draw("/p_one");
+		draw("/p/p_one");
 		const p = one('[data-pane="p_one"]');
 		rect(p);
 		const over = drag(p, "dragover", PLANE_MIME, "", 10, 100);
@@ -831,7 +816,7 @@ describe("dropping", () => {
 
 		it("on a solo plane carries the plane with the params it shows", () => {
 			feed(DESKS);
-			draw("/p_one?run=42");
+			draw("/p/p_one?run=42");
 			const data = start(one('[data-pane-header="p_one"]'));
 			expect(Object.keys(data)).toEqual([PLANE_MIME]);
 			expect(JSON.parse(data[PLANE_MIME])).toEqual(link("p_one", { run: "42" }));

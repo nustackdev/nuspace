@@ -116,9 +116,9 @@ describe("the nav section", () => {
 		draw(<Nav />);
 		expect(rowOf("nav:home")?.querySelector("a")).toBeNull();
 		act(() => applyDesksWrite(null, { op: "set_roles", roles: ROLES }));
-		expect(rowOf("nav:home")?.querySelector("a")?.getAttribute("href")).toBe("/p-home");
-		expect(rowOf("nav:search")?.querySelector("a")?.getAttribute("href")).toBe("/p-search");
-		expect(rowOf("nav:settings")?.querySelector("a")?.getAttribute("href")).toBe("/p-settings");
+		expect(rowOf("nav:home")?.querySelector("a")?.getAttribute("href")).toBe("/p/p-home");
+		expect(rowOf("nav:search")?.querySelector("a")?.getAttribute("href")).toBe("/p/p-search");
+		expect(rowOf("nav:settings")?.querySelector("a")?.getAttribute("href")).toBe("/p/p-settings");
 	});
 
 	it("selects the row whose plane is focused", () => {

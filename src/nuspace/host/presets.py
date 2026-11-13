@@ -102,7 +102,10 @@ def with_plane(
     def opened(plane: nu.ObjectRef) -> nu.Nu:
         steps = [_plane_of(found, plane)]
         if web and open_browser:
-            url = nu.Str(f"http://{host}:{port}/") + nu.Str(plane)
+            # The web device's own url, so the tab opens on the same encoded path a link would.
+            from nuspace.web.interactions import Href
+
+            url = nu.Str(f"http://{host}:{port}") + nu.Str(Href(plane, {}))
             steps.append(Browse(url, host, port))
         return nu.Sequential(*steps, nu.Park())
 

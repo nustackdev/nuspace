@@ -203,7 +203,7 @@ describe("desk folders", () => {
 		expect(made?.[1].items[0]).toMatchObject({ kind: "plane", original: L("q") });
 		expect(made?.[1].name).toBe("Untitled");
 		expect(host.querySelector("input")).toBeNull();
-		expect(window.location.pathname).toBe(`/${made?.[0]}/${made?.[1].items[0].id}`);
+		expect(window.location.pathname).toBe(`/d/${made?.[0]}/${made?.[1].items[0].id}`);
 	});
 
 	it("makes an empty desk named Untitled from newDesk, its folder open, no rename", () => {
@@ -215,7 +215,7 @@ describe("desk folders", () => {
 		const made = Object.entries(knownDesks() ?? {}).find(([id]) => id !== W);
 		expect(made?.[1]).toEqual({ name: "Untitled", items: [] });
 		expect(names()).toEqual(["Work", "Untitled"]);
-		expect(window.location.pathname).toBe(`/${made?.[0]}`);
+		expect(window.location.pathname).toBe(`/d/${made?.[0]}`);
 		expect(host.querySelector("input")).toBeNull();
 	});
 
@@ -268,7 +268,7 @@ describe("desk folders", () => {
 
 	it("closes the desk from its chip, no confirm, and a tab on it goes home", () => {
 		feed({ [W]: WORK, [F]: FAV });
-		window.history.replaceState(null, "", `/${W}/item01`);
+		window.history.replaceState(null, "", `/d/${W}/item01`);
 		draw();
 		act(() => chipOf("Work", "Close")?.click());
 		expect(names()).toEqual(["Favorites"]);
@@ -331,7 +331,7 @@ describe("item rows", () => {
 		expect(window.location.pathname).toBe("/");
 		expect(knownDesks()?.[W]?.items[2]).toEqual({ id: "item02", kind: "plane", original: L("p") });
 		act(() => linkOf(itemKey(W, "item01"))?.click());
-		expect(window.location.pathname).toBe(`/${W}/item01`);
+		expect(window.location.pathname).toBe(`/d/${W}/item01`);
 	});
 
 	it("resets a navigated item from its row's hover reset too, none on a plain one", () => {
@@ -359,13 +359,13 @@ describe("item rows", () => {
 
 	it("opens a strip from its row, and a pane row opens it with that pane focused", () => {
 		act(() => linkOf(itemKey(W, "strip1"))?.click());
-		expect(window.location.pathname).toBe(`/${W}/strip1`);
+		expect(window.location.pathname).toBe(`/d/${W}/strip1`);
 		window.history.replaceState(null, "", "/");
 		const revealed: string[] = [];
 		const off = onReveal((plane) => revealed.push(plane));
 		act(() => linkOf(paneKey(W, "strip1", "w"))?.click());
 		off();
-		expect(window.location.pathname).toBe(`/${W}/strip1`);
+		expect(window.location.pathname).toBe(`/d/${W}/strip1`);
 		expect(focusedRoute()).toBe("w");
 		expect(revealed).toEqual(["w"]);
 	});
@@ -404,7 +404,7 @@ describe("item rows", () => {
 
 	it("a column group links to its strip, standing for its top pane", () => {
 		const link = linkOf(columnKey(W, "strip1", 1));
-		expect(link?.getAttribute("href")).toBe(`/${W}/strip1`);
+		expect(link?.getAttribute("href")).toBe(`/d/${W}/strip1`);
 		expect(link?.closest("[data-sidebar-pane]")?.getAttribute("data-sidebar-pane")).toBe("z");
 	});
 });
@@ -464,7 +464,7 @@ describe("selection", () => {
 
 	it("a plane item: its row only, no title, nothing in the tree", () => {
 		feed({ [W]: WORK });
-		window.history.replaceState(null, "", `/${W}/item02`);
+		window.history.replaceState(null, "", `/d/${W}/item02`);
 		drawSidebar();
 		expect(selected()).toEqual([itemKey(W, "item02")]);
 		expect(headOf("Work")?.className).not.toMatch(/(^|\s)bg-bg-press/);
@@ -479,18 +479,18 @@ describe("selection", () => {
 
 	it("solo: its tree row, nothing in the folders", () => {
 		feed({ [W]: WORK });
-		window.history.replaceState(null, "", "/y");
+		window.history.replaceState(null, "", "/p/y");
 		drawSidebar();
 		expect(selected()).toEqual(["y"]);
 	});
 
 	it("a tree row opens solo, even on a desk item", () => {
 		feed({ [W]: WORK });
-		window.history.replaceState(null, "", `/${W}/strip1`);
+		window.history.replaceState(null, "", `/d/${W}/strip1`);
 		drawSidebar();
 		const planes = host.querySelector('section[aria-label="Planes"]');
 		act(() => planes?.querySelector<HTMLAnchorElement>('[data-key="t"] a')?.click());
-		expect(window.location.pathname).toBe("/t");
+		expect(window.location.pathname).toBe("/p/t");
 		// The strip was not navigated.
 		expect(knownDesks()?.[W]).toEqual(WORK);
 	});

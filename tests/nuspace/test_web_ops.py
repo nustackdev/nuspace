@@ -351,13 +351,13 @@ def _made():
 
 async def test_href_encodes_like_the_browser():
     got, _ = await nu.arun(web.href("p 1", {"q": "a b", "gone": None}))
-    assert got == "/p%201?q=a+b" or got == "/p%201?q=a%20b"
+    assert got == "/p/p%201?q=a+b" or got == "/p/p%201?q=a%20b"
 
 
 def test_url_is_href_in_plain_python():
-    assert web.url("p 1") == "/p%201"
-    assert web.url("p", {"id": 3, "gone": None}) == "/p?id=3"
-    assert web.url("p", None) == "/p"
+    assert web.url("p 1") == "/p/p%201"
+    assert web.url("p", {"id": 3, "gone": None}) == "/p/p?id=3"
+    assert web.url("p", None) == "/p/p"
 
 
 async def test_href_and_url_spell_one_url():
@@ -378,7 +378,7 @@ def _encode_cases() -> list[dict]:
 @pytest.mark.parametrize("case", _encode_cases())
 async def test_href_query_is_nus_encoding(case):
     got, _ = await nu.arun(web.href("p", case["query"]))
-    assert got == ("/p?" + case["string"] if case["string"] else "/p")
+    assert got == ("/p/p?" + case["string"] if case["string"] else "/p/p")
 
 
 class _Recording:
@@ -401,19 +401,19 @@ async def test_link_draws_title_and_icon(store):
     await plane(store, "a", name="Movies", icon="emoji:🎬")
     await plane(store, "b")
     got = await _drawn(store, web.link(nustd.ui.PageLinkRef("l"), "a", params={"id": "1"}))
-    assert got[("l",)]["href"] == "/a?id=1" and got[("l",)]["title"] == "Movies"
+    assert got[("l",)]["href"] == "/p/a?id=1" and got[("l",)]["title"] == "Movies"
     got = await _drawn(store, web.link(nustd.ui.LinkRef("k"), "b"))
-    assert got[("k",)] == {"href": "/b", "label": "b"}
+    assert got[("k",)] == {"href": "/p/b", "label": "b"}
     page = web.link(nustd.ui.PageLinkRef("n"), "a", description="Daily")
     got = await _drawn(store, page)
-    assert got[("n",)] == {"href": "/a", "title": "Movies", "icon": "🎬", "description": "Daily"}
+    assert got[("n",)] == {"href": "/p/a", "title": "Movies", "icon": "🎬", "description": "Daily"}
     with pytest.raises(TypeError):
         web.link(nustd.ui.TextRef("t"), "a")
 
 
 async def test_link_to_a_plane_not_there_still_draws(store):
     got = await _drawn(store, web.link(nustd.ui.LinkRef("k"), "nowhere", label="Gone"))
-    assert got[("k",)] == {"href": "/nowhere", "label": "Gone"}
+    assert got[("k",)] == {"href": "/p/nowhere", "label": "Gone"}
     got = await _drawn(store, web.link(nustd.ui.PageLinkRef("l"), "nowhere"))
     assert got[("l",)]["title"] == "nowhere"
 
@@ -421,9 +421,9 @@ async def test_link_to_a_plane_not_there_still_draws(store):
 async def test_page_is_a_link_cell_value(store):
     await plane(store, "a", name="Movies", icon="emoji:🎬")
     got = await store.read(web.page("a", {"id": 1}))
-    assert got == {"id": "a", "title": "Movies", "icon": "🎬", "href": "/a?id=1"}
+    assert got == {"id": "a", "title": "Movies", "icon": "🎬", "href": "/p/a?id=1"}
     got = await store.read(web.page("nowhere"))
-    assert got == {"id": "nowhere", "title": "nowhere", "icon": "", "href": "/nowhere"}
+    assert got == {"id": "nowhere", "title": "nowhere", "icon": "", "href": "/p/nowhere"}
 
 
 async def test_root_is_never_a_pane(store):

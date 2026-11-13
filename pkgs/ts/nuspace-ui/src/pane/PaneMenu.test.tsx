@@ -65,7 +65,7 @@ function menu(path: string, planeId: string, onClose?: () => void, desk: Desk = 
 	});
 }
 
-const STRIP_URL = `/${ID}/${STRIP}`;
+const STRIP_URL = `/d/${ID}/${STRIP}`;
 
 const items = () => [...document.querySelectorAll<HTMLElement>('[role^="menuitem"]')];
 const item = (label: string) => items().find((i) => i.textContent?.trim() === label);
@@ -77,7 +77,7 @@ describe("the pane menu in a strip", () => {
 	});
 
 	it("lists the same on a plane item", () => {
-		menu(`/${ID}/${LONE}`, "e", () => {});
+		menu(`/d/${ID}/${LONE}`, "e", () => {});
 		expect(items().map((i) => i.textContent?.trim())).toEqual([COPY_LINK, "Close"]);
 	});
 });
@@ -90,10 +90,10 @@ describe("the pane's own rows", () => {
 			...ROW,
 			items: [{ id: LONE, kind: "plane", original: { plane: "a", params: { run: "42" } } }],
 		};
-		menu(`/${ID}/${LONE}`, "a", undefined, withParams);
-		expect(planeLink("a")).toBe(`${window.location.origin}/a?run=42`);
+		menu(`/d/${ID}/${LONE}`, "a", undefined, withParams);
+		expect(planeLink("a")).toBe(`${window.location.origin}/p/a?run=42`);
 		await act(async () => item(COPY_LINK)?.click());
-		expect(writeText).toHaveBeenCalledWith(`${window.location.origin}/a?run=42`);
+		expect(writeText).toHaveBeenCalledWith(`${window.location.origin}/p/a?run=42`);
 	});
 
 	it("closes through the pane's close", () => {
@@ -104,7 +104,7 @@ describe("the pane's own rows", () => {
 	});
 
 	it("has the link and no Close on a solo plane, ending on no separator", () => {
-		menu("/p_solo", "p_solo");
+		menu("/p/p_solo", "p_solo");
 		expect(items().map((i) => i.textContent?.trim())).toEqual([COPY_LINK]);
 		const content = document.querySelector('[role="menu"]');
 		expect(content?.lastElementChild?.getAttribute("role")).not.toBe("separator");

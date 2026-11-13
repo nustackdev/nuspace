@@ -563,11 +563,11 @@ def test_runs_shape_tones_window_and_open_runs():
     got = {
         "lanes": [
             {
-                "page": {"id": "a", "title": "A", "icon": "", "href": "/a"},
+                "page": {"id": "a", "title": "A", "icon": "", "href": "/p/a"},
                 "runs": [[900.0, 0.0, ""]],
             },
             {
-                "page": {"id": "b", "title": "B", "icon": "", "href": "/b"},
+                "page": {"id": "b", "title": "B", "icon": "", "href": "/p/b"},
                 "runs": [[400.0, 450.0, "killed"]],
             },
         ],

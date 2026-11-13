@@ -93,11 +93,11 @@ def url(plane: str, params: Mapping | None = None) -> str:
     pairs = params if isinstance(params, Mapping) else {}
     search = nustd.ui.encode_query(dict(pairs))
     # encodeURIComponent's set, so a plane id reads the same on both sides.
-    path = "/" + quote(str(plane), safe="!*'()")
+    path = "/p/" + quote(str(plane), safe="!*'()")
     return f"{path}?{search}" if search else path
 
 
-#: ``Href(plane, params)``: :func:`url` as a term. ``/<plane>``, or ``/<plane>?<params>``;
+#: ``Href(plane, params)``: :func:`url` as a term. ``/p/<plane>``, or ``/p/<plane>?<params>``;
 #: a None param drops its key.
 Href = nu.host(url, name="Href")
 

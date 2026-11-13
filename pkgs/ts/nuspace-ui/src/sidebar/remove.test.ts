@@ -28,21 +28,21 @@ describe("deleting a plane", () => {
 		resetRouter();
 		setDesks({});
 		setRoles({ home: "home", settings: "", search: "" });
-		window.history.replaceState(null, "", "/a1");
+		window.history.replaceState(null, "", "/p/a1");
 		vi.mocked(confirm).mockResolvedValue(true);
 		const notify = vi.fn();
 		await deletePlane(notify, tree, "a", "A");
 		expect(confirm).toHaveBeenCalledWith(expect.objectContaining({ action: "Delete" }));
 		expect(notify).toHaveBeenCalledWith("plane.delete", { plane_id: "a" });
-		expect(window.location.pathname).toBe("/home");
+		expect(window.location.pathname).toBe("/p/home");
 	});
 
 	it("does nothing when not confirmed", async () => {
-		window.history.replaceState({}, "", "/a");
+		window.history.replaceState({}, "", "/p/a");
 		vi.mocked(confirm).mockResolvedValue(false);
 		const notify = vi.fn();
 		await deletePlane(notify, tree, "a", "A");
 		expect(notify).not.toHaveBeenCalled();
-		expect(window.location.pathname).toBe("/a");
+		expect(window.location.pathname).toBe("/p/a");
 	});
 });

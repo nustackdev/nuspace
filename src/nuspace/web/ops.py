@@ -437,7 +437,7 @@ def on_params() -> nu.Nu:
 
 
 def href(plane: nu.StrArg, params: nu.DictArg[str, object] | None = None) -> nu.Str:
-    """A pane's URL: ``/<plane>``, or ``/<plane>?<params>``. Encoded the way the browser does.
+    """A pane's URL: ``/p/<plane>``, or ``/p/<plane>?<params>``. Encoded the way the browser does.
 
     The query is ``nustd.ui.encode_query``'s: a None value drops its key. A
     read of nothing: no store is touched.

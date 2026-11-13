@@ -3,29 +3,30 @@
 //
 // The url names exactly what the canvas shows (the task's iteration-3.md):
 //
-//   /                       replaced by the home role's plane url
-//   /<plane id>?<params>    solo: one plane outside any desk, its params in
-//                           the query. Navigation just moves the url
-//   /<desk id>/<item id>    a desk item: a plane item or a strip. Navigation
-//                           inside writes that plane item's or pane's recent
-//   /<desk id>              replaced by its first item's url, or the empty
-//                           desk state
+//   /                         replaced by the home role's plane url
+//   /p/<plane id>?<params>    solo: one plane outside any desk, its params in
+//                             the query. Navigation just moves the url
+//   /d/<desk id>/<item id>    a desk item: a plane item or a strip. Navigation
+//                             inside writes that plane item's or pane's recent
+//   /d/<desk id>              replaced by its first item's url, or the empty
+//                             desk state
 //
-// Every segment is checked for its shape. A desk id is 8 chars [a-z0-9], an
-// item id 6 (../desk/model.ts), a plane id key chars [A-Za-z0-9_-] (a minted
-// `p_<hex>_<hex>_<hex>`, a system plane's name, an id given in code). A one
-// segment path of a desk id's shape is a desk when the desks hold it; else it
-// is a plane url when a role or a known plane has that id, and otherwise a
-// desk not found. A known desk with an unknown item is an item not found. A
-// plane url the server finds no plane for is the pane's own not found. Any
-// other path, or a segment of no id's shape: a page not found. All of it
-// waits for the desks and the roles (`pending`). Not found is never sent
-// elsewhere: it stays on its url and says so (../pane/NotFound.tsx).
+// The prefix alone says what a url is, so plane and desk ids are separate
+// namespaces and no list of known planes is ever needed. Every segment is
+// checked for its shape: a desk id is 8 chars [a-z0-9], an item id 6
+// (../desk/model.ts), a plane id key chars [A-Za-z0-9_-] (the server refuses
+// any other id). A desk the desks do not hold is a desk not found, a known
+// desk with an unknown item an item not found. A plane url the server finds
+// no plane for is the pane's own not found. Any other path (no prefix, a
+// segment of no id's shape): a page not found. A plane url shows at once;
+// "/" waits for the roles and a desk url for the desks (`pending`). Not found
+// is never sent elsewhere: it stays on its url and says so
+// (../pane/NotFound.tsx).
 //
 // History is the only writer of browser history. Every url move goes through
 // it; back and forward step between solo planes and desk items like pages.
 //
-// Desks, roles and planes are inputs (`setDesks`, `setRoles`, `setPlanes`):
+// Desks and roles are inputs (`setDesks`, `setRoles`):
 // this module never reads the store. A desk op writes the desk here at once,
 // so the tab moves without waiting, and hands it to the write hook
 // (`onDeskWrite`) that takes it to the store. The next `setDesks` is the
@@ -64,7 +65,7 @@ export type { Link, Params } from "../desk/model";
 
 /** What the tab shows. */
 export type Route =
-	/** Before the desks and roles land, and an address on its way to landing elsewhere. */
+	/** "/" before the roles land, a desk url before the desks do, and an address on its way to landing elsewhere. */
 	| { kind: "pending" }
 	/** A path that is no plane, desk or item url, or "/" with no home role. */
 	| { kind: "missing"; what: Missing; id: string }
@@ -104,48 +105,40 @@ function decode(raw: string): string | null {
 	}
 }
 
-/**
- * What `pathname` names, given the desks known (null: not landed yet). A one
- * segment desk shaped id is a desk until the desks land, then a desk only
- * when it is one of them, else a plane.
- */
-export function shapeOf(pathname: string, known: Record<string, Desk> | null = null): Shape {
+/** What `pathname` names, by its prefix and the shape of its segments alone. */
+export function shapeOf(pathname: string): Shape {
 	if (pathname === "/" || pathname === "") return { kind: "root" };
 	const parts = pathname.split("/").slice(1).map(decode);
 	if (parts.some((p) => !p)) return { kind: "none" };
-	const [first, second] = parts as string[];
-	if (parts.length === 2) {
-		return M.isDeskId(first) && M.isItemId(second)
-			? { kind: "item", desk: first, item: second }
-			: { kind: "none" };
+	const [prefix, first, second] = parts as string[];
+	if (prefix === "p" && parts.length === 2) {
+		return PLANE_ID.test(first) ? { kind: "plane", plane: first } : { kind: "none" };
 	}
-	if (parts.length !== 1) return { kind: "none" };
-	const desk = M.isDeskId(first) && (!known || Object.hasOwn(known, first));
-	if (desk) return { kind: "desk", desk: first };
-	return PLANE_ID.test(first) ? { kind: "plane", plane: first } : { kind: "none" };
+	if (prefix !== "d" || !M.isDeskId(first)) return { kind: "none" };
+	if (parts.length === 2) return { kind: "desk", desk: first };
+	return parts.length === 3 && M.isItemId(second)
+		? { kind: "item", desk: first, item: second }
+		: { kind: "none" };
 }
 
-/** A plane url: `/<plane>`, with `?<params>` when it has any. */
+/** A plane url: `/p/<plane>`, with `?<params>` when it has any. */
 export function hrefFor(plane: string, params: Params = {}): string {
 	const search = serializeQuery(params);
-	return `/${encodeURIComponent(plane)}${search ? `?${search}` : ""}`;
+	return `/p/${encodeURIComponent(plane)}${search ? `?${search}` : ""}`;
 }
 
 /** A desk url. */
 export function deskHref(desk: string): string {
-	return `/${desk}`;
+	return `/d/${desk}`;
 }
 
 /** A desk item url. */
 export function itemHref(desk: string, item: string): string {
-	return `/${desk}/${item}`;
+	return `/d/${desk}/${item}`;
 }
 
 /** What an in app href points at, or null when it is no plane, desk or item url (a hash, a deeper path). */
-export function shapeOfHref(
-	href: string,
-	known: Record<string, Desk> | null = null,
-): { shape: Shape; params: Params } | null {
+export function shapeOfHref(href: string): { shape: Shape; params: Params } | null {
 	let url: URL;
 	try {
 		url = new URL(href, "http://nuspace.invalid/");
@@ -153,22 +146,8 @@ export function shapeOfHref(
 		return null;
 	}
 	if (url.hash) return null;
-	const shape = shapeOf(url.pathname, known);
+	const shape = shapeOf(url.pathname);
 	return shape.kind === "none" ? null : { shape, params: parseQuery(url.search) };
-}
-
-/**
- * For a desk shaped id that is no desk: true when a role or a known plane has
- * it, false when neither does (a desk not found), null while the planes have
- * not landed.
- */
-export function isKnownPlane(
-	id: string,
-	roles: Roles | null,
-	planes: ReadonlySet<string> | null,
-): boolean | null {
-	if (roles && Object.values(roles).includes(id)) return true;
-	return planes ? planes.has(id) : null;
 }
 
 /** The plane to focus in `item`: `focus` while the item shows it, else its first. */
@@ -182,38 +161,35 @@ function itemRoute(desk: string, d: Desk, item: Item, focus: string): Route {
 }
 
 /**
- * The route of an entry, given the desks, roles and planes known (null: not
- * landed yet). Focus is the first pane's: the router keeps each tab's own.
+ * The route of an entry, given the desks and roles known (null: not landed
+ * yet). A plane url needs neither, "/" waits for the roles, a desk or item url
+ * for the desks. Focus is the first pane's: the router keeps each tab's own.
  */
 export function resolve(
 	entry: Pick<Entry, "path" | "query">,
 	desks: Record<string, Desk> | null,
 	roles: Roles | null,
-	planes: ReadonlySet<string> | null = null,
 ): Route {
-	if (!desks || !roles) return { kind: "pending" };
-	const shape = shapeOf(entry.path, desks);
+	const shape = shapeOf(entry.path);
 	switch (shape.kind) {
+		case "plane":
+			return { kind: "solo", plane: shape.plane, params: { ...entry.query } };
 		case "root":
+			if (!roles) return { kind: "pending" };
 			return roles.home
 				? { kind: "solo", plane: roles.home, params: {} }
 				: { kind: "missing", what: "page", id: "/" };
-		case "plane":
-			if (M.isDeskId(shape.plane)) {
-				// A desk's shape and no desk: a plane by that id, or a desk not found.
-				const known = isKnownPlane(shape.plane, roles, planes);
-				if (known === null) return { kind: "pending" };
-				if (!known) return { kind: "missing", what: "desk", id: shape.plane };
-			}
-			return { kind: "solo", plane: shape.plane, params: { ...entry.query } };
 		case "desk": {
+			if (!desks) return { kind: "pending" };
 			const d = desks[shape.desk];
+			if (!d) return { kind: "missing", what: "desk", id: shape.desk };
 			const first = d.items[0];
 			return first
 				? itemRoute(shape.desk, d, first, "")
 				: { kind: "desk", desk: shape.desk, name: d.name };
 		}
 		case "item": {
+			if (!desks) return { kind: "pending" };
 			const d = desks[shape.desk];
 			if (!d) return { kind: "missing", what: "desk", id: shape.desk };
 			const item = M.itemOf(d, shape.item);
@@ -230,8 +206,6 @@ export function resolve(
 
 let desks: Record<string, Desk> | null = null;
 let roles: Roles | null = null;
-/** The planes that exist. Null until fed. */
-let planeIds: ReadonlySet<string> | null = null;
 const writers = new Set<(id: string, desk: Desk) => void>();
 const deleters = new Set<(id: string) => void>();
 /** The focused plane per strip (`<desk>/<item>`), this tab only. */
@@ -265,7 +239,7 @@ export function setDesks(next: Record<string, Desk> | null): void {
  */
 function follow(was: Record<string, Desk> | null): void {
 	if (!was || !desks) return;
-	const shape = shapeOf(History.current().path, was);
+	const shape = shapeOf(History.current().path);
 	if (shape.kind !== "desk" && shape.kind !== "item") return;
 	if (!Object.hasOwn(was, shape.desk)) return;
 	if (!Object.hasOwn(desks, shape.desk)) {
@@ -282,12 +256,6 @@ function follow(was: Record<string, Desk> | null): void {
 /** The roles the store holds. Null until they land. */
 export function setRoles(next: Roles | null): void {
 	roles = next;
-	changed();
-}
-
-/** The plane ids that exist, from the plane list. Null (the default): not known yet. */
-export function setPlanes(ids: Iterable<string> | null): void {
-	planeIds = ids ? new Set(ids) : null;
 	changed();
 }
 
@@ -316,7 +284,7 @@ function routeNow(entry: Entry): Route {
 	const hold = held?.entry === entry && desks?.[held.desk];
 	const kept = hold && held ? M.itemOf(hold, held.item) : null;
 	if (hold && held && kept) return itemRoute(held.desk, hold, kept, focusIn(held.desk, kept));
-	const route = resolve(entry, desks, roles, planeIds);
+	const route = resolve(entry, desks, roles);
 	if (route.kind !== "item" || !desks) return route;
 	return { ...route, focus: focusIn(route.desk, route.item) };
 }
@@ -635,7 +603,7 @@ export function setShares(desk: string, item: string, plane: string, shares: num
  * before the roles land).
  */
 export function planeLinkOf(href: string): Link | null {
-	const hit = shapeOfHref(href, desks);
+	const hit = shapeOfHref(href);
 	if (!hit) return null;
 	const { shape, params } = hit;
 	if (shape.kind === "root") return roles?.home ? { plane: roles.home, params: {} } : null;
@@ -651,7 +619,7 @@ export function planeLinkOf(href: string): Link | null {
  * url opens it. False, so native, for anything else.
  */
 export const paneRule: AnchorRule = (href, _gesture, anchor) => {
-	const hit = shapeOfHref(href, desks);
+	const hit = shapeOfHref(href);
 	if (!hit) return false;
 	const { shape } = hit;
 	if (shape.kind === "desk") go(deskHref(shape.desk));
@@ -676,11 +644,11 @@ export const paneRule: AnchorRule = (href, _gesture, anchor) => {
  */
 function lay(move: { kind: string; origin: unknown; entry: Entry; previous: Entry }): void {
 	if (move.kind === "pop" || move.origin === ROUTER || !desks || !roles) return;
-	const before = resolve(move.previous, desks, roles, planeIds);
+	const before = resolve(move.previous, desks, roles);
 	if (before.kind !== "item") return;
 	const { entry } = move;
 	const { desk, item } = before;
-	const shape = shapeOf(entry.path, desks);
+	const shape = shapeOf(entry.path);
 	const focus = focusIn(desk, item);
 	let link: Link | null = null;
 	if (shape.kind === "plane") {
@@ -698,10 +666,10 @@ function lay(move: { kind: string; origin: unknown; entry: Entry; previous: Entr
 /**
  * Every entry the page lands on, made right in place, once the desks and the
  * roles are known: "/" as home's plane url, a held program push as its item
- * url, `/<desk id>` as its first item's url, and a query or hash on a desk or
+ * url, `/d/<desk id>` as its first item's url, and a query or hash on a desk or
  * item url dropped. All replaces. What is not found (an unknown desk or item,
- * a desk shaped id that is no plane either) stays on its url and draws the
- * not found pane (`resolve`).
+ * a url of no shape) stays on its url and draws the not found pane
+ * (`resolve`).
  */
 function land(): void {
 	if (!desks || !roles) return;
@@ -715,12 +683,14 @@ function land(): void {
 			return;
 		}
 	}
-	const shape = shapeOf(entry.path, desks);
+	const shape = shapeOf(entry.path);
 	const bare = entry.url === entry.path && !entry.hash;
 	if (shape.kind === "root") {
 		if (roles.home) go(hrefFor(roles.home), "replace");
 	} else if (shape.kind === "desk") {
-		const first = desks[shape.desk].items[0];
+		const d = desks[shape.desk];
+		if (!d) return;
+		const first = d.items[0];
 		if (first) go(itemHref(shape.desk, first.id), "replace");
 		else if (!bare) go(deskHref(shape.desk), "replace");
 	} else if (shape.kind === "item") {
@@ -733,7 +703,7 @@ let landing = false;
 
 /**
  * Landing bootstrap: the entry the tab opened on, and every entry after it,
- * and again whenever the desks, roles or planes change (so "/" lands once the
+ * and again whenever the desks or roles change (so "/" lands once the
  * roles do). For the tab's whole life; after the move that landed has been
  * heard.
  */
@@ -748,7 +718,6 @@ export function ensureLanding(): void {
 export function resetRouter(): void {
 	desks = null;
 	roles = null;
-	planeIds = null;
 	held = null;
 	writers.clear();
 	deleters.clear();

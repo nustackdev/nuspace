@@ -69,7 +69,7 @@ describe("feed in", () => {
 		roles();
 		applyDesksWrite(AT, { op: "set_desks", desks: { [DESK]: row("a", "b"), junk: 3 } });
 		expect(knownDesks()).toEqual({ [DESK]: row("a", "b") });
-		window.history.replaceState(null, "", `/${DESK}/${STRIP}`);
+		window.history.replaceState(null, "", `/d/${DESK}/${STRIP}`);
 		expect(currentRoutes()).toEqual(["a", "b"]);
 	});
 
@@ -105,7 +105,7 @@ describe("feed in", () => {
 	it("takes the shipped desk as the truth, over this tab's own move", () => {
 		roles();
 		applyDesksWrite(AT, { op: "set_desks", desks: { [DESK]: row("a", "b") } });
-		window.history.replaceState(null, "", `/${DESK}/${STRIP}`);
+		window.history.replaceState(null, "", `/d/${DESK}/${STRIP}`);
 		dropOn(
 			{ kind: "pane", desk: DESK, item: STRIP, plane: "a" },
 			{
@@ -127,7 +127,7 @@ describe("feed in", () => {
 		applyDesksWrite(AT, { op: "set_roles", roles: { home: "p_home", settings: "p_set" } });
 		expect(currentRoles()).toEqual({ home: "p_home", settings: "p_set", search: "" });
 		await Promise.resolve();
-		expect(window.location.pathname).toBe("/p_home");
+		expect(window.location.pathname).toBe("/p/p_home");
 	});
 
 	it("keeps set_titles, each write replacing the last", () => {
@@ -286,9 +286,9 @@ describe("writes out", () => {
 		roles();
 		const two = { [DESK]: row("a", "b"), desk0002: row("x", "y") };
 		applyDesksWrite(AT, { op: "set_desks", desks: two });
-		window.history.replaceState(null, "", `/desk0002/${STRIP}`);
+		window.history.replaceState(null, "", `/d/desk0002/${STRIP}`);
 		closeDesk("desk0002");
-		expect(window.location.pathname).toBe("/p_home");
+		expect(window.location.pathname).toBe("/p/p_home");
 		expect(knownDesks()).toEqual({ [DESK]: row("a", "b") });
 		expect(sent()).toEqual([{ path: AT, op: "desk.delete", args: { desk_id: "desk0002" } }]);
 	});

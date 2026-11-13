@@ -20,7 +20,6 @@ import {
 	focusedRoute,
 	focusPane,
 	hrefFor,
-	isKnownPlane,
 	itemHref,
 	knownDesks,
 	leavePlanes,
@@ -40,7 +39,6 @@ import {
 	resolve,
 	saveItem,
 	setDesks,
-	setPlanes,
 	setRoles,
 	setShares,
 	setWidth,
@@ -113,84 +111,92 @@ beforeEach(() => {
 });
 
 describe("url shapes", () => {
-	it("tells root, desk, item, plane and nothing apart", () => {
+	it("tells root, desk, item, plane and nothing apart by prefix", () => {
 		expect(shapeOf("/")).toEqual({ kind: "root" });
-		expect(shapeOf("/ab12cd34")).toEqual({ kind: "desk", desk: "ab12cd34" });
-		expect(shapeOf("/ab12cd34/k3x9ab")).toEqual({ kind: "item", desk: "ab12cd34", item: "k3x9ab" });
-		expect(shapeOf("/p_0190_0001_ab12")).toEqual({ kind: "plane", plane: "p_0190_0001_ab12" });
+		expect(shapeOf("/d/ab12cd34")).toEqual({ kind: "desk", desk: "ab12cd34" });
+		expect(shapeOf("/d/ab12cd34/k3x9ab")).toEqual({
+			kind: "item",
+			desk: "ab12cd34",
+			item: "k3x9ab",
+		});
+		expect(shapeOf("/p/p_0190_0001_ab12")).toEqual({ kind: "plane", plane: "p_0190_0001_ab12" });
+		// A desk shaped plane id is a plane: the prefix says so.
+		expect(shapeOf("/p/settings")).toEqual({ kind: "plane", plane: "settings" });
 		// A plane id is key chars only.
-		expect(shapeOf("/a%20b")).toEqual({ kind: "none" });
-		expect(shapeOf("/ab12cd34/K3X9AB")).toEqual({ kind: "none" });
-		expect(shapeOf("/x/k3x9ab")).toEqual({ kind: "none" });
-		expect(shapeOf("/a/b/c")).toEqual({ kind: "none" });
-		expect(shapeOf("/a/")).toEqual({ kind: "none" });
-		expect(shapeOf("/%E0%A4%A")).toEqual({ kind: "none" });
-	});
-
-	it("reads a one segment desk shaped id as a desk only once the desks hold it", () => {
-		expect(shapeOf("/settings")).toEqual({ kind: "desk", desk: "settings" });
-		expect(shapeOf("/settings", {})).toEqual({ kind: "plane", plane: "settings" });
-		expect(shapeOf(`/${DESK}`, { [DESK]: usual() })).toEqual({ kind: "desk", desk: DESK });
+		expect(shapeOf("/p/a%20b")).toEqual({ kind: "none" });
+		expect(shapeOf("/d/ab12cd34/K3X9AB")).toEqual({ kind: "none" });
+		expect(shapeOf("/d/x/k3x9ab")).toEqual({ kind: "none" });
+		expect(shapeOf("/d/ab12cd34/k3x9ab/x")).toEqual({ kind: "none" });
+		expect(shapeOf("/p/a/b")).toEqual({ kind: "none" });
+		expect(shapeOf("/p/")).toEqual({ kind: "none" });
+		expect(shapeOf("/p")).toEqual({ kind: "none" });
+		expect(shapeOf("/p/%E0%A4%A")).toEqual({ kind: "none" });
+		// No prefix: the old forms are nothing.
+		expect(shapeOf("/ab12cd34")).toEqual({ kind: "none" });
+		expect(shapeOf("/ab12cd34/k3x9ab")).toEqual({ kind: "none" });
+		expect(shapeOf("/p_0190_0001_ab12")).toEqual({ kind: "none" });
+		expect(shapeOf("/x/settings")).toEqual({ kind: "none" });
 	});
 
 	it("reads an href, leaving a hash or a deeper path out", () => {
-		expect(shapeOfHref("/movie?id=42")).toEqual({
+		expect(shapeOfHref("/p/movie?id=42")).toEqual({
 			shape: { kind: "plane", plane: "movie" },
 			params: { id: "42" },
 		});
-		expect(shapeOfHref(`/${DESK}/${P}`)?.shape).toEqual({ kind: "item", desk: DESK, item: P });
-		expect(shapeOfHref("/x#top")).toBeNull();
-		expect(shapeOfHref("/x/y/z")).toBeNull();
+		expect(shapeOfHref(`/d/${DESK}/${P}`)?.shape).toEqual({ kind: "item", desk: DESK, item: P });
+		expect(shapeOfHref("/p/x#top")).toBeNull();
+		expect(shapeOfHref("/p/x/y")).toBeNull();
+		expect(shapeOfHref("/x")).toBeNull();
 	});
 
 	it("builds urls", () => {
-		expect(hrefFor("a b", { k: "v" })).toBe("/a%20b?k=v");
-		expect(deskHref(DESK)).toBe(`/${DESK}`);
-		expect(itemHref(DESK, P)).toBe(`/${DESK}/${P}`);
+		expect(hrefFor("a b", { k: "v" })).toBe("/p/a%20b?k=v");
+		expect(deskHref(DESK)).toBe(`/d/${DESK}`);
+		expect(itemHref(DESK, P)).toBe(`/d/${DESK}/${P}`);
 	});
 
-	it("knows a desk shaped plane id through a role or the planes", () => {
-		expect(isKnownPlane("settings", { settings: "settings" }, null)).toBe(true);
-		expect(isKnownPlane("settings", {}, new Set(["settings"]))).toBe(true);
-		expect(isKnownPlane("settings", {}, new Set())).toBe(false);
-		expect(isKnownPlane("settings", {}, null)).toBeNull();
-	});
-
-	it("resolves pending until desks and roles land, then each row", () => {
+	it("shows a plane url at once, / once the roles land, a desk url once the desks do", () => {
 		const desks = { [DESK]: usual(), [OTHER]: dk("Empty") };
 		const e = (path: string, query = {}) => ({ path, query });
-		expect(resolve(e("/m"), null, { home: "h" })).toEqual({ kind: "pending" });
-		expect(resolve(e("/m"), desks, null)).toEqual({ kind: "pending" });
+		expect(resolve(e("/p/m"), null, null)).toEqual({ kind: "solo", plane: "m", params: {} });
+		expect(resolve(e("/"), desks, null)).toEqual({ kind: "pending" });
+		expect(resolve(e(`/d/${DESK}`), null, { home: "h" })).toEqual({ kind: "pending" });
+		expect(resolve(e(`/d/${DESK}/${P}`), null, { home: "h" })).toEqual({ kind: "pending" });
 		const roles = { home: "h" };
-		expect(resolve(e("/"), desks, roles)).toEqual({ kind: "solo", plane: "h", params: {} });
+		expect(resolve(e("/"), null, roles)).toEqual({ kind: "solo", plane: "h", params: {} });
 		expect(resolve(e("/"), desks, {})).toEqual({ kind: "missing", what: "page", id: "/" });
-		expect(resolve(e("/m", { id: "1" }), desks, roles)).toEqual({
+		expect(resolve(e("/p/m", { id: "1" }), desks, roles)).toEqual({
 			kind: "solo",
 			plane: "m",
 			params: { id: "1" },
 		});
-		expect(resolve(e(`/${DESK}/${S}`), desks, roles)).toMatchObject({
+		expect(resolve(e(`/d/${DESK}/${S}`), desks, roles)).toMatchObject({
 			kind: "item",
 			desk: DESK,
 			name: "Work",
 			focus: "b",
 		});
-		expect(resolve(e(`/${DESK}`), desks, roles)).toMatchObject({
+		expect(resolve(e(`/d/${DESK}`), desks, roles)).toMatchObject({
 			kind: "item",
 			desk: DESK,
 			item: { id: P },
 		});
-		expect(resolve(e(`/${OTHER}`), desks, roles)).toEqual({
+		expect(resolve(e(`/d/${OTHER}`), desks, roles)).toEqual({
 			kind: "desk",
 			desk: OTHER,
 			name: "Empty",
 		});
-		expect(resolve(e(`/zzzzzzzz/${P}`), desks, roles)).toEqual({
+		expect(resolve(e("/d/zzzzzzzz"), desks, roles)).toEqual({
 			kind: "missing",
 			what: "desk",
 			id: "zzzzzzzz",
 		});
-		expect(resolve(e(`/${DESK}/zzzzzz`), desks, roles)).toEqual({
+		expect(resolve(e(`/d/zzzzzzzz/${P}`), desks, roles)).toEqual({
+			kind: "missing",
+			what: "desk",
+			id: "zzzzzzzz",
+		});
+		expect(resolve(e(`/d/${DESK}/zzzzzz`), desks, roles)).toEqual({
 			kind: "missing",
 			what: "item",
 			id: "Work / zzzzzz",
@@ -208,23 +214,26 @@ describe("url shapes", () => {
 		const e = (path: string) => ({ path, query: {} });
 		const page = (path: string) => ({ kind: "missing", what: "page", id: path });
 		// Plane ids: key chars, minted, a system plane's name, an id given in code.
-		for (const ok of ["/p_01a1cb96cbab_0006_3f2d", "/home_indexer", "/My-plane_2"]) {
+		for (const ok of ["/p/p_01a1cb96cbab_0006_3f2d", "/p/home_indexer", "/p/My-plane_2"]) {
 			expect(resolve(e(ok), desks, roles).kind).toBe("solo");
 		}
-		for (const bad of ["/a%20b", "/a.b", "/%E2%9C%93", `/${"x".repeat(129)}`]) {
+		for (const bad of ["/p/a%20b", "/p/a.b", "/p/%E2%9C%93", `/p/${"x".repeat(129)}`]) {
 			expect(resolve(e(bad), desks, roles)).toEqual(page(bad));
 		}
-		// Two segments: a desk id (8) and an item id (6), nothing else.
-		for (const bad of [`/${DESK}/abc`, `/${DESK}/ABCDEF`, `/short/${P}`, `/${DESK}/${P}x`]) {
+		// A desk id (8) and an item id (6), nothing else.
+		for (const bad of [
+			`/d/${DESK}/abc`,
+			`/d/${DESK}/ABCDEF`,
+			`/d/short/${P}`,
+			`/d/${DESK}/${P}x`,
+			"/d/short",
+		]) {
 			expect(resolve(e(bad), desks, roles)).toEqual(page(bad));
 		}
-		// A desk's shape and no desk: pending until the planes are known, then a desk not found.
-		expect(resolve(e("/zzzzzzzz"), desks, roles)).toEqual({ kind: "pending" });
-		expect(resolve(e("/zzzzzzzz"), desks, roles, new Set())).toEqual({
-			kind: "missing",
-			what: "desk",
-			id: "zzzzzzzz",
-		});
+		// Old urls, no prefix: a page not found, no redirect.
+		for (const bad of [`/${DESK}`, `/${DESK}/${P}`, "/home_indexer", "/zzzzzzzz"]) {
+			expect(resolve(e(bad), desks, roles)).toEqual(page(bad));
+		}
 	});
 });
 
@@ -235,14 +244,14 @@ describe("landing: the url table", () => {
 		const before = window.history.length;
 		known({});
 		await tick();
-		expect(url()).toBe("/p_home");
+		expect(url()).toBe("/p/p_home");
 		expect(window.history.length).toBe(before);
 		expect(focusedRoute()).toBe("p_home");
 	});
 
 	it("shows /<plane id> solo, its query as params", () => {
 		known({});
-		at("/movie?id=42");
+		at("/p/movie?id=42");
 		expect(currentRoute()).toEqual({ kind: "solo", plane: "movie", params: { id: "42" } });
 		expect(currentRoutes()).toEqual(["movie"]);
 		expect(paramsOf("movie")).toEqual({ id: "42" });
@@ -281,39 +290,25 @@ describe("landing: the url table", () => {
 
 	it("keeps an unknown desk's url and says the desk is not found", async () => {
 		known({ [DESK]: usual() });
-		at(`/zzzzzzzz/${P}`);
+		at(`/d/zzzzzzzz/${P}`);
 		ensureLanding();
 		await tick();
-		expect(url()).toBe(`/zzzzzzzz/${P}`);
+		expect(url()).toBe(`/d/zzzzzzzz/${P}`);
 		expect(currentRoute()).toEqual({ kind: "missing", what: "desk", id: "zzzzzzzz" });
 	});
 
 	it("keeps a known desk's unknown item url and says the item is not found", async () => {
 		known({ [DESK]: usual() });
-		at(`/${DESK}/zzzzzz`);
+		at(`/d/${DESK}/zzzzzz`);
 		ensureLanding();
 		await tick();
 		await tick();
-		expect(url()).toBe(`/${DESK}/zzzzzz`);
+		expect(url()).toBe(`/d/${DESK}/zzzzzz`);
 		expect(currentRoute()).toMatchObject({ kind: "missing", what: "item" });
 	});
 
-	it("says a desk shaped id that is no desk and no plane is a desk not found, once the planes are known", async () => {
-		known({});
-		at("/zzzzzzzz");
-		ensureLanding();
-		await tick();
-		expect(currentRoute()).toEqual({ kind: "pending" });
-		setPlanes(["p_home"]);
-		await tick();
-		expect(url()).toBe("/zzzzzzzz");
-		expect(currentRoute()).toEqual({ kind: "missing", what: "desk", id: "zzzzzzzz" });
-	});
-
-	it("shows a desk shaped plane id a role holds", () => {
-		setRoles({ home: "p_home", settings: "settings" });
-		setDesks({});
-		at("/settings?tab=keys");
+	it("shows a desk shaped plane id solo before anything lands", () => {
+		at("/p/settings?tab=keys");
 		expect(currentRoute()).toEqual({ kind: "solo", plane: "settings", params: { tab: "keys" } });
 	});
 
@@ -341,7 +336,7 @@ describe("landing: the url table", () => {
 		ensureLanding();
 		setDesks({});
 		await tick();
-		expect(url()).toBe("/p_home");
+		expect(url()).toBe("/p/p_home");
 	});
 });
 
@@ -387,16 +382,16 @@ describe("navigation inside a desk item", () => {
 	});
 
 	it("just navigates in a solo plane", () => {
-		at("/s");
+		at("/p/s");
 		navigate(L("m", { k: "1" }));
-		expect(url()).toBe("/m?k=1");
+		expect(url()).toBe("/p/m?k=1");
 		expect(desk()).toEqual(usual());
 	});
 
 	it("reads a program's push to a plane url as navigation, the item url put back", async () => {
 		at(itemHref(DESK, P));
 		ensureLanding();
-		History.push("/x?k=1");
+		History.push("/p/x?k=1");
 		expect(currentRoute()).toMatchObject({ kind: "item", desk: DESK });
 		await tick();
 		expect(url()).toBe(itemHref(DESK, P));
@@ -414,9 +409,9 @@ describe("navigation inside a desk item", () => {
 	});
 
 	it("leaves a removed solo plane for home, and a desk item as it is", () => {
-		at("/gone");
+		at("/p/gone");
 		leavePlanes(["gone"], true);
-		expect(url()).toBe("/p_home");
+		expect(url()).toBe("/p/p_home");
 		at(itemHref(DESK, P));
 		leavePlanes(["a"]);
 		expect(url()).toBe(itemHref(DESK, P));
@@ -427,7 +422,7 @@ describe("navigation inside a desk item", () => {
 		desk().items[0] = pi(P, "a", L("a", { k: "v" }));
 		at(itemHref(DESK, P));
 		openInNewTab("a");
-		expect(open).toHaveBeenCalledWith("/a?k=v", "_blank", "noopener");
+		expect(open).toHaveBeenCalledWith("/p/a?k=v", "_blank", "noopener");
 		open.mockRestore();
 	});
 });
@@ -456,7 +451,7 @@ describe("desk ops by id", () => {
 		closeDesk(DESK);
 		expect(knownDesks()).toEqual({});
 		expect(deleted).toEqual([DESK]);
-		expect(url()).toBe("/p_home");
+		expect(url()).toBe("/p/p_home");
 	});
 
 	it("closing another desk leaves the tab be", () => {
@@ -487,7 +482,7 @@ describe("desk ops by id", () => {
 	it("opens an item (pushed), and a strip focusing a pane", () => {
 		const shown = vi.fn();
 		onReveal(shown);
-		at("/s");
+		at("/p/s");
 		const before = window.history.length;
 		openItem(DESK, P);
 		expect(url()).toBe(itemHref(DESK, P));
@@ -544,7 +539,7 @@ describe("desk ops by id", () => {
 describe("focus and history", () => {
 	it("keeps focus per strip, this tab only, through back and forward", async () => {
 		known({ [DESK]: usual(), [OTHER]: dk("Other", st(S, "x", "y")) });
-		at("/s");
+		at("/p/s");
 		openItem(DESK, S);
 		focusPane(DESK, S, "c");
 		openItem(OTHER, S);
@@ -570,7 +565,7 @@ describe("focus and history", () => {
 		known({ [DESK]: usual() });
 		at(itemHref(DESK, P));
 		openPlane("m");
-		expect(url()).toBe("/m");
+		expect(url()).toBe("/p/m");
 		expect(desk()).toEqual(usual());
 	});
 });
@@ -610,7 +605,7 @@ describe("gestures", () => {
 		const pane = document.createElement("div");
 		pane.setAttribute("data-pane", "c");
 		root.append(pane);
-		const e = click(link("/movie?id=1", {}, pane));
+		const e = click(link("/p/movie?id=1", {}, pane));
 		expect(e.defaultPrevented).toBe(true);
 		expect(url()).toBe(itemHref(DESK, S));
 		expect(currentRoutes()).toEqual(["b", "movie"]);
@@ -619,9 +614,9 @@ describe("gestures", () => {
 	it("opens a plane url outside any pane solo, on a desk item too", () => {
 		const writes = vi.fn();
 		const off = onDeskWrite(writes);
-		const e = click(link("/movie?id=1"));
+		const e = click(link("/p/movie?id=1"));
 		expect(e.defaultPrevented).toBe(true);
-		expect(url()).toBe("/movie?id=1");
+		expect(url()).toBe("/p/movie?id=1");
 		expect(currentRoute()).toEqual({ kind: "solo", plane: "movie", params: { id: "1" } });
 		expect(desk().items[1]).toEqual(st(S, "b", "c"));
 		expect(writes).not.toHaveBeenCalled();
@@ -630,7 +625,7 @@ describe("gestures", () => {
 
 	it("opens / outside any pane as home's plane, solo", () => {
 		click(link("/"));
-		expect(url()).toBe("/p_home");
+		expect(url()).toBe("/p/p_home");
 	});
 
 	it("opens an item url as that item, from a pane too", () => {
@@ -644,29 +639,29 @@ describe("gestures", () => {
 	});
 
 	it("pushes a plane url in a solo plane", () => {
-		at("/s");
-		click(link("/movie?id=1"));
-		expect(url()).toBe("/movie?id=1");
+		at("/p/s");
+		click(link("/p/movie?id=1"));
+		expect(url()).toBe("/p/movie?id=1");
 	});
 
 	it("opens a desk or item url, and / as home", () => {
 		click(link(itemHref(DESK, P)));
 		expect(url()).toBe(itemHref(DESK, P));
-		at("/s");
+		at("/p/s");
 		click(link("/"));
-		expect(url()).toBe("/p_home");
+		expect(url()).toBe("/p/p_home");
 		click(link(deskHref(DESK)));
 		expect(url()).toBe(deskHref(DESK));
 	});
 
 	it("leaves the rest native", () => {
 		const cases: [HTMLElement, MouseEventInit][] = [
-			[link("/x"), { metaKey: true }],
-			[link("/x"), { ctrlKey: true }],
-			[link("/x"), { shiftKey: true }],
-			[link("/x/y/z"), {}],
-			[link("/x#top"), {}],
-			[link("/x", { target: "_blank" }), {}],
+			[link("/p/x"), { metaKey: true }],
+			[link("/p/x"), { ctrlKey: true }],
+			[link("/p/x"), { shiftKey: true }],
+			[link("/p/x/y/z"), {}],
+			[link("/p/x#top"), {}],
+			[link("/p/x", { target: "_blank" }), {}],
 			[link("https://example.com/x"), {}],
 		];
 		for (const [a, init] of cases) expect(click(a, init).defaultPrevented).toBe(false);

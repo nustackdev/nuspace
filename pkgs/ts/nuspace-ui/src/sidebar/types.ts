@@ -12,7 +12,7 @@
 // itself.
 //
 // There is no path to a Plane. It is addressed by id at a fixed depth however
-// deep it is nested, so the URL is /<plane id> and an op carries an id.
+// deep it is nested, so the URL is /p/<plane id> and an op carries an id.
 //
 // ## Two kinds of row
 //

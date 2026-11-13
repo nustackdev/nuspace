@@ -50,7 +50,7 @@ beforeEach(() => {
 
 describe("openToTheSide", () => {
 	it("makes a new desk of a solo plane and the link, side by side, the link focused", () => {
-		at("/s?x=1");
+		at("/p/s?x=1");
 		openToTheSide(L("movie", { id: "1" }));
 		const [id] = others();
 		expect(desk(id).items).toHaveLength(1);
@@ -60,7 +60,7 @@ describe("openToTheSide", () => {
 	});
 
 	it("opens the solo plane itself in place, no desk made", () => {
-		at("/s");
+		at("/p/s");
 		openToTheSide(L("s", { q: "2" }));
 		expect(others()).toEqual([]);
 		expect(currentRoute()).toEqual({ kind: "solo", plane: "s", params: { q: "2" } });
@@ -97,7 +97,7 @@ describe("openToTheSide", () => {
 
 	it("pins the link as an empty desk's first item", () => {
 		setDesks({ [DESK]: usual(), desk0002: { name: "", items: [] } });
-		at("/desk0002");
+		at("/d/desk0002");
 		openToTheSide(L("x"));
 		expect(desk("desk0002").items).toMatchObject([{ kind: "plane", original: L("x") }]);
 		expect(currentRoutes()).toEqual(["x"]);
@@ -134,16 +134,16 @@ describe("linkRule", () => {
 	}
 
 	it("opens an Option Cmd click to the side of the link's pane", () => {
-		expect(click("/x", { altKey: true, metaKey: true }, "b").defaultPrevented).toBe(true);
+		expect(click("/p/x", { altKey: true, metaKey: true }, "b").defaultPrevented).toBe(true);
 		expect(currentRoutes()).toEqual(["b", "x", "c", "d"]);
 	});
 
 	it("leaves a plain or Option click and a desk or item url to the router", () => {
-		click("/x", { altKey: true }, "b");
+		click("/p/x", { altKey: true }, "b");
 		expect(currentRoutes()).toEqual(["x", "c", "d"]);
 		expect(others()).toEqual([]);
 		click(itemHref(DESK, "pitem1"), { altKey: true, metaKey: true });
-		click("/y", { altKey: true, metaKey: true, shiftKey: true });
+		click("/p/y", { altKey: true, metaKey: true, shiftKey: true });
 		expect(currentRoutes()).toEqual(["a"]);
 		expect(others()).toEqual([]);
 	});

@@ -32,7 +32,7 @@ function at(path: string) {
 	}));
 	setDesks({ desk0001: { name: "", items: [{ id: "strip1", kind: "strip", columns }] } });
 	setRoles({ home: "", settings: "", search: "" });
-	window.history.replaceState(null, "", "/desk0001/strip1");
+	window.history.replaceState(null, "", "/d/desk0001/strip1");
 }
 
 function render(planeId: string, absent: AbsentReason, where: PaneAt = IN_STRIP) {

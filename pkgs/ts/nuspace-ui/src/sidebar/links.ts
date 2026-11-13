@@ -17,7 +17,7 @@
 
 import { type AnchorRule, useAnchorCatcher } from "@nustackdev/ui-kit";
 import type { RefObject } from "react";
-import { knownDesks, openPane, resetItem, shapeOfHref } from "../core/router";
+import { openPane, resetItem, shapeOfHref } from "../core/router";
 import { linkRule } from "../desk/open";
 
 /** The attribute a pane row carries: the plane its pane shows. */
@@ -39,7 +39,7 @@ export const sidebarRule: AnchorRule = (href, gesture, anchor, event) => {
 		return true;
 	}
 	const pane = anchor.closest(`[${PANE_ATTR}]`)?.getAttribute(PANE_ATTR);
-	const hit = pane ? shapeOfHref(href, knownDesks()) : null;
+	const hit = pane ? shapeOfHref(href) : null;
 	if (pane && hit?.shape.kind === "item") {
 		openPane(hit.shape.desk, hit.shape.item, pane);
 		return true;

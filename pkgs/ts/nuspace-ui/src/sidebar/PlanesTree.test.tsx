@@ -33,7 +33,7 @@ function onDesk(...planes: string[]): Desk {
 	const desk: Desk = { name: "", items: [{ id: "strip1", kind: "strip", columns }] };
 	setRoles({ home: "h", settings: "", search: "" });
 	setDesks({ desk0001: desk });
-	window.history.replaceState(null, "", "/desk0001/strip1");
+	window.history.replaceState(null, "", "/d/desk0001/strip1");
 	focusPane("desk0001", "strip1", planes.at(-1) ?? "");
 	return desk;
 }
@@ -191,7 +191,7 @@ describe("tree row icon and chevron slot", () => {
 		]);
 		expect(labels).not.toContain("Open on desk");
 		act(() => items.find((i) => itemLabel(i) === "Open in new tab")?.click());
-		expect(open).toHaveBeenLastCalledWith("/b", "_blank", "noopener");
+		expect(open).toHaveBeenLastCalledWith("/p/b", "_blank", "noopener");
 
 		act(() => {
 			rowOf("a")?.dispatchEvent(
@@ -200,7 +200,7 @@ describe("tree row icon and chevron slot", () => {
 		});
 		const ctx = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')];
 		act(() => ctx.find((i) => itemLabel(i) === "Open in new tab")?.click());
-		expect(open).toHaveBeenLastCalledWith("/a", "_blank", "noopener");
+		expect(open).toHaveBeenLastCalledWith("/p/a", "_blank", "noopener");
 		open.mockRestore();
 	});
 
@@ -222,14 +222,14 @@ describe("tree row icon and chevron slot", () => {
 		act(() => linkOf("b")?.click());
 		document.removeEventListener("click", after);
 		expect(seen).toEqual([false, false, true]);
-		expect(linkOf("b")?.getAttribute("href")).toBe("/b");
-		expect(window.location.pathname).toBe("/b");
+		expect(linkOf("b")?.getAttribute("href")).toBe("/p/b");
+		expect(window.location.pathname).toBe("/p/b");
 	});
 
 	it("opens an Option-Cmd-click on a row to the side", () => {
 		setRoles({ home: "h", settings: "", search: "" });
 		setDesks({});
-		window.history.replaceState(null, "", "/a");
+		window.history.replaceState(null, "", "/p/a");
 		render([]);
 		const press = (init: MouseEventInit) =>
 			act(() => {
@@ -246,7 +246,7 @@ describe("tree row icon and chevron slot", () => {
 		const desk = onDesk("x", "y");
 		render([]);
 		act(() => linkOf("b")?.click());
-		expect(window.location.pathname).toBe("/b");
+		expect(window.location.pathname).toBe("/p/b");
 		expect(currentRoutes()).toEqual(["b"]);
 		expect(knownDesks()?.desk0001).toEqual(desk);
 	});
@@ -347,12 +347,12 @@ describe("tree row selection", () => {
 	});
 
 	it("opens the row's plane with Enter", () => {
-		window.history.replaceState(null, "", "/a");
+		window.history.replaceState(null, "", "/p/a");
 		render([]);
 		act(() => {
 			rowOf("b")?.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
 		});
-		expect(window.location.pathname).toBe("/b");
+		expect(window.location.pathname).toBe("/p/b");
 	});
 });
 

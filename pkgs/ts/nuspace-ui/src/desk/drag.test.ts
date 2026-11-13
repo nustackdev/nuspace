@@ -172,7 +172,7 @@ describe("what a pane header's drag carries", () => {
 	});
 
 	it("on a solo plane, the plane with the params it shows", () => {
-		window.history.replaceState(null, "", "/p_solo?run=42");
+		window.history.replaceState(null, "", "/p/p_solo?run=42");
 		const { data } = start(headerDragProps({ kind: "solo" }, "p_solo"));
 		expect(Object.keys(data)).toEqual([PLANE_MIME]);
 		const link = { plane: "p_solo", params: { run: "42" } };
