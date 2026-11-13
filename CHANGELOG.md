@@ -11,6 +11,8 @@ separately here.
 
 ## Unreleased
 
+- Boot skeleton gets its top gap back above the title
+
 - Drop unused cell and status wire fields; ref classes cover every feed op
 - Cells can make their pane follow the bottom or scroll, for chat style output
 - Opening a deep plane opens its sidebar folders, and only the sidebar reads its tree

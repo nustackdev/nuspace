@@ -219,9 +219,10 @@ export const shellPane = cn(
 
 /**
  * The plane's scroll host for the viewer skeleton the shell draws while it
- * boots. A pane's own body is `paneBody`.
+ * boots. It takes a pane body's top and bottom frame (`paneBody`), so the
+ * skeleton title sits where a landed plane's will.
  */
-export const shellPanePlane = cn(docPlaneSurface, "bg-transparent");
+export const shellPanePlane = cn(docPlaneSurface, "bg-transparent py-doc-pad-y");
 
 /* ============================== States =================================== */
 
