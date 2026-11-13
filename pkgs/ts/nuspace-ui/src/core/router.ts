@@ -572,6 +572,11 @@ export function renameDesk(id: string, name: string): void {
 	deskMove(id, (d) => M.rename(d, name));
 }
 
+/** Leave the desk the tab is on, keeping it: to "/", which lands on home. Pushed. */
+export function leaveDesk(): void {
+	go("/");
+}
+
 /** Close desk `id`: gone here at once, then from the store. A tab showing it goes home. */
 export function closeDesk(id: string): void {
 	if (!desks || !Object.hasOwn(desks, id)) return;

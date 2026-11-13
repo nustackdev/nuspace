@@ -38,6 +38,8 @@ vi.mock("../sidebar/api", () => ({
 	canDelete: () => false,
 	deletePlane: vi.fn(),
 	trailOf: vi.fn(() => []),
+	deskLabel: (name: string) => name.trim() || "Desk",
+	STRIP_TITLE: "Strip",
 }));
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -123,6 +125,18 @@ function draw(path: string) {
 
 const all = (sel: string) => [...host.querySelectorAll<HTMLElement>(sel)];
 const one = (sel: string) => host.querySelector(sel) as HTMLElement;
+/** Close the pane showing `plane` from its `...` menu: the pane has no close of its own. */
+function closeFromMenu(plane: string) {
+	const trigger = one(`[data-pane="${plane}"] [aria-label="Plane settings"]`);
+	act(() => {
+		trigger.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+	});
+	const close = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
+		(i) => i.textContent?.trim() === "Close",
+	);
+	if (!close) throw new Error("no Close in the pane menu");
+	act(() => close.click());
+}
 const opened = () =>
 	vi
 		.mocked(notifyOp)
@@ -201,7 +215,7 @@ describe("a strip", () => {
 		expect(all("[data-pane]").map((p) => p.dataset.pane)).toEqual(["g", "b", "c"]);
 	});
 
-	it("gives each pane a header to drag by, and a close", () => {
+	it("gives each pane a header to drag by, and no close of its own", () => {
 		feed(DESKS);
 		draw(STRIP_URL);
 		expect(all("[data-pane-header]").map((h) => h.dataset.paneHeader)).toEqual([
@@ -210,7 +224,8 @@ describe("a strip", () => {
 			"c",
 			"d",
 		]);
-		expect(all('[aria-label^="Close"]')).toHaveLength(4);
+		expect(all('[data-pane] [aria-label^="Close"]')).toEqual([]);
+		expect(all('[data-pane] [aria-label="Plane settings"]')).toHaveLength(4);
 	});
 
 	it("focuses a pane on a click, per tab, its title bright and the others dimmed", () => {
@@ -244,7 +259,7 @@ describe("a strip", () => {
 		const closePane = vi.spyOn(router, "closePane");
 		feed(DESKS);
 		draw(STRIP_URL);
-		act(() => one('[aria-label="Close Untitled"]').click());
+		closeFromMenu("a");
 		expect(closePane).toHaveBeenCalledWith(ID, "strip1", "a");
 		expect(all("[data-pane]").map((p) => p.dataset.pane)).toEqual(["b", "c", "d"]);
 	});
@@ -308,8 +323,59 @@ describe("a plane item", () => {
 		const closeItem = vi.spyOn(router, "closeItem");
 		feed(DESKS);
 		draw(LONE_URL);
-		act(() => one('[aria-label^="Close"]').click());
+		closeFromMenu("f");
 		expect(closeItem).toHaveBeenCalledWith(ID, "lone01");
+	});
+});
+
+describe("the desk header", () => {
+	const header = () => host.querySelector<HTMLElement>("[data-desk-header]");
+	const items = () => [...(header()?.querySelectorAll<HTMLAnchorElement>("nav a") ?? [])];
+
+	it("names the desk and links its items in order, the shown one active", () => {
+		feed(DESKS);
+		draw(STRIP_URL);
+		expect(header()?.dataset.deskHeader).toBe(ID);
+		expect(header()?.textContent).toContain("Work");
+		expect(items().map((a) => a.getAttribute("href"))).toEqual([STRIP_URL, LONE_URL]);
+		expect(items()[0].textContent).toContain("Strip4");
+		expect(items().map((a) => a.getAttribute("aria-current"))).toEqual(["page", null]);
+	});
+
+	it("follows the item the tab shows, and is there on an empty desk", () => {
+		feed(DESKS);
+		draw(LONE_URL);
+		expect(items().map((a) => a.getAttribute("aria-current"))).toEqual([null, "page"]);
+		draw(`/${EMPTY}`);
+		expect(header()?.textContent).toContain("Empty");
+		expect(items()).toEqual([]);
+	});
+
+	it("shows a navigated plane item as its original's icon, a slash and its recent, the icon a reset", () => {
+		const resetItem = vi.spyOn(router, "resetItem");
+		feed(DESKS);
+		draw(STRIP_URL);
+		const reset = one('[data-desk-header] [aria-label^="Reset to"]');
+		expect(reset.nextElementSibling?.textContent).toBe("/");
+		act(() => reset.click());
+		expect(resetItem).toHaveBeenCalledWith(ID, "lone01");
+	});
+
+	it("is not on a solo plane", () => {
+		feed(DESKS);
+		draw("/p_one");
+		expect(header()).toBeNull();
+	});
+
+	it("closes the desk by leaving it for home, the desk kept", () => {
+		const closeDesk = vi.spyOn(router, "closeDesk");
+		feed(DESKS);
+		draw(STRIP_URL);
+		expect(header()?.querySelector('[aria-label^="Rename"]')).toBeNull();
+		act(() => one('[data-desk-header] [aria-label="Close Work"]').click());
+		expect(closeDesk).not.toHaveBeenCalled();
+		expect(window.location.pathname).toBe("/");
+		expect(header()).toBeNull();
 	});
 });
 

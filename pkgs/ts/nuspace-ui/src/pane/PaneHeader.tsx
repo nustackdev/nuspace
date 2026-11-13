@@ -1,6 +1,6 @@
 // The header across a pane's top: the plane's icon and trail on the left, its
-// actions on the right (the pane menu, and close where the pane has one). The
-// actions show on hover and on the focused pane.
+// one action on the right, the pane menu (which holds close, where the pane
+// has one). The menu shows on hover and on the focused pane.
 //
 // The trail is the planes above this one, then its own title. A parent is a
 // link to its plane, so the shell's anchor rule opens it in this pane: in
@@ -21,10 +21,8 @@ import {
 	BreadcrumbList,
 	BreadcrumbPage,
 	BreadcrumbSeparator,
-	IconButton,
 	OverflowTooltip,
 } from "@nustackdev/ui-kit";
-import { X } from "lucide-react";
 import { Fragment } from "react";
 import { hrefFor } from "../core/router";
 import {
@@ -128,11 +126,6 @@ export function PaneHeader({
 					onRestart={onRestart}
 					onClose={onClose}
 				/>
-				{onClose ? (
-					<IconButton variant="ghost" size="sm" aria-label={`Close ${title}`} onClick={onClose}>
-						<X />
-					</IconButton>
-				) : null}
 			</div>
 		</header>
 	);

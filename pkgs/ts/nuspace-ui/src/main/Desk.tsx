@@ -11,6 +11,10 @@
 //   missing  not found: a desk, a desk's item or a url that is none of
 //            them, drawn as a pane (../pane/NotFound.tsx)
 //
+// On a desk (an empty desk or one of its items) the desk header runs across
+// the top, over what it shows (./DeskHeader.tsx): the desk's name, its items
+// to switch between, rename and close. A solo plane has none.
+//
 // A pane draws the plane it shows: its recent, else its original. A link
 // inside a desk item navigates that plane item or pane in place, through the
 // router's anchor rule on the shell, which finds the pane by `data-pane`.
@@ -54,6 +58,7 @@ import {
 } from "@nustackdev/ui-kit";
 import { Columns2 } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import { useDesks } from "../core/desks";
 import {
 	currentRoutes,
 	onReveal,
@@ -71,6 +76,7 @@ import {
 	deskColumns,
 	deskEmpty,
 	deskEmptyAim,
+	deskFrame,
 	deskRow,
 	deskRowViewport,
 	deskSolo,
@@ -92,6 +98,7 @@ import {
 	usePlaneTree,
 } from "../sidebar/api";
 import { Column } from "./Column";
+import { DeskHeader } from "./DeskHeader";
 import { DropRegion } from "./DropRegion";
 import { useCanvasDrop } from "./drop";
 import {
@@ -133,6 +140,7 @@ export function Desk({ path }: NodeProps) {
 	const focused = useFocusedRoute();
 	const sidebar = useTypePath("SidebarRef");
 	const tree = usePlaneTree(sidebar);
+	const desks = useDesks();
 	const key = pathKey(path);
 	// What `planes.open` says, as a key: the panes in order with their params.
 	const panesKey = JSON.stringify(routes.map((id) => [id, paramsOf(id)]));
@@ -285,8 +293,17 @@ export function Desk({ path }: NodeProps) {
 			</div>
 		);
 	}
+	// On a desk, its header across the top, over what it shows.
+	const framed = (deskId: string, active: string | null, body: ReactNode): ReactNode => (
+		<div className={deskFrame}>
+			<DeskHeader deskId={deskId} desk={desks?.[deskId] ?? null} active={active} tree={tree} />
+			{body}
+		</div>
+	);
 	if (route.kind === "desk") {
-		return (
+		return framed(
+			route.desk,
+			null,
 			<div className={deskArea} data-desk={route.desk} {...drop.props}>
 				<EmptyState className={deskEmpty} icon={<Columns2 />} description={EMPTY_DESK_HINT}>
 					{EMPTY_DESK}
@@ -296,12 +313,14 @@ export function Desk({ path }: NodeProps) {
 						<Badge>{dropDoes(dragging(), drop.aim).label}</Badge>
 					</span>
 				) : null}
-			</div>
+			</div>,
 		);
 	}
 	if (route.item.kind === "plane") {
 		const plane = shown(route.item).plane;
-		return (
+		return framed(
+			route.desk,
+			route.item.id,
 			<div className={deskArea}>
 				<div
 					ref={dropHost}
@@ -313,14 +332,16 @@ export function Desk({ path }: NodeProps) {
 					{pane(plane)}
 					<DropRegion aim={drop.aim} refused={drop.refused} host={dropHost} />
 				</div>
-			</div>
+			</div>,
 		);
 	}
 
 	const { desk } = route;
 	const item = route.item.id;
 	const columns = route.item.columns;
-	return (
+	return framed(
+		desk,
+		item,
 		<div className={deskStripArea}>
 			<ScrollArea
 				orientation="horizontal"
@@ -346,7 +367,7 @@ export function Desk({ path }: NodeProps) {
 					<DropRegion aim={drop.aim} refused={drop.refused} host={dropHost} />
 				</div>
 			</ScrollArea>
-		</div>
+		</div>,
 	);
 }
 

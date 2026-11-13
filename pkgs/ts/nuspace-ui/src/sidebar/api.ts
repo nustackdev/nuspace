@@ -34,7 +34,8 @@ export { SidebarRail } from "./SidebarRail";
 // -- For the desk ------------------------------------------------------------
 
 export { PLANE_MIME } from "./drag";
+export { deskLabel, STRIP_TITLE } from "./folders";
 export type { Notify, Ops } from "./ops";
 export { canDelete, deletePlane } from "./remove";
 export { usePlaneTree } from "./state";
-export { type Crumb, trailOf } from "./types";
+export { type Crumb, type PlaneTree, trailOf } from "./types";

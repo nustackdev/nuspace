@@ -70,6 +70,76 @@ export const shellMain = "group/main relative flex min-h-0 min-w-0 flex-1";
 export const deskArea = "relative flex min-h-0 min-w-0 flex-1 bg-nuspace-page";
 
 /**
+ * A desk on the canvas: its header across the top, the desk area under it.
+ * Only a desk route has one; a solo plane is the desk area alone.
+ */
+export const deskFrame = "flex min-h-0 min-w-0 flex-1 flex-col bg-nuspace-page";
+
+/**
+ * The desk header: the desk's icon and name, its items, its actions. As
+ * tall as a pane header, on the sidebar's ground (`ground-deep`, the kit's
+ * `bg-sunken`), so it reads as the frame and not as a pane, a `line-subtle`
+ * hairline under it, the same line the panes meet on.
+ */
+export const deskHeader = cn(
+	"flex h-8.5 shrink-0 items-center gap-1.5 pr-1 pl-2.5",
+	"border-b border-border-subtle bg-bg-sunken",
+);
+
+/** The desk icon in the header. */
+export const deskHeaderIcon = "size-4 shrink-0 text-text-muted";
+
+/** The desk's name: `ink-1`, a step heavier, never wider than a third of the header. */
+export const deskHeaderName =
+	"block max-w-[33%] shrink-0 select-none truncate text-sm font-medium text-text-primary";
+
+/** The items: one line of the kit's nav links, scrolling sideways when they overflow. */
+export const deskHeaderItems = cn(
+	"ml-2 flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto",
+	"[scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+);
+
+/** One item's link: truncates past a fixed width. */
+export const deskHeaderItem = "max-w-48 shrink-0 font-normal";
+
+/**
+ * A navigated plane item: the original's icon (a reset), a slash, the
+ * recent's link, one chip with one wash. The chip takes the nav link's
+ * states (hover, and the press wash on the item the tab shows); the link
+ * inside draws none of its own, so the chip never reads as two.
+ */
+export const deskHeaderItemGroup = cn(
+	"inline-flex h-6 shrink-0 items-center rounded-md pl-0.5 text-text-secondary",
+	"transition-colors duration-fast ease-out hover:bg-bg-hover hover:text-text-primary",
+);
+
+/** The chip of the item the tab shows. */
+export const deskHeaderItemActive = "bg-bg-press text-text-primary hover:bg-bg-press";
+
+/** The recent's link inside a navigated chip: no wash of its own, the chip's color. */
+export const deskHeaderItemInner = cn(
+	deskHeaderItem,
+	"bg-transparent pl-1 text-inherit hover:bg-transparent active:bg-transparent",
+	"data-[active=true]:bg-transparent data-[active=true]:text-inherit",
+	"aria-[current=page]:bg-transparent aria-[current=page]:text-inherit",
+);
+
+/** The original's icon on a navigated item, a button that resets it. */
+export const deskHeaderReset = "rounded-sm text-text-secondary";
+
+/** The slash between a navigated item's original icon and its recent title. */
+export const deskHeaderCrumbSlash = "shrink-0 select-none pl-0.5 text-sm text-text-muted";
+
+/** An item's label inside its link. */
+export const deskHeaderItemLabel = "min-w-0 truncate";
+
+/** A strip's pane count beside its label. */
+export const deskHeaderItemCount = "text-text-muted tabular-nums";
+
+/** The header's close, always shown. */
+export const deskHeaderActions = "flex shrink-0 items-center gap-0.5";
+
+/**
  * A strip's desk area: a size container, so a column's default width is a
  * part of the canvas in pure css (`deskColumnWidth`), nothing measured.
  */
