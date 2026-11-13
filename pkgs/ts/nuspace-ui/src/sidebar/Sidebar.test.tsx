@@ -7,11 +7,11 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { applyDesksWrite, resetDesks } from "../core/desks";
-import { focusedRoute, resetRouter } from "../core/router";
+import { focusedRoute, knownDesks, resetRouter } from "../core/router";
 import { PLANE_MIME } from "../desk/dnd";
 import { ActionRow } from "./ActionRow";
 import { SidebarBody } from "./harness";
-import { NAV_KEYS, NavSection } from "./NavSection";
+import { NAV_KEYS, NavSection, NEW_DESK_KEY } from "./NavSection";
 import { rolePlanes, useNavShortcuts } from "./nav";
 import { Sidebar } from "./Sidebar";
 import { SidebarSection } from "./SidebarSection";
@@ -66,16 +66,50 @@ describe("the nav section", () => {
 		);
 	}
 
-	it("draws home, search and settings, untitled, their shortcuts shown", () => {
+	it("draws home, search and settings, untitled, their shortcuts shown, then New desk", () => {
 		draw(<Nav />);
 		const rows = [...host.querySelectorAll<HTMLElement>('[role="treeitem"]')];
 		expect(rows.map((r) => r.querySelector(".truncate")?.textContent)).toEqual([
 			"Home",
 			"Search",
 			"Settings",
+			"New desk",
 		]);
 		expect(host.querySelector("h2, h3")).toBeNull();
-		for (const r of rows) expect(r.querySelector('[data-slot="shortcut"], kbd')).not.toBeNull();
+		for (const r of rows.slice(0, 3)) {
+			expect(r.querySelector('[data-slot="shortcut"], kbd')).not.toBeNull();
+		}
+	});
+
+	it("makes a desk from New desk: empty on a click, of a plane dropped on it", () => {
+		act(() => applyDesksWrite(null, { op: "set_desks", desks: {} }));
+		draw(<Nav />);
+		const row = rowOf(NEW_DESK_KEY);
+		act(() => row?.click());
+		expect(Object.values(knownDesks() ?? {})).toEqual([{ name: "Untitled", items: [] }]);
+		const held: Record<string, string> = {
+			[PLANE_MIME]: JSON.stringify({ plane: "q", params: {} }),
+		};
+		const data = {
+			types: Object.keys(held),
+			getData: (k: string) => held[k] ?? "",
+			dropEffect: "",
+		};
+		const fire = (type: string) => {
+			const e = Object.assign(new Event(type, { bubbles: true, cancelable: true }), {
+				dataTransfer: data,
+			});
+			act(() => {
+				row?.dispatchEvent(e);
+			});
+			return e;
+		};
+		expect(fire("dragover").defaultPrevented).toBe(true);
+		expect(row?.className).toContain("ring-doc-drop-line");
+		fire("drop");
+		expect(row?.className).not.toContain("ring-doc-drop-line");
+		const made = Object.values(knownDesks() ?? {}).find((d) => d.items.length);
+		expect(made?.items[0]).toMatchObject({ kind: "plane", original: { plane: "q", params: {} } });
 	});
 
 	it("links each row to the plane its role points at, not a fixed id", () => {

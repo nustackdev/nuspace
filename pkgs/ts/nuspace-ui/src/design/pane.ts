@@ -26,7 +26,7 @@ export const paneHeaderIcon = "shrink-0 text-text-muted";
  * long enough to be taken.
  */
 export const dragChip = cn(
-	"pointer-events-none fixed top-0 -left-[1000px] flex h-7 max-w-64 items-center gap-2",
+	"pointer-events-none fixed top-0 -left-[1000px] flex h-7 max-w-30 items-center gap-2",
 	"rounded-md bg-bg-elevated px-2 text-sm text-text-primary shadow-raised",
 	"[&>*:first-child]:mr-0 [&>*:first-child]:shrink-0 [&_svg]:size-4",
 );

@@ -13,18 +13,23 @@ import {
 	setRoles,
 } from "../core/router";
 import {
+	ALREADY_HERE,
+	ALREADY_IN_STRIP,
 	canDrop,
 	canDropOnSolo,
 	dragging,
 	dragKind,
+	dropDoes,
 	dropOn,
 	dropOnSolo,
 	endDrag,
 	ITEM_MIME,
+	NO_NESTING,
 	PANE_MIME,
 	PLANE_MIME,
 	planDrop,
 	readDrag,
+	refusal,
 	type Target,
 	writeItem,
 	writePane,
@@ -427,5 +432,79 @@ describe("dropOnSolo", () => {
 		dropOnSolo({ kind: "item", desk: DESK, item: "ssssss" }, L("solo"), "right");
 		expect(made()).toEqual([]);
 		expect(window.location.pathname).toBe("/solo");
+	});
+});
+
+describe("what a drop says", () => {
+	const plane = { kind: "plane" as const, link: L("x") };
+	const between: Target = { kind: "between", desk: DESK, index: 0 };
+
+	it("pins a link or a pane, moves an item already on a desk", () => {
+		expect(dropDoes(plane, between).label).toBe("Pin");
+		expect(dropDoes({ kind: "pane", desk: DESK, item: "s", plane: "x" }, between).label).toBe(
+			"Pin",
+		);
+		expect(
+			dropDoes({ kind: "item", desk: DESK, item: "a" }, { kind: "end", desk: DESK }).label,
+		).toBe("Move here");
+	});
+
+	it("names a strip made or added to by where it lands", () => {
+		const onto = (edge: "left" | "top") => ({ kind: "onto" as const, desk: DESK, item: "a", edge });
+		const strip = (drop: Drop): Target => ({ kind: "strip", desk: DESK, item: "s", drop });
+		expect(dropDoes(plane, onto("left")).label).toBe("Side by side");
+		expect(dropDoes(plane, onto("top")).label).toBe("Stack above");
+		expect(dropDoes(plane, strip({ plane: "y", edge: "right" })).label).toBe("New column");
+		expect(dropDoes(plane, strip({ plane: "y", edge: "bottom" })).label).toBe("Stack below");
+		expect(dropDoes(plane, strip({ at: 0 })).label).toBe("New column");
+		expect(dropDoes(plane, strip({ column: 0 })).label).toBe("Stack in column");
+	});
+});
+
+describe("why a drop is refused", () => {
+	// a plane item of x, a strip of x and y, a plane item of y.
+	const desks = { [DESK]: dk(pi("a", "x"), st("s", pn("x"), pn("y")), pi("b", "y")) };
+	const link = (plane: string) => ({ kind: "plane" as const, link: L(plane) });
+
+	it("a plane a strip shows already: the strip is one window", () => {
+		const into: Target = { kind: "strip", desk: DESK, item: "s", drop: { at: 0 } };
+		expect(refusal(desks, link("x"), into)).toBe(ALREADY_IN_STRIP);
+		expect(refusal(desks, { kind: "item", desk: DESK, item: "b" }, into)).toBe(ALREADY_IN_STRIP);
+		expect(refusal(desks, link("z"), into)).toBeNull();
+	});
+
+	it("a plane onto a plane item showing it", () => {
+		const onto: Target = { kind: "onto", desk: DESK, item: "a", edge: "right" };
+		expect(refusal(desks, link("x"), onto)).toBe(ALREADY_HERE);
+		expect(refusal(desks, { kind: "pane", desk: DESK, item: "s", plane: "x" }, onto)).toBe(
+			ALREADY_HERE,
+		);
+	});
+
+	it("a whole strip anywhere but between items", () => {
+		const strip = { kind: "item" as const, desk: DESK, item: "s" };
+		expect(refusal(desks, strip, { kind: "onto", desk: DESK, item: "a", edge: "left" })).toBe(
+			NO_NESTING,
+		);
+		expect(refusal(desks, strip, { kind: "between", desk: DESK, index: 3 })).toBeNull();
+	});
+
+	it("the same plane anywhere at the top level is no refusal: a desk holds it twice", () => {
+		const between: Target = { kind: "between", desk: DESK, index: 3 };
+		expect(planDrop(desks, link("x"), between)).not.toBeNull();
+		expect(refusal(desks, link("x"), between)).toBeNull();
+	});
+
+	it("a drop that changes nothing says nothing", () => {
+		const self = { kind: "item" as const, desk: DESK, item: "a" };
+		expect(refusal(desks, self, { kind: "onto", desk: DESK, item: "a", edge: "left" })).toBeNull();
+		const pane = { kind: "pane" as const, desk: DESK, item: "s", plane: "x" };
+		const own: Target = {
+			kind: "strip",
+			desk: DESK,
+			item: "s",
+			drop: { plane: "x", edge: "left" },
+		};
+		expect(refusal(desks, pane, own)).toBeNull();
 	});
 });

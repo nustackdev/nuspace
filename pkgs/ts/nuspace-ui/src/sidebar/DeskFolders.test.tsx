@@ -14,9 +14,10 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { applyDesksWrite, resetDesks } from "../core/desks";
 import { focusedRoute, knownDesks, onReveal, resetRouter } from "../core/router";
-import { ITEM_MIME, PANE_MIME, PLANE_MIME } from "../desk/dnd";
+import { endDrag, ITEM_MIME, PANE_MIME, PLANE_MIME, writePlane } from "../desk/dnd";
 import type { Desk, Link } from "../desk/model";
 import { DeskFolders, folderKeys, useFolders } from "./DeskFolders";
+import { SETTLE_MS } from "./drag";
 import {
 	arrowMove,
 	columnKey,
@@ -203,36 +204,6 @@ describe("desk folders", () => {
 		expect(made?.[1].name).toBe("Untitled");
 		expect(host.querySelector("input")).toBeNull();
 		expect(window.location.pathname).toBe(`/${made?.[0]}/${made?.[1].items[0].id}`);
-	});
-
-	it("shows a New desk zone only while dragging, a drop there makes a desk of it", async () => {
-		const tick = () => act(async () => await new Promise((r) => setTimeout(r)));
-		feed({ [W]: WORK });
-		draw();
-		expect(host.querySelector("[data-new-desk]")).toBeNull();
-		const held: Record<string, string> = { [PLANE_MIME]: JSON.stringify(L("q")) };
-		const data = {
-			types: Object.keys(held),
-			getData: (k: string) => held[k] ?? "",
-			dropEffect: "",
-		};
-		act(() => {
-			window.dispatchEvent(Object.assign(new Event("dragstart"), { dataTransfer: data }));
-		});
-		await tick();
-		const zone = host.querySelector<HTMLElement>("[data-new-desk]");
-		expect(zone?.textContent).toBe("New desk");
-		act(() => {
-			zone?.dispatchEvent(
-				Object.assign(new Event("drop", { bubbles: true, cancelable: true }), {
-					dataTransfer: data,
-				}),
-			);
-		});
-		const made = Object.entries(knownDesks() ?? {}).find(([id]) => id !== W);
-		expect(made?.[1].items[0]).toMatchObject({ kind: "plane", original: L("q") });
-		await tick();
-		expect(host.querySelector("[data-new-desk]")).toBeNull();
 	});
 
 	it("makes an empty desk named Untitled from newDesk, its folder open, no rename", () => {
@@ -606,16 +577,26 @@ describe("drop targets", () => {
 		return e;
 	}
 
+	// A row's drop box is the box around it (`data-drop-row`): give both a row's size.
 	function box(el: HTMLElement | null) {
-		if (el)
-			el.getBoundingClientRect = () => ({ top: 0, left: 0, height: 28, width: 200 }) as DOMRect;
+		const rect = () => ({ top: 0, left: 0, height: 28, width: 200 }) as DOMRect;
+		for (const at of [el, el?.closest<HTMLElement>("[data-drop-row]")]) {
+			if (at) at.getBoundingClientRect = rect;
+		}
 		return el;
+	}
+
+	/** A dragover that has rested on its row, so the row's edges reorder. */
+	function settle(el: HTMLElement | null, dt: object, y = 14, x = 50) {
+		fire("dragover", el, dt, y, x);
+		vi.advanceTimersByTime(SETTLE_MS);
+		return fire("dragover", el, dt, y, x);
 	}
 
 	function dropAt(el: HTMLElement | null, data: Record<string, string>, y = 14, x = 50) {
 		box(el);
 		const dt = carrying(data);
-		fire("dragover", el, dt, y, x);
+		settle(el, dt, y, x);
 		fire("drop", el, dt, y, x);
 	}
 
@@ -624,12 +605,45 @@ describe("drop targets", () => {
 	const strip = (drop: object) => ({ kind: "strip", desk: W, item: "strip1", drop });
 
 	beforeEach(() => {
+		vi.useFakeTimers({ toFake: ["Date"] });
 		feed({ [W]: WORK, [F]: FAV });
 		draw();
 	});
 
-	it("a folder title: the end of the desk", () => {
+	afterEach(() => {
+		vi.useRealTimers();
+	});
+
+	it("a folder title: the end of the desk, its bottom edge once rested the top", () => {
 		dropAt(headOf("Work"), plane);
+		expect(dropOn).toHaveBeenLastCalledWith(PLANE, { kind: "end", desk: W });
+		// Just reached, the bottom edge is the middle too.
+		const head = box(headOf("Work"));
+		const dt = carrying(plane);
+		fire("dragover", head, dt, 26);
+		fire("drop", head, dt, 26);
+		expect(dropOn).toHaveBeenLastCalledWith(PLANE, { kind: "end", desk: W });
+		// Rested: the top of the desk, the line over the first row.
+		box(head);
+		const later = carrying(plane);
+		settle(head, later, 26);
+		const line = document.querySelector<HTMLElement>("[data-drop-line]");
+		expect(line?.closest("[data-drop-row]")?.getAttribute("data-drop-row")).toBe(
+			itemKey(W, "item01"),
+		);
+		expect(line?.textContent).toBe("Pin");
+		fire("drop", head, later, 26);
+		expect(dropOn).toHaveBeenLastCalledWith(PLANE, { kind: "between", desk: W, index: 0 });
+	});
+
+	it("under the last row: the end of the desk, at once, the line under it", () => {
+		const tail = folderOf("Work")?.querySelector<HTMLElement>("[data-drop-tail]") ?? null;
+		const dt = carrying(plane);
+		expect(fire("dragover", tail, dt).defaultPrevented).toBe(true);
+		expect(document.querySelector("[data-drop-line]")?.getAttribute("data-drop-line")).toBe(
+			"after",
+		);
+		fire("drop", tail, dt);
 		expect(dropOn).toHaveBeenLastCalledWith(PLANE, { kind: "end", desk: W });
 	});
 
@@ -714,18 +728,54 @@ describe("drop targets", () => {
 		fire("dragend", row, dt);
 	});
 
-	it("marks between items with a line at the folder's rows, a stack two steps in", () => {
+	it("rings a row the drag just reached, and lines its edge once rested on it", () => {
+		const line = () => document.querySelector<HTMLElement>("[data-drop-line]");
 		const row = box(rowOf(itemKey(W, "item02")));
+		const wrap = row?.closest<HTMLElement>("[data-drop-row]");
+		const hint = () => row?.parentElement?.querySelector(":scope > [data-drop-hint]")?.textContent;
+		// Just reached: the edge is the middle.
 		fire("dragover", row, carrying(plane), 2);
-		const line = row?.parentElement?.querySelector<HTMLElement>(":scope > span[aria-hidden]");
-		// jsdom folds the calc: 0.5rem + 0 + 1.75rem.
-		expect(line?.style.left).toBe("calc(2.25rem)");
-		const w = box(rowOf(paneKey(W, "strip1", "w")));
-		fire("dragover", w, carrying(plane), 2);
-		const stack = w?.parentElement?.querySelector<HTMLElement>(":scope > span[aria-hidden]");
-		expect(stack?.style.left).toBe("calc(4.75rem)");
+		expect(line()).toBeNull();
+		expect(row?.className).toContain("ring-doc-drop-line");
+		expect(hint()).toBe("Side by side");
+		// Rested: the line on the gap right above it, at the folder's rows. No row moves.
+		vi.advanceTimersByTime(SETTLE_MS);
+		fire("dragover", row, carrying(plane), 2);
+		expect(line()?.parentElement).toBe(wrap);
+		expect(line()?.getAttribute("data-drop-line")).toBe("before");
+		expect(line()?.style.left).toBe("calc(0.5rem)");
+		expect(line()?.textContent).toBe("Pin");
+		expect(document.querySelector("[data-drop-slot]")).toBeNull();
+		// The 1px gap between rows is the zone's own: over it, the aim holds.
+		const over = fire("dragover", wrap?.parentElement ?? null, carrying(plane), 40);
+		expect(over.defaultPrevented).toBe(true);
+		expect(line()?.textContent).toBe("Pin");
+		// The middle still rings.
 		fire("dragover", row, carrying(plane), 14);
-		expect(row?.className).toContain("ring-accent");
+		expect(line()).toBeNull();
+		expect(hint()).toBe("Side by side");
+		// A stack two steps in.
+		const w = box(rowOf(paneKey(W, "strip1", "w")));
+		settle(w, carrying(plane), 2);
+		expect(line()?.style.left).toBe("calc(3rem)");
+		expect(line()?.textContent).toBe("Stack above");
+	});
+
+	it("says why a plane the strip shows already takes no drop there, and offers none", () => {
+		const y = box(rowOf(paneKey(W, "strip1", "y")));
+		const shown: Record<string, string> = {};
+		// The drag as a tree row starts it, so the page knows what is coming.
+		writePlane(carrying(shown) as unknown as DataTransfer, "z");
+		const e = settle(y, carrying(shown), 14);
+		expect(e.defaultPrevented).toBe(false);
+		expect(y?.className).toContain("outline-dashed");
+		expect(y?.parentElement?.querySelector("[data-drop-hint]")?.textContent).toBe(
+			"Already in strip",
+		);
+		// The same plane pins between items: a desk holds it twice at the top.
+		const item = box(rowOf(itemKey(W, "item01")));
+		expect(settle(item, carrying(shown), 2).defaultPrevented).toBe(true);
+		endDrag();
 	});
 });
 

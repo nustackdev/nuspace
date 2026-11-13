@@ -150,6 +150,15 @@ export const deskDropRegion = cn(
 );
 
 /**
+ * A target that takes no drop, drawn over the pane it points at: a light
+ * neutral wash in a dashed muted line, its reason on an outline Badge.
+ */
+export const deskDropRefused = cn(
+	"pointer-events-none absolute z-20 flex items-center justify-center",
+	"bg-bg-hover outline-1 -outline-offset-1 outline-dashed outline-text-muted",
+);
+
+/**
  * The region gliding from one target to the next. Only once shown: a region
  * that appears is placed, not flown in.
  */
@@ -167,7 +176,7 @@ export const deskEmpty = "min-h-0 flex-1";
 
 /**
  * A drag over an empty desk: the drop region over the whole desk, on the
- * desk area's edges.
+ * desk area's edges, saying "Pin".
  */
 export const deskEmptyAim = cn(deskDropRegion, "inset-0");
 

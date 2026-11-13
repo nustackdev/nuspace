@@ -1,35 +1,33 @@
 // The desk folders: one section per desk (./DeskFolder.tsx), above the
 // Planes tree, in the desks feed's order (creation order, Favorites first,
 // then as dragged). A new desk comes from the header's `+` menu, a plane's
-// menu or a drop on the New desk zone (./newDesk.ts).
+// menu or the nav section's New desk row, a click or a drop (./newDesk.ts).
 //
 // This is the list: the folders and the state they share while a drag is on.
 //
 //   drops    one aim at a time across every folder (`Aimed`), and the drop
 //            itself through `dropOn` (../desk/dnd.ts), offered only where the
-//            drag table writes something (`canDrop`)
+//            drag table writes something (`canDrop`). The aim says what the
+//            drop does (`dropDoes`), or why the table refuses it (`whyNot`),
+//            ringed on its row and not offered
 //   lifted   the row being dragged, dimmed while it travels
 //   reorder  a desk dragged by its title, and where it would land
 //   rename   which folder's title is a rename field
-//   New desk while a plane, item or pane is dragged, a dashed zone under the
-//            last folder: a drop there makes a desk of it
 //
 // The looks of every plane the folders link to are resolved once, here
 // (../core/looks.ts).
 
-import { cn } from "@nustackdev/ui-kit";
 import type * as React from "react";
 import { useEffect, useMemo, useState } from "react";
 import { moveDesk, useDeskOrder, useDesks } from "../core/desks";
 import { usePlaneLooks } from "../core/looks";
-import { sidebarDeskEmpty, sidebarDropInto } from "../design";
-import { canDrop, dragging, dragKind, dropOn, endDrag, readDrag } from "../desk/dnd";
+import { canDrop, dragging, dragKind, dropOn, endDrag, readDrag, whyNot } from "../desk/dnd";
 import { setDragChip } from "../desk/drag";
 import type { Desk, Links } from "../desk/model";
-import { type Aimed, DeskFolder } from "./DeskFolder";
+import { type Aimed, type AimHit, DeskFolder } from "./DeskFolder";
 import type { DragProps, DropProps } from "./DeskRows";
-import { type Aim, type FolderRow, folderKey, folderRows, useFolds } from "./folders";
-import { newDesk } from "./newDesk";
+import { doesHint, refusedHint, useSettle } from "./drag";
+import { type FolderRow, folderKey, folderRows, useFolds } from "./folders";
 import type { PlaneTree } from "./types";
 
 /** One desk's folder, as drawn. */
@@ -73,8 +71,7 @@ function planesOf(folders: Folder[]): string[] {
 	return [...out];
 }
 
-const sameAim = (a: Aimed, b: Aimed) =>
-	a?.desk === b?.desk && a?.key === b?.key && JSON.stringify(a?.mark) === JSON.stringify(b?.mark);
+const sameAim = (a: Aimed, b: Aimed) => JSON.stringify(a) === JSON.stringify(b);
 
 export function DeskFolders({
 	folders,
@@ -93,54 +90,99 @@ export function DeskFolders({
 	const [lifted, setLifted] = useState<string | null>(null);
 	// The desk whose title is a rename field.
 	const [renaming, setRenaming] = useState<string | null>(null);
-	const dragOn = useDragOn();
-	// The New desk zone while a drag aims at it.
-	const [aimNew, setAimNew] = useState(false);
 	// A desk dragged by its title, and where it would land: over a folder's
 	// title, above or under it.
 	const [movingDesk, setMovingDesk] = useState<string | null>(null);
 	const [deskAim, setDeskAim] = useState<{ desk: string; edge: "before" | "after" } | null>(null);
 
+	// How long the pointer has rested on a row, across every folder.
+	const settle = useSettle();
+
+	// A drag that ends anywhere (Esc, a drop elsewhere, a drag from the tree)
+	// clears the aim, as the canvas's does.
+	const { reset } = settle;
+	useEffect(() => {
+		const clear = () => {
+			setAim(null);
+			reset();
+		};
+		document.addEventListener("dragend", clear);
+		document.addEventListener("drop", clear);
+		return () => {
+			document.removeEventListener("dragend", clear);
+			document.removeEventListener("drop", clear);
+		};
+	}, [reset]);
+
 	const onAim = (next: Aimed) => {
 		if (!sameAim(aim, next)) setAim(next);
 	};
 
-	/** Drag handlers for a drop site whose aim is `aimAt`'s, null where nothing lands. */
-	const dropHandlers = (
-		aimAt: (
-			e: React.DragEvent<HTMLElement>,
-		) => { aim: Aim; key: string | null; desk: string } | null,
-	): DropProps => {
-		const take = (e: React.DragEvent<HTMLElement>) => {
+	/**
+	 * Drag handlers for a drop site whose aim is `aimAt`'s: null where nothing
+	 * lands, `{ keep }` over no row of desk `keep`, where its aim holds.
+	 */
+	const dropHandlers = (aimAt: (e: React.DragEvent<HTMLElement>) => AimHit): DropProps => {
+		const judge = (e: React.DragEvent<HTMLElement>): Aimed | "keep" => {
 			const hit = aimAt(e);
-			return hit && canDrop(dragging(), hit.aim.target) ? hit : null;
+			if (!hit) return null;
+			if ("keep" in hit) return aim?.desk === hit.keep ? "keep" : null;
+			const payload = dragging();
+			const { target, mark } = hit.aim;
+			if (canDrop(payload, target)) {
+				return {
+					desk: hit.desk,
+					key: hit.key,
+					mark,
+					target,
+					ok: true,
+					hint: doesHint(payload, target),
+				};
+			}
+			const why = whyNot(payload, target);
+			return why
+				? {
+						desk: hit.desk,
+						key: hit.key,
+						mark: { ring: true },
+						target,
+						ok: false,
+						hint: refusedHint(why),
+					}
+				: null;
 		};
 		return {
 			onDragOver: (e) => {
 				if (!dragKind(e.dataTransfer)) return;
-				const hit = take(e);
-				if (!hit) {
-					if (aim) setAim(null);
-					return;
-				}
+				const next = judge(e);
+				if (next !== "keep") onAim(next);
+				const now = next === "keep" ? aim : next;
+				if (!now?.ok) return;
 				e.preventDefault();
 				e.stopPropagation();
 				e.dataTransfer.dropEffect = "move";
-				onAim({ desk: hit.desk, key: hit.key, mark: hit.aim.mark });
 			},
 			onDragLeave: (e) => {
-				if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setAim(null);
+				// Within its folder (the title to the rows and back) the aim
+				// holds, so a line on the gap between them stays; the next
+				// dragover sets it. Leaving the folders clears it (below).
+				const to = e.relatedTarget as Node | null;
+				if (e.currentTarget.closest("section")?.contains(to)) return;
+				setAim(null);
+				settle.reset();
 			},
 			onDrop: (e) => {
 				const payload = readDrag(e.dataTransfer);
-				const hit = payload ? take(e) : null;
+				const next = payload ? judge(e) : null;
+				const now = next === "keep" ? aim : next;
 				setAim(null);
-				if (!payload || !hit || !canDrop(payload, hit.aim.target)) return;
+				settle.reset();
+				if (!payload || !now?.ok || !canDrop(payload, now.target)) return;
 				e.preventDefault();
 				e.stopPropagation();
 				endDrag();
 				setLifted(null);
-				dropOn(payload, hit.aim.target);
+				dropOn(payload, now.target);
 			},
 		};
 	};
@@ -156,11 +198,20 @@ export function DeskFolders({
 			endDrag();
 			setLifted(null);
 			setAim(null);
+			settle.reset();
 		},
 	});
 
+	// Leaving every folder, for the tree or the canvas, drops the aim.
+	const leave = (e: React.DragEvent<HTMLElement>) => {
+		if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
+		setAim(null);
+		settle.reset();
+	};
+
 	return (
-		<>
+		// `contents`: a box for leaving the folders only.
+		<div role="none" className="contents" onDragLeave={leave}>
 			{folders.map((folder, i) => (
 				<DeskFolder
 					key={folder.id}
@@ -198,64 +249,9 @@ export function DeskFolders({
 					onRename={(on) => setRenaming(on ? folder.id : null)}
 					dropHandlers={dropHandlers}
 					dragOf={dragOf}
+					settled={settle.settled}
 				/>
 			))}
-			{dragOn ? (
-				// biome-ignore lint/a11y/noStaticElementInteractions: a drop zone, for a pointer drag only
-				<div
-					data-new-desk=""
-					className={cn(sidebarDeskEmpty, aimNew && sidebarDropInto)}
-					onDragOver={(e) => {
-						if (!dragKind(e.dataTransfer)) return;
-						e.preventDefault();
-						e.dataTransfer.dropEffect = "move";
-						setAim(null);
-						setAimNew(true);
-					}}
-					onDragLeave={() => setAimNew(false)}
-					onDrop={(e) => {
-						const payload = readDrag(e.dataTransfer);
-						setAimNew(false);
-						if (!payload) return;
-						e.preventDefault();
-						e.stopPropagation();
-						endDrag();
-						setLifted(null);
-						newDesk(payload);
-					}}
-				>
-					New desk
-				</div>
-			) : null}
-		</>
+		</div>
 	);
-}
-
-/**
- * Whether a desk or plane drag is on: the New desk zone shows only then.
- * Heard on the window, so a drag from the tree, a folder or a pane header
- * all count; over at its end or its drop, wherever that lands.
- *
- * Both flips wait a task. The zone must still be there when the drop reaches
- * it: hidden at once from a capturing listener, React drops it first and the
- * drop lands on nothing. And a page that changes under a drag as it starts
- * can make Chrome end that drag at once.
- */
-function useDragOn(): boolean {
-	const [on, setOn] = useState(false);
-	useEffect(() => {
-		const start = (e: DragEvent) => {
-			if (dragKind(e.dataTransfer)) setTimeout(() => setOn(true));
-		};
-		const stop = () => setTimeout(() => setOn(false));
-		window.addEventListener("dragstart", start);
-		window.addEventListener("dragend", stop, true);
-		window.addEventListener("drop", stop, true);
-		return () => {
-			window.removeEventListener("dragstart", start);
-			window.removeEventListener("dragend", stop, true);
-			window.removeEventListener("drop", stop, true);
-		};
-	}, []);
-	return on;
 }

@@ -194,13 +194,15 @@ export const sidebarSectionCount = "shrink-0 select-none text-sm text-text-muted
 
 /**
  * The right actions, on the rows' right edge, each shown while the title line
- * is hovered, one of them has keyboard focus or a menu open.
+ * is hovered, one of them has keyboard focus or a menu open. Hidden, they
+ * take no room, so a long title runs the full line until then.
  */
 export const sidebarSectionActions = cn(
-	"flex shrink-0 items-center gap-px",
+	"flex w-0 shrink-0 items-center gap-px overflow-hidden",
 	"*:opacity-0 *:transition-opacity *:duration-fast *:ease-out",
-	"group-hover/section:*:opacity-100 has-focus-visible:*:opacity-100",
-	"[&:has([data-state=open])]:*:opacity-100",
+	"group-hover/section:w-auto group-hover/section:*:opacity-100",
+	"has-focus-visible:w-auto has-focus-visible:*:opacity-100",
+	"[&:has([data-state=open])]:w-auto [&:has([data-state=open])]:*:opacity-100",
 );
 
 /**
@@ -211,6 +213,13 @@ export const sidebarSectionAction = cn(sidebarControlWash, "rounded-sm [&_svg]:s
 
 /** Rows a hairline apart, so two fills never merge. */
 export const sidebarRows = "flex flex-col gap-px";
+
+/**
+ * The box a drop zone wraps its rows in (the Planes tree's, a desk folder's
+ * body): laid out as the rows are, so the 1px gaps between rows are its own
+ * and the pointer crossing one never leaves the zone.
+ */
+export const sidebarDropZone = sidebarRows;
 
 /* ============================== Row ====================================== */
 
@@ -360,12 +369,87 @@ export const sidebarInput = "h-6 min-w-0 flex-1 px-1 py-0 text-lg";
  */
 export const sidebarNoPlanes = "h-7 items-start py-0";
 
-/** Wrapper around a tree row, which the drop line positions against. */
+/** Wrapper around a drop row: what its drop hint positions against. */
 export const sidebarRowWrap = "relative";
 
+/*
+ * Where a drag would land, in the desk's drop language (shell.ts
+ * `deskDropRegion`): a light Afterglow wash in a 1.5px Afterglow line, and
+ * what the drop does said in it, a glyph and a word, no chip around them.
+ *
+ *   the line   a drop between rows: the 2px Afterglow line on the gap, from
+ *              the depth the row lands at, the hint on its end. Nothing
+ *              moves: the rows stay where the pointer reads them
+ *   the ring   a drop onto or into a row: the row washed, the hint at its end
+ *
+ * A refused drop rings its row neutral and dashed, the reason muted.
+ */
+
 /**
- * Where a dragged row would land: the accent line between rows for a sibling
- * drop, at the target row's indent; the whole row ringed for a drop into it.
+ * A ringed row or title, and the rows either side of a line, hide their
+ * hover actions (`data-row-action`): the hint sits where they would.
+ */
+export const sidebarDropQuiet = "[&_[data-row-action]]:hidden";
+
+/** A row the drop lands onto or into. */
+export const sidebarDropInto = cn(
+	"bg-doc-drop ring-[1.5px] ring-doc-drop-line ring-inset",
+	sidebarDropQuiet,
+);
+
+/** A row that refuses the drop, saying why. */
+export const sidebarDropRefused = cn(
+	"bg-bg-hover outline-1 -outline-offset-1 outline-dashed outline-text-muted",
+	sidebarDropQuiet,
+);
+
+/** The line on the gap a drop between rows lands in, above or under its row's box. */
+export function sidebarDropGap(edge: "before" | "after"): string {
+	return cn(sidebarDropLine(edge), "z-10");
+}
+
+/** The line's left end, at the icon lane of a row at `depth`: where the row lands. */
+export function sidebarDropGapIndent(depth: number): { left: string } {
+	return { left: `calc(0.5rem + ${depth} * 1.25rem)` };
+}
+
+/**
+ * The line's hint, on its right end, centered on it: over the rows' ends on
+ * the sidebar's own ground, faded in from the left so a long title runs out
+ * under it.
+ */
+export const sidebarDropGapHint = cn(
+	"absolute top-1/2 right-0 -translate-y-1/2 rounded-sm py-0.5 pr-2 pl-4",
+	"[background:linear-gradient(to_right,transparent,var(--bg-sunken)_0.75rem)]",
+);
+
+/** What a drop does: a glyph and a word, Afterglow; a refusal muted. */
+export function sidebarDropHint(refused: boolean): string {
+	return cn(
+		"pointer-events-none inline-flex min-w-0 items-center gap-1.5 whitespace-nowrap",
+		"text-xs font-medium [&_svg]:size-3.5 [&_svg]:shrink-0",
+		refused ? "text-text-muted" : "text-accent-text",
+	);
+}
+
+/**
+ * A ringed row's hint, at the row's end, inside its ring. It covers the
+ * title under it: the sidebar's ground with the row's own wash on top (the
+ * drop wash, or for a refusal the neutral one), faded in from the left so a
+ * long title runs out under it rather than through it.
+ */
+export function sidebarDropHintAt(refused: boolean): string {
+	return cn(
+		"absolute inset-y-[1.5px] right-[1.5px] rounded-r-md pr-[calc(0.5rem-1.5px)] pl-4",
+		refused
+			? "[background:linear-gradient(to_right,transparent,var(--bg-hover)_0.75rem),linear-gradient(to_right,transparent,var(--bg-sunken)_0.75rem)]"
+			: "[background:linear-gradient(to_right,transparent,var(--doc-drop)_0.75rem),linear-gradient(to_right,transparent,var(--bg-sunken)_0.75rem)]",
+	);
+}
+
+/**
+ * The accent line above or under a box: where a desk dragged by its title
+ * would land among the folders, and under a drop between rows (`sidebarDropGap`).
  */
 export function sidebarDropLine(edge: "before" | "after"): string {
 	return cn(
@@ -374,13 +458,6 @@ export function sidebarDropLine(edge: "before" | "after"): string {
 	);
 }
 
-/** The line's left edge, at the label of a row at `depth`. */
-export function sidebarDropLineStyle(depth: number): { left: string } {
-	return { left: `calc(0.5rem + ${depth} * 1.25rem + 1.75rem)` };
-}
-
-export const sidebarDropInto = "ring-2 ring-accent ring-inset";
-
 /**
  * An empty desk's body: a row's box (full width, 28px, its radius), its
  * outline dashed and drawn inside so it takes no room, a small muted line of
@@ -388,7 +465,7 @@ export const sidebarDropInto = "ring-2 ring-accent ring-inset";
  * aims at it.
  */
 export const sidebarDeskEmpty = cn(
-	"flex h-7 select-none items-center rounded-md px-2",
+	"relative flex h-7 select-none items-center rounded-md px-2",
 	"outline-1 -outline-offset-1 outline-border-default outline-dashed",
 	"text-sm text-text-muted",
 );

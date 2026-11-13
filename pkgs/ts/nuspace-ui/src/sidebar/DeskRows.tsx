@@ -69,7 +69,6 @@ export function DeskRow({
 	looks,
 	selected,
 	className,
-	drop,
 	dragOf,
 }: {
 	deskId: string;
@@ -79,7 +78,6 @@ export function DeskRow({
 	looks: Record<string, PlaneLook>;
 	selected: boolean;
 	className?: string;
-	drop: DropProps;
 	dragOf: (key: string, write: (dt: DataTransfer) => void) => DragProps;
 }) {
 	const depth = rowDepth(row);
@@ -105,7 +103,7 @@ export function DeskRow({
 				depth={depth}
 				selected={selected}
 				className={className}
-				drag={{ ...dragOf(row.key, (dt) => writeItem(dt, deskId, row.item)), ...drop }}
+				drag={dragOf(row.key, (dt) => writeItem(dt, deskId, row.item))}
 				onKeyDown={onKeyDown}
 				reset={resetAttr(deskId, row.item)}
 				onSave={() => saveItem(deskId, row.item)}
@@ -125,7 +123,7 @@ export function DeskRow({
 				depth={depth}
 				selected={selected}
 				className={className}
-				drag={{ ...dragOf(row.key, (dt) => writePane(dt, deskId, row.item, row.plane)), ...drop }}
+				drag={dragOf(row.key, (dt) => writePane(dt, deskId, row.item, row.plane))}
 				onKeyDown={onKeyDown}
 				reset={resetAttr(deskId, row.item, row.plane)}
 				onSave={() => saveItem(deskId, row.item, row.plane)}
@@ -144,7 +142,7 @@ export function DeskRow({
 				expanded={row.open}
 				selected={selected}
 				className={className}
-				drag={{ ...dragOf(row.key, (dt) => writeItem(dt, deskId, row.item)), ...drop }}
+				drag={dragOf(row.key, (dt) => writeItem(dt, deskId, row.item))}
 				onKeyDown={onKeyDown}
 				icon={
 					<>
@@ -183,7 +181,6 @@ export function DeskRow({
 			expanded={row.open}
 			selected={selected}
 			className={className}
-			drag={drop}
 			onKeyDown={onKeyDown}
 			icon={
 				<>

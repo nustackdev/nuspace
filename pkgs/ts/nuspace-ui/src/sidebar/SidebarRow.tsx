@@ -229,7 +229,11 @@ function TrailingThing({ trailing }: { trailing: Trailing }) {
 			/>
 		);
 	if ("count" in trailing) return <span className={sidebarCount}>{trailing.count}</span>;
-	return <div className={sidebarHoverAction}>{trailing.action}</div>;
+	return (
+		<div data-row-action="" className={sidebarHoverAction}>
+			{trailing.action}
+		</div>
+	);
 }
 
 /**

@@ -8,6 +8,10 @@
 //   a plane item's or solo plane's edge       "Side by side": the half of it
 //   a plane item's or solo plane's half       "Stack above" / "Stack below"
 //
+// The labels are the drag table's (../desk/dnd.ts `dropDoes`), shared with
+// the sidebar. A refused target (`refused`, dnd `whyNot`) is drawn over the
+// whole pane it points at, neutral and dashed, saying why.
+//
 // One region per host, measured against it: the strip's columns (so it
 // scrolls with them) or the solo pane's box. It glides from one target to
 // the next and is placed, not flown in, when it appears. An empty desk's
@@ -15,30 +19,19 @@
 
 import { Badge, cn } from "@nustackdev/ui-kit";
 import { type RefObject, useLayoutEffect, useRef, useState } from "react";
-import { deskDropGlide, deskDropRegion } from "../design";
-import type { Target } from "../desk/dnd";
+import { deskDropGlide, deskDropRefused, deskDropRegion } from "../design";
+import { dragging, dropDoes, type Target } from "../desk/dnd";
 
 type Box = { left: number; top: number; width: number; height: number };
 
 /** How far inside its region the drawn region sits, px. None: flat panes, square regions on their edges. */
 const INSET = 0;
 
-/** What a drop on `aim` does, as its label. */
-export function dropLabel(aim: Target): string | null {
-	const edge =
-		aim.kind === "onto"
-			? aim.edge
-			: aim.kind === "strip" && "plane" in aim.drop
-				? aim.drop.edge
-				: null;
-	if (edge === "top") return "Stack above";
-	if (edge === "bottom") return "Stack below";
-	if (edge === null) return null;
-	return aim.kind === "onto" ? "Side by side" : "New column";
-}
-
-/** The region a drop on `aim` makes, in `host`'s box, or null when it draws none. */
-function regionOf(host: HTMLElement, aim: Target): Box | null {
+/**
+ * The region a drop on `aim` makes, in `host`'s box, or null when it draws
+ * none. `whole`: the whole pane it points at, for a refused one.
+ */
+function regionOf(host: HTMLElement, aim: Target, whole: boolean): Box | null {
 	let el: Element | null = null;
 	let edge: "left" | "right" | "top" | "bottom";
 	if (aim.kind === "onto") {
@@ -51,7 +44,7 @@ function regionOf(host: HTMLElement, aim: Target): Box | null {
 		);
 		edge = aim.drop.edge;
 		el =
-			edge === "left" || edge === "right"
+			!whole && (edge === "left" || edge === "right")
 				? (pane?.closest("[data-column]") ?? null)
 				: (pane ?? null);
 	} else return null;
@@ -64,7 +57,9 @@ function regionOf(host: HTMLElement, aim: Target): Box | null {
 		width: r.width,
 		height: r.height,
 	};
-	if (edge === "left" || edge === "right") {
+	if (whole) {
+		// The pane as it is.
+	} else if (edge === "left" || edge === "right") {
 		width /= 2;
 		if (edge === "right") left += width;
 	} else {
@@ -82,15 +77,18 @@ function regionOf(host: HTMLElement, aim: Target): Box | null {
 /** The region of the drop `aim` points at inside `host`, null at rest. */
 export function DropRegion({
 	aim,
+	refused = null,
 	host,
 }: {
 	aim: Target | null;
+	/** Why `aim` takes no drop, null for one that does. */
+	refused?: string | null;
 	host: RefObject<HTMLElement | null>;
 }) {
 	const [box, setBox] = useState<Box | null>(null);
 	useLayoutEffect(() => {
-		setBox(aim && host.current ? regionOf(host.current, aim) : null);
-	}, [aim, host]);
+		setBox(aim && host.current ? regionOf(host.current, aim, !!refused) : null);
+	}, [aim, refused, host]);
 	// Shown on the last paint: only then does it glide to the next target.
 	const shown = useRef(false);
 	const glide = shown.current;
@@ -98,15 +96,19 @@ export function DropRegion({
 		shown.current = box !== null;
 	}, [box]);
 	if (!aim || !box) return null;
-	const label = dropLabel(aim);
 	return (
 		<div
 			aria-hidden
 			data-drop-region=""
-			className={cn(deskDropRegion, glide && deskDropGlide)}
+			data-refused={refused ? "" : undefined}
+			className={cn(refused ? deskDropRefused : deskDropRegion, glide && deskDropGlide)}
 			style={box}
 		>
-			{label ? <Badge>{label}</Badge> : null}
+			{refused ? (
+				<Badge variant="outline">{refused}</Badge>
+			) : (
+				<Badge>{dropDoes(dragging(), aim).label}</Badge>
+			)}
 		</div>
 	);
 }

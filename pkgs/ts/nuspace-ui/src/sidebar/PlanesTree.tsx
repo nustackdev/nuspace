@@ -24,13 +24,15 @@
 // also on a right-click. Rename is in place (double click, or the menu).
 // "Change icon" opens the picker, anchored on the row's icon. The selected
 // row is the solo plane's; on a desk item no tree row is selected.
-// Drag and drop is ./drag.ts; this draws its line and its target. A row also
-// drags onto a desk folder or the canvas, as a plane.
+// Drag and drop is ./drag.ts; this draws its marks (./DropMarks.tsx): the
+// line on a gap between rows, the ring on a row. A row also drags onto a desk folder
+// or the canvas, as a plane.
 //
 // The rows are flat siblings, never nested in each other's DOM, so a row's
 // `group/row` hover is its own.
 
 import {
+	cn,
 	DropdownMenu,
 	DropdownMenuContent,
 	DropdownMenuTrigger,
@@ -45,16 +47,17 @@ import {
 } from "@nustackdev/ui-kit";
 import { ChevronRight, Ellipsis, Plus } from "lucide-react";
 import type * as React from "react";
-import { Fragment, useCallback, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { hrefFor, openPlane } from "../core/router";
 import {
 	planeMenu,
 	sidebarChevron,
 	sidebarDragging,
 	sidebarDropInto,
-	sidebarDropLine,
-	sidebarDropLineStyle,
+	sidebarDropQuiet,
+	sidebarDropRefused,
 	sidebarDropTail,
+	sidebarDropZone,
 	sidebarIcon,
 	sidebarIndent,
 	sidebarNoPlanes,
@@ -69,7 +72,8 @@ import { planeIcon } from "../icon/parse";
 import { PlaneMenuItems } from "../menu/PlaneMenuItems";
 import { contextParts, dropdownParts } from "../menu/parts";
 import { NEW_INSIDE_KEYS, openAddPlane } from "./add";
-import { useTreeDrag } from "./drag";
+import { DropHint, DropLine } from "./DropMarks";
+import { DROP_ROW, DROP_TAIL, useTreeDrag } from "./drag";
 import { useSidebarNav } from "./focus";
 import type { Notify } from "./ops";
 import { canDelete, deletePlane } from "./remove";
@@ -96,70 +100,82 @@ export function PlanesTree({
 }) {
 	const { focusKey } = useSidebarNav();
 	const { draft, startRename, commitDraft, cancelDraft } = useDraft({ notify, focusKey });
-	const { dragKey, target, rowProps, tailProps, leaveProps } = useTreeDrag({
+	const { dragKey, aim, rowProps, zoneProps } = useTreeDrag({
 		tree,
 		rows,
 		notify,
 		reveal,
 	});
+	const ringed = aim && "ring" in aim.mark ? aim.mark.ring : null;
+	const gap = aim && "gap" in aim.mark ? aim.mark : null;
+
+	const items: React.ReactNode[] = [];
+	rows.forEach((row, index) => {
+		const ring = ringed === row.key && aim ? aim : null;
+		// The line on the gap above this row, or under the last.
+		const line =
+			gap?.gap === index
+				? "before"
+				: gap?.gap === rows.length && index === rows.length - 1
+					? "after"
+					: null;
+		const near = gap !== null && (gap.gap === index || gap.gap === index + 1);
+		items.push(
+			<div
+				key={row.key}
+				role="none"
+				className={cn(sidebarRowWrap, near && sidebarDropQuiet)}
+				{...{ [DROP_ROW]: row.key }}
+			>
+				<PlaneRow
+					row={row}
+					next={rows[index + 1]}
+					selected={row.key === selKey}
+					renaming={draft?.key === row.key}
+					drag={rowProps(row.key)}
+					dragging={dragKey !== null}
+					className={
+						ring
+							? ring.ok
+								? sidebarDropInto
+								: sidebarDropRefused
+							: dragKey === row.key
+								? sidebarDragging
+								: undefined
+					}
+					onToggle={onToggle}
+					reveal={reveal}
+					onRename={startRename}
+					onCommit={commitDraft}
+					onCancel={cancelDraft}
+					notify={notify}
+					tree={tree}
+				/>
+				{ring ? <DropHint hint={ring.hint} at /> : null}
+				{line && gap && aim ? <DropLine edge={line} depth={gap.depth} hint={aim.hint} /> : null}
+			</div>,
+		);
+		if (showsNoPlanes(row)) {
+			items.push(
+				<EmptyState
+					key={`${row.key}:none`}
+					role="none"
+					size="sm"
+					className={sidebarNoPlanes}
+					style={sidebarIndent(row.depth + 1)}
+				>
+					No planes inside
+				</EmptyState>,
+			);
+		}
+	});
 
 	return (
-		// `contents`: a box for the drag's leave only.
-		<div className="contents" {...leaveProps}>
-			{rows.map((row, index) => {
-				const aimed = target?.key === row.key ? target.edge : null;
-				return (
-					<Fragment key={row.key}>
-						<div role="none" className={sidebarRowWrap}>
-							<PlaneRow
-								row={row}
-								next={rows[index + 1]}
-								selected={row.key === selKey}
-								renaming={draft?.key === row.key}
-								drag={rowProps(row.key)}
-								dragging={dragKey !== null}
-								className={
-									aimed === "into"
-										? sidebarDropInto
-										: dragKey === row.key
-											? sidebarDragging
-											: undefined
-								}
-								onToggle={onToggle}
-								reveal={reveal}
-								onRename={startRename}
-								onCommit={commitDraft}
-								onCancel={cancelDraft}
-								notify={notify}
-								tree={tree}
-							/>
-							{aimed === "before" || aimed === "after" ? (
-								<span
-									className={sidebarDropLine(aimed)}
-									style={sidebarDropLineStyle(row.depth)}
-									aria-hidden="true"
-								/>
-							) : null}
-						</div>
-						{showsNoPlanes(row) ? (
-							<EmptyState
-								role="none"
-								size="sm"
-								className={sidebarNoPlanes}
-								style={sidebarIndent(row.depth + 1)}
-							>
-								No planes inside
-							</EmptyState>
-						) : null}
-					</Fragment>
-				);
-			})}
+		// The drop zone: its gaps between rows are its own (`sidebarDropZone`).
+		<div role="none" className={sidebarDropZone} {...zoneProps}>
+			{items}
 			{/* Under the last row: a drop here goes to the top level, last. */}
-			<div className={sidebarDropTail} {...tailProps}>
-				{target?.key === "" ? (
-					<span className={sidebarDropLine("before")} style={sidebarDropLineStyle(0)} />
-				) : null}
-			</div>
+			<div className={sidebarDropTail} {...{ [DROP_TAIL]: "" }} />
 		</div>
 	);
 }

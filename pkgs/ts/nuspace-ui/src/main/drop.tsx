@@ -7,7 +7,9 @@
 // header) and a pane (a pane row, a pane header in a strip). Anything else
 // dragged over the canvas (a file, a cell) passes through untouched. A drop
 // goes out through `dropOn`, which does the drag table, and is offered only
-// where the table writes something (`canDrop`, `canDropOnSolo`).
+// where the table writes something (`canDrop`, `canDropOnSolo`). Where the
+// table refuses it for a reason (dnd `whyNot`: a plane a strip shows already,
+// a whole strip), the region says why and the drop is not offered.
 // Leaving the canvas, dropping or ending the drag anywhere clears the region.
 
 import type * as React from "react";
@@ -22,16 +24,24 @@ import {
 	dropOnSolo,
 	readDrag,
 	type Target,
+	whyNot,
 } from "../desk/dnd";
 import { type Surface, sameTarget, targetAt } from "../desk/drag";
 
-/** The target a drag event over `surface` points at, or null when it offers none. */
-function aimOf(surface: Surface, e: React.DragEvent): Target | null {
+/** Where a drag event over `surface` points: the target, and why it is refused, if it is. */
+type Aim = { target: Target; refused: string | null };
+
+/** The aim of a drag event over `surface`, or null where it offers nothing. */
+function aimOf(surface: Surface, e: React.DragEvent): Aim | null {
 	if (!dragKind(e.dataTransfer)) return null;
 	const target = targetAt(surface, e.target as Element, e.clientX, e.clientY, e.currentTarget);
 	if (!target) return null;
-	if (surface.kind === "solo") return canDropOnSolo(dragging(), surface.plane) ? target : null;
-	return canDrop(dragging(), target) ? target : null;
+	if (surface.kind === "solo") {
+		return canDropOnSolo(dragging(), surface.plane) ? { target, refused: null } : null;
+	}
+	if (canDrop(dragging(), target)) return { target, refused: null };
+	const refused = whyNot(dragging(), target);
+	return refused ? { target, refused } : null;
 }
 
 /**
@@ -41,11 +51,18 @@ function aimOf(surface: Surface, e: React.DragEvent): Target | null {
  */
 export function useCanvasDrop(surface: Surface | null): {
 	aim: Target | null;
+	/** Why the aim takes no drop, said on its region. Null for one that does. */
+	refused: string | null;
 	props: Pick<React.HTMLAttributes<HTMLElement>, "onDragOver" | "onDragLeave" | "onDrop">;
 } {
-	const [aim, setAim] = useState<Target | null>(null);
+	const [aim, setAim] = useState<Aim | null>(null);
 	const show = useCallback(
-		(next: Target | null) => setAim((was) => (sameTarget(was, next) ? was : next)),
+		(next: Aim | null) =>
+			setAim((was) =>
+				sameTarget(was?.target ?? null, next?.target ?? null) && was?.refused === next?.refused
+					? was
+					: next,
+			),
 		[],
 	);
 
@@ -69,7 +86,7 @@ export function useCanvasDrop(surface: Surface | null): {
 			onDragOver: (e: React.DragEvent) => {
 				const next = aimOf(surface, e);
 				show(next);
-				if (!next) return;
+				if (!next || next.refused) return;
 				e.preventDefault();
 				e.dataTransfer.dropEffect = "move";
 			},
@@ -77,9 +94,10 @@ export function useCanvasDrop(surface: Surface | null): {
 				if (!e.currentTarget.contains(e.relatedTarget as Node | null)) show(null);
 			},
 			onDrop: (e: React.DragEvent) => {
-				const target = aimOf(surface, e);
+				const at = aimOf(surface, e);
 				show(null);
-				if (!target) return;
+				if (!at || at.refused) return;
+				const { target } = at;
 				e.preventDefault();
 				const payload = readDrag(e.dataTransfer);
 				if (!payload) return;
@@ -96,5 +114,9 @@ export function useCanvasDrop(surface: Surface | null): {
 		};
 	}, [show, key]);
 
-	return { aim: surface ? aim : null, props };
+	return {
+		aim: surface ? (aim?.target ?? null) : null,
+		refused: surface ? (aim?.refused ?? null) : null,
+		props,
+	};
 }

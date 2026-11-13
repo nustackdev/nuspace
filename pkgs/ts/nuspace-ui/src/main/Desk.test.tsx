@@ -681,6 +681,7 @@ describe("dropping", () => {
 		const over = drag(area.firstElementChild as Element, "dragover", PLANE_MIME, "", 5, 5);
 		expect(over.defaultPrevented).toBe(true);
 		expect(area.querySelector("span.bg-doc-drop")).not.toBeNull();
+		expect(one("[data-drop-region]").textContent).toBe("Pin");
 		drag(area, "drop", PLANE_MIME, plane("z"), 5, 5);
 		expect(dropOn).toHaveBeenCalledWith(
 			{ kind: "plane", link: link("z") },
@@ -688,6 +689,23 @@ describe("dropping", () => {
 		);
 		expect(window.location.pathname).toBe(`/${EMPTY}`);
 		expect(area.querySelector("span.bg-doc-drop")).toBeNull();
+	});
+
+	it("in a strip: a plane it shows already is refused, the pane saying so", () => {
+		const dropOn = vi.spyOn(dnd, "dropOn");
+		feed(DESKS);
+		draw(STRIP_URL);
+		const c = one('[data-pane="c"]');
+		rect(c);
+		// The drag as the page starts it, so the table knows the plane.
+		dnd.writePlane({ setData() {} } as unknown as DataTransfer, "a");
+		const over = drag(c, "dragover", PLANE_MIME, "", 380, 100);
+		expect(over.defaultPrevented).toBe(false);
+		const region = one("[data-drop-region]");
+		expect(region.hasAttribute("data-refused")).toBe(true);
+		expect(region.textContent).toBe("Already in strip");
+		drag(c, "drop", PLANE_MIME, plane("a"), 380, 100);
+		expect(dropOn).not.toHaveBeenCalled();
 	});
 
 	it("on a solo plane: its left or right edge, a new desk of the two", () => {

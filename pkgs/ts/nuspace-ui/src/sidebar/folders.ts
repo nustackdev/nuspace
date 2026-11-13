@@ -16,8 +16,9 @@
 //
 // A pane is named by the plane it shows (a strip shows each plane once).
 //
-// Drops, by the pointer's band on the row (./drag.ts `edgeAt`: top quarter,
-// middle half, bottom quarter), as a `Target` (../desk/dnd.ts):
+// Drops, by the pointer's band on the row (./drag.ts `bandAt`: top 20%,
+// middle 60%, bottom 20%, the edges only once the pointer has rested on the
+// row, all middle before), as a `Target` (../desk/dnd.ts):
 //
 //   plane item row     before / after: between items there; middle: onto
 //                      it, the side by the pointer's half of the row (left
@@ -35,8 +36,8 @@
 //                      is a new column after the group
 //   folder title       the end of the desk
 //
-// The drop line's indent says which: at the folder's rows between items, one
-// step in for a new column, two for a stack. A middle band rings the row.
+// The line's indent says which: at the folder's rows between items, one step
+// in for a new column, two for a stack. A middle band rings the row.
 
 import { readStored, writeStored } from "@nustackdev/ui-kit";
 import { useSyncExternalStore } from "react";
@@ -240,7 +241,7 @@ export function selectedKey(desk: string, item: Item, focus: string, folded: Set
 
 // -- Drops --------------------------------------------------------------------
 
-/** How a drop shows: a ring on the row, or a line before or after it at a depth. */
+/** How a drop shows: a ring on the row, or the line before or after it at a depth. */
 export type Mark = { ring: true } | { ring: false; edge: "before" | "after"; depth: number };
 
 /** Where a drop on a row lands, and how it shows. */

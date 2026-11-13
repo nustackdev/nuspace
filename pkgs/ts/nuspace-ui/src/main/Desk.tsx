@@ -44,7 +44,14 @@
 //
 // Column widths are ./Column.tsx's: nothing here measures the canvas.
 
-import { EmptyState, type NodeProps, pathKey, ScrollArea, Spinner } from "@nustackdev/ui-kit";
+import {
+	Badge,
+	EmptyState,
+	type NodeProps,
+	pathKey,
+	ScrollArea,
+	Spinner,
+} from "@nustackdev/ui-kit";
 import { Columns2 } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -70,6 +77,7 @@ import {
 	deskStripArea,
 	shellMissing,
 } from "../design";
+import { dragging, dropDoes } from "../desk/dnd";
 import type { PaneAt, Surface } from "../desk/drag";
 import { locate, shown } from "../desk/model";
 import { NotFound } from "../pane/NotFound";
@@ -272,7 +280,7 @@ export function Desk({ path }: NodeProps) {
 			<div className={deskArea}>
 				<div ref={dropHost} className={deskSolo} {...drop.props}>
 					{pane(route.plane)}
-					<DropRegion aim={drop.aim} host={dropHost} />
+					<DropRegion aim={drop.aim} refused={drop.refused} host={dropHost} />
 				</div>
 			</div>
 		);
@@ -283,7 +291,11 @@ export function Desk({ path }: NodeProps) {
 				<EmptyState className={deskEmpty} icon={<Columns2 />} description={EMPTY_DESK_HINT}>
 					{EMPTY_DESK}
 				</EmptyState>
-				{drop.aim?.kind === "end" ? <span aria-hidden className={deskEmptyAim} /> : null}
+				{drop.aim?.kind === "end" ? (
+					<span aria-hidden data-drop-region="" className={deskEmptyAim}>
+						<Badge>{dropDoes(dragging(), drop.aim).label}</Badge>
+					</span>
+				) : null}
 			</div>
 		);
 	}
@@ -299,7 +311,7 @@ export function Desk({ path }: NodeProps) {
 					{...drop.props}
 				>
 					{pane(plane)}
-					<DropRegion aim={drop.aim} host={dropHost} />
+					<DropRegion aim={drop.aim} refused={drop.refused} host={dropHost} />
 				</div>
 			</div>
 		);
@@ -331,7 +343,7 @@ export function Desk({ path }: NodeProps) {
 							pane={pane}
 						/>
 					))}
-					<DropRegion aim={drop.aim} host={dropHost} />
+					<DropRegion aim={drop.aim} refused={drop.refused} host={dropHost} />
 				</div>
 			</ScrollArea>
 		</div>

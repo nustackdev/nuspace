@@ -241,6 +241,92 @@ export function planDrop(
 	return { [target.desk]: next, [lifted.from.id]: lifted.from.desk };
 }
 
+// -- What a drop says --------------------------------------------------------
+
+/** What a drop does, the one word every drop site shows it by. */
+export type Does = "pin" | "move" | "side" | "column" | "stack";
+
+/**
+ * What a drop of `payload` on `target` does, and its label: the same words
+ * on the canvas and in the sidebar.
+ *
+ *   between items, the end    "Pin" a link or pane as an item of its own,
+ *                             "Move here" for an item already on a desk
+ *   onto a plane item         "Side by side" on a side, "Stack above" /
+ *                             "Stack below" on a half: a strip of the two
+ *   in a strip                "New column", "Stack above" / "Stack below",
+ *                             "Stack in column" at a column's bottom
+ */
+export function dropDoes(payload: Payload | null, target: Target): { does: Does; label: string } {
+	const stack = (edge: Edge) =>
+		edge === "top"
+			? { does: "stack" as const, label: "Stack above" }
+			: { does: "stack" as const, label: "Stack below" };
+	if (target.kind === "end" || target.kind === "between") {
+		return payload?.kind === "item"
+			? { does: "move", label: "Move here" }
+			: { does: "pin", label: "Pin" };
+	}
+	if (target.kind === "onto") {
+		return target.edge === "left" || target.edge === "right"
+			? { does: "side", label: "Side by side" }
+			: stack(target.edge);
+	}
+	const drop = target.drop;
+	if ("column" in drop) return { does: "stack", label: "Stack in column" };
+	if ("plane" in drop && (drop.edge === "top" || drop.edge === "bottom")) return stack(drop.edge);
+	return { does: "column", label: "New column" };
+}
+
+/** A whole strip lands only between items. */
+export const NO_NESTING = "Strips don't nest";
+
+/** A plane item onto one that shows the same plane. */
+export const ALREADY_HERE = "Already here";
+
+/** A strip shows a plane once: it is one window. */
+export const ALREADY_IN_STRIP = "Already in strip";
+
+/**
+ * Why the drag table refuses `payload` on `target`, said to the user: a
+ * strip anywhere but between items, a plane onto a plane item showing it,
+ * a plane into a strip showing it. Null for a drop that lands, and for one
+ * that only changes nothing (onto itself, back where it is), which shows
+ * nothing at all.
+ */
+export function refusal(
+	desks: Record<string, Desk>,
+	payload: Payload,
+	target: Target,
+): string | null {
+	const into = desks[target.desk];
+	if (!into || planDrop(desks, payload, target)) return null;
+	const lifted = lift(desks, payload);
+	if (!lifted) return null;
+	const between = target.kind === "end" || target.kind === "between";
+	if (lifted.item?.kind === "strip") return between ? null : NO_NESTING;
+	const plane = M.shown(lifted.links).plane;
+	if (target.kind === "onto") {
+		const item = M.itemOf(into, target.item);
+		const self =
+			payload.kind === "item" && payload.desk === target.desk && payload.item === target.item;
+		return item?.kind === "plane" && !self && M.shown(item).plane === plane ? ALREADY_HERE : null;
+	}
+	if (target.kind === "strip") {
+		const strip = M.stripOf(into, target.item);
+		const own =
+			payload.kind === "pane" && payload.desk === target.desk && payload.item === target.item;
+		return strip && !own && M.locate(strip, plane) ? ALREADY_IN_STRIP : null;
+	}
+	return null;
+}
+
+/** Why `payload` may not land on `target` (`refusal`), off the desks this page knows. */
+export function whyNot(payload: Payload | null, target: Target): string | null {
+	const desks = knownDesks();
+	return payload && desks ? refusal(desks, payload, target) : null;
+}
+
 /**
  * Whether `payload` may land on `target`: whether the drag table writes
  * anything for it. A drag whose payload this page cannot read yet (another

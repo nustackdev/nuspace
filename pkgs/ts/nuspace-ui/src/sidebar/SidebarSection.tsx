@@ -110,7 +110,11 @@ export function SidebarSection({
 						</span>
 					)}
 					{count !== undefined ? <span className={sidebarSectionCount}>{count}</span> : null}
-					{actions ? <div className={sidebarSectionActions}>{actions}</div> : null}
+					{actions ? (
+						<div data-row-action="" className={sidebarSectionActions}>
+							{actions}
+						</div>
+					) : null}
 					{headMark}
 				</div>
 			) : null}

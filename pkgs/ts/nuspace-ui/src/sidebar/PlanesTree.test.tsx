@@ -395,6 +395,35 @@ describe("tree row rename, delete and drop", () => {
 		drag("drop", rowOf("a"));
 		expect(notify).toHaveBeenCalledWith("plane.move", { plane_id: "b", parent_id: "a" });
 	});
+	it("says where a drop lands, and why a row of its own subtree takes none", () => {
+		render(["a"]);
+		const data = new Map<string, string>();
+		const dataTransfer = {
+			setData: (k: string, v: string) => data.set(k, v),
+			getData: (k: string) => data.get(k) ?? "",
+			effectAllowed: "",
+			dropEffect: "",
+		};
+		const drag = (type: string, el: HTMLElement | null) => {
+			const e = new Event(type, { bubbles: true, cancelable: true });
+			Object.assign(e, { dataTransfer, clientY: 0, clientX: 0 });
+			act(() => {
+				el?.dispatchEvent(e);
+			});
+			return e;
+		};
+		const hint = (key: string) =>
+			rowOf(key)?.parentElement?.querySelector("[data-drop-hint]")?.textContent;
+		drag("dragstart", rowOf("b"));
+		expect(drag("dragover", rowOf("a")).defaultPrevented).toBe(true);
+		expect(hint("a")).toBe("Move inside");
+		drag("dragend", rowOf("b"));
+		drag("dragstart", rowOf("a"));
+		expect(drag("dragover", rowOf("a1")).defaultPrevented).toBe(false);
+		expect(hint("a1")).toBe("Can't move into itself");
+		drag("dragend", rowOf("a"));
+		expect(hint("a1")).toBeUndefined();
+	});
 });
 
 describe("tree row tooltips", () => {
