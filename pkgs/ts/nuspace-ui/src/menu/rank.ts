@@ -11,6 +11,13 @@
 // rank by where the query hit, the label's start beating a word's start
 // beating anywhere in it, then the name, then a word's start in the group or
 // the description.
+//
+// Over the groups, one fold more: the package an entry ships in, the name
+// before its dot (`nudemos.memes` is nudemos'). Nuverse's rows sit unfolded on
+// top, with the menu's pinned rows; every other package is a title with how
+// many rows it holds, open only while the lit row is in it. The arrows step
+// the rows alone, every package's, folded or not, so stepping into a package
+// is what opens it; a title is never a stop. Typing opens them all.
 
 /** What a registry menu ranks: a registered Cell or Plane, as shipped, named `pkg.name`. */
 export type MenuEntry = { name: string; label: string; group?: string; description?: string };
@@ -91,4 +98,88 @@ export function menuMatch(query: string, label: string): [number, number] | null
 	const word = l.search(new RegExp(`(^|\\s)${q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
 	const at = word === -1 ? l.indexOf(q) : word === 0 && l.startsWith(q) ? 0 : word + 1;
 	return at === -1 ? null : [at, at + q.length];
+}
+
+/** The package an entry ships in: its name before the first dot, "" for none. */
+export function packageOf(name: string): string {
+	const dot = name.indexOf(".");
+	return dot === -1 ? "" : name.slice(0, dot);
+}
+
+/** The package that never folds: its rows sit on top, under the menu's pinned rows. */
+export const FIRST_PACKAGE = "nuverse";
+
+/** One package's fold and the sections inside it. */
+export type MenuPackage<T extends MenuEntry = MenuEntry> = {
+	/** The package, "" for the entries with none. Null on rows with no title: pinned, nuverse's, or a list from one package. */
+	key: string | null;
+	/** What its title reads. */
+	label: string;
+	/** How many rows it holds for the query. */
+	count: number;
+	/** Whether its rows show. A folded package's rows are still the arrows' stops. */
+	open: boolean;
+	sections: MenuSection<T>[];
+};
+
+/** Rows with no title, always open. For a menu's pinned rows. */
+export function menuPinned<T extends MenuEntry>(sections: MenuSection<T>[]): MenuPackage<T> {
+	const count = sections.reduce((n, s) => n + s.items.length, 0);
+	return { key: null, label: "", count, open: true, sections };
+}
+
+/**
+ * The menu's packages for `query`, in order: nuverse untitled on top, then
+ * the rest, in the registry's order or, with a query, best match first. Only
+ * the package holding `lit` (an entry's name) is open, until a query opens all.
+ */
+export function menuPackages<T extends MenuEntry>(
+	query: string,
+	items: T[],
+	lit?: string,
+): MenuPackage<T>[] {
+	const byPackage = new Map<string, T[]>();
+	for (const item of items) {
+		const key = packageOf(item.name);
+		const rows = byPackage.get(key);
+		if (rows) rows.push(item);
+		else byPackage.set(key, [item]);
+	}
+	if (byPackage.size <= 1) {
+		const sections = menuSections(query, items);
+		return sections.length === 0 ? [] : [menuPinned(sections)];
+	}
+	const typed = query.trim() !== "";
+	const keys = [...byPackage.keys()];
+	const litPackage = lit === undefined ? null : packageOf(lit);
+	return keys
+		.map((key) => {
+			const rows = byPackage.get(key) ?? [];
+			const sections = menuSections(query, rows);
+			const best = Math.min(...rows.map((r) => menuScore(query, r) ?? Number.MAX_SAFE_INTEGER));
+			return { key, sections, best };
+		})
+		.filter((p) => p.sections.length > 0)
+		.sort(
+			(a, b) =>
+				Number(b.key === FIRST_PACKAGE) - Number(a.key === FIRST_PACKAGE) ||
+				(typed ? a.best - b.best : 0) ||
+				keys.indexOf(a.key) - keys.indexOf(b.key),
+		)
+		.map(({ key, sections }) =>
+			key === FIRST_PACKAGE
+				? menuPinned(sections)
+				: {
+						key,
+						label: key || OTHER,
+						count: sections.reduce((n, s) => n + s.items.length, 0),
+						open: typed || key === litPackage,
+						sections,
+					},
+		);
+}
+
+/** Every row in menu order, folded or not: what the arrows step through. */
+export function menuRows<T extends MenuEntry>(packages: MenuPackage<T>[]): T[] {
+	return packages.flatMap((p) => p.sections.flatMap((s) => s.items));
 }

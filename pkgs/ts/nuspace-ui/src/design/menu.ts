@@ -19,59 +19,60 @@ import { cn, commandHeadingClasses, commandItemClasses } from "@nustackdev/ui-ki
  */
 export const planeMenu = "w-64";
 
+/**
+ * A package's title: the chevron, its name, how many rows it holds. Not a
+ * stop: it only says whether the package is open, and a click lights its
+ * first row. Slimmer than an entry's row, so the folds read as the frame.
+ */
+export const menuPackage = cn(
+	"flex w-full cursor-default select-none items-center gap-2 rounded-md px-2 pt-2 pb-1",
+	"text-sm font-medium text-text-primary hover:bg-bg-hover",
+	"[&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:text-text-secondary",
+);
+
+/** The chevron on a package's row, turned while it is open. */
+export function menuPackageChevron(open: boolean): string {
+	return cn("transition-transform duration-fast ease-out", open && "rotate-90");
+}
+
+/** How many rows a package holds, at the row's end. */
+export const menuPackageCount = "ml-auto text-xs tabular-nums text-text-muted";
+
 /** A section heading. */
 export const menuHeading = cn(commandHeadingClasses, "pt-2 first:pt-1");
 
-/** A row: icon tile, label over description, and the Enter hint when lit. Lit, it lifts as its float does. */
+/** A row: icon tile, label over description, and the Enter hint when lit. Flat: lit, it only tints. */
 export const menuItem = cn(
 	commandItemClasses,
-	"group w-full gap-3 rounded-md px-2 py-1.5 text-left data-[selected=true]:shadow-raised",
+	"group w-full items-start gap-3 rounded-md px-2 py-1.5 text-left",
 );
 
 /** The icon's tile, so a glyph and an emoji read as the same kind of thing. */
 export const menuTile = cn(
 	"flex size-9 shrink-0 items-center justify-center rounded-md",
 	"border border-border-subtle bg-bg-surface",
-	"group-data-[selected=true]:border-border-default group-data-[selected=true]:bg-bg-elevated",
 );
 
-export const menuText = "flex min-w-0 flex-1 flex-col";
-
 // Label and description lines are 20px and 16px, the tile's 36px together, so
-// a row's tile, text and hint sit at the same offsets whether centered (the
-// row) or from the top (its float): lighting a row moves nothing in it.
+// a one-line description sits level with the tile. Longer text wraps and the
+// row grows: nothing is cut off.
 
-/** The row's label. Owns the line: it truncates, the hint never does. */
-export const menuLabel = "truncate font-medium leading-5 text-text-primary";
+/** The row's text, centered on the tile while it fits beside it. */
+export const menuText = "flex min-h-9 min-w-0 flex-1 flex-col justify-center";
+
+/** The row's label. */
+export const menuLabel = "break-words font-medium leading-5 text-text-primary";
 
 /** The part of the label the query matched. */
 export const menuHit = "bg-transparent font-semibold text-accent-text";
 
-export const menuDescription = "truncate text-xs leading-4 text-text-muted";
+export const menuDescription = "break-words text-xs leading-4 text-text-muted";
 
 /**
- * The lit row whole, when its row cut it off: drawn over the row and the rows
- * under it, so nothing in the list moves. Lined up with the row it covers
- * (same padding and gap), opaque under the hover tint, and blind to the
- * pointer so the rows beneath still take hover.
+ * The Enter hint on the lit row. Its room is kept on every row, only unseen,
+ * so lighting a row never rewraps its text. Level with the tile's middle.
  */
-export const menuFloat = cn(
-	"pointer-events-none absolute inset-x-0 top-0 z-10 hidden group-data-[selected=true]:block",
-	"rounded-md bg-bg-elevated shadow-raised",
-);
-
-export const menuFloatRow = "flex items-start gap-3 rounded-md bg-bg-hover px-2 py-1.5";
-
-/** The labels in the float, wrapping instead of truncating. */
-export const menuFloatLabel = "break-words font-medium leading-5 text-text-primary";
-
-export const menuFloatDescription = "break-words text-xs leading-4 text-text-muted";
-
-/**
- * The Enter hint on the lit row. Out of the layout elsewhere, so it leaves no
- * gap. Pinned to the middle of the first 36px, so the float's sits where the row's did.
- */
-export const menuEnter = "mt-2 hidden shrink-0 self-start group-data-[selected=true]:inline-flex";
+export const menuEnter = "invisible mt-2 inline-flex shrink-0 group-data-[selected=true]:visible";
 
 /** The keys, along the bottom edge. */
 export const menuFooter = cn(

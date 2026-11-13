@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { CellSpec } from "../types";
-import { PROGRAM, slashItems } from "./slash";
+import { PROGRAM, slashItems, slashPackages } from "./slash";
 
 const CELL_SPECS: CellSpec[] = [
 	{ name: "nuverse.text", label: "Text", group: "Content" },
@@ -26,5 +26,29 @@ describe("slashItems", () => {
 		// "program" still finds it, through its description.
 		expect(names(slashItems("program", CELL_SPECS))).toEqual([""]);
 		expect(names(slashItems("sl", CELL_SPECS))).toEqual(["nuverse.slider"]);
+	});
+});
+
+describe("slashPackages", () => {
+	it("keeps the program and nuverse on top, other packages folded until lit", () => {
+		const specs = [...CELL_SPECS, { name: "nulogs.logs", label: "Logs" }];
+		const shape = (lit?: string) => slashPackages("", specs, lit).map((p) => [p.key, p.open]);
+		expect(shape()).toEqual([
+			[null, true],
+			[null, true],
+			["nulogs", false],
+		]);
+		expect(shape("nulogs.logs")).toEqual([
+			[null, true],
+			[null, true],
+			["nulogs", true],
+		]);
+		expect(names(slashItems("", specs))).toEqual([
+			"",
+			"nuverse.text",
+			"nuverse.prose",
+			"nuverse.slider",
+			"nulogs.logs",
+		]);
 	});
 });

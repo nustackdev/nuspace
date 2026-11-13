@@ -8,14 +8,19 @@
 // lose the query), so this component has no keyboard of its own: it draws
 // and reports clicks, and the ghost forwards arrow/enter/escape. It wears
 // the kit's command palette recipes, so it reads as one without being one.
+//
+// Over the sections, the packages (../../menu/rank.ts): nuverse's rows on
+// top, every other package a title, open while the lit row is in it. The
+// arrows step every row, folded or not, so a folded package's rows stay
+// drawn, hidden; a click on a title lights its first row.
 
 import { EmptyState, Popover, PopoverAnchor, PopoverContent } from "@nustackdev/ui-kit";
 import { useEffect, useRef } from "react";
-import { docSlashList, docSlashMenu, menuHeading, menuItem } from "../../design";
-import { MenuEntry, MenuKeys } from "../../menu/Entry";
+import { docSlashList, docSlashMenu, menuHeading, menuItem, menuPackage } from "../../design";
+import { MenuEntry, MenuKeys, PackageEntry } from "../../menu/Entry";
 import type { SlashAnchor } from "../state";
 import type { CellSpec } from "../types";
-import { slashSections } from "./slash";
+import { slashItems, slashPackages } from "./slash";
 
 /** The glyph a Cell that names none shows. */
 const CELL_ICON = { kind: "lucide", name: "square-terminal" } as const;
@@ -44,7 +49,7 @@ export function SlashMenu({
 	onClose: () => void;
 }) {
 	const ref = useRef<HTMLDivElement | null>(null);
-	const sections = slashSections(query, cellSpecs);
+	const packages = slashPackages(query, cellSpecs, slashItems(query, cellSpecs)[index]?.name);
 
 	// Keep the highlighted row visible while filtering narrows the list.
 	useEffect(() => {
@@ -54,6 +59,21 @@ export function SlashMenu({
 	}, [index]);
 
 	let at = 0;
+	// One stop: lit when the arrows are on it, lit by hover too.
+	const stop = () => {
+		const i = at++;
+		const lit = i === index;
+		return {
+			role: "option",
+			"aria-selected": lit,
+			tabIndex: -1,
+			"data-slash-index": i,
+			"data-selected": lit,
+			onMouseMove: () => {
+				if (!lit) onMove(i - index);
+			},
+		} as const;
+	};
 
 	// A kit popover pinned to the ghost's input: it follows the line as the
 	// page scrolls, and flips above it when the room below runs short. The
@@ -83,45 +103,56 @@ export function SlashMenu({
 				onMouseDown={(e) => e.preventDefault()}
 			>
 				<div className={docSlashList}>
-					{sections.length === 0 ? (
+					{packages.length === 0 ? (
 						<EmptyState size="sm">Nothing matches “{query.trim()}”</EmptyState>
 					) : null}
-					{sections.map((section) => (
-						// The pinned program and an ungrouped list are both headless.
-						<div key={section.heading ?? `_${section.items[0]?.name}`}>
-							{section.heading ? <div className={menuHeading}>{section.heading}</div> : null}
-							{section.items.map((item) => {
-								const i = at++;
-								const lit = i === index;
-								return (
-									<button
-										key={item.name}
-										type="button"
-										role="option"
-										aria-selected={lit}
-										tabIndex={-1}
-										data-slash-index={i}
-										data-selected={lit}
-										onClick={() => onPick(item)}
-										onMouseMove={() => {
-											if (!lit) onMove(i - index);
-										}}
-										className={menuItem}
+					{packages.map((pkg) => {
+						const first = at;
+						return (
+							<div key={pkg.key ?? `_${pkg.sections[0]?.items[0]?.name}`}>
+								{pkg.key === null ? null : (
+									// A title, not a stop: a click lights its first row, which opens it.
+									// biome-ignore lint/a11y/useKeyWithClickEvents lint/a11y/noStaticElementInteractions: the arrows reach the same rows
+									<div
+										data-open={pkg.open}
+										onClick={() => onMove(first - index)}
+										className={menuPackage}
 									>
-										<MenuEntry
-											icon={item.icon}
-											fallback={CELL_ICON}
-											label={item.label}
-											description={item.description}
-											query={query}
-										/>
-									</button>
-								);
-							})}
-						</div>
-					))}
+										<PackageEntry {...pkg} />
+									</div>
+								)}
+								<div hidden={!pkg.open}>
+									{pkg.sections.map((section) => (
+										// The pinned program and an ungrouped list are both headless.
+										<div key={section.heading ?? `_${section.items[0]?.name}`}>
+											{section.heading ? (
+												<div className={menuHeading}>{section.heading}</div>
+											) : null}
+											{section.items.map((item) => (
+												<button
+													key={item.name}
+													type="button"
+													{...stop()}
+													onClick={() => onPick(item)}
+													className={menuItem}
+												>
+													<MenuEntry
+														icon={item.icon}
+														fallback={CELL_ICON}
+														label={item.label}
+														description={item.description}
+														query={query}
+													/>
+												</button>
+											))}
+										</div>
+									))}
+								</div>
+							</div>
+						);
+					})}
 				</div>
-				{sections.length === 0 ? null : <MenuKeys action="Insert" />}
+				{packages.length === 0 ? null : <MenuKeys action="Insert" />}
 			</PopoverContent>
 		</Popover>
 	);

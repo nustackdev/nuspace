@@ -6,7 +6,8 @@
 // written meanwhile (another tab, a program): so whether to replace it is
 // asked again as the pick lands. Its document still blank, the pick replaces
 // it; anything in it, the pick goes in after and the cell comes back as it
-// is now. Text is never lost to a pick.
+// is now. Text is never lost to a pick. The rows step through every
+// package, folded or not (../../menu/rank.ts).
 
 import { useCallback, useMemo } from "react";
 import type { Place, PlaneModel } from "../api";
