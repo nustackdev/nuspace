@@ -209,15 +209,14 @@ def test_registered_entries():
 
 async def test_viewer_plane(store):
     await plane(store, "p1", "Notes", icon="lucide:book", key="notes")
-    await do(store, web.set("p1", full_width=True))
+    await do(store, web.set("p1", width="full"))
     await do(store, nuspace.cell.add("p1", "x = 1", id="c1", name="one", fabrics=["ui"]))
     await do(store, nuspace.specs.add_cell("p1", TEXT, id="c2", fabrics=[]))
     got = await store.read(plane_view("p1", CELLS))
     assert got["absent"] == "" and got["title"] == "Notes"
     assert got["meta"] == {
         "editable": True,
-        "full_width": True,
-        "compact": False,
+        "width": "full",
         "icon": "lucide:book",
         "key": "notes",
     }
@@ -388,9 +387,9 @@ async def test_tab_live(store):
             lambda: any(c["source"] == "y = 2" for c in session.writes("set_plane")[-1]["cells"])
         )
         session.notify(
-            ("viewer", "ops", "plane.web"), {"plane_id": "p1", "flags": {"full_width": True}}
+            ("viewer", "ops", "plane.web"), {"plane_id": "p1", "flags": {"width": "board"}}
         )
-        await _until(lambda: session.writes("set_plane")[-1]["meta"]["full_width"])
+        await _until(lambda: session.writes("set_plane")[-1]["meta"]["width"] == "board")
         # A cell's key: set, changed and removed, each reshipped.
         session.notify(("viewer", "ops", "cell.key"), {"cell_id": "c1", "key": "first"})
         await _until(

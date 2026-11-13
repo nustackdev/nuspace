@@ -3,7 +3,8 @@
 // `editable` is the plane's own setting and the thing here that branches on
 // it: with it you get the insert affordances, the drag handle, a source you
 // can edit and the keyboard. Without it the same cells render their output
-// and keep a reduced gutter: copy the id, and read the source. `wide` is the full-width setting.
+// and keep a reduced gutter: copy the id, and read the source. `width` is the
+// plane's width setting, how wide its grid runs at most.
 //
 // Everything structural lives in this directory and nowhere else: ordering,
 // keyboard, selection, focus, the input lines and the slash menu, drag
@@ -36,6 +37,7 @@ import {
 	docDropIndicator,
 	docRow,
 	docTail,
+	type PlaneWidth,
 } from "../design";
 import type { FocusRequest, PlaneApi, PlaneHandle, PlaneModel } from "./api";
 import { cellUiPath } from "./cell/address";
@@ -65,8 +67,7 @@ export function Plane({
 	plane,
 	cellSpecs = NO_CELL_SPECS,
 	editable,
-	wide,
-	compact,
+	width,
 	notify,
 	handleRef,
 	onTitle,
@@ -81,10 +82,8 @@ export function Plane({
 	cellSpecs?: CellSpec[];
 	/** The plane's setting. False draws the same cells, output only. */
 	editable: boolean;
-	/** The plane's full-width setting. */
-	wide: boolean;
-	/** The plane's compact setting: no run-off under the last cell. */
-	compact: boolean;
+	/** The plane's width setting: how wide its grid runs, at most. */
+	width: PlaneWidth;
 	notify: Notify;
 	/** Filled with what the pane above holds of this plane (./api.ts). */
 	handleRef?: React.RefObject<PlaneHandle | null>;
@@ -292,7 +291,7 @@ export function Plane({
 			ref={rootRef}
 			tabIndex={-1}
 			onKeyDown={onCellKeys}
-			className={`${docColumn(wide, compact)} outline-none`}
+			className={`${docColumn(width)} outline-none`}
 		>
 			{editable && editor.ghost?.after === null ? (
 				<div className={docRow}>
@@ -401,23 +400,20 @@ export function Plane({
 					<Ghost {...ghostProps(lastId, false)} hinted={cells.length === 0} />
 				</div>
 			) : null}
-			{/* The run-off under the last cell is the plane's compact setting, not
-			    its editable one. Clicking it aims at the ghost when there is one.
-			    It spans all three tracks: the whole width under the plane is
-			    somewhere to click. */}
-			{compact ? null : (
-				// biome-ignore lint/a11y/noStaticElementInteractions: the run-off under a document is a click target, not a control -- the keyboard reaches the same ghost by arrowing down
-				<div
-					className={docTail}
-					onMouseDown={(e) => {
-						// mousedown and not click, and preventDefault: the caret has to
-						// land in the ghost, not in the empty div that was clicked.
-						if (!editable || e.button !== 0) return;
-						e.preventDefault();
-						endGhost.current?.focus();
-					}}
-				/>
-			)}
+			{/* The run-off under the last cell, on every plane, editable or not.
+			    Clicking it aims at the ghost when there is one. It spans all three
+			    tracks: the whole width under the plane is somewhere to click. */}
+			{/* biome-ignore lint/a11y/noStaticElementInteractions: the run-off under a document is a click target, not a control -- the keyboard reaches the same ghost by arrowing down */}
+			<div
+				className={docTail}
+				onMouseDown={(e) => {
+					// mousedown and not click, and preventDefault: the caret has to
+					// land in the ghost, not in the empty div that was clicked.
+					if (!editable || e.button !== 0) return;
+					e.preventDefault();
+					endGhost.current?.focus();
+				}}
+			/>
 
 			{box ? <div className={docBoxSelect} style={box} /> : null}
 

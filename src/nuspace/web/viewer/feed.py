@@ -88,8 +88,8 @@ import nustd
 out = nustd.ui.TextRef("out").set("Hello, cell!")
 """
 
-#: The web flags a ``plane.web`` event may set.
-WEB_FLAGS = ("editable", "full_width", "compact")
+#: The web flags a ``plane.web`` event may set, each with how its value reads.
+WEB_FLAGS = {"editable": nu.Bool, "width": nu.Str}
 
 _live = Space.exec.indexes.live
 _history = Space.exec.indexes.history
@@ -145,8 +145,7 @@ def plane_view(plane: nu.StrArg, specs: Iterable[CellSpec] = ()) -> nu.Dict:
     )
     meta = nu.Dict.of(
         editable=flags.editable.fallback(False),
-        full_width=flags.full_width.fallback(False),
-        compact=flags.compact.fallback(False),
+        width=flags.width.fallback("page"),
         icon=row.icon.fallback(""),
         key=row.key.fallback(""),
     )
@@ -345,13 +344,11 @@ def _web_flags(plane: nu.Str, event: nu.Attr) -> nu.Nu:
     )
     stray = nu.Int(nu.Count(unknown)) > 0
     given = {
-        flag: nu.IfDo(flags.contains(flag), web.set(plane, **{flag: nu.Bool(flags[flag])}))
-        for flag in WEB_FLAGS
+        flag: nu.IfDo(flags.contains(flag), web.set(plane, **{flag: read(flags[flag])}))
+        for flag, read in WEB_FLAGS.items()
     }
     writes = nu.Sequential(*given.values())
-    bad = nu.Raise(
-        "malformed event: web flags are editable, full_width, compact", exc_cls=ValueError
-    )
+    bad = nu.Raise("malformed event: web flags are editable, width", exc_cls=ValueError)
     return nu.IfDo(stray, bad, atomic(writes))
 
 

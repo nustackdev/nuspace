@@ -45,9 +45,9 @@ async def plane(store, pid, *, on_web=True, **kw):
 
 async def test_add_writes_the_web_row_with_its_flags(store):
     await plane(store, "p1", on_web=False)
-    await do(store, web.add("p1", editable=True, compact=True))
+    await do(store, web.add("p1", editable=True, width="board"))
     row = await store.read(web.Web.planes["p1"].extract())
-    assert row == {"editable": True, "full_width": False, "compact": True}
+    assert row == {"editable": True, "width": "board"}
 
 
 async def test_add_raises_for_a_missing_removed_or_web_plane(store):
@@ -64,11 +64,22 @@ async def test_add_raises_for_a_missing_removed_or_web_plane(store):
 
 async def test_set_changes_only_the_flags_given(store):
     await plane(store, "p1")
-    await do(store, web.set("p1", full_width=True))
+    await do(store, web.set("p1", width="full"))
     row = await store.read(web.Web.planes["p1"].extract())
-    assert row == {"editable": False, "full_width": True, "compact": False}
+    assert row == {"editable": False, "width": "full"}
     with pytest.raises(Missing):
         await do(store, web.set("p9", editable=True))
+
+
+async def test_a_width_is_page_board_or_full(store):
+    await plane(store, "p1", on_web=False)
+    with pytest.raises(Refused):
+        await do(store, web.add("p1", width="wide"))
+    await do(store, web.add("p1"))
+    assert await store.read(web.Web.planes["p1"].width) == "page"
+    with pytest.raises(Refused):
+        await do(store, web.set("p1", width="wide"))
+    assert await store.read(web.Web.planes["p1"].width) == "page"
 
 
 # --- Recents ------------------------------------------------------------------------------

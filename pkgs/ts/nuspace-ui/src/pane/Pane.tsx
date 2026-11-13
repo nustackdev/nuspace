@@ -26,16 +26,18 @@
 // on an editable plane.
 
 import type { Path } from "@nustackdev/ui-core";
-import { Button } from "@nustackdev/ui-kit";
+import { Button, ScrollArea } from "@nustackdev/ui-kit";
 import { useCallback, useRef, useState } from "react";
 import { closeItem, closePane, focusPane } from "../core/router";
 import {
 	docRow,
 	docTitleHead,
 	docTitleIdentity,
+	docTitleLine,
 	docTitleRow,
 	paneBody,
 	paneBodyScroll,
+	paneBodyViewport,
 	shellPane,
 } from "../design";
 import type { PaneAt } from "../desk/drag";
@@ -124,8 +126,7 @@ export function Pane({
 	}, [deskId, itemId, planeId]);
 	const close = closeOf(at, planeId);
 	const title = paneTitle(planeId, plane, absent);
-	const wide = plane?.meta.full_width === true;
-	const compact = plane?.meta.compact === true;
+	const width = plane?.meta.width ?? "page";
 	// The plane fills this in: the title reports its intents to it, and a
 	// press anywhere in the pane can start a box selection over its cells.
 	// The way back up is the title's own heading, which the plane puts the
@@ -163,7 +164,7 @@ export function Pane({
 				onClose={close}
 				focused={focused}
 			/>
-			<div className={paneBodyScroll}>
+			<ScrollArea className={paneBodyScroll} viewportClassName={paneBodyViewport}>
 				{/* A press off the cells starts a box selection over them. */}
 				<div className={paneBody} onPointerDown={(e) => planeHandle.current?.press(e)}>
 					{absent ? (
@@ -183,16 +184,18 @@ export function Pane({
 						<ViewerSkeleton />
 					) : (
 						<>
-							<header className={docTitleHead(wide, compact)}>
+							<header className={docTitleHead(width)}>
 								<div className={docTitleRow}>
-									<TitleIcon value={plane.meta.icon} onChange={(icon) => onIcon(planeId, icon)} />
-									<Title
-										value={plane.title}
-										placeholder={TITLE_FALLBACK}
-										onCommit={(next) => onRename(planeId, next)}
-										onIntent={(i) => planeHandle.current?.title(i) ?? false}
-										headRef={head}
-									/>
+									<div className={docTitleLine}>
+										<TitleIcon value={plane.meta.icon} onChange={(icon) => onIcon(planeId, icon)} />
+										<Title
+											value={plane.title}
+											placeholder={TITLE_FALLBACK}
+											onCommit={(next) => onRename(planeId, next)}
+											onIntent={(i) => planeHandle.current?.title(i) ?? false}
+											headRef={head}
+										/>
+									</div>
 									<IdentityToggle open={identity} onOpenChange={setIdentity} />
 								</div>
 								{key ? (
@@ -222,8 +225,7 @@ export function Pane({
 								plane={plane}
 								cellSpecs={cellSpecs}
 								editable={plane.meta.editable}
-								wide={wide}
-								compact={compact}
+								width={width}
 								notify={notify}
 								handleRef={planeHandle}
 								onTitle={toTitle}
@@ -232,7 +234,7 @@ export function Pane({
 						</>
 					)}
 				</div>
-			</div>
+			</ScrollArea>
 		</section>
 	);
 }

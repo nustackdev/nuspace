@@ -51,10 +51,11 @@ export const shellSideOpen = "flex min-h-0 min-w-0 flex-1 group-data-[state=coll
 export const shellSideRail = "hidden min-h-0 flex-1 group-data-[state=collapsed]/side:flex";
 
 /**
- * The kit split handle between the sidebar and the desk area: the 6px gap
- * itself, no fill. The kit's own line shows on hover and while dragging.
+ * The kit split handle between the sidebar and the desk area, as the kit
+ * draws it: a `line-subtle` hairline, the afterglow line on hover and while
+ * dragging. The shell is flat, so this line is the sidebar's edge.
  */
-export const shellSplitHandle = "w-1.5 bg-transparent";
+export const shellSplitHandle = "";
 
 /** Everything right of the sidebar. */
 export const shellMain = "group/main relative flex min-h-0 min-w-0 flex-1";
@@ -62,10 +63,11 @@ export const shellMain = "group/main relative flex min-h-0 min-w-0 flex-1";
 /* ============================== The desk ================================= */
 
 /**
- * The desk area: 6px from the window's top, right and bottom edges. The 6px
- * on the left is the sidebar's split handle.
+ * The desk area: flat, edge to edge, the panes' own fill. No gaps, no
+ * radius: panes meet on hairlines, and a pane cut by the window edge reads
+ * like any app window, not a card sliced in half.
  */
-export const deskArea = "relative flex min-h-0 min-w-0 flex-1 py-1.5 pr-1.5";
+export const deskArea = "relative flex min-h-0 min-w-0 flex-1 bg-nuspace-page";
 
 /**
  * A strip's desk area: a size container, so a column's default width is a
@@ -85,11 +87,12 @@ export const deskRow = "min-h-0 min-w-0 flex-1";
 export const deskRowViewport = "overscroll-x-contain";
 
 /**
- * The columns, side by side, 6px apart. Nothing shrinks to fit: the row
+ * The columns, side by side, edge to edge: the column handle on each one's
+ * right is the hairline between them. Nothing shrinks to fit: the row
  * scrolls instead. Holds the drop region, so it scrolls with the columns.
  * A new column at the end is a drop on the last pane's right edge.
  */
-export const deskColumns = "relative flex h-full gap-1.5";
+export const deskColumns = "relative flex h-full";
 
 /**
  * A column's width, as an inline style value: `null` for the canvas's full
@@ -102,10 +105,11 @@ export function deskColumnWidth(px: number | null | undefined): string | number 
 }
 
 /**
- * One column: its panes stacked, 6px apart. Its width is set inline. The
- * column resize handle sits on its right edge.
+ * One column: its panes stacked edge to edge, the share handle between them
+ * the hairline. Its width is set inline. The column resize handle sits on
+ * its right edge.
  */
-export const deskColumn = "relative flex h-full shrink-0 flex-col gap-1.5";
+export const deskColumn = "relative flex h-full shrink-0 flex-col";
 
 /**
  * A pane's place in its column: its share of the height, set inline as flex
@@ -114,36 +118,34 @@ export const deskColumn = "relative flex h-full shrink-0 flex-col gap-1.5";
 export const deskShare = "relative flex min-h-0 basis-0";
 
 /**
- * A column's resize handle: the 6px gap on its right, the kit's split handle
- * with no hairline, so nothing shows until it is hovered, then the kit's 2px
- * afterglow line, which stays while dragging (`data-dragging`).
+ * A column's resize handle on its right edge: the kit's split handle, its
+ * `line-subtle` hairline the line between this column and the next, the
+ * kit's 2px afterglow line on hover and while dragging (`data-dragging`).
  */
 export function deskColumnHandle(last: boolean): string {
 	return cn(
 		splitHandleClasses("horizontal"),
-		"absolute inset-y-0 w-1.5 bg-transparent",
-		// In the gap to the next column; the last column has no gap after it
-		// (the row ends at its edge), so its handle sits just inside it.
-		last ? "right-0" : "-right-1.5",
+		"absolute inset-y-0",
+		// On the seam to the next column; the last column's sits just inside
+		// it, so the row never scrolls a pixel past its end.
+		last ? "right-0" : "-right-px",
 	);
 }
 
-/** The share resize handle: the 6px gap under a pane, the same look as the column's. */
-export const deskShareHandle = cn(
-	splitHandleClasses("vertical"),
-	"absolute inset-x-0 -bottom-1.5 h-1.5 bg-transparent",
-);
+/** The share resize handle: the hairline under a pane, the same look as the column's. */
+export const deskShareHandle = cn(splitHandleClasses("vertical"), "absolute inset-x-0 -bottom-px");
 
 /**
  * Where a drag would land, drawn as the region the drop makes: the half of a
  * column's full height for a new column beside it (every pane stacked in it),
  * the half of a pane for one stacked there or for a plane item made a strip.
- * A light Afterglow wash inside a 1.5px Afterglow line, 8px radius like a
- * pane, no elevation. Placed inline, 2px inside the region (main/DropRegion.tsx).
+ * A light Afterglow wash inside a 1.5px Afterglow line, square like a flat
+ * pane, no elevation. Placed inline, on the region's own edges
+ * (main/DropRegion.tsx).
  * Its label is the kit's Badge, centered.
  */
 export const deskDropRegion = cn(
-	"pointer-events-none absolute z-20 flex items-center justify-center rounded-lg",
+	"pointer-events-none absolute z-20 flex items-center justify-center",
 	"bg-doc-drop ring-[1.5px] ring-doc-drop-line ring-inset",
 );
 
@@ -164,19 +166,22 @@ export const deskSolo = "relative flex min-h-0 min-w-0 flex-1";
 export const deskEmpty = "min-h-0 flex-1";
 
 /**
- * A drag over an empty desk: the drop region over the whole desk, inside the
+ * A drag over an empty desk: the drop region over the whole desk, on the
  * desk area's edges.
  */
-export const deskEmptyAim = cn(deskDropRegion, "top-1.5 right-1.5 bottom-1.5 left-0");
+export const deskEmptyAim = cn(deskDropRegion, "inset-0");
 
 /**
- * One pane on the canvas: 8px radius, a `line-subtle` border, the
- * `ground-raised` fill. Focus is in the header's title, never on the border.
+ * One pane on the desk: flat, no border and no radius, the `ground-raised`
+ * fill. The handles around it draw its edges. Focus is in the header's
+ * title, never on an edge.
+ *
+ * A size container, both ways: the air under a plane's last cell is a third
+ * of the pane's height (tokens.css `--spacing-doc-tail`).
  */
 export const shellPane = cn(
-	"group/pane relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden",
-	"rounded-lg border border-border-subtle bg-nuspace-page",
-	"outline-none",
+	"group/pane [container-type:size] relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden",
+	"bg-nuspace-page outline-none",
 );
 
 /**

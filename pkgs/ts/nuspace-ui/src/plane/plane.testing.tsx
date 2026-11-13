@@ -79,7 +79,7 @@ export function render(
 	const plane: ActivePlane = {
 		plane_id: "p1",
 		title: "",
-		meta: { editable, full_width: false, compact: false, key: "" },
+		meta: { editable, width: "page", key: "" },
 		cells,
 	};
 	act(() => {
@@ -90,8 +90,7 @@ export function render(
 					plane={plane}
 					cellSpecs={specs}
 					editable={editable}
-					wide={false}
-					compact={false}
+					width="page"
 					notify={notify}
 					handleRef={handle}
 					onTitle={title ? onTitle : undefined}

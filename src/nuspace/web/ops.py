@@ -46,7 +46,7 @@ from nuspace.utils import MintId
 from nuspace.utils.checks import live, refuse, row_known
 
 from .interactions import Href, IconName, Session
-from .shapes import RECENTS_CAP, ROLES, Conn, Web
+from .shapes import RECENTS_CAP, ROLES, WIDTHS, Conn, Web
 
 
 if TYPE_CHECKING:
@@ -127,33 +127,33 @@ def add(
     plane: nu.StrArg,
     *,
     editable: nu.BoolArg = False,
-    full_width: nu.BoolArg = False,
-    compact: nu.BoolArg = False,
+    width: nu.StrArg = "page",
 ) -> nu.Nu:
     """Put a plane on the web: its ``Web.planes`` row, with its view flags.
 
     Web planes are what the sidebar lists and what a tab can open; a tab
-    runs one with the session wrapper. Cost: O(1), 2 reads of Space, 4 keys
+    runs one with the session wrapper. Cost: O(1), 2 reads of Space, 3 keys
     written.
 
     Args:
         plane: The plane.
         editable: Its cells can be edited in the browser.
-        full_width: It takes the whole width of a pane.
-        compact: It draws its cells tight.
+        width: How wide its content runs in a pane, at most: ``page``,
+            ``board`` or ``full`` (:data:`~nuspace.web.shapes.WIDTHS`).
 
     Raises:
         Missing: No plane with that id.
         Removed: It is removed.
         Exists: It is on the web already.
+        Refused: Not a width.
     """
     row = Web.planes[plane]
     return (
         _plane_live(plane)
         >> refuse(Web.planes.contains(plane), Exists, "plane ", plane, " is on the web already")
+        >> _width_ok(width)
         >> row.editable.set(editable)
-        >> row.full_width.set(full_width)
-        >> row.compact.set(compact)
+        >> row.width.set(width)
     )
 
 
@@ -161,23 +161,31 @@ def set(
     plane: nu.StrArg,
     *,
     editable: nu.BoolArg | None = None,
-    full_width: nu.BoolArg | None = None,
-    compact: nu.BoolArg | None = None,
+    width: nu.StrArg | None = None,
 ) -> nu.Nu:
-    """Change a web plane's view flags, only those given. Cost: O(1), up to 4 keys.
+    """Change a web plane's view flags, only those given. Cost: O(1), up to 3 keys.
 
     Raises:
         Missing: The plane is not on the web.
+        Refused: Not a width.
     """
     row = Web.planes[plane]
     term = _on_web(plane)
     if editable is not None:
         term = term >> row.editable.set(editable)
-    if full_width is not None:
-        term = term >> row.full_width.set(full_width)
-    if compact is not None:
-        term = term >> row.compact.set(compact)
+    if width is not None:
+        term = term >> _width_ok(width) >> row.width.set(width)
     return term
+
+
+def _width_ok(width: nu.StrArg) -> nu.Nu:
+    """``width`` is one of :data:`~nuspace.web.shapes.WIDTHS`.
+
+    Raises:
+        Refused: It is not.
+    """
+    known = nu.List.of(*WIDTHS).contains(width)
+    return refuse(known.not_(), Refused, "a width is page, board or full, not ", width)
 
 
 # --- Recents ------------------------------------------------------------------------------

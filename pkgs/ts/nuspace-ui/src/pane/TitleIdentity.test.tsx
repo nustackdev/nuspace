@@ -30,7 +30,7 @@ function render(key: string, editable = true) {
 	const plane: ActivePlane = {
 		plane_id: "p1",
 		title: "Notes",
-		meta: { editable, full_width: false, compact: false, key },
+		meta: { editable, width: "page", key },
 		cells: [],
 	};
 	act(() => {

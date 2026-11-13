@@ -90,7 +90,7 @@ def set_plane(
     """Replace what one pane draws: one plane and its cells, in order.
 
     ``meta`` is how the pane shows it: its web flags (``editable``,
-    ``full_width``, ``compact``), its ``icon`` and its ``key``. A cell is ``{id, name,
+    ``width``), its ``icon`` and its ``key``. A cell is ``{id, name,
     key, source, spec, draws, classes}``. Every open plane is answered
     with one or with a :func:`set_absent`, or its pane loads forever.
     """
@@ -182,5 +182,5 @@ def on_remove_plane_key(viewer: Ref) -> Changed:
 
 
 def on_set_web(viewer: Ref) -> Changed:
-    """``{plane_id, flags}``. Sets the plane's web flags given: ``editable``, ``full_width``, ``compact``."""
+    """``{plane_id, flags}``. Sets the plane's web flags given: ``editable``, ``width``."""
     return event(viewer, "plane.web")

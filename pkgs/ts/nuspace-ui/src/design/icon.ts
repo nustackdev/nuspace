@@ -2,7 +2,7 @@
 //
 // An icon is either a lucide glyph from the pack or an emoji, and the two sit
 // in the same box at every size: a 16 slot in the rail and on a tab, a 20
-// glyph in the picker's 32 cells, and 40 in the gutter beside a plane's title. The emoji is
+// glyph in the picker's 32 cells, and 32 before a plane's title. The emoji is
 // text, so it is centred in the box with the line box collapsed, and drawn in
 // the platform's colour font (`font-emoji`, tokens.css).
 //
@@ -12,11 +12,9 @@
 
 import { cn } from "@nustackdev/ui-kit";
 
-import { docGutterTrack } from "./document";
-
 export type IconSize = "sm" | "md" | "lg";
 
-const BOX: Record<IconSize, string> = { sm: "size-4", md: "size-5", lg: "size-10" };
+const BOX: Record<IconSize, string> = { sm: "size-4", md: "size-5", lg: "size-8" };
 
 /** A lucide glyph at `size`, plus the caller's classes. */
 export function iconGlyph(size: IconSize, className?: string): string {
@@ -78,18 +76,14 @@ export function iconPickerCell(current: boolean): string {
 /* ============================== Beside the title ======================== */
 
 /**
- * The icon, a button that opens the picker. It sits in the title row's left
- * gutter (`docTitleRow`), not beside the title's text: a square the gutter's
- * width, its right edge on the content edge the way the cell controls sit,
- * so the title keeps the text edge every cell has. `-my-0.5` centres it on
- * the title's first line (its 2 of pad plus half its 48 line, against half
- * the 56 box) and keeps its height at the title's, so the row is as tall as
- * it would be with no icon. Muted like the rail's; an emoji keeps its own
- * colours.
+ * The icon, a button that opens the picker. It sits on the content edge, in
+ * the title's line (`docTitleLine`), not out in the gutter: the 32 glyph in
+ * a 40 square, so with the square's 4 of pad the glyph starts on the text
+ * edge every cell has, and the title follows it. `mt-px` centres it on the
+ * title's first line. Muted like the rail's; an emoji keeps its own colours.
  */
 export const docPlaneIcon = cn(
-	docGutterTrack,
-	"-my-0.5 flex size-doc-gutter shrink-0 cursor-default items-center justify-center self-start rounded-md text-text-muted",
+	"mt-px flex size-10 shrink-0 cursor-default items-center justify-center self-start rounded-md text-text-muted",
 	"transition-colors duration-fast ease-out hover:bg-doc-hover active:bg-doc-active",
 	"focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring",
 	"data-[state=open]:bg-doc-active",

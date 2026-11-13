@@ -9,11 +9,12 @@
 // which it is not for a system Plane. A plane that has not landed (or is
 // absent) gets the link and Close only.
 //
-// Its settings group is one row per entry in ./settings.ts, each a label and a
-// switch. The whole row is the item, so the arrows reach it and Enter, Space
-// or a click anywhere on it flips the switch, and the menu stays open for the
-// next one. The switch only shows the state; the row carries it for a screen
-// reader.
+// Its settings group is one row per entry in ./settings.ts. A switch is a
+// label and a switch, the whole row the item, so the arrows reach it and
+// Enter, Space or a click anywhere on it flips the switch, and the menu stays
+// open for the next one. The switch only shows the state; the row carries it
+// for a screen reader. A choice is its label over a row of tiles, one item
+// per value, each a small picture of what it does over its name.
 
 import {
 	DropdownMenu,
@@ -28,11 +29,16 @@ import { Ellipsis, Link, X } from "lucide-react";
 import { useState } from "react";
 import { hrefFor, paramsOf } from "../core/router";
 import {
+	type PlaneWidth,
+	paneMenuChoice,
+	paneMenuChoiceItem,
+	paneMenuChoices,
 	paneMenuHint,
 	paneMenuLabel,
 	paneMenuRow,
 	paneMenuSwitch,
 	paneMenuText,
+	paneMenuWidthPicture,
 	planeMenu,
 } from "../design";
 import { PlaneMenuItems } from "../menu/PlaneMenuItems";
@@ -146,6 +152,33 @@ function SettingRow({
 	onChange: (patch: Record<string, unknown>) => void;
 }) {
 	const { Item } = parts;
+	if (setting.kind === "choice") {
+		return (
+			<div className={paneMenuChoice}>
+				<span className={paneMenuLabel}>{setting.label}</span>
+				<div className={paneMenuChoices}>
+					{setting.options.map((o) => {
+						const on = meta[setting.key] === o.value;
+						return (
+							<Item
+								key={o.value}
+								role="menuitemradio"
+								aria-checked={on}
+								className={paneMenuChoiceItem(on)}
+								onSelect={(e) => {
+									e.preventDefault();
+									if (!on) onChange({ [setting.key]: o.value });
+								}}
+							>
+								<WidthPicture width={o.value} />
+								<span title={o.hint}>{o.label}</span>
+							</Item>
+						);
+					})}
+				</div>
+			</div>
+		);
+	}
 	const on = meta[setting.key] === true;
 	return (
 		<Item
@@ -163,5 +196,43 @@ function SettingRow({
 			</span>
 			<Switch size="sm" checked={on} tabIndex={-1} aria-hidden className={paneMenuSwitch} />
 		</Item>
+	);
+}
+
+/** Where the content's lines start and how long they run, in a 32 wide pane. */
+const WIDTH_LINES: Record<PlaneWidth, [number, number]> = {
+	page: [11, 10],
+	board: [7, 18],
+	full: [3, 26],
+};
+
+/**
+ * A width as a picture: a pane's outline and three lines of content as wide
+ * as the setting lets them run. Sized inline, so the menu item's own icon
+ * size never squares it.
+ */
+function WidthPicture({ width }: { width: PlaneWidth }) {
+	const [x, w] = WIDTH_LINES[width];
+	return (
+		<svg
+			viewBox="0 0 32 20"
+			aria-hidden
+			className={paneMenuWidthPicture}
+			style={{ width: 32, height: 20 }}
+		>
+			<rect
+				x={0.5}
+				y={0.5}
+				width={31}
+				height={19}
+				rx={2.5}
+				fill="none"
+				stroke="currentColor"
+				strokeOpacity={0.45}
+			/>
+			<rect x={x} y={5} width={w} height={2} rx={1} fill="currentColor" />
+			<rect x={x} y={9} width={w} height={2} rx={1} fill="currentColor" />
+			<rect x={x} y={13} width={w * 0.6} height={2} rx={1} fill="currentColor" />
+		</svg>
 	);
 }

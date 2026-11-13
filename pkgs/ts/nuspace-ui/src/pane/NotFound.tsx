@@ -5,10 +5,17 @@
 // `NotFoundBody` is the body alone: the pane of a plane the server reports
 // absent draws it in its own frame (./Pane.tsx), with its Close.
 
-import { Button, EmptyState } from "@nustackdev/ui-kit";
+import { Button, EmptyState, ScrollArea } from "@nustackdev/ui-kit";
 import type * as React from "react";
 import { homeHref, type Missing } from "../core/router";
-import { docContentTrack, docPlaneAbsent, paneBody, paneBodyScroll, shellPane } from "../design";
+import {
+	docContentTrack,
+	docPlaneAbsent,
+	paneBody,
+	paneBodyScroll,
+	paneBodyViewport,
+	shellPane,
+} from "../design";
 
 /** What each kind of not found says. */
 export const NOT_FOUND_TEXT: Record<Missing, string> = {
@@ -42,11 +49,11 @@ export function GoHome() {
 export function NotFound({ what }: { what: Missing }) {
 	return (
 		<section className={shellPane} aria-label={NOT_FOUND_TEXT[what]} data-not-found={what}>
-			<div className={paneBodyScroll}>
+			<ScrollArea className={paneBodyScroll} viewportClassName={paneBodyViewport}>
 				<div className={paneBody}>
 					<NotFoundBody text={NOT_FOUND_TEXT[what]} action={<GoHome />} />
 				</div>
-			</div>
+			</ScrollArea>
 		</section>
 	);
 }

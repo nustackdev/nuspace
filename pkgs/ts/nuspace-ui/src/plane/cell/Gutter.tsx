@@ -244,7 +244,7 @@ export function RightGutter({
 							data-cell-identity=""
 							className={docGutterToggle}
 						>
-							<Hash />
+							<AtSign />
 						</Toggle>
 					</TooltipTrigger>
 					<TooltipContent side="top">{idLabel}</TooltipContent>

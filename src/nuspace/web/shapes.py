@@ -5,7 +5,7 @@ space opened without the web device carries no web data. Core never reads
 them; they name plane and plane run ids only::
 
     Web                                  web_state.db, persistent
-      planes[plane_id]                   WebPlane: editable, full_width, compact
+      planes[plane_id]                   WebPlane: editable, width
       recents                            [plane id], most recent first, capped
       desks[desk_id]                     Desk, in sidebar order
         name                             the desk's name
@@ -26,7 +26,7 @@ import nu
 import nustd.kv
 
 
-__all__ = ["RECENTS_CAP", "ROLES", "Conn", "Desk", "Pane", "Tab", "Web", "WebPlane"]
+__all__ = ["RECENTS_CAP", "ROLES", "WIDTHS", "Conn", "Desk", "Pane", "Tab", "Web", "WebPlane"]
 
 
 #: How many plane ids ``Web.recents`` keeps. Past it the oldest drops.
@@ -36,6 +36,11 @@ RECENTS_CAP = 50
 #: section's rows, ``/`` (home) and Cmd+K (search) resolve through them.
 ROLES = ("home", "settings", "search")
 
+#: How wide a web plane's content runs in its pane, ``WebPlane.width``: the
+#: most it takes, never more than the pane. ``page`` is the reading measure,
+#: ``board`` a dashboard's, ``full`` the whole pane. The browser draws them.
+WIDTHS = ("page", "board", "full")
+
 
 class WebPlane(nu.Shape):
     """A plane on the web: its row at ``Web.planes[id]``.
@@ -43,12 +48,12 @@ class WebPlane(nu.Shape):
     The row existing is the fact: the sidebar lists the plane, and a
     tab opening it runs it with the session wrapper. Planes with no row
     (services, searches) are not on the web. The flags are how it shows:
-    ``editable`` (its cells can be edited), ``full_width``, ``compact``.
+    ``editable`` (its cells can be edited) and ``width`` (one of
+    :data:`WIDTHS`, ``page`` when unset).
     """
 
     editable = nustd.kv.BoolRef.slot()
-    full_width = nustd.kv.BoolRef.slot()
-    compact = nustd.kv.BoolRef.slot()
+    width = nustd.kv.StrRef.slot()
 
 
 class Desk(nu.Shape):

@@ -1,11 +1,11 @@
-// What a plane is called by code and agents, next to its title: the `#` toggle
+// What a plane is called by code and agents, next to its title: the `@` toggle
 // in the title row's right gutter, where a cell's sits on its row, opens the
 // identity block (../plane/Identity.tsx) under the title; and the plane's key,
 // when it has one, as a small `@key` line under the title that copies on a
 // click. No key, no line: nothing invites adding one but the block.
 
 import { Button, Toggle, Tooltip, TooltipContent, TooltipTrigger } from "@nustackdev/ui-kit";
-import { Hash } from "lucide-react";
+import { AtSign } from "lucide-react";
 import { useCopyRow } from "../core/clipboard";
 import { docGutterToggle, docTitleGutter, docTitleKey, docTitleKeyLine } from "../design";
 
@@ -30,7 +30,7 @@ export function IdentityToggle({
 						data-plane-identity=""
 						className={docGutterToggle}
 					>
-						<Hash />
+						<AtSign />
 					</Toggle>
 				</TooltipTrigger>
 				<TooltipContent side="top">{label}</TooltipContent>

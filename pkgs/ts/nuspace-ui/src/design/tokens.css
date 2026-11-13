@@ -202,6 +202,11 @@
 	 * measure. See "Plane grid" in :root above. */
 	--container-doc-plane: var(--doc-grid-width);
 
+	/* max-w-doc-board: a board plane's grid at its widest, gutters included.
+	 * A dashboard's width: 1024, the common breakpoint a grid of charts and
+	 * tables is laid out for. */
+	--container-doc-board: 64rem; /* 1024 */
+
 	/* p-doc-*, w-doc-*, gap-doc-* */
 	--spacing-doc-gutter: var(--doc-gutter); /* 56  a gutter track's WIDTH.
 	                               * The widest row of controls, two kit
@@ -228,45 +233,38 @@
 	                               * 24px control row is taller than the
 	                               * ~20px (14px/1.45) line, so the row
 	                               * centres on the line.                   */
-	--spacing-doc-tail: 30vh; /* The dead air under the last cell. A document
-	                           * that ends at the window bottom has nowhere to
-	                           * click to start writing, and reads as though it
-	                           * were cut off rather than finished. Viewport
-	                           * relative on purpose: it is a proportion of what
-	                           * you can see, not a distance, so it stays a
-	                           * comfortable run-off on a laptop and on a 4k
-	                           * panel alike. Clicking it lands in the
-	                           * end-of-plane ghost -- see `docTail`.          */
+	--spacing-doc-tail: 30cqh; /* The air under the last cell, a third of
+	                           * the pane's height, whatever the plane. A
+	                           * plane that ends at the pane's bottom has its
+	                           * last cells at the bottom of the screen, where
+	                           * reading them hurts the neck, and nowhere to
+	                           * click to start writing. The pane's height,
+	                           * not the window's: the pane is a size
+	                           * container (`shellPane`), so a pane stacked at
+	                           * half height keeps a third of itself, not half.
+	                           * Clicking it lands in the end-of-plane ghost
+	                           * -- see `docTail`.                          */
 	--spacing-doc-dot: 0.5rem; /* 8               status dot                */
 	--spacing-doc-rail: 0.125rem; /* 2            drop line thickness       */
-	--spacing-doc-title-gap: 8rem; /* 128         blank air above the title.
-	                                * A plane with no cover still opens on
-	                                * emptiness rather than on ink: the run-up
-	                                * is what tells you the title is the top of
-	                                * a document and not a toolbar label. Sized
-	                                * by eye against the 30vh tail, so the plane
-	                                * is bracketed by air at both ends, and
-	                                * short enough that the first cell is
-	                                * still on screen when a plane opens.     */
-
-	/* --- Title type ---------------------------------------------------------
-	 * The one size the kit's scale does not carry. typography.md tops out at
-	 * `display` (32) and that is the hero tier for tool chrome, where the thing
-	 * above it is a window. On a document the title has to out-rank the
-	 * document's own h1 (`text-3xl`, 24) by more than the body's own steps do,
-	 * or the first heading you write reads as a second title. 40 is the next
-	 * 4px-grid step that does that, and it is the only place it is used.
-	 * --------------------------------------------------------------------- */
-	--text-doc-title: 2.5rem; /* 40 */
-	--text-doc-title--line-height: 1.2;
-	--text-doc-title--letter-spacing: -0.02em;
+	--spacing-doc-pad-x: 0.75rem; /* 12  the pane's frame at the sides: the
+	                                * air between the pane's edges and the
+	                                * plane's grid, gutters included. Small,
+	                                * because the 56 gutters already hold the
+	                                * text off the edge.                     */
+	--spacing-doc-pad-y: 1.25rem; /* 20  the frame at the top and bottom.
+	                                * Larger than the sides, so the title sits
+	                                * clear of the header line: on screen the
+	                                * text is 68 in from the sides, and 12 on
+	                                * top read as cramped under the header.  */
+	--spacing-doc-lead: 1rem; /* 16   the air between the title and the
+	                                * first cell.                            */
 
 	/* --- Plane icons ---------------------------------------------------------
-	 * Beside the title the icon is 40 on a button the gutter's 56 square,
-	 * about the title's cap height up to its 48 line. The emoji is drawn at
-	 * the same 40 so the two kinds are one size.
+	 * Beside the title the icon is the title's own 32 (the kit's `display`),
+	 * on the content edge where the title and the cells start. The emoji is
+	 * drawn at the same 32 so the two kinds are one size.
 	 * --------------------------------------------------------------------- */
-	--text-plane-icon: 2.5rem; /* 40 */
+	--text-plane-icon: 2rem; /* 32 */
 	--text-plane-icon--line-height: 1;
 	/* Emoji draw in the platform's colour font, never a text face's mono glyph. */
 	--font-emoji: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;

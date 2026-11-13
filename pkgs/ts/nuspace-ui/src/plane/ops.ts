@@ -34,7 +34,7 @@ export type Ops = {
 	 */
 	"planes.open": { plane_ids: string[]; params: Record<string, Record<string, string>> };
 	/**
-	 * Set the Plane's web flags given (`editable`, `full_width`, `compact`).
+	 * Set the Plane's web flags given (`editable`, `width`).
 	 * The pane applies them optimistically and the next `set_plane` confirms.
 	 */
 	"plane.web": { plane_id: string; flags: Record<string, boolean> };

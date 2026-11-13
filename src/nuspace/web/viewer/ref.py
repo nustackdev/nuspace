@@ -3,7 +3,7 @@
 A component ref like ``ButtonRef``, only wider: it renders the open planes'
 cells, one pane per plane.
 It never asks what kind of plane it draws; what it reads off the plane is
-its web flags (``editable``, ``full_width``, ``compact``), which arrive with
+its web flags (``editable``, ``width``), which arrive with
 the plane like anything else, and go back through ``plane.web``.
 
 It is mounted with one prop off the registered Cells (D19):

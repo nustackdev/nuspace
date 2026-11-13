@@ -16,7 +16,7 @@ spec says how a space presents it.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 import nu
 import nustd.kv
@@ -38,13 +38,13 @@ class WebOptions:
 
     Args:
         editable: Its cells can be edited in the browser.
-        full_width: It takes the whole width of a pane.
-        compact: It draws its cells tight.
+        width: How wide its content runs in a pane, at most: ``page`` (the
+            reading measure), ``board`` (a dashboard's) or ``full`` (the
+            whole pane).
     """
 
     editable: bool = True
-    full_width: bool = False
-    compact: bool = False
+    width: Literal["page", "board", "full"] = "page"
 
 
 class SpecCells(nu.Shape):
@@ -123,7 +123,7 @@ EMPTY_PLANE = PlaneSpec(
     "",
     "Empty",
     description="An empty plane. Add cells with /, or nest planes under it.",
-    web=WebOptions(editable=True, full_width=False),
+    web=WebOptions(editable=True),
     backend="async",
 )
 

@@ -60,7 +60,7 @@ def test_cell_spec_default_is_one_of_its_classes():
 
 
 def test_the_empty_plane_shows_on_the_web_and_records_no_spec():
-    assert EMPTY_PLANE.web == WebOptions(editable=True, full_width=False, compact=False)
+    assert EMPTY_PLANE.web == WebOptions(editable=True, width="page")
     assert (EMPTY_PLANE.name, EMPTY_PLANE.cells, EMPTY_PLANE.key) == ("", (), "")
 
 
@@ -104,7 +104,7 @@ async def test_add_plane_makes_the_whole_tree_and_records_each_cells_id(store):
 
 async def test_add_plane_writes_the_web_row_and_seeds_the_key(store):
     spec = PlaneSpec(
-        "meter", "Meter", key="testing_meter", web=WebOptions(compact=True), backend="async"
+        "meter", "Meter", key="testing_meter", web=WebOptions(width="board"), backend="async"
     )
     p = await store.made(specs.add_plane(spec, id="m1", name="Mine", into=MADE))
     assert p == "m1"
@@ -112,8 +112,7 @@ async def test_add_plane_writes_the_web_row_and_seeds_the_key(store):
     assert await store.read(Space.indexes.plane_keys["testing_meter"]) == "m1"
     assert await store.read(Web.planes["m1"].extract()) == {
         "editable": True,
-        "full_width": False,
-        "compact": True,
+        "width": "board",
     }
     with pytest.raises(Exists, match="testing_meter"):
         await store.run(specs.add_plane(spec))

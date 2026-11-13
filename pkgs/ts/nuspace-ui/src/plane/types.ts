@@ -10,6 +10,8 @@
 // Cell order is list position in the Plane's `order` on the server, so cells
 // arrive already in order and carry no `order` field to renormalise.
 
+import { PLANE_WIDTHS, type PlaneWidth } from "../design";
+
 /** Which way the caret leaves an editor across a cell boundary. */
 export type ExitDir = "up" | "down";
 
@@ -55,10 +57,8 @@ export type PlaneMeta = Record<string, unknown> & {
 	/** Whether the Plane's own Cells can be authored from in here. The
 	 *  Plane's call, never the Viewer's. */
 	editable: boolean;
-	/** The plane spans its pane instead of the reading measure. */
-	full_width: boolean;
-	/** A tight head and no run-off under the last cell. */
-	compact: boolean;
+	/** How wide the plane runs in its pane, at most: page, board or full. */
+	width: PlaneWidth;
 	/** Its handle, what code and agents reach it by. "" when it has none. */
 	key: string;
 };
@@ -108,15 +108,17 @@ export function isLive(s: CellState): boolean {
 
 const STATES: CellState[] = ["invalid", "idle", "starting", "running", "stopped", "failed"];
 
-/** The named flags default to false and the key to "" when absent, whatever else is there. */
+/**
+ * The named flags default to false, the width to page and the key to "" when
+ * absent or unknown, whatever else is there.
+ */
 export function coerceMeta(raw: unknown): PlaneMeta {
 	const r =
 		raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
 	return {
 		...r,
 		editable: r.editable === true,
-		full_width: r.full_width === true,
-		compact: r.compact === true,
+		width: PLANE_WIDTHS.includes(r.width as PlaneWidth) ? (r.width as PlaneWidth) : "page",
 		key: typeof r.key === "string" ? r.key : "",
 	};
 }

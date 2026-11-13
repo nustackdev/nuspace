@@ -129,8 +129,7 @@ def _web_row(pid: nu.Str, spec: PlaneSpec) -> nu.Nu:
     return web.add(
         pid,
         editable=flags.editable,  # type: ignore[union-attr]
-        full_width=flags.full_width,  # type: ignore[union-attr]
-        compact=flags.compact,  # type: ignore[union-attr]
+        width=flags.width,  # type: ignore[union-attr]
     )
 
 

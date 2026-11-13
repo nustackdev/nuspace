@@ -31,15 +31,28 @@ const docPlane = cn(
 );
 
 /**
- * The plane's width: its grid at its widest, centred in the pane. The title
- * head and the column of cells both take it, so their rows line up track for
- * track.
- *
- * `wide` is the plane's full-width setting: no cap, so the content track
- * spans the pane while the gutters keep their width.
+ * A plane's width setting: how wide its grid runs in its pane, at most. It
+ * is a cap, never more than the pane: `page` is the reading measure,
+ * `board` a dashboard's, `full` the whole pane. The server keeps the same
+ * three (`nuspace.web.shapes.WIDTHS`).
  */
-function docPlaneWidth(wide: boolean): string {
-	return cn("mx-auto w-full", wide ? "max-w-none" : "max-w-doc-plane");
+export const PLANE_WIDTHS = ["page", "board", "full"] as const;
+export type PlaneWidth = (typeof PLANE_WIDTHS)[number];
+
+const PLANE_MAX: Record<PlaneWidth, string> = {
+	page: "max-w-doc-plane",
+	board: "max-w-doc-board",
+	full: "max-w-none",
+};
+
+/**
+ * The plane's width: its grid at its widest (`PlaneWidth`), centred in the
+ * pane. The title head and the column of cells both take it, so their rows
+ * line up track for track. The gutters keep their width at every one; the
+ * content track takes the rest.
+ */
+function docPlaneWidth(width: PlaneWidth): string {
+	return cn("mx-auto w-full", PLANE_MAX[width]);
 }
 
 /**
@@ -61,18 +74,12 @@ export const docContentTrack = "col-[content] row-start-1 min-w-0";
  * The column of cells. Each child is a `docRow`, and the ones that are not
  * (the tail, the slash menu) span it or float over it.
  *
- * The top pad is the canvas pad, the air between the title and the first
- * cell, 32. Under the last cell the tail is the only air, so there is no
- * bottom pad. Compact trims the top to 12 and, having no tail, keeps 12
- * under the last cell, the same as over the title.
+ * The top pad is the air between the title and the first cell
+ * (`--spacing-doc-lead`). Under the last cell the tail is the air, so there
+ * is no bottom pad of its own.
  */
-export function docColumn(wide = false, compact = false): string {
-	return cn(
-		"relative",
-		docPlaneWidth(wide),
-		compact ? "pt-3 pb-3" : "pt-8",
-		"flex flex-col gap-doc-cell-gap",
-	);
+export function docColumn(width: PlaneWidth = "page"): string {
+	return cn("relative", docPlaneWidth(width), "pt-doc-lead", "flex flex-col gap-doc-cell-gap");
 }
 
 /**
@@ -90,7 +97,7 @@ export const docPlaneSurface = cn(docPlane, "flex min-w-0 flex-1 flex-col px-2")
  * a view. The kit's `EmptyState` in the document grid's content track,
  * centred in the pane's height, with its one way out under it.
  */
-export const docPlaneAbsent = cn(docRow, docPlaneWidth(false), "flex-1 content-center");
+export const docPlaneAbsent = cn(docRow, docPlaneWidth("page"), "flex-1 content-center");
 
 /**
  * A ghost input: the line where a cell will be, before there is one.
@@ -147,37 +154,48 @@ export const docTail = "h-doc-tail w-full shrink-0 cursor-text";
  * it. The same width as `docColumn`, so its rows and the cells' rows share
  * their tracks.
  *
- * Its top pad is the plane's one run-up, the air above everything it draws:
- * the full gap (`--spacing-doc-title-gap`), or 12 in compact, the same as
- * the 12 compact keeps under the last cell. The air between the title and
- * the first cell is the column's top pad, not anything here.
+ * No pad of its own: the air above it is the pane body's frame
+ * (`paneBody`), the same on every side. The air between the title and the
+ * first cell is the column's top pad, not anything here.
  */
-export function docTitleHead(wide = false, compact = false): string {
-	return cn(docPlaneWidth(wide), "group/title", compact ? "pt-3" : "pt-doc-title-gap");
+export function docTitleHead(width: PlaneWidth = "page"): string {
+	return cn(docPlaneWidth(width), "group/title");
 }
 
 /**
- * The title's row: the plane's icon in the left gutter, the title in the
- * content track, so a long title wraps on the cells' text edge.
+ * The title's row, on the plane's three tracks: the icon and the title in
+ * the content track (`docTitleLine`), the identity toggle in the right
+ * gutter. The left gutter stays empty, like a cell's at rest.
  */
 export const docTitleRow = docRow;
+
+/**
+ * The icon and the title side by side in the content track: the icon's
+ * glyph on the cells' text edge, the title after it, a long title wrapping
+ * under itself.
+ */
+export const docTitleLine = cn(docContentTrack, "flex items-start gap-1");
 
 /**
  * The editable title. It is an `h1` with `contenteditable`, not an input and
  * not a button: the heading you read and the heading you type are the same
  * node, so there is no mode swap and no layout shift on click.
  *
- * The blank run-up above it is the band's top pad (`docTitleHead`). It fills
- * the content track of `docTitleRow`, the row it shares with the plane's icon.
+ * The blank run-up above it is the band's top pad (`docTitleHead`). It takes
+ * what the icon leaves of `docTitleLine`.
  *
- * No focus ring. A ring around a 40px heading is a box drawn around the plane's
+ * Its size is the kit's `display`, 32: the top of the kit's scale, a clear
+ * step over the document's own h1 (`text-3xl`, 24), so the first heading you
+ * write never reads as a second title.
+ *
+ * No focus ring. A ring around a 32px heading is a box drawn around the plane's
  * name, and the caret already says where you are. The placeholder is a `::before` on the empty element
  * rather than a second absolutely positioned node, so it can never fall out of
  * alignment with that caret.
  */
-// `text-doc-title` is concatenated rather than merged, and it has to be.
+// `text-display` is concatenated rather than merged, and it has to be.
 // `cn` is tailwind-merge, which resolves conflicts from a table of the classes
-// it ships knowing about. Our size is not in that table, so it is read as a
+// it ships knowing about. The kit's size is not in that table, so it is read as a
 // `text-*` COLOUR, `text-text-primary` in the same call is taken to conflict
 // with it, and last-one-wins drops the size on the floor. The rule compiles,
 // the class reaches the bundle, and the title still renders at body size.
@@ -185,24 +203,23 @@ export const docTitleRow = docRow;
 // future custom type token meeting a text colour has the same problem.
 export function docTitle(): string {
 	return `${cn(
-		docContentTrack,
-		"block px-doc-cell py-0.5",
+		"block min-w-0 flex-1 px-doc-cell py-0.5",
 		"font-bold text-text-primary",
 		"cursor-text whitespace-pre-wrap break-words outline-none",
 		"empty:before:pointer-events-none empty:before:text-text-muted",
 		"empty:before:content-[attr(data-placeholder)]",
-	)} text-doc-title`;
+	)} text-display`;
 }
 
 /**
  * The title row's right gutter, where a cell's identity toggle sits on its
  * row. Hidden like a cell's controls: out while the head is hovered or the
  * toggle has the keyboard, and pinned (`data-pinned`) while the block is open.
- * `pt-3.5` centres the 24px toggle on the title's first line (its 2 of pad
- * plus half its 48 line).
+ * `pt-2.5` centres the 24px toggle on the title's first line (its 2 of pad
+ * plus half its 38 line).
  */
 export const docTitleGutter = cn(
-	"col-[gutter-r] row-start-1 flex items-start justify-start pt-3.5 pl-1 select-none",
+	"col-[gutter-r] row-start-1 flex items-start justify-start pt-2.5 pl-1 select-none",
 	"opacity-0 transition-opacity duration-fast ease-out",
 	"group-hover/title:opacity-100 has-[:focus-visible]:opacity-100 data-[pinned]:opacity-100",
 );
@@ -406,7 +423,7 @@ export const docProgramLoadingLineShort = "w-1/3";
 export const docSkeleton = "flex min-w-0 flex-1 flex-col";
 
 /** The bar where the title goes, in the title row's content track. */
-export const docSkeletonTitle = cn(docContentTrack, "h-9 w-1/2 self-center");
+export const docSkeletonTitle = cn(docContentTrack, "h-10 w-1/2 self-center");
 
 /** One cell's worth: text lines in the content track, at the cell's pad. */
 export const docSkeletonCell = cn(docContentTrack, "flex flex-col gap-2 p-doc-cell");

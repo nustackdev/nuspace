@@ -563,7 +563,7 @@ async def test_with_plane_headless_lands_the_web_row_of_a_spec_that_shows_on_the
         "Board",
         cells=(("count", "1"),),
         backend="async",
-        web=WebOptions(compact=True),
+        web=WebOptions(width="board"),
     )
     term = presets.with_plane(root, spec, web=False, spares=0, name="nuspace-host", extensions=())
     task = asyncio.create_task(nu.arun(term))
@@ -571,7 +571,7 @@ async def test_with_plane_headless_lands_the_web_row_of_a_spec_that_shows_on_the
         planes = await _apoll(root, nu.list(Web.planes.keys()), bool)
         assert len(planes) == 1
         assert await _aread(root, Space.planes[planes[0]].spec) == registered_name(spec)
-        assert await _aread(root, Web.planes[planes[0]].compact) is True
+        assert await _aread(root, Web.planes[planes[0]].width) == "board"
     finally:
         task.cancel()
         with contextlib.suppress(asyncio.CancelledError):

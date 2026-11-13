@@ -74,11 +74,11 @@ export const sidebarBody = "flex flex-col gap-2.5 px-2 py-1 outline-hidden";
 /* ============================== Header, footer =========================== */
 
 /**
- * The fixed top bar, lined up with the first pane's header: 6px down like the
- * desk area (its `py-1.5`), then as tall as a pane's top border and header
- * (1px + 34px), so its buttons sit on the header's center line.
+ * The fixed top bar, lined up with the panes' headers: the desk is flat and
+ * starts at the window's top, so the bar is a header's 34px, and its buttons
+ * sit on the headers' center line.
  */
-export const sidebarHeader = "mt-1.5 flex h-[35px] shrink-0 items-center gap-0.5 px-3";
+export const sidebarHeader = "flex h-8.5 shrink-0 items-center gap-0.5 px-3";
 
 /** A header button pushed to the bar's right end. */
 export const sidebarHeaderEnd = "ml-auto";
@@ -90,9 +90,9 @@ export const sidebarWordmarkNu = "text-accent-text";
 
 /**
  * The fixed bottom bar: links on the left, the window's own state on the
- * right. No rule. 6px off the bottom edge, like the desk area.
+ * right. No rule, on the window's bottom edge like the flat desk.
  */
-export const sidebarFooter = "mb-1.5 flex h-chrome shrink-0 items-center gap-0.5 px-3";
+export const sidebarFooter = "flex h-chrome shrink-0 items-center gap-0.5 px-3";
 
 /** The free middle of the bottom bar. */
 export const sidebarFooterSpace = "min-w-0 flex-1";
@@ -124,10 +124,10 @@ export const SIDEBAR_RAIL_PX = 48;
 export const sidebarRail = "flex w-12 shrink-0 flex-col";
 
 /** The rail's top bar: just the toggle, on the header's line (`sidebarHeader`). */
-export const sidebarRailHead = "mt-1.5 flex h-[35px] shrink-0 items-center justify-center";
+export const sidebarRailHead = "flex h-8.5 shrink-0 items-center justify-center";
 
-/** The rail's scroller: 6px off the bottom edge, like the desk area. */
-export const sidebarRailScroll = "mb-1.5 min-h-0 flex-1";
+/** The rail's scroller, down to the window's bottom edge like the flat desk. */
+export const sidebarRailScroll = "min-h-0 flex-1";
 
 /** The icons, one column, a hairline apart like the sidebar's rows. */
 export const sidebarRailBody = "flex flex-col items-center gap-px py-1";

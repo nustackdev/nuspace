@@ -20,8 +20,8 @@ import type { Target } from "../desk/dnd";
 
 type Box = { left: number; top: number; width: number; height: number };
 
-/** How far inside its region the drawn region sits, px. */
-const INSET = 2;
+/** How far inside its region the drawn region sits, px. None: flat panes, square regions on their edges. */
+const INSET = 0;
 
 /** What a drop on `aim` does, as its label. */
 export function dropLabel(aim: Target): string | null {

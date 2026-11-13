@@ -9,6 +9,11 @@ Below is the changelog for **nuspace** - the full commit stream. Newest first.
 The `nuspace-ui` wheel is the same source tree's vite output and is not tracked
 separately here.
 
+## Unreleased
+
+- Flat desk shell, one plane frame, and a page, board or full width setting
+- Plane width replaces the compact and full width flags; update specs that set them
+
 ## 0.7.2 - 2026-11-13
 
 - Release nuspace and nuspace-ui 0.7.2
