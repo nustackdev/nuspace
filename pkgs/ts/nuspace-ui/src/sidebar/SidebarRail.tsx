@@ -17,8 +17,14 @@
 //
 // Selected, one look for all, like the sidebar: the nav icon of a solo role
 // plane, the desk the tab shows, and on a solo plane deeper in the tree its
-// top-level ancestor, so the rail always says where you are.
+// top-level ancestor, so the rail always says where you are. The tree holds
+// only open branches, but the server opens every branch above a plane a pane
+// opens on, so a deep plane's chain is always there to climb.
+//
+// The rail is the sidebar folded, drawn by the shell beside the sidebar's
+// node rather than inside it, so it reads that node's tree by its path.
 
+import type { Path } from "@nustackdev/ui-core";
 import { cn, IconButton, ScrollArea, Shortcut } from "@nustackdev/ui-kit";
 import type * as React from "react";
 import { useMemo } from "react";
@@ -42,9 +48,11 @@ import { focusSidebarToggle, setSidebarCollapsed } from "./collapse";
 import { deskLabel } from "./folders";
 import { NAV_ITEMS, rolePlanes } from "./nav";
 import { SidebarToggle } from "./SidebarHeader";
+import { usePlaneTree } from "./state";
 import { childrenOf, KIND_PLANE, type PlaneTree, ROOT_ID, rootId } from "./types";
 
-export function SidebarRail({ tree }: { tree: PlaneTree }) {
+export function SidebarRail({ sidebar }: { sidebar: Path | null }) {
+	const tree = usePlaneTree(sidebar);
 	const roles = useRoles();
 	const route = useRoute();
 	const desks = useDesks();

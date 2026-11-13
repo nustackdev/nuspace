@@ -35,5 +35,3 @@ export { SidebarRail } from "./SidebarRail";
 
 export { PLANE_MIME } from "./drag";
 export { deskLabel, STRIP_TITLE } from "./folders";
-export { usePlaneTree } from "./state";
-export type { PlaneTree } from "./types";

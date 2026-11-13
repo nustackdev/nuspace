@@ -13,9 +13,12 @@ anyone. Per tab, one arm:
 **The pane arm.** The viewer's ``planes.open`` carries the full ordered
 list of open panes, left to right, and each pane's params. It becomes
 ``web.set_panes`` (the order whole: a new plane gets its pane, nav runs it),
-then ``web.set_pane_params`` for each pane whose params moved, then
+then ``web.set_pane_params`` for each pane whose params moved, and
+``web.reveal`` for each plane newly open, all in one Conn commit, then
 ``web.visit`` for each plane newly open (not a plane a role names, nor one
-missing or headless).
+missing or headless). The reveal opens the sidebar branches above a new
+pane's plane for this tab, so the tree reships with its row in reach: the
+browser never climbs a tree that holds only open branches.
 The cells of every plane leaving the list are erased as drawn first, so
 nothing of a closed pane stays on screen. The browser mints a new plane's
 id and opens it while its create is in flight, so the arm waits a moment
@@ -140,8 +143,9 @@ def pane_arm(viewer: Ref, sid: nu.StrArg, arms: Arms) -> nu.Nu:
     """The tab's panes, as the viewer has them open. Never ends.
 
     Per ``planes.open``: erase what closed, wait for planes new to the
-    list, then ``set_panes``, the params that moved, and a visit for each
-    plane newly open. Each step is its own commit, Conn then Web.
+    list, then ``set_panes``, the params that moved and the sidebar path
+    to each plane newly open, then a visit for each plane newly open. Each
+    step is its own commit, Conn then Web.
     """
     tab = Conn.connections[sid]
 
@@ -171,7 +175,11 @@ def pane_arm(viewer: Ref, sid: nu.StrArg, arms: Arms) -> nu.Nu:
             return (
                 nu.ForEachDo(gone, lambda p: _erase(viewer, nu.Str(p)))
                 >> _landed(fresh)
-                >> atomic(web.set_panes(sid, wanted) >> nu.ForEachDo(wanted, params))
+                >> atomic(
+                    web.set_panes(sid, wanted)
+                    >> nu.ForEachDo(wanted, params)
+                    >> nu.ForEachDo(fresh, lambda p: web.reveal(sid, nu.Str(p)))
+                )
                 >> nu.ForEachDo(fresh, visited)
             )
 

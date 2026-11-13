@@ -83,7 +83,6 @@ import {
 	SidebarRail,
 	useNavShortcuts,
 	useNewPlaneShortcut,
-	usePlaneTree,
 	useSidebarShortcut,
 } from "../sidebar/api";
 import { useTab } from "./tab";
@@ -97,7 +96,6 @@ export function Shell() {
 	const split = useRef<ResizablePanelGroupHandle | null>(null);
 	// The sidebar's panel: the real sidebar, or its placeholder until the tree lands.
 	const side = sidebar !== null || !booted;
-	const tree = usePlaneTree(sidebar);
 	useSidebarShortcut();
 	useNewPlaneShortcut();
 	useNavShortcuts();
@@ -137,7 +135,7 @@ export function Shell() {
 									{sidebar ? <NodeView path={sidebar} /> : <SidebarPlaceholder />}
 								</div>
 								<div className={shellSideRail}>
-									<SidebarRail tree={tree} />
+									<SidebarRail sidebar={sidebar} />
 								</div>
 							</ResizablePanel>,
 							<ResizableHandle

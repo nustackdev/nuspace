@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Opening a deep plane opens its sidebar folders, and only the sidebar reads its tree
 - Each open pane is its own node, so a rename no longer resends its cells
 - Urls are /p/<plane> and /d/<desk>, so routing never waits on a plane list
 - Plane and cell ids given from outside must be slugs, so they read cleanly in urls

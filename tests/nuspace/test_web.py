@@ -542,6 +542,42 @@ async def test_a_pane_is_its_own_node(store):
         await asyncio.gather(task, return_exceptions=True)
 
 
+async def test_a_deep_plane_opened_reveals_its_path_in_that_tab_only(store):
+    """Opening a plane under closed branches opens them for the tab: the tree reships with its row."""
+    from nuspace.web.device import connection
+
+    await plane(store, "a", "A")
+    await plane(store, "b", "B", parent="a")
+    await plane(store, "c", "C", parent="b")
+    await plane(store, "d", "D", parent="c")
+    await plane(store, "e", "E", parent="d")
+    await do(store, web.open_tab("s2"))
+    session = FakeSession()
+    ctx = store.ctx.bind(Session, session)
+    task = asyncio.create_task(nu.arun(connection(nu.Str("s1"), registry=REGISTRY), ctx))
+    tabs = web.Conn.connections
+    try:
+        await _until(lambda: session.writes("set_tree"), BOOT_TIMEOUT)
+        assert list(_tree(session)) == ["space", "a"]
+        session.notify(("viewer", "ops", "planes.open"), {"plane_ids": ["d"], "params": {}})
+        await _until(lambda: "d" in _tree(session))
+        tree = _tree(session)
+        assert [tree[p]["parent"] for p in ("b", "c", "d")] == ["a", "b", "c"]
+        # The plane's own branch stays closed: its child ships no row.
+        assert "e" not in tree
+        assert tree["d"]["children"] == []
+        assert await store.read(tabs["s1"].expanded.extract()) == {
+            "a": True,
+            "b": True,
+            "c": True,
+        }
+        # Another tab's folds are its own.
+        assert await store.read(tabs["s2"].expanded.extract()) == {}
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+
+
 async def test_a_pane_closed_and_reopened_at_once_is_shipped_again(store):
     """The browser drops a closed pane's node at once: a reopen gets its head and cells again.
 

@@ -57,7 +57,7 @@ export function useSidebarValue(path: Path): SidebarValue {
 	return useMemo(() => ({ tree, loaded, registered }), [tree, loaded, registered]);
 }
 
-/** The sidebar's tree, read from outside the sidebar. Empty until it lands. */
+/** The sidebar node's tree, by its path: what the rail draws beside it. Empty until it lands. */
 export function usePlaneTree(sidebar: Path | null): PlaneTree {
 	return useTree((s) => {
 		const props = sidebar ? getNode(s.root, sidebar)?.props : undefined;

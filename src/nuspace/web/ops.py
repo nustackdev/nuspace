@@ -66,6 +66,7 @@ __all__ = [
     "params",
     "restart_cell",
     "restart_pane",
+    "reveal",
     "set",
     "set_pane_params",
     "set_panes",
@@ -397,6 +398,29 @@ def expand(sid: nu.StrArg, plane: nu.StrArg) -> nu.Nu:
         Missing: No tab with that id.
     """
     return _tab_known(sid) >> _tabs[sid].expanded.set_item(plane, True)
+
+
+class _Up(nu.Shape):
+    """A climb up the tree: the plane it stands on."""
+
+    at = nu.StrRef.slot()
+
+
+def reveal(sid: nu.StrArg, plane: nu.StrArg) -> nu.Nu:
+    """Open every branch above ``plane`` in the tab's sidebar, so its row ships in the tree.
+
+    Climbs ``parent`` slots up to root, root left out, and opens each one
+    like :func:`expand`. The plane's own branch stays as it is. A top level
+    plane, or no plane, opens nothing. Cost: O(depth), one read and one key
+    a level.
+
+    Raises:
+        Missing: No tab with that id.
+    """
+    at, rows = _Up.at, Space.planes
+    step = _tabs[sid].expanded.set_item(at, True) >> at.set(rows[at].parent.fallback(""))
+    climb = nu.WhileDo((at != "").and_(at != ROOT), step)
+    return _tab_known(sid) >> nu.Frame(_Up, climb, at=rows[plane].parent.fallback(""))
 
 
 def collapse(sid: nu.StrArg, plane: nu.StrArg) -> nu.Nu:

@@ -311,6 +311,25 @@ async def test_expand_and_collapse_fold(store):
         await do(store, web.expand("nope", "a"))
 
 
+async def test_reveal_opens_the_branches_above_a_plane_in_that_tab_only(store):
+    await plane(store, "a")
+    await plane(store, "b", parent="a")
+    await plane(store, "c", parent="b")
+    await plane(store, "d", parent="c")
+    await do(store, web.open_tab("t"))
+    await do(store, web.open_tab("u"))
+    await do(store, web.reveal("t", "d"))
+    # Every ancestor, root left out, the plane's own branch left closed.
+    assert await store.read(tabs["t"].expanded.extract()) == {"a": True, "b": True, "c": True}
+    assert await store.read(tabs["u"].expanded.extract()) == {}
+    # A top level plane, or no plane, opens nothing.
+    await do(store, web.reveal("u", "a"))
+    await do(store, web.reveal("u", "nope"))
+    assert await store.read(tabs["u"].expanded.extract()) == {}
+    with pytest.raises(Missing):
+        await do(store, web.reveal("nope", "d"))
+
+
 # --- A cell on a pane ---------------------------------------------------------------------
 
 

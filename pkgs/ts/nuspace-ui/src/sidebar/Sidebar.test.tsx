@@ -14,6 +14,7 @@ import { SidebarBody } from "./harness";
 import { NAV_KEYS, NavSection, NEW_DESK_KEY } from "./NavSection";
 import { rolePlanes, useNavShortcuts } from "./nav";
 import { Sidebar } from "./Sidebar";
+import { SidebarRail } from "./SidebarRail";
 import { SidebarSection } from "./SidebarSection";
 import { Specs, specGroups, specLines } from "./Specs";
 import { patchSidebar } from "./state";
@@ -370,5 +371,73 @@ describe("the sidebar", () => {
 		);
 		expect(rowOf("x1")).toBeNull();
 		expect(rowOf("x")).not.toBeNull();
+	});
+});
+
+describe("a plane three levels down under closed folders", () => {
+	const path = ["sidebar"];
+	const row = (id: string, parent: string, children: string[] = []) => ({
+		id,
+		kind: "plane",
+		title: id.toUpperCase(),
+		parent,
+		children,
+	});
+	// Before: root and the top folder, closed. After: the server opened every
+	// branch above `d` for this tab and reshipped the tree with them.
+	const folded = [
+		{ id: ROOT_ID, kind: "space", title: "", parent: ROOT_ID, children: ["a", "z"] },
+		row("a", ROOT_ID),
+		row("z", ROOT_ID),
+	];
+	const opened = [
+		{ id: ROOT_ID, kind: "space", title: "", parent: ROOT_ID, children: ["a", "z"] },
+		row("a", ROOT_ID, ["b"]),
+		row("b", "a", ["c"]),
+		row("c", "b", ["d"]),
+		row("d", "c"),
+		row("z", ROOT_ID),
+	];
+	const land = (rows: unknown[]) =>
+		act(() => {
+			store.getState().setProps(path, { loaded: true, registered: [], tree: coerceTree(rows) });
+		});
+
+	beforeEach(() => {
+		act(() => store.getState().write(path.map((seg) => [seg, null])));
+		window.history.replaceState(null, "", "/p/d");
+		resetRouter();
+	});
+
+	it("reveals and selects it once the server ships its path open", () => {
+		land(folded);
+		draw(<Sidebar path={path} />);
+		expect(rowOf("b")).toBeNull();
+		land(opened);
+		for (const id of ["a", "b", "c", "d"]) expect(rowOf(id)).not.toBeNull();
+		expect(rowOf("d")?.getAttribute("aria-selected")).toBe("true");
+	});
+
+	it("reveals once: a later reship leaves a branch you folded folded", () => {
+		land(folded);
+		draw(<Sidebar path={path} />);
+		land(opened);
+		act(() => patchSidebar(path, (s) => ({ expanded: s.expanded.filter((id) => id !== "a") })));
+		expect(rowOf("b")).toBeNull();
+		land(opened.map((r) => (r.id === "z" ? { ...r, title: "Zed" } : r)));
+		expect(rowOf("b")).toBeNull();
+	});
+
+	it("lights its top-level folder on the rail", () => {
+		land(opened);
+		draw(<SidebarRail sidebar={path} />);
+		const lit = host.querySelectorAll('a[aria-current="page"]');
+		expect([...lit].map((a) => a.getAttribute("href"))).toEqual(["/p/a"]);
+	});
+
+	it("lights nothing on the rail while its path is not shipped", () => {
+		land(folded);
+		draw(<SidebarRail sidebar={path} />);
+		expect(host.querySelector('a[aria-current="page"]')).toBeNull();
 	});
 });

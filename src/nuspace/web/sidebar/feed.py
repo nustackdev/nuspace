@@ -14,6 +14,10 @@ plane with no web row stops the walk: what hangs under it is not listed.
 A row ships its children only when its branch is open, ``[]`` otherwise,
 and the walk goes down from root through shipped rows only, so a branch
 left open under a closed one lists nothing until its parent opens again.
+A pane opening on a plane opens every branch above it for the tab
+(``web.reveal``, from the device's pane arm), so the tree reships with
+that plane's row in it: the browser reveals and highlights a deep plane
+off its own tree, never climbing past what it holds.
 
 **Rows.** A row carries its plane's name, icon, ``spec`` and ``system``
 (the browser offers no delete for a plane ``plane.remove`` refuses). The
