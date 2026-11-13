@@ -2,8 +2,9 @@
 // strip's item url, and only the row knows which pane it stands for
 // (`data-sidebar-pane`): a plain click or Enter opens the strip with that
 // pane focused and on screen. Every other link, Planes tree and nav rows and
-// desk item rows included, is the shell's rule (core/router.ts `paneRule`),
-// which opens a plane url solo outside a pane and an item url as that item.
+// desk item rows included, is the shell's rule (../desk/open.ts `linkRule`),
+// which opens a plane url solo outside a pane, to the side with Option Cmd,
+// and an item url as that item.
 //
 // A navigated desk row's icon is a link of its own too: its href is the
 // original plane's url and it carries `data-sidebar-reset`. A plain click or
@@ -16,7 +17,8 @@
 
 import { type AnchorRule, useAnchorCatcher } from "@nustackdev/ui-kit";
 import type { RefObject } from "react";
-import { knownDesks, openPane, paneRule, resetItem, shapeOfHref } from "../core/router";
+import { knownDesks, openPane, resetItem, shapeOfHref } from "../core/router";
+import { linkRule } from "../desk/open";
 
 /** The attribute a pane row carries: the plane its pane shows. */
 export const PANE_ATTR = "data-sidebar-pane";
@@ -42,7 +44,7 @@ export const sidebarRule: AnchorRule = (href, gesture, anchor, event) => {
 		openPane(hit.shape.desk, hit.shape.item, pane);
 		return true;
 	}
-	return paneRule(href, gesture, anchor, event);
+	return linkRule(href, gesture, anchor, event);
 };
 
 /** Route the sidebar's links under `ref` through `sidebarRule`. */

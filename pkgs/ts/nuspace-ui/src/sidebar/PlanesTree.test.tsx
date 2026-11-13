@@ -182,7 +182,13 @@ describe("tree row icon and chevron slot", () => {
 		});
 		const items = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')];
 		const labels = items.map(itemLabel);
-		expect(labels.indexOf("Open in new tab")).toBe(labels.indexOf("Open") + 1);
+		const open0 = labels.indexOf("Open");
+		expect(labels.slice(open0, open0 + 4)).toEqual([
+			"Open",
+			"Open to the side",
+			"Open in a new desk",
+			"Open in new tab",
+		]);
 		expect(labels).not.toContain("Open on desk");
 		act(() => items.find((i) => itemLabel(i) === "Open in new tab")?.click());
 		expect(open).toHaveBeenLastCalledWith("/b", "_blank", "noopener");
@@ -220,15 +226,20 @@ describe("tree row icon and chevron slot", () => {
 		expect(window.location.pathname).toBe("/b");
 	});
 
-	it("reads an Option-click on a row as a plain one: the plane solo", () => {
+	it("opens an Option-Cmd-click on a row to the side", () => {
+		setRoles({ home: "h", settings: "", search: "" });
+		setDesks({});
 		window.history.replaceState(null, "", "/a");
 		render([]);
-		act(() => {
-			linkOf("b")?.dispatchEvent(
-				new MouseEvent("click", { bubbles: true, cancelable: true, altKey: true }),
-			);
-		});
-		expect(window.location.pathname).toBe("/b");
+		const press = (init: MouseEventInit) =>
+			act(() => {
+				linkOf("b")?.dispatchEvent(
+					new MouseEvent("click", { bubbles: true, cancelable: true, ...init }),
+				);
+			});
+		press({ altKey: true, metaKey: true });
+		expect(currentRoutes()).toEqual(["a", "b"]);
+		expect(Object.keys(knownDesks() ?? {})).toHaveLength(1);
 	});
 
 	it("opens a plain click on a desk item as the plane solo, the desk untouched", () => {

@@ -21,10 +21,11 @@
 // Every link is a plain anchor whose href is where it goes: a cell's (the
 // kit's LinkRef, PageLinkRef, a markdown link) and the sidebar's rows
 // alike. The kit's AnchorCatcher on the shell's root hands an in-app click or
-// Enter to the router's rule (core/router.ts `paneRule`): a plain click on a
+// Enter to the shell's rule (../desk/open.ts `linkRule`): a plain click on a
 // plane url navigates the pane it sits in, in place, and opens solo from
-// anywhere else, and anything that is not the app's url is left to the
-// browser, as are Cmd, Shift and middle clicks. The sidebar routes its pane
+// anywhere else, Option Cmd opens it to the side,
+// and anything that is not the app's url is left to the browser, as are Cmd,
+// Shift and middle clicks. The sidebar routes its pane
 // rows first (../sidebar/links.ts): the strip opens with that pane focused.
 //
 // The two sit in the kit's split (`ResizablePanelGroup`): the sidebar is a
@@ -58,7 +59,6 @@ import {
 } from "@nustackdev/ui-kit";
 import { useLayoutEffect, useRef } from "react";
 import { BOOTING_DELAY_MS, useAfter } from "../core/delay";
-import { paneRule } from "../core/router";
 import { useBooted, useTypePath } from "../core/surfaces";
 import {
 	SIDEBAR_RAIL_PX,
@@ -73,6 +73,7 @@ import {
 	shellSplitHandle,
 } from "../design";
 import { useDragScroll } from "../desk/autoscroll";
+import { linkRule } from "../desk/open";
 import { ViewerSkeleton } from "../pane/ViewerSkeleton";
 import {
 	bindSidebar,
@@ -109,7 +110,7 @@ export function Shell() {
 		return () => bindSidebar(null);
 	}, []);
 
-	useAnchorCatcher(rootRef, paneRule);
+	useAnchorCatcher(rootRef, linkRule);
 
 	return (
 		<div ref={rootRef} className={shellRoot}>

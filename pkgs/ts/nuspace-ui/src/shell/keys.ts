@@ -15,6 +15,7 @@ import {
 	OPEN_KEYS,
 	SEARCH_KEYS,
 	SETTINGS_KEYS,
+	SIDE_KEYS,
 	SIDEBAR_KEYS,
 } from "../sidebar/api";
 
@@ -38,6 +39,7 @@ export const BINDINGS: BindingGroup[] = [
 			{ does: "New plane inside the current one", keys: [NEW_INSIDE_KEYS] },
 			{ does: "Show or hide the sidebar", keys: [SIDEBAR_KEYS] },
 			{ does: "Keyboard shortcuts", keys: [KEYS_KEYS] },
+			{ does: "Open a link to the side", keys: [SIDE_KEYS] },
 		],
 	},
 	{

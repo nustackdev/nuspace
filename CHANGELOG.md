@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Option Cmd click opens a plane to the side; panes get a close button again
 - Desks get a header to switch items and leave; panes close from their menu
 - Sidebar drops say what they do, refuse with a reason, and never shift rows
 - Flat desk shell, one plane frame, and a page, board or full width setting

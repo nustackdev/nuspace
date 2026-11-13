@@ -26,7 +26,7 @@ export {
 	setSidebarCollapsed,
 	useSidebarShortcut,
 } from "./collapse";
-export { OPEN_KEYS } from "./keys";
+export { OPEN_KEYS, SIDE_KEYS } from "./keys";
 export { HOME_KEYS, SEARCH_KEYS, SETTINGS_KEYS, useNavShortcuts } from "./nav";
 export { SidebarPlaceholder } from "./Sidebar";
 export { SidebarRail } from "./SidebarRail";

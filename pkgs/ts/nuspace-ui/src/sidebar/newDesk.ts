@@ -1,5 +1,5 @@
 // Making a desk: the one way every "New desk" goes, the header's `+` menu,
-// a plane's menu ("New desk with this plane") and the New desk drop zone
+// a plane's menu ("Open in a new desk") and the New desk drop zone
 // shown while dragging. The desk lands named "Untitled", empty or with what
 // was dropped or picked as its first item; its folder opens and the tab goes
 // to it. Renaming it is up to the user, from its folder's chip.
@@ -25,7 +25,7 @@ export function newDesk(first?: Payload): string {
 	return id;
 }
 
-/** "New desk with this plane": a new desk holding plane `plane` as its one item. */
+/** "Open in a new desk": a new desk holding plane `plane` as its one item. */
 export function newDeskWith(plane: string): string {
 	return newDesk({ kind: "plane", link: { plane, params: {} } });
 }

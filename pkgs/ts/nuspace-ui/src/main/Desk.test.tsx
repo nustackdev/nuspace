@@ -125,7 +125,7 @@ function draw(path: string) {
 
 const all = (sel: string) => [...host.querySelectorAll<HTMLElement>(sel)];
 const one = (sel: string) => host.querySelector(sel) as HTMLElement;
-/** Close the pane showing `plane` from its `...` menu: the pane has no close of its own. */
+/** Close the pane showing `plane` from its `...` menu (its header's X closes it too). */
 function closeFromMenu(plane: string) {
 	const trigger = one(`[data-pane="${plane}"] [aria-label="Plane settings"]`);
 	act(() => {
@@ -215,7 +215,7 @@ describe("a strip", () => {
 		expect(all("[data-pane]").map((p) => p.dataset.pane)).toEqual(["g", "b", "c"]);
 	});
 
-	it("gives each pane a header to drag by, and no close of its own", () => {
+	it("gives each pane a header to drag by, with a close and a menu", () => {
 		feed(DESKS);
 		draw(STRIP_URL);
 		expect(all("[data-pane-header]").map((h) => h.dataset.paneHeader)).toEqual([
@@ -224,7 +224,7 @@ describe("a strip", () => {
 			"c",
 			"d",
 		]);
-		expect(all('[data-pane] [aria-label^="Close"]')).toEqual([]);
+		expect(all('[data-pane] [data-pane-header] [aria-label^="Close "]')).toHaveLength(4);
 		expect(all('[data-pane] [aria-label="Plane settings"]')).toHaveLength(4);
 	});
 
@@ -262,6 +262,16 @@ describe("a strip", () => {
 		closeFromMenu("a");
 		expect(closePane).toHaveBeenCalledWith(ID, "strip1", "a");
 		expect(all("[data-pane]").map((p) => p.dataset.pane)).toEqual(["b", "c", "d"]);
+	});
+
+	it("closes a pane by its header's X too", () => {
+		const closePane = vi.spyOn(router, "closePane");
+		feed(DESKS);
+		draw(STRIP_URL);
+		const x = one('[data-pane="b"] [data-pane-header] button[aria-label^="Close "]');
+		act(() => x.click());
+		expect(closePane).toHaveBeenCalledWith(ID, "strip1", "b");
+		expect(all("[data-pane]").map((p) => p.dataset.pane)).toEqual(["a", "c", "d"]);
 	});
 
 	describe("scrolling a pane into view", () => {

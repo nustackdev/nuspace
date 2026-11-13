@@ -616,10 +616,10 @@ describe("gestures", () => {
 		expect(currentRoutes()).toEqual(["b", "movie"]);
 	});
 
-	it("opens a plane url outside any pane solo, on a desk item too, Option the same", () => {
+	it("opens a plane url outside any pane solo, on a desk item too", () => {
 		const writes = vi.fn();
 		const off = onDeskWrite(writes);
-		const e = click(link("/movie?id=1"), { altKey: true });
+		const e = click(link("/movie?id=1"));
 		expect(e.defaultPrevented).toBe(true);
 		expect(url()).toBe("/movie?id=1");
 		expect(currentRoute()).toEqual({ kind: "solo", plane: "movie", params: { id: "1" } });

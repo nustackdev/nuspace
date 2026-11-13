@@ -44,7 +44,8 @@
 // url opens it. A program's push to a plane url while on a desk item reads the
 // same way: the recent is written and the url goes back to the item's. A
 // program's query rewrite on an item url is the focused pane's params. A Cmd
-// click stays the browser's.
+// click stays the browser's. Option Cmd opens a plane to the side
+// (../desk/open.ts).
 //
 // Not part of the nustd.ui bridge: purely browser side.
 
@@ -629,24 +630,36 @@ export function setShares(desk: string, item: string, plane: string, shares: num
 }
 
 /**
- * The gesture rule for in app links, the AnchorCatcher's on the shell. A
- * plane url (or "/", home's) decides by where the anchor sits: inside a pane
- * (`[data-pane]`) of the desk item the tab shows, it navigates that pane in
- * place; anywhere else it opens the plane solo. A desk or item url opens it.
- * False, so native, for anything else. Option is no gesture of its own: it
- * reads as a plain click.
+ * The plane link `href` names: a plane url with its params, "/" as home's
+ * plane. Null for anything else (a desk or item url, not the app's, "/"
+ * before the roles land).
+ */
+export function planeLinkOf(href: string): Link | null {
+	const hit = shapeOfHref(href, desks);
+	if (!hit) return null;
+	const { shape, params } = hit;
+	if (shape.kind === "root") return roles?.home ? { plane: roles.home, params: {} } : null;
+	return shape.kind === "plane" ? { plane: shape.plane, params } : null;
+}
+
+/**
+ * The rule for a plain click on an in app link, the AnchorCatcher's on the
+ * shell (through ../desk/open.ts `linkRule`, which takes the Option
+ * gestures). A plane url (or "/", home's) decides by where the anchor sits:
+ * inside a pane (`[data-pane]`) of the desk item the tab shows, it navigates
+ * that pane in place; anywhere else it opens the plane solo. A desk or item
+ * url opens it. False, so native, for anything else.
  */
 export const paneRule: AnchorRule = (href, _gesture, anchor) => {
 	const hit = shapeOfHref(href, desks);
 	if (!hit) return false;
-	const { shape, params } = hit;
+	const { shape } = hit;
 	if (shape.kind === "desk") go(deskHref(shape.desk));
 	else if (shape.kind === "item") openItem(shape.desk, shape.item);
 	else {
-		const plane = shape.kind === "root" ? roles?.home : shape.kind === "plane" ? shape.plane : "";
-		const link = { plane: plane ?? "", params: shape.kind === "root" ? {} : params };
+		const link = planeLinkOf(href);
 		const pane = anchor?.closest?.("[data-pane]")?.getAttribute("data-pane") ?? "";
-		if (!link.plane) go("/");
+		if (!link) go("/");
 		else if (pane) navigate(link, pane);
 		else openPlane(link);
 	}

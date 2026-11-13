@@ -4,14 +4,15 @@
 // the list keeps the same groups, in the same order, with the same icons and
 // labels, so the two read as one menu that shows more or less of itself.
 //
-//   open      Open, Open in new tab, New desk with this plane
+//   open      Open, Open to the side, Open in a new desk, Open in new tab
 //   close     Close
 //   plane     Add plane inside, Rename, Change icon,
 //             Copy plane ID, Copy plane key, Restart plane
 //   settings  the caller's rows, eg the pane's switches
 //   delete    Delete plane, last and on its own
 //
-// A group with nothing in it takes no separator. "Open in new tab" and "Copy
+// "Open to the side" is with Open, on the Planes tree row's menu only: a pane
+// is beside itself already. A group with nothing in it takes no separator. "Open in new tab" and "Copy
 // plane ID" need only the id, so they are on every menu with a plane. "Copy
 // plane key" needs the key, which only a landed plane's pane knows, so it is
 // on the pane's menu alone, disabled while the plane has no key. The
@@ -26,6 +27,7 @@ import {
 	ExternalLink,
 	FileText,
 	Hash,
+	PanelRight,
 	Pen,
 	Plus,
 	RotateCcw,
@@ -37,8 +39,9 @@ import type * as React from "react";
 import { Fragment } from "react";
 import { useCopyRow } from "../core/clipboard";
 import { closeItem, closePane, openInNewTab, type Route, useRoute } from "../core/router";
+import { openToTheSide } from "../desk/open";
 import { NEW_INSIDE_KEYS, openAddPlane } from "../sidebar/add";
-import { OPEN_KEYS } from "../sidebar/keys";
+import { OPEN_KEYS, SIDE_KEYS } from "../sidebar/keys";
 import { newDeskWith } from "../sidebar/newDesk";
 import type { MenuParts } from "./parts";
 
@@ -79,13 +82,20 @@ export function PlaneMenuItems({ parts, ...a }: PlaneActions & { parts: MenuPart
 				<Shortcut keys={OPEN_KEYS} />
 			</Item>
 		) : null,
+		a.open ? (
+			<Item key="side" onSelect={() => openToTheSide({ plane: id, params: {} })}>
+				<PanelRight />
+				Open to the side
+				<Shortcut keys={SIDE_KEYS} />
+			</Item>
+		) : null,
+		<Item key="new-desk" onSelect={() => newDeskWith(id)}>
+			<Columns3 />
+			Open in a new desk
+		</Item>,
 		<Item key="tab" onSelect={() => openInNewTab(id)}>
 			<ExternalLink />
 			Open in new tab
-		</Item>,
-		<Item key="new-desk" onSelect={() => newDeskWith(id)}>
-			<Columns3 />
-			New desk with this plane
 		</Item>,
 	];
 

@@ -3,3 +3,6 @@
 
 /** Open the focused row: a plane solo, a desk item as it is now. */
 export const OPEN_KEYS = ["enter"] as const;
+
+/** Open a plane to the side: Option Cmd click on its row or any link to it. */
+export const SIDE_KEYS = ["alt", "mod", "Click"] as const;
