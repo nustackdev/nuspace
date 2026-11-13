@@ -29,6 +29,10 @@
 // A pane whose head or cells have not landed yet draws the viewer skeleton,
 // the same one the boot draws, so a switch and a first load look alike.
 //
+// The body's scroll is the node's too: `set_follow` keeps it at its end as
+// it grows, `scroll` moves it once (./scroll.ts). The server or a cell on the
+// pane sends them.
+//
 // Under the title, the plane's `@key` when it has one, and the identity block
 // its title row's `#` opens (./TitleIdentity.tsx). Like the title, the key is
 // the plane's own, not one of its cells, but unlike the title it changes only
@@ -59,13 +63,18 @@ import { Plane } from "../plane/Plane";
 import type { AbsentReason, ActivePlane, CellSpec, PaneHead } from "../plane/types";
 import { GoHome, NOT_FOUND_TEXT, NotFoundBody } from "./NotFound";
 import { PaneHeader } from "./PaneHeader";
+import { useScroller } from "./scroll";
 import {
+	markScrolled,
 	panePath,
 	patchPaneMeta,
 	patchPaneTitle,
 	usePaneAbsent,
 	usePaneCells,
+	usePaneFollow,
 	usePaneHead,
+	usePaneScroll,
+	usePaneScrolled,
 	usePaneTrail,
 } from "./state";
 import { focusTitle, Title } from "./Title";
@@ -137,6 +146,20 @@ export function Pane({
 	const trail = usePaneTrail(path);
 	const absent = usePaneAbsent(path);
 	const plane = usePlane(planeId, head, cells);
+
+	// The body's scroll, as the node says.
+	const viewport = useRef<HTMLDivElement | null>(null);
+	const content = useRef<HTMLDivElement | null>(null);
+	const onScrolled = useCallback((seq: string) => markScrolled(path, seq), [path]);
+	useScroller({
+		viewport,
+		content,
+		follow: usePaneFollow(path),
+		scroll: usePaneScroll(path),
+		applied: usePaneScrolled(path),
+		ready: plane != null,
+		onApplied: onScrolled,
+	});
 
 	// One ref per op, on this pane's own node: the path says the plane.
 	const notify = useCallback<Notify>(
@@ -215,9 +238,17 @@ export function Pane({
 				onClose={close}
 				focused={focused}
 			/>
-			<ScrollArea className={paneBodyScroll} viewportClassName={paneBodyViewport}>
+			<ScrollArea
+				className={paneBodyScroll}
+				viewportClassName={paneBodyViewport}
+				viewportRef={viewport}
+			>
 				{/* A press off the cells starts a box selection over them. */}
-				<div className={paneBody} onPointerDown={(e) => planeHandle.current?.press(e)}>
+				<div
+					ref={content}
+					className={paneBody}
+					onPointerDown={(e) => planeHandle.current?.press(e)}
+				>
 					{absent ? (
 						<NotFoundBody
 							text={ABSENT_TEXT[absent]}

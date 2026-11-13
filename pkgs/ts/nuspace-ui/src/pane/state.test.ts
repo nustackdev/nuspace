@@ -1,4 +1,4 @@
-// A pane node's writes: each of the five lands beside the others, in any
+// A pane node's writes: each of the five state writes lands beside the others, in any
 // order, and none needs a plane id. How an absent pane draws is ./Absent.test.tsx.
 
 import { describe, expect, it } from "vitest";
@@ -87,5 +87,20 @@ describe("a pane node", () => {
 		applyPaneWrite(props, { op: "set_absent", reason: "odd" });
 		applyPaneWrite(props, { op: "set_plane", title: "old" });
 		expect(props).toEqual({});
+	});
+
+	it("keeps follow, and a scroll command until a new seq replaces it", () => {
+		const props: Record<string, unknown> = {};
+		applyPaneWrite(props, { op: "set_follow", follow: "bottom" });
+		expect(props.follow).toBe("bottom");
+		applyPaneWrite(props, { op: "set_follow", follow: "odd" });
+		expect(props.follow).toBe("none");
+		applyPaneWrite(props, { op: "scroll", to: "top", cell_id: "", smooth: false, seq: "s1" });
+		const first = props.scroll;
+		expect(first).toEqual({ to: "top", cellId: "", smooth: false, seq: "s1" });
+		applyPaneWrite(props, { op: "scroll", to: "bottom", cell_id: "", smooth: false, seq: "s1" });
+		expect(props.scroll).toBe(first);
+		applyPaneWrite(props, { op: "scroll", to: "cell", cell_id: "c1", smooth: true, seq: "s2" });
+		expect(props.scroll).toEqual({ to: "cell", cellId: "c1", smooth: true, seq: "s2" });
 	});
 });

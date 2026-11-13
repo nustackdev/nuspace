@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Cells can make their pane follow the bottom or scroll, for chat style output
 - Opening a deep plane opens its sidebar folders, and only the sidebar reads its tree
 - Each open pane is its own node, so a rename no longer resends its cells
 - Urls are /p/<plane> and /d/<desk>, so routing never waits on a plane list

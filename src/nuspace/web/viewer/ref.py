@@ -14,6 +14,11 @@ feed erases it when the pane closes. It never asks what kind of plane it
 draws; what it reads off the plane is its head (name, icon, key, ``system``)
 and its web flags (``editable``, ``width``), and those go back through the
 pane's own ops.
+
+A pane's body scroll is driven here too, by the server or by a cell on the
+pane (``nuspace.web.pane()``): :meth:`PaneRef.follow` keeps it at its end as
+it grows, :meth:`PaneRef.scroll` and :meth:`PaneRef.scroll_to` move it once.
+Scrollers are a pane's only, so there is no ref of their own.
 """
 
 from __future__ import annotations
@@ -23,6 +28,7 @@ from typing import TYPE_CHECKING, ClassVar
 from typing_extensions import Self
 
 from nuspace.specs import registered_name
+from nuspace.utils import MintId
 from nuspace.web.utils import PANES, SpaceRef
 from nuspace.web.viewer import interactions
 
@@ -120,6 +126,41 @@ class PaneRef(SpaceRef):
     def set_trail(self, trail: ListArg[dict]) -> Nu:
         """Say which planes sit above the pane's, top first."""
         return interactions.set_trail(self, trail)
+
+    def follow(self, mode: StrArg = interactions.FOLLOW_BOTTOM) -> Nu:
+        """Keep the pane's body at its end as it grows (``"bottom"``), or stop (``"none"``).
+
+        The node keeps it, so it holds across redraws until the next call or
+        the pane closes. The user scrolling up pauses it, coming back to the
+        end resumes it.
+
+        Raises:
+            ValueError: ``mode`` is a str and not one of those two, at build.
+        """
+        if isinstance(mode, str) and mode not in interactions.FOLLOWS:
+            msg = f"follow takes one of {interactions.FOLLOWS}, not {mode!r}"
+            raise ValueError(msg)
+        return interactions.set_follow(self, mode)
+
+    def scroll(self, to: StrArg = interactions.SCROLL_BOTTOM, *, smooth: BoolArg = False) -> Nu:
+        """Scroll the pane's body once, to ``"top"`` or ``"bottom"``.
+
+        Each run mints its own ``seq``, so running it twice scrolls twice.
+
+        Raises:
+            ValueError: ``to`` is a str and not one of those two, at build.
+        """
+        ends = (interactions.SCROLL_TOP, interactions.SCROLL_BOTTOM)
+        if isinstance(to, str) and to not in ends:
+            msg = f"scroll goes to one of {ends}, not {to!r}; a cell is scroll_to"
+            raise ValueError(msg)
+        return interactions.scroll(self, to=to, cell_id="", smooth=smooth, seq=MintId("sc"))
+
+    def scroll_to(self, cell: StrArg, *, smooth: BoolArg = False) -> Nu:
+        """Scroll the pane's body once, so the cell ``cell`` (an id, eg ``Here.cell``) starts at its top."""
+        return interactions.scroll(
+            self, to=interactions.SCROLL_CELL, cell_id=cell, smooth=smooth, seq=MintId("sc")
+        )
 
     def on_rename_plane(self) -> Changed:
         """``{title}``."""

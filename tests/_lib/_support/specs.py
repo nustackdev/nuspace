@@ -16,6 +16,25 @@ from .contents import NoteContent, PlainContent
 #: The prog a text-like test cell runs.
 TEXT_SRC = "def out():\n    return prose()\n"
 
+#: A cell that appends a line every second while its pane follows the end:
+#: the pane's scroll, driven from a cell (``nuspace.web.pane()``). Add it from
+#: the ``/`` menu (``Tail``) in a space run with ``NUSPACE_TESTING=1``.
+TAIL_SRC = """\
+import nu
+import nustd.ui
+import nuspace.web as web
+
+lines = nustd.ui.ListRef("lines")
+
+
+def tick(i):
+    return lines.append(nu.Str("line ") + nu.Format(i)) >> nu.Delay(1.0)
+
+
+def out():
+    return lines.clear() >> web.pane().follow("bottom") >> nu.ForRangeDo(1, 100_000, tick)
+"""
+
 PLANES = (
     PlaneSpec("plain", "Plain", web=WebOptions(), backend="async"),
     PlaneSpec(
@@ -26,6 +45,7 @@ PLANES = (
 CELLS = (
     CellSpec("text", "Text", TEXT_SRC, classes=("prose",), default_for=("prose",)),
     CellSpec("program", "Program", "def out():\n    return nu.Noop()\n"),
+    CellSpec("tail", "Tail", TAIL_SRC, description="Appends a line a second, the pane following."),
 )
 
 CONTENTS = (

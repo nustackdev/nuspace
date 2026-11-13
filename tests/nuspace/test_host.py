@@ -220,7 +220,7 @@ def test_a_space_takes_the_packages_it_names(monkeypatch):
 def test_the_tests_specs_register_through_their_installed_package():
     reg = space_registry(extensions=["testing"])
     assert list(reg.planes) == ["testing.plain", "testing.jobs"]
-    assert list(reg.cells) == ["testing.text", "testing.program"]
+    assert list(reg.cells) == ["testing.text", "testing.program", "testing.tail"]
     assert list(reg.contents) == ["testing.Note", "testing.Plain"]
 
 

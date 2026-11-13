@@ -10,6 +10,10 @@
   ``set_absent``. ``set_absent`` stands in for the head when the pane has
   no plane to draw, and a later ``set_head`` clears it. Any order is fine:
   the browser keeps each beside the others.
+- **Scroll**, host or cell to browser, on the same path: ``set_follow`` is
+  state the node keeps (pin the body to its end as it grows), ``scroll`` a
+  one shot command, applied once per new ``seq``. Whether the user is at
+  the end stays in the browser: nothing comes back.
 
 Nothing here reads or writes a store. Which op an event runs is
 :mod:`.feed`.
@@ -30,6 +34,12 @@ if TYPE_CHECKING:
 __all__ = [
     "ABSENT_HEADLESS",
     "ABSENT_MISSING",
+    "FOLLOWS",
+    "FOLLOW_BOTTOM",
+    "FOLLOW_NONE",
+    "SCROLL_BOTTOM",
+    "SCROLL_CELL",
+    "SCROLL_TOP",
     "STATES",
     "STATE_FAILED",
     "STATE_IDLE",
@@ -51,8 +61,10 @@ __all__ = [
     "on_set_plane_key",
     "on_set_web",
     "on_update_cell",
+    "scroll",
     "set_absent",
     "set_cells",
+    "set_follow",
     "set_head",
     "set_status",
     "set_trail",
@@ -82,6 +94,20 @@ ABSENT_MISSING = "missing"
 
 #: A plane, but not on the web: no tab shows it.
 ABSENT_HEADLESS = "headless"
+
+#: The body scrolls only when the user scrolls it.
+FOLLOW_NONE = "none"
+
+#: The body stays at its end as it grows, until the user scrolls up.
+FOLLOW_BOTTOM = "bottom"
+
+#: What ``set_follow`` takes. The browser's contract (``pane/scroll.ts``).
+FOLLOWS = (FOLLOW_NONE, FOLLOW_BOTTOM)
+
+#: Where a ``scroll`` goes: the body's start, its end, or one of its cells.
+SCROLL_TOP = "top"
+SCROLL_BOTTOM = "bottom"
+SCROLL_CELL = "cell"
 
 
 # --- Writes: host -> pane -------------------------------------------------------
@@ -138,6 +164,27 @@ def set_status(pane: Ref, statuses: ListArg[dict]) -> Nu:
 def set_trail(pane: Ref, trail: ListArg[dict]) -> Nu:
     """Say which planes sit above the pane's, top first, each ``{id, title}``."""
     return write(pane, "set_trail", trail=trail)
+
+
+def set_follow(pane: Ref, follow: StrArg) -> Nu:
+    """Say whether the pane's body follows its end: :data:`FOLLOW_NONE` or :data:`FOLLOW_BOTTOM`.
+
+    Kept on the node until the next one or the pane closes. While it is
+    bottom, the user scrolling up pauses it and coming back to the end
+    resumes it, in the browser alone.
+    """
+    return write(pane, "set_follow", follow=follow)
+
+
+def scroll(pane: Ref, *, to: StrArg, cell_id: StrArg, smooth: BoolArg, seq: StrArg) -> Nu:
+    """Scroll the pane's body once: to :data:`SCROLL_TOP`, :data:`SCROLL_BOTTOM` or :data:`SCROLL_CELL`.
+
+    ``cell_id`` names the cell for ``cell`` and is ``""`` otherwise. The
+    browser applies a command once per new ``seq``, so the same one landing
+    again (a remount, a replay) moves nothing, while two scrolls to the same
+    place, each with its own ``seq``, both move.
+    """
+    return write(pane, "scroll", to=to, cell_id=cell_id, smooth=smooth, seq=seq)
 
 
 # --- Events: browser -> viewer ----------------------------------------------------

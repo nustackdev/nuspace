@@ -6,6 +6,7 @@ The sdk, what a program calls, is the ops (:mod:`.ops`), flat here::
 
     nuspace.atomic(web.add(plane, editable=True))     # put a plane on the web
     web.params(), web.on_params()                     # a cell's own pane params
+    web.pane().follow("bottom")                       # a cell's own pane, its scroll
     web.restart_cell(sid, cell)                       # run one cell again, brackets itself
     nuspace.atomic(web.link(row.link, plane))         # draw a link to a plane
     nuspace.atomic(web.page(plane))                   # {id, title, icon, href}: a PageLink table cell
@@ -29,6 +30,7 @@ Safe for a worker to import: nothing imported here pulls in a server.
 """
 
 from . import desks
+from .here import pane
 from .interactions import url
 from .ops import (
     add,
@@ -74,6 +76,7 @@ __all__ = [
     "on_params",
     "open_tab",
     "page",
+    "pane",
     "params",
     "restart_cell",
     "restart_pane",
