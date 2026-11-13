@@ -12,8 +12,8 @@
 //            them, drawn as a pane (../pane/NotFound.tsx)
 //
 // On a desk (an empty desk or one of its items) the desk header runs across
-// the top, over what it shows (./DeskHeader.tsx): the desk's name, its items
-// to switch between, rename and close. A solo plane has none.
+// the top, over what it shows (./DeskHeader.tsx): the desk's name and close,
+// nothing else. A solo plane has none.
 //
 // A pane draws the plane it shows: its recent, else its original. A link
 // inside a desk item navigates that plane item or pane in place, through the
@@ -294,16 +294,15 @@ export function Desk({ path }: NodeProps) {
 		);
 	}
 	// On a desk, its header across the top, over what it shows.
-	const framed = (deskId: string, active: string | null, body: ReactNode): ReactNode => (
+	const framed = (deskId: string, body: ReactNode): ReactNode => (
 		<div className={deskFrame}>
-			<DeskHeader deskId={deskId} desk={desks?.[deskId] ?? null} active={active} tree={tree} />
+			<DeskHeader deskId={deskId} desk={desks?.[deskId] ?? null} />
 			{body}
 		</div>
 	);
 	if (route.kind === "desk") {
 		return framed(
 			route.desk,
-			null,
 			<div className={deskArea} data-desk={route.desk} {...drop.props}>
 				<EmptyState className={deskEmpty} icon={<Columns2 />} description={EMPTY_DESK_HINT}>
 					{EMPTY_DESK}
@@ -320,7 +319,6 @@ export function Desk({ path }: NodeProps) {
 		const plane = shown(route.item).plane;
 		return framed(
 			route.desk,
-			route.item.id,
 			<div className={deskArea}>
 				<div
 					ref={dropHost}
@@ -341,7 +339,6 @@ export function Desk({ path }: NodeProps) {
 	const columns = route.item.columns;
 	return framed(
 		desk,
-		item,
 		<div className={deskStripArea}>
 			<ScrollArea
 				orientation="horizontal"

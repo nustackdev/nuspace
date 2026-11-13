@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Desk header shows only the desk name and close; items stay in the sidebar
 - Search runs on Enter in any filter, on the new nu input contract
 - Option Cmd click opens a plane to the side; panes get a close button again
 - Desks get a header to switch items and leave; panes close from their menu

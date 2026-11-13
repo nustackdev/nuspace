@@ -340,35 +340,19 @@ describe("a plane item", () => {
 
 describe("the desk header", () => {
 	const header = () => host.querySelector<HTMLElement>("[data-desk-header]");
-	const items = () => [...(header()?.querySelectorAll<HTMLAnchorElement>("nav a") ?? [])];
 
-	it("names the desk and links its items in order, the shown one active", () => {
+	it("names the desk and lists none of its items: the sidebar has them", () => {
 		feed(DESKS);
 		draw(STRIP_URL);
 		expect(header()?.dataset.deskHeader).toBe(ID);
 		expect(header()?.textContent).toContain("Work");
-		expect(items().map((a) => a.getAttribute("href"))).toEqual([STRIP_URL, LONE_URL]);
-		expect(items()[0].textContent).toContain("Strip4");
-		expect(items().map((a) => a.getAttribute("aria-current"))).toEqual(["page", null]);
+		expect(header()?.querySelectorAll("a")).toHaveLength(0);
 	});
 
-	it("follows the item the tab shows, and is there on an empty desk", () => {
+	it("is there on an empty desk", () => {
 		feed(DESKS);
-		draw(LONE_URL);
-		expect(items().map((a) => a.getAttribute("aria-current"))).toEqual([null, "page"]);
 		draw(`/${EMPTY}`);
 		expect(header()?.textContent).toContain("Empty");
-		expect(items()).toEqual([]);
-	});
-
-	it("shows a navigated plane item as its original's icon, a slash and its recent, the icon a reset", () => {
-		const resetItem = vi.spyOn(router, "resetItem");
-		feed(DESKS);
-		draw(STRIP_URL);
-		const reset = one('[data-desk-header] [aria-label^="Reset to"]');
-		expect(reset.nextElementSibling?.textContent).toBe("/");
-		act(() => reset.click());
-		expect(resetItem).toHaveBeenCalledWith(ID, "lone01");
 	});
 
 	it("is not on a solo plane", () => {
