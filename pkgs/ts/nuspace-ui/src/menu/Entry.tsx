@@ -3,18 +3,16 @@
 // plane popup, a button in the slash menu); it wears `menuItem`.
 
 import { Shortcut } from "@nustackdev/ui-kit";
-import { type RefObject, useLayoutEffect, useRef, useState } from "react";
+import { ChevronRight } from "lucide-react";
 import {
 	menuDescription,
 	menuEnter,
-	menuFloat,
-	menuFloatDescription,
-	menuFloatLabel,
-	menuFloatRow,
 	menuFooter,
 	menuHit,
 	menuKey,
 	menuLabel,
+	menuPackageChevron,
+	menuPackageCount,
 	menuText,
 	menuTile,
 } from "../design";
@@ -22,11 +20,7 @@ import { PlaneIcon } from "../icon/PlaneIcon";
 import { type Icon, parseIcon } from "../icon/parse";
 import { menuMatch } from "./rank";
 
-/**
- * One row's inside: its icon in a tile, the label lit where `query` hit, the
- * description under it. A row that cuts its text off also carries the whole of
- * it, floated over the list while the row is lit (`menuFloat`).
- */
+/** One row's inside: its icon in a tile, the label lit where `query` hit, the description under it, wrapped whole. */
 export function MenuEntry({
 	icon,
 	fallback,
@@ -42,52 +36,37 @@ export function MenuEntry({
 	description?: string;
 	query: string;
 }) {
-	const text = useRef<HTMLSpanElement | null>(null);
-	const clipped = useClipped(text, `${label}\n${description ?? ""}\n${query}`);
-	const glyph = parseIcon(icon) ?? fallback;
 	return (
 		<>
 			<span className={menuTile}>
-				<PlaneIcon icon={glyph} />
+				<PlaneIcon icon={parseIcon(icon) ?? fallback} />
 			</span>
-			<span ref={text} className={menuText}>
+			<span className={menuText}>
 				<Label label={label} query={query} className={menuLabel} />
 				{description ? <span className={menuDescription}>{description}</span> : null}
 			</span>
 			<Shortcut keys={["enter"]} className={menuEnter} />
-			{clipped ? (
-				<span aria-hidden="true" className={menuFloat}>
-					<span className={menuFloatRow}>
-						<span className={menuTile}>
-							<PlaneIcon icon={glyph} />
-						</span>
-						<span className={menuText}>
-							<Label label={label} query={query} className={menuFloatLabel} />
-							{description ? <span className={menuFloatDescription}>{description}</span> : null}
-						</span>
-						<Shortcut keys={["enter"]} className={menuEnter} />
-					</span>
-				</span>
-			) : null}
 		</>
 	);
 }
 
-/** Whether a line under `ref` is cut off, kept true to the row's width as it changes. */
-function useClipped(ref: RefObject<HTMLElement | null>, text: string): boolean {
-	const [clipped, setClipped] = useState(false);
-	// biome-ignore lint/correctness/useExhaustiveDependencies: a new text is a new measure
-	useLayoutEffect(() => {
-		const el = ref.current;
-		if (!el) return;
-		const measure = () =>
-			setClipped(Array.from(el.children).some((line) => line.scrollWidth > line.clientWidth));
-		measure();
-		const watch = new ResizeObserver(measure);
-		watch.observe(el);
-		return () => watch.disconnect();
-	}, [ref, text]);
-	return clipped;
+/** A package's title inside: the chevron saying open or folded, its name, its count. */
+export function PackageEntry({
+	label,
+	count,
+	open,
+}: {
+	label: string;
+	count: number;
+	open: boolean;
+}) {
+	return (
+		<>
+			<ChevronRight className={menuPackageChevron(open)} />
+			<span className="truncate">{label}</span>
+			<span className={menuPackageCount}>{count}</span>
+		</>
+	);
 }
 
 /** The label, the part the query matched lit. */

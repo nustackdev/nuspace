@@ -115,4 +115,67 @@ describe("AddPlane", () => {
 		);
 		expect(items).toEqual(["nuverse.runs"]);
 	});
+
+	it("folds the other packages, and the arrows open the one they step into", () => {
+		act(() =>
+			root.render(
+				<AddPlane
+					registered={[
+						...registered,
+						{ name: "nudemos.memes", label: "Memes", group: "", icon: "", description: "" },
+					]}
+					notify={notify}
+					reveal={() => {}}
+				/>,
+			),
+		);
+		act(() => openAddPlane({ parent: ROOT_ID }));
+		const shown = () =>
+			[...document.querySelectorAll('[cmdk-item=""]')]
+				.filter((i) => !i.closest("[hidden]"))
+				.map((i) => i.getAttribute("data-value"));
+		expect(shown()).toEqual(["_empty", "nuverse.notes", "nuverse.jobs", "nuverse.runs"]);
+		const input = document.querySelector<HTMLInputElement>("[cmdk-input]");
+		if (!input) throw new Error("no input");
+		const press = (key: string) =>
+			act(() => {
+				input.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
+			});
+		// Up from the top wraps to the last row, in nudemos: it opens.
+		press("ArrowUp");
+		expect(shown()).toContain("nudemos.memes");
+		press("ArrowUp");
+		expect(shown()).not.toContain("nudemos.memes");
+		press("ArrowDown");
+		press("Enter");
+		expect(notify).toHaveBeenCalledWith(
+			"plane.create",
+			expect.objectContaining({ spec: "nudemos.memes" }),
+		);
+	});
+
+	it("lights a package's first row on a click on its title", () => {
+		act(() =>
+			root.render(
+				<AddPlane
+					registered={[
+						...registered,
+						{ name: "nudemos.memes", label: "Memes", group: "", icon: "", description: "" },
+					]}
+					notify={notify}
+					reveal={() => {}}
+				/>,
+			),
+		);
+		act(() => openAddPlane({ parent: ROOT_ID }));
+		const title = [...document.querySelectorAll<HTMLElement>("[data-open]")].find((t) =>
+			t.textContent?.includes("nudemos"),
+		);
+		act(() => title?.click());
+		expect(title?.getAttribute("data-open")).toBe("true");
+		expect(
+			document.querySelector('[cmdk-item][data-selected="true"]')?.getAttribute("data-value"),
+		).toBe("nudemos.memes");
+		expect(notify).not.toHaveBeenCalled();
+	});
 });

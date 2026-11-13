@@ -5,9 +5,9 @@
 // primitive, and a Cell is the same insert with the source filled in. It
 // needs no registry entry, which is why it is here and not in one. It still
 // filters with the query like any row, so a query it misses never puts it
-// under the caret.
+// under the caret. It sits above the packages (../../menu/rank.ts), in none.
 
-import { type MenuSection, menuScore, menuSections } from "../../menu/rank";
+import { type MenuPackage, menuPackages, menuPinned, menuRows, menuScore } from "../../menu/rank";
 import type { CellSpec } from "../types";
 
 /** The empty program. Its name is no Cell's, so the cell stores the server's starter program. */
@@ -18,13 +18,19 @@ export const PROGRAM: CellSpec = {
 	description: "A cell with a starter program, to write your own.",
 };
 
-/** The menu's sections for `query`: the empty program first when it matches. */
-export function slashSections(query: string, cellSpecs: CellSpec[]): MenuSection<CellSpec>[] {
-	const rest = menuSections(query, cellSpecs);
-	return menuScore(query, PROGRAM) === null ? rest : [{ heading: null, items: [PROGRAM] }, ...rest];
+/** The menu's packages for `query`: the empty program pinned first when it matches. `lit` opens its package. */
+export function slashPackages(
+	query: string,
+	cellSpecs: CellSpec[],
+	lit?: string,
+): MenuPackage<CellSpec>[] {
+	const rest = menuPackages(query, cellSpecs, lit);
+	return menuScore(query, PROGRAM) === null
+		? rest
+		: [menuPinned([{ heading: null, items: [PROGRAM] }]), ...rest];
 }
 
-/** The rows in menu order, flat: what the arrows step through. */
+/** The rows in menu order, flat, folded or not: what the arrows step through. */
 export function slashItems(query: string, cellSpecs: CellSpec[]): CellSpec[] {
-	return slashSections(query, cellSpecs).flatMap((s) => s.items);
+	return menuRows(slashPackages(query, cellSpecs));
 }

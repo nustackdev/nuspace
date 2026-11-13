@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { type MenuEntry, menuItems, menuMatch, menuSections, OTHER } from "./rank";
+import {
+	type MenuEntry,
+	menuItems,
+	menuMatch,
+	menuPackages,
+	menuRows,
+	menuSections,
+	OTHER,
+} from "./rank";
 
 const CELL_SPECS: MenuEntry[] = [
 	{
@@ -81,5 +89,62 @@ describe("menuMatch", () => {
 		expect(menuMatch("ane", "Plane lens")).toEqual([2, 5]);
 		expect(menuMatch("x", "Plane lens")).toBeNull();
 		expect(menuMatch("", "Plane lens")).toBeNull();
+	});
+});
+
+const MIXED: MenuEntry[] = [
+	{ name: "nudemos.memes", label: "Memes", group: "Demos" },
+	{ name: "nuverse.text", label: "Text", group: "Content" },
+	{ name: "nulogs.logs", label: "Logs" },
+	{ name: "nuverse.slider", label: "Slider", group: "Inputs" },
+	{ name: "nudemos.mnist", label: "MNIST", group: "Demos" },
+];
+
+const shape = (packages: ReturnType<typeof menuPackages>) =>
+	packages.map((p) => [p.key, p.count, p.open]);
+
+describe("menuPackages", () => {
+	it("puts nuverse untitled on top, the rest folded titles with their counts", () => {
+		expect(shape(menuPackages("", MIXED))).toEqual([
+			[null, 2, true],
+			["nudemos", 2, false],
+			["nulogs", 1, false],
+		]);
+	});
+
+	it("opens only the package the lit row is in", () => {
+		expect(shape(menuPackages("", MIXED, "nudemos.mnist"))).toEqual([
+			[null, 2, true],
+			["nudemos", 2, true],
+			["nulogs", 1, false],
+		]);
+		expect(shape(menuPackages("", MIXED, "nuverse.text"))).toEqual([
+			[null, 2, true],
+			["nudemos", 2, false],
+			["nulogs", 1, false],
+		]);
+	});
+
+	it("steps every row, folded or not, nuverse's first", () => {
+		expect(menuRows(menuPackages("", MIXED)).map((i) => i.name)).toEqual([
+			"nuverse.text",
+			"nuverse.slider",
+			"nudemos.memes",
+			"nudemos.mnist",
+			"nulogs.logs",
+		]);
+	});
+
+	it("opens every package on a query, nuverse still first, then best match", () => {
+		expect(shape(menuPackages("l", MIXED))).toEqual([
+			[null, 1, true],
+			["nulogs", 1, true],
+		]);
+		expect(shape(menuPackages("m", MIXED))).toEqual([["nudemos", 2, true]]);
+	});
+
+	it("draws no title for one package", () => {
+		const got = menuPackages("", CELL_SPECS.slice(0, 3));
+		expect(shape(got)).toEqual([[null, 3, true]]);
 	});
 });

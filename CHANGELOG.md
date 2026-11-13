@@ -18,6 +18,7 @@ separately here.
 - Pane menu Width choice now reaches the server and sticks
 - Urls are /p/<plane> and /d/<desk>; old plane links now read page not found
 - Plane and cell ids given from outside must be slugs, so they read cleanly in urls
+- Add plane and / menus fold packages by focus, with flat rows that wrap
 - Pane breadcrumbs come from the server, so they show under collapsed sidebar branches
 - Desk header shows only the desk name and close; items stay in the sidebar
 - Search runs on Enter in any filter, on the new nu input contract
