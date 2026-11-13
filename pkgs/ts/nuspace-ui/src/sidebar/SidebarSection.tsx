@@ -153,7 +153,7 @@ export function SectionAction({
 	return (
 		<IconButton
 			variant="ghost"
-			size="sm"
+			size="xs"
 			ring="inset"
 			aria-label={label}
 			tip={tip}

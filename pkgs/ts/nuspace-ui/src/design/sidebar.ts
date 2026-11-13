@@ -206,10 +206,10 @@ export const sidebarSectionActions = cn(
 );
 
 /**
- * A section action, on a kit `IconButton ghost sm`: a row action's look and
+ * A section action, on a kit `IconButton ghost xs`: a row action's look and
  * size, since the title line is an item like a row.
  */
-export const sidebarSectionAction = cn(sidebarControlWash, "rounded-sm [&_svg]:size-4");
+export const sidebarSectionAction = sidebarControlWash;
 
 /** Rows a hairline apart, so two fills never merge. */
 export const sidebarRows = "flex flex-col gap-px";
@@ -340,8 +340,11 @@ export const sidebarHoverAction = cn(
 	"[&:has([data-state=open])]:pointer-events-auto [&:has([data-state=open])]:w-auto [&:has([data-state=open])]:opacity-100",
 );
 
-/** The hover action's button, on a kit `IconButton ghost sm` with the inset ring. */
-export const sidebarRowAction = cn(sidebarControlWash, "rounded-sm [&_svg]:size-4");
+/**
+ * The hover action's button, on a kit `IconButton ghost xs` with the inset
+ * ring: the fold chevron's size, so a row's controls read as one set.
+ */
+export const sidebarRowAction = sidebarControlWash;
 
 /**
  * The original plane's icon on a navigated desk row, as a control on a kit

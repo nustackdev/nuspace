@@ -404,7 +404,7 @@ function MoreMenu({
 					<TooltipTrigger asChild>
 						<IconButton
 							variant="ghost"
-							size="sm"
+							size="xs"
 							ring="inset"
 							tabIndex={tabbable ? 0 : -1}
 							aria-label={`Actions for ${title}`}

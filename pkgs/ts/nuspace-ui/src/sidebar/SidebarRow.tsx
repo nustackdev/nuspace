@@ -254,7 +254,7 @@ export function RowAction({
 	return (
 		<IconButton
 			variant="ghost"
-			size="sm"
+			size="xs"
 			ring="inset"
 			tabIndex={-1}
 			aria-label={label}

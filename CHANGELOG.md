@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Sidebar hover buttons shrink to the fold chevron's size, rows and titles alike
 - Boot skeleton gets its top gap back above the title
 
 - Drop unused cell and status wire fields; ref classes cover every feed op
