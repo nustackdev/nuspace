@@ -15,6 +15,7 @@ from nuspace.web.viewer.feed import (
     plane_cells,
     plane_view,
     statuses,
+    trail,
     viewer_feed,
 )
 from nuspace.web.viewer.interactions import (
@@ -37,6 +38,7 @@ from nuspace.web.viewer.interactions import (
     set_absent,
     set_plane,
     set_status,
+    set_trail,
 )
 from nuspace.web.viewer.ref import ViewerRef, slash_entries
 
@@ -66,7 +68,9 @@ __all__ = [
     "set_absent",
     "set_plane",
     "set_status",
+    "set_trail",
     "slash_entries",
     "statuses",
+    "trail",
     "viewer_feed",
 ]

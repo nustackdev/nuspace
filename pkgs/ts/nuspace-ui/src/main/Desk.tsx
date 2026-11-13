@@ -94,7 +94,6 @@ import {
 	deletePlane,
 	type Notify as SidebarNotify,
 	type Ops as SidebarOps,
-	trailOf,
 	usePlaneTree,
 } from "../sidebar/api";
 import { Column } from "./Column";
@@ -108,6 +107,7 @@ import {
 	useAbsent,
 	useCellSpecs,
 	usePlanes,
+	useTrails,
 } from "./state";
 
 /** A path that is no plane or desk url, or "/" with no home role. */
@@ -134,6 +134,7 @@ function paneAt(route: Route): PaneAt {
 export function Desk({ path }: NodeProps) {
 	const planes = usePlanes(path);
 	const absent = useAbsent(path);
+	const trails = useTrails(path);
 	const cellSpecs = useCellSpecs(path);
 	const route = useRoute();
 	const routes = useRoutes();
@@ -262,7 +263,7 @@ export function Desk({ path }: NodeProps) {
 			onRename={onRename}
 			onIcon={onIcon}
 			onDelete={deleteOf(id)}
-			trail={trailOf(tree, id)}
+			trail={trails[id]}
 			focused={id === focused}
 		/>
 	);

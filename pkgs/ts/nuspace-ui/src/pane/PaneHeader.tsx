@@ -42,8 +42,7 @@ import {
 import { headerDragProps, type PaneAt } from "../desk/drag";
 import { PlaneIcon } from "../icon/PlaneIcon";
 import { planeIcon } from "../icon/parse";
-import type { PlaneMeta } from "../plane/types";
-import type { Crumb } from "../sidebar/api";
+import type { Crumb, PlaneMeta } from "../plane/types";
 import { PaneMenu } from "./PaneMenu";
 
 /** The parents a header shows: all of them up to two, else the top one, a fold, the nearest. */

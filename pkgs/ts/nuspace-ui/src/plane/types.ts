@@ -70,6 +70,22 @@ export type ActivePlane = {
 	cells: Cell[];
 };
 
+/** One step of a pane's trail: a plane above it, by id and title. */
+export type Crumb = { id: string; title: string };
+
+/** A wire trail, top first. Entries with no id are dropped. */
+export function coerceTrail(raw: unknown): Crumb[] {
+	if (!Array.isArray(raw)) return [];
+	const out: Crumb[] = [];
+	for (const e of raw) {
+		if (!e || typeof e !== "object") continue;
+		const r = e as Record<string, unknown>;
+		const id = String(r.id ?? "");
+		if (id) out.push({ id, title: String(r.title ?? "") });
+	}
+	return out;
+}
+
 /**
  * Why an open pane has no Plane to draw, as `set_absent.reason` ships it:
  * no Plane by that id, or one that runs without a view.

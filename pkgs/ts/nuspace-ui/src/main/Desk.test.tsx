@@ -25,19 +25,24 @@ import {
 } from "../desk/model";
 import { NOT_FOUND_TEXT } from "../pane/NotFound";
 import type { Ops } from "../plane/ops";
-import { trailOf, usePlaneTree } from "../sidebar/api";
+import { usePlaneTree } from "../sidebar/api";
 import { Desk, EMPTY_DESK, EMPTY_DESK_HINT } from "./Desk";
+import { useTrails } from "./state";
 
 const { currentRoute, focusPane, onDeskWrite, openPane, paneRule, resetRouter } = router;
 const { ITEM_MIME, PANE_MIME, PLANE_MIME } = dnd;
 
 vi.mock("../core/wire", () => ({ notifyOp: vi.fn() }));
+// The trails the viewer feed ships: none unless a test says.
+vi.mock("./state", async (real) => ({
+	...(await real<typeof import("./state")>()),
+	useTrails: vi.fn(() => ({})),
+}));
 // The sidebar's tree and delete: not what is tested here.
 vi.mock("../sidebar/api", () => ({
 	usePlaneTree: vi.fn(() => ({})),
 	canDelete: () => false,
 	deletePlane: vi.fn(),
-	trailOf: vi.fn(() => []),
 	deskLabel: (name: string) => name.trim() || "Desk",
 	STRIP_TITLE: "Strip",
 }));
@@ -155,7 +160,7 @@ beforeEach(() => {
 	resetDesks();
 	vi.mocked(notifyOp).mockClear();
 	vi.mocked(usePlaneTree).mockImplementation(() => ({}));
-	vi.mocked(trailOf).mockImplementation(() => []);
+	vi.mocked(useTrails).mockImplementation(() => ({}));
 	host = document.createElement("div");
 	document.body.append(host);
 	root = createRoot(host);
@@ -426,7 +431,9 @@ describe("links inside the canvas", () => {
 	let release: () => void;
 	beforeEach(() => {
 		release = catchAnchors(host, paneRule);
-		vi.mocked(trailOf).mockImplementation(() => [{ id: "par", title: "Parent" }]);
+		// Every pane has the one parent.
+		const trail = [{ id: "par", title: "Parent" }];
+		vi.mocked(useTrails).mockImplementation(() => new Proxy({}, { get: () => trail }));
 	});
 	afterEach(() => release());
 

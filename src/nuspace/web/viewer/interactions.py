@@ -1,11 +1,12 @@
 """Everything the viewer says and hears, in the browser's own words.
 
 - **Events**, browser to host. One path per op under ``<viewer>.ops.``.
-- **Writes**, host to browser. Three, on the viewer's own path, tagged with an
+- **Writes**, host to browser. Four, on the viewer's own path, tagged with an
   ``op`` key, and keyed by ``plane_id``: several planes can be open at once,
   one pane each. ``set_status`` patches what ``set_plane`` landed for the
   same plane, so the two go in that order. ``set_absent`` stands in for
   ``set_plane`` when the pane has no plane to draw; either replaces the other.
+  ``set_trail`` stands apart: the planes above the pane's, kept beside it.
 
 Nothing here reads or writes a store. Which op an event runs is
 :mod:`.feed`. ``planes.open`` is the viewer's: which panes are open is a
@@ -48,6 +49,7 @@ __all__ = [
     "set_absent",
     "set_plane",
     "set_status",
+    "set_trail",
 ]
 
 
@@ -113,6 +115,14 @@ def set_status(viewer: Ref, plane_id: StrArg, statuses: ListArg[dict]) -> Nu:
     plane already landed, so it follows a :func:`set_plane` for the same plane.
     """
     return write(viewer, "set_status", plane_id=plane_id, statuses=statuses)
+
+
+def set_trail(viewer: Ref, plane_id: StrArg, trail: ListArg[dict]) -> Nu:
+    """Say which planes sit above one pane's, top first, each ``{id, title}``.
+
+    Kept apart from the plane, so any order with :func:`set_plane` is fine.
+    """
+    return write(viewer, "set_trail", plane_id=plane_id, trail=trail)
 
 
 # --- Events: browser -> host --------------------------------------------------

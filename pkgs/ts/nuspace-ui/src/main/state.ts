@@ -15,11 +15,18 @@
 //
 // ## Why this type keeps a write handler
 //
-// Three ops ride one payload, told apart by an `op` key, and the store's default
+// Four ops ride one payload, told apart by an `op` key, and the store's default
 // write has nothing to dispatch on. `set_status` also patches statuses into
 // the cell list by id, which a prop merge cannot do, and `set_plane` has to
 // prune local state naming cells the new Plane does not carry, which nothing
 // else is in a position to notice.
+//
+// ## The trail is the viewer's, not the sidebar's
+//
+// The planes above each pane's ride `set_trail`, kept by plane id in
+// `props.trails`, apart from the plane so either may land first. The sidebar's
+// tree holds only the branches a tab has open, so it cannot say.
+
 //
 // ## A closed plane leaves nothing drawn behind
 //
@@ -43,10 +50,12 @@ import {
 	type ActivePlane,
 	type CellSpec,
 	type CellStatus,
+	type Crumb,
 	coerceAbsent,
 	coerceCells,
 	coerceMeta,
 	coerceStatus,
+	coerceTrail,
 } from "../plane/types";
 
 /** Every open Plane that has landed, by id, off the node's props. */
@@ -57,6 +66,11 @@ function planesOf(props: Props): Record<string, ActivePlane> {
 /** Why each open pane has no Plane, by id, off the node's props. */
 function absentOf(props: Props): Record<string, AbsentReason> {
 	return (props.absent as Record<string, AbsentReason> | undefined) ?? {};
+}
+
+/** The planes above each open pane's, by id, off the node's props. */
+function trailsOf(props: Props): Record<string, Crumb[]> {
+	return (props.trails as Record<string, Crumb[]> | undefined) ?? {};
 }
 
 /** Every pane's editor state, by Plane id, off the node's props. */
@@ -95,6 +109,12 @@ export function applyViewerWrite(props: Props, payload: unknown, open: string[])
 	const op = String(p.op ?? "");
 	const planeId = String(p.plane_id ?? "");
 
+	if (op === "set_trail") {
+		if (!planeId || !open.includes(planeId)) return;
+		props.trails = { ...keepOpen(trailsOf(props), open), [planeId]: coerceTrail(p.trail) };
+		return;
+	}
+
 	if (op === "set_status") {
 		const planes = planesOf(props);
 		const plane = planes[planeId];
@@ -122,6 +142,7 @@ export function applyViewerWrite(props: Props, payload: unknown, open: string[])
 	const planes = keepOpen(planesOf(props), open);
 	const panes = keepOpen(panesOf(props), open);
 	const absent = keepOpen(absentOf(props), open);
+	props.trails = keepOpen(trailsOf(props), open);
 	if (!planeId || !open.includes(planeId)) {
 		props.planes = planes;
 		props.absent = absent;
@@ -217,11 +238,20 @@ export function pruneViewer(path: Path, open: string[]): void {
 	settleCellUi(path, planes, open);
 	const panes = panesOf(node.props);
 	const absent = absentOf(node.props);
+	const trails = trailsOf(node.props);
 	const nextPlanes = keepOpen(planes, open);
 	const nextPanes = keepOpen(panes, open);
 	const nextAbsent = keepOpen(absent, open);
-	if (nextPlanes === planes && nextPanes === panes && nextAbsent === absent) return;
-	tree.getState().setProps(path, { planes: nextPlanes, absent: nextAbsent, [LOCAL]: nextPanes });
+	const nextTrails = keepOpen(trails, open);
+	const same =
+		nextPlanes === planes && nextPanes === panes && nextAbsent === absent && nextTrails === trails;
+	if (same) return;
+	tree.getState().setProps(path, {
+		planes: nextPlanes,
+		absent: nextAbsent,
+		trails: nextTrails,
+		[LOCAL]: nextPanes,
+	});
 }
 
 /**
@@ -269,6 +299,13 @@ const NO_ABSENT: Record<string, AbsentReason> = {};
 /** Why each open pane has no Plane to draw, by id. */
 export function useAbsent(path: Path): Record<string, AbsentReason> {
 	return (useProps(path).absent as Record<string, AbsentReason> | undefined) ?? NO_ABSENT;
+}
+
+const NO_TRAILS: Record<string, Crumb[]> = {};
+
+/** The planes above each open pane's, top first, by id. A pane with none landed has no entry. */
+export function useTrails(path: Path): Record<string, Crumb[]> {
+	return (useProps(path).trails as Record<string, Crumb[]> | undefined) ?? NO_TRAILS;
 }
 
 const EMPTY_CELL_SPECS: CellSpec[] = [];

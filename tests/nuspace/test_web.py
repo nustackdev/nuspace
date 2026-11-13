@@ -33,7 +33,7 @@ from nuspace.web.shapes import Web
 from nuspace.web.shell import Shell
 from nuspace.web.sidebar import registered_entries, rows
 from nuspace.web.utils import CellRoot
-from nuspace.web.viewer import PROGRAM, plane_view, slash_entries, statuses
+from nuspace.web.viewer import PROGRAM, plane_view, slash_entries, statuses, trail
 from nustd.ui.core import OP_NOTIFY, Frame, WsSession
 from nustd.ui.core.session import Session
 
@@ -249,6 +249,17 @@ async def test_viewer_plane_absent(store):
     assert (await store.read(plane_view("nope")))["absent"] == "missing"
     assert (await store.read(plane_view("gone")))["absent"] == "missing"
     assert (await store.read(plane_view("off")))["absent"] == "headless"
+
+
+async def test_viewer_trail_climbs_whatever_the_sidebar_shows(store):
+    await plane(store, "p1", "One")
+    await plane(store, "p2", "Two", parent="p1")
+    await plane(store, "p3", "Three", parent="p2")
+    # No tab, nothing expanded: the trail does not read the sidebar.
+    got = await store.made(nuspace.atomic(trail("p3", into=MADE)))
+    assert got == [{"id": "p1", "title": "One"}, {"id": "p2", "title": "Two"}]
+    assert await store.made(nuspace.atomic(trail("p1", into=MADE))) == []
+    assert await store.made(nuspace.atomic(trail("nope", into=MADE))) == []
 
 
 def test_slash_entries_ship_classes_and_one_default_per_class():

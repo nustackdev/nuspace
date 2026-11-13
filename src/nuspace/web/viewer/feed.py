@@ -4,8 +4,9 @@ Two families:
 
 - **browser to store.** A viewer event runs one op over its own fields.
   A failure toasts on the tab (:meth:`~nuspace.web.utils.Arms.event`).
-- **store to browser.** An open plane or its pane's run changed; its arm
-  ships the plane or the statuses again, keyed by ``plane_id``.
+- **store to browser.** An open plane, its pane's run or the planes above
+  it changed; its arm ships the plane, the statuses or the trail again,
+  keyed by ``plane_id``.
 
 **Which planes are open** is the tab's pane order,
 ``Conn.connections[sid].order``, written by the device from the browser's
@@ -30,7 +31,12 @@ run, or no cell run of the cell, is idle.
 statuses ship again when the pane's run changes, the plane's cells change,
 one of the run's cell runs comes or goes, or one of its live cell runs
 starts: one small arm per live cell run watches its ``started_at``.
-Nothing of another plane or run wakes either. Level, no re-checks: a
+Nothing of another plane or run wakes either. The trail is the exception:
+any rename or move reships it (:func:`_trail`).
+
+**The trail is read here, not off the sidebar.** The sidebar ships only the
+branches a tab has open, so a pane under a closed branch would lose its
+crumbs. The pane climbs ``parent`` itself (:func:`trail`). Level, no re-checks: a
 missed notification leaves the display stale until the next change.
 
 **A cell's classes are read off its spec, here.** Each shipped cell carries
@@ -48,6 +54,7 @@ from nuspace import specs as spec_ops
 from nuspace.ops.brackets import atomic
 from nuspace.ops.interactions import Fabrics
 from nuspace.shapes import EXIT_FAILED, EXIT_INTERRUPTED, EXIT_KILLED, Space
+from nuspace.shapes.plane import ROOT
 from nuspace.specs import registered_name
 from nuspace.utils import keys_of
 from nuspace.web import ops as web
@@ -78,6 +85,7 @@ __all__ = [
     "plane_cells",
     "plane_view",
     "statuses",
+    "trail",
     "viewer_feed",
 ]
 
@@ -160,6 +168,29 @@ def plane_view(plane: nu.StrArg, specs: Iterable[CellSpec] = ()) -> nu.Dict:
     )
 
 
+class _Climb(nu.Shape):
+    """A climb up: the plane it stands on, the crumbs gathered above the start."""
+
+    at = nu.StrRef.slot()
+    crumbs = nu.ObjectRef.slot()
+
+
+def trail(plane: nu.StrArg, *, into: nu.Ref) -> nu.Nu:
+    """The planes above ``plane``, top first, as ``{id, title}``, set into ``into``. Bare term.
+
+    Climbs ``parent`` slots up to root, root left out: ``[]`` for a top
+    level plane and for no plane. Never the sidebar's tree, which holds only
+    the branches a tab has open. Cost: O(depth), one read a level.
+    """
+    at, crumbs = _Climb.at, _Climb.crumbs
+    rows = Space.planes
+    crumb = nu.Dict.of(id=nu.Str(at), title=rows[at].name.fallback(""))
+    step = crumbs.set(nu.List.of(crumb) + nu.List(crumbs)) >> at.set(rows[at].parent.fallback(""))
+    climb = nu.WhileDo((at != "").and_(at != ROOT), step)
+    start = rows[plane].parent.fallback("")
+    return nu.Frame(_Climb, climb >> into.set(nu.List(crumbs)), at=start, crumbs=nu.List.create())
+
+
 def _state(run: nu.StrArg, picked: nu.Str) -> nu.Str:
     """The browser state of a cell run of ``run``. ``picked`` of ``""`` (no cell run) is idle."""
     cr = Space.exec.cell_runs[picked]
@@ -229,6 +260,26 @@ def _plane(arms: Arms, viewer: Ref, plane: nu.Str, specs: Sequence[CellSpec]) ->
     ship = nu.let(atomic(plane_view(plane, specs)), show)
     changes = [atomic(Space.planes[plane].on_change()), atomic(Web.planes[plane].on_change())]
     return arms.states("plane", changes, ship)
+
+
+def _trail(arms: Arms, viewer: Ref, plane: nu.Str) -> nu.Nu:
+    """The pane's trail, shipped again when any plane is renamed or moved.
+
+    Broad on purpose: which planes sit above this one is itself what a move
+    changes, so there is no fixed set of rows to watch. A wake is one climb,
+    O(depth), and renames and moves are rare.
+    """
+
+    def ship(held: nu.ObjectRef) -> nu.Nu:
+        return atomic(trail(plane, into=held)) >> interactions.set_trail(
+            viewer, plane, nu.List(held)
+        )
+
+    changes = [
+        atomic(Space.planes.on_descendants_change("*", "name")),
+        atomic(Space.planes.on_descendants_change("*", "parent")),
+    ]
+    return arms.states("trail", changes, nu.let([], ship))
 
 
 def _status(arms: Arms, viewer: Ref, sid: nu.StrArg, plane: nu.Str) -> nu.Nu:
@@ -426,7 +477,9 @@ def viewer_feed(viewer: Ref, sid: nu.StrArg, specs: Iterable[CellSpec], toasts: 
     def shown(at: nu.Attr) -> nu.Nu:
         plane = nu.Str(at)
         return nu.ParallelAsync(
-            _plane(arms, viewer, plane, specs), _status(arms, viewer, sid, plane)
+            _plane(arms, viewer, plane, specs),
+            _status(arms, viewer, sid, plane),
+            _trail(arms, viewer, plane),
         )
 
     # One arm per open pane: a pane opened gets its plane and statuses

@@ -1,5 +1,5 @@
 // The viewer's `set_absent` landing in the node's props: it stands in for the
-// plane, and a `set_plane` replaces it. How an absent pane draws is
+// plane, and a `set_plane` replaces it. `set_trail` keeps beside both. How an absent pane draws is
 // ../pane/Absent.test.tsx.
 
 import { OPS } from "@nustackdev/ui-core";
@@ -27,6 +27,27 @@ describe("set_absent", () => {
 		applyViewerWrite(props, { op: "set_absent", plane_id: "p", reason: "odd" }, ["p"]);
 		applyViewerWrite(props, { op: "set_absent", plane_id: "q", reason: "headless" }, ["p"]);
 		expect(props.absent ?? {}).toEqual({});
+	});
+});
+
+describe("set_trail", () => {
+	const trail = (id: string, crumbs: unknown) => ({ op: "set_trail", plane_id: id, trail: crumbs });
+
+	it("keeps each open pane's trail apart from its plane, whichever lands first", () => {
+		const props: Record<string, unknown> = {};
+		applyViewerWrite(props, trail("p", [{ id: "a", title: "A" }, { title: "no id" }]), ["p"]);
+		applyViewerWrite(props, { op: "set_plane", plane_id: "p", title: "P", meta: {}, cells: [] }, [
+			"p",
+		]);
+		expect(props.trails).toEqual({ p: [{ id: "a", title: "A" }] });
+	});
+
+	it("drops a closed pane's trail, and one for a pane no longer open", () => {
+		const props: Record<string, unknown> = {};
+		applyViewerWrite(props, trail("p", [{ id: "a", title: "A" }]), ["p", "q"]);
+		applyViewerWrite(props, trail("q", []), ["q"]);
+		applyViewerWrite(props, trail("r", []), ["q"]);
+		expect(props.trails).toEqual({ q: [] });
 	});
 });
 

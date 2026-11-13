@@ -119,20 +119,6 @@ export function ancestorsOf(tree: PlaneTree, id: string): TreeRow[] {
 	return out.reverse();
 }
 
-/** One step of a pane's trail: an ancestor plane, by id and title. */
-export type Crumb = { id: string; title: string };
-
-/**
- * The planes above a plane, top first, as a pane's bar shows them: the
- * space row left out, since there is only ever the one. Empty for a plane
- * at the top, and for one the tree does not hold.
- */
-export function trailOf(tree: PlaneTree, id: string): Crumb[] {
-	return ancestorsOf(tree, id)
-		.filter((row) => row.kind !== KIND_SPACE)
-		.map((row) => ({ id: row.id, title: row.title }));
-}
-
 // -- Coercion ----------------------------------------------------------------
 
 export function coerceStrs(raw: unknown): string[] {
