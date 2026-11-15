@@ -2,15 +2,16 @@
 
 ## Packages shipped from this repo
 
-- **nuspace** (the runtime, the `nuspace` command) — 0.7.2
-- **nuspace-ui** (the compiled web bundle) — 0.7.2
+- **nuspace** (the runtime, the `nuspace` command) — 0.7.3
+- **nuspace-ui** (the compiled web bundle) — 0.7.3
 
 Below is the changelog for **nuspace** - the full commit stream. Newest first.
 The `nuspace-ui` wheel is the same source tree's vite output and is not tracked
 separately here.
 
-## Unreleased
+## 0.7.3 - 2026-11-16
 
+- Release nuspace and nuspace-ui 0.7.3
 - Home's Recent timeline shows the last hour, so long runs never hide short ones
 - System planes get minted ids, reserved keys and readable titles, found by key
 - Home execution rows and timeline lanes name their plane without linking to it
