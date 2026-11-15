@@ -584,6 +584,8 @@ def test_runs_shape_tones_window_and_open_runs():
     assert shaped["start"] < 400_000 < shaped["end"]
     assert shaped["note"] == ""
     assert all("count_label" not in lane for lane in shaped["lanes"])
+    # A lane names its plane, it is not a way into it.
+    assert all("href" not in lane for lane in shaped["lanes"])
 
 
 async def test_runs_and_now_leave_system_planes_out_but_count_their_runs_in_the_budget(store):
@@ -608,6 +610,8 @@ async def test_runs_and_now_leave_system_planes_out_but_count_their_runs_in_the_
     session = await _draw(store, now.draw())
     assert session.drawn()[(*NOW, "head", "count")] == {"value": "1 plane run"}
     assert _rows(session) == ["mine"]
+    # A row names its plane, it is not a way into it.
+    assert all("href" not in row["plane"] for row in _table(session))
 
 
 async def test_runs_redraw_on_a_new_run_and_not_while_idle(store):

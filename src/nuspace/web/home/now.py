@@ -7,7 +7,7 @@ Read off ``Space.exec.indexes.live`` alone, never history:
   are left out unless the viewer turns the switch on. The first
   :data:`ROWS` draw; the rest are counted for an honest ``+N more
   running``, in either mode. The walk is O(live runs).
-- **Per row:** the plane's icon and title; its cells as status squares,
+- **Per row:** the plane's icon and title, not a link; its cells as status squares,
   :data:`SQUARES` at most, then the full count; how many failed; the
   backend and the workers the run holds; how long it is up (a stamp the
   browser ticks); who asked.
@@ -18,7 +18,7 @@ Read off ``Space.exec.indexes.live`` alone, never history:
   a walk of that one plane's list.
 
 - **The table.** One data table keyed by run, each column drawing its
-  cells as a kind (a page link, status squares, a badge, a ticking
+  cells as a kind (the plane's mark and title, status squares, a badge, a ticking
   duration): a draw replaces the rows whole, so a run that ended goes
   with no erase of its own.
 - **The switch.** "System runs", off by default, on the section's head:
@@ -195,8 +195,8 @@ def read(system: nu.BoolArg = False) -> nu.Dict:
 def rows(got: object) -> list:
     """A read's rows as the table takes them: one mapping per run, keyed ``run``.
 
-    Each value is what its column's cell draws (:data:`COLUMNS`): the plane a
-    page link, the cells status square counts, a count of failed cells only
+    Each value is what its column's cell draws (:data:`COLUMNS`): the plane its
+    icon and title, never a link, the cells status square counts, a count of failed cells only
     when there are some (a blank cell draws nothing), the backend with the
     workers the run holds, the time up in ms.
     """
@@ -209,7 +209,7 @@ def rows(got: object) -> list:
         out.append(
             {
                 "run": str(row.get("run", "")),
-                "plane": dict(row.get("page") or {}),
+                "plane": _plane(row.get("page")),
                 "cells": {"counts": dict(row.get("squares") or {})},
                 "failed": compact(failed) if failed else "",
                 "backend": f"{row.get('backend') or ''}, {held}",
@@ -218,6 +218,12 @@ def rows(got: object) -> list:
             }
         )
     return out
+
+
+def _plane(got: object) -> dict:
+    """A row's plane as its cell draws it: icon and title, no href. A row is not a way into the plane."""
+    page = dict(got or {})
+    return {"title": str(page.get("title", "")), "icon": str(page.get("icon", ""))}
 
 
 #: ``Rows(read)``: :func:`rows` as a term.

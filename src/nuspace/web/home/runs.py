@@ -13,7 +13,8 @@ No run index of its own, read straight from ``Space.exec``, with caps:
   fill it, and then the lanes found so far show with a quiet note.
 - **Per lane.** One page of the plane's history log, newest first,
   :data:`PER_LANE` runs at most, each an interval from start to end,
-  colored by its exit. A run not ended reaches the window's end. A full
+  colored by its exit. A lane's label is the plane's icon and title, not
+  a link. A run not ended reaches the window's end. A full
   page says so: its count reads ``100+ runs``.
 - **Window.** From the oldest lane's newest run to now: variable, as long
   as it takes to show every lane.
@@ -207,7 +208,6 @@ def shape(got: object, now: object) -> dict:
             "id": str(p.get("id", "")),
             "title": str(p.get("title", "")),
             "icon": str(p.get("icon", "")),
-            "href": str(p.get("href", "")),
             "items": items,
         }
         if len(items) >= PER_LANE:
