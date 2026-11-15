@@ -1,4 +1,4 @@
-"""The supervisor's own state: the plane's id and a policy per supervised plane, kept in its plane's state."""
+"""The supervisor's own state: the plane's key and a policy per supervised plane, kept in its plane's state."""
 
 from __future__ import annotations
 
@@ -7,11 +7,11 @@ import nustd.kv
 from nuspace.places import at
 
 
-__all__ = ["ALWAYS", "ON_FAILURE", "PLANE", "POLICIES", "Policy", "Supervised", "supervised"]
+__all__ = ["ALWAYS", "KEY", "ON_FAILURE", "POLICIES", "Policy", "Supervised", "supervised"]
 
 
-#: The plane's id, fixed.
-PLANE = "supervisor"
+#: The plane's key. Its id is minted when it is made; code finds it by this.
+KEY = "supervisor"
 
 
 #: Restart after a failed exit only.
@@ -40,11 +40,14 @@ class Supervised(nu.Shape):
 
 
 class Policy(nu.Shape):
-    """The supervisor's state, at ``State.planes["supervisor"]``: the supervised planes by id."""
+    """The supervisor's state, in its plane's state: the supervised planes by id."""
 
     planes = nustd.kv.DictRef.slot(Supervised)
 
 
-def supervised() -> nu.Nu:
-    """The supervised planes' ref: ``State.planes["supervisor"]`` read through :class:`Policy`."""
-    return at.plane(id=PLANE).state(Policy).planes
+def supervised(*, here: bool = False) -> nu.Nu:
+    """The supervised planes' ref, found by key: one index read. ``here``: the running plane's, no read.
+
+    ``here`` is for the supervisor's own cell; every other caller finds the plane by key.
+    """
+    return (at.plane if here else at.plane(KEY)).state(Policy).planes

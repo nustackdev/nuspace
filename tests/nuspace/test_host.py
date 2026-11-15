@@ -393,10 +393,13 @@ def test_make_space_seeds_a_fresh_space_and_keeps_an_existing_one(tmp_path):
     info = _read(root, Space.info.extract())
     assert info["format"] == FORMAT
     planes = set(_read(root, nu.list(Space.planes.keys())))
-    assert {"root", init.PLANE, _read(root, Web.roles["home"])} <= planes
-    assert set(_read(root, nu.list(init.boot_list().keys()))) == set(init.BOOTED)
+    keyed = {key: _read(root, nuspace.plane.keyed(key)) for key in (init.KEY, *init.BOOTED)}
+    assert {"root", keyed[init.KEY], _read(root, Web.roles["home"])} <= planes
+    booted = {keyed[key] for key in init.BOOTED}
+    assert set(_read(root, nu.list(init.boot_list().keys()))) == booted
     # A second make keeps what is there: a booted plane stays booted.
-    _write(root, host.STATE_STORE, init.boot_list().set_item("mine", True))
+    booting = nuspace.at.plane(id=keyed[init.KEY]).state(init.Boot).planes
+    _write(root, host.STATE_STORE, booting.set_item("mine", True))
     _make(root)
     assert "mine" in _read(root, nu.list(init.boot_list().keys()))
     assert _read(root, Space.info.created_at) == info["created_at"]
@@ -503,7 +506,9 @@ async def test_a_clean_close_ends_what_is_live_so_the_reopen_reaps_nothing(tmp_p
         planes = {
             (await nu.arun(nuspace.atomic(Space.exec.plane_runs[r].plane), ctx))[0] for r in runs
         }
-        assert planes == {init.PLANE, *init.BOOTED}
+        keyed = [nuspace.plane.keyed(key) for key in (init.KEY, *init.BOOTED)]
+        ids = {(await nu.arun(nuspace.atomic(k), ctx))[0] for k in keyed}
+        assert planes == ids
         with pytest.raises(Refused, match="open already in this process"):
             await nu.arun(host.headless(root))
     finally:

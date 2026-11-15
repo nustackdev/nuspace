@@ -14,12 +14,12 @@ __all__ = ["RESERVED", "ROOT", "Plane"]
 #: remove), has no backend (no run) and no parent of its own (``""``).
 ROOT = "root"
 
-#: Plane ids only nuspace's own planes take: ``plane.add`` refuses them
-#: unless ``system=True``. The system planes' (``nuspace.system``), then the
-#: web device's (``nuspace.web.planes``): the searches folder, the
-#: home indexer and the desk pruner. Home, search and settings have minted
-#: ids, found through the web device's roles. Root's id and ``""`` are
-#: refused for every add.
+#: Plane keys only nuspace's own planes hold: ``plane.add`` and ``plane.set_key``
+#: refuse them unless the plane is system. The system planes'
+#: (``nuspace.system``), then the web device's (``nuspace.web.planes``): the
+#: searches folder, the home indexer and the desk pruner. Their ids are
+#: minted like any plane's; code finds them by key. Home, search and
+#: settings are found through the web device's roles.
 RESERVED = frozenset(
     {
         "init",

@@ -1,7 +1,7 @@
 """The reactions plane: runs a plane when something changes. No engine of its own.
 
 The plane runs its cells like any plane, on the ``async`` backend, and
-init boots it. Its first cell, :data:`PARK`, runs ``nu.Park()``: it never
+init boots it. Its first cell, ``park``, runs ``nu.Park()``: it never
 ends, so the plane run stays live with no reactions at all, and reload
 gives each new reaction cell its first run in it. Every other cell is a
 reaction (see :mod:`.ops`), whose program is :func:`react`::
@@ -30,14 +30,11 @@ from nuspace.places import at
 from nuspace.shapes import Space
 from nuspace.utils.policies import restarting
 
-from .shapes import PLANE, Reaction
+from .shapes import KEY, Reaction
 
 
-__all__ = ["BACKEND", "PARK", "PARK_PROG", "react", "up_plane"]
+__all__ = ["BACKEND", "PARK_PROG", "react", "up_plane"]
 
-
-#: Its fixed first cell, the one that keeps its run live.
-PARK = "reactions_park"
 
 #: What its runs execute on.
 BACKEND = "async"
@@ -99,4 +96,4 @@ def react(change: nu.Nu, plane: nu.StrArg, reaction: nu.StrArg) -> nu.Nu:
         reaction: The reaction's id.
     """
     flow = nu.ReactEvery(atomic(change), up_plane(plane, reaction))
-    return restarting(flow, PLANE, reaction)
+    return restarting(flow, KEY, reaction)

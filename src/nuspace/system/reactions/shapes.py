@@ -1,4 +1,4 @@
-"""The reactions plane's own state: the plane's id, its reactions by the plane they run, and each reaction's plane."""
+"""The reactions plane's own state: the plane's key, its reactions by the plane they run, and each reaction's plane."""
 
 from __future__ import annotations
 
@@ -7,11 +7,11 @@ import nustd.kv
 from nuspace.places import at
 
 
-__all__ = ["PLANE", "Reaction", "ReactionIds", "Registry", "registry"]
+__all__ = ["KEY", "Reaction", "ReactionIds", "Registry", "registry"]
 
 
-#: The plane's id, fixed.
-PLANE = "reactions"
+#: The plane's key. Its id is minted when it is made; code finds it by this.
+KEY = "reactions"
 
 
 class Reaction(nu.Shape):
@@ -34,7 +34,7 @@ class ReactionIds(nu.Shape):
 
 
 class Registry(nu.Shape):
-    """The reactions plane's state, at ``State.planes["reactions"]``.
+    """The reactions plane's state, in its plane's state.
 
     ``by_plane[plane].ids`` lists the reactions that run ``plane``, what
     ``reactions.clear(plane)`` reads.
@@ -44,5 +44,5 @@ class Registry(nu.Shape):
 
 
 def registry() -> Registry:
-    """The plane's state: ``State.planes["reactions"]`` read through :class:`Registry`."""
-    return at.plane(id=PLANE).state(Registry)
+    """The plane's state, found by key: one index read. Read through :class:`Registry`."""
+    return at.plane(KEY).state(Registry)

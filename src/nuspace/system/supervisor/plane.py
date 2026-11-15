@@ -1,6 +1,6 @@
 """The supervisor plane: restarts the planes it supervises when their runs end.
 
-One cell, :data:`CELL`, runs :func:`driver`: one arm per supervised plane
+One cell, ``main``, runs :func:`driver`: one arm per supervised plane
 (:class:`~.shapes.Policy`), births and deaths included. An arm keeps one
 plane run of its plane ``by`` supervisor, remembers its id
 (``Supervised.run``), and only ever reads that run:
@@ -43,7 +43,7 @@ from nuspace.shapes import EXIT_FAILED, EXIT_OK, Space
 from nuspace.utils import keys_of
 from nuspace.utils.policies import restarting
 
-from .shapes import ALWAYS, PLANE, supervised
+from .shapes import ALWAYS, KEY, supervised
 
 
 __all__ = [
@@ -51,14 +51,10 @@ __all__ = [
     "BACKOFF_CAP",
     "BACKOFF_START",
     "BY",
-    "CELL",
     "PROG",
     "driver",
 ]
 
-
-#: Its one cell's id, fixed.
-CELL = "supervisor_main"
 
 #: What its runs execute on.
 BACKEND = "mp"
@@ -99,7 +95,7 @@ def _start(plane: nu.Str, mine: nu.Str) -> nu.Nu:
     supervise) refuses the second, and the run just asked for, tracked by
     nobody, is stopped.
     """
-    row = supervised()[plane]
+    row = supervised(here=True)[plane]
     still = row.policy.exists().and_(row.run.fallback("") == mine)
 
     def write(new: nu.ObjectRef) -> nu.Nu:
@@ -120,7 +116,7 @@ def _wait(plane: nu.Str) -> nu.Nu:
     delay = _Arm.delay
     doubled = delay * 2.0
     backoff = nu.Delay(delay) >> delay.set(nu.If(doubled > BACKOFF_CAP, BACKOFF_CAP, doubled))
-    fixed = supervised()[plane].delay
+    fixed = supervised(here=True)[plane].delay
 
     def wait(given: nu.ObjectRef) -> nu.Nu:
         return nu.IfDo(nu.Float(given) >= 0.0, nu.Delay(given), backoff)
@@ -134,7 +130,7 @@ def _pass(plane: nu.Str) -> nu.Nu:
     Level: what it does follows from the state alone, so a pass with
     nothing new does nothing.
     """
-    row = supervised()[plane]
+    row = supervised(here=True)[plane]
     runs = Space.exec.plane_runs
     up = row.policy.exists().and_(ops.plane.exists(plane))
 
@@ -165,11 +161,11 @@ def _arm(plane: nu.Str) -> nu.Nu:
     plane made later, or removed). The backoff lives across passes.
     """
     changes = nu.OnAny(
-        atomic(supervised().on_child_change(plane)),
+        atomic(supervised(here=True).on_child_change(plane)),
         atomic(ops.plane_run.on_live_change(plane=plane)),
         atomic(Space.planes.on_child_change(plane)),
     )
-    held = restarting(nu.Reconcile(changes, _pass(plane), **_RECHECK), PLANE, plane)
+    held = restarting(nu.Reconcile(changes, _pass(plane), **_RECHECK), KEY, plane)
     return nu.Frame(_Arm, held, delay=BACKOFF_START)
 
 
@@ -180,7 +176,7 @@ def driver() -> nu.Nu:
     the driver runs again (``restarting``). Cost: per supervised plane, a
     few point reads a pass.
     """
-    planes = supervised()
+    planes = supervised(here=True)
     listed = keys_of(planes)
     arms = nu.ReconcileLatestEach(
         atomic(listed),
@@ -188,4 +184,4 @@ def driver() -> nu.Nu:
         lambda p: _arm(nu.Str(p)),
         **_RECHECK,
     )
-    return restarting(arms, PLANE)
+    return restarting(arms, KEY)

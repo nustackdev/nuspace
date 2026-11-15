@@ -6,12 +6,13 @@ Home, settings and search are web planes found through roles
 (``Web.roles``), never by id: each has a minted plane id, is system
 (remove refuses it), runs on the async backend and is made with fixed
 cells. The sidebar draws them in its nav section, out of the tree.
-``searches`` is the system plane every search hangs under; it is not on
-the web. ``home_indexer`` (:mod:`..home.indexer`) is not on the web either: a
-system plane two reactions run, counting what Home shows. Nor is
-``desk_pruner`` (:mod:`..desks.pruner`): a system plane one reaction runs, taking
-removed planes off the desks. Those three keep reserved ids
-(:data:`~nuspace.shapes.plane.RESERVED`).
+Searches is the system plane every search hangs under; it is not on the
+web. The home indexer (:mod:`..home.indexer`) is not on the web either: a
+system plane two reactions run, counting what Home shows. Nor is the desk
+pruner (:mod:`..desks.pruner`): a system plane one reaction runs, taking
+removed planes off the desks. Those three have minted ids like any plane
+and reserved keys (:data:`~nuspace.shapes.plane.RESERVED`): code finds
+them by key.
 
 :func:`ensure` makes each one where missing, with its cells and its web
 row, and leaves one that is there exactly as it is: after the first open
@@ -24,11 +25,9 @@ from __future__ import annotations
 
 import nu
 import nuspace
-from nuspace.errors import Refused
 from nuspace.ops.brackets import atomic
 from nuspace.shapes.space import Space
 from nuspace.utils import MintId
-from nuspace.utils.checks import refuse
 
 from .. import desks
 from .. import ops as web
@@ -50,24 +49,14 @@ from .settings import NAME as SETTINGS_NAME
 
 __all__ = [
     "BACKEND",
-    "INDEXER",
     "PLANES",
-    "PRUNER",
     "SEARCHES",
-    "cell_id",
     "ensure",
     "ensure_favorites",
     "ensure_indexer",
     "ensure_pruner",
     "role_plane",
 ]
-
-#: The home indexer's plane id.
-INDEXER = indexer.PLANE
-
-#: The desk pruner's plane id.
-PRUNER = pruner.PLANE
-
 
 #: What the web planes' runs execute on: their cells await, they never block.
 BACKEND = "async"
@@ -78,14 +67,6 @@ PLANES = (
     ("search", SEARCH_NAME, SEARCH_ICON, SEARCH_CELLS),
     ("settings", SETTINGS_NAME, SETTINGS_ICON, SETTINGS_CELLS),
 )
-
-
-def cell_id(plane: str, name: str) -> str:
-    """The fixed id of a reserved plane's cell: the plane's id, then the cell's name.
-
-    Under the plane's id, so two planes' cells of one name never meet.
-    """
-    return f"{plane}_{name}"
 
 
 def role_plane(role: nu.StrArg) -> nu.Str:
@@ -122,8 +103,8 @@ def _role(role: str, name: str, icon: str, cells: tuple[tuple[str, str], ...]) -
     return nu.IfDo(nu.Bool(atomic(there)).not_(), nu.let(MintId("p"), made))
 
 
-def _reserved(
-    plane: str,
+def _keyed(
+    key: str,
     name: str,
     icon: str,
     cells: tuple[tuple[str, str], ...],
@@ -131,22 +112,19 @@ def _reserved(
     backend: str,
     fabrics: tuple[str, ...] = ("ui",),
 ) -> nu.Nu:
-    """A plane with a reserved id and its cells where missing, one Space commit. Not on the web.
+    """A system plane with a reserved key and its cells, minted ids, when no plane holds the key.
 
-    Raises:
-        Refused: The id is held by a plane that is not system.
+    One Space commit. Not on the web.
     """
-    there = nuspace.plane.exists(plane, removed=True)
-    alien = there.and_(Space.planes[plane].system.fallback(False).not_())
-    adds = nuspace.plane.add(plane, name=name, icon=icon, backend=backend, system=True)
-    for cell, source in cells:
-        adds = adds >> nuspace.cell.add(
-            plane, source, id=cell_id(plane, cell), name=cell, fabrics=list(fabrics)
-        )
-    return atomic(
-        refuse(alien, Refused, "plane ", plane, " is taken by a plane that is not system")
-        >> nu.IfDo(there.not_(), adds)
-    )
+
+    def made(minted: nu.ObjectRef) -> nu.Nu:
+        plane = nu.Str(minted)
+        adds = nuspace.plane.add(plane, key=key, name=name, icon=icon, backend=backend, system=True)
+        for cell, source in cells:
+            adds = adds >> nuspace.cell.add(plane, source, name=cell, fabrics=list(fabrics))
+        return adds
+
+    return atomic(nu.IfDo(nuspace.plane.keyed(key) == "", nu.let(MintId("p"), made)))
 
 
 def ensure() -> nu.Nu:
@@ -158,12 +136,9 @@ def ensure() -> nu.Nu:
     (:func:`~..home.indexer.ensure_reactions`), one for the pruner, then its
     reaction where not kept yet (:func:`~..desks.pruner.ensure_reaction`), then
     one for Favorites on the first open (:func:`ensure_favorites`).
-
-    Raises:
-        Refused: A reserved id held by a plane that is not system.
     """
     roles = [_role(*spec) for spec in PLANES]
-    folder = _reserved(SEARCHES, SEARCHES_NAME, "", (), backend=SEARCHES_BACKEND)
+    folder = _keyed(SEARCHES, SEARCHES_NAME, "", (), backend=SEARCHES_BACKEND)
     return nu.Sequential(*roles, folder, ensure_indexer(), ensure_pruner(), ensure_favorites())
 
 
@@ -172,8 +147,8 @@ def ensure_indexer() -> nu.Nu:
 
     Needs no web store: the indexer is not on the web.
     """
-    plane = _reserved(
-        indexer.PLANE,
+    plane = _keyed(
+        indexer.KEY,
         indexer.NAME,
         indexer.ICON,
         indexer.CELLS,
@@ -188,8 +163,8 @@ def ensure_pruner() -> nu.Nu:
 
     Not on the web: it writes the Web store, it is never shown.
     """
-    plane = _reserved(
-        pruner.PLANE,
+    plane = _keyed(
+        pruner.KEY,
         pruner.NAME,
         pruner.ICON,
         pruner.CELLS,

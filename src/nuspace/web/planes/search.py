@@ -3,7 +3,7 @@
 Search is by kind, never by CellSpec or by who made a cell. Three parts,
 all planes and cells:
 
-- **a search**: a plane under the system plane :data:`SEARCHES`, made by
+- **a search**: a plane under the system plane keyed :data:`SEARCHES`, made by
   :func:`search`. Not on the web. What it asks is plain data, per kind name
   the ``match`` keywords given, kept in its plane state (:class:`Search`),
   and its one cell, named :data:`CELL`, looks: per kind it walks the
@@ -83,7 +83,7 @@ __all__ = [
 ]
 
 
-#: The system plane every search hangs under. Not on the web.
+#: The key of the system plane every search hangs under. Not on the web. Its id is minted.
 SEARCHES = "searches"
 
 #: What it is called.
@@ -290,12 +290,12 @@ def search(
     name: nu.StrArg | None = None,
     into: nu.Ref | None = None,
 ) -> nu.Nu:
-    """Search the space: a new search plane under :data:`SEARCHES`, its state set, its run asked for.
+    """Search the space: a new search plane under the plane keyed :data:`SEARCHES`, its state set, its run asked for.
 
     A wrapper that brackets itself, run it on its own: three commits in a
     row, the plane with its cell (Space), then its state (State), then its
     run (Space). The run does the searching. The new search is the newest
-    child of :data:`SEARCHES`, where the viewer finds it.
+    child of the plane keyed :data:`SEARCHES`, where the viewer finds it.
 
     Args:
         request: Per kind name, the ``match`` keywords given, plain data: a
@@ -318,7 +318,8 @@ def search(
 
     def made(minted: nu.ObjectRef, cell: nu.ObjectRef, text: nu.ObjectRef) -> nu.Nu:
         pid, cid = nu.Str(minted), nu.Str(cell)
-        plane = nuspace.plane.add(pid, parent=SEARCHES, name=called, backend=SEARCHES_BACKEND)
+        folder = nuspace.plane.keyed(SEARCHES)
+        plane = nuspace.plane.add(pid, parent=folder, name=called, backend=SEARCHES_BACKEND)
         made_cell = nuspace.cell.add(pid, nu.Str(text), id=cid, name=CELL, fabrics=[])
         state = nuspace.at.plane(id=pid).state(Search)
         steps = (
@@ -534,7 +535,7 @@ SEARCH = View.head[1].to(ui.SelectRef.slot(placeholder="No searches yet"))
 
 def newest_first():
     # The newest searches, one page off the folder's children.
-    kids = nuspace.Space.planes[search.SEARCHES].children
+    kids = nuspace.Space.planes[nuspace.plane.keyed(search.SEARCHES)].children
     return kids.reversed_keys(limit=LISTED).iter().filter(lambda s: nuspace.plane.exists(s)).to_list()
 
 
@@ -576,7 +577,7 @@ def pick():
 
 def out():
     # Searches are made anywhere: redraw when the list of them may have changed.
-    made = nuspace.Space.planes[search.SEARCHES].children.on_change()
+    made = nuspace.Space.planes[nuspace.plane.keyed(search.SEARCHES)].children.on_change()
     return nu.ParallelAsync(
         nu.ReactEvery(SEARCH.on_change(), pick()),
         nu.Reconcile(nuspace.atomic(made), draw()),

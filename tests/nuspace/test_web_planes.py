@@ -158,9 +158,10 @@ async def test_ensure_then_home_is_a_system_web_plane(store):
     with pytest.raises(nuspace.errors.Refused):
         await do(store, nuspace.plane.remove(home_plane))
     with pytest.raises(nuspace.errors.Refused):
-        await do(store, nuspace.plane.add("searches", backend="async"))
-    # The role names are no reserved ids any more: a user plane may take one.
+        await do(store, nuspace.plane.add(key=search.SEARCHES, backend="async"))
+    # No name is a reserved id: a user plane may take one.
     await do(store, nuspace.plane.add("home", backend="async"))
+    await do(store, nuspace.plane.add("searches", backend="async"))
 
 
 # --- Search ---------------------------------------------------------------------------
@@ -213,7 +214,8 @@ async def test_search_makes_a_plane_under_searches_its_state_and_its_run(store):
     request = {NOTE: {"text": "tomato"}}
     pid = await _searched(store, request)
     row = await store.read(Space.planes[pid].extract())
-    assert row["parent"] == search.SEARCHES and row["name"] == "Note: tomato"
+    folder = await store.read(nuspace.plane.keyed(search.SEARCHES))
+    assert row["parent"] == folder and row["name"] == "Note: tomato"
     assert row["backend"] == search.SEARCHES_BACKEND
     assert await store.read(web.Web.planes.contains(pid)) is False
     (cell,) = await store.read(nu.list(Space.planes[pid].cells.keys()))
@@ -354,7 +356,7 @@ async def test_the_forms_button_makes_a_search_of_what_was_filled_in(store):
         (*FORM_MORE, "0", "done", "control"): True,
     }
     await _framed(store, _viewer(search.FORM, "go"), values)
-    kids = Space.planes[search.SEARCHES].children
+    kids = Space.planes[nuspace.plane.keyed(search.SEARCHES)].children
     (pid,) = await store.read(nu.list(kids.keys()))
     state = nuspace.at.plane(id=pid).state(search.Search)
     assert await store.read(state.request) == {NOTE: {"text": "tomato", "done": True}}

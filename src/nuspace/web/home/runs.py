@@ -16,8 +16,10 @@ No run index of its own, read straight from ``Space.exec``, with caps:
   colored by its exit. A lane's label is the plane's icon and title, not
   a link. A run not ended reaches the window's end. A full
   page says so: its count reads ``100+ runs``.
-- **Window.** From the oldest lane's newest run to now: variable, as long
-  as it takes to show every lane.
+- **Window.** From the oldest lane's newest run to now, at most the last
+  :data:`WINDOW`: the lanes are read the same, only the drawing is cut, so
+  a long run never squeezes the recent ones out of sight. A run that
+  started earlier is drawn from the window's start.
 
 Drawn by the ``now`` cell (:mod:`.now`), under Execution, beside Now:
 one "System runs" switch, the section's, sets both. No live styling: Now
@@ -49,6 +51,7 @@ __all__ = [
     "PAGE",
     "PER_LANE",
     "TONES",
+    "WINDOW",
     "Recent",
     "changes",
     "collect",
@@ -67,6 +70,9 @@ PER_LANE = 100
 
 #: Most runs the walk for lanes reads.
 BUDGET = 10_000
+
+#: The longest the timeline reaches back, in seconds: the last hour.
+WINDOW = 3600.0
 
 #: Runs one step of the walk reads.
 PAGE = 500
@@ -183,7 +189,8 @@ def shape(got: object, now: object) -> dict:
     A lane whose page came back full reads ``"100+ runs"`` (``count_label``).
 
     The window runs from the oldest lane's newest run to ``now`` (seconds),
-    a little before so that run shows, and never under a minute.
+    a little before so that run shows, never under a minute and never past
+    :data:`WINDOW` back.
     """
     data = dict(got or {})
     end = float(now or time.time())
@@ -216,7 +223,7 @@ def shape(got: object, now: object) -> dict:
         out.append(lane)
     oldest = min(newest) if newest else end - 3600
     span = max(end - oldest, 60.0)
-    start = end - span * 1.04
+    start = max(end - span * 1.04, end - WINDOW)
     notes = []
     if data.get("cut"):
         notes.append(

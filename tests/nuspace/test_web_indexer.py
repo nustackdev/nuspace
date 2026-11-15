@@ -16,6 +16,7 @@ import time
 import pytest
 from _support.kernel import opened
 from _support.made import MADE
+from _support.system import as_indexer, catch_up, keyed
 
 import nu
 import nuspace
@@ -109,8 +110,9 @@ async def test_minted_ids_page_in_mint_order_forward_and_newest_first_back(store
 
 
 async def test_a_space_never_indexed_reads_counting(store):
+    await store.run(ensure_indexer())
     assert await store.read(STATE.cursor.cell.fallback("")) == ""
-    await store.run(indexer.catch_up())
+    await catch_up(store)
     assert await totals(store) == {"planes": 0, "cells": 0, "specs": 0}
 
 
@@ -121,7 +123,7 @@ async def test_the_first_run_on_an_existing_space_matches_a_brute_count(store):
         for _ in range(4):
             await cell(store, p)
     await do(store, nuspace.plane.remove(made[4]))
-    await store.run(indexer.catch_up(specs=7))
+    await catch_up(store, specs=7)
     got = await totals(store)
     assert (got["planes"], got["cells"]) == await brute(store) == (5, 12)
     assert got["specs"] == 7
@@ -129,10 +131,11 @@ async def test_the_first_run_on_an_existing_space_matches_a_brute_count(store):
 
 
 async def test_fixed_ids_are_skipped(store):
+    await store.run(ensure_indexer())  # its own plane first, so the cursor ends on the test's
     await do(store, nuspace.plane.add("fixed", backend="async"))
     await do(store, nuspace.cell.add("fixed", "x = 1", id="kept", fabrics=[]))
     minted = await plane(store)
-    await store.run(indexer.catch_up())
+    await catch_up(store)
     got = await totals(store)
     assert (got["planes"], got["cells"]) == (1, 0)
     assert await store.read(STATE.cursor.plane) == minted
@@ -141,25 +144,26 @@ async def test_fixed_ids_are_skipped(store):
 async def test_incremental_adds_count_only_what_is_new(store):
     p = await plane(store)
     await cell(store, p)
-    await store.run(indexer.catch_up())
+    await catch_up(store)
     first = await totals(store)
     assert (first["planes"], first["cells"]) == (1, 1)
     q = await plane(store)
     await cell(store, q)
     await cell(store, q)
-    await store.run(indexer.catch_up())
+    await catch_up(store)
     got = await totals(store)
     assert (got["planes"], got["cells"]) == (2, 3)
     # A run with nothing new changes nothing.
-    await store.run(indexer.catch_up())
+    await catch_up(store)
     assert await totals(store) == got
 
 
 async def test_paged_counts_are_exact(store):
+    await store.run(ensure_indexer())  # its own plane first, so the cursor ends on the test's
     made = [await plane(store) for _ in range(7)]
     for p in made:
         await cell(store, p)
-    await store.run(indexer.catch_up(limit=3))
+    await catch_up(store, limit=3)
     got = await totals(store)
     assert (got["planes"], got["cells"]) == (7, 7)
     assert await store.read(STATE.cursor.plane) == made[-1]
@@ -173,7 +177,7 @@ async def test_days_bucket_by_local_created_date_across_midnight(store):
         await do(store, Space.planes[p].created_at.set(stamp))
     c = await cell(store, made[0])
     await do(store, Space.cells[c].created_at.set(midnight - 1))
-    await store.run(indexer.catch_up())
+    await catch_up(store)
     assert await calendar(store) == {
         "2026-03-07": {"planes": 1},
         "2026-03-08": {"planes": 1, "cells": 1},
@@ -186,10 +190,10 @@ async def test_days_bucket_by_local_created_date_across_midnight(store):
 async def test_planes_from_specs_are_counted(store):
     made = [await plane(store) for _ in range(3)]
     await do(store, Space.planes[made[0]].spec.set("testing.thing"))
-    await store.run(indexer.catch_up())
+    await catch_up(store)
     later = await plane(store)
     await do(store, Space.planes[later].spec.set("testing.thing"))
-    await store.run(indexer.catch_up())
+    await catch_up(store)
     assert (await totals(store))["from_specs"] == 2
 
 
@@ -198,7 +202,7 @@ async def test_cells_of_system_planes_are_not_counted(store):
     p = await plane(store)
     await cell(store, p)
     await store.run(reactions.add(indexer.PLANES_ADDED, p))
-    await store.run(indexer.catch_up())
+    await catch_up(store)
     got = await totals(store)
     assert (got["planes"], got["cells"]) == (1, 1)
 
@@ -208,11 +212,11 @@ async def test_a_page_whose_commit_fails_counts_nothing_and_its_retry_counts_onc
     await cell(store, p)
     crashed = nuspace.atomic(indexer.step() >> nu.Raise(nu.Str("crash before the commit")))
     with pytest.raises(Exception, match="crash before the commit"):
-        await store.run(crashed)
+        await as_indexer(store, crashed)
     assert await store.read(STATE.cursor.plane.exists()) is False
     assert await calendar(store) == {}
-    await store.run(indexer.catch_up())
-    await store.run(indexer.catch_up())
+    await catch_up(store)
+    await catch_up(store)
     got = await totals(store)
     assert (got["planes"], got["cells"]) == (1, 1)
     assert await calendar(store) == {day_of(time.time()): {"planes": 1, "cells": 1}}
@@ -223,14 +227,16 @@ async def test_a_page_whose_commit_fails_counts_nothing_and_its_retry_counts_onc
 
 async def test_ensure_makes_the_indexer_off_the_web_with_two_reactions_once(store):
     await store.run(system.ensure() >> ensure())
-    row = await store.read(Space.planes[indexer.PLANE].extract())
+    pid = await keyed(store, indexer.KEY)
+    row = await store.read(Space.planes[pid].extract())
     assert row["system"] is True and row["backend"] == indexer.BACKEND
-    assert await store.read(nuspace.web.Web.planes.contains(indexer.PLANE)) is False
+    assert (row["key"], row["name"]) == (indexer.KEY, indexer.NAME)
+    assert await store.read(nuspace.web.Web.planes.contains(pid)) is False
     with pytest.raises(nuspace.errors.Refused):
-        await do(store, nuspace.plane.remove(indexer.PLANE))
+        await do(store, nuspace.plane.remove(pid))
     kept = await store.read(STATE.reactions.extract())
     assert set(kept) == {"planes", "cells"}
-    listed = reactions.registry().by_plane[indexer.PLANE].ids
+    listed = reactions.registry().by_plane[pid].ids
     assert set(await store.read(nu.list(listed.keys()))) == set(kept.values())
     # A second open adds nothing.
     await store.run(ensure())
@@ -240,7 +246,7 @@ async def test_ensure_makes_the_indexer_off_the_web_with_two_reactions_once(stor
 
 async def test_ensure_without_a_reactions_plane_adds_no_reaction(store):
     await store.run(ensure())
-    assert await store.read(Space.planes.contains(indexer.PLANE)) is True
+    assert await keyed(store, indexer.KEY) != ""
     assert await store.read(STATE.reactions.exists()) is False
 
 
@@ -265,7 +271,7 @@ async def test_planes_and_cells_added_wake_it_and_runs_do_not():
         def listening(rows: list) -> bool:
             return all(r in rows for r in kept.values())
 
-        await k.until(lambda: _live_cells(k, reactions.PLANE), listening, SLOW)
+        await k.until(lambda: _live_cells(k, nuspace.plane.keyed(reactions.KEY)), listening, SLOW)
         # A reaction is live a moment before its flow listens: add until one gets through.
         deadline = time.monotonic() + SLOW
         for _ in itertools.count():
@@ -339,7 +345,7 @@ async def test_an_open_counts_an_existing_space_with_no_indexer_state(tmp_path):
 
     for _ in range(2):
         await _on_disk(root, nu.let("", plane_and_cell))
-    assert await _on_disk(root, nuspace.atomic(STATE.exists())) is False
+    assert await _on_disk(root, nuspace.atomic(nuspace.plane.keyed(indexer.KEY))) == ""
     term = host.serve(
         root, open_browser=False, static=None, port=_free_port(), extensions=(), spares=0
     )
@@ -386,6 +392,6 @@ def _listed(ids) -> nu.Nu:
 
 async def _runs(k) -> dict:
     """The indexer's plane runs, each with who asked for it."""
-    ids = Space.exec.indexes.history.plane_to_plane_runs[indexer.PLANE].runs
+    ids = Space.exec.indexes.history.plane_to_plane_runs[nuspace.plane.keyed(indexer.KEY)].runs
     listed = await k.read(_listed(ids))
     return {r: await k.read(Space.exec.plane_runs[r].by) for r in listed}

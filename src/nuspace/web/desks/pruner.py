@@ -1,6 +1,6 @@
 """The desk pruner: takes removed planes off every desk, with no browser open.
 
-A plane with the fixed id :data:`PLANE`, made at open where missing
+A plane keyed :data:`KEY` (its id minted), made at open where missing
 (:mod:`nuspace.web.planes`). It is system (remove refuses it), runs on ``async``, and
 is not on the web, so the sidebar never lists it. One reaction wakes it:
 on ``Space.indexes.removed``, the log every plane remove appends to. The
@@ -27,13 +27,13 @@ when a remove landed during it, so nothing waits for the next remove.
 A system plane is never removed, so it is never pruned. A plane id with no
 row is left on its desk: only a removed plane is pruned.
 
-State, at ``State.planes["desk_pruner"]`` (:class:`Pruner`): the reaction's
+State, in its plane's state (:class:`Pruner`): the reaction's
 id, kept so :func:`ensure_reaction` adds it once.
 """
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 
 import nu
 import nustd.kv
@@ -50,11 +50,10 @@ from .ops import write_items
 
 __all__ = [
     "BACKEND",
-    "CELL",
     "CELLS",
     "ICON",
+    "KEY",
     "NAME",
-    "PLANE",
     "PROG",
     "REMOVED",
     "SETTLE",
@@ -71,8 +70,8 @@ __all__ = [
 ]
 
 
-#: The plane id, fixed and reserved.
-PLANE = "desk_pruner"
+#: The plane's key, reserved. Its id is minted when it is made; code finds it by this.
+KEY = "desk_pruner"
 
 #: What the plane is called.
 NAME = "Desk pruner"
@@ -83,16 +82,13 @@ ICON = ""
 #: What its runs execute on: its pass awaits the stores, it never blocks.
 BACKEND = "async"
 
-#: Its one cell's name, and its fixed id (``<plane>_<name>``, as the web planes' cells).
-CELL = "main"
-
 #: The cell's prog: a shim, the code is here.
 PROG = """\
 from nuspace.web.desks.pruner import out
 """
 
 #: The plane's cells, as ``(name, source)``.
-CELLS = ((CELL, PROG),)
+CELLS = (("main", PROG),)
 
 #: How long a run waits before its pass, in seconds: removes landing in it share the pass.
 SETTLE = 0.5
@@ -102,14 +98,14 @@ REMOVED = "Space.indexes.removed.on_children_change()"
 
 
 class Pruner(nu.Shape):
-    """The pruner's state, at ``State.planes["desk_pruner"]``: the id of the reaction that wakes it."""
+    """The pruner's state, in its plane's state: the id of the reaction that wakes it."""
 
     reaction = nustd.kv.StrRef.slot()
 
 
 def pruner() -> Pruner:
-    """The pruner's state: ``State.planes["desk_pruner"]`` read through :class:`Pruner`."""
-    return at.plane(id=PLANE).state(Pruner)
+    """The pruner's state, found by key: one index read. Read through :class:`Pruner`."""
+    return at.plane(KEY).state(Pruner)
 
 
 # --- The plan, plain python -----------------------------------------------------------------
@@ -193,6 +189,11 @@ def out() -> nu.Nu:
 # --- Made at open ---------------------------------------------------------------------------
 
 
+def _mine(body: Callable[[nu.Str], nu.Nu]) -> nu.Nu:
+    """``body`` given the pruner's plane id, read by key once, in its own snapshot."""
+    return nu.let(atomic(ops.plane.keyed(KEY)), lambda plane: body(nu.Str(plane)))
+
+
 def ensure_reaction() -> nu.Nu:
     """The reaction that wakes the pruner, added once, its id kept in :attr:`Pruner.reaction`.
 
@@ -201,8 +202,8 @@ def ensure_reaction() -> nu.Nu:
     commits when added, one read when kept.
     """
     kept = pruner().reaction
-    added = reactions.add(REMOVED, PLANE, into=kept)
-    there = ops.plane.exists(reactions.PLANE).and_(ops.plane.exists(PLANE))
+    added = _mine(lambda plane: reactions.add(REMOVED, plane, into=kept))
+    there = (ops.plane.keyed(reactions.KEY) != "").and_(ops.plane.keyed(KEY) != "")
     missing = there.and_(kept.fallback("") == "")
     return nu.IfDo(atomic(missing), added)
 
@@ -218,6 +219,6 @@ def wake() -> nu.Nu:
 
     def asked(reaction: nu.Attr) -> nu.Nu:
         r = nu.Str(reaction)
-        return nu.IfDo(r != "", reactions.up_plane(PLANE, r))
+        return nu.IfDo(r != "", _mine(lambda plane: reactions.up_plane(plane, r)))
 
     return nu.let(kept, asked)

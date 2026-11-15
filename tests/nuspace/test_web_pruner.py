@@ -13,6 +13,7 @@ import time
 from typing import TYPE_CHECKING
 
 import pytest
+from _support.system import keyed
 
 import nu
 import nuspace
@@ -249,13 +250,15 @@ def test_the_plan_is_plain_python():
 
 async def test_ensure_makes_the_pruner_off_the_web_with_one_reaction_once(store):
     await store.run(system.ensure() >> ensure())
-    row = await store.read(Space.planes[pruner.PLANE].extract())
+    pid = await keyed(store, pruner.KEY)
+    row = await store.read(Space.planes[pid].extract())
     assert row["system"] is True and row["backend"] == pruner.BACKEND
-    assert await store.read(web.Web.planes.contains(pruner.PLANE)) is False
+    assert (row["key"], row["name"]) == (pruner.KEY, pruner.NAME)
+    assert await store.read(web.Web.planes.contains(pid)) is False
     with pytest.raises(Refused):
-        await do(store, nuspace.plane.remove(pruner.PLANE))
+        await do(store, nuspace.plane.remove(pid))
     kept = await store.read(pruner.pruner().reaction)
-    listed = reactions.registry().by_plane[pruner.PLANE].ids
+    listed = reactions.registry().by_plane[pid].ids
     assert await store.read(nu.list(listed.keys())) == [kept]
     await store.run(ensure_pruner())
     assert await store.read(pruner.pruner().reaction) == kept
@@ -264,13 +267,13 @@ async def test_ensure_makes_the_pruner_off_the_web_with_one_reaction_once(store)
 
 async def test_ensure_without_a_reactions_plane_adds_no_reaction(store):
     await store.run(ensure())
-    assert await store.read(Space.planes.contains(pruner.PLANE)) is True
+    assert await keyed(store, pruner.KEY) != ""
     assert await store.read(pruner.pruner().reaction.exists()) is False
 
 
-def test_a_user_plane_cannot_take_the_pruner_id():
+def test_a_user_plane_cannot_take_the_pruner_key():
     with pytest.raises(Refused, match="reserved"):
-        nuspace.plane.add(pruner.PLANE)
+        nuspace.plane.add(key=pruner.KEY)
 
 
 def test_the_cell_builds_and_validates():
@@ -336,11 +339,11 @@ class Served:
 
     async def runs(self) -> list:
         """The pruner's plane runs, in start order."""
-        ids = Space.exec.indexes.history.plane_to_plane_runs[pruner.PLANE].runs
+        ids = Space.exec.indexes.history.plane_to_plane_runs[nuspace.plane.keyed(pruner.KEY)].runs
         return await self.read(_listed(ids))
 
     async def live_runs(self) -> list:
-        ids = Space.exec.indexes.live.plane_to_plane_runs[pruner.PLANE].ids
+        ids = Space.exec.indexes.live.plane_to_plane_runs[nuspace.plane.keyed(pruner.KEY)].ids
         return await self.read(_listed(ids))
 
     async def desks(self) -> dict:

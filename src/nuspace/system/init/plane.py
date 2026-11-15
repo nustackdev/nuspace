@@ -1,6 +1,6 @@
 """The init plane: starts the planes on its boot list when the space opens.
 
-One cell, :data:`CELL`, runs :func:`driver`. The host asks for init's own
+One cell, ``main``, runs :func:`driver`. The host asks for init's own
 plane run at open (``nuspace.system.start``); init asks for the rest. A
 plane on the boot list (:class:`~.shapes.Boot`) gets one plane run ``by``
 init in every open, unless it already ran in this open:
@@ -35,14 +35,11 @@ from nuspace.utils import keys_of
 from nuspace.utils.policies import report, restarting
 
 from .. import supervisor
-from .shapes import PLANE, boot_list
+from .shapes import KEY, boot_list
 
 
-__all__ = ["BACKEND", "BOOTED", "BY", "CELL", "PROG", "driver"]
+__all__ = ["BACKEND", "BOOTED", "BY", "PROG", "driver"]
 
-
-#: Its one cell's id, fixed.
-CELL = "init_main"
 
 #: What its runs execute on.
 BACKEND = "mp"
@@ -50,7 +47,8 @@ BACKEND = "mp"
 #: What the plane runs init asks for are recorded as ``by``.
 BY = "init"
 
-#: What the boot list starts as, the first time the system planes are made.
+#: What the boot list starts as, the first time the system planes are made: plane keys,
+#: written as the ids they find.
 BOOTED = ("supervisor", "reload", "reactions")
 
 #: The cell's prog: the driver lives here, the store holds this.
@@ -69,7 +67,7 @@ def _supervised(plane: nu.Str) -> nu.Bool:
     The supervisor plane itself is never skipped: init is what brings it up.
     """
     policy = supervisor.supervised()[plane].policy
-    return policy.exists().and_(plane != supervisor.PLANE)
+    return policy.exists().and_(plane != ops.plane.keyed(supervisor.KEY))
 
 
 def _due(plane: nu.Str) -> nu.Bool:
@@ -93,7 +91,7 @@ def _due(plane: nu.Str) -> nu.Bool:
 def _up(plane: nu.Str) -> nu.Nu:
     """One listed plane run if it is due, check and run in one commit. A raise is reported."""
     up = atomic(nu.IfDo(_due(plane), ops.plane_run.add(plane, by=BY)))
-    return nu.TryCatch(up, catch=lambda err: report(PLANE, plane, err))
+    return nu.TryCatch(up, catch=lambda err: report(KEY, plane, err))
 
 
 def driver() -> nu.Nu:
@@ -103,7 +101,7 @@ def driver() -> nu.Nu:
     raise outside a plane's step (reading the list) is reported and the
     driver runs again (``restarting``).
     """
-    planes = boot_list()
+    planes = boot_list(here=True)
     listed = keys_of(planes)
     one_pass = nu.ForEachDo(atomic(listed), lambda p: _up(nu.Str(p)))
     flow = nu.Reconcile(
@@ -112,4 +110,4 @@ def driver() -> nu.Nu:
         after=nu.RECHECK_AFTER,
         every=nu.RECHECK_EVERY,
     )
-    return restarting(flow, PLANE)
+    return restarting(flow, KEY)

@@ -1,6 +1,6 @@
 """The home indexer: counts the planes and cells added to the space, by day, for Home to read.
 
-A plane with the fixed id :data:`PLANE`, made at open where missing
+A plane keyed :data:`KEY` (its id minted), made at open where missing
 (:mod:`nuspace.web.planes`). It is system (remove refuses it), runs on ``async``, and
 is not on the web, so the sidebar never lists it. Two reactions wake it:
 one on planes added, one on cells added. Runs never do.
@@ -11,8 +11,8 @@ nothing stays resident. The
 pass walks ``Space.planes`` and ``Space.cells`` in key order past its
 cursors. Minted ids are time ordered (``p_<12 hex ms>_...``, ``c_...``,
 see :func:`~nuspace.utils.interactions.mint_ordered_id`), so key order is
-creation order and the two dicts read as creation logs. Fixed ids (root,
-the system planes and their cells) carry no prefix and are skipped.
+creation order and the two dicts read as creation logs. Root's id carries
+no prefix and is skipped.
 
 Counts are created only: a removed row still counts, a restore adds
 nothing. System planes are not counted (home, search and settings have
@@ -21,8 +21,7 @@ cells are reactions, the indexer's own two among them). Misses are
 accepted, this feeds a status page: a row added mid run waits for the next
 add, and an id minted long before its row landed sorts behind the cursor.
 
-State, at ``State.planes["home_indexer"]`` (:class:`Index`, via
-:func:`index`); only indexer runs write it, except :func:`ensure` keeping
+State, in its plane's state (:class:`Index`, via :func:`index`); only indexer runs write it, except :func:`ensure` keeping
 the reaction ids:
 
 - ``calendar[day]``: ``{planes, cells}`` added that day, ``day`` the
@@ -43,6 +42,8 @@ counted twice.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import nu
 import nustd.kv
 from nuspace import ops
@@ -53,14 +54,17 @@ from nuspace.system import reactions
 from nustd.datetime import date
 
 
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+
 __all__ = [
     "BACKEND",
-    "CELL",
     "CELLS",
     "ICON",
+    "KEY",
     "NAME",
     "PAGE",
-    "PLANE",
     "PROG",
     "Cursor",
     "Day",
@@ -77,8 +81,8 @@ __all__ = [
 ]
 
 
-#: The plane id, fixed and reserved.
-PLANE = "home_indexer"
+#: The plane's key, reserved. Its id is minted when it is made; code finds it by this.
+KEY = "home_indexer"
 
 #: What the plane is called.
 NAME = "Home indexer"
@@ -89,16 +93,13 @@ ICON = ""
 #: What its runs execute on: its pass awaits the stores, it never blocks.
 BACKEND = "async"
 
-#: Its one cell's name, and its fixed id (``<plane>_<name>``, as the web planes' cells).
-CELL = "main"
-
 #: The cell's prog: a shim, the code is here.
 PROG = """\
 from nuspace.web.home.indexer import out
 """
 
 #: The plane's cells, as ``(name, source)``.
-CELLS = ((CELL, PROG),)
+CELLS = (("main", PROG),)
 
 #: The most keys one page reads from each dict.
 PAGE = 1000
@@ -148,7 +149,7 @@ class Reactions(nu.Shape):
 
 
 class Index(nu.Shape):
-    """The indexer's state, at ``State.planes["home_indexer"]``. See the module."""
+    """The indexer's state, in its plane's state. See the module."""
 
     calendar = nustd.kv.DictRef.slot(Day)
     cursor = nustd.kv.ShapeRef.slot(Cursor)
@@ -156,9 +157,12 @@ class Index(nu.Shape):
     reactions = nustd.kv.ShapeRef.slot(Reactions)
 
 
-def index() -> Index:
-    """The indexer's state: ``State.planes["home_indexer"]`` read through :class:`Index`."""
-    return at.plane(id=PLANE).state(Index)
+def index(*, here: bool = False) -> Index:
+    """The indexer's state, found by key: one index read. ``here``: the running plane's, no read.
+
+    ``here`` is for the indexer's own pass; every other caller finds the plane by key.
+    """
+    return (at.plane if here else at.plane(KEY)).state(Index)
 
 
 def specs_installed() -> int:
@@ -211,7 +215,7 @@ def _from_spec(p: nu.Str) -> nu.Bool:
 
 def _add(days: nu.List, field: str) -> nu.Nu:
     """Each distinct day of ``days`` gets its count of entries added to ``calendar[day].<field>``."""
-    calendar = index().calendar
+    calendar = index(here=True).calendar
 
     def one(at_: nu.Attr) -> nu.Nu:
         slot = getattr(calendar[nu.Str(at_)], field)
@@ -222,7 +226,7 @@ def _add(days: nu.List, field: str) -> nu.Nu:
 
 def _summed(field: str) -> nu.Int:
     """``field`` summed over every day of the calendar. O(days)."""
-    calendar = index().calendar
+    calendar = index(here=True).calendar
     days = nu.List(nu.If(calendar.exists(), nu.list(calendar.keys()), []))
     return nu.Int(days.iter().map(lambda d: getattr(calendar[nu.Str(d)], field).fallback(0)).sum())
 
@@ -242,7 +246,7 @@ def step(*, specs: int = 0, limit: int = PAGE) -> nu.Nu:
         specs: What ``totals.specs`` is set to.
         limit: The most keys read from each dict.
     """
-    state = index()
+    state = index(here=True)
     cursor = state.cursor
     totals = state.totals
 
@@ -275,7 +279,7 @@ def step(*, specs: int = 0, limit: int = PAGE) -> nu.Nu:
 
 def _pending() -> nu.Bool:
     """Whether any minted plane or cell id lies past the cursors: two one key reads."""
-    cursor = index().cursor
+    cursor = index(here=True).cursor
     planes = _after(Space.planes, cursor.plane.fallback(""), PLANE_PREFIX, 1)
     cells = _after(Space.cells, cursor.cell.fallback(""), CELL_PREFIX, 1)
     return (planes.len() > 0).or_(cells.len() > 0)
@@ -304,9 +308,14 @@ def out() -> nu.Nu:
 # --- Made at open -------------------------------------------------------------------------
 
 
-def _kept(slot: nu.Nu, change: str) -> nu.Nu:
+def _mine(body: Callable[[nu.Str], nu.Nu]) -> nu.Nu:
+    """``body`` given the indexer's plane id, read by key once, in its own snapshot."""
+    return nu.let(atomic(ops.plane.keyed(KEY)), lambda plane: body(nu.Str(plane)))
+
+
+def _kept(slot: nu.Nu, change: str, plane: nu.Str) -> nu.Nu:
     """A reaction on ``change`` running the indexer, added only when ``slot`` keeps no id yet."""
-    added = reactions.add(change, PLANE, into=slot)
+    added = reactions.add(change, plane, into=slot)
     return nu.IfDo(atomic(slot.fallback("") == ""), added)
 
 
@@ -318,9 +327,9 @@ def ensure_reactions() -> nu.Nu:
     commits per reaction added, one read when both are kept.
     """
     kept = index().reactions
-    adds = _kept(kept.planes, PLANES_ADDED) >> _kept(kept.cells, CELLS_ADDED)
-    there = atomic(ops.plane.exists(reactions.PLANE).and_(ops.plane.exists(PLANE)))
-    return nu.IfDo(there, adds)
+    adds = _mine(lambda p: _kept(kept.planes, PLANES_ADDED, p) >> _kept(kept.cells, CELLS_ADDED, p))
+    keyed = (ops.plane.keyed(reactions.KEY) != "").and_(ops.plane.keyed(KEY) != "")
+    return nu.IfDo(atomic(keyed), adds)
 
 
 def wake() -> nu.Nu:
@@ -336,6 +345,6 @@ def wake() -> nu.Nu:
 
     def asked(reaction: nu.Attr) -> nu.Nu:
         r = nu.Str(reaction)
-        return nu.IfDo(r != "", reactions.up_plane(PLANE, r))
+        return nu.IfDo(r != "", _mine(lambda p: reactions.up_plane(p, r)))
 
     return nu.let(kept, asked)

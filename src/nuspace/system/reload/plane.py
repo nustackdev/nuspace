@@ -1,6 +1,6 @@
 """The reload plane: keeps running plane runs on the latest code. No ops of its own.
 
-One cell, :data:`CELL`, runs :func:`driver`: one arm per live plane run,
+One cell, ``main``, runs :func:`driver`: one arm per live plane run,
 births and deaths included. An arm wakes when a cell of its plane is
 written (``Plane.version``) and, per cell of the plane:
 
@@ -31,14 +31,11 @@ from nuspace.shapes import Space
 from nuspace.utils.policies import restarting
 
 
-__all__ = ["BACKEND", "BY", "CELL", "PLANE", "PROG", "driver"]
+__all__ = ["BACKEND", "BY", "KEY", "PROG", "driver"]
 
 
-#: The plane's id, fixed.
-PLANE = "reload"
-
-#: Its one cell's id, fixed.
-CELL = "reload_main"
+#: The plane's key. Its id is minted when it is made; code finds it by this.
+KEY = "reload"
 
 #: What its runs execute on.
 BACKEND = "mp"
@@ -105,7 +102,7 @@ def _arm(plane_run: nu.Str) -> nu.Nu:
         )
         return nu.Reconcile(changes, _pass(plane_run, plane), **_RECHECK)
 
-    return restarting(nu.let(atomic(row.plane.fallback("")), watching), PLANE, plane_run)
+    return restarting(nu.let(atomic(row.plane.fallback("")), watching), KEY, plane_run)
 
 
 def driver() -> nu.Nu:
@@ -121,4 +118,4 @@ def driver() -> nu.Nu:
         lambda r: _arm(nu.Str(r)),
         **_RECHECK,
     )
-    return restarting(arms, PLANE)
+    return restarting(arms, KEY)

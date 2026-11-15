@@ -11,6 +11,7 @@ import asyncio
 
 import pytest
 from _support.made import MADE
+from _support.system import catch_up
 
 import nu
 import nuspace
@@ -19,6 +20,7 @@ from nuspace.places import inside
 from nuspace.shapes import Space
 from nuspace.web import home
 from nuspace.web.home import history, indexer, now, runs, space
+from nuspace.web.planes import ensure_indexer
 from nustd.ui import Session
 
 
@@ -183,6 +185,7 @@ FROM_SPECS = ("space", "board", "0,0", "footer", "0")
 
 
 async def test_space_on_a_space_never_indexed_reads_counting(store):
+    await store.run(ensure_indexer())
     await do(store, Space.info.path.set("/tmp/garden") >> Space.info.opened_at.set(1000.0))
     got = await store.read(space.read())
     assert got["counting"] is True
@@ -200,7 +203,7 @@ async def test_space_on_a_space_never_indexed_reads_counting(store):
 async def test_space_reads_the_indexer_totals_and_calendar(store):
     for _ in range(3):
         await cell(store, await plane(store))
-    await store.run(indexer.catch_up(specs=4))
+    await catch_up(store, specs=4)
     got = await store.read(space.read())
     assert got["counting"] is False
     assert (got["planes"], got["cells"], got["specs"], got["from_specs"]) == (3, 3, 4, 0)
@@ -211,12 +214,14 @@ async def test_space_reads_the_indexer_totals_and_calendar(store):
 
 
 async def test_space_counts_go_compact_past_ten_thousand(store):
+    await store.run(ensure_indexer())
     await do(store, STATE.totals.cells.set(1_184_220) >> STATE.cursor.cell.set("c_x"))
     drawn = (await _draw(store, space.draw())).drawn()
     assert drawn[(*STATS, "cells")]["value"] == "1.2M"
 
 
 async def test_space_calendar_reads_only_the_window(store):
+    await store.run(ensure_indexer())
     old, new = "2001-01-01", nu.run(space.Since())[0]
     for day in (old, new, "2999-01-01"):
         await do(store, STATE.calendar[day].planes.set(1))
@@ -225,6 +230,7 @@ async def test_space_calendar_reads_only_the_window(store):
 
 
 async def test_space_draws_again_on_totals_and_not_while_idle(store):
+    await store.run(ensure_indexer())
     session, task = await _live(store, space.out())
     try:
         planes = (*STATS, "planes")
@@ -313,6 +319,7 @@ async def test_history_redraws_on_a_visit_and_a_shown_rename_only(store):
 
 async def test_headings_nest_under_the_page_title(store):
     """The page title is the h1: Space, History and Execution are section titles (h2), Now and Recent h3 under Execution."""
+    await store.run(ensure_indexer())
     sections = {}
     for cell_ in (space.draw(), history.draw(), now.draw()):
         session = await _draw(store, cell_)
@@ -586,6 +593,26 @@ def test_runs_shape_tones_window_and_open_runs():
     assert all("count_label" not in lane for lane in shaped["lanes"])
     # A lane names its plane, it is not a way into it.
     assert all("href" not in lane for lane in shaped["lanes"])
+
+
+def test_runs_shape_shows_at_most_the_last_hour():
+    day = 86_400.0
+    got = {
+        "lanes": [
+            # A plane up all day, still running, and one that just ran.
+            {"page": {"id": "a", "title": "A", "icon": ""}, "runs": [[1.0, 0.0, ""]]},
+            {"page": {"id": "b", "title": "B", "icon": ""}, "runs": [[day - 5, day - 1, ""]]},
+        ],
+        "read": 2,
+        "cut": False,
+    }
+    shaped = runs.shape(got, day)
+    assert (shaped["start"], shaped["end"]) == (
+        round((day - runs.WINDOW) * 1000),
+        round(day * 1000),
+    )
+    # Read the same: the long run keeps its start, the drawing cuts it.
+    assert shaped["lanes"][0]["items"] == [[1000, None, "ok"]]
 
 
 async def test_runs_and_now_leave_system_planes_out_but_count_their_runs_in_the_budget(store):

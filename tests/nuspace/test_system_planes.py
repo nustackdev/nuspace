@@ -76,6 +76,11 @@ async def until_runs(k: Kernel, plane: str, pred, timeout: float = SLOW) -> list
     return await k.until(lambda: runs_of(k, plane), pred, timeout)
 
 
+def of(key: str) -> nu.Str:
+    """The id of the system plane holding ``key``, as a term: one index read."""
+    return nuspace.plane.keyed(key)
+
+
 def first_cell(row: dict) -> dict:
     return row["cells"][0] if row.get("cells") else {}
 
@@ -90,19 +95,28 @@ def gaps(rows: list[dict]) -> list[float]:
 
 @module_loop
 async def test_init_runs_its_boot_list_once_per_open(space):
-    (own,) = await until_runs(space, init.PLANE, lambda rs: rs and live(first_cell(rs[0])))
+    (own,) = await until_runs(space, of(init.KEY), lambda rs: rs and live(first_cell(rs[0])))
     assert own["by"] == system.planes.BY
-    for plane in (supervisor.PLANE, reload.PLANE, reactions.PLANE):
+    for plane in (of(supervisor.KEY), of(reload.KEY), of(reactions.KEY)):
         (row,) = await until_runs(space, plane, lambda rs: rs and live(first_cell(rs[0])))
         assert row["by"] == init.BY
     # The reactions plane stays up with no reaction: its park cell never ends.
-    assert [c["cell"] for c in row["cells"]] == [reactions.PARK]
+    (park,) = await space.read(nu.list(Space.planes[of(reactions.KEY)].cells.keys()))
+    assert [c["cell"] for c in row["cells"]] == [park]
     (row,) = await until_runs(space, space.booted, lambda rs: rs and ended(rs[0]))
     assert (row["by"], row["exit"]) == (init.BY, EXIT_OK)
     assert await space.read(State.cells[first_cell(row)["cell"]].extract()) == {"n": 42}
     # Ended in this open, so not run again.
     await asyncio.sleep(0.6)
     assert len(await runs_of(space, space.booted)) == 1
+
+
+@module_loop
+async def test_system_planes_have_minted_ids_keys_and_titles(space):
+    for key, title, *_ in system.planes.PLANES:
+        row = await space.read(Space.planes[of(key)].extract())
+        assert (row["key"], row["name"]) == (key, title)
+    assert (await space.read(of(init.KEY))).startswith("p_")
 
 
 @module_loop
@@ -289,7 +303,7 @@ def box(watched: str = WATCHED):
 async def reacting(k: Kernel, watched: str, plane: str) -> str:
     """A reaction on ``watched`` that runs ``plane``, once its cell runs: its id."""
     r = await k.made(reactions.add(change_of(watched), plane, imports=IMPORTS, into=MADE))
-    rows = await until_runs(k, reactions.PLANE, lambda rs: any(not ended(x) for x in rs))
+    rows = await until_runs(k, of(reactions.KEY), lambda rs: any(not ended(x) for x in rs))
     (host,) = [x for x in rows if not ended(x)]
     await k.run_row(host["id"], lambda x: live(cell_of(x, r)), SLOW)
     return r
@@ -329,7 +343,7 @@ def all_ended(rows: list[dict]) -> bool:
 async def test_a_reaction_runs_its_plane_on_each_change_until_removed(space):
     p, _ = await space.plane(SET_42)
     r = await space.made(reactions.add(CHANGE, p, imports=IMPORTS, into=MADE))
-    (host,) = [x for x in await runs_of(space, reactions.PLANE) if not ended(x)]
+    (host,) = [x for x in await runs_of(space, of(reactions.KEY)) if not ended(x)]
     await space.run_row(host["id"], lambda x: live(cell_of(x, r)), SLOW)
     assert cell_of(await space.row(host["id"]), r)["by"] == reload.BY
     await asyncio.sleep(0.3)
@@ -437,7 +451,7 @@ async def test_a_reaction_comes_back_at_the_next_open():
     k = await open_space(name, data=data)
     try:
         # The reactions plane came back at boot, by init, with the reaction in it.
-        host = await until_runs(k, reactions.PLANE, lambda rs: any(live(x) for x in rs))
+        host = await until_runs(k, of(reactions.KEY), lambda rs: any(live(x) for x in rs))
         (row,) = [x for x in host if live(x)]
         assert row["by"] == init.BY
         await k.run_row(row["id"], lambda x: live(cell_of(x, r)), SLOW)

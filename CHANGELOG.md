@@ -11,6 +11,8 @@ separately here.
 
 ## Unreleased
 
+- Home's Recent timeline shows the last hour, so long runs never hide short ones
+- System planes get minted ids, reserved keys and readable titles, found by key
 - Home execution rows and timeline lanes name their plane without linking to it
 - Sidebar hover buttons shrink to the fold chevron's size, rows and titles alike
 - Boot skeleton gets its top gap back above the title

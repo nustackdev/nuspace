@@ -784,11 +784,12 @@ async def test_ensure_makes_the_web_planes_once(store):
     await do(store, nuspace.plane.rename(home, "My home"))
     await store.run(ensure())
     assert await store.read(Web.roles.extract()) == roles
-    for pid in (*roles.values(), "searches"):
+    folder = await store.read(nuspace.plane.keyed("searches"))
+    for pid in (*roles.values(), folder):
         assert await store.read(Space.planes[pid].system) is True
     assert await store.read(Space.planes[home].name) == "My home"
     assert await store.read(web.Web.planes.contains(home)) is True
-    assert await store.read(web.Web.planes.contains("searches")) is False
+    assert await store.read(web.Web.planes.contains(folder)) is False
     cells = await store.read(nu.list(Space.planes[home].cells.keys()))
     names = [await store.read(Space.cells[c].name) for c in cells]
     assert names == ["space", "history", "now"]

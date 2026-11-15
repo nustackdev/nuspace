@@ -40,6 +40,7 @@ from nuspace.utils.tree import no_cycle, subtree
 __all__ = [
     "add",
     "exists",
+    "keyed",
     "move",
     "on_change",
     "on_children_change",
@@ -75,23 +76,34 @@ def _icon_spelled(icon: nu.StrArg) -> None:
         raise Refused(msg)
 
 
-def _reserved(id: nu.StrArg, system: nu.BoolArg) -> nu.Nu:
-    """Refuse an id no new plane may take: root's, ``""``, or a :data:`RESERVED` one for a user plane.
+def _reserved(id: nu.StrArg) -> nu.Nu:
+    """Refuse an id no plane may take: root's or ``""``.
 
     Raises:
         Refused: A literal at build, a term at run time.
     """
     if isinstance(id, str):
-        user = system is False
-        if id in (ROOT, "") or (user and id in RESERVED):
+        if id in (ROOT, ""):
             msg = f"plane id {id!r} is reserved"
             raise Refused(msg)
-        if system is True or id not in RESERVED:
-            return nu.Noop()
+        return nu.Noop()
     pid = nu.Str(id)
-    always = (pid == ROOT).or_(pid == "")
-    taken = nu.List.of(*sorted(RESERVED)).contains(pid).and_(nu.Bool(system).not_())
-    return refuse(always.or_(taken), Refused, "plane id ", id, " is reserved")
+    return refuse((pid == ROOT).or_(pid == ""), Refused, "plane id ", id, " is reserved")
+
+
+def _key_reserved(key: nu.StrArg, system: nu.BoolArg) -> nu.Nu:
+    """Refuse a :data:`RESERVED` key for a plane that is not system.
+
+    Raises:
+        Refused: A literal at build, a term at run time.
+    """
+    if isinstance(key, str) and isinstance(system, bool):
+        if key in RESERVED and not system:
+            msg = f"plane key {key!r} is reserved"
+            raise Refused(msg)
+        return nu.Noop()
+    taken = nu.List.of(*sorted(RESERVED)).contains(key).and_(nu.Bool(system).not_())
+    return refuse(taken, Refused, "plane key ", key, " is reserved")
 
 
 def _not_root(id: nu.StrArg, doing: str) -> nu.Nu:
@@ -144,8 +156,8 @@ def add(
             case-sensitive, ``""`` for none.
         icon: ``lucide:<name>`` or ``emoji:<char>``. ``""``: :data:`DEFAULT_ICON`.
         backend: What its runs execute on. ``""``: it does not run.
-        system: Protected: ``remove`` refuses it. Only a system plane takes
-            a :data:`~nuspace.shapes.plane.RESERVED` id.
+        system: Protected: ``remove`` refuses it. Only a system plane holds
+            a :data:`~nuspace.shapes.plane.RESERVED` key.
         spec: The spec it was made from, ``""`` for none.
         meta: The free dict, for programs. nuspace never reads it.
         into: A ref set to the id in the same commit, for a minted one.
@@ -154,8 +166,8 @@ def add(
         Exists: The id or the key is taken.
         Missing: No parent or anchor with that id.
         Removed: The parent or the anchor is removed.
-        Refused: A reserved id (root's, ``""``, or one of
-            :data:`~nuspace.shapes.plane.RESERVED` unless ``system``), an
+        Refused: A reserved id (root's or ``""``), a
+            :data:`~nuspace.shapes.plane.RESERVED` key unless ``system``, an
             id or a key that is not key chars, an anchor that is not a
             sibling, an icon spelled wrong. A literal at build.
         TypeError: Both ``before`` and ``after``, at build.
@@ -187,12 +199,13 @@ def add(
             )
 
         writes = (
-            _reserved(pid, system)
+            _reserved(pid)
             >> id_spelled(pid, "plane")
             >> refuse(rows.contains(pid), Exists, "plane ", pid, " exists")
             >> live(rows, parent, "plane")
             >> anchored(siblings, rows, anchor, pid, "plane", text("plane ", parent))
             >> spelled
+            >> _key_reserved(key, system)
             >> key_free(Space.indexes.plane_keys, key, None, "plane")
             >> nu.let(nustd.time.time(), made)
             >> place(siblings, pid, before=before, after=after)
@@ -310,7 +323,9 @@ def set_key(id: nu.StrArg, key: nu.StrArg) -> nu.Nu:
         Missing: No plane with that id.
         Removed: It is removed.
         Exists: Another plane holds the key.
-        Refused: An empty key, or one not in key chars. A literal at build.
+        Refused: An empty key, or one not in key chars, a literal at build.
+            A :data:`~nuspace.shapes.plane.RESERVED` key on a plane that is
+            not system.
     """
     spelled = key_spelled(key, "plane", empty_ok=False)
     index = Space.indexes.plane_keys
@@ -319,6 +334,7 @@ def set_key(id: nu.StrArg, key: nu.StrArg) -> nu.Nu:
     return (
         spelled
         >> live(Space.planes, id, "plane")
+        >> _key_reserved(key, row.system.fallback(False))
         >> key_free(index, key, id, "plane")
         >> nu.IfDo((old != "").and_(old != key), index.del_item(old))
         >> index.set_item(key, id)
@@ -391,6 +407,11 @@ def exists(id: nu.StrArg, *, removed: bool = False) -> nu.Bool:
     """
     there = Space.planes.contains(id)
     return there if removed else there.and_(Space.planes[id].removed_at.exists().not_())
+
+
+def keyed(key: nu.StrArg) -> nu.Str:
+    """The id of the live plane holding ``key``, ``""`` when none does. A read. Cost: O(1), 1 point read."""
+    return nu.Str(Space.indexes.plane_keys.get_item(key, ""))
 
 
 def title(id: nu.StrArg) -> nu.Str:

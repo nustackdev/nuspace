@@ -1,7 +1,9 @@
 """The system planes as a set: made where missing, and init started. What the host runs at open.
 
-Each system plane has a fixed id, is ``system`` (remove refuses it) and
-holds fixed cells whose progs are short shims: the code lives in
+Each system plane has a minted id like any plane, a key code finds it by
+(``nuspace.at.plane(KEY)``, ``ops.plane.keyed(KEY)``), a title, is
+``system`` (remove refuses it, only it holds a reserved key) and holds
+cells whose progs are short shims: the code lives in
 ``nuspace.system.<plane>``, the store holds the shim. init's boot list
 starts as the other three, so init brings them up:
 
@@ -13,10 +15,8 @@ from __future__ import annotations
 
 import nu
 from nuspace import ops
-from nuspace.errors import Refused
 from nuspace.ops.brackets import atomic
-from nuspace.shapes import Space
-from nuspace.utils.checks import refuse
+from nuspace.utils import MintId
 
 from . import init, reactions, reload, supervisor
 from .init.plane import BACKEND as INIT_BACKEND
@@ -32,58 +32,48 @@ from .supervisor.plane import PROG as SUPERVISOR_PROG
 __all__ = ["BY", "PLANES", "ensure", "start"]
 
 
-#: Every system plane: ``(plane id, backend, ((cell id, cell name, prog), ...))``. init first.
+#: Every system plane: ``(key, title, backend, ((cell name, prog), ...))``. init first.
 PLANES = (
-    (init.PLANE, INIT_BACKEND, ((init.CELL, "main", INIT_PROG),)),
-    (supervisor.PLANE, SUPERVISOR_BACKEND, ((supervisor.CELL, "main", SUPERVISOR_PROG),)),
-    (reload.PLANE, RELOAD_BACKEND, ((reload.CELL, "main", RELOAD_PROG),)),
-    (reactions.PLANE, REACTIONS_BACKEND, ((reactions.PARK, "park", PARK_PROG),)),
+    (init.KEY, "Init", INIT_BACKEND, (("main", INIT_PROG),)),
+    (supervisor.KEY, "Supervisor", SUPERVISOR_BACKEND, (("main", SUPERVISOR_PROG),)),
+    (reload.KEY, "Reload", RELOAD_BACKEND, (("main", RELOAD_PROG),)),
+    (reactions.KEY, "Reactions", REACTIONS_BACKEND, (("park", PARK_PROG),)),
 )
 
 #: What init's own plane run is recorded as ``by`` when :func:`start` asks for it.
 BY = "host"
 
 
-def _made(plane: str, backend: str, cells: tuple[tuple[str, str, str], ...]) -> nu.Nu:
-    """One system plane and its cells, each made only where missing. One commit.
+def _made(key: str, title: str, backend: str, cells: tuple[tuple[str, str], ...]) -> nu.Nu:
+    """One system plane and its cells, minted ids, when no plane holds its key. One commit."""
 
-    Raises:
-        Refused: The id is held by a plane that is not system, or a cell id
-            by a cell on another plane (a store from before the ids were
-            reserved).
-    """
-    rows = Space.planes
-    there = ops.plane.exists(plane, removed=True)
-    alien = there.and_(rows[plane].system.fallback(False).not_())
-    term = refuse(alien, Refused, "plane ", plane, " is taken by a plane that is not system")
-    term = term >> nu.IfDo(
-        there.not_(), ops.plane.add(plane, name=plane, backend=backend, system=True)
-    )
-    for cell, name, prog in cells:
-        held = Space.cells.contains(cell)
-        elsewhere = held.and_(Space.cells[cell].plane.fallback("") != plane)
-        term = (
-            term
-            >> refuse(elsewhere, Refused, "cell ", cell, " is taken by a cell of another plane")
-            >> nu.IfDo(held.not_(), ops.cell.add(plane, prog, id=cell, name=name, fabrics=[]))
-        )
-    return atomic(term)
+    def made(minted: nu.ObjectRef) -> nu.Nu:
+        plane = nu.Str(minted)
+        adds = ops.plane.add(plane, key=key, name=title, backend=backend, system=True)
+        for name, prog in cells:
+            adds = adds >> ops.cell.add(plane, prog, name=name, fabrics=[])
+        return adds
+
+    return atomic(nu.IfDo(ops.plane.keyed(key) == "", nu.let(MintId("p"), made)))
 
 
 def ensure() -> nu.Nu:
     """Every system plane and its cells, then their state's containers, made where missing.
 
-    Idempotent: what is there is left exactly as it is, init's boot list
-    included (it is data somebody may have edited). The boot list starts as
-    :data:`~nuspace.system.init.BOOTED` the first time. One commit per
-    plane, then one State commit.
-
-    Raises:
-        Refused: A system plane's or cell's id held by something else.
+    Idempotent: a plane is made only when no plane holds its key, and what
+    is there is left exactly as it is, init's boot list included (it is data
+    somebody may have edited). The boot list starts as the ids of
+    :data:`~nuspace.system.init.BOOTED`'s planes the first time. One commit
+    per plane, then one State commit.
     """
     made = nu.Sequential(*(_made(*spec) for spec in PLANES))
+    booted = init.boot_list()
+    first = nu.Sequential(
+        booted.init({}),
+        *(booted.set_item(ops.plane.keyed(key), True) for key in init.BOOTED),
+    )
     state = (
-        init.boot_list().init(dict.fromkeys(init.BOOTED, True))
+        nu.IfDo(booted.exists().not_(), first)
         >> supervisor.supervised().init({})
         >> reactions.registry().by_plane.init({})
     )
@@ -99,5 +89,6 @@ def start(*, by: nu.StrArg = BY) -> nu.Nu:
     Raises:
         Missing: No init plane: :func:`ensure` first.
     """
-    idle = ops.plane_run.any_live(init.PLANE).not_()
-    return atomic(nu.IfDo(idle, ops.plane_run.add(init.PLANE, by=by)))
+    plane = ops.plane.keyed(init.KEY)
+    idle = ops.plane_run.any_live(plane).not_()
+    return atomic(nu.IfDo(idle, ops.plane_run.add(plane, by=by)))

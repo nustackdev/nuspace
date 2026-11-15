@@ -26,7 +26,7 @@ from nuspace.shapes import Space
 from nuspace.utils import MintId, keys_of
 from nuspace.utils.checks import live, refuse
 
-from .shapes import PLANE, Reaction, registry
+from .shapes import KEY, Reaction, registry
 
 
 if TYPE_CHECKING:
@@ -127,7 +127,7 @@ def add(
             >> at.cell(id=reaction).state(Reaction).plane.set(plane)
             >> registry().by_plane[plane].ids.set_item(reaction, True)
         )
-        cell = ops.cell.add(PLANE, src, id=reaction, name=plane, fabrics=[])
+        cell = ops.cell.add(ops.plane.keyed(KEY), src, id=reaction, name=plane, fabrics=[])
         steps = atomic(kept) >> atomic(cell)
         if into is not None:
             steps = steps >> atomic(into.set(reaction))
@@ -141,7 +141,7 @@ def add(
 def _known(reaction: nu.StrArg) -> nu.Bool:
     """Whether ``reaction`` is a live reaction: a cell on the reactions plane, not removed, with its plane kept."""
     row = Space.cells[reaction]
-    on = row.plane.fallback("") == PLANE
+    on = row.plane.fallback("") == ops.plane.keyed(KEY)
     kept = at.cell(id=reaction).state(Reaction).plane.exists()
     return on.and_(row.removed_at.exists().not_()).and_(kept)
 
