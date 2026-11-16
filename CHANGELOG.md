@@ -2,15 +2,16 @@
 
 ## Packages shipped from this repo
 
-- **nuspace** (the runtime, the `nuspace` command) — 0.7.4
+- **nuspace** (the runtime, the `nuspace` command) — 0.7.5
 - **nuspace-ui** (the compiled web bundle) — 0.7.4
 
 Below is the changelog for **nuspace** - the full commit stream. Newest first.
 The `nuspace-ui` wheel is the same source tree's vite output and is not tracked
 separately here.
 
-## Unreleased
+## 0.7.5 - 2026-11-17
 
+- Release nuspace 0.7.5
 - Planes and cells note how they were made: by hand, from a spec or by the system
 
 ## 0.7.4 - 2026-11-16
