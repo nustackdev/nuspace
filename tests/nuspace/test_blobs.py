@@ -1,6 +1,6 @@
 """The blob store and the upload area, wired into a space.
 
-- the default store: LMDB in the data dir, plain files on a network disk;
+- the default store: plain files in the data dir;
 - a cell's run, async or on a worker, puts into the store the host reads;
 - a worker's run reads a file the tab posted, by path, through its session;
 - a served space answers the blob routes and the upload intake, and wipes
@@ -36,7 +36,7 @@ from nuspace.shapes import EXIT_OK
 from nuspace.web.env import SessionWrap
 from nuspace.web.session import SessionPipe, piped_session
 from nuspace.web.stores import UPLOADS_DIR
-from nustd.blob.backends import FilesBackend, LMDBBackend
+from nustd.blob.backends import FilesBackend
 from nustd.ui.core import WsSession
 from nustd.ui.uploads import UploadView, tab_dir
 
@@ -58,34 +58,12 @@ def _backend(spec: nu.Provide) -> type:
 # --- the default store ------------------------------------------------------------------
 
 
-def test_the_default_store_is_lmdb_in_the_data_dir(tmp_path, monkeypatch):
-    monkeypatch.setattr(host_blobs, "_mounts", lambda: [("/", "ext4")])
+def test_the_default_store_is_files_in_the_data_dir(tmp_path):
     spec = host_blobs.default_spec(tmp_path / ".nuspace")
-    assert _backend(spec) is LMDBBackend
-    assert str(nustd.blob.backend_of(spec).path) == str(
+    assert _backend(spec) is FilesBackend
+    assert str(nustd.blob.backend_of(spec).root) == str(
         tmp_path / ".nuspace" / host_blobs.BLOBS_DIR
     )
-
-
-def test_a_data_dir_on_a_network_disk_keeps_blobs_as_files(tmp_path, monkeypatch):
-    monkeypatch.setattr(host_blobs, "_mounts", lambda: [("/", "ext4"), (str(tmp_path), "nfs4")])
-    with pytest.warns(host_blobs.BlobWarning, match="network file system"):
-        spec = host_blobs.default_spec(tmp_path / ".nuspace")
-    assert _backend(spec) is FilesBackend
-
-
-def test_the_deepest_mount_decides(tmp_path, monkeypatch):
-    inner = tmp_path / "local"
-    inner.mkdir()
-    mounts = [("/", "ext4"), (str(tmp_path), "nfs"), (str(inner), "ext4")]
-    monkeypatch.setattr(host_blobs, "_mounts", lambda: mounts)
-    assert host_blobs.on_network_fs(tmp_path / "x" / "y")
-    assert not host_blobs.on_network_fs(inner / "not" / "made" / "yet")
-
-
-def test_a_mount_unknown_reads_as_local(tmp_path, monkeypatch):
-    monkeypatch.setattr(host_blobs, "_mounts", list)
-    assert not host_blobs.on_network_fs(tmp_path)
 
 
 def test_the_mount_serves_under_blobs():

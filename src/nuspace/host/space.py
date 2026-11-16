@@ -6,7 +6,7 @@ The order at open, each step inside the brackets of the ones before::
     host.lock                     taken, or Refused: a live host holds it
     the notification server
     Space, State                  their navigators
-    blobs                         the blob store, LMDB in store/blobs/ by default
+    blobs                         the blob store, plain files in store/blobs/ by default
     format check                  space.db's format, then the core containers, a commit per store
     fresh device stores           conn.db deleted, then every device's navigators, their containers
     reap                          what a dead host left live, ended killed
@@ -257,8 +257,8 @@ def open_space(
             and ``mp``.
         blobs: The blob store (``nuspace.Blobs``): a ``nustd.blob`` spec,
             eg ``nustd.blob.s3(nuspace.Blobs, bucket="models")``. None is
-            LMDB in ``.nuspace/store/blobs/``, plain files there on a
-            network disk (:func:`~.blobs.default_spec`).
+            plain files in ``.nuspace/store/blobs/``
+            (:func:`~.blobs.default_spec`).
         body: Host nu run beside the drivers. The space closes when it returns.
         name: Process name prefix for workers.
 

@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Blobs are kept as plain files by default, so uploads of any size are kept
 - Pane header drops the plane icon, the breadcrumb starts with the trail
 - Add a space blob store and file uploads for cells, served over http
 
