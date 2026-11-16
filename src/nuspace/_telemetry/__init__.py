@@ -8,11 +8,10 @@
 What is sent: ``first_run`` once per user and ``space_opened`` per open, by
 the host however the space is opened (:func:`.opened`), ``space_loaded`` per
 page load in the browser (through the web device, never from the browser
-itself), and the ``quickstart_*`` steps nuverse tracks. ``plane_created``,
-``plane_removed``, ``cell_created`` and ``cell_removed`` are still listed but
-nothing tells them: ops touch only the stores, and no driver tells them yet
-(:func:`nuspace._telemetry.usage.track` is there for whoever does). Each carries the versions and the machine's kind,
-nothing about the space. Those names, :data:`.send.EVENTS`, are all that is
+itself), the ``quickstart_*`` steps nuverse tracks, and from the core ops
+(:mod:`.usage`) ``plane_created`` and ``cell_created``, each also as
+``_spec`` and ``_system``, then ``plane_removed`` and ``cell_removed``. Each carries the versions and the
+machine's kind, nothing about the space. Those names, :data:`.send.EVENTS`, are all that is
 ever sent: any other is dropped before it is queued.
 
 Stdlib only and silent on every failure. Queuing is free and never sends:

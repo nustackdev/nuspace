@@ -9,6 +9,10 @@ Below is the changelog for **nuspace** - the full commit stream. Newest first.
 The `nuspace-ui` wheel is the same source tree's vite output and is not tracked
 separately here.
 
+## Unreleased
+
+- Planes and cells note how they were made: by hand, from a spec or by the system
+
 ## 0.7.4 - 2026-11-16
 
 - Release nuspace and nuspace-ui 0.7.4

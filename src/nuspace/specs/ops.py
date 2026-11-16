@@ -110,7 +110,9 @@ class _Tree:
         for cell_name, source in spec.cells:
             cid = self.minted("c")
             fabrics = self.analysed(source, pid, cid)
-            self.space.append(cell.add(pid, source, id=cid, name=cell_name, fabrics=fabrics))
+            self.space.append(
+                cell.add(pid, source, id=cid, name=cell_name, fabrics=fabrics, origin="spec")
+            )
             self.state.append(named.set_item(cell_name, cid))  # type: ignore[union-attr]
         if spec.web is not None:
             self.web.append(_web_row(pid, spec))

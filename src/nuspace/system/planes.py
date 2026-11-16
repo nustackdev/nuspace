@@ -51,7 +51,7 @@ def _made(key: str, title: str, backend: str, cells: tuple[tuple[str, str], ...]
         plane = nu.Str(minted)
         adds = ops.plane.add(plane, key=key, name=title, backend=backend, system=True)
         for name, prog in cells:
-            adds = adds >> ops.cell.add(plane, prog, name=name, fabrics=[])
+            adds = adds >> ops.cell.add(plane, prog, name=name, fabrics=[], origin="system")
         return adds
 
     return atomic(nu.IfDo(ops.plane.keyed(key) == "", nu.let(MintId("p"), made)))

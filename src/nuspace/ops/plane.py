@@ -120,6 +120,13 @@ def _not_root(id: nu.StrArg, doing: str) -> nu.Nu:
     return refuse(nu.Str(id) == ROOT, Refused, msg)
 
 
+def _told(event: str) -> nu.Nu:
+    """Queue ``event`` once the term runs. Imported here: importing nuspace reaches no telemetry."""
+    from nuspace._telemetry.usage import track
+
+    return track(event)
+
+
 def _touched(id: nu.StrArg) -> nu.Nu:
     """Stamp a write to the plane's own row on ``modified_at``."""
     return Space.planes[id].modified_at.set(nustd.time.time())
@@ -144,7 +151,8 @@ def add(
 
     One commit: the row, the id in the parent's ``children``, the key in
     ``Space.indexes.plane_keys`` and the id in ``spec_planes[spec].ids``
-    when given. Cost: O(1), about 20 keys.
+    when given. Told to telemetry as made by nuspace, from a spec or by
+    hand, reading no key. Cost: O(1), about 20 keys.
 
     Args:
         id: Its id, key chars. Minted when the op evaluates when absent.
@@ -212,8 +220,12 @@ def add(
             >> when(key, Space.indexes.plane_keys.set_item(key, pid))
             >> when(spec, Space.indexes.spec_planes[spec].ids.set_item(pid, True))
         )
-        return writes if into is None else writes >> into.set(pid)
+        writes = writes if into is None else writes >> into.set(pid)
+        return writes >> told
 
+    from nuspace._telemetry.usage import created  # importing nuspace reaches no telemetry
+
+    told = created("plane", system=system, spec=spec)
     if id is None:
         return nu.let(MintId("p"), lambda pid: write(nu.Str(pid)))
     return write(id)
@@ -228,7 +240,8 @@ def remove(id: nu.StrArg) -> nu.Nu:
     (the rows keep ``.key``). The plane leaves its parent's ``children``;
     the rows below stay listed where they are, for a restore. The id goes
     into ``Space.indexes.removed``. Writes nothing about runs: the kernel
-    stops the live plane runs of what it sees removed.
+    stops the live plane runs of what it sees removed. Each plane and cell
+    stamped is told to telemetry.
 
     Cost: O(subtree), a few keys per plane and cell below.
 
@@ -245,13 +258,19 @@ def remove(id: nu.StrArg) -> nu.Nu:
         def plane(p: nu.Str) -> nu.Nu:
             at = rows[p]
             return (
-                at.removed_at.set(now) >> at.removed_by.set(id) >> unkey(keys.plane_keys, at.key, p)
+                at.removed_at.set(now)
+                >> at.removed_by.set(id)
+                >> unkey(keys.plane_keys, at.key, p)
+                >> _told("plane_removed")
             )
 
         def cell(c: nu.Str) -> nu.Nu:
             at = Space.cells[c]
             return (
-                at.removed_at.set(now) >> at.removed_by.set(id) >> unkey(keys.cell_keys, at.key, c)
+                at.removed_at.set(now)
+                >> at.removed_by.set(id)
+                >> unkey(keys.cell_keys, at.key, c)
+                >> _told("cell_removed")
             )
 
         return subtree(id, plane, cell)

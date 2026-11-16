@@ -15,7 +15,9 @@ module in front, ``nuspace.plane.add(...)``, never ``from ... import add``.
 - **Declarative.** Ops touch only the stores. They write what is wanted
   (``plane_run.add`` starts nothing, it adds a record) and what drivers
   observed (``cell_run.end``); the kernel and the other drivers make
-  reality match.
+  reality match. The one thing past the stores: adding and removing planes
+  and cells queues a telemetry event (:mod:`nuspace._telemetry.usage`),
+  told again when a commit is retried.
 - **Raise, never fail silently.** An op that cannot do what it says raises
   one of :mod:`nuspace.errors` and the commit aborts. A no-op only where it
   harms nothing and races are normal, eg stopping a run that already ended.

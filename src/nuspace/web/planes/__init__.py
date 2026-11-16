@@ -78,7 +78,9 @@ def _cells(plane: nu.StrArg, cells: tuple[tuple[str, str], ...], fabrics: list[s
     """A new plane's cells, in order. Every one draws, so its fabrics are given: no build."""
     adds: nu.Nu = nu.Noop()
     for name, source in cells:
-        adds = adds >> nuspace.cell.add(plane, source, name=name, fabrics=list(fabrics))
+        adds = adds >> nuspace.cell.add(
+            plane, source, name=name, fabrics=list(fabrics), origin="system"
+        )
     return adds
 
 
@@ -121,7 +123,9 @@ def _keyed(
         plane = nu.Str(minted)
         adds = nuspace.plane.add(plane, key=key, name=name, icon=icon, backend=backend, system=True)
         for cell, source in cells:
-            adds = adds >> nuspace.cell.add(plane, source, name=cell, fabrics=list(fabrics))
+            adds = adds >> nuspace.cell.add(
+                plane, source, name=cell, fabrics=list(fabrics), origin="system"
+            )
         return adds
 
     return atomic(nu.IfDo(nuspace.plane.keyed(key) == "", nu.let(MintId("p"), made)))

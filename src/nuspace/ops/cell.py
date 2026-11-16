@@ -12,7 +12,7 @@ Programs write the module in front: ``nuspace.cell.add(...)``.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 import nu
 import nustd.time
@@ -54,6 +54,13 @@ def _bump(plane: nu.StrArg) -> nu.Nu:
     return version.set(version.fallback(0) + 1)
 
 
+def _removed() -> nu.Nu:
+    """Tell telemetry a cell went. Imported here: importing nuspace reaches no telemetry."""
+    from nuspace._telemetry.usage import track
+
+    return track("cell_removed")
+
+
 def _edited(id: nu.StrArg) -> nu.Nu:
     """Stamp ``modified_at`` and count the write on the cell's plane."""
     row = Space.cells[id]
@@ -73,6 +80,7 @@ def add(
     meta: dict[str, Any] | nu.Nu | None = None,
     fabrics: list[str] | nu.Nu | None = None,
     into: nu.Ref | None = None,
+    origin: Literal["", "spec", "system"] = "",
 ) -> nu.Nu:
     """Create a cell on a plane. Create only: an id taken raises. Does not run it.
 
@@ -81,7 +89,8 @@ def add(
     ``cells`` (before or after a sibling, else at the end), the key in
     ``Space.indexes.cell_keys``, the id in ``spec_cells[spec].ids`` when
     given, and ``Plane.version`` +1. A plane run picks the cell up, or
-    reload does for a live one. Cost: O(1), about 20 keys.
+    reload does for a live one. Told to telemetry as made by nuspace, from a
+    spec or by hand, reading no key. Cost: O(1), about 20 keys.
 
     Working out the fabrics builds the prog in this process (its module
     code runs), before any store key is read. A caller that brackets more
@@ -105,6 +114,10 @@ def add(
             same prog, plane and id. Stored as given. Absent: worked out
             here.
         into: A ref set to the id in the same commit, for a minted one.
+        origin: What made it, for telemetry only, stored nowhere: ``system``
+            for what nuspace seeds itself with no one asking, ``spec`` for a
+            spec plane's cells. ``""``: ``spec`` when ``spec`` is given, else
+            by hand, a user's, an agent's or a program's.
 
     Raises:
         Exists: The id or the key is taken.
@@ -149,7 +162,12 @@ def add(
             >> when(spec, Space.indexes.spec_cells[spec].ids.set_item(cid, True))
             >> _bump(plane)
         )
-        return writes if into is None else writes >> into.set(cid)
+        writes = writes if into is None else writes >> into.set(cid)
+        return writes >> told
+
+    from nuspace._telemetry.usage import created  # importing nuspace reaches no telemetry
+
+    told = created("cell", system=origin == "system", spec="spec" if origin == "spec" else spec)
 
     def analysed(cid: nu.StrArg) -> nu.Nu:
         if fabrics is not None:
@@ -168,7 +186,8 @@ def remove(id: nu.StrArg) -> nu.Nu:
     plane's ``cells``, drops its key from ``cell_keys`` (the row keeps
     ``.key``), adds the id to ``Space.indexes.removed``, ``Plane.version``
     +1. Writes nothing about runs: the kernel sees the removed cell and
-    interrupts its live cell runs. Cost: O(1), about 7 keys.
+    interrupts its live cell runs. Told to telemetry. Cost: O(1), about 7
+    keys.
 
     Raises:
         Missing: No cell with that id.
@@ -183,6 +202,7 @@ def remove(id: nu.StrArg) -> nu.Nu:
         >> row.removed_by.set(id)
         >> Space.indexes.removed.set_item(id, True)
         >> _bump(row.plane)
+        >> _removed()
     )
 
 
