@@ -2,15 +2,16 @@
 
 ## Packages shipped from this repo
 
-- **nuspace** (the runtime, the `nuspace` command) — 0.7.3
-- **nuspace-ui** (the compiled web bundle) — 0.7.3
+- **nuspace** (the runtime, the `nuspace` command) — 0.7.4
+- **nuspace-ui** (the compiled web bundle) — 0.7.4
 
 Below is the changelog for **nuspace** - the full commit stream. Newest first.
 The `nuspace-ui` wheel is the same source tree's vite output and is not tracked
 separately here.
 
-## Unreleased
+## 0.7.4 - 2026-11-16
 
+- Release nuspace and nuspace-ui 0.7.4
 - New empty pages start untitled with the caret in the title
 - Blobs are kept as plain files by default, so uploads of any size are kept
 - Pane header drops the plane icon, the breadcrumb starts with the trail

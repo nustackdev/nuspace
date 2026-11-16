@@ -431,7 +431,7 @@ async def test_link_draws_title_and_icon(store):
     got = await _drawn(store, web.link(nustd.ui.PageLinkRef("l"), "a", params={"id": "1"}))
     assert got[("l",)]["href"] == "/p/a?id=1" and got[("l",)]["title"] == "Movies"
     got = await _drawn(store, web.link(nustd.ui.LinkRef("k"), "b"))
-    assert got[("k",)] == {"href": "/p/b", "label": "b"}
+    assert got[("k",)] == {"href": "/p/b", "label": "Untitled"}
     page = web.link(nustd.ui.PageLinkRef("n"), "a", description="Daily")
     got = await _drawn(store, page)
     assert got[("n",)] == {"href": "/p/a", "title": "Movies", "icon": "🎬", "description": "Daily"}
