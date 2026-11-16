@@ -97,11 +97,19 @@ export function useAddRequest(): AddRequest | null {
 	);
 }
 
+/** Planes made here and not yet opened: the pane puts the caret in an empty title once. */
+const fresh = new Set<string>();
+
+/** Whether `planeId` was just made here, and forget it: true once. */
+export function takeFresh(planeId: string): boolean {
+	return fresh.delete(planeId);
+}
+
 /**
  * Make a Plane from `entry` under `parent` and return its id. The id is
  * minted here, so the caller can route to it at once: nav holds a route
  * until its Plane exists. `empty` names the space's own empty plane, whose
- * planes start as "Untitled" rather than taking its label.
+ * planes start with no name (shown as "Untitled") rather than taking its label.
  */
 export function createPlane(
 	notify: Notify,
@@ -110,11 +118,12 @@ export function createPlane(
 	empty = false,
 ): string {
 	const planeId = mintId("p");
+	fresh.add(planeId);
 	notify("plane.create", {
 		plane_id: planeId,
 		parent_id: parent || ROOT_ID,
 		spec: entry.name,
-		title: empty ? "Untitled" : entry.label,
+		title: empty ? "" : entry.label,
 	});
 	return planeId;
 }

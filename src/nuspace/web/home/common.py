@@ -14,6 +14,7 @@ from pathlib import Path
 import nu
 import nustd.ui
 from nuspace.shapes import Space
+from nuspace.shapes.plane import UNTITLED
 
 
 __all__ = [
@@ -44,9 +45,9 @@ def ids(held: nu.Nu) -> nu.List:
 
 
 def title(plane: nu.StrArg) -> nu.Str:
-    """A plane's title: its name, else its id. 1 read."""
+    """A plane's title: its name, else ``Untitled``. 1 read."""
     name = Space.planes[plane].name.fallback("")
-    return nu.Str(nu.If(name == "", plane, name))
+    return nu.Str(nu.If(name == "", UNTITLED, name))
 
 
 def compact(n: object) -> str:

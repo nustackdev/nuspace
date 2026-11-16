@@ -20,7 +20,7 @@ from typing import Any
 import nu
 import nustd.time
 from nuspace.errors import Exists, Missing, Refused
-from nuspace.shapes.plane import RESERVED, ROOT
+from nuspace.shapes.plane import RESERVED, ROOT, UNTITLED
 from nuspace.shapes.space import Space
 from nuspace.utils import MintId, Require, anchor_of, place
 from nuspace.utils.checks import (
@@ -415,7 +415,7 @@ def keyed(key: nu.StrArg) -> nu.Str:
 
 
 def title(id: nu.StrArg) -> nu.Str:
-    """What a list or a header shows for a plane: its name, else its id. Cost: O(1), 2 reads.
+    """What a list or a header shows for a plane: its name, else ``Untitled``. Cost: O(1), 2 reads.
 
     Removed planes keep theirs.
 
@@ -423,7 +423,7 @@ def title(id: nu.StrArg) -> nu.Str:
         Missing: No plane with that id.
     """
     name = Space.planes[id].name.fallback("")
-    shown = nu.If(name == "", id, name)
+    shown = nu.If(name == "", UNTITLED, name)
     return nu.Str(Require(Space.planes.contains(id), shown, text("no plane ", id), exc_cls=Missing))
 
 

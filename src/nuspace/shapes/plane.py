@@ -14,6 +14,9 @@ __all__ = ["RESERVED", "ROOT", "Plane"]
 #: remove), has no backend (no run) and no parent of its own (``""``).
 ROOT = "root"
 
+#: What a plane with no name is called where it shows. Its name stays ``""``.
+UNTITLED = "Untitled"
+
 #: Plane keys only nuspace's own planes hold: ``plane.add`` and ``plane.set_key``
 #: refuse them unless the plane is system. The system planes'
 #: (``nuspace.system``), then the web device's (``nuspace.web.planes``): the

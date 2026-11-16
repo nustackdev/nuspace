@@ -40,7 +40,7 @@ from nuspace.errors import Exists, Missing, Refused
 from nuspace.ops import cell_run
 from nuspace.ops.brackets import atomic
 from nuspace.places import Here
-from nuspace.shapes.plane import ROOT
+from nuspace.shapes.plane import ROOT, UNTITLED
 from nuspace.shapes.space import Space
 from nuspace.utils import MintId
 from nuspace.utils.checks import live, refuse, row_known
@@ -478,13 +478,13 @@ def page(plane: nu.StrArg, params: nu.DictArg[str, object] | None = None) -> nu.
     """A plane as a link shows it: ``{id, title, icon, href}``. Never raises at run time.
 
     The value a ``PageLinkRef`` table cell takes, and what :func:`link` draws.
-    The title is the plane's name, else its id; the icon is its ``icon``.
+    The title is the plane's name, else ``Untitled``; the icon is its ``icon``.
     Reads Space: bracket it with ``nuspace.atomic``. Cost: O(1), 2 reads.
     """
     name = Space.planes[plane].name.fallback("")
     return nu.Dict.of(
         id=plane,
-        title=nu.Str(nu.If(name == "", plane, name)),
+        title=nu.Str(nu.If(name == "", UNTITLED, name)),
         icon=nu.Str(IconName(Space.planes[plane].icon.fallback(""))),
         href=href(plane, params),
     )
@@ -502,8 +502,8 @@ def link(
 
     ``ref`` is a ``PageLinkRef`` (href, title, icon, and ``description``
     when given) or a ``LinkRef`` (href, and the title as its label). The
-    title is the plane's name, else its id, so a link to a plane not in the
-    space still draws, as its id; the icon is its ``icon``. ``label`` stands
+    title is the plane's name, else ``Untitled``, so a link to a plane not in
+    the space still draws; the icon is its ``icon``. ``label`` stands
     in for the title. Reads Space: bracket it with ``nuspace.atomic``.
     Cost: O(1), 3 reads.
 

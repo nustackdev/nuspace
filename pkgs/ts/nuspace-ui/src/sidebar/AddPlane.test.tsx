@@ -83,13 +83,13 @@ describe("AddPlane", () => {
 		expect(openPlane).not.toHaveBeenCalled();
 	});
 
-	it("puts the empty plane on top, made by none and named Untitled", () => {
+	it("puts the empty plane on top, made by none and with no name", () => {
 		act(() => openAddPlane({ parent: ROOT_ID }));
 		expect(document.querySelector('[cmdk-item=""]')?.textContent).toContain("Empty");
 		act(() => item("Empty")?.click());
 		expect(notify).toHaveBeenCalledWith(
 			"plane.create",
-			expect.objectContaining({ spec: "", title: "Untitled" }),
+			expect.objectContaining({ spec: "", title: "" }),
 		);
 	});
 

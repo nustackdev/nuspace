@@ -61,6 +61,7 @@ import { Identity } from "../plane/Identity";
 import type { Notify, Ops } from "../plane/ops";
 import { Plane } from "../plane/Plane";
 import type { AbsentReason, ActivePlane, CellSpec, PaneHead } from "../plane/types";
+import { takeFresh } from "../sidebar/add";
 import { GoHome, NOT_FOUND_TEXT, NotFoundBody } from "./NotFound";
 import { PaneHeader } from "./PaneHeader";
 import { useScroller } from "./scroll";
@@ -212,6 +213,14 @@ export function Pane({
 	const toTitle = useCallback((at: "start" | "end") => {
 		if (headRef.current) focusTitle(headRef.current, at);
 	}, []);
+	// A plane just made with no name opens with the caret in its title, so it
+	// is named first. After the plane's own effects, so this wins over its end
+	// line. Once: a reopen, or one made with a name (a spec's), leaves it.
+	const loaded = plane != null;
+	const untitled = plane?.title === "";
+	useEffect(() => {
+		if (loaded && takeFresh(planeId) && untitled && headRef.current) toTitle("start");
+	}, [loaded, planeId, untitled, toTitle]);
 	// The identity block is this pane's own business, like a cell's is the cell's.
 	const [identity, setIdentity] = useState(false);
 	const key = plane?.meta.key ?? "";

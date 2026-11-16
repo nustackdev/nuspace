@@ -155,7 +155,7 @@ def create(
 
     :func:`nuspace.specs.add_plane`, a wrapper that brackets itself: the
     plane, then its state and its web row. An empty ``title`` takes the
-    spec's label.
+    spec's label, but the empty plane's stays ``""``: it shows as ``Untitled``.
 
     Raises:
         Missing: No registered PlaneSpec of that name.
@@ -164,6 +164,8 @@ def create(
     name = nu.Str(spec)
 
     def made(found: PlaneSpec) -> nu.Nu:
+        if found is EMPTY_PLANE:
+            return add_plane(found, id=plane_id, parent=node(parent_id), name=title)
         called = nu.If(nu.Str(title) == "", found.label, title)
         return add_plane(found, id=plane_id, parent=node(parent_id), name=called)
 

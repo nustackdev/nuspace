@@ -294,7 +294,7 @@ async def test_exists_and_title_read_the_row(store):
         nu.List.of(nuspace.plane.exists("a"), nuspace.plane.exists("nope"))
     ) == [True, False]
     assert await store.read(nu.List.of(nuspace.plane.title("a"), nuspace.plane.title("b"))) == [
-        "a",
+        "Untitled",
         "Bee",
     ]
     with pytest.raises(Missing, match="no plane nope"):

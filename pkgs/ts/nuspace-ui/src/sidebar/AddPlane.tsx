@@ -35,7 +35,7 @@ import { closeAddPlane, createPlane, useAddRequest } from "./add";
 import type { Notify } from "./ops";
 import { type Registered, ROOT_ID } from "./types";
 
-/** The empty plane (nuspace.ext.EMPTY). Its name is no Plane's, so the server makes it; its planes start as "Untitled". */
+/** The empty plane (nuspace.ext.EMPTY). Its name is no Plane's, so the server makes it; its planes start with no name, shown as "Untitled". */
 export const EMPTY: Registered = {
 	name: "",
 	label: "Empty",

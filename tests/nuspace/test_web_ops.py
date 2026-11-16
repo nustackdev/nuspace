@@ -443,7 +443,7 @@ async def test_link_to_a_plane_not_there_still_draws(store):
     got = await _drawn(store, web.link(nustd.ui.LinkRef("k"), "nowhere", label="Gone"))
     assert got[("k",)] == {"href": "/p/nowhere", "label": "Gone"}
     got = await _drawn(store, web.link(nustd.ui.PageLinkRef("l"), "nowhere"))
-    assert got[("l",)]["title"] == "nowhere"
+    assert got[("l",)]["title"] == "Untitled"
 
 
 async def test_page_is_a_link_cell_value(store):
@@ -451,7 +451,7 @@ async def test_page_is_a_link_cell_value(store):
     got = await store.read(web.page("a", {"id": 1}))
     assert got == {"id": "a", "title": "Movies", "icon": "🎬", "href": "/p/a?id=1"}
     got = await store.read(web.page("nowhere"))
-    assert got == {"id": "nowhere", "title": "nowhere", "icon": "", "href": "/p/nowhere"}
+    assert got == {"id": "nowhere", "title": "Untitled", "icon": "", "href": "/p/nowhere"}
 
 
 async def test_root_is_never_a_pane(store):
