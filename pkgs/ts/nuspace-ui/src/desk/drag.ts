@@ -118,6 +118,7 @@ export function sameTarget(a: Target | null, b: Target | null): boolean {
  * The one drag image, for every drag source: a chip (design `dragChip`) of
  * the icon marked `data-drag-icon` and the text marked `data-drag-title`
  * under the grabbed element, not the browser's snapshot of the whole thing.
+ * The icon may be carried hidden (a pane header); the chip shows it.
  * Drawn off screen, taken as the image, removed once the drag has it. A
  * source with neither mark keeps the browser's image.
  */
@@ -129,7 +130,11 @@ export function setDragChip(e: React.DragEvent): void {
 	if (!icon && !text) return;
 	const chip = document.createElement("div");
 	chip.className = dragChip;
-	if (icon) chip.append(icon.cloneNode(true));
+	if (icon) {
+		const shown = icon.cloneNode(true) as Element;
+		shown.removeAttribute("hidden");
+		chip.append(shown);
+	}
 	const title = document.createElement("span");
 	title.className = "truncate";
 	title.textContent = text;

@@ -16,9 +16,6 @@ import { cn } from "@nustackdev/ui-kit";
 export const paneHeader =
 	"flex h-8.5 shrink-0 items-center gap-1.5 pr-1 pl-2.5";
 
-/** The plane's icon in the header. */
-export const paneHeaderIcon = "shrink-0 text-text-muted";
-
 /**
  * What every drag shows under the pointer, a pane header's and a sidebar
  * row's alike: a small chip of the icon and title, like a sidebar row, in

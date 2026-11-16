@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Pane header drops the plane icon, the breadcrumb starts with the trail
 - Add a space blob store and file uploads for cells, served over http
 
 ## 0.7.3 - 2026-11-16

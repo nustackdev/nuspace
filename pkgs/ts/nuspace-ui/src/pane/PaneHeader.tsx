@@ -1,4 +1,4 @@
-// The header across a pane's top: the plane's icon and trail on the left, its
+// The header across a pane's top: the plane's trail on the left, its
 // actions on the right: the pane menu, and close where the pane has one (in
 // the menu too). The actions show on hover and on the focused pane.
 //
@@ -11,7 +11,8 @@
 // Outside the body's scroll, so it stays put while the plane moves under it.
 // It is the pane's drag handle (`data-pane-header`) and drags as the pane's
 // row in the sidebar would: the pane in a strip, the item for a plane item,
-// the plane with its params on a solo plane (../desk/drag.ts).
+// the plane with its params on a solo plane (../desk/drag.ts). The plane's icon
+// is not shown here, only carried hidden for the drag chip.
 
 import {
 	Breadcrumb,
@@ -36,7 +37,6 @@ import {
 	paneCrumbs,
 	paneHeader,
 	paneHeaderActions,
-	paneHeaderIcon,
 	paneHeaderTitle,
 } from "../design";
 import { headerDragProps, type PaneAt } from "../desk/drag";
@@ -83,8 +83,8 @@ export function PaneHeader({
 }) {
 	return (
 		<header className={paneHeader} data-pane-header={planeId} {...headerDragProps(at, planeId)}>
-			<span data-drag-icon className="contents">
-				<PlaneIcon icon={planeIcon(meta?.icon)} className={paneHeaderIcon} />
+			<span data-drag-icon hidden>
+				<PlaneIcon icon={planeIcon(meta?.icon)} />
 			</span>
 			<Breadcrumb className={paneCrumbs}>
 				<BreadcrumbList className={paneCrumbList}>
