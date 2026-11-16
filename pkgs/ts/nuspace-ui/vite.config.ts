@@ -82,6 +82,11 @@ export default defineConfig({
 				target: "http://localhost:8080",
 				changeOrigin: true,
 			},
+			// Same origin as far as the host can tell: no changeOrigin, so the
+			// upload routes' same origin checks see the page's own host.
+			"/blobs": { target: "http://localhost:8080" },
+			"/_nu": { target: "http://localhost:8080" },
+			"/api": { target: "http://localhost:8080" },
 		},
 	},
 });

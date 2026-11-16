@@ -42,3 +42,6 @@ WEB_STORE = Store(Web, "devices/web/web_state.db", "nuspace.web", init_web)
 
 #: Browser tabs: their panes and sidebar folds.
 CONN_STORE = Store(Conn, "devices/web/conn.db", "nuspace.conn", init_conn, fresh=True)
+
+#: The upload area inside the data dir: files tabs posted, wiped at every open.
+UPLOADS_DIR = "devices/web/uploads"

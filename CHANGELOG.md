@@ -9,6 +9,10 @@ Below is the changelog for **nuspace** - the full commit stream. Newest first.
 The `nuspace-ui` wheel is the same source tree's vite output and is not tracked
 separately here.
 
+## Unreleased
+
+- Add a space blob store and file uploads for cells, served over http
+
 ## 0.7.3 - 2026-11-16
 
 - Release nuspace and nuspace-ui 0.7.3

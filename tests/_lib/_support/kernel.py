@@ -28,6 +28,7 @@ import nustd.valkey
 from _support.made import MADE, MADE_STORE
 from nu.lang import ScalarQuery
 from nuspace import kernel
+from nuspace.host.space import worker_context
 from nuspace.host.stores import CORE, VALKEY_DIR
 from nuspace.host.stores import navigators as host_navigators
 from nuspace.shapes import Space
@@ -100,6 +101,7 @@ def kernel_open(
     name: str = "nuspace-test",
     spares: int = 0,
     grace: float = 2.0,
+    blobs: nu.Provide | None = None,
     **bound: object,
 ) -> nu.With:
     """The kernel open on the space whose data dir is ``data``, beside ``body``.
@@ -107,11 +109,15 @@ def kernel_open(
     The open's order: server and stores, a dict, the containers, reap;
     then the pool (spare workers, each opening the stores itself), the
     backends and config, and inside them the kernel racing ``body``. Reap
-    needs no backend, so nothing is spawned before it.
+    needs no backend, so nothing is spawned before it. ``blobs``, a blob
+    store spec, is bound in the host and in every worker, the workers through
+    the host's own :func:`~nuspace.host.space.worker_context`.
     """
     (Path(data) / "store").mkdir(parents=True, exist_ok=True)
-    served = nu.With(nustd.valkey.server(Path(data) / VALKEY_DIR), navigators(data))
-    pool = nustd.mp_pool.pool(name=name, init=navigators(data), spares=spares, grace=grace)
+    held = () if blobs is None else (blobs,)
+    served = nu.With(nustd.valkey.server(Path(data) / VALKEY_DIR), navigators(data), *held)
+    init = navigators(data) if blobs is None else worker_context(data, STORES, blobs)
+    pool = nustd.mp_pool.pool(name=name, init=init, spares=spares, grace=grace)
     drivers = nu.With(pool, kernel.bound(**bound), body=nu.Race(kernel.kernel(), body))
     return nu.With(
         served,

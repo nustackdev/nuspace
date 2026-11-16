@@ -32,15 +32,26 @@ tab (:meth:`~nuspace.web.utils.Arms.event`).
 (:func:`~nuspace.web.planes.ensure`), then the server and nav side
 by side. nav runs here, in the host, beside the tabs it serves.
 
-Beside the socket the server answers one plain route,
-``POST /api/telemetry/space-loaded``: the browser saying a page loaded,
-queued as ``space_loaded`` (see :mod:`nuspace._telemetry`), so the browser
-never talks to PostHog and follows the same opt out.
+Beside the socket the server answers plain routes:
+
+- ``POST /api/telemetry/space-loaded``: the browser saying a page loaded,
+  queued as ``space_loaded`` (see :mod:`nuspace._telemetry`), so the browser
+  never talks to PostHog and follows the same opt out.
+- ``GET|HEAD /blobs/<id>`` and ``POST /blobs``: the blob store
+  (``nuspace.Blobs``), served for leaves and downloads, taking
+  uploads, same origin.
+- ``POST /_nu/upload/{sid}``: the upload intake, where a tab posts a picked
+  file's bytes when a cell asks for them. They land in the upload area
+  (``.nuspace/devices/web/uploads/``, wiped at every open), and a cell's
+  worker reads them there by path (:class:`~.session.ConnectedSession`).
 """
 
 from __future__ import annotations
 
 import socket
+import tempfile
+import uuid
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from starlette.responses import Response
@@ -49,10 +60,14 @@ from starlette.routing import Route
 import nu
 import nuspace
 from nuspace import _telemetry
+from nuspace.host.resources import Fresh
 from nuspace.ops.brackets import atomic
+from nuspace.shapes import blobs as blob_mount
 from nuspace.specs import space_registry
 from nuspace.utils import keys_of
+from nustd.blob.http.serving import serve_blobs
 from nustd.ui.core import WsSession
+from nustd.ui.uploads import uploads
 from nustd.ws_server import SID_ATTR, listen, run_once, session_for, sessions_fold
 
 from . import ops as web
@@ -66,6 +81,7 @@ from .session import served_sessions
 from .shapes import Conn, Web
 from .shell import Shell
 from .sidebar import registered_entries, sidebar_feed
+from .stores import UPLOADS_DIR
 from .utils import Arms, cell_ui, field_dict, field_ids
 from .viewer import on_open, slash_entries, viewer_feed
 
@@ -75,6 +91,7 @@ if TYPE_CHECKING:
 
     from starlette.requests import Request
 
+    from nu.context.fabric import Provide
     from nuspace.kernel import EnvFactory
     from nuspace.specs import Registry
     from nustd.ui.core import Ref
@@ -241,6 +258,8 @@ def serve_web(
     open_browser: bool = True,
     log_level: str = "warning",
     session_address: str | None = None,
+    data: str | None = None,
+    blobs: Provide | None = None,
 ) -> tuple[nu.Nu, dict[str, EnvFactory]]:
     """The web device: the term the host runs, and the envs it registers.
 
@@ -263,6 +282,10 @@ def serve_web(
         log_level: How much the server says.
         session_address: ``host:port`` for the tab socket. A free port by
             default.
+        data: The space's data dir, absolute: the upload area goes in it.
+            None puts the area in the system temp dir.
+        blobs: The blob store's spec, served under ``/blobs``. None
+            serves no blobs.
 
     Returns:
         ``(term, envs)``: ``envs`` maps ``"session"`` to the session env
@@ -271,7 +294,18 @@ def serve_web(
     session_address = session_address or f"127.0.0.1:{_free_port()}"
     registry = space_registry() if registry is None else registry
     sid = nu.Str(nu.Attr(SID_ATTR))
+    held, blob_routes = serve_blobs({blob_mount: blobs}) if blobs is not None else ([], [])
+    # Fixed now, at build, so the session env hands workers the same root.
+    if data is None:
+        upload_root = str(Path(tempfile.gettempdir()) / f"nu-uploads-{uuid.uuid4().hex}")
+        fresh = []
+    else:
+        upload_root = str(Path(data) / UPLOADS_DIR)
+        fresh = [nu.Provide(Fresh, {"paths": [], "dirs": [upload_root]})]
+    area, upload_routes = uploads(upload_root)
     server = nu.With(
+        *held,
+        *fresh,
         listen(
             session_cls=WsSession,
             static=static,
@@ -280,8 +314,10 @@ def serve_web(
             log_level=log_level,
             banner=BANNER,
             open_browser=open_browser,
-            routes=ROUTES,
+            routes=(*ROUTES, *upload_routes, *blob_routes),
         ),
+        # After the server: the area follows its connections.
+        area,
         served_sessions(session_address),
         body=sessions_fold(
             session_for(
@@ -294,4 +330,4 @@ def serve_web(
         ),
     )
     term = ensure() >> indexer.wake() >> pruner.wake() >> nu.ParallelAsync(server, nav())
-    return term, {SESSION_ENV: session_env(session_address)}
+    return term, {SESSION_ENV: session_env(session_address, upload_root)}

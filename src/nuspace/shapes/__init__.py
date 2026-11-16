@@ -31,6 +31,7 @@ by the host for the core stores. The web device keeps its own stores and
 shapes, in :mod:`nuspace.web.shapes`. Core never reads them.
 """
 
+from .blob import Blobs, blobs
 from .cell import Cell
 from .cell_run import OUT_CAP, CellRun
 from .content import Content
@@ -75,6 +76,7 @@ __all__ = [
     "FORMAT",
     "OUT_CAP",
     "ROOT",
+    "Blobs",
     "Cell",
     "CellRun",
     "CellRunIds",
@@ -102,4 +104,5 @@ __all__ = [
     "State",
     "Store",
     "Worker",
+    "blobs",
 ]

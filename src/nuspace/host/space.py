@@ -6,12 +6,13 @@ The order at open, each step inside the brackets of the ones before::
     host.lock                     taken, or Refused: a live host holds it
     the notification server
     Space, State                  their navigators
+    blobs                         the blob store, LMDB in store/blobs/ by default
     format check                  space.db's format, then the core containers, a commit per store
     fresh device stores           conn.db deleted, then every device's navigators, their containers
     reap                          what a dead host left live, ended killed
     stamp                         Space.info path and opened_at; the open told to telemetry
     system and device planes      made where missing
-    worker pool                   spare workers, each binding every store of the open
+    worker pool                   spare workers, each binding every store of the open, blobs too
     backends, kernel config
     init's plane run asked for
     race                          the kernel, each device's driver, the body
@@ -49,6 +50,7 @@ from nuspace._telemetry.usage import opened
 from nuspace.shapes import Space
 from nuspace.specs import RegistryWarning, space_registry
 
+from .blobs import default_spec
 from .devices import device, device_stores
 from .layout import LOCK_FILE, data_dir
 from .lock import HostLock
@@ -60,6 +62,7 @@ if TYPE_CHECKING:
     import os
     from collections.abc import Iterable, Mapping, Sequence
 
+    from nu.context.fabric import Provide
     from nuspace.kernel import Backend, EnvFactory
     from nuspace.shapes import Store
 
@@ -119,24 +122,26 @@ def stamp(root: str) -> nu.Nu:
     return nustd.kv.atomic(info.path.set(root) >> info.opened_at.set(nustd.time.time()))
 
 
-def worker_context(data: str, stores: Sequence[Store]) -> nu.With:
+def worker_context(data: str, stores: Sequence[Store], blobs: Provide) -> nu.With:
     """What every worker comes up holding. Pickled to the child, entered there.
 
     Process scope only, since the pool pays it on every launch: every store
     of the open, opened by the worker itself on the host's files and server,
-    a dict for host local records, and the warm module cache. Whatever one
-    run needs rides in its body.
+    the blob store, a dict for host local records, and the warm module
+    cache. Whatever one run needs rides in its body.
 
     Args:
         data: The space's data dir, absolute.
         stores: The stores of the open, core ones and the devices'.
+        blobs: The blob store's spec (``nuspace.Blobs``).
     """
-    return nu.With(navigators(data, stores), nu.Provide(dict, {}), nu.Provide(Warmed, {}))
+    return nu.With(navigators(data, stores), blobs, nu.Provide(dict, {}), nu.Provide(Warmed, {}))
 
 
 def worker_pool(
     data: str,
     stores: Sequence[Store],
+    blobs: Provide,
     *,
     name: str = DEFAULT_NAME,
     spares: int = DEFAULT_SPARES,
@@ -147,12 +152,13 @@ def worker_pool(
     Args:
         data: The space's data dir, absolute.
         stores: The stores every worker binds.
+        blobs: The blob store's spec every worker binds.
         name: Process name prefix.
         spares: Idle workers to keep up, so a launch does not wait for a spawn.
         grace: Seconds a worker gets to end, polite first, killed past it.
     """
     return nustd.mp_pool.pool(
-        name=name, init=worker_context(data, stores), spares=spares, grace=grace
+        name=name, init=worker_context(data, stores, blobs), spares=spares, grace=grace
     )
 
 
@@ -173,12 +179,13 @@ def _envs(
     return merged
 
 
-def _opening(root: str, throwaway: bool, body: nu.Nu) -> nu.With:
+def _opening(root: str, throwaway: bool, blobs: Provide | None, body: nu.Nu) -> nu.With:
     """The brackets every open shares, from the data dir to every device's stores, around ``body``.
 
     ``body`` runs with every store open and initialized: the format checked,
-    the fresh stores made again. Every device's stores, whichever devices
-    the open serves.
+    the fresh stores made again, the blob store bound (unless ``blobs``
+    is None: nothing runs). Every device's stores, whichever devices the
+    open serves.
     """
     data = str(data_dir(root))
     extra = device_stores()
@@ -193,6 +200,8 @@ def _opening(root: str, throwaway: bool, body: nu.Nu) -> nu.With:
         notifier(data),
         navigators(data, CORE),
     ]
+    if blobs is not None:
+        outer.append(blobs)
     if throwaway:
         outer.insert(0, nu.Provide(Throwaway, {"path": root}))
     return nu.With(*outer, body=_inits(CORE) >> inner)
@@ -216,6 +225,7 @@ def open_space(
     envs: Mapping[str, EnvFactory] | None = None,
     space_envs: Sequence[Sequence[str] | str] = (),
     backends: Mapping[str, type[Backend]] | None = None,
+    blobs: Provide | None = None,
     body: nu.Nu | None = None,
     name: str = DEFAULT_NAME,
 ) -> nu.With:
@@ -245,6 +255,10 @@ def open_space(
         space_envs: Env specs every plane run executes inside, outermost.
         backends: Backend classes by name, on top of the built in ``async``
             and ``mp``.
+        blobs: The blob store (``nuspace.Blobs``): a ``nustd.blob`` spec,
+            eg ``nustd.blob.s3(nuspace.Blobs, bucket="models")``. None is
+            LMDB in ``.nuspace/store/blobs/``, plain files there on a
+            network disk (:func:`~.blobs.default_spec`).
         body: Host nu run beside the drivers. The space closes when it returns.
         name: Process name prefix for workers.
 
@@ -256,7 +270,15 @@ def open_space(
     data = str(data_dir(root))
     opened_devices = [device(d) for d in devices]
     reg = space_registry(extensions=extensions, envs=envs)
-    options = {"host": host, "port": port, "static": static, "open_browser": open_browser}
+    blobs = default_spec(data) if blobs is None else blobs
+    options = {
+        "host": host,
+        "port": port,
+        "static": static,
+        "open_browser": open_browser,
+        "data": data,
+        "blobs": blobs,
+    }
     served = {d.name: d.serve(registry=reg, **options) for d in opened_devices}
     factories = _envs(reg.envs, {n: e for n, (_, e) in served.items()})
     stores = (*CORE, *device_stores())
@@ -265,13 +287,14 @@ def open_space(
     )
     # Inside the pool, after the race: the arms are drained, the workers not stopped yet.
     running = nu.With(
-        worker_pool(data, stores, name=name, spares=spares),
+        worker_pool(data, stores, blobs, name=name, spares=spares),
         kernel.bound(backends=backends, envs=factories, space_envs=space_envs),
         body=nu.TryCatch(system.start() >> drivers, finally_=kernel.close()),
     )
     return _opening(
         root,
         throwaway,
+        blobs,
         kernel.reap() >> stamp(root) >> opened() >> _seeds(opened_devices) >> running,
     )
 
@@ -290,4 +313,4 @@ def make_space(path: str | os.PathLike[str], *, devices: Sequence[str] = ("web",
     """
     root, _ = _root(path)
     opened_devices = [device(d) for d in devices]
-    return _opening(root, False, _seeds(opened_devices))
+    return _opening(root, False, None, _seeds(opened_devices))

@@ -7,7 +7,8 @@ multiplexed over it by sid.
 
 - **worker side**: :func:`piped_session` binds a :class:`PipeSession` for
   connection ``sid``, a local :class:`Session` whose every call is a message
-  on the worker's one pipe. This module imports no web server at module
+  on the worker's one pipe, and the tab's :class:`UploadView`: the host's
+  intake lands a posted file on disk, and the worker reads it by path. This module imports no web server at module
   scope: a worker unpickling a body would otherwise load uvicorn and starlette
   for a server it never runs.
 - **host side**: :func:`served_sessions` puts :class:`SessionPipe` on one
@@ -35,7 +36,7 @@ from __future__ import annotations
 import asyncio
 import itertools
 import struct
-from contextlib import asynccontextmanager, suppress
+from contextlib import ExitStack, asynccontextmanager, suppress
 from typing import TYPE_CHECKING, Any, ClassVar
 
 import msgpack
@@ -44,6 +45,7 @@ import nu
 from nu.core.spans.bracket import _LifecycleBracket
 from nustd.ui.core.protocol import decode, encode
 from nustd.ui.core.session import Session
+from nustd.ui.uploads import UploadView
 
 
 if TYPE_CHECKING:
@@ -307,12 +309,16 @@ class ConnectedSession(_LifecycleBracket):
     Args:
         address: ``host:port`` where :func:`served_sessions` listens.
         sid: The connection id, fixed when the run's env is built.
+        uploads: The upload area's root. Given, the tab's
+            :class:`UploadView` is bound too, so the upload refs read what
+            the tab posted to the host.
     """
 
-    def __init__(self, address: str, sid: str) -> None:
+    def __init__(self, address: str, sid: str, uploads: str | None = None) -> None:
         super().__init__()
         self._payload["address"] = address
         self._payload["sid"] = sid
+        self._payload["uploads"] = uploads
 
     @asynccontextmanager
     async def _aopen(self, ctx: Context) -> AsyncIterator[None]:
@@ -322,21 +328,26 @@ class ConnectedSession(_LifecycleBracket):
             if not await pipe.request(_OPEN, sid):
                 msg = f"No live connection for {sid!r}"
                 raise LookupError(msg)
-            with ctx.fabrics.bind(Session, PipeSession(pipe, sid)):
+            with ExitStack() as bound:
+                bound.enter_context(ctx.fabrics.bind(Session, PipeSession(pipe, sid)))
+                if self._payload["uploads"] is not None:
+                    view = UploadView(self._payload["uploads"], sid)
+                    bound.enter_context(ctx.fabrics.bind(UploadView, view))
                 yield
         finally:
             await pipe.release()
 
 
-def piped_session(address: str, sid: str, body: nu.Nu) -> nu.With:
+def piped_session(address: str, sid: str, body: nu.Nu, *, uploads: str | None = None) -> nu.With:
     """``body`` with connection ``sid`` bound as the session it draws on.
 
     Args:
         address: ``host:port`` where :func:`served_sessions` listens.
         sid: The connection id.
         body: What runs with the connection bound. Pickled into the worker.
+        uploads: The upload area's root, bound as the tab's view. None binds none.
     """
-    return nu.With(ConnectedSession(address, sid), body=body)
+    return nu.With(ConnectedSession(address, sid, uploads), body=body)
 
 
 # --- Host side -------------------------------------------------------------------

@@ -8,8 +8,10 @@ repository keeps ``.git/``::
         host.lock                  the host holding the space open
         store/space.db             Space
         store/state.db             State
+        store/blobs/               Blobs, the blob store (LMDB, or files on a network disk)
         devices/web/web_state.db   Web, with the web device
         devices/web/conn.db        Conn, made fresh at every open
+        devices/web/uploads/       files tabs posted, wiped at every open
         infra/valkey/              the notification server's dir, per open
 
 The store files are the store records' (:mod:`.stores`,

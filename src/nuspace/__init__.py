@@ -11,6 +11,8 @@ The top level holds the everyday names only:
   ``nuspace.State`` (the root) differ by case only, as python modules and
   classes do.
 - places: ``nuspace.at``, ``nuspace.here``.
+- blobs: ``nuspace.Blobs`` (the space's blob store) and ``nuspace.blobs``
+  (where the web device serves it: ``nuspace.blobs.url(id)``).
 - brackets: ``nuspace.atomic``, ``nuspace.bracketed``.
 - ``nuspace.specs`` (PlaneSpec, CellSpec, the registry, add_plane,
   add_cell) and ``nuspace.errors`` (what an op raises).
@@ -25,14 +27,16 @@ from nuspace import errors, specs
 from nuspace.ops import cell, cell_run, plane, plane_run, state, worker
 from nuspace.ops.brackets import atomic, bracketed
 from nuspace.places import at, here
-from nuspace.shapes import Space, State
+from nuspace.shapes import Blobs, Space, State, blobs
 
 
 __all__ = [
+    "Blobs",
     "Space",
     "State",
     "at",
     "atomic",
+    "blobs",
     "bracketed",
     "cell",
     "cell_run",

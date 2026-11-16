@@ -11,6 +11,7 @@ from nuspace import ops, places
 def test_the_top_level_is_the_everyday_list():
     assert sorted(nuspace.__all__) == sorted(
         [
+            "Blobs",
             "Space",
             "State",
             "at",
@@ -19,6 +20,7 @@ def test_the_top_level_is_the_everyday_list():
             "cell",
             "cell_run",
             "errors",
+            "blobs",
             "here",
             "plane",
             "plane_run",
