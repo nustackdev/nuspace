@@ -14,9 +14,15 @@ opens on it. The next run with the same name reopens the newest plane made
 from it, unless removed. The header names the Plane: its id is only known
 once the space is open. A space open in another host, or of an older store
 format, is refused with a short error.
+
+The port: ``--port`` binds that one and a taken one is a short error.
+Without it, the first free port from 8080 up.
 """
 
 from __future__ import annotations
+
+import errno
+import socket
 
 import rich_click as click
 
@@ -29,6 +35,45 @@ from .._meta import announce, hold, path_argument, space_root, tmp_option
 
 
 __all__ = ["run"]
+
+
+#: Where the search for a free port starts when none is given, and how far it goes.
+DEFAULT_PORT = 8080
+_SCAN = 100
+
+
+def _bindable(host: str, port: int) -> bool:
+    """Whether the server could bind ``host:port`` now, probed as uvicorn binds it."""
+    try:
+        infos = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM, flags=socket.AI_PASSIVE)
+    except socket.gaierror as e:
+        raise click.ClickException(f"Cannot bind {host}: {e.strerror}.") from None
+    family, kind, proto, _, address = infos[0]
+    with socket.socket(family, kind, proto) as s:
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            s.bind(address)
+        except OSError as e:
+            if e.errno in (errno.EADDRINUSE, errno.EACCES):
+                return False
+            raise click.ClickException(f"Cannot bind {host}:{port}: {e.strerror}.") from None
+    return True
+
+
+def _port(host: str, port: int | None) -> int:
+    """The port to serve on: ``port`` if free, else a short error; None, the first free from 8080."""
+    if port is not None:
+        if not _bindable(host, port):
+            raise click.ClickException(
+                f"Port {port} on {host} is taken. Pick another with -p, or drop -p for a free one."
+            )
+        return port
+    for candidate in range(DEFAULT_PORT, DEFAULT_PORT + _SCAN):
+        if _bindable(host, candidate):
+            return candidate
+    raise click.ClickException(
+        f"No free port on {host} in {DEFAULT_PORT}-{DEFAULT_PORT + _SCAN - 1}. Pick one with -p."
+    )
 
 
 @click.command(
@@ -54,7 +99,12 @@ __all__ = ["run"]
     "--headless", is_flag=True, help="Serve no browser. --host, --port and --no-browser go unused."
 )
 @click.option("--host", default="127.0.0.1", show_default=True, help="Interface to bind.")
-@click.option("-p", "--port", default=8080, show_default=True, help="Port to bind.")
+@click.option(
+    "-p",
+    "--port",
+    type=int,
+    help="Port to bind, an error if taken. Default: the first free one from 8080.",
+)
 @click.option("--no-browser", is_flag=True, help="Do not open a browser tab on the way up.")
 def run(
     path: str | None,
@@ -62,11 +112,13 @@ def run(
     plane: str | None,
     headless: bool,
     host: str,
-    port: int,
+    port: int | None,
     no_browser: bool,
 ) -> None:
     """Run until Ctrl+C."""
     path = space_root(path, tmp=tmp)
+    if not headless:
+        port = _port(host, port)
     web = {"host": host, "port": port, "open_browser": not no_browser}
     made = None
     try:

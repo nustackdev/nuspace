@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import socket
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -181,6 +182,37 @@ def test_run_headless_maps_to_the_headless_preset(monkeypatch, held, tmp_path):
     assert serve.calls == []
     assert "headless" in result.output
     assert held == ["term"]
+
+
+@pytest.fixture
+def listening():
+    """A socket listening on a loopback port, so that port is taken."""
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        s.listen()
+        yield s.getsockname()[1]
+
+
+def test_run_refuses_a_taken_port_given(monkeypatch, held, listening):
+    serve = _Recorder()
+    monkeypatch.setattr(presets, "serve", serve)
+    result = _invoke("run", "/tmp/space", "-p", str(listening), "--no-browser")
+    assert result.exit_code == 1, result.output
+    assert f"Port {listening}" in _said(result)
+    assert "taken" in _said(result)
+    assert serve.calls == []
+    assert held == []
+
+
+def test_run_without_a_port_takes_the_first_free_from_8080(monkeypatch, held):
+    serve = _Recorder()
+    monkeypatch.setattr(presets, "serve", serve)
+    monkeypatch.setattr(run_command, "_bindable", lambda host, port: port >= 8082)
+    result = _invoke("run", "/tmp/space", "--no-browser")
+    assert result.exit_code == 0, result.output
+    assert serve.calls == [
+        ((_abs("/tmp/space"),), {"host": "127.0.0.1", "port": 8082, "open_browser": False})
+    ]
 
 
 # --- which space -------------------------------------------------------------------
