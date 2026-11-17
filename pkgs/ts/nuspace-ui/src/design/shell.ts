@@ -60,6 +60,23 @@ export const shellSplitHandle = "";
 /** Everything right of the sidebar. */
 export const shellMain = "group/main relative flex min-h-0 min-w-0 flex-1";
 
+/* ============================== Chrome =================================== */
+
+/**
+ * Every strip of window chrome: the sidebar's header and footer, the rail's
+ * head, the desk header, every pane header. One height (`h-chrome`), so the
+ * bars across the top line up by construction. Each bar adds its own gap and
+ * side pads; the pads put its first and last glyph on the region's own lines
+ * (the sidebar's icon lane and shortcut column, a pane's 10px title inset).
+ */
+export const chromeBar = "flex h-chrome shrink-0 items-center";
+
+/**
+ * A button in any chrome bar, on a kit `IconButton ghost sm`: 28px, a 16px
+ * glyph, so its glyph sits 6px in from the button's edge.
+ */
+export const chromeButton = "size-7 [&_svg]:size-4";
+
 /* ============================== The desk ================================= */
 
 /**
@@ -76,20 +93,22 @@ export const deskArea = "relative flex min-h-0 min-w-0 flex-1 bg-nuspace-page";
 export const deskFrame = "flex min-h-0 min-w-0 flex-1 flex-col bg-nuspace-page";
 
 /**
- * The desk header: the desk's icon and name, close right beside it. As
+ * The desk header: the desk's name, close right beside it. As
  * tall as a pane header, on the sidebar's ground (`ground-deep`, the kit's
  * `bg-sunken`), so it reads as the frame and not as a pane, a `line-subtle`
  * hairline under it, the same line the panes meet on.
  */
 export const deskHeader = cn(
-	"flex h-8.5 shrink-0 items-center gap-1.5 pr-1 pl-2.5",
+	chromeBar,
+	"gap-1.5 pr-1 pl-2.5",
 	"border-b border-border-subtle bg-bg-sunken",
 );
 
-/** The desk icon in the header. */
-export const deskHeaderIcon = "size-4 shrink-0 text-text-muted";
-
-/** The desk's name: `ink-1`, a step heavier, never wider than half the header. */
+/**
+ * The desk's name: the focused pane title's type (text-sm, medium, `ink-1`),
+ * never wider than half the header. Its close stays the kit's small xs, a
+ * quiet mark beside the name, not a chrome button.
+ */
 export const deskHeaderName =
 	"block max-w-[50%] min-w-0 select-none truncate text-sm font-medium text-text-primary";
 

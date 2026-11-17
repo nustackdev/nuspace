@@ -29,6 +29,7 @@ import { Ellipsis, Link, X } from "lucide-react";
 import { useState } from "react";
 import { hrefFor, paramsOf } from "../core/router";
 import {
+	chromeButton,
 	type PlaneWidth,
 	paneMenuChoice,
 	paneMenuChoiceItem,
@@ -78,7 +79,7 @@ export function PaneMenu({
 	return (
 		<DropdownMenu open={open ?? own} onOpenChange={onOpenChange ?? setOwn}>
 			<DropdownMenuTrigger asChild>
-				<IconButton variant="ghost" size="sm" aria-label="Plane settings">
+				<IconButton variant="ghost" size="sm" aria-label="Plane settings" className={chromeButton}>
 					<Ellipsis />
 				</IconButton>
 			</DropdownMenuTrigger>

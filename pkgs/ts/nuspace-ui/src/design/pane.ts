@@ -11,10 +11,14 @@
 //   go/projects/nustackdev/design/palette.md        §2.2 text tiers
 
 import { cn } from "@nustackdev/ui-kit";
+import { chromeBar } from "./shell";
 
-/** The header. The drag handle of its pane (`data-pane-header`). */
-export const paneHeader =
-	"flex h-8.5 shrink-0 items-center gap-1.5 pr-1 pl-2.5";
+/**
+ * The header. The drag handle of its pane (`data-pane-header`). The title
+ * starts 10px in, and the last action's glyph ends 10px in (4px pad plus the
+ * chrome button's 6px), the same on a desk header.
+ */
+export const paneHeader = cn(chromeBar, "gap-1.5 pr-1 pl-2.5");
 
 /**
  * What every drag shows under the pointer, a pane header's and a sidebar

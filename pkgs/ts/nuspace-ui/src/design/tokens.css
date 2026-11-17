@@ -188,10 +188,12 @@
 	 * --------------------------------------------------------------------- */
 
 	/* h-chrome: the one height every strip of window chrome shares - the
-	 * rail's header and footer, every pane's bar.
+	 * sidebar's header and footer, the rail's head, the desk header, every
+	 * pane header (./shell.ts chromeBar).
 	 * One token so the rules across the top of the window line up by
-	 * construction, not by two files happening to say h-9. 36 = spacing 9. */
-	--spacing-chrome: 2.25rem;
+	 * construction, not by files happening to agree. 34px, off the 4px grid
+	 * on purpose: a 28px chrome button with 3px of air above and below. */
+	--spacing-chrome: 2.125rem;
 
 	/* max-w-doc / max-w-doc-wide */
 	--container-doc: 40rem; /* 640, == kit container-prose  */

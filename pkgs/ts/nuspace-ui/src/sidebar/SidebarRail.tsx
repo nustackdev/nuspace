@@ -31,7 +31,7 @@ import { useMemo } from "react";
 import { type Roles, useDeskOrder, useDesks, useRoles } from "../core/desks";
 import { deskHref, hrefFor, type Route, useRoute } from "../core/router";
 import {
-	sidebarChromeButton,
+	chromeButton,
 	sidebarRail,
 	sidebarRailBody,
 	sidebarRailDivider,
@@ -152,7 +152,7 @@ function RailLink({
 					{keys ? <Shortcut keys={keys} size="sm" className={sidebarTooltipHint} /> : null}
 				</>
 			}
-			className={cn(sidebarChromeButton, sidebarRailItem(selected))}
+			className={cn(chromeButton, sidebarRailItem(selected))}
 		>
 			<a href={href} aria-current={selected ? "page" : undefined}>
 				{children}

@@ -31,6 +31,7 @@
 //   go/projects/nustackdev/design/a11y.md           §4 aria, §5 focus ring
 
 import { cn } from "@nustackdev/ui-kit";
+import { chromeBar } from "./shell";
 
 /* ============================== Geometry ================================= */
 
@@ -74,31 +75,38 @@ export const sidebarBody = "flex flex-col gap-2.5 px-2 py-1 outline-hidden";
 /* ============================== Header, footer =========================== */
 
 /**
+ * The pads both bars share, so their glyphs sit on the rows' lines: 12px
+ * plus a chrome button's 6px puts the first glyph on the icon lane (18px in),
+ * 8px plus 6px ends the last one on the shortcut column (14px in).
+ */
+const sidebarBarPad = "gap-0.5 pr-2 pl-3";
+
+/**
  * The fixed top bar, lined up with the panes' headers: the desk is flat and
  * starts at the window's top, so the bar is a header's 34px, and its buttons
  * sit on the headers' center line.
  */
-export const sidebarHeader = "flex h-8.5 shrink-0 items-center gap-0.5 px-3";
+export const sidebarHeader = cn(chromeBar, sidebarBarPad);
 
 /** A header button pushed to the bar's right end. */
 export const sidebarHeaderEnd = "ml-auto";
 
-/** NUSPACE next to the collapse button, the "nu" in accent text. */
+/**
+ * NUSPACE next to the collapse button, the "nu" in accent text. Starts on
+ * the rows' label line (44px in): 12 + 28 + the bar's 2px gap + 2.
+ */
 export const sidebarWordmark =
-	"ml-1.5 select-none font-semibold text-sm text-text-primary uppercase tracking-wider";
+	"ml-0.5 select-none font-semibold text-sm text-text-primary uppercase tracking-wider";
 export const sidebarWordmarkNu = "text-accent-text";
 
 /**
  * The fixed bottom bar: links on the left, the window's own state on the
  * right. No rule, on the window's bottom edge like the flat desk.
  */
-export const sidebarFooter = "flex h-chrome shrink-0 items-center gap-0.5 px-3";
+export const sidebarFooter = cn(chromeBar, sidebarBarPad);
 
 /** The free middle of the bottom bar. */
 export const sidebarFooterSpace = "min-w-0 flex-1";
-
-/** A header or footer button, on a kit `IconButton ghost sm`: 28px, a 16px glyph. */
-export const sidebarChromeButton = "size-7 [&_svg]:size-4";
 
 /** The shortcut's kit `Shortcut` after a tooltip's text. */
 export const sidebarTooltipHint = "ml-1.5";
@@ -124,7 +132,7 @@ export const SIDEBAR_RAIL_PX = 48;
 export const sidebarRail = "flex w-12 shrink-0 flex-col";
 
 /** The rail's top bar: just the toggle, on the header's line (`sidebarHeader`). */
-export const sidebarRailHead = "flex h-8.5 shrink-0 items-center justify-center";
+export const sidebarRailHead = cn(chromeBar, "justify-center");
 
 /** The rail's scroller, down to the window's bottom edge like the flat desk. */
 export const sidebarRailScroll = "min-h-0 flex-1";

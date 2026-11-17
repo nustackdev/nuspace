@@ -15,7 +15,7 @@ import {
 } from "@nustackdev/ui-kit";
 import { Columns3, FilePlus, PanelLeft, Plus } from "lucide-react";
 import {
-	sidebarChromeButton,
+	chromeButton,
 	sidebarHeader,
 	sidebarHeaderEnd,
 	sidebarTooltipHint,
@@ -48,7 +48,7 @@ export function SidebarHeader() {
 						ring="inset"
 						aria-label="New"
 						tip="New"
-						className={cn(sidebarChromeButton, sidebarHeaderEnd)}
+						className={cn(chromeButton, sidebarHeaderEnd)}
 					>
 						<Plus />
 					</IconButton>
@@ -88,7 +88,7 @@ export function SidebarToggle({ label, onClick }: { label: string; onClick: () =
 			}
 			data-sidebar-toggle=""
 			onClick={onClick}
-			className={sidebarChromeButton}
+			className={chromeButton}
 		>
 			<PanelLeft />
 		</IconButton>

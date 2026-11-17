@@ -26,7 +26,7 @@ import { useConnectionStatus } from "../core/connection";
 import { KEYS_KEYS, setKeysOpen } from "../core/keys";
 import { toggleTheme, useTheme } from "../core/theme";
 import {
-	sidebarChromeButton,
+	chromeButton,
 	sidebarFooter,
 	sidebarFooterSpace,
 	sidebarStatus,
@@ -73,7 +73,7 @@ function FooterLink({
 			aria-label={label}
 			tip={hint ?? label}
 			tipSide="top"
-			className={sidebarChromeButton}
+			className={chromeButton}
 			asChild
 		>
 			<a href={href} target="_blank" rel="noreferrer">
@@ -119,7 +119,7 @@ function KeysButton() {
 			}
 			tipSide="top"
 			onClick={() => setKeysOpen(true)}
-			className={sidebarChromeButton}
+			className={chromeButton}
 		>
 			<Keyboard />
 		</IconButton>
@@ -139,7 +139,7 @@ function ThemeToggle() {
 			tip={`${next === "dark" ? "Dark" : "Light"} theme`}
 			tipSide="top"
 			onClick={toggleTheme}
-			className={sidebarChromeButton}
+			className={chromeButton}
 		>
 			<Icon />
 		</IconButton>

@@ -1,7 +1,7 @@
 // The desk header: the row across the canvas's top while the tab is on a
 // desk (an empty desk or one of its items). A solo plane has none.
 //
-// Only the desk's icon and name, and close right beside them. The desk's
+// Only the desk's name, and close right beside it. A desk has no icon. The desk's
 // items are the sidebar's, never listed here too: the sidebar is the one
 // place to switch, drag, reset and close them (../sidebar/DeskRows.tsx).
 //
@@ -10,9 +10,9 @@
 // (../sidebar/DeskFolder.tsx).
 
 import { IconButton, OverflowTooltip } from "@nustackdev/ui-kit";
-import { LayoutGrid, X } from "lucide-react";
+import { X } from "lucide-react";
 import { leaveDesk } from "../core/router";
-import { deskHeader, deskHeaderIcon, deskHeaderName } from "../design";
+import { deskHeader, deskHeaderName } from "../design";
 import type { Desk } from "../desk/model";
 import { deskLabel } from "../sidebar/api";
 
@@ -27,7 +27,6 @@ export function DeskHeader({
 	const name = deskLabel(desk?.name ?? "");
 	return (
 		<header className={deskHeader} data-desk-header={deskId}>
-			<LayoutGrid aria-hidden className={deskHeaderIcon} />
 			<OverflowTooltip label={name} side="bottom">
 				<span className={deskHeaderName}>{name}</span>
 			</OverflowTooltip>

@@ -29,6 +29,7 @@ import { X } from "lucide-react";
 import { Fragment } from "react";
 import { hrefFor } from "../core/router";
 import {
+	chromeButton,
 	paneCrumbHere,
 	paneCrumbLink,
 	paneCrumbList,
@@ -128,7 +129,13 @@ export function PaneHeader({
 					onClose={onClose}
 				/>
 				{onClose ? (
-					<IconButton variant="ghost" size="sm" aria-label={`Close ${title}`} onClick={onClose}>
+					<IconButton
+						variant="ghost"
+						size="sm"
+						aria-label={`Close ${title}`}
+						onClick={onClose}
+						className={chromeButton}
+					>
 						<X />
 					</IconButton>
 				) : null}
