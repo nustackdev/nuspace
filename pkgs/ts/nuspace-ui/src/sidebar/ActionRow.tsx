@@ -3,6 +3,7 @@
 // label, and its shortcut when it has one.
 
 import { Plus } from "lucide-react";
+import { sidebarIcon } from "../design";
 import { SidebarRow } from "./SidebarRow";
 
 export function ActionRow({
@@ -21,7 +22,7 @@ export function ActionRow({
 	return (
 		<SidebarRow
 			rowKey={rowKey}
-			icon={<Plus aria-hidden="true" />}
+			icon={<Plus aria-hidden="true" className={sidebarIcon(false)} />}
 			label={label}
 			trailing={keys ? { shortcut: keys } : undefined}
 			onClick={onClick}

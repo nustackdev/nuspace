@@ -246,11 +246,12 @@ export function sidebarRow(selected: boolean, inset = false): string {
 /**
  * The icon lane: one grid cell, so a tree row's icon and its fold chevron
  * stack and swap in place. It is also the `lane` group, so the icon hears
- * when the chevron next to it has keyboard focus.
+ * when the chevron next to it has keyboard focus. It sizes no glyph: an
+ * icon is `sidebarIcon`'s 16px, a control in it keeps the kit's xs 12px.
  */
 export const sidebarLane = cn(
 	"group/lane mr-2 grid w-5 shrink-0 place-items-center *:[grid-area:1/1]",
-	"text-text-muted [&_svg]:size-4",
+	"text-text-muted",
 );
 
 /*
@@ -284,10 +285,10 @@ export function sidebarTwisty(swap: boolean): string {
 	);
 }
 
-/** The fold chevron as a glyph, for a row that is one button (a spec group). */
+/** The fold chevron as a glyph, for a row that is one button (a spec group): the controls' 12px. */
 export function sidebarLaneChevron(open: boolean): string {
 	return cn(
-		"size-4 text-text-muted opacity-0 transition-[opacity,transform] duration-fast ease-out",
+		"size-3 text-text-muted opacity-0 transition-[opacity,transform] duration-fast ease-out",
 		CHEVRON_IN,
 		open && "rotate-90",
 	);
@@ -348,9 +349,10 @@ export const sidebarRowAction = sidebarControlWash;
 
 /**
  * The original plane's icon on a navigated desk row, as a control on a kit
- * `IconButton ghost xs` in the icon lane: a click resets the row.
+ * `IconButton ghost xs` in the icon lane: a click resets the row. The glyph
+ * is the plane's icon, so it keeps an icon's 16px, not the kit's xs 12px.
  */
-export const sidebarResetIcon = cn(sidebarControlWash, "rounded-sm");
+export const sidebarResetIcon = cn(sidebarControlWash, "rounded-sm [&_svg]:size-4");
 
 /** The slash between a navigated row's original icon and its recent title. */
 export const sidebarCrumbSlash = "mr-1.5 shrink-0 select-none text-text-muted";

@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Sidebar controls share one glyph size, icons keep theirs
 - Run finds a free port when none is given, and says so when one is taken
 - Search hits draw through a switch built at load, like any cell ui
 

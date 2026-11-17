@@ -15,7 +15,7 @@ import type * as React from "react";
 import { useEffect, useState } from "react";
 import { useRoles } from "../core/desks";
 import { hrefFor } from "../core/router";
-import { sidebarDropInto } from "../design";
+import { sidebarDropInto, sidebarIcon } from "../design";
 import { dragKind, endDrag, readDrag } from "../desk/dnd";
 import { planeDragProps } from "./drag";
 import { navKey } from "./focus";
@@ -45,7 +45,7 @@ export function NavSection({ selKey }: { selKey: string }) {
 						drag={plane ? planeDragProps(plane) : undefined}
 						label={label}
 						selected={!!plane && plane === selKey}
-						icon={<Icon aria-hidden="true" />}
+						icon={<Icon aria-hidden="true" className={sidebarIcon(false)} />}
 						trailing={{ shortcut: keys }}
 						aria-keyshortcuts={ariaKeys(keys)}
 					/>
@@ -101,7 +101,7 @@ function NewDeskRow() {
 			<SidebarRow
 				rowKey={NEW_DESK_KEY}
 				label="New desk"
-				icon={<Plus aria-hidden="true" />}
+				icon={<Plus aria-hidden="true" className={sidebarIcon(false)} />}
 				onClick={() => newDesk()}
 				drag={drop}
 				className={aimed ? sidebarDropInto : undefined}
