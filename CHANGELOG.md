@@ -9,6 +9,10 @@ Below is the changelog for **nuspace** - the full commit stream. Newest first.
 The `nuspace-ui` wheel is the same source tree's vite output and is not tracked
 separately here.
 
+## Unreleased
+
+- Search hits draw through a switch built at load, like any cell ui
+
 ## 0.7.5 - 2026-11-17
 
 - Release nuspace 0.7.5

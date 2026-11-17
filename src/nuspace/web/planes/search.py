@@ -591,14 +591,18 @@ import nustd.kv
 import nustd.ui as ui
 import nuspace
 import nuspace.web as web
+from nuspace.shapes.content import LEVELS, entries
+from nuspace.specs import content_specs
 from nuspace.web.planes import search
-from nuspace.web.interactions import Drawing
+from nuspace.web.utils import rooted
 
 #: Hits drawn at most. The rest are counted.
 SHOWN = 200
 
 # Every installed kind's label, read off the registry as the cell is built.
 LABELS = nu.Dict(nu.Literal({name: kind["label"] for name, kind in search.kinds().items()}))
+# Every installed kind, read off the registry as the cell is built: a hit draws with one of them.
+KINDS = {name: spec.kind for name, spec in content_specs().items()}
 
 
 class Chosen(nu.Shape):
@@ -630,6 +634,19 @@ HITS = View.results[3].to(
 def of(sel):
     # The shown search's own state, read from here.
     return nuspace.at.plane(id=sel).state(search.Search)
+
+
+def drawing(kind, level, at, key):
+    # A hit's render_hit, one branch per installed kind and level, picked by
+    # the hit's own. An unknown one raises, and the hit says so.
+    def at_level(found):
+        drawn = {lvl: found.render_hit(entries(found, lvl, at)[key]) for lvl in LEVELS}
+        bad = nu.Raise(nu.Str("No scope level ") + level, exc_cls=ValueError)
+        return nu.SwitchDo(level, drawn, default=bad)
+
+    kinds = {name: at_level(found) for name, found in KINDS.items()}
+    unknown = nu.Raise(nu.Str("No content kind ") + kind + " installed", exc_cls=LookupError)
+    return nu.SwitchDo(kind, kinds, default=unknown)
 
 
 def hit(i, h):
@@ -665,11 +682,10 @@ def hit(i, h):
             >> where[1].to(ui.TextRef.slot(size="xs", tone="muted")).set(said)
         )
 
-    # One draw of what the item holds now, read in a snapshot. The drawing is
-    # built at run time, where atomic cannot see its reads: the snapshot is
-    # named, on State, where the items live.
-    drawing = nu.Eval(Drawing(kind, level, at, key, item, hit=True))
-    drawn = nustd.kv.Snapshot(drawing, scope=nuspace.State)
+    # One draw of what the item holds now, in one snapshot. The kind draws
+    # bare ui: placed under the hit's item here, it lands with the rest of
+    # the cell's ui.
+    drawn = nuspace.atomic(nu.shape.reroot(drawing(kind, level, at, key), item, rooted=rooted))
     note = body[1].to(ui.TextRef.slot(size="sm", tone="danger"))
     failed = lambda err: note.set(nu.Str("Cannot draw this hit: ") + nu.str(err))
     return nu.let(place, head) >> nu.TryCatch(drawn, catch=failed)

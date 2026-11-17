@@ -436,6 +436,23 @@ async def test_results_follow_hits_as_they_land_and_end_once_done(store):
         await _stop(task)
 
 
+@pytest.mark.parametrize(
+    ("kind", "scope", "said"),
+    [
+        ("testing.Gone", (CELL, "c1"), "No content kind testing.Gone installed"),
+        (NOTE, ("zone", "c1"), "No scope level zone"),
+    ],
+)
+async def test_results_say_so_when_a_hit_cannot_be_drawn(store, kind, scope, said):
+    await _garden(store)
+    pid = await _searched(store, {NOTE: {}})
+    state = nuspace.at.plane(id=pid).state(search.Search)
+    await do(store, state.hits.append(address(kind, scope, "a")) >> state.finished_at.set(1.0))
+    got = await _frames(store, _viewer(search.RESULTS, "shown", nu.Str(pid)))
+    assert got[RESULTS_COUNT] == {"value": "1 hit"}
+    assert got[(*RESULTS_HITS, "0", "0", "1")] == {"value": f"Cannot draw this hit: {said}"}
+
+
 async def test_results_say_when_nothing_was_found_or_searched(store):
     pid = await _searched(store, {NOTE: {"text": "zzz"}})
     await _run(store, pid)
