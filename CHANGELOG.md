@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Enter in a plane title opens an input line instead of a text cell
 - Window chrome bars share one height, button size and edge lines
 - Sidebar controls share one glyph size, icons keep theirs
 - Run finds a free port when none is given, and says so when one is taken

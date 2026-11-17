@@ -249,13 +249,35 @@ describe("A. the input line", () => {
 });
 
 describe("B. the title", () => {
-	it("row 26 r5_title_enter_creates_top: Enter anywhere makes a prose cell at the top", () => {
+	it("row 26 r5_title_enter_opens_top_line: Enter anywhere opens a line at the top, nothing made", () => {
 		plane([cell("a")]);
 		expect(title({ kind: "enter", end: false })).toBe(true);
+		expect(notify).not.toHaveBeenCalled();
+		expect(lines()).toHaveLength(2);
+		expect(document.activeElement).toBe(lines()[0]);
+	});
+
+	it("row 26 r5_line_enter_makes_cell: Enter again in that line makes an empty prose cell at the top", () => {
+		plane([cell("a")]);
+		title({ kind: "enter", end: true });
+		press(lines()[0], "Enter");
 		expect(created()).toEqual([expect.objectContaining({ name: "text", before: "a" })]);
-		const id = created()[0].cell_id as string;
-		plane([cell(id), cell("a")]);
-		expect(mountDoc(id).doc.focus).toHaveBeenCalledWith("start");
+	});
+
+	it("row 26 r5_esc_back_to_title: Escape in that line puts the caret back at the title's end", () => {
+		plane([cell("a")]);
+		title({ kind: "enter", end: true });
+		press(lines()[0], "Escape");
+		expect(lines()).toHaveLength(1);
+		expect(onTitle).toHaveBeenCalledWith("end");
+	});
+
+	it("row 26 r5_empty_plane_end_line: on an empty plane, the end line", () => {
+		plane([]);
+		expect(title({ kind: "enter", end: false })).toBe(true);
+		expect(lines()).toHaveLength(1);
+		expect(document.activeElement).toBe(endLine());
+		expect(notify).not.toHaveBeenCalled();
 	});
 
 	it("row 27 title_enter_core_at_end: no default, Enter at the end goes into the cells", () => {
@@ -1096,14 +1118,15 @@ describe("a document opened in two frames: read-only first, editing later", () =
 		expect(endLine().value).toBe("");
 	});
 
-	it("a create that asks for the caret gets it once the document opens (R5)", async () => {
+	it("a create that asks for the caret gets it once the document opens (R5, then R1)", async () => {
 		plane([cell("a")]);
 		title({ kind: "enter", end: true });
+		press(lines()[0], "Enter");
 		const id = created()[0].cell_id as string;
 		plane([cell(id), cell("a")]);
 		await drawReadOnly(id);
 		const d = mountDoc(id);
-		expect(d.doc.focus).toHaveBeenCalledWith("start");
+		expect(d.doc.focus).toHaveBeenCalledWith("end");
 	});
 
 	it("a document that goes without ever opening lets the request go, the text back in the line", async () => {

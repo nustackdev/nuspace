@@ -14,7 +14,7 @@
 //
 //   R1  the input line: typed text or Enter makes a prose cell holding it
 //   R2  Backspace in a blank prose cell removes it, the caret above
-//   R5  Enter in the title makes a prose cell at the top
+//   R5  Enter in the title puts the caret in an input line at the top
 //   R6  `/` in a blank prose cell stands the menu in for it
 //   R7  Cmd+Enter at the end of the text opens an input line below
 //   R8  the arrows cross into the prose cell that way, or the title, from
@@ -369,17 +369,20 @@ export const inputRules: Rule<InputIntent, string | null>[] = [
 
 /** Enter in the title, or leaving it at its end. */
 export const titleRules: Rule<TitleIntent, null>[] = [
-	// R5. Enter in the title starts an empty prose cell at the top, the title
-	// left whole. Back: R2 in it, which puts the caret back at the title's end.
+	// R5. Enter in the title puts the caret in an input line at the top, the
+	// title left whole: one opened there, or the end line on an empty plane.
+	// Nothing is made until something is typed (R1). A line already there is
+	// the core's to land in. Back: Escape, or Up or Backspace on the empty
+	// line (R8), which puts the caret back at the title's end.
 	head({
 		rule: "R5",
 		on: "enter",
-		when: ({ api }) => api.defaultSpec(PROSE) !== null,
-		run: ({ api }) => {
-			const spec = api.defaultSpec(PROSE);
-			if (spec) api.create({ after: null }, spec, { at: "start" });
+		when: ({ api }) => {
+			const top = api.cells[0];
+			return top === undefined || !api.beside(top.id, "up").line;
 		},
-		back: "R2",
+		run: ({ api }) => api.openInput(null, { title: "end" }),
+		back: "R8",
 	}),
 	// R8 from the title: Down or Right at its end goes to the start of a prose
 	// cell on top (the title has no x to land under). A cell of another class
