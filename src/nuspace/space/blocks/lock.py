@@ -1,8 +1,10 @@
 """A driver's lock: one of each driver runs on a space at a time.
 
-An assembly takes one lock per driver it runs, a file it names (local:
-``kernel/kernel.lock``, ``devices/web/web.lock``), first, before the
-notification server and the stores, held until the driver stops. A POSIX
+An assembly takes one lock per component it runs, a file it names
+(local: ``infra/infra.lock``, ``kernel/kernel.lock``,
+``devices/web/web.lock``), before the notification server and the
+stores, held until the component stops. Another process may look
+whether it is held (:func:`held`): web runs only while the kernel's is. A POSIX
 record lock (``fcntl.lockf``), which NFS carries across machines, so red
 and blue never run two kernels of one space on the shared grid. The file
 says who holds it, ``host pid taken_at``, read back when the lock is

@@ -8,7 +8,7 @@ EOF the parent is gone, whatever way it went, and the child stops itself
 as at a Ctrl+C: no driver outlives its supervisor.
 
 Exit status: 0 stopped, :data:`~.supervise.REFUSED` refused (a lock
-held, another store format), 1 anything else. Never imported by the
+held, another store format, what it requires not running), 1 anything else. Never imported by the
 package: ``-m`` runs it fresh.
 """
 

@@ -1,12 +1,13 @@
 """Running a space: the registry, where a space lives, the blocks, and local's entry points for real.
 
-The registry is plain python. The layout, the lock, the notifier and the
-resources are file system work, tested on their own. ``local.init``,
-``kernel``, ``web`` and ``open`` run for real on sqlite with the space's
-notifier, with real workers, held open while the test reads. ``local.run``
-runs in a process of its own with its two children: killed web comes back,
-a killed kernel ends it. ``nuspace run`` stops on SIGINT, as Ctrl+C does,
-and ``nuspace run --headless`` is killed with SIGKILL, as a crash is.
+The registry is plain python. The layout, the lock, the notifier, the
+requirement and the resources are file system work, tested on their own.
+``local.init``, ``infra``, ``kernel``, ``web`` and ``open`` run for real
+on sqlite with the space's notifier, with real workers, held open while
+the test reads. ``local.run`` runs in a process of its own, holding infra,
+with its two children: killed web comes back, a killed kernel ends it
+while infra still answers. ``nuspace run`` stops on SIGINT, as Ctrl+C
+does, and ``nuspace run --headless`` is killed with SIGKILL, as a crash is.
 """
 
 from __future__ import annotations
@@ -578,13 +579,30 @@ def _initialized(root: Path) -> bool:
     return meta is not None and meta.init
 
 
-async def _opened(root: Path):
-    """``local.kernel`` held open, no spares, no extensions: ``(ctx, done, task)``.
+def _on_infra(root: Path, *, body: nu.Nu | None = None, **kwargs) -> nu.Nu:
+    """``local.kernel`` on ``root`` inside ``local.infra``, both in this process."""
+    return local.infra(root, body=local.kernel(root, body=body, **kwargs))
 
-    A space not initialized yet is initialized first.
+
+async def _opened(root: Path):
+    """``local.kernel`` on its infra held open, no spares, no extensions: ``(ctx, done, task)``.
+
+    A space not initialized yet is initialized first. Closing stops both.
     """
     if not _initialized(root):
         await nu.arun(local.init(root))
+    return await _held(_on_infra, root, spares=0, name="nuspace-test", extensions=())
+
+
+async def _infra(root: Path):
+    """``local.infra`` alone held open: ``(ctx, done, task)``. Initialized first when it is not."""
+    if not _initialized(root):
+        await nu.arun(local.init(root))
+    return await _held(local.infra, root)
+
+
+async def _kernel(root: Path):
+    """``local.kernel`` alone held open, on an infra run beside it: ``(ctx, done, task)``."""
     return await _held(local.kernel, root, spares=0, name="nuspace-test", extensions=())
 
 
@@ -722,8 +740,8 @@ async def test_web_clears_conn_by_a_commit_while_a_worker_holds_its_file(tmp_pat
         web = local.web(
             root, port=_free_port(), open_browser=False, static=None, extensions=(), body=hold
         )
-        # Web runs only beside a kernel; both in this process, meeting through the files.
-        term = nu.Race(local.kernel(root, spares=0, extensions=()), web)
+        # Web runs only beside a kernel, the kernel on infra: all here, meeting through the files.
+        term = local.infra(root, body=nu.Race(local.kernel(root, spares=0, extensions=()), web))
         task = asyncio.create_task(nu.arun(term))
         try:
             waiting = asyncio.ensure_future(asyncio.shield(ready))
@@ -931,7 +949,7 @@ def test_open_with_nothing_up_writes_and_leaves_nothing_up(tmp_path):
     _free(root, WEB_LOCK, "web")
 
 
-async def test_open_beside_a_live_kernel_joins_its_notifier_and_the_kernel_hears_the_write(
+async def test_open_beside_a_live_kernel_publishes_to_infra_and_the_kernel_hears_the_write(
     tmp_path,
 ):
     root = tmp_path / "space"
@@ -945,7 +963,7 @@ async def test_open_beside_a_live_kernel_joins_its_notifier_and_the_kernel_hears
         await _until(ctx, started, bool)
         name, _ = await nu.arun(nuspace.atomic(Space.planes["p_mine"].name), ctx)
         assert name == "Mine"
-        # The kernel's server is the kernel's still: not stopped, not replaced.
+        # Infra's server is infra's still: not stopped, not replaced.
         assert (valkey / "valkey.pid").read_text() == pid
         assert _answers(valkey)
     finally:
@@ -1031,7 +1049,7 @@ async def test_open_after_a_kernel_alone_lands_a_desk_op(tmp_path):
     """No web ever ran: open binds web's stores, so a desk edit lands, and a later open reads it."""
     root = tmp_path / "space"
     await nu.arun(local.init(root))
-    await nu.arun(local.kernel(root, spares=0, extensions=(), body=nu.Noop()))
+    await nu.arun(_on_infra(root, spares=0, extensions=(), body=nu.Noop()))
     (desk,) = await _aread(root, nu.list(Web.desks.keys()))
     plane = await _aread(root, nuspace.plane.keyed(init.KEY))
     assert await _aread(root, Web.desks[desk].entries.extract()) == {}
@@ -1118,7 +1136,7 @@ async def test_a_second_kernel_and_a_second_web_are_refused_and_init_too(tmp_pat
     try:
         with pytest.raises(Refused, match="the kernel of this space runs in this process already"):
             await nu.arun(local.kernel(root, extensions=()))
-        with pytest.raises(Refused, match="the kernel of this space runs"):
+        with pytest.raises(Refused, match="of this space runs in this process already"):
             await nu.arun(local.init(root))
         # Web beside the kernel is fine: one lock per driver.
         _, wdone, wtask = await _served(root)
@@ -1149,37 +1167,83 @@ async def test_init_is_refused_while_web_runs(tmp_path):
 async def test_web_is_refused_with_no_kernel_running(tmp_path):
     root = tmp_path / "space"
     await nu.arun(local.init(root))
-    started = time.monotonic()
-    with pytest.raises(Refused, match="the kernel of this space is not running: start it first"):
-        await nu.arun(local.web(root, port=_free_port(), static=None, extensions=()))
-    # No kernel lock held: only the short grace for one starting beside it, not the long wait.
-    assert time.monotonic() - started < 10
+    refusal = "the kernel of this space is not running: start it first"
+    for up in (False, True):
+        # With infra up or not: web needs a kernel, and infra alone is none.
+        held = await _infra(root) if up else None
+        try:
+            started = time.monotonic()
+            with pytest.raises(Refused) as refused:
+                await nu.arun(local.web(root, port=_free_port(), static=None, extensions=()))
+            assert str(refused.value) == refusal
+            # No kernel lock held: only the short grace for one starting beside it.
+            assert time.monotonic() - started < 10
+        finally:
+            if held is not None:
+                await _close(*held[1:])
     _free(root, WEB_LOCK, "web")
     assert not _answers(data_dir(root) / VALKEY_DIR)
 
 
-async def test_web_hears_again_once_a_stopped_kernel_is_back(tmp_path):
-    """The kernel's server goes with it; web stays up, and a write of web's reaches the next kernel."""
+async def test_the_kernel_is_refused_with_no_infra_running(tmp_path):
     root = tmp_path / "space"
-    _, done, task = await _opened(root)
-    wctx, wdone, wtask = await _served(root)
+    await nu.arun(local.init(root))
+    started = time.monotonic()
+    with pytest.raises(Refused) as refused:
+        await nu.arun(local.kernel(root, spares=0, extensions=()))
+    assert str(refused.value) == "infra of this space is not running: start it first"
+    # No infra lock held: only the grace, refused before the kernel's lock or log.
+    assert time.monotonic() - started < 10
+    assert not (data_dir(root) / KERNEL_LOG).exists()
+    _free(root, KERNEL_LOCK, "kernel")
+
+
+async def test_the_kernel_waits_for_infra_coming_up(tmp_path):
+    """Infra's lock held, its server not up yet: the kernel waits past its grace, then comes up."""
+    root = tmp_path / "space"
+    await nu.arun(local.init(root))
+    lock = Lock(str(data_dir(root) / INFRA_LOCK), "infra")
+    lock.setup(None)
+    server = nustd.valkey.ValkeyServer(data_dir=data_dir(root) / VALKEY_DIR)
+    starting = threading.Timer(3.0, server.setup, args=(None,))
     try:
+        started = time.monotonic()
+        starting.start()
+        _, done, task = await _kernel(root)
+        assert time.monotonic() - started >= 3.0
         await _close(done, task)
-        assert not _answers(data_dir(root) / VALKEY_DIR)
-        assert not wtask.done(), "web went down with the kernel"
-        ctx, done, task = await _opened(root)
-        try:
-            made = nuspace.plane.add("p_back", name="Back", backend="async")
-            await nu.arun(nuspace.atomic(made), wctx)
-            asked = nu.let("", lambda r: nuspace.plane_run.add("p_back", into=r) >> nu.Noop())
-            await nu.arun(nuspace.atomic(asked), wctx)
-            runs = Space.exec.indexes.live.plane_to_plane_runs["p_back"].ids
-            ids = await _until(wctx, nu.list(runs.keys()), lambda rs: len(rs) == 1)
-            await _until(ctx, Space.exec.plane_runs[ids[0]].started_at.exists(), bool)
-        finally:
-            await _close(done, task)
     finally:
-        await _close(wdone, wtask)
+        starting.join()
+        server.cleanup()
+        lock.cleanup()
+
+
+async def test_web_hears_again_once_a_stopped_kernel_is_back(tmp_path):
+    """Infra outlives the kernel; web stays up, and a write of web's reaches the next kernel."""
+    root = tmp_path / "space"
+    _, idone, itask = await _infra(root)
+    try:
+        _, done, task = await _kernel(root)
+        wctx, wdone, wtask = await _served(root)
+        try:
+            await _close(done, task)
+            assert _answers(data_dir(root) / VALKEY_DIR)
+            assert not wtask.done(), "web went down with the kernel"
+            ctx, done, task = await _kernel(root)
+            try:
+                made = nuspace.plane.add("p_back", name="Back", backend="async")
+                await nu.arun(nuspace.atomic(made), wctx)
+                asked = nu.let("", lambda r: nuspace.plane_run.add("p_back", into=r) >> nu.Noop())
+                await nu.arun(nuspace.atomic(asked), wctx)
+                runs = Space.exec.indexes.live.plane_to_plane_runs["p_back"].ids
+                ids = await _until(wctx, nu.list(runs.keys()), lambda rs: len(rs) == 1)
+                await _until(ctx, Space.exec.plane_runs[ids[0]].started_at.exists(), bool)
+            finally:
+                await _close(done, task)
+        finally:
+            await _close(wdone, wtask)
+    finally:
+        await _close(idone, itask)
 
 
 async def test_each_driver_logs_to_its_own_file(tmp_path):
@@ -1188,8 +1252,11 @@ async def test_each_driver_logs_to_its_own_file(tmp_path):
     _, wdone, wtask = await _served(root)
     await _close(wdone, wtask)
     await _close(done, task)
+    infra_log = (data_dir(root) / INFRA_LOG).read_text()
     kernel_log = (data_dir(root) / KERNEL_LOG).read_text()
     web_log = (data_dir(root) / WEB_LOG).read_text()
+    assert "infra up" in infra_log
+    assert "infra down" in infra_log
     assert f"kernel up on {socket.gethostname()}, pid {os.getpid()}" in kernel_log
     assert "kernel down" in kernel_log
     assert "web up" in web_log
@@ -1347,7 +1414,7 @@ print("yielded", value, flush=True)
 """
 
 
-def test_run_restarts_a_killed_web_and_ends_with_a_killed_kernel(tmp_path):
+def test_run_restarts_a_killed_web_and_ends_with_a_killed_kernel_infra_up_till_the_end(tmp_path):
     root = tmp_path / "space"
     env = dict(os.environ, NUSPACE_TELEMETRY="0")
     run = subprocess.Popen(  # noqa: S603
@@ -1372,7 +1439,20 @@ def test_run_restarts_a_killed_web_and_ends_with_a_killed_kernel(tmp_path):
         while (data_dir(root) / WEB_LOG).read_text().count("web up") < 2:
             assert time.monotonic() < deadline, "the new web never came up"
             time.sleep(0.1)
+        valkey = data_dir(root) / VALKEY_DIR
+        assert _answers(valkey)
+        # Web held stopped, so run waits on it: the moment between the kernel's death and run's end.
+        web = _child(run.pid, "web")
+        os.kill(web, signal.SIGSTOP)
         os.kill(kernel, signal.SIGKILL)
+        deadline = time.monotonic() + 30
+        while lock_module.held(str(data_dir(root) / KERNEL_LOCK)):
+            assert time.monotonic() < deadline, "the killed kernel kept its lock"
+            time.sleep(0.1)
+        # The kernel is gone; infra, in run's own process, still answers.
+        assert _answers(valkey)
+        assert run.poll() is None
+        os.kill(web, signal.SIGCONT)
         out, _ = run.communicate(timeout=60)
     finally:
         if run.poll() is None:
@@ -1383,7 +1463,8 @@ def test_run_restarts_a_killed_web_and_ends_with_a_killed_kernel(tmp_path):
     assert "the kernel exited (137), stopping web" in said
     assert "yielded 137" in said
     assert _gone(seen) == [], [_tree(p) for p in seen]
-    assert not _answers(data_dir(root) / VALKEY_DIR)
+    assert not _answers(valkey)
+    assert _valkeys(valkey) == []
 
 
 # --- nuspace run and Ctrl+C ----------------------------------------------------------------

@@ -1,16 +1,36 @@
-"""local.kernel and local.web: one driver each, in the process that runs the term.
+"""local.infra, local.kernel and local.web: one component each, in the process that runs the term.
 
-Both open the space the same way (:mod:`.opening`), each under its own
-lock, so one kernel and one web run on a space, in one process or two.
-Neither makes or inits a space: each refuses one whose init has not run
-(``local.init``), except a throwaway root, which it makes and inits first.
-The kernel owns the notification server and web joins it, so web starts
-only beside a running kernel: it waits a moment for one coming up, else
-it is refused. A kernel stopped under a live web takes the server with
-it; web's tabs hear again once a kernel is back. They meet only through
-the stores, the notifier and two files
-of local's: ``devices/web/session.addr``, where web's tab sessions answer
-(:mod:`.session`), and the uploads dir, both named by :mod:`.layout`.
+A local space runs in three layers, each assuming the ones under it:
+
+- **infra**, what the space runs on: the notification server, owned by
+  this process and gone with it (nustd's keeper watches it).
+- **kernel**, the kernel's driver. It needs infra up.
+- **devices**, web today. It needs the kernel running, so infra too.
+
+The drivers never check what they run on: if infra goes under a kernel,
+the kernel fails as it fails. Every check is here, at the entry point,
+once, at setup (:class:`~..blocks.required.Required`): the kernel refuses
+with no infra answering, web with no kernel lock held. Each waits a short
+grace for what it needs starting beside it, and the kernel up to
+:data:`INFRA_WAIT` seconds while infra's lock is held. A kernel that stops
+leaves infra and web up; web's tabs hear again once a kernel is back.
+
+Each takes its own lock, so one of each runs on a space, in one process
+or several. None makes or inits a space: each refuses one whose init has
+not run (``local.init``), except a throwaway root, which it makes and
+inits first. The kernel and web open the space the same way
+(:mod:`.opening`) and meet only through the stores, the notifier and two
+files of local's: ``devices/web/session.addr``, where web's tab sessions
+answer (:mod:`.session`), and the uploads dir, both named by :mod:`.layout`.
+
+``infra``::
+
+    the init check        refused when meta.json lacks "init": true
+    the data dir          local's dirs, made where missing
+    infra/infra.lock      one infra per space, or Refused
+    infra/infra.log       this process's logging
+    the notifier          served, watchdog on: it lives as long as this process
+    body                  the body when given, else parked until cancelled
 
 ``kernel``, inside the shared brackets::
 
@@ -147,16 +167,19 @@ def kernel(
 ) -> nu.Nu:
     """The space's kernel in this process, run until ``body`` returns, or until cancelled without one.
 
-    See the module for the order. At a clean close (cancelled, or ``body``
-    returning) what the kernel started and left live is ended
-    ``interrupted``. A space not initialized, of another store format,
-    another assembly's, or one whose kernel runs elsewhere, is refused
-    before anything is written. Logs to ``kernel/kernel.log``.
+    See the module for the order. Infra must run on the space: the kernel
+    publishes to its notification server, waiting up to :data:`INFRA_WAIT`
+    seconds while infra's lock is held, and only :data:`GRACE` seconds
+    while it is not. At a clean close (cancelled, or ``body`` returning)
+    what the kernel started and left live is ended ``interrupted``. A space
+    not initialized, of another store format, another assembly's, or one
+    whose kernel runs elsewhere, is refused before anything is written.
+    Logs to ``kernel/kernel.log``.
 
     Args:
         path: The space's root, initialized (``local.init``); its data in
             ``.nuspace/``. None is a throwaway one, made and initialized
-            here, removed at close.
+            here, removed at close: no infra runs on it, so it is refused.
         extensions: The installed packages whose extensions register, by
             entry point name. None registers every installed one, ``()`` none.
         envs: Env factories of the space's own, ahead of every package's.
@@ -172,7 +195,8 @@ def kernel(
 
     Raises:
         Refused: A space not initialized, an older store format, another
-            assembly's space, or a kernel of this space running already.
+            assembly's space, no infra running on it, or a kernel of this
+            space running already.
     """
     root, throwaway = resolve_root(path)
     data = str(data_dir(root))
@@ -190,34 +214,42 @@ def kernel(
         root,
         locks=[(KERNEL_LOCK, "kernel")],
         log=(KERNEL_LOG, "kernel"),
-        notifier=binding.served(data),
+        required=needs_infra(data),
         blobs=blobs,
         body=path_set(root) >> opened() >> running,
     )
     return fresh(root, throwaway, driven)
 
 
-#: Seconds web waits for a kernel whose lock is held but whose server is not up yet.
-KERNEL_WAIT = 30.0
+#: Seconds the kernel waits for infra whose lock is held but whose server is not up yet.
+INFRA_WAIT = 30.0
 
-#: Seconds web looks again at first for a kernel starting beside it, its lock not taken yet.
-KERNEL_GRACE = 2.0
+#: Seconds an entry point looks again for what it requires starting beside it, not showing yet.
+GRACE = 2.0
 
 
-def kernels(data: str) -> nu.Provide:
-    """The kernel's notification server answering, or web refused: no kernel, nothing to serve."""
-    refusal = (
-        "the kernel of this space is not running: start it first"
-        " (nuspace run, or nuspace run --headless beside this)"
-    )
+def needs_infra(data: str) -> nu.Provide:
+    """Infra's notification server answering, or the kernel refused: start infra first."""
     return nu.Provide(
         Required,
         {
             "check": functools.partial(answers, binding.valkey_dir(data)),
-            "refusal": refusal,
-            "wait": KERNEL_WAIT,
-            "waiting": functools.partial(held, str(Path(data) / KERNEL_LOCK)),
-            "grace": KERNEL_GRACE,
+            "refusal": "infra of this space is not running: start it first",
+            "wait": INFRA_WAIT,
+            "waiting": functools.partial(held, str(Path(data) / INFRA_LOCK)),
+            "grace": GRACE,
+        },
+    )
+
+
+def needs_kernel(data: str) -> nu.Provide:
+    """The kernel's lock held, or web refused: start the kernel first. A kernel up has infra up."""
+    return nu.Provide(
+        Required,
+        {
+            "check": functools.partial(held, str(Path(data) / KERNEL_LOCK)),
+            "refusal": "the kernel of this space is not running: start it first",
+            "wait": GRACE,
         },
     )
 
@@ -252,9 +284,9 @@ def web(
 ) -> nu.Nu:
     """The space's web in this process, served until ``body`` returns, or until cancelled without one.
 
-    See the module for the order. A kernel must run on the space: web joins
-    its notification server, waiting up to :data:`KERNEL_WAIT` seconds for
-    one coming up, and is refused when there is none. A space not
+    See the module for the order. A kernel must run on the space: web
+    looks for its lock held, for up to :data:`GRACE` seconds for one
+    coming up, and is refused when there is none. A space not
     initialized, of another store format, another assembly's, or one whose
     web runs elsewhere, is refused before anything is written. Logs to
     ``devices/web/web.log``.
@@ -308,7 +340,7 @@ def web(
         root,
         locks=[(WEB_LOCK, "web")],
         log=(WEB_LOG, "web"),
-        notifier=kernels(data),
+        required=needs_kernel(data),
         blobs=blobs,
         body=running,
     )

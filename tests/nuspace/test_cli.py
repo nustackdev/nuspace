@@ -179,13 +179,15 @@ def test_run_runs_kernel_and_web_by_default(monkeypatch, held):
     assert held == ["term"]
 
 
-def test_run_headless_maps_to_the_kernel_alone(monkeypatch, held, tmp_path):
-    serve, headless = _Recorder(), _Recorder()
+def test_run_headless_maps_to_infra_around_the_kernel(monkeypatch, held, tmp_path):
+    serve, headless, infra = _Recorder(), _Recorder(), _Recorder()
     monkeypatch.setattr(local, "run", serve)
     monkeypatch.setattr(local, "kernel", headless)
+    monkeypatch.setattr(local, "infra", infra)
     result = _invoke("run", "--headless")
     assert result.exit_code == 0, result.output
     assert headless.calls == [((_home_root(tmp_path),), {"body": None})]
+    assert infra.calls == [((_home_root(tmp_path),), {"body": "term"})]
     assert serve.calls == []
     assert "headless" in result.output
     assert held == ["term"]
@@ -337,7 +339,9 @@ def _made_by(root: Path, name: str) -> None:
 
 def test_run_calls_the_assembly_meta_json_names(monkeypatch, held, tmp_path):
     kernel = _Recorder()
-    other = SimpleNamespace(run=_Recorder(), kernel=kernel, web=_Recorder(), open=None, init=None)
+    other = SimpleNamespace(
+        run=_Recorder(), infra=_Recorder(), kernel=kernel, web=_Recorder(), open=None, init=None
+    )
     monkeypatch.setitem(sys.modules, "nuspace.space.other", other)
     _made_by(tmp_path, "other")
     result = _invoke("run", "--headless", str(tmp_path))

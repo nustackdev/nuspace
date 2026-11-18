@@ -12,21 +12,26 @@
     Space.info.path       the space's root
     "init": true          in meta.json, last: a failed init leaves it false
 
-Every entry point that runs a driver opens the space the same way after
-it, each step inside the brackets of the ones before::
+The kernel and web open the space the same way after it, each step
+inside the brackets of the ones before::
 
     the init check        refused when meta.json lacks "init": true
+    the requirement       what the driver runs on, up, or Refused: infra
+                          for the kernel, the kernel for web
     the data dir          local's dirs, made where missing
-    locks                 one per driver the entry point runs, or Refused
+    lock                  the driver's, or Refused
     log                   this process's logging at the driver's file
-    the notifier          the kernel's: started and owned by the kernel,
-                          joined by web (refused with no kernel up)
-    Space, State, Web, Conn   bound (:mod:`.binding`), publishing
+    Space, State, Web, Conn   bound (:mod:`.binding`), publishing to
+                          infra's notification server
     blobs                 when the entry point binds them
 
-A throwaway root (path None) is made by the entry point itself, so it
-runs ``init`` on it first, at setup (:func:`fresh`). ``open`` shares only the
-bindings and the init check: it locks nothing and makes nothing.
+The requirement comes before the lock, so a driver holding its lock has
+what it runs on up: web looks only for the kernel's lock. Infra binds no
+store and needs nothing: it shares the init check, the data dir, a lock
+and a log. A throwaway root (path None) is made by the entry point
+itself, so it runs ``init`` on it first, at setup (:func:`fresh`).
+``open`` shares only the bindings and the init check: it locks nothing
+and makes nothing.
 """
 
 from __future__ import annotations
@@ -139,7 +144,7 @@ def bracketed(
     *,
     locks: Sequence[tuple[str, str]],
     log: tuple[str, str] | None,
-    notifier: nu.Nu,
+    required: nu.Nu,
     blobs: Provide | None,
     body: nu.Nu,
 ) -> nu.With:
@@ -149,20 +154,22 @@ def bracketed(
         root: The space's root, absolute.
         locks: ``(file, what)`` per driver, the file relative to the data dir.
         log: ``(file, what)``, this process's log while it runs, or None.
-        notifier: The notification server's bracket, served or joined: the
-            stores publish to it.
+        required: What the driver needs running, checked before its lock
+            (:class:`~..blocks.required.Required`): what it requires is up
+            by the time it holds its lock.
         blobs: The blob store's spec, or None to bind none.
         body: What runs inside, every store ready.
     """
     data = str(data_dir(root))
     outer: list[nu.Nu] = [
         nu.Provide(Initialized, {"root": root}),
+        required,
         nu.Provide(DataDir, {"root": root, "dirs": DIRS}),
     ]
     outer += [nu.Provide(Lock, {"path": str(Path(data) / f), "what": w}) for f, w in locks]
     if log is not None:
         outer.append(logged_to(Path(data) / log[0], log[1]))
-    outer += [notifier, binding.stores(data, ROOTS)]
+    outer.append(binding.stores(data, ROOTS))
     if blobs is not None:
         outer.append(blobs)
     return nu.With(*outer, body=body)

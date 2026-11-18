@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Kernel requires infra, web requires a kernel; run holds infra through kernel crashes
 - Infra runs as its own entry point, owning the notification server while it lives
 - Entry points check what they need running through one requirement block, refusing otherwise
 - Init flags a space once set up; kernel, web and open refuse one without

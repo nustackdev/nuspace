@@ -5,7 +5,7 @@ a new space) does the work, through its entry points:
 
 - by default its ``run``: the kernel and web, each in a process of its
   own, web started again if it dies.
-- ``--headless``: its ``kernel`` alone, in this process.
+- ``--headless``: its ``infra`` and ``kernel``, in this process, no web.
 - ``--web``: its ``web`` alone, in this process, beside a kernel run
   elsewhere (``--headless`` in another shell) or none yet: what web asks
   for waits until a kernel runs.
@@ -152,7 +152,7 @@ def run(
         served = {"host": host, "port": port, "open_browser": not no_browser}
         if headless:
             body = None if spec is None else nu.let("", lambda p: plane_of(spec, p)) >> nu.Park()
-            term = space.kernel(path, body=body)
+            term = space.infra(path, body=space.kernel(path, body=body))
         elif web_only:
             term = space.web(path, plane=spec, **served)
         else:

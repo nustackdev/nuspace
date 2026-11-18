@@ -6,7 +6,7 @@ not. It needs no infra, no kernel and no device, only a space initialized
 ops such as desk edits work through it.
 
 ``open`` makes nothing, resets nothing, seeds nothing and takes no lock.
-With a kernel up it joins the kernel's notification server, so a write
+With infra up it publishes to infra's notification server, so a write
 lands in the stores and the kernel and web hear it. With none up nobody
 listens: it binds the same files publishing nothing, and starts no
 server. A plane run asked for through it is started by the live kernel,
@@ -76,7 +76,7 @@ def open(
 
     Ops run as in a cell: brackets, ``nuspace.atomic``, named targets, no
     ``Here``. Takes no lock: beside a live kernel and web, or with nothing
-    up. Publishes to the kernel's notification server when it answers as
+    up. Publishes to infra's notification server when it answers as
     this opens, else publishes nothing (nobody listens).
 
     Args:

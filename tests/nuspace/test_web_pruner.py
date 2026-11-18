@@ -360,7 +360,7 @@ async def test_a_removal_prunes_with_no_browser_and_a_bulk_removal_is_one_run(tm
     web = local.web(
         root, open_browser=False, static=None, port=_free_port(), extensions=(), body=hold
     )
-    term = nu.Race(local.kernel(root, spares=0, extensions=()), web)
+    term = local.infra(root, body=nu.Race(local.kernel(root, spares=0, extensions=()), web))
     task = asyncio.create_task(nu.arun(term))
     try:
         waiting = asyncio.ensure_future(asyncio.shield(ready))

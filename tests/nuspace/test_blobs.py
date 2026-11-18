@@ -205,8 +205,8 @@ async def _served(root: Path, port: int):
     ready, done = loop.create_future(), asyncio.Event()
     hold = nu.With(MADE_STORE, body=nu.let(_Hold(ready, done), lambda _: nu.Noop()))
     web = local.web(root, port=port, open_browser=False, static=None, extensions=(), body=hold)
-    # Web runs only beside a kernel: both here, meeting through the files.
-    term = nu.Race(local.kernel(root, spares=0, extensions=()), web)
+    # Web runs only beside a kernel, the kernel on infra: all here, meeting through the files.
+    term = local.infra(root, body=nu.Race(local.kernel(root, spares=0, extensions=()), web))
     task = asyncio.create_task(nu.arun(term))
     waiting = asyncio.ensure_future(asyncio.shield(ready))
     finished, _ = await asyncio.wait({waiting, task}, timeout=30, return_when="FIRST_COMPLETED")

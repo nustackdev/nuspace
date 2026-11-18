@@ -5,8 +5,8 @@ an ``open``, and each worker (the pool gets the same term pickled). The
 stores go through the navigators block, one stack per root, so the
 drivers only ever see the root shapes. Names come from :mod:`.layout`.
 
-The kernel owns the Valkey server (:func:`served`); every other process
-publishes to it. With no kernel up nobody listens, so ``open`` and
+Infra owns the Valkey server (:func:`served`); the kernel, web and every
+worker publish to it. With no infra up nobody listens, so ``open`` and
 ``init`` bind :func:`quiet` stores then: the same files, nothing published.
 """
 
@@ -48,7 +48,7 @@ def valkey_url(data: str | os.PathLike[str]) -> str:
 
 
 def served(data: str | os.PathLike[str]) -> Provide:
-    """The space's notification server, started and owned for the body: the kernel's."""
+    """The space's notification server, started and owned for the body: infra's."""
     return _notifier.served(valkey_dir(data))
 
 
@@ -81,7 +81,7 @@ def stores(data: str | os.PathLike[str], roots: Iterable[type[nu.Shape]]) -> nu.
 def quiet(data: str | os.PathLike[str], roots: Iterable[type[nu.Shape]]) -> nu.With:
     """Each of ``roots`` bound to its SQLite file under ``data``, publishing nothing.
 
-    For a process on a space with no kernel up, so no server to publish to
+    For a process on a space with no infra up, so no server to publish to
     and nobody to hear it. A kernel starting later reads the stores as
     they are, so nothing is missed.
 

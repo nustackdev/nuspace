@@ -55,7 +55,7 @@ console = Console()
 DEFAULT_ASSEMBLY = "local"
 
 #: What a module needs to be an assembly the commands can call.
-_ENTRY_POINTS = ("run", "kernel", "web", "open", "init")
+_ENTRY_POINTS = ("run", "infra", "kernel", "web", "open", "init")
 
 _F = TypeVar("_F", bound=Callable[..., Any])
 

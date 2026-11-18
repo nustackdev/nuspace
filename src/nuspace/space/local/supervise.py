@@ -1,25 +1,30 @@
-"""local.run: the kernel and web as two child processes on one root, watched over.
+"""local.run: infra held here, the kernel and web as two child processes on one root, watched over.
 
-Two processes so web can stop and start again (a crash, an extension
-installed) while the kernel and every plane run it holds go on. They
-share nothing in memory: the stores, the notifier and local's files are
-all they meet through.
+The run process holds infra itself (``local.infra``, its body the
+supervisor): the notification server lives as long as run does. The
+kernel and web run as children, so web can stop and start again (a
+crash, an extension installed) while the kernel and every plane run it
+holds go on, and a kernel that dies takes neither the server nor web
+with it. They share nothing in memory: the stores, the notifier and
+local's files are all they meet through.
 
-- **Start.** The kernel first, then web once the kernel's notification
-  server answers (web joins it). Each is ``python -m
-  nuspace.space.local.child kernel|web ROOT`` (:mod:`.child`), its
-  options pickled on stdin, in a session of its own: a Ctrl+C on the
-  terminal reaches only this process.
+- **Start.** Infra's init check, lock and server here, then the kernel,
+  then web once the kernel's lock is held (a kernel holding its lock has
+  infra answering). Each is ``python -m nuspace.space.local.child
+  kernel|web ROOT`` (:mod:`.child`), its options pickled on stdin, in a
+  session of its own: a Ctrl+C on the terminal reaches only this process.
 - **Ctrl+C**, or the term cancelled: web is stopped first (SIGINT, as a
-  Ctrl+C), then the kernel, each given :data:`GRACE` seconds before SIGKILL.
+  Ctrl+C), then the kernel, each given :data:`GRACE` seconds before
+  SIGKILL, then infra closes here.
 - **Web dies**: started again, without opening a tab (the tab reconnects
   on its own). More than :data:`RESTARTS` times within :data:`WINDOW`
   seconds, or refused (a web runs elsewhere), and run stops, saying why.
 - **The kernel exits**: web is stopped, and run ends with the kernel's
-  status.
-- **path None**: one throwaway root made and initialized here, both
-  children use it, and it is removed once both are gone. Any other path
-  must be initialized already (``local.init``): the children refuse it.
+  status. Infra answers until then: the server never went with the kernel.
+- **path None**: one throwaway root made and initialized here, before
+  infra's init check, both children use it, and it is removed once all
+  is gone. Any other path must be initialized already (``local.init``):
+  infra's init check refuses it.
 
 Each child's stdout and stderr are this process's: web's server says where
 it listens, the kernel what it reaps. This process only says what it
@@ -42,10 +47,10 @@ from typing import TYPE_CHECKING
 from nu.engine.structure import Declared
 from nu.lang import Command, Ref
 
+from ..blocks.lock import held
 from ..blocks.meta import data_dir, resolve_root
-from ..blocks.notifier import answers
-from . import binding
-from .layout import WEB_LOG
+from .drivers import infra
+from .layout import KERNEL_LOCK, WEB_LOG
 from .opening import fresh
 from .plane import found
 
@@ -76,7 +81,7 @@ GRACE = 30.0
 #: How often run looks at its children.
 POLL = 0.1
 
-#: Seconds run waits for the kernel's notification server before it gives up.
+#: Seconds run waits for the kernel to hold its lock before it gives up.
 KERNEL_UP = 60.0
 
 #: The options each entry point takes, so ``run`` hands each its own.
@@ -150,6 +155,8 @@ def stop(child: subprocess.Popen | None, grace: float = GRACE) -> None:
 async def supervise(root: str, kernel: bytes, web: bytes, rest: bytes) -> int:
     """Run both children on ``root`` until the kernel exits or this is cancelled; the kernel's status.
 
+    Infra runs already: this is its body.
+
     Args:
         root: The space's root, absolute.
         kernel: The kernel's options, pickled.
@@ -159,9 +166,9 @@ async def supervise(root: str, kernel: bytes, web: bytes, rest: bytes) -> int:
     kernel_child = spawn("kernel", root, kernel)
     web_child = None
     try:
-        valkey = binding.valkey_dir(data_dir(root))
+        lock = str(data_dir(root) / KERNEL_LOCK)
         deadline = time.monotonic() + KERNEL_UP
-        while not answers(valkey):
+        while not held(lock):
             code = kernel_child.poll()
             if code is not None:
                 say(f"the kernel exited ({status(code)}) before it came up")
@@ -265,7 +272,7 @@ def run(
     plane: PlaneSpec | str | None = None,
     **options: object,
 ) -> nu.Nu:
-    """The space at ``path`` with its kernel and its web in two processes, watched over.
+    """The space at ``path``: infra in this process, its kernel and its web in two more, watched over.
 
     See the module for what happens when either stops. Yields the kernel's
     exit status, 0 at a Ctrl+C.
@@ -283,6 +290,8 @@ def run(
     Raises:
         TypeError: An option neither entry point takes, or one that does not pickle.
         Missing: No plane spec of the name ``plane``.
+        Refused: A space not initialized, or infra of this space running
+            already (at run).
     """
     unknown = set(options) - KERNEL - WEB
     if unknown:
@@ -301,4 +310,4 @@ def run(
         pickled("web", web),
         pickled("web", {**web, "open_browser": False}),
     )
-    return fresh(root, throwaway, term)
+    return fresh(root, throwaway, infra(root, body=term))
