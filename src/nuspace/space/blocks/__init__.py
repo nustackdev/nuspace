@@ -13,7 +13,7 @@
 from . import navigators
 from .browse import Browse, BrowserRef
 from .lock import Lock, LockWarning, held
-from .logs import Logged, logs
+from .logs import Logged, logged_to
 from .meta import (
     DATA_DIR,
     META_FILE,
@@ -50,7 +50,7 @@ __all__ = [
     "find_space",
     "held",
     "is_space",
-    "logs",
+    "logged_to",
     "navigators",
     "read_meta",
     "resolve_root",

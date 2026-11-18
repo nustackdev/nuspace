@@ -38,7 +38,7 @@ import rich_click as click
 
 import nu
 from nuspace.errors import Refused
-from nuspace.space.local._plane import plane_of
+from nuspace.space.local.plane import plane_of
 from nuspace.specs import registered_name
 
 from .._installed import resolve

@@ -55,8 +55,7 @@ from nuspace.space.blocks.meta import (
 )
 from nuspace.space.blocks.notifier import Joined, served
 from nuspace.space.blocks.resources import DataDir, Throwaway
-from nuspace.space.local._disk import Marked
-from nuspace.space.local._plane import plane_of
+from nuspace.space.local.disk import Marked
 from nuspace.space.local.layout import (
     DIRS,
     KERNEL_LOCK,
@@ -68,6 +67,7 @@ from nuspace.space.local.layout import (
     made_before,
 )
 from nuspace.space.local.layout import STORES as PLACES
+from nuspace.space.local.plane import plane_of
 from nuspace.space.local.supervise import Restarts
 from nuspace.specs import (
     GROUP,
@@ -1089,7 +1089,7 @@ def _child(pid: int, what: str, *, not_: int | None = None, timeout: float = 30.
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         for child, args in _tree(pid).items():
-            if f"local._child {what} " in args and child != not_ and _alive([child]):
+            if f"local.child {what} " in args and child != not_ and _alive([child]):
                 return child
         time.sleep(0.1)
     msg = f"no {what} child came up"

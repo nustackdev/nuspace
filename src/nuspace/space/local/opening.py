@@ -35,11 +35,11 @@ from nuspace.shapes.stores import CORE
 from nuspace.web.stores import CONN_STORE, WEB_STORE
 
 from ..blocks.lock import Lock
-from ..blocks.logs import logs
+from ..blocks.logs import logged_to
 from ..blocks.meta import data_dir
 from ..blocks.resources import DataDir, Throwaway
 from . import binding
-from ._disk import Marked
+from .disk import Marked
 from .layout import DIRS
 
 
@@ -50,7 +50,7 @@ if TYPE_CHECKING:
     from nuspace.shapes import Store
 
 
-__all__ = ["ROOTS", "STORES", "inits", "opening", "path_set"]
+__all__ = ["ROOTS", "STORES", "bracketed", "inits", "path_set"]
 
 
 #: Every store local binds: the core ones, then web's.
@@ -60,14 +60,14 @@ STORES = (*CORE, WEB_STORE, CONN_STORE)
 ROOTS = tuple(s.root for s in STORES)
 
 
-def _each(stores: Iterable[Store]) -> nu.Nu:
+def each(stores: Iterable[Store]) -> nu.Nu:
     """Each store's fixed containers made where missing, one commit per store, in order."""
     return nu.Sequential(*(nustd.kv.atomic(s.init()) for s in stores))
 
 
 def inits() -> nu.Nu:
     """Every store ready: the core ones (the format checked first), the live indexes, web's."""
-    return _each(CORE) >> nustd.kv.atomic(kernel.init_live()) >> _each((WEB_STORE, CONN_STORE))
+    return each(CORE) >> nustd.kv.atomic(kernel.init_live()) >> each((WEB_STORE, CONN_STORE))
 
 
 def path_set(root: str) -> nu.Nu:
@@ -78,7 +78,7 @@ def path_set(root: str) -> nu.Nu:
     return nustd.kv.atomic(Space.info.path.set(root))
 
 
-def opening(
+def bracketed(
     root: str,
     *,
     throwaway: bool,
@@ -110,7 +110,7 @@ def opening(
     ]
     outer += [nu.Provide(Lock, {"path": str(Path(data) / f), "what": w}) for f, w in locks]
     if log is not None:
-        outer.append(logs(Path(data) / log[0], log[1]))
+        outer.append(logged_to(Path(data) / log[0], log[1]))
     if notifier is None:
         outer.append(binding.quiet(data, ROOTS))
     else:

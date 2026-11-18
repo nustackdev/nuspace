@@ -65,13 +65,13 @@ def data_dir(root: str | os.PathLike[str]) -> Path:
     return Path(root) / DATA_DIR
 
 
-def _meta_file(root: str | os.PathLike[str]) -> Path:
+def meta_file(root: str | os.PathLike[str]) -> Path:
     return data_dir(root) / META_FILE
 
 
 def is_space(root: str | os.PathLike[str]) -> bool:
     """Whether ``root`` is a space: its data dir holds ``meta.json``."""
-    return _meta_file(root).is_file()
+    return meta_file(root).is_file()
 
 
 def read_meta(root: str | os.PathLike[str]) -> Meta | None:
@@ -80,7 +80,7 @@ def read_meta(root: str | os.PathLike[str]) -> Meta | None:
     Raises:
         Refused: The file is there but does not read as a meta.
     """
-    file = _meta_file(root)
+    file = meta_file(root)
     try:
         raw = file.read_text(encoding="utf-8")
     except FileNotFoundError:
@@ -95,7 +95,7 @@ def read_meta(root: str | os.PathLike[str]) -> Meta | None:
 
 def write_meta(root: str | os.PathLike[str], meta: Meta) -> None:
     """Write ``meta.json`` of the space at ``root`` whole: a reader never sees half of it."""
-    file = _meta_file(root)
+    file = meta_file(root)
     file.parent.mkdir(parents=True, exist_ok=True)
     part = file.with_name(f".{META_FILE}.{os.getpid()}")
     part.write_text(json.dumps(asdict(meta)) + "\n", encoding="utf-8")

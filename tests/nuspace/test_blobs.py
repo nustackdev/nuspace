@@ -32,7 +32,7 @@ from nuspace.space import local
 from nuspace.space.blocks.meta import data_dir
 from nuspace.space.blocks.workers import worker_context
 from nuspace.space.local import binding
-from nuspace.space.local._disk import Wiped
+from nuspace.space.local.disk import Wiped
 from nuspace.space.local.layout import BLOBS_DIR, UPLOADS_DIR
 from nuspace.web.env import SessionWrap
 from nuspace.web.session import SessionPipe, piped_session

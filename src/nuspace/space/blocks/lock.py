@@ -42,10 +42,10 @@ __all__ = ["Lock", "LockWarning", "held", "holder"]
 
 
 #: Errors a non blocking lock raises when somebody else holds it.
-_HELD = frozenset({errno.EACCES, errno.EAGAIN})
+HELD = frozenset({errno.EACCES, errno.EAGAIN})
 
 #: The lock files this process holds, by absolute path.
-_MINE: set[str] = set()
+MINE: set[str] = set()
 
 
 class LockWarning(UserWarning):
@@ -66,7 +66,7 @@ def held(path: str) -> bool:
     This process's own locks are answered from the set: a second descriptor
     on the file, closed, would drop the lock this process holds on it.
     """
-    if path in _MINE:
+    if path in MINE:
         return True
     try:
         fd = os.open(path, os.O_RDWR)
@@ -75,7 +75,7 @@ def held(path: str) -> bool:
     try:
         fcntl.lockf(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except OSError as exc:
-        return exc.errno in _HELD
+        return exc.errno in HELD
     else:
         fcntl.lockf(fd, fcntl.LOCK_UN)
         return False
@@ -83,7 +83,7 @@ def held(path: str) -> bool:
         os.close(fd)
 
 
-def _told(record: str) -> str:
+def told(record: str) -> str:
     """A holder record as a refusal tells it: ``on <host>, pid <pid>``."""
     host, _, rest = record.partition(" ")
     pid = rest.partition(" ")[0]
@@ -110,7 +110,7 @@ class Lock:
 
     def setup(self, ctx: Context) -> None:
         """Take the lock without waiting, and write who holds it."""
-        if self.path in _MINE:
+        if self.path in MINE:
             msg = f"the {self.what} of this space runs in this process already, pid {os.getpid()}"
             raise Refused(msg)
         Path(self.path).parent.mkdir(parents=True, exist_ok=True)
@@ -119,8 +119,8 @@ class Lock:
             fcntl.lockf(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except OSError as exc:
             os.close(fd)
-            if exc.errno in _HELD:
-                msg = f"the {self.what} of this space runs {_told(holder(self.path))}. Stop it there first"
+            if exc.errno in HELD:
+                msg = f"the {self.what} of this space runs {told(holder(self.path))}. Stop it there first"
                 raise Refused(msg) from None
             warnings.warn(
                 f"could not take the {self.what} lock {self.path} ({exc}), going on without it",
@@ -129,7 +129,7 @@ class Lock:
             )
             return
         self._fd = fd
-        _MINE.add(self.path)
+        MINE.add(self.path)
         os.ftruncate(fd, 0)
         os.write(fd, f"{socket.gethostname()} {os.getpid()} {time.time():.3f}\n".encode())
 
@@ -142,7 +142,7 @@ class Lock:
         fd, self._fd = self._fd, None
         if fd is None:
             return
-        _MINE.discard(self.path)
+        MINE.discard(self.path)
         with contextlib.suppress(OSError):
             fcntl.lockf(fd, fcntl.LOCK_UN)
         os.close(fd)

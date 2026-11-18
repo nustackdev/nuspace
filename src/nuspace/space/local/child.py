@@ -1,4 +1,4 @@
-"""One driver of ``local.run``, in a process of its own: ``python -m nuspace.space.local._child``.
+"""One driver of ``local.run``, in a process of its own: ``python -m nuspace.space.local.child``.
 
 ``local.run`` starts this module twice, ``kernel ROOT`` and ``web ROOT``,
 each in a session of its own, so a Ctrl+C on the terminal reaches only
@@ -23,7 +23,7 @@ import threading
 from .supervise import REFUSED
 
 
-def _watch_parent() -> None:
+def watch_parent() -> None:
     """Wait for EOF on stdin, the parent gone or letting go, then stop as Ctrl+C does."""
     # The raw fd, not sys.stdin: a buffered reader held by a daemon thread aborts interpreter shutdown.
     try:
@@ -40,14 +40,14 @@ def main(argv: list[str]) -> int:
     from nuspace import _telemetry
     from nuspace.errors import Refused
 
-    from . import _drivers
+    from . import drivers
 
     what, root = argv[1], argv[2]
     # A parent started in the background may hand down SIGINT ignored: the stop is SIGINT.
     signal.signal(signal.SIGINT, signal.default_int_handler)
     options = pickle.load(sys.stdin.buffer)  # noqa: S301 -- written by our own parent
-    threading.Thread(target=_watch_parent, name=f"nuspace-{what}-parent", daemon=True).start()
-    entry = {"kernel": _drivers.kernel, "web": _drivers.web}[what]
+    threading.Thread(target=watch_parent, name=f"nuspace-{what}-parent", daemon=True).start()
+    entry = {"kernel": drivers.kernel, "web": drivers.web}[what]
     try:
         nu.eval_in_loop(nu.compile(entry(root, **options)), nu.Context())
     except KeyboardInterrupt:

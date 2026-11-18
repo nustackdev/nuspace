@@ -38,7 +38,7 @@ from nuspace.kernel import CLOSED, LEFT_OVER, Env
 from nuspace.kernel.kernel import loop
 from nuspace.shapes import EXIT_FAILED, Space
 from nuspace.space.local import binding
-from nuspace.space.local._session import AddressFile
+from nuspace.space.local.session import AddressFile
 from nuspace.web.env import session_env
 from nuspace.web.nav import BY, nav
 from nuspace.web.stores import CONN_STORE, WEB_STORE
@@ -368,9 +368,7 @@ async def _nav_alone(data: str) -> Kernel:
     init = init_stores() >> nustd.kv.atomic(WEB_STORE.init()) >> nustd.kv.atomic(CONN_STORE.init())
     held = nu.let(_Hold(ready, done), lambda _: nu.Noop())
     body = nu.With(MADE_STORE, mem, body=init >> nu.Race(nav(), held))
-    task = asyncio.create_task(
-        nu.arun(nu.With(binding.served(data), navigators(data), body=body))
-    )
+    task = asyncio.create_task(nu.arun(nu.With(binding.served(data), navigators(data), body=body)))
     waiting = asyncio.ensure_future(asyncio.shield(ready))
     finished, _ = await asyncio.wait({waiting, task}, timeout=30, return_when="FIRST_COMPLETED")
     if task in finished:

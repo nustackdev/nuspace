@@ -24,17 +24,17 @@ if TYPE_CHECKING:
     from nu.lang.runtime import Context
 
 
-__all__ = ["FORMAT", "Logged", "logs"]
+__all__ = ["FORMAT", "Logged", "logged_to"]
 
 
 #: One line per record: when, which process, who logged it, what.
 FORMAT = "%(asctime)s %(process)d %(levelname)s %(name)s: %(message)s"
 
 #: nuspace's own logger: its INFO lines land too, a library's only from WARNING.
-_OWN = "nuspace"
+OWN = "nuspace"
 
 #: The logger a driver's own up and down lines go to.
-_LOGGER = "nuspace.space"
+LOGGER = "nuspace.space"
 
 
 class Logged:
@@ -60,13 +60,13 @@ class Logged:
         handler = logging.FileHandler(self.path, encoding="utf-8")
         handler.setFormatter(logging.Formatter(FORMAT))
         handler.setLevel(logging.INFO)
-        own = logging.getLogger(_OWN)
+        own = logging.getLogger(OWN)
         if own.getEffectiveLevel() > logging.INFO:
             self._level = own.level
             own.setLevel(logging.INFO)
         logging.getLogger().addHandler(handler)
         self._handler = handler
-        logging.getLogger(_LOGGER).info(
+        logging.getLogger(LOGGER).info(
             "%s up on %s, pid %d", self.what, socket.gethostname(), os.getpid()
         )
 
@@ -79,15 +79,15 @@ class Logged:
         handler, self._handler = self._handler, None
         if handler is None:
             return
-        logging.getLogger(_LOGGER).info("%s down, pid %d", self.what, os.getpid())
+        logging.getLogger(LOGGER).info("%s down, pid %d", self.what, os.getpid())
         logging.getLogger().removeHandler(handler)
         handler.close()
         if self._level is not None:
-            logging.getLogger(_OWN).setLevel(self._level)
+            logging.getLogger(OWN).setLevel(self._level)
             self._level = None
 
 
-def logs(path: str | os.PathLike[str], what: str) -> nu.Provide:
+def logged_to(path: str | os.PathLike[str], what: str) -> nu.Provide:
     """This process's logging at ``path`` while the bracket holds (:class:`Logged`).
 
     Args:

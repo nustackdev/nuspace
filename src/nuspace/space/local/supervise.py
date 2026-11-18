@@ -7,7 +7,7 @@ all they meet through.
 
 - **Start.** The kernel first, then web once the kernel's notification
   server answers (web joins it). Each is ``python -m
-  nuspace.space.local._child kernel|web ROOT`` (:mod:`._child`), its
+  nuspace.space.local.child kernel|web ROOT`` (:mod:`.child`), its
   options pickled on stdin, in a session of its own: a Ctrl+C on the
   terminal reaches only this process.
 - **Ctrl+C**, or the term cancelled: web is stopped first (SIGINT, as a
@@ -46,8 +46,8 @@ from ..blocks.meta import data_dir, resolve_root
 from ..blocks.notifier import answers
 from ..blocks.resources import Throwaway
 from . import binding
-from ._plane import found
 from .layout import WEB_LOG
+from .plane import found
 
 
 if TYPE_CHECKING:
@@ -73,14 +73,14 @@ WINDOW = 60.0
 GRACE = 30.0
 
 #: How often run looks at its children.
-_POLL = 0.1
+POLL = 0.1
 
 #: Seconds run waits for the kernel's notification server before it gives up.
 KERNEL_UP = 60.0
 
 #: The options each entry point takes, so ``run`` hands each its own.
-_KERNEL = frozenset({"extensions", "envs", "space_envs", "backends", "spares", "name", "blobs"})
-_WEB = frozenset({"extensions", "host", "port", "static", "open_browser", "blobs"})
+KERNEL = frozenset({"extensions", "envs", "space_envs", "backends", "spares", "name", "blobs"})
+WEB = frozenset({"extensions", "host", "port", "static", "open_browser", "blobs"})
 
 
 class Restarts:
@@ -106,19 +106,19 @@ class Restarts:
         return True
 
 
-def _say(line: str) -> None:
+def say(line: str) -> None:
     print(f"nuspace run: {line}", file=sys.stderr, flush=True)  # noqa: T201
 
 
-def _status(code: int) -> int:
+def status(code: int) -> int:
     """A child's return code as a shell tells it: a signal ``n`` is ``128 + n``."""
     return 128 - code if code < 0 else code
 
 
-def _spawn(what: str, root: str, options: bytes) -> subprocess.Popen:
+def spawn(what: str, root: str, options: bytes) -> subprocess.Popen:
     """One driver's child, its options written on its stdin, the pipe left open."""
     child = subprocess.Popen(  # noqa: S603 -- our own interpreter and module
-        [sys.executable, "-m", "nuspace.space.local._child", what, root],
+        [sys.executable, "-m", "nuspace.space.local.child", what, root],
         stdin=subprocess.PIPE,
         start_new_session=True,
     )
@@ -128,7 +128,7 @@ def _spawn(what: str, root: str, options: bytes) -> subprocess.Popen:
     return child
 
 
-def _stop(child: subprocess.Popen | None, grace: float = GRACE) -> None:
+def stop(child: subprocess.Popen | None, grace: float = GRACE) -> None:
     """``child`` stopped as at a Ctrl+C, killed past ``grace``, reaped. Gone already is fine."""
     if child is None:
         return
@@ -155,7 +155,7 @@ async def supervise(root: str, kernel: bytes, web: bytes, rest: bytes) -> int:
         web: Web's options, pickled, for its first start.
         rest: Web's options, pickled, for a restart (no tab opened).
     """
-    kernel_child = _spawn("kernel", root, kernel)
+    kernel_child = spawn("kernel", root, kernel)
     web_child = None
     try:
         valkey = binding.valkey_dir(data_dir(root))
@@ -163,36 +163,36 @@ async def supervise(root: str, kernel: bytes, web: bytes, rest: bytes) -> int:
         while not answers(valkey):
             code = kernel_child.poll()
             if code is not None:
-                _say(f"the kernel exited ({_status(code)}) before it came up")
-                return _status(code)
+                say(f"the kernel exited ({status(code)}) before it came up")
+                return status(code)
             if time.monotonic() >= deadline:
-                _say(f"the kernel did not come up within {KERNEL_UP:.0f} s, stopping")
+                say(f"the kernel did not come up within {KERNEL_UP:.0f} s, stopping")
                 return 1
-            await asyncio.sleep(_POLL)
-        web_child = _spawn("web", root, web)
+            await asyncio.sleep(POLL)
+        web_child = spawn("web", root, web)
         restarts = Restarts()
         while True:
-            await asyncio.sleep(_POLL)
+            await asyncio.sleep(POLL)
             code = kernel_child.poll()
             if code is not None:
-                _say(f"the kernel exited ({_status(code)}), stopping web")
-                return _status(code)
+                say(f"the kernel exited ({status(code)}), stopping web")
+                return status(code)
             code = web_child.poll()
             if code is None:
                 continue
             if code == REFUSED:
-                _say("web was refused, stopping the kernel")
+                say("web was refused, stopping the kernel")
                 return REFUSED
             if not restarts.allow(time.monotonic()):
                 log = data_dir(root) / WEB_LOG
-                _say(f"web exited {RESTARTS + 1} times within {WINDOW:.0f} s, stopping. See {log}")
+                say(f"web exited {RESTARTS + 1} times within {WINDOW:.0f} s, stopping. See {log}")
                 return 1
-            _say(f"web exited ({_status(code)}), starting it again")
-            _stop(web_child)
-            web_child = _spawn("web", root, rest)
+            say(f"web exited ({status(code)}), starting it again")
+            stop(web_child)
+            web_child = spawn("web", root, rest)
     finally:
-        _stop(web_child)
-        _stop(kernel_child)
+        stop(web_child)
+        stop(kernel_child)
 
 
 class ChildrenRef(Ref):
@@ -248,7 +248,7 @@ class Supervised(Command):
         return athunk
 
 
-def _pickled(what: str, options: Mapping[str, object]) -> bytes:
+def pickled(what: str, options: Mapping[str, object]) -> bytes:
     try:
         return pickle.dumps(dict(options))
     except (pickle.PicklingError, TypeError, AttributeError) as e:
@@ -283,22 +283,22 @@ def run(
         TypeError: An option neither entry point takes, or one that does not pickle.
         Missing: No plane spec of the name ``plane``.
     """
-    unknown = set(options) - _KERNEL - _WEB
+    unknown = set(options) - KERNEL - WEB
     if unknown:
         msg = f"local.run got options no entry point takes: {', '.join(sorted(unknown))}"
         raise TypeError(msg)
     if plane is not None:
         found(plane)
     root, throwaway = resolve_root(path)
-    kernel = {k: v for k, v in options.items() if k in _KERNEL}
-    web = {k: v for k, v in options.items() if k in _WEB}
+    kernel = {k: v for k, v in options.items() if k in KERNEL}
+    web = {k: v for k, v in options.items() if k in WEB}
     if plane is not None:
         web["plane"] = plane
     term = Supervised(
         root,
-        _pickled("kernel", kernel),
-        _pickled("web", web),
-        _pickled("web", {**web, "open_browser": False}),
+        pickled("kernel", kernel),
+        pickled("web", web),
+        pickled("web", {**web, "open_browser": False}),
     )
     held = [nu.Provide(Throwaway, {"path": root})] if throwaway else []
     return nu.With(*held, body=term)

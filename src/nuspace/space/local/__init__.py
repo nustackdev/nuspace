@@ -13,8 +13,8 @@ Where everything lives on disk is :mod:`.layout`, how the stores are bound
 :mod:`.binding`.
 """
 
-from ._drivers import kernel, web
-from ._open import init, open
+from .access import init, open
+from .drivers import kernel, web
 from .supervise import run
 
 

@@ -44,15 +44,15 @@ __all__ = ["Heard", "Joined", "answers", "served"]
 
 
 #: How long one ping waits for an answer.
-_PING = 0.5
+PING = 0.5
 
 #: How often a join looks again while it waits.
-_EVERY = 0.05
+EVERY = 0.05
 
 
 def answers(path: str | os.PathLike[str]) -> bool:
     """Whether the server of the dir ``path`` answers a ping now."""
-    return ping(socket_path_for(Path(path)), _PING)
+    return ping(socket_path_for(Path(path)), PING)
 
 
 def served(path: str | os.PathLike[str]) -> nu.Provide:
@@ -111,7 +111,7 @@ class Joined:
         while not answers(self.path):
             if not self._hold_on(deadline):
                 raise Refused(self.refusal)
-            time.sleep(_EVERY)
+            time.sleep(EVERY)
 
     async def asetup(self, ctx: Context) -> None:
         """Ping until the server answers, or refuse, sleeping between looks on the loop."""
@@ -119,7 +119,7 @@ class Joined:
         while not answers(self.path):
             if not self._hold_on(deadline):
                 raise Refused(self.refusal)
-            await asyncio.sleep(_EVERY)
+            await asyncio.sleep(EVERY)
 
 
 class Heard(_LifecycleBracket):

@@ -1,6 +1,6 @@
 """local.kernel and local.web: one driver each, in the process that runs the term.
 
-Both open the space the same way (:mod:`._common`), each under its own
+Both open the space the same way (:mod:`.opening`), each under its own
 lock, so one kernel and one web run on a space, in one process or two.
 The kernel owns the notification server and web joins it, so web starts
 only beside a running kernel: it waits a moment for one coming up, else
@@ -8,7 +8,7 @@ it is refused. A kernel stopped under a live web takes the server with
 it; web's tabs hear again once a kernel is back. They meet only through
 the stores, the notifier and two files
 of local's: ``devices/web/session.addr``, where web's tab sessions answer
-(:mod:`._session`), and the uploads dir, both named by :mod:`.layout`.
+(:mod:`.session`), and the uploads dir, both named by :mod:`.layout`.
 
 ``kernel``, inside the shared brackets::
 
@@ -55,11 +55,11 @@ from ..blocks.meta import data_dir, resolve_root
 from ..blocks.notifier import Joined
 from ..blocks.workers import DEFAULT_NAME, DEFAULT_SPARES, worker_pool
 from . import binding
-from ._common import ROOTS, opening, path_set
-from ._disk import Wiped
-from ._plane import found, plane_of
-from ._session import Recorded, free_address, session_env
+from .disk import Wiped
 from .layout import KERNEL_LOCK, KERNEL_LOG, SESSION_ADDR, UPLOADS_DIR, WEB_LOCK, WEB_LOG
+from .opening import ROOTS, bracketed, path_set
+from .plane import found, plane_of
+from .session import Recorded, free_address, session_env
 
 
 if TYPE_CHECKING:
@@ -74,7 +74,7 @@ if TYPE_CHECKING:
 __all__ = ["kernel", "web"]
 
 
-def _envs(registered: Mapping[str, EnvFactory], session: EnvFactory) -> dict[str, EnvFactory]:
+def merged_envs(registered: Mapping[str, EnvFactory], session: EnvFactory) -> dict[str, EnvFactory]:
     """The registry's env factories with web's session env on top: web owns what it serves."""
     merged = dict(registered)
     if SESSION_ENV in merged:
@@ -131,7 +131,7 @@ def kernel(
     data = str(data_dir(root))
     reg = space_registry(extensions=extensions, envs=envs)
     blobs = binding.blobs(data) if blobs is None else blobs
-    factories = _envs(reg.envs, session_env(data))
+    factories = merged_envs(reg.envs, session_env(data))
     bindings = binding.stores(data, ROOTS)
     driver = _kernel.driver()
     running = nu.With(
@@ -139,7 +139,7 @@ def kernel(
         _kernel.bound(backends=backends, envs=factories, space_envs=space_envs),
         body=driver if body is None else nu.Race(driver, body),
     )
-    return opening(
+    return bracketed(
         root,
         throwaway=throwaway,
         locks=[(KERNEL_LOCK, "kernel")],
@@ -157,7 +157,7 @@ KERNEL_WAIT = 30.0
 KERNEL_GRACE = 2.0
 
 
-class _Coming:
+class Coming:
     """Whether a kernel is coming up: its lock held, or still inside the first grace seconds."""
 
     def __init__(self, lock: str, grace: float = KERNEL_GRACE) -> None:
@@ -172,7 +172,7 @@ class _Coming:
         return held(self.lock) or now - self._since < self.grace
 
 
-def _kernels(data: str) -> nu.Provide:
+def kernels(data: str) -> nu.Provide:
     """The kernel's notification server joined, or web refused: no kernel, nothing to serve."""
     refusal = (
         "the kernel of this space is not running: start it first"
@@ -184,12 +184,12 @@ def _kernels(data: str) -> nu.Provide:
             "path": binding.valkey_dir(data),
             "refusal": refusal,
             "wait": KERNEL_WAIT,
-            "waiting": _Coming(str(Path(data) / KERNEL_LOCK)),
+            "waiting": Coming(str(Path(data) / KERNEL_LOCK)),
         },
     )
 
 
-def _opened_on(spec: PlaneSpec, host: str, port: int, browse: bool) -> nu.Nu:
+def opened_on(spec: PlaneSpec, host: str, port: int, browse: bool) -> nu.Nu:
     """The plane of ``spec`` resolved or made, a tab opened on it once web answers, then held."""
 
     def on(plane: nu.ObjectRef) -> nu.Nu:
@@ -261,7 +261,7 @@ def web(
         session_address=address,
         upload_root=uploads,
     )
-    beside = [] if plane is None else [_opened_on(found(plane), host, port, open_browser)]
+    beside = [] if plane is None else [opened_on(found(plane), host, port, open_browser)]
     if body is not None:
         beside.append(body)
     recorded = nu.Provide(Recorded, {"path": str(Path(data) / SESSION_ADDR), "address": address})
@@ -270,12 +270,12 @@ def web(
         recorded,
         body=nu.Race(served, *beside) if beside else served,
     )
-    return opening(
+    return bracketed(
         root,
         throwaway=throwaway,
         locks=[(WEB_LOCK, "web")],
         log=(WEB_LOG, "web"),
-        notifier=_kernels(data),
+        notifier=kernels(data),
         blobs=blobs,
         body=running,
     )

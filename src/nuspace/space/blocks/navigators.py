@@ -72,7 +72,7 @@ class Shard:
 
 
 @dataclass(frozen=True)
-class _ShardTag:
+class ShardTag:
     """The tag a shard's own stack is bound under, never one a ref carries."""
 
     root: type
@@ -80,7 +80,7 @@ class _ShardTag:
 
 
 @dataclass(frozen=True)
-class _Holds:
+class Holds:
     """The predicate of a shard's navigator: whether a ref's top-level slot is kept there.
 
     A plain value, not a closure, so the bindings pickle to workers.
@@ -95,7 +95,7 @@ class _Holds:
         return top in self.slots if self.slots else top not in self.others
 
 
-class _Routed(Navigator):
+class Routed(Navigator):
     """A shard's storage, bound again at the root's tag behind the shard's predicate.
 
     Args:
@@ -141,10 +141,10 @@ def sharded(
     others = frozenset(named)
     parts: list[nu.Nu] = []
     for i, shard in enumerate(shards):
-        tag = _ShardTag(root, i)
-        holds = _Holds(frozenset(shard.slots), frozenset() if shard.slots else others)
+        tag = ShardTag(root, i)
+        holds = Holds(frozenset(shard.slots), frozenset() if shard.slots else others)
         parts.append(shard.stack(tags=(tag,)))
-        parts.append(nu.Provide(_Routed, {"via": (tag,)}, tags=(root,), predicate=holds))
+        parts.append(nu.Provide(Routed, {"via": (tag,)}, tags=(root,), predicate=holds))
     if observer is not None:
         parts.append(observer(tags=(root,)))
     return nu.With(*parts)

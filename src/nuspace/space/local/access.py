@@ -26,8 +26,8 @@ from nuspace.web.planes import ensure as web_planes
 from ..blocks.meta import data_dir, read_meta, resolve_root
 from ..blocks.notifier import Heard
 from . import binding
-from ._common import ROOTS, opening, path_set
 from .layout import ASSEMBLY, KERNEL_LOCK, WEB_LOCK
+from .opening import ROOTS, bracketed, path_set
 
 
 if TYPE_CHECKING:
@@ -120,7 +120,7 @@ def init(path: str | os.PathLike[str]) -> nu.With:
             kernel or a web of this space running.
     """
     root, _ = resolve_root(path)
-    return opening(
+    return bracketed(
         root,
         throwaway=False,
         locks=[(KERNEL_LOCK, "kernel"), (WEB_LOCK, "web")],
