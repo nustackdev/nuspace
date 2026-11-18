@@ -1,11 +1,11 @@
-"""The web device's stores: their roots and inits, and Conn's reset.
+"""Web's stores: their roots and inits, and Conn's reset, which web's driver runs as it starts.
 
     Web    persistent: web planes, recents, desks, roles
     Conn   per web start: browser tabs, cleared by one commit when web starts
 
 Where each lives (a file, a channel) is an assembly's call
 (``nuspace.space.local.layout``). Bound at every open, served or headless
-(the web device's driver runs only when served), so a web row a program
+(web's driver runs only when served), so a web row a program
 writes always lands. Their init terms are bare, as the core ones are
 (:mod:`nuspace.shapes.stores`): the caller brackets each store on its own.
 """

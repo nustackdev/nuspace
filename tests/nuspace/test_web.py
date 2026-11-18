@@ -1,7 +1,7 @@
 """The web device without a server or a browser.
 
 What can be checked in process: the session env builds a body that pickles,
-a worker unpickling it imports no web server, the device's term compiles and
+a worker unpickling it imports no web server, web's driver compiles and
 validates, the feeds' reads (sidebar rows, viewer plane and statuses) answer
 the right dicts against a store written through ops, and one tab, live over
 a fake session: events run ops, store changes ship, and a failed event
@@ -62,7 +62,7 @@ async def plane(store, pid, name="", *, parent="root", on_web=True, **kw):
 
 def _body():
     """A run body built the way the kernel builds it, inside the session env."""
-    env = session_env("127.0.0.1:9")("tab-7")
+    env = session_env(lambda: "127.0.0.1:9")("tab-7")
     return env, build_body("r1", "cr1", "p1", "c1", [env])
 
 
@@ -113,13 +113,26 @@ def test_worker_unpickling_imports_no_web_server(tmp_path):
     assert done.returncode == 0, done.stdout + done.stderr
 
 
-def test_device_term_compiles_and_validates():
-    from nuspace.web.device import serve_web
-
-    term, envs = serve_web(registry=REGISTRY, open_browser=False, port=0, static=None)
-    assert set(envs) == {"session"}
-    assert envs["session"]("s1").label == "session:s1"
+def test_the_driver_compiles_and_validates():
+    term = web.driver(
+        registry=REGISTRY,
+        host="127.0.0.1",
+        port=0,
+        static=None,
+        open_browser=False,
+        log_level="warning",
+        session_address="127.0.0.1:9",
+        upload_root="/tmp/nowhere",
+    )
     nu.validate(nu.compile(term))
+
+
+def test_the_session_env_asks_where_web_is_at_every_cell_run():
+    at = ["127.0.0.1:9"]
+    factory = session_env(lambda: at[0])
+    assert factory("s1").wrap.address == "127.0.0.1:9"
+    at[0] = "127.0.0.1:10"
+    assert factory("s1").wrap.address == "127.0.0.1:10"
 
 
 # --- Sidebar rows ------------------------------------------------------------------

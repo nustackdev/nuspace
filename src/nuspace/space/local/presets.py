@@ -1,7 +1,7 @@
 """Presets: the named ways to open a space, each one :func:`~.space.open_space` call.
 
-- :func:`serve`: with the web device. What ``nuspace run`` does.
-- :func:`headless`: no device served, for scripts and servers.
+- :func:`serve`: with web served. What ``nuspace run`` does.
+- :func:`headless`: web not served, for scripts and servers.
 - :func:`with_plane`: open on the plane of a spec, made from the spec when
   the space has none. What ``nuspace run --with`` does.
 
@@ -33,24 +33,24 @@ __all__ = ["headless", "serve", "with_plane"]
 
 
 def serve(path: str | os.PathLike[str] | None = None, **kwargs: object) -> nu.With:
-    """The space at ``path`` served in a browser: :func:`open_space` with the web device.
+    """The space at ``path`` served in a browser: :func:`open_space` with web.
 
     Raises:
         Refused: As :func:`open_space`.
     """
-    return open_space(path, devices=("web",), **kwargs)
+    return open_space(path, web=True, **kwargs)
 
 
 def headless(path: str | os.PathLike[str] | None = None, **kwargs: object) -> nu.With:
-    """The space at ``path`` with no device served: the kernel and the system planes run.
+    """The space at ``path`` with web not served: the kernel and the system planes run.
 
-    Every device's stores still open, without their drivers, so a program
-    writing a device's rows (``add_plane`` of a spec with ``web=``) works.
+    Web's stores still open, without its driver, so a program writing a
+    web row (``add_plane`` of a spec with ``web=``) works.
 
     Raises:
         Refused: As :func:`open_space`.
     """
-    return open_space(path, devices=(), **kwargs)
+    return open_space(path, web=False, **kwargs)
 
 
 def _plane_of(spec: PlaneSpec, plane: nu.Ref) -> nu.Nu:
@@ -111,7 +111,5 @@ def with_plane(
 
     body = nu.let("", opened)
     if not web:
-        return open_space(path, devices=(), body=body, **kwargs)
-    return open_space(
-        path, devices=("web",), host=host, port=port, open_browser=False, body=body, **kwargs
-    )
+        return open_space(path, web=False, body=body, **kwargs)
+    return open_space(path, web=True, host=host, port=port, open_browser=False, body=body, **kwargs)

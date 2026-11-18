@@ -145,8 +145,13 @@ class _Pipe:
         await self._close()
 
     async def _connect(self, address: str) -> None:
+        """Open the stream, or say plainly that no web answers: the cell run fails, the kernel goes on."""
         host, port = _split(address)
-        reader, self._writer = await asyncio.open_connection(host, port)
+        try:
+            reader, self._writer = await asyncio.open_connection(host, port)
+        except OSError as exc:
+            msg = f"No web answers at {address}: is the space's web running? ({exc})"
+            raise ConnectionError(msg) from exc
         self._task = asyncio.get_running_loop().create_task(self._read_loop(reader))
 
     async def _close(self) -> None:

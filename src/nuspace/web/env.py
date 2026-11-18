@@ -1,7 +1,8 @@
 """The session env: a run drawing on one browser tab.
 
 Registered as :data:`SESSION_ENV`, nav asks for it on every pane's plane
-run, ``envs=[["session", sid]]``. The kernel resolves it in the host:
+run, ``envs=[["session", sid]]``. The kernel resolves it in its own
+process, when a cell run is dispatched:
 
 - **wrap**: opens :func:`piped_session` on the tab around each cell run,
   with the tab's view of the upload area, and erases the cell's own ui node
@@ -11,6 +12,11 @@ run, ``envs=[["session", sid]]``. The kernel resolves it in the host:
 
 Both are classes, not closures, so the built body and the rewrite pickle.
 Everything here is safe for a worker to import.
+
+Where the tab sessions answer is the assembly's choice, and it may change
+while the kernel runs (web restarted on another port). So the factory takes
+a getter, asked at every dispatch, never an address fixed at build: the
+kernel holds nothing of a web process.
 """
 
 from __future__ import annotations
@@ -27,6 +33,8 @@ from .utils import CellRoot, cell_ui
 
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     import nu
 
 
@@ -37,7 +45,7 @@ class SessionWrap:
     """``body -> body``: the run inside tab ``sid``, its cell's ui cleared.
 
     Args:
-        address: Where the host serves its connections.
+        address: Where web serves its tab sessions, ``host:port``.
         sid: The tab id.
         uploads: The upload area's root, where the tab's posted files land.
             None binds no upload view.
@@ -56,11 +64,13 @@ class SessionWrap:
         return piped_session(self.address, self.sid, erase >> body, uploads=self.uploads)
 
 
-def session_env(address: str, uploads: str | None = None) -> EnvFactory:
-    """The session env factory for a host serving tabs at ``address``.
+def session_env(address: Callable[[], str], uploads: str | None = None) -> EnvFactory:
+    """The session env factory, for the kernel: each cell run asks ``address()`` where web is.
 
     Args:
-        address: Where the host serves its connections.
+        address: ``() -> "host:port"``, where web serves its tab sessions
+            now, asked once per cell run. It raises to fail that cell run,
+            eg when no web has said where it is.
         uploads: The upload area's root. None binds no upload view.
 
     Returns:
@@ -69,7 +79,7 @@ def session_env(address: str, uploads: str | None = None) -> EnvFactory:
 
     def factory(sid: str) -> Env:
         return Env(
-            wrap=SessionWrap(address, sid, uploads),
+            wrap=SessionWrap(address(), sid, uploads),
             rewrite=CellRoot(Shell.viewer, Here.cell),
             label=f"{SESSION_ENV}:{sid}",
         )

@@ -341,8 +341,8 @@ def _free_port() -> int:
 
 async def test_an_open_counts_an_existing_space_with_no_indexer_state(tmp_path):
     root = tmp_path / "space"
-    # A space from before the indexer: made without the web device, so no indexer, no state.
-    await nu.arun(local.make_space(root, devices=()))
+    # A space from before the indexer: opened headless, web never ran, so no indexer, no state.
+    await nu.arun(local.headless(root, spares=0, extensions=(), body=nu.Noop()))
 
     def plane_and_cell(made: nu.ObjectRef) -> nu.Nu:
         added = nuspace.atomic(nuspace.plane.add(backend="async", into=made))

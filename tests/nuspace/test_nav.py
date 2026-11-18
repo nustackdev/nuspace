@@ -9,6 +9,7 @@ tab and planes and polls the store until nav and the kernel have acted.
 from __future__ import annotations
 
 import asyncio
+import socket
 import tempfile
 import time
 
@@ -37,6 +38,8 @@ from nuspace.kernel import CLOSED, LEFT_OVER, Env
 from nuspace.kernel.kernel import loop
 from nuspace.shapes import EXIT_FAILED, Space
 from nuspace.space.local import binding
+from nuspace.space.local._session import AddressFile
+from nuspace.web.env import session_env
 from nuspace.web.nav import BY, nav
 from nuspace.web.stores import CONN_STORE, WEB_STORE
 
@@ -52,8 +55,24 @@ FOREVER = prog("return nu.ForeverDo(nu.Delay(0.05))")
 #: What the module's kernel calls its workers.
 NAME = "nuspace-nav"
 
+
+def _dead_address() -> str:
+    """``host:port`` nobody listens on."""
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        return f"127.0.0.1:{s.getsockname()[1]}"
+
+
 #: The tabs' session env, as the kernel resolves it: here it wraps nothing.
-ENVS = {"session": lambda sid: Env(label=f"session:{sid}")}
+#: Beside it, the real one with no web: at an address nobody answers, and
+#: through local's address file with no file written.
+ENVS = {
+    "session": lambda sid: Env(label=f"session:{sid}"),
+    "deadweb": session_env(lambda: _DEAD),
+    "noweb": session_env(AddressFile(f"{tempfile.gettempdir()}/nuspace-nav-none/session.addr")),
+}
+
+_DEAD = _dead_address()
 
 
 @pytest_asyncio.fixture(loop_scope="module", scope="module")
@@ -273,6 +292,26 @@ async def test_a_failed_plane_waits_for_its_restart_and_never_loops(space):
     await k.do(web.restart_pane("e1", p))
     await pane_run(k, "e1", p, not_=run)
     await k.do(web.close_tab("e1"))
+
+
+@module_loop
+@pytest.mark.parametrize(
+    ("env", "said"),
+    [("deadweb", f"No web answers at {_DEAD}"), ("noweb", "No web runs on this space")],
+    ids=["web-gone", "no-address"],
+)
+async def test_a_session_cell_run_with_no_web_fails_and_the_kernel_goes_on(space, env, said):
+    k = space
+    p, (c,) = await k.plane(SET_42)
+    run = await k.start(p, envs=[[env, "t1"]])
+    assert (await ended(k, run))["exit"] == EXIT_FAILED
+    rows = await k.read(Space.exec.cell_runs.extract())
+    (row,) = [r for r in rows.values() if r["plane_run"] == run and r["cell"] == c]
+    assert row["exit"] == EXIT_FAILED
+    assert said in row["error"]
+    # The kernel is untouched: the next run, outside a session, runs.
+    again = await k.start(p)
+    assert (await ended(k, again))["exit"] == "ok"
 
 
 @module_loop

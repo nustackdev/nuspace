@@ -413,10 +413,14 @@ async def _apoll(root: Path, term: nu.Nu, pred, stores=_EVERY_STORE, timeout: fl
         await asyncio.sleep(0.2)
 
 
-def _write(root: Path, store, term: nu.Nu) -> None:
+async def _awrite(root: Path, store, term: nu.Nu) -> None:
     file = str(data_dir(root) / PLACES[store.root].file)
     navs = nustd.kv.sqlite_navigator(file, tags=(store.root,))
-    asyncio.run(nu.arun(nu.With(navs, body=nuspace.atomic(term))))
+    await nu.arun(nu.With(navs, body=nuspace.atomic(term)))
+
+
+def _write(root: Path, store, term: nu.Nu) -> None:
+    asyncio.run(_awrite(root, store, term))
 
 
 def _make(root: Path, **kwargs) -> None:
@@ -454,28 +458,17 @@ def test_a_space_made_before_meta_opens_with_its_data_and_gets_its_meta(tmp_path
     assert _read(root, Space.info.created_at) == created
 
 
-def test_headless_opens_every_device_store_and_seeds_no_device_plane(tmp_path):
-    root = tmp_path / "space"
-    _make(root, devices=())
-    assert is_space(root)
-    assert (data_dir(root) / PLACES[Web].file).exists()
-    assert (data_dir(root) / PLACES[Conn].file).exists()
-    assert _read(root, Web.roles.extract()) == {}
-    assert _read(root, nu.list(Web.planes.keys())) == []
-    # conn.db is made fresh at a headless open too.
-    _write(root, CONN_STORE, Conn.connections["tab"].order.set(["p"]))
-    _make(root, devices=())
-    assert _read(root, Conn.connections.extract()) == {}
-
-
-def test_conn_is_made_fresh_at_every_open_web_is_kept(tmp_path):
+def test_make_space_makes_every_store_and_leaves_conn_and_web_as_they_are(tmp_path):
     root = tmp_path / "space"
     _make(root)
+    assert (data_dir(root) / PLACES[Web].file).exists()
+    assert (data_dir(root) / PLACES[Conn].file).exists()
     _write(root, CONN_STORE, Conn.connections["tab"].order.set(["p"]))
     home = _read(root, Web.roles["home"])
     _write(root, WEB_STORE, nuspace.web.Web.recents.set([home]))
     _make(root)
-    assert _read(root, Conn.connections.extract()) == {}
+    # Conn is web's driver's to clear, when web starts: making a space runs no driver.
+    assert _read(root, Conn.connections["tab"].order.extract()) == ["p"]
     assert _read(root, nuspace.web.Web.recents.extract()) == [home]
     assert _read(root, Web.roles["home"]) == home
 
@@ -493,11 +486,6 @@ def test_a_space_of_another_format_is_refused_before_anything_is_written(tmp_pat
     assert holder(str(data_dir(root) / KERNEL_LOCK))
     _write(root, stores.SPACE_STORE, Space.info.format.set(FORMAT))
     _make(root)
-
-
-def test_an_unknown_device_is_refused_at_build(tmp_path):
-    with pytest.raises(Missing, match="no device 'tv'"):
-        local.open_space(tmp_path, devices=("tv",))
 
 
 # --- open_space, for real ---------------------------------------------------------------
@@ -590,6 +578,76 @@ async def test_a_clean_close_ends_what_is_live_so_the_reopen_reaps_nothing(tmp_p
 def test_served_open_compiles_and_validates(tmp_path):
     term = local.serve(tmp_path, extensions=["testing"], open_browser=False, static=None, port=0)
     nu.validate(nu.compile(term))
+
+
+#: A process holding a store's file open, as a worker does, until its stdin closes.
+_HOLDER = """
+import sqlite3, sys
+db = sqlite3.connect(sys.argv[1])
+db.execute("select count(*) from sqlite_master").fetchall()
+print("held", flush=True)
+sys.stdin.read()
+"""
+
+
+async def test_web_clears_conn_by_a_commit_while_a_worker_holds_its_file(tmp_path):
+    """W2 and W7: at web's start Conn is emptied in place, and the runs nav asked for are stopped."""
+    root = tmp_path / "space"
+    await nu.arun(local.make_space(root))
+    conn = data_dir(root) / PLACES[Conn].file
+    await _awrite(root, CONN_STORE, Conn.connections["old-tab"].order.set(["p"]))
+
+    def asked(run: nu.ObjectRef) -> nu.Nu:
+        made = nuspace.plane.add("p1", backend="async")
+        return made >> nuspace.plane_run.add("p1", by="nav", into=run)
+
+    await _awrite(root, stores.SPACE_STORE, nu.let("", asked))
+    holder = subprocess.Popen(  # noqa: S603
+        [sys.executable, "-c", _HOLDER, str(conn)],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        text=True,
+    )
+    try:
+        assert holder.stdout.readline().strip() == "held"
+        inode = conn.stat().st_ino
+        loop = asyncio.get_running_loop()
+        ready, done = loop.create_future(), asyncio.Event()
+        hold = nu.With(MADE_STORE, body=nu.let(_Hold(ready, done), lambda _: nu.Noop()))
+        term = local.serve(
+            root,
+            port=_free_port(),
+            open_browser=False,
+            static=None,
+            spares=0,
+            extensions=(),
+            body=hold,
+        )
+        task = asyncio.create_task(nu.arun(term))
+        try:
+            waiting = asyncio.ensure_future(asyncio.shield(ready))
+            finished, _ = await asyncio.wait(
+                {waiting, task}, timeout=30, return_when="FIRST_COMPLETED"
+            )
+            if task in finished:
+                task.result()
+            ctx = await waiting
+            await _until(ctx, Conn.connections.extract(), lambda tabs: tabs == {})
+            runs = Space.exec.plane_runs.extract()
+            rows = await _until(
+                ctx,
+                runs,
+                lambda rs: all(r.get("interrupt_at") for r in rs.values() if r.get("by") == "nav"),
+            )
+            assert [r for r in rows.values() if r.get("by") == "nav"]
+        finally:
+            done.set()
+            await asyncio.wait_for(task, 15)
+        # The same file, never deleted under the process holding it.
+        assert conn.stat().st_ino == inode
+        assert holder.poll() is None
+    finally:
+        holder.communicate("")
 
 
 # --- with_plane -------------------------------------------------------------------------
