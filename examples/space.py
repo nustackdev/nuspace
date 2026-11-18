@@ -1,36 +1,31 @@
-"""A space in the browser, with whatever extensions are installed.
+"""A space in the browser, with whatever extensions are installed, run by the local assembly.
 
 Every Plane, Cell and content kind comes from an installed extension, found
 through its entry point.
 The space's root is ``examples/example.nuspace``, its data in ``.nuspace/``
-inside it, kept between runs.
+inside it, kept between runs. ``local.run`` starts its kernel and its web
+as two processes, and starts web again if it stops.
 
 Run it::
 
-    python examples/space.py
+    uv run python examples/space.py
 
-A browser opens on http://127.0.0.1:8080. Ctrl+C stops it.
+A browser opens on http://127.0.0.1:8080. Ctrl+C stops both.
 """
 
 from __future__ import annotations
 
-import logging
 from pathlib import Path
 
 import nu
 from nuspace.space import local
 
 
-# Closing the space drops sockets under workers still holding them. Expected.
-# At module scope so spawned workers, which import this file, are quiet too.
-logging.getLogger("invisibles").setLevel(logging.CRITICAL)
-
-
 STORE = str(Path(__file__).parent / "example.nuspace")
 
 
 if __name__ == "__main__":
-    # Load bearing: workers are spawned and re-import __main__.
+    # The drivers run in child processes of their own; this one only watches them.
     try:
         nu.run_in_loop(local.run(STORE))
     except KeyboardInterrupt:
