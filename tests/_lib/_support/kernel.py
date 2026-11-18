@@ -1,12 +1,17 @@
 """The kernel harness and programs shared by the kernel, system plane and host tests.
 
 One kernel held open on the test's loop, headless, with real workers: the
-Space and State stores on sqlite with a private notification server, reap,
-then a worker pool whose workers open the same stores, the backends and the
+Space and State stores on sqlite with a private notification server, then
+a worker pool whose workers open the same stores, the backends and the
 kernel. Run ops against it, read the store, wait until the kernel has made
 something true.
 
-The stores are opened here, not through the host: the kernel needs only
+By default the kernel is reap and its loop only: no system planes, no
+stamp, and no close, so a test closing it leaves what was live as a crash
+would. ``driver=True`` runs ``nuspace.kernel.driver`` instead, the whole
+life an assembly runs.
+
+The stores are opened here, not through an assembly: the kernel needs only
 them, the pool and :func:`nuspace.kernel.bound` around it.
 """
 
@@ -28,6 +33,7 @@ import nustd.valkey
 from _support.made import MADE, MADE_STORE
 from nu.lang import ScalarQuery
 from nuspace import kernel
+from nuspace.kernel.kernel import loop
 from nuspace.shapes import Space
 from nuspace.shapes.stores import CORE
 from nuspace.space.blocks.navigators import navigators as host_navigators
@@ -104,6 +110,7 @@ def kernel_open(
     spares: int = 0,
     grace: float = 2.0,
     blobs: nu.Provide | None = None,
+    driver: bool = False,
     **bound: object,
 ) -> nu.With:
     """The kernel open on the space whose data dir is ``data``, beside ``body``.
@@ -112,15 +119,19 @@ def kernel_open(
     then the pool (spare workers, each opening the stores itself), the
     backends and config, and inside them the kernel racing ``body``. Reap
     needs no backend, so nothing is spawned before it. ``blobs``, a blob
-    store spec, is bound in the host and in every worker, the workers through
-    the host's own :func:`~nuspace.space.blocks.workers.worker_context`.
+    store spec, is bound in the kernel and in every worker, the workers through
+    :func:`~nuspace.space.blocks.workers.worker_context`. ``driver`` runs
+    ``nuspace.kernel.driver`` in place of reap and the loop.
     """
     (Path(data) / "store").mkdir(parents=True, exist_ok=True)
     held = () if blobs is None else (blobs,)
     served = nu.With(nustd.valkey.server(Path(data) / VALKEY_DIR), navigators(data), *held)
     init = navigators(data) if blobs is None else worker_context(data, STORES, blobs)
     pool = nustd.mp_pool.pool(name=name, init=init, spares=spares, grace=grace)
-    drivers = nu.With(pool, kernel.bound(**bound), body=nu.Race(kernel.kernel(), body))
+    if driver:
+        drivers = nu.With(pool, kernel.bound(**bound), body=nu.Race(kernel.driver(), body))
+        return nu.With(served, nu.Provide(dict, {}), body=init_stores() >> drivers)
+    drivers = nu.With(pool, kernel.bound(**bound), body=nu.Race(loop(), body))
     return nu.With(
         served,
         nu.Provide(dict, {}),

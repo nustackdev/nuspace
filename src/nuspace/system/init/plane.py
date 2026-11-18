@@ -1,6 +1,6 @@
 """The init plane: starts the planes on its boot list when the space opens.
 
-One cell, ``main``, runs :func:`driver`. The host asks for init's own
+One cell, ``main``, runs :func:`driver`. The kernel asks for init's own
 plane run at open (``nuspace.system.start``); init asks for the rest. A
 plane on the boot list (:class:`~.shapes.Boot`) gets one plane run ``by``
 init in every open, unless it already ran in this open:
@@ -13,7 +13,7 @@ so init leaves it alone and a plane booted and supervised gets one run, not
 two.
 
 "Since the open" is a run created at or after ``Space.info.opened_at``,
-which the host stamps before the drivers start. So a pass is idempotent:
+which the kernel stamps before it runs anything. So a pass is idempotent:
 a booted plane whose run ended stays down until the next open (bringing
 it back is the supervisor's job), and booting a plane mid open runs it
 once, now.

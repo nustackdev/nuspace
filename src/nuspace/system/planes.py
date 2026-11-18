@@ -1,4 +1,4 @@
-"""The system planes as a set: made where missing, and init started. What the host runs at open.
+"""The system planes as a set: made where missing, and init started. What the kernel runs as it starts.
 
 Each system plane has a minted id like any plane, a key code finds it by
 (``nuspace.at.plane(KEY)``, ``ops.plane.keyed(KEY)``), a title, is
@@ -7,7 +7,7 @@ cells whose progs are short shims: the code lives in
 ``nuspace.system.<plane>``, the store holds the shim. init's boot list
 starts as the other three, so init brings them up:
 
-    host        ensure() >> start()
+    kernel      ensure() >> start(), in its driver
     init        boots supervisor, reload, reactions
 """
 

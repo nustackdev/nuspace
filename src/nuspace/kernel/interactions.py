@@ -1,7 +1,7 @@
 """The kernel's own nu interactions. The driver and the body are composed of these and the ops.
 
 - :class:`KernelConfigRef`: the env registry bound at open.
-- :class:`Body`: a cell run's body, built in the host from its record.
+- :class:`Body`: a cell run's body, built in the kernel's process from its record.
 - :class:`Captured`: a bracket capturing a body's output, in the worker.
 - :class:`HasOut`, :class:`TakeOut`: the output not written yet.
 - :class:`ErrorText`: a caught error as text.

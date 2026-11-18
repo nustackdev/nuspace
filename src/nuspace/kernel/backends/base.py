@@ -1,7 +1,7 @@
 """The backend contract: what every backend is, and how it says when it wants a worker.
 
 A backend runs cells on workers. Each is a fabric, one instance per name,
-bound on the host's context at open under :class:`Backend` tagged with its
+bound on the kernel's context at open under :class:`Backend` tagged with its
 name (:func:`~nuspace.kernel.backends.provided`). The kernel reaches one
 only through :mod:`.interactions`, by the name on the plane run's record,
 and never asks what kind it holds.
@@ -63,7 +63,7 @@ class UnknownBackendError(LookupError):
 class Backend:
     """What runs cells on workers. Subclass it, register the subclass by name at open.
 
-    Every method is async and runs in the host. Worker ids are the kernel's:
+    Every method is async and runs in the kernel's process. Worker ids are the kernel's:
     each method takes the id the kernel minted, so the records around the
     calls stay generic. A backend's own books (which process is which
     worker) are its own; the kernel keeps none of them.
@@ -111,7 +111,7 @@ class Backend:
 
         Not called yet: reap marks leftovers killed and relies on the
         backend's own guard (mp_pool's parent watch kills a worker whose
-        host died). Kill by handle comes in only if leftovers show up. The
+        kernel died). Kill by handle comes in only if leftovers show up. The
         default does nothing.
         """
         del handle

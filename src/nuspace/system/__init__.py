@@ -8,7 +8,7 @@
 Each folder holds its own ``shapes`` (its state, in its plane's state), its
 ``ops`` and its ``plane`` (ids, cells, driver). They run without any device.
 :func:`ensure` makes them where missing and :func:`start` asks for init's
-run: the host calls both at open.
+run: the kernel's driver calls both as it starts.
 
 Namespaced, never re-exported at the top: ``nuspace.system.supervisor.supervise(...)``.
 """

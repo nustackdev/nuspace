@@ -10,7 +10,7 @@ kind it holds::
     Stop(ref, workers)              let workers go              (shielded)
     Kill(ref, workers)              tear workers down now       (shielded)
 
-All async only: backends run on the host's loop. :class:`Stop` and
+All async only: backends run on the kernel's loop. :class:`Stop` and
 :class:`Kill` take a list of worker ids and are shielded: letting go never
 stops halfway when the caller is cancelled, or a process outlives the run
 it served. An empty list does nothing, not even look the backend up, so a

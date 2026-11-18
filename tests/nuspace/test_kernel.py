@@ -47,6 +47,7 @@ import nu
 import nuspace
 import nustd.kv
 from nu.lang import is_null
+from nuspace import system
 from nuspace.kernel import (
     CLOSED,
     LEFT_OVER,
@@ -61,6 +62,7 @@ from nuspace.kernel import (
 from nuspace.kernel.backends import PER_PLANE_RUN, provided
 from nuspace.kernel.kernel import _release
 from nuspace.shapes import EXIT_FAILED, EXIT_INTERRUPTED, EXIT_KILLED, EXIT_OK, Space, State
+from nuspace.system import init
 from nustd.mp_pool import WorkerPool
 
 
@@ -1012,6 +1014,40 @@ async def test_an_ask_the_kernel_never_started_survives_reap_and_runs_at_the_nex
         old, new = sorted(row["workers"], key=lambda x: x["id"] != w)
         assert (old["id"], old["exit"], old["error"]) == (w, EXIT_KILLED, LEFT_OVER)
         assert new["exit"] == EXIT_OK
+    finally:
+        await k.close()
+
+
+async def test_the_driver_stamps_starts_init_and_closes_leaving_asks_pending(tmp_path, capfd):
+    """The whole life: stamp, system planes, init run; its close ends what it started, asks stay."""
+    data = str(tmp_path / "space")
+    before = time.time()
+    k = await opened("nuspace-driver", data=data, driver=True, backends={"stuck": _Stuck})
+    try:
+        stamped = Space.info.opened_at.fallback(0.0)
+        await k.until(lambda: k.read(stamped), lambda at: at >= before)
+        keyed = nuspace.plane.keyed(init.KEY)
+        init_plane = await k.until(lambda: k.read(keyed), bool)
+        runs = Space.exec.indexes.live.plane_to_plane_runs[init_plane].ids
+        listed = nu.If(runs.exists(), nu.list(runs.keys()), nu.Literal([]))
+        (first,) = await k.until(lambda: k.read(listed), lambda ids: len(ids) == 1)
+        assert (await k.run_row(first, live, SLOW))["by"] == system.planes.BY
+        p, _ = await k.plane(SET_42, backend="stuck")
+        r = await k.start(p, by="nav")
+        w = await _held_worker(k, r)
+    finally:
+        await k.close()
+    capfd.readouterr()
+    k = await opened("nuspace-driver", data=data, backends={"stuck": _Shared})
+    try:
+        assert "nuspace reap" not in capfd.readouterr().err
+        row = await k.row(first)
+        assert (row["exit"], row["error"]) == (EXIT_INTERRUPTED, CLOSED)
+        held = await k.read(Space.exec.workers[w].extract())
+        assert (held["exit"], held["error"]) == (EXIT_INTERRUPTED, CLOSED)
+        # The ask the closed kernel never started runs now.
+        row = await k.run_row(r, ended, SLOW)
+        assert (row["exit"], only_cell(row)["exit"]) == (EXIT_OK, EXIT_OK)
     finally:
         await k.close()
 

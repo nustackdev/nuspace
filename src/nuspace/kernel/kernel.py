@@ -1,4 +1,4 @@
-"""The kernel: one arm per live plane run, making the run records true through the backends.
+"""The kernel's loop: one arm per live plane run, making the run records true through the backends.
 
 The ops write what is wanted (``plane_run.add``, ``interrupt_at``,
 ``kill_at``); the kernel makes it so and writes what happened, through the
@@ -74,7 +74,7 @@ if TYPE_CHECKING:
     from .envs import EnvFactory
 
 
-__all__ = ["bound", "kernel"]
+__all__ = ["bound", "loop"]
 
 
 _exec = Space.exec
@@ -205,7 +205,7 @@ def _release(plane_run: nu.Str, backend: nu.Str, taken: nu.Ref) -> nu.Nu:
 
     After a clean end the run holds none. On a raise or a cancel (the space
     closing) the records still list them: their processes go now, their
-    records end with the run (on a raise) or at the host's close (on a
+    records end with the run (on a raise) or at the kernel's close (on a
     close, :mod:`.close`).
     ``taken`` is the worker the arm took for a per plane run placement
     (``""`` for none): a cancel between the end's commit and its let go
@@ -428,7 +428,7 @@ def _life(plane_run: nu.Str, plane: nu.Str, backend: nu.Str, taken: nu.Ref) -> n
 
 
 def _arm(plane_run: nu.Str) -> nu.Nu:
-    """One plane run's whole life in the host. Runs once per appearance in ``live.plane_runs``.
+    """One plane run's whole life in the kernel. Runs once per appearance in ``live.plane_runs``.
 
     It finishes once the run has ended, or the fold cancels it as the run
     leaves the live set. A raise anywhere in it is reported and ends the
@@ -459,12 +459,13 @@ def _arm(plane_run: nu.Str) -> nu.Nu:
     )
 
 
-def kernel() -> nu.Nu:
-    """The kernel driver: :func:`_arm` for every plane run in ``live.plane_runs``. Never returns.
+def loop() -> nu.Nu:
+    """The kernel's loop: :func:`_arm` for every plane run in ``live.plane_runs``. Never returns.
 
     Needs :func:`bound` around it, inside the stores and the worker pool,
     and reap run before it (``nuspace.kernel.reap``): it trusts the live
-    indexes. Nobody calls it but the host.
+    indexes. The last step of :func:`~nuspace.kernel.driver`, which is
+    what an assembly runs.
     """
     plane_runs = _live.plane_runs
     return nu.ReconcileLatestEach(

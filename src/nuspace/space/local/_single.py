@@ -10,24 +10,27 @@ The order at open, each step inside the brackets of the ones before::
     format check                  space.db's format, then the core containers, a commit per store,
                                   then the kernel's live indexes
     fresh device stores           conn.db deleted, then every device's navigators, their containers
-    reap                          what a dead host left live, ended killed
-    stamp                         Space.info path and opened_at; the open told to telemetry
-    system and device planes      made where missing
+    path                          Space.info.path; the open told to telemetry
+    device planes                 made where missing
     worker pool                   spare workers, each binding every store of the open, blobs too
     backends, kernel config
-    init's plane run asked for
-    race                          the kernel, each device's driver, the body
-    finally, close                what is still live ended interrupted, one commit
+    race                          the kernel's driver, each device's driver, the body
+
+The kernel's driver (``nuspace.kernel.driver``) owns the kernel's life:
+reap, the ``opened_at`` stamp, the system planes and init's run asked
+for, its loop, and ``finally`` the close, which ends what it started
+``interrupted`` while the pool and stores are still bound.
 
 Every device's stores open, headless too: a program writing a device's rows
 finds them. Only the devices the open names seed their planes and run
 their drivers.
 
 Closing runs the brackets the other way: the drivers are cancelled and
-drained (each kernel arm lets its workers go), the close ends every plane
-run, cell run and worker still live as ``interrupted`` (``kernel.CLOSED``),
-the pool stops its workers, the stores close, the server stops, the lock
-goes. So the next open's reap finds only what a crash left.
+drained (each kernel arm lets its workers go, then the kernel's close ends
+what it started and left live ``interrupted``, ``kernel.CLOSED``), the
+pool stops its workers, the stores close, the server stops, the lock goes.
+So the next open's reap finds only what a crash left; a plane run asked
+for and never started stays pending, and the next kernel starts it.
 
 Nothing here runs at build: building the term touches no file. Evaluate it
 under a ``if __name__ == "__main__"`` guard: workers are spawned and
@@ -42,7 +45,6 @@ from typing import TYPE_CHECKING
 
 import nu
 import nustd.kv
-import nustd.time
 from nuspace import kernel, system
 from nuspace._telemetry.usage import opened
 from nuspace.shapes import Space
@@ -70,7 +72,7 @@ if TYPE_CHECKING:
     from .devices import Device
 
 
-__all__ = ["make_space", "open_space", "stamp"]
+__all__ = ["make_space", "open_space"]
 
 
 def _inits(stores: Iterable[Store]) -> nu.Nu:
@@ -78,17 +80,15 @@ def _inits(stores: Iterable[Store]) -> nu.Nu:
     return nu.Sequential(*(nustd.kv.atomic(s.init()) for s in stores))
 
 
-def stamp(root: str) -> nu.Nu:
-    """``Space.info.path`` and ``opened_at`` for this open. One commit.
+def _path(root: str) -> nu.Nu:
+    """``Space.info.path``, the space's root as this open found it. One commit.
 
-    Before the drivers: init reads ``opened_at`` to tell a run of this open
-    from an older one.
+    The assembly's to write; ``opened_at`` is the kernel's (its driver).
 
     Args:
         root: The space's root, absolute.
     """
-    info = Space.info
-    return nustd.kv.atomic(info.path.set(root) >> info.opened_at.set(nustd.time.time()))
+    return nustd.kv.atomic(Space.info.path.set(root))
 
 
 def _envs(
@@ -138,8 +138,8 @@ def _opening(root: str, throwaway: bool, blobs: Provide | None, body: nu.Nu) -> 
 
 
 def _seeds(devices: Sequence[Device]) -> nu.Nu:
-    """The system planes, then each device's, made where missing."""
-    return nu.Sequential(system.ensure(), *(d.seed() for d in devices))
+    """Each device's planes, made where missing. The system planes are the kernel's."""
+    return nu.Sequential(*(d.seed() for d in devices))
 
 
 def open_space(
@@ -213,19 +213,15 @@ def open_space(
     factories = _envs(reg.envs, {n: e for n, (_, e) in served.items()})
     stores = (*CORE, *device_stores())
     drivers = nu.Race(
-        kernel.kernel(), *(t for t, _ in served.values()), nu.Park() if body is None else body
+        kernel.driver(), *(t for t, _ in served.values()), nu.Park() if body is None else body
     )
-    # Inside the pool, after the race: the arms are drained, the workers not stopped yet.
     running = nu.With(
         worker_pool(data, stores, blobs, name=name, spares=spares),
         kernel.bound(backends=backends, envs=factories, space_envs=space_envs),
-        body=nu.TryCatch(system.start() >> drivers, finally_=kernel.close()),
+        body=drivers,
     )
     return _opening(
-        root,
-        throwaway,
-        blobs,
-        kernel.reap() >> stamp(root) >> opened() >> _seeds(opened_devices) >> running,
+        root, throwaway, blobs, _path(root) >> opened() >> _seeds(opened_devices) >> running
     )
 
 
@@ -233,9 +229,9 @@ def make_space(path: str | os.PathLike[str], *, devices: Sequence[str] = ("web",
     """The space at ``path`` made and seeded as its first open would, then closed. Nothing runs.
 
     The data dir, the lock, every store and its containers (every
-    device's too), the system planes and each named device's planes, made
-    where missing. No reap, no workers, no driver. A space already there is
-    left as it is.
+    device's too, and the kernel's live indexes), the system planes and
+    each named device's planes, made where missing. No reap, no workers, no
+    driver. A space already there is left as it is.
 
     Raises:
         Missing: A device of no known name (at build).
@@ -243,4 +239,4 @@ def make_space(path: str | os.PathLike[str], *, devices: Sequence[str] = ("web",
     """
     root, _ = resolve_root(path)
     opened_devices = [device(d) for d in devices]
-    return _opening(root, False, None, _seeds(opened_devices))
+    return _opening(root, False, None, system.ensure() >> _seeds(opened_devices))

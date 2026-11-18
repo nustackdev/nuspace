@@ -1,4 +1,4 @@
-"""The body of one cell run: built in the host, handed to a backend, run on a worker.
+"""The body of one cell run: built in the kernel's process, handed to a backend, run on a worker.
 
 Everything a cell run is on its worker, as one Nu term with its ids baked
 in as plain strs::
@@ -12,7 +12,7 @@ in as plain strs::
         the end: the last out, cell_run.end, one commit
 
 The kernel wrote ``cell_run.start`` before handing the body over; the body
-writes its own end, so its output never travels back to the host. An end
+writes its own end, so its output never travels back to the kernel. An end
 already written (the run was killed, its worker torn down) is kept.
 
 The program is loaded on the worker from the store, so a cell run always
@@ -120,7 +120,7 @@ def build_body(
         plane: The plane id.
         cell: The cell id.
         envs: Resolved envs, outermost first. Their wraps are applied here,
-            in the host; their rewrites ride along onto the worker.
+            in the kernel's process; their rewrites ride along onto the worker.
 
     Returns:
         A picklable term. Holds :class:`~nuspace.places.Here` in a frame
