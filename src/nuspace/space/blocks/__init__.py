@@ -23,6 +23,7 @@ from .meta import (
     is_space,
     read_meta,
     resolve_root,
+    set_init,
     stamp,
     write_meta,
 )
@@ -55,6 +56,7 @@ __all__ = [
     "read_meta",
     "resolve_root",
     "served",
+    "set_init",
     "stamp",
     "worker_context",
     "worker_pool",

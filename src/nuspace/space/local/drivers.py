@@ -2,6 +2,8 @@
 
 Both open the space the same way (:mod:`.opening`), each under its own
 lock, so one kernel and one web run on a space, in one process or two.
+Neither makes or inits a space: each refuses one whose init has not run
+(``local.init``), except a throwaway root, which it makes and inits first.
 The kernel owns the notification server and web joins it, so web starts
 only beside a running kernel: it waits a moment for one coming up, else
 it is refused. A kernel stopped under a live web takes the server with
@@ -24,7 +26,7 @@ of local's: ``devices/web/session.addr``, where web's tab sessions answer
     uploads               the dir wiped: no tab of a web before outlives it
     session.addr          the address picked for the tab sessions, recorded
     race                  web's driver (Conn cleared, nav's old runs stopped,
-                          its planes, server and nav), the plane opened on
+                          wakes, server and nav), the plane opened on
                           when given, and the body when given
 
 Closing runs the brackets the other way. The kernel's close ends what it
@@ -57,7 +59,7 @@ from ..blocks.workers import DEFAULT_NAME, DEFAULT_SPARES, worker_pool
 from . import binding
 from .disk import Wiped
 from .layout import KERNEL_LOCK, KERNEL_LOG, SESSION_ADDR, UPLOADS_DIR, WEB_LOCK, WEB_LOG
-from .opening import ROOTS, bracketed, path_set
+from .opening import ROOTS, bracketed, fresh, path_set
 from .plane import found, plane_of
 from .session import Recorded, free_address, session_env
 
@@ -98,18 +100,19 @@ def kernel(
     name: str = DEFAULT_NAME,
     blobs: Provide | None = None,
     body: nu.Nu | None = None,
-) -> nu.With:
+) -> nu.Nu:
     """The space's kernel in this process, run until ``body`` returns, or until cancelled without one.
 
     See the module for the order. At a clean close (cancelled, or ``body``
     returning) what the kernel started and left live is ended
-    ``interrupted``. A space of another store format, another assembly's,
-    or one whose kernel runs elsewhere, is refused before anything is
-    written. Logs to ``kernel/kernel.log``.
+    ``interrupted``. A space not initialized, of another store format,
+    another assembly's, or one whose kernel runs elsewhere, is refused
+    before anything is written. Logs to ``kernel/kernel.log``.
 
     Args:
-        path: The space's root, any directory, made if missing; its data in
-            ``.nuspace/``. None is a throwaway one, removed at close.
+        path: The space's root, initialized (``local.init``); its data in
+            ``.nuspace/``. None is a throwaway one, made and initialized
+            here, removed at close.
         extensions: The installed packages whose extensions register, by
             entry point name. None registers every installed one, ``()`` none.
         envs: Env factories of the space's own, ahead of every package's.
@@ -124,8 +127,8 @@ def kernel(
         body: Nu run beside the kernel. The kernel closes when it returns.
 
     Raises:
-        Refused: An older store format, another assembly's space, or a
-            kernel of this space running already.
+        Refused: A space not initialized, an older store format, another
+            assembly's space, or a kernel of this space running already.
     """
     root, throwaway = resolve_root(path)
     data = str(data_dir(root))
@@ -139,15 +142,15 @@ def kernel(
         _kernel.bound(backends=backends, envs=factories, space_envs=space_envs),
         body=driver if body is None else nu.Race(driver, body),
     )
-    return bracketed(
+    driven = bracketed(
         root,
-        throwaway=throwaway,
         locks=[(KERNEL_LOCK, "kernel")],
         log=(KERNEL_LOG, "kernel"),
         notifier=binding.served(data),
         blobs=blobs,
         body=path_set(root) >> opened() >> running,
     )
+    return fresh(root, throwaway, driven)
 
 
 #: Seconds web waits for a kernel whose lock is held but whose server is not up yet.
@@ -216,14 +219,15 @@ def web(
     plane: PlaneSpec | str | None = None,
     blobs: Provide | None = None,
     body: nu.Nu | None = None,
-) -> nu.With:
+) -> nu.Nu:
     """The space's web in this process, served until ``body`` returns, or until cancelled without one.
 
     See the module for the order. A kernel must run on the space: web joins
     its notification server, waiting up to :data:`KERNEL_WAIT` seconds for
-    one coming up, and is refused when there is none. A space of another
-    store format, another assembly's, or one whose web runs elsewhere, is
-    refused before anything is written. Logs to ``devices/web/web.log``.
+    one coming up, and is refused when there is none. A space not
+    initialized, of another store format, another assembly's, or one whose
+    web runs elsewhere, is refused before anything is written. Logs to
+    ``devices/web/web.log``.
 
     Args:
         path: The space's root, as :func:`kernel`.
@@ -270,12 +274,12 @@ def web(
         recorded,
         body=nu.Race(served, *beside) if beside else served,
     )
-    return bracketed(
+    driven = bracketed(
         root,
-        throwaway=throwaway,
         locks=[(WEB_LOCK, "web")],
         log=(WEB_LOG, "web"),
         notifier=kernels(data),
         blobs=blobs,
         body=running,
     )
+    return fresh(root, throwaway, driven)

@@ -17,8 +17,9 @@ all they meet through.
   seconds, or refused (a web runs elsewhere), and run stops, saying why.
 - **The kernel exits**: web is stopped, and run ends with the kernel's
   status.
-- **path None**: one throwaway root made here, both children use it, and
-  it is removed once both are gone.
+- **path None**: one throwaway root made and initialized here, both
+  children use it, and it is removed once both are gone. Any other path
+  must be initialized already (``local.init``): the children refuse it.
 
 Each child's stdout and stderr are this process's: web's server says where
 it listens, the kernel what it reaps. This process only says what it
@@ -38,21 +39,21 @@ import time
 from collections import deque
 from typing import TYPE_CHECKING
 
-import nu
 from nu.engine.structure import Declared
 from nu.lang import Command, Ref
 
 from ..blocks.meta import data_dir, resolve_root
 from ..blocks.notifier import answers
-from ..blocks.resources import Throwaway
 from . import binding
 from .layout import WEB_LOG
+from .opening import fresh
 from .plane import found
 
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
 
+    import nu
     from nu.lang.runtime import Runtime
     from nuspace.specs import PlaneSpec
 
@@ -263,15 +264,15 @@ def run(
     *,
     plane: PlaneSpec | str | None = None,
     **options: object,
-) -> nu.With:
+) -> nu.Nu:
     """The space at ``path`` with its kernel and its web in two processes, watched over.
 
     See the module for what happens when either stops. Yields the kernel's
     exit status, 0 at a Ctrl+C.
 
     Args:
-        path: The space's root, made if missing. None is a throwaway one,
-            removed at the end.
+        path: The space's root, initialized (``local.init``). None is a
+            throwaway one, made and initialized here, removed at the end.
         plane: A plane spec, or its registered name, web opens on (see
             ``local.web``). Resolved or made by web, so a restarted web
             finds the same plane.
@@ -300,5 +301,4 @@ def run(
         pickled("web", web),
         pickled("web", {**web, "open_browser": False}),
     )
-    held = [nu.Provide(Throwaway, {"path": root})] if throwaway else []
-    return nu.With(*held, body=term)
+    return fresh(root, throwaway, term)

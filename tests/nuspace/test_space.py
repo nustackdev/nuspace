@@ -19,6 +19,7 @@ import logging
 import os
 import signal
 import socket
+import sqlite3
 import subprocess
 import sys
 import threading
@@ -50,6 +51,7 @@ from nuspace.space.blocks.meta import (
     find_space,
     is_space,
     read_meta,
+    set_init,
     stamp,
     write_meta,
 )
@@ -314,6 +316,20 @@ def test_meta_names_the_assembly_and_another_assembly_is_refused(tmp_path):
         read_meta(tmp_path)
 
 
+def test_the_init_flag_is_a_plain_bool_false_when_missing(tmp_path):
+    made = stamp(tmp_path, "local")
+    assert made.init is False
+    raw = '{"assembly": "local", "made_at": "2026-11-18T00:00:00+00:00"}'
+    (data_dir(tmp_path) / META_FILE).write_text(raw)
+    assert read_meta(tmp_path).init is False
+    assert set_init(tmp_path).init is True
+    assert '"init": true' in (data_dir(tmp_path) / META_FILE).read_text()
+    assert read_meta(tmp_path) == Meta("local", "2026-11-18T00:00:00+00:00", init=True)
+    (data_dir(tmp_path) / META_FILE).write_text(raw[:-1] + ', "init": "yes"}')
+    with pytest.raises(Refused, match="does not read as a space's meta"):
+        read_meta(tmp_path)
+
+
 def test_a_space_made_before_meta_is_found_and_adopted_and_its_host_lock_ignored(tmp_path):
     root = tmp_path / "space"
     _made_before(root)
@@ -462,6 +478,37 @@ def test_init_seeds_a_fresh_space_and_keeps_an_existing_one(tmp_path):
     assert _read(root, Space.info.created_at) == info["created_at"]
 
 
+def _dump(root: Path) -> dict[str, list]:
+    """Every store of the space at ``root``, row by row, as sqlite holds it."""
+    rows = {}
+    for shape, placed in PLACES.items():
+        with contextlib.closing(sqlite3.connect(data_dir(root) / placed.file)) as db:
+            rows[shape.__name__] = db.execute("select k, v from kv order by k").fetchall()
+    return rows
+
+
+def test_init_writes_the_flag_last_and_a_second_init_changes_nothing(tmp_path):
+    root = tmp_path / "space"
+    _make(root)
+    meta = read_meta(root)
+    assert meta.init is True
+    before = _dump(root)
+    assert all(before.values())
+    _make(root)
+    assert _dump(root) == before
+    assert read_meta(root) == meta
+
+
+def test_a_failed_init_leaves_the_flag_unset(tmp_path):
+    root = tmp_path / "space"
+    _make(root)
+    _write(root, stores.SPACE_STORE, Space.info.format.set(FORMAT + 1))
+    set_init(root, False)
+    with pytest.raises(Refused, match="another store format"):
+        _make(root)
+    assert read_meta(root).init is False
+
+
 def test_a_space_made_before_meta_opens_with_its_data_and_gets_its_meta(tmp_path):
     root = tmp_path / "space"
     _make(root)
@@ -523,8 +570,18 @@ async def _held(entry, root: Path, **kwargs):
     return await waiting, done, task
 
 
+def _initialized(root: Path) -> bool:
+    meta = read_meta(root)
+    return meta is not None and meta.init
+
+
 async def _opened(root: Path):
-    """``local.kernel`` held open, no spares, no extensions: ``(ctx, done, task)``."""
+    """``local.kernel`` held open, no spares, no extensions: ``(ctx, done, task)``.
+
+    A space not initialized yet is initialized first.
+    """
+    if not _initialized(root):
+        await nu.arun(local.init(root))
     return await _held(local.kernel, root, spares=0, name="nuspace-test", extensions=())
 
 
@@ -849,9 +906,9 @@ def test_open_refuses_where_there_is_no_space(tmp_path):
     with pytest.raises(Missing, match="no space at"):
         _open(tmp_path / "none", nu.Noop())
     assert not (tmp_path / "none").exists()
-    # A space made before meta.json is adopted by init or a driver, never by open.
+    # A space made before meta.json is adopted by init alone, never by open.
     _made_before(tmp_path / "before")
-    with pytest.raises(Missing, match="no space at"):
+    with pytest.raises(Refused, match="is not initialized: run nuspace init"):
         _open(tmp_path / "before", nu.Noop())
     assert not is_space(tmp_path / "before")
 
@@ -907,6 +964,78 @@ async def test_a_run_asked_through_open_with_nothing_up_is_started_by_the_next_k
         await _close(done, task)
 
 
+# --- The init check -------------------------------------------------------------------
+
+
+async def _not_initialized(root: Path, how: str) -> None:
+    """``root`` a space whose init has not run: ``meta.json`` without the flag, or one made before it."""
+    if how == "made before":
+        _made_before(root)
+        return
+    await nu.arun(local.init(root))
+    meta = data_dir(root) / META_FILE
+    if how == "flag false":
+        set_init(root, False)
+    else:
+        meta.write_text('{"assembly": "local", "made_at": "2026-11-18T00:00:00+00:00"}')
+
+
+@pytest.mark.parametrize("how", ["flag false", "flag missing", "made before"])
+async def test_kernel_web_and_open_refuse_a_space_not_initialized(tmp_path, how):
+    root = tmp_path / "space"
+    await _not_initialized(root, how)
+    meta = data_dir(root) / META_FILE
+    said = meta.read_text() if meta.exists() else None
+    refusal = f"the space at {root} is not initialized: run nuspace init, or local.init"
+    terms = {
+        "kernel": local.kernel(root, spares=0, extensions=()),
+        "web": local.web(root, port=_free_port(), static=None, extensions=()),
+        "open": local.open(root, body=nu.Noop()),
+    }
+    for what, term in terms.items():
+        with pytest.raises(Refused) as refused:
+            await nu.arun(term)
+        assert str(refused.value) == refusal, what
+    # Refused before anything is written: no meta made or changed, no driver's log.
+    assert (meta.read_text() if meta.exists() else None) == said
+    assert not (data_dir(root) / KERNEL_LOG).exists()
+    assert not (data_dir(root) / WEB_LOG).exists()
+    await nu.arun(local.init(root))
+    assert read_meta(root).init is True
+    await nu.arun(local.open(root, body=nu.Noop()))
+
+
+async def test_another_assemblys_space_and_an_older_one_stay_refused(tmp_path):
+    other = tmp_path / "other"
+    write_meta(other, Meta("shard", "2026-11-18T00:00:00+00:00", init=True))
+    older = tmp_path / "older"
+    data_dir(older).mkdir(parents=True)
+    (data_dir(older) / "kernel.sqlite").touch()
+    for root, refusal in ((other, "'shard' assembly"), (older, "older nuspace store format")):
+        for term in (
+            local.kernel(root, spares=0, extensions=()),
+            local.open(root, body=nu.Noop()),
+            local.init(root),
+        ):
+            with pytest.raises(Refused, match=refusal):
+                await nu.arun(term)
+
+
+async def test_open_after_a_kernel_alone_lands_a_desk_op(tmp_path):
+    """No web ever ran: open binds web's stores, so a desk edit lands, and a later open reads it."""
+    root = tmp_path / "space"
+    await nu.arun(local.init(root))
+    await nu.arun(local.kernel(root, spares=0, extensions=(), body=nu.Noop()))
+    (desk,) = await _aread(root, nu.list(Web.desks.keys()))
+    plane = await _aread(root, nuspace.plane.keyed(init.KEY))
+    assert await _aread(root, Web.desks[desk].entries.extract()) == {}
+    await nu.arun(local.open(root, body=nuspace.atomic(nuspace.web.desks.add_plane(desk, plane))))
+    items, _ = await nu.arun(
+        local.open(root, body=nuspace.atomic(Web.desks[desk].entries.extract()))
+    )
+    assert [i["original"] for i in items.values()] == [{"plane": plane, "params": {}}]
+
+
 # --- One of each driver ---------------------------------------------------------------
 
 
@@ -927,6 +1056,20 @@ async def test_a_second_kernel_and_a_second_web_are_refused_and_init_too(tmp_pat
             await _close(wdone, wtask)
     finally:
         await _close(done, task)
+    await nu.arun(local.init(root))
+
+
+async def test_init_is_refused_while_web_runs(tmp_path):
+    root = tmp_path / "space"
+    _, done, task = await _opened(root)
+    _, wdone, wtask = await _served(root)
+    try:
+        # Web outlives the kernel that served it: its lock alone refuses init.
+        await _close(done, task)
+        with pytest.raises(Refused, match="the web of this space runs"):
+            await nu.arun(local.init(root))
+    finally:
+        await _close(wdone, wtask)
     await nu.arun(local.init(root))
 
 
@@ -1108,6 +1251,7 @@ _RUN = """
 import sys
 import nu
 from nuspace.space import local
+nu.eval_in_loop(nu.compile(local.init(sys.argv[1])), nu.Context())
 term = local.run(sys.argv[1], port=int(sys.argv[2]), static=None, open_browser=False,
                  extensions=(), spares=0)
 value, _ = nu.eval_in_loop(nu.compile(term), nu.Context())
@@ -1182,6 +1326,7 @@ def _live_runs(root: Path, n: int = 4) -> list[str]:
 
 def test_nuspace_run_stops_on_ctrl_c_ends_what_is_live_and_leaves_no_process(tmp_path):
     root = tmp_path / "space"
+    _make(root)
     run = _nuspace_run(root, "--no-browser", "-p", str(_free_port()))
     try:
         runs = _live_runs(root)
@@ -1210,6 +1355,7 @@ def test_nuspace_run_stops_on_ctrl_c_ends_what_is_live_and_leaves_no_process(tmp
 async def test_a_kernel_killed_mid_run_is_reaped_killed_at_the_next_start(tmp_path, capfd):
     """SIGKILL, as a crash: no close runs, so the reopen's reap ends what was started, killed."""
     root = tmp_path / "space"
+    await nu.arun(local.init(root))
     run = _nuspace_run(root, "--headless")
     try:
         live = Space.exec.indexes.live.plane_runs

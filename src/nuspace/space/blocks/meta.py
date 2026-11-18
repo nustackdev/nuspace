@@ -5,11 +5,12 @@ repository keeps ``.git/``. One file in it is common to every assembly::
 
     <space root>/
       .nuspace/
-        meta.json      {"assembly": "local", "made_at": "<iso time>"}
+        meta.json      {"assembly": "local", "made_at": "<iso time>", "init": true}
         ...            the rest is the assembly's own layout
 
 ``meta.json`` marks the space and names the assembly that made it, so a
-tool knows which assembly opens it. ``~/.nuspace`` holds the user's
+tool knows which assembly opens it. ``init`` says whether the assembly's
+init ran to its end: a plain flag, false until then, false when missing. ``~/.nuspace`` holds the user's
 config whether or not home is a space: a data dir alone is no space.
 """
 
@@ -19,7 +20,7 @@ import json
 import os
 import tempfile
 import uuid
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -35,6 +36,7 @@ __all__ = [
     "is_space",
     "read_meta",
     "resolve_root",
+    "set_init",
     "stamp",
     "write_meta",
 ]
@@ -54,10 +56,12 @@ class Meta:
     Attributes:
         assembly: The name of the assembly that made the space, eg ``"local"``.
         made_at: When ``meta.json`` was written, an ISO 8601 time in UTC.
+        init: Whether the assembly's init ran to its end on the space.
     """
 
     assembly: str
     made_at: str
+    init: bool = False
 
 
 def data_dir(root: str | os.PathLike[str]) -> Path:
@@ -87,8 +91,11 @@ def read_meta(root: str | os.PathLike[str]) -> Meta | None:
         return None
     try:
         data = json.loads(raw)
-        return Meta(assembly=str(data["assembly"]), made_at=str(data["made_at"]))
-    except (ValueError, KeyError, TypeError):
+        init = data.get("init", False)
+        if not isinstance(init, bool):
+            raise TypeError(init)
+        return Meta(assembly=str(data["assembly"]), made_at=str(data["made_at"]), init=init)
+    except (ValueError, KeyError, TypeError, AttributeError):
         msg = f"{file} does not read as a space's meta; fix or remove it"
         raise Refused(msg) from None
 
@@ -118,6 +125,21 @@ def stamp(root: str | os.PathLike[str], assembly: str) -> Meta:
             f" Open it with {meta.assembly!r}"
         )
         raise Refused(msg)
+    return meta
+
+
+def set_init(root: str | os.PathLike[str], init: bool = True) -> Meta:
+    """``init`` set in the meta of the space at ``root``, the file written whole. The new meta.
+
+    Raises:
+        Refused: There is no meta, or it does not read.
+    """
+    meta = read_meta(root)
+    if meta is None:
+        msg = f"no space at {root} to set init on"
+        raise Refused(msg)
+    meta = replace(meta, init=init)
+    write_meta(root, meta)
     return meta
 
 

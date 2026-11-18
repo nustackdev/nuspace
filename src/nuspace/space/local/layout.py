@@ -13,6 +13,8 @@ Inside the data dir (``.nuspace/``, with ``meta.json``, both the blocks')::
     devices/web/conn.db        Conn     channel nuspace.conn
     devices/web/uploads/       files tabs posted, wiped when web starts
     devices/web/session.addr   where workers reach web's tab sessions
+    infra/infra.lock           one infra per space
+    infra/infra.log            what infra says
     infra/valkey/              the notification server's dir
 
 Every name is relative to the data dir. A space made before ``meta.json``
@@ -42,6 +44,8 @@ __all__ = [
     "ASSEMBLY",
     "BLOBS_DIR",
     "DIRS",
+    "INFRA_LOCK",
+    "INFRA_LOG",
     "KERNEL_LOCK",
     "KERNEL_LOG",
     "MADE_BEFORE",
@@ -86,6 +90,10 @@ STORES: dict[type[nu.Shape], Placed] = {
 
 #: The blob store's dir, plain files, beside the kv stores.
 BLOBS_DIR = "store/blobs"
+
+#: Infra's lock and log: what runs the space, the notification server.
+INFRA_LOCK = "infra/infra.lock"
+INFRA_LOG = "infra/infra.log"
 
 #: The kernel's lock and log.
 KERNEL_LOCK = "kernel/kernel.lock"
