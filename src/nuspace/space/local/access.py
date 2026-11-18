@@ -19,9 +19,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import nu
-from nuspace import system
 from nuspace.errors import Missing, Refused
-from nuspace.web.planes import ensure as web_planes
 
 from ..blocks.meta import data_dir, read_meta, resolve_root
 from ..blocks.notifier import Heard
@@ -127,5 +125,5 @@ def init(path: str | os.PathLike[str]) -> nu.With:
         log=None,
         notifier=None,
         blobs=None,
-        body=path_set(root) >> system.ensure() >> web_planes(),
+        body=path_set(root),
     )

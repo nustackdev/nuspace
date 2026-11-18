@@ -341,7 +341,8 @@ def _free_port() -> int:
 
 async def test_an_open_counts_an_existing_space_with_no_indexer_state(tmp_path):
     root = tmp_path / "space"
-    # A space from before the indexer: its kernel ran, web never did, so no indexer, no state.
+    # Init makes the indexer; its kernel ran, web never did, so the indexer never ran: no state.
+    await nu.arun(local.init(root))
     await nu.arun(local.kernel(root, spares=0, extensions=(), body=nu.Noop()))
 
     def plane_and_cell(made: nu.ObjectRef) -> nu.Nu:
@@ -350,7 +351,8 @@ async def test_an_open_counts_an_existing_space_with_no_indexer_state(tmp_path):
 
     for _ in range(2):
         await _on_disk(root, nu.let("", plane_and_cell))
-    assert await _on_disk(root, nuspace.atomic(nuspace.plane.keyed(indexer.KEY))) == ""
+    assert await _on_disk(root, nuspace.atomic(nuspace.plane.keyed(indexer.KEY))) != ""
+    assert not await _on_disk(root, nuspace.atomic(STATE.totals.extract()))
     # Web wakes the indexer, the kernel beside it runs it.
     term = nu.Race(
         local.kernel(root, spares=0, extensions=()),

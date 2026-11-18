@@ -13,8 +13,9 @@ The sdk, what a program calls, is the ops (:mod:`.ops`), flat here::
     web.url(plane, {"id": 3})                         # its URL, plain python, for rows built outside a term
     nuspace.atomic(web.set_role("home", plane))       # make a plane the home
 
-- :func:`driver`: web's whole life as one term, for an assembly to run
-  (:mod:`.driver`). It imports the server only when called.
+- :func:`init`, :func:`driver`: web's init, once per space, and its whole
+  life as one term, for an assembly to run (:mod:`.driver`). The driver
+  imports the server only when called.
 - :mod:`.shapes`: :class:`Web` (web planes, recents, desks, roles) and :class:`Conn`
   (browser tabs, their panes and sidebar folds); :mod:`.stores`: their
   init terms and Conn's reset.
@@ -22,7 +23,7 @@ The sdk, what a program calls, is the ops (:mod:`.ops`), flat here::
 - :mod:`.desks`: the desks: their ops (``web.desks.add_plane``, ...), the
   browser node and feed, the desk pruner.
 - :mod:`.home`: Home and the home indexer; :mod:`.planes`: every plane
-  the device ships with, made at open (search and settings live there).
+  the device ships with, made by :func:`init` (search and settings live there).
 - :mod:`.nav`: the driver running what the panes show.
 - :mod:`.device`: the server and one arm per tab, the sidebar, viewer and
   desks feeds under it. Imported by the driver only when built: it pulls
@@ -32,7 +33,7 @@ Safe for a worker to import: nothing imported here pulls in a server.
 """
 
 from . import desks
-from .driver import driver
+from .driver import driver, init
 from .here import pane
 from .interactions import url
 from .ops import (
@@ -76,6 +77,7 @@ __all__ = [
     "driver",
     "expand",
     "href",
+    "init",
     "link",
     "on_params",
     "open_tab",

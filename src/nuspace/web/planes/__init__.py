@@ -15,8 +15,9 @@ and reserved keys (:data:`~nuspace.shapes.plane.RESERVED`): code finds
 them by key.
 
 :func:`ensure` makes each one where missing, with its cells and its web
-row, and leaves one that is there exactly as it is: after the first open
-its cells are the owner's to edit. A role plane is missing when its role
+row, and leaves one that is there exactly as it is: after the space's
+init its cells are the owner's to edit. Web's init (:func:`nuspace.web.init`)
+runs it. A role plane is missing when its role
 is not set, or names a plane with no row (a stale id); one that is
 removed is left alone for now.
 """

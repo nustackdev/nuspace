@@ -15,8 +15,8 @@ way, each step inside the brackets of the ones before::
     Space, State, Web, Conn   bound (:mod:`.binding`), publishing when a
                           notifier is there, quiet when not
     blobs                 when the entry point binds them
-    inits                 the Space store's format, each store's containers,
-                          a commit per store, the kernel's live indexes too
+    inits                 each component's (``init``): core's, the Space
+                          format checked first, the kernel's, web's
 
 ``open`` shares only the bindings: it marks, locks, inits nothing, and
 publishes only when a kernel's server answers.
@@ -28,10 +28,10 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import nu
+import nuspace.web
 import nustd.kv
 from nuspace import kernel
-from nuspace.shapes import Space
-from nuspace.shapes.stores import CORE
+from nuspace.shapes import Space, stores
 from nuspace.web.stores import CONN_STORE, WEB_STORE
 
 from ..blocks.lock import Lock
@@ -44,30 +44,24 @@ from .layout import DIRS
 
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Sequence
+    from collections.abc import Sequence
 
     from nu.context.fabric import Provide
-    from nuspace.shapes import Store
 
 
 __all__ = ["ROOTS", "STORES", "bracketed", "inits", "path_set"]
 
 
 #: Every store local binds: the core ones, then web's.
-STORES = (*CORE, WEB_STORE, CONN_STORE)
+STORES = (*stores.CORE, WEB_STORE, CONN_STORE)
 
 #: Their roots, as the bindings take them.
 ROOTS = tuple(s.root for s in STORES)
 
 
-def each(stores: Iterable[Store]) -> nu.Nu:
-    """Each store's fixed containers made where missing, one commit per store, in order."""
-    return nu.Sequential(*(nustd.kv.atomic(s.init()) for s in stores))
-
-
 def inits() -> nu.Nu:
-    """Every store ready: the core ones (the format checked first), the live indexes, web's."""
-    return each(CORE) >> nustd.kv.atomic(kernel.init_live()) >> each((WEB_STORE, CONN_STORE))
+    """Every component's init, idempotent: core's (the format checked first), the kernel's, web's."""
+    return stores.init() >> kernel.init() >> nuspace.web.init()
 
 
 def path_set(root: str) -> nu.Nu:

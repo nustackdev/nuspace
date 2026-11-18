@@ -2,9 +2,9 @@
 
 ``Space.exec.indexes.live`` lists what is live now: the plane runs asked
 for and not ended, their cell runs and workers. The ops write it and the
-kernel trusts it, so it is the kernel's to make. Whoever inits a space's
-stores runs :func:`init_live` beside the Space init, in its own commit;
-reap runs it again when it has to clear ``live`` after its ends failed.
+kernel trusts it, so it is the kernel's to make: the kernel's init
+(:func:`~.driver.init`) runs :func:`init_live` in its own commit, after
+core's; reap runs it again when it has to clear ``live`` after its ends failed.
 """
 
 from __future__ import annotations

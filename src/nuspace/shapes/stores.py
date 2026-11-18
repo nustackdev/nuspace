@@ -16,16 +16,18 @@ A device keeps its own stores beside these (the web device:
 
 A container never written is absent, and reading one (its length, its keys,
 whether it holds an id) raises. So each store's fixed containers are made
-once, at open, by its ``init`` term: only where missing, so it is safe on
-every open of an existing space. The live indexes the kernel folds over are
-the kernel's own, made by ``nuspace.kernel.init_live`` beside the Space
-init. A row's own containers are made by the op that adds the row. Init terms are bare, as ops are: the caller brackets each
-store on its own, ``nustd.kv.atomic(SPACE_STORE.init())``, one commit per store.
+when the space is initialized, by its ``init`` term: only where missing,
+so it is safe to run again on an existing space. The live indexes the kernel folds over are
+the kernel's own, made by ``nuspace.kernel.init`` after these. A row's own
+containers are made by the op that adds the row. Each store's init term is
+bare, as ops are; :func:`init` is core's whole init, the Space format
+checked first, one commit per store.
 """
 
 from __future__ import annotations
 
 import nu
+import nustd.kv
 import nustd.time
 from nuspace.errors import Refused
 
@@ -39,6 +41,7 @@ __all__ = [
     "CORE",
     "SPACE_STORE",
     "STATE_STORE",
+    "init",
     "init_space",
     "init_state",
 ]
@@ -91,8 +94,8 @@ def init_space() -> nu.Nu:
 
     One term, one commit: the format, ``created_at``, the containers and the
     root plane land together. ``info.path`` is the assembly's, ``info.opened_at``
-    the kernel's, written at every open. ``exec.indexes.live`` is the kernel's
-    too: ``nuspace.kernel.init_live``, run beside this in its own commit.
+    the kernel's, written at every kernel start. ``exec.indexes.live`` is the
+    kernel's too: ``nuspace.kernel.init``, run after this.
 
     Raises:
         Refused: The store holds another format.
@@ -136,3 +139,15 @@ STATE_STORE = Store(State, init_state)
 
 #: The stores every open of a space has, whatever its devices.
 CORE = (SPACE_STORE, STATE_STORE)
+
+
+def init() -> nu.Nu:
+    """Core's init: the Space format checked, then Space's and State's containers. A commit per store.
+
+    Idempotent: what is there is left as it is. An assembly runs it once,
+    when it inits a space, before the kernel's and every device's init.
+
+    Raises:
+        Refused: The Space store holds another format. Nothing is written.
+    """
+    return nu.Sequential(*(nustd.kv.atomic(s.init()) for s in CORE))

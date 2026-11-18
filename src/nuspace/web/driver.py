@@ -1,12 +1,14 @@
-"""Web's driver: one term that owns web's whole life, from Conn cleared to the server and nav.
+"""Web's two terms: :func:`init`, once per space, and :func:`driver`, its whole life at every start.
 
-::
+:func:`init` makes web's stores' containers and the planes web ships with
+(home, settings, search, the indexer, the pruner, Favorites). An assembly
+runs it when it inits a space, after core's and the kernel's.
+:func:`driver`, from Conn cleared to the server and nav::
 
     Conn cleared         one commit, then its containers made again: no tab
                          of a web before outlives it
     nav's runs stopped   every live plane run asked ``by="nav"``: their tabs
                          are gone with Conn
-    web planes           home, settings, search and the rest, made where missing
     wakes                one home indexer run, one desk pruner run
     server + nav         side by side, never returning
 
@@ -30,14 +32,23 @@ from . import nav as _nav
 from .desks import pruner
 from .home import indexer
 from .planes import ensure
-from .stores import init_conn, reset_conn
+from .stores import init_conn, init_web, reset_conn
 
 
 if TYPE_CHECKING:
     from nuspace.specs import Registry
 
 
-__all__ = ["driver"]
+__all__ = ["driver", "init"]
+
+
+def init() -> nu.Nu:
+    """Web's init: the Web and Conn containers, a commit each, then web's planes. Idempotent.
+
+    Needs the stores bound and core's init run before it. A plane that is
+    there is left as it is; a closed Favorites stays closed.
+    """
+    return nustd.kv.atomic(init_web()) >> nustd.kv.atomic(init_conn()) >> ensure()
 
 
 def _cleared() -> nu.Nu:
@@ -56,10 +67,10 @@ def driver(
     session_address: str,
     upload_root: str,
 ) -> nu.Nu:
-    """Web, its whole life: Conn cleared, nav's old runs stopped, its planes, then server and nav.
+    """Web, its whole life: Conn cleared, nav's old runs stopped, then server and nav.
 
     Never returns. Needs the stores bound and the ``Blobs`` store around
-    it; makes neither. Building it imports the web server, so a worker
+    it, and :func:`init` run on the space once; makes none of them. Building it imports the web server, so a worker
     never calls it.
 
     Args:
@@ -92,7 +103,6 @@ def driver(
     return (
         _cleared()
         >> _nav.stop_left()
-        >> ensure()
         >> indexer.wake()
         >> pruner.wake()
         >> nu.ParallelAsync(served, _nav.nav())

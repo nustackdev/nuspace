@@ -1,6 +1,6 @@
 """The home indexer: counts the planes and cells added to the space, by day, for Home to read.
 
-A plane keyed :data:`KEY` (its id minted), made at open where missing
+A plane keyed :data:`KEY` (its id minted), made by web's init where missing
 (:mod:`nuspace.web.planes`). It is system (remove refuses it), runs on ``async``, and
 is not on the web, so the sidebar never lists it. Two reactions wake it:
 one on planes added, one on cells added. Runs never do.
@@ -305,7 +305,7 @@ def out() -> nu.Nu:
     return catch_up(specs=specs_installed())
 
 
-# --- Made at open -------------------------------------------------------------------------
+# --- Made by web's init -------------------------------------------------------------------
 
 
 def _mine(body: Callable[[nu.Str], nu.Nu]) -> nu.Nu:

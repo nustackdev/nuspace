@@ -200,6 +200,7 @@ def _free_port() -> int:
 
 async def _served(root: Path, port: int):
     """``local.web`` on this loop, held open: ``(done, task)``. Close with ``done.set()``."""
+    await nu.arun(local.init(root))
     loop = asyncio.get_running_loop()
     ready, done = loop.create_future(), asyncio.Event()
     hold = nu.With(MADE_STORE, body=nu.let(_Hold(ready, done), lambda _: nu.Noop()))

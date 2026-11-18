@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Core, kernel and web each set up a space through their own init
 - The space runtime's modules and helpers drop leading underscores, named for what they hold
 - The kernel owns the notifier; web needs a running kernel, open works without one
 - The space example runs kernel and web as two processes, web restarted on exit

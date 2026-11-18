@@ -1,4 +1,4 @@
-"""Home: the web plane the ``home`` role names, where ``/`` lands. Made at open when missing (:mod:`..planes`).
+"""Home: the web plane the ``home`` role names, where ``/`` lands. Made by web's init when missing (:mod:`..planes`).
 
 A system web plane with a minted id, found through ``Web.roles``: ``plane.remove`` refuses it, nav runs
 it like any web plane, and the sidebar draws it first in its nav group,

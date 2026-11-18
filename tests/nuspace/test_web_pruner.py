@@ -356,6 +356,7 @@ async def test_a_removal_prunes_with_no_browser_and_a_bulk_removal_is_one_run(tm
     ready, done = loop.create_future(), asyncio.Event()
     hold = nu.let(_Hold(ready, done), lambda _: nu.Noop())
     root = tmp_path / "space"
+    await nu.arun(local.init(root))
     web = local.web(
         root, open_browser=False, static=None, port=_free_port(), extensions=(), body=hold
     )

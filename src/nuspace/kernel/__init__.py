@@ -4,8 +4,10 @@ The ops write what is wanted to ``Space.exec`` (``plane_run.add``,
 ``interrupt_at``, ``kill_at``); the kernel makes it true through the
 backends, never asking which kind, and writes what happened through the
 same ops. An assembly runs it as one term, :func:`driver`, inside what it
-binds::
+binds, after its :func:`init` once per space::
 
+    init()
+      live indexes, system planes
     stores, worker pool, bound(backends, envs, space_envs)
       driver()
         reap, stamp opened_at, system planes, loop, finally close
@@ -15,14 +17,15 @@ envs come from the assembly. Reap and close end only what a kernel
 started; a plane run asked for and never started stays pending, and the
 next kernel starts it.
 
-- :mod:`.driver`: :func:`driver`, the kernel's whole life as one term.
+- :mod:`.driver`: :func:`init`, what the kernel keeps in the stores, made
+  once per space; :func:`driver`, the kernel's whole life as one term.
 - :mod:`.kernel`: the loop, one arm per live plane run, and :func:`bound`,
   what it needs around it.
 - :mod:`.reap`: at start, what an earlier kernel started and left live,
   ended killed.
 - :mod:`.close`: at a clean close, what this kernel started and left live,
   ended interrupted.
-- :mod:`.live`: the live indexes' sets, made by whoever inits the stores.
+- :mod:`.live`: the live indexes' sets, made by :func:`init`.
 - :mod:`.body`: one cell run's life on its worker.
 - :mod:`.envs`: named env factories, resolved per cell run in the kernel.
 - :mod:`.out`: a cell run's stdout and stderr, captured in the worker.
@@ -43,7 +46,7 @@ from .backends import (
 )
 from .body import build_body
 from .close import CLOSED, close
-from .driver import driver
+from .driver import driver, init
 from .envs import Env, EnvFactory, KernelConfig, UnknownEnvError
 from .kernel import ORPHAN, UNENDED, bound
 from .live import init_live
@@ -71,6 +74,7 @@ __all__ = [
     "build_body",
     "close",
     "driver",
+    "init",
     "init_live",
     "reap",
 ]

@@ -1,6 +1,6 @@
 """The desk pruner: takes removed planes off every desk, with no browser open.
 
-A plane keyed :data:`KEY` (its id minted), made at open where missing
+A plane keyed :data:`KEY` (its id minted), made by web's init where missing
 (:mod:`nuspace.web.planes`). It is system (remove refuses it), runs on ``async``, and
 is not on the web, so the sidebar never lists it. One reaction wakes it:
 on ``Space.indexes.removed``, the log every plane remove appends to. The
@@ -186,7 +186,7 @@ def out() -> nu.Nu:
     return nu.Delay(SETTLE) >> catch_up()
 
 
-# --- Made at open ---------------------------------------------------------------------------
+# --- Made by web's init ---------------------------------------------------------------------
 
 
 def _mine(body: Callable[[nu.Str], nu.Nu]) -> nu.Nu:

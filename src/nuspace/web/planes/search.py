@@ -305,7 +305,7 @@ def search(
         into: A ref set to the search plane's id, once its plane landed.
 
     Raises:
-        Missing: No searches plane: the web device makes it at open.
+        Missing: No searches plane: web's init makes it.
     """
     if isinstance(request, nu.Nu):
         asked: nu.Nu | dict = request
