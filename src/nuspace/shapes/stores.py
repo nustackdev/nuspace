@@ -13,8 +13,9 @@ A device keeps its own stores beside these (the web device:
 A container never written is absent, and reading one (its length, its keys,
 whether it holds an id) raises. So each store's fixed containers are made
 once, at open, by its ``init`` term: only where missing, so it is safe on
-every open of an existing space. A row's own containers are made by the op
-that adds the row. Init terms are bare, as ops are: the caller brackets each
+every open of an existing space. The live indexes the kernel folds over are
+the kernel's own, made by ``nuspace.kernel.init_live`` beside the Space
+init. A row's own containers are made by the op that adds the row. Init terms are bare, as ops are: the caller brackets each
 store on its own, ``nustd.kv.atomic(SPACE_STORE.init())``, one commit per store.
 """
 
@@ -34,7 +35,6 @@ __all__ = [
     "CORE",
     "SPACE_STORE",
     "STATE_STORE",
-    "init_live",
     "init_space",
     "init_state",
 ]
@@ -82,30 +82,13 @@ def _root() -> nu.Nu:
     return nu.IfDo(root.exists().not_(), nu.let(nustd.time.time(), made))
 
 
-def init_live() -> nu.Nu:
-    """``Space.exec.indexes.live``'s sets, made where missing.
-
-    Part of :func:`init_space`. Reap runs it again after it has ended the
-    leftovers and erased ``live``.
-    """
-    live = Space.exec.indexes.live
-    return (
-        live.plane_runs.init(nu.Dict.create())
-        >> live.plane_to_plane_runs.init(nu.Dict.create())
-        >> live.cell_to_cell_runs.init(nu.Dict.create())
-        >> live.plane_run_to_cell_runs.init(nu.Dict.create())
-        >> live.plane_run_to_failed_cells.init(nu.Dict.create())
-        >> live.plane_run_to_workers.init(nu.Dict.create())
-        >> live.workers.init(nu.Dict.create())
-    )
-
-
 def init_space() -> nu.Nu:
     """``space.db`` ready: format checked, every fixed container and the root plane made where missing.
 
     One term, one commit: the format, ``created_at``, the containers and the
-    root plane land together. ``info.path`` and ``info.opened_at`` are the
-    host's, written at every open.
+    root plane land together. ``info.path`` is the assembly's, ``info.opened_at``
+    the kernel's, written at every open. ``exec.indexes.live`` is the kernel's
+    too: ``nuspace.kernel.init_live``, run beside this in its own commit.
 
     Raises:
         Refused: The store holds another format.
@@ -125,7 +108,6 @@ def init_space() -> nu.Nu:
         >> exec_.cell_runs.init(nu.Dict.create())
         >> exec_.workers.init(nu.Dict.create())
         >> exec_.indexes.history.plane_to_plane_runs.init(nu.Dict.create())
-        >> init_live()
         >> _root()
     )
 

@@ -18,6 +18,7 @@ same ops. Nobody calls it but the host, which opens a space as::
 - :mod:`.envs`: named env factories, resolved per cell run in the host.
 - :mod:`.out`: a cell run's stdout and stderr, captured in the worker.
 - :mod:`.records`: the guarded end writes the kernel, reap and close share.
+- :mod:`.live`: the live indexes' sets, made by whoever inits the stores.
 - :mod:`.interactions`: the kernel's own nu interactions.
 - :mod:`.backends`: what runs cells on workers: the contract, ``mp``, ``async``.
 """
@@ -36,6 +37,7 @@ from .body import build_body
 from .close import CLOSED, close
 from .envs import Env, EnvFactory, KernelConfig, UnknownEnvError
 from .kernel import ORPHAN, UNENDED, bound, kernel
+from .live import init_live
 from .reap import LEFT_OVER, reap
 
 
@@ -59,6 +61,7 @@ __all__ = [
     "bound",
     "build_body",
     "close",
+    "init_live",
     "kernel",
     "reap",
 ]

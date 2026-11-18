@@ -18,6 +18,7 @@ from _support.made import MADE, MADE_STORE
 import nu
 import nustd.kv
 from nu.lang import ScalarQuery
+from nuspace.kernel import init_live
 from nuspace.shapes.stores import SPACE_STORE, STATE_STORE
 from nuspace.web.stores import CONN_STORE, WEB_STORE
 
@@ -99,8 +100,9 @@ def _navigators(backend: str, root: Path) -> tuple[nu.Nu, ...]:
 
 
 def init_stores() -> nu.Nu:
-    """Every store's fixed containers, made where missing: one commit per store."""
-    return nu.Sequential(*(nustd.kv.atomic(s.init()) for s in STORES_OF_A_SPACE))
+    """Every store's fixed containers, made where missing: one commit per store, then live's."""
+    stores = (nustd.kv.atomic(s.init()) for s in STORES_OF_A_SPACE)
+    return nu.Sequential(*stores, nustd.kv.atomic(init_live()))
 
 
 @pytest_asyncio.fixture

@@ -20,6 +20,7 @@ import nu
 import nustd.kv
 from nu.lang import is_null
 from nuspace.errors import Refused
+from nuspace.kernel import init_live
 from nuspace.shapes import (
     FORMAT,
     OUT_CAP,
@@ -34,7 +35,7 @@ from nuspace.shapes import (
     State,
     Worker,
 )
-from nuspace.shapes.stores import SPACE_STORE, STATE_STORE, init_live
+from nuspace.shapes.stores import SPACE_STORE, STATE_STORE
 from nuspace.web.shapes import RECENTS_CAP, Conn, Desk, Pane, Tab, Web, WebPlane
 from nuspace.web.stores import CONN_STORE, WEB_STORE
 

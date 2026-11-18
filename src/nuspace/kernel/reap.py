@@ -24,10 +24,10 @@ import nu
 from nu.core.io import STDERR
 from nuspace.ops.brackets import atomic
 from nuspace.shapes import EXIT_KILLED, Space
-from nuspace.shapes.stores import init_live
 from nuspace.utils import keys_of
 
 from .interactions import ErrorText
+from .live import init_live
 from .records import end_live
 
 

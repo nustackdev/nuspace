@@ -7,7 +7,8 @@ The order at open, each step inside the brackets of the ones before::
     the notification server
     Space, State                  their navigators
     blobs                         the blob store, plain files in store/blobs/ by default
-    format check                  space.db's format, then the core containers, a commit per store
+    format check                  space.db's format, then the core containers, a commit per store,
+                                  then the kernel's live indexes
     fresh device stores           conn.db deleted, then every device's navigators, their containers
     reap                          what a dead host left live, ended killed
     stamp                         Space.info path and opened_at; the open told to telemetry
@@ -132,7 +133,8 @@ def _opening(root: str, throwaway: bool, blobs: Provide | None, body: nu.Nu) -> 
         outer.append(blobs)
     if throwaway:
         outer.insert(0, nu.Provide(Throwaway, {"path": root}))
-    return nu.With(*outer, body=_inits(CORE) >> inner)
+    live = nustd.kv.atomic(kernel.init_live())
+    return nu.With(*outer, body=_inits(CORE) >> live >> inner)
 
 
 def _seeds(devices: Sequence[Device]) -> nu.Nu:

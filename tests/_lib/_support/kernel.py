@@ -91,8 +91,9 @@ def navigators(data: str) -> nu.With:
 
 
 def init_stores() -> nu.Nu:
-    """Every core store's fixed containers, made where missing: one commit per store."""
-    return nu.Sequential(*(nustd.kv.atomic(s.init()) for s in STORES))
+    """Every core store's fixed containers, made where missing: one commit per store, then live's."""
+    stores = (nustd.kv.atomic(s.init()) for s in STORES)
+    return nu.Sequential(*stores, nustd.kv.atomic(kernel.init_live()))
 
 
 def kernel_open(
