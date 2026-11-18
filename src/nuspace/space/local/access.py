@@ -11,6 +11,9 @@ lands in the stores and the kernel and web hear it. With none up nobody
 listens: it binds the same files publishing nothing, and starts no
 server. A plane run asked for through it is started by the live kernel,
 or left pending for the next kernel to start.
+
+Like every entry point it yields nothing: what a body wants to keep it
+writes into a ref the caller holds (``into=``, ``nu.let``), as in a cell.
 """
 
 from __future__ import annotations
@@ -19,9 +22,8 @@ from typing import TYPE_CHECKING
 
 import nu
 
-from ..blocks.guarded import Guarded
 from ..blocks.meta import data_dir, resolve_root
-from ..blocks.notifier import Answers, Heard
+from ..blocks.notifier import Answers
 from . import binding
 from .disk import checked, found
 from .opening import ROOTS
@@ -47,11 +49,12 @@ def open(
     Ops run as in a cell: brackets, ``nuspace.atomic``, named targets, no
     ``Here``. Takes no lock: beside a live kernel and web, or with nothing
     up. Publishes to infra's notification server when it answers as
-    this starts, else publishes nothing (nobody listens).
+    this starts, else publishes nothing (nobody listens). Yields nothing:
+    the body writes what it keeps into a ref the caller holds.
 
     Args:
         path: The space's root. It must be a local space, initialized.
-        body: What runs with the stores bound. The term yields what it yields.
+        body: What runs with the stores bound.
         blobs: The blob store, as ``local.kernel``. None is local's files.
 
     Raises:
@@ -62,9 +65,7 @@ def open(
     root, _ = resolve_root(path)
     data = str(data_dir(root))
     blobs = binding.blobs(data) if blobs is None else blobs
-    stores = Heard(
-        nu.With(binding.stores(data, ROOTS), blobs, body=body),
-        nu.With(binding.quiet(data, ROOTS), blobs, body=body),
-        Answers(binding.valkey_dir(data)),
-    )
-    return Guarded(stores, found(root), checked(root))
+    published = nu.With(binding.stores(data, ROOTS), blobs, body=body)
+    quiet = nu.With(binding.quiet(data, ROOTS), blobs, body=body)
+    chosen = nu.IfDo(Answers(binding.valkey_dir(data)), published, quiet)
+    return found(root) >> checked(root) >> chosen

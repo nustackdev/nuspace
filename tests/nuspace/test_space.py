@@ -59,7 +59,7 @@ from nuspace.space.blocks.meta import (
     read_meta,
     write_meta,
 )
-from nuspace.space.blocks.notifier import Answers, Heard, served
+from nuspace.space.blocks.notifier import Answers, served
 from nuspace.space.blocks.required import required
 from nuspace.space.blocks.resources import Throwaway
 from nuspace.space.local.disk import marked
@@ -948,9 +948,14 @@ def test_open_tab_writes_the_browser_ref():
 # --- local.open ---------------------------------------------------------------------
 
 
-def _open(root: Path, body: nu.Nu) -> object:
-    value, _ = asyncio.run(nu.arun(local.open(root, body=body)))
-    return value
+class Kept(nu.Shape):
+    """What a test's ``open`` body keeps, in a dict the test binds and reads after."""
+
+    value = nu.ObjectRef.slot()
+
+
+def _open(root: Path, body: nu.Nu) -> None:
+    asyncio.run(nu.arun(local.open(root, body=body)))
 
 
 def _free(root: Path, path: str, what: str) -> None:
@@ -1102,9 +1107,11 @@ async def test_open_after_a_kernel_alone_lands_a_desk_op(tmp_path):
     plane = await _aread(root, nuspace.plane.keyed(init.KEY))
     assert await _aread(root, Web.desks[desk].entries.extract()) == {}
     await nu.arun(local.open(root, body=nuspace.atomic(nuspace.web.desks.add_plane(desk, plane))))
-    items, _ = await nu.arun(
-        local.open(root, body=nuspace.atomic(Web.desks[desk].entries.extract()))
-    )
+    # open yields nothing: the body keeps what it read in a ref this test holds.
+    kept: dict[str, object] = {}
+    read = Kept.value.set(nuspace.atomic(Web.desks[desk].entries.extract()))
+    await nu.arun(local.open(root, body=read), nu.Context().bind(dict, kept, Kept))
+    items = kept["value"]
     assert [i["original"] for i in items.values()] == [{"plane": plane, "params": {}}]
 
 
@@ -1393,14 +1400,6 @@ async def test_a_requirement_waits_on_the_loop_while_it_is_on_its_way():
     flag.update(up=False, coming=False)
     with pytest.raises(Refused, match="start it"):
         await nu.arun(req)
-
-
-def test_heard_runs_one_tree_by_its_condition():
-    def heard(cond: bool) -> nu.Nu:
-        return Heard(nu.Literal("served"), nu.Literal("quiet"), nu.Literal(cond))
-
-    assert nu.run(heard(True))[0] == "served"
-    assert nu.run(heard(False))[0] == "quiet"
 
 
 def test_served_is_nustds_own_server(tmp_path):

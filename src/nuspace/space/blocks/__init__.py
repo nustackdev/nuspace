@@ -36,7 +36,7 @@ from .meta import (
     resolve_root,
     write_meta,
 )
-from .notifier import Answers, Heard, answers, served
+from .notifier import Answers, answers, served
 from .required import required
 from .resources import Throwaway, Warmed, throwaway
 from .workers import worker_context, worker_pool
@@ -53,7 +53,6 @@ __all__ = [
     "DiskBackend",
     "DiskRef",
     "Guarded",
-    "Heard",
     "Held",
     "InitDone",
     "Listening",
