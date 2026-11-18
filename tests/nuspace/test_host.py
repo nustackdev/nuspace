@@ -14,6 +14,7 @@ import asyncio
 import contextlib
 import errno
 import functools
+import logging
 import os
 import signal
 import socket
@@ -37,6 +38,7 @@ from nuspace.space import local
 from nuspace.space.blocks import browse
 from nuspace.space.blocks import lock as lock_module
 from nuspace.space.blocks.lock import Lock, LockWarning, holder
+from nuspace.space.blocks.logs import Logged
 from nuspace.space.blocks.meta import (
     DATA_DIR,
     META_FILE,
@@ -48,6 +50,7 @@ from nuspace.space.blocks.meta import (
     stamp,
     write_meta,
 )
+from nuspace.space.blocks.notifier import Notifier, holders
 from nuspace.space.blocks.resources import DataDir, Throwaway
 from nuspace.space.local import presets
 from nuspace.space.local._disk import Marked
@@ -69,6 +72,7 @@ from nuspace.specs import (
 from nuspace.specs import registry as registry_module
 from nuspace.system import init
 from nuspace.web import CONN_STORE, WEB_STORE, Conn, Web
+from nustd.valkey.resources import ping, socket_path_for
 
 
 if TYPE_CHECKING:
@@ -310,21 +314,21 @@ def test_a_space_made_before_meta_is_found_and_adopted_and_its_host_lock_ignored
     assert not made_before(root)
 
 
-# --- The host lock -----------------------------------------------------------------
+# --- The lock ----------------------------------------------------------------------
 
 
-def test_the_lock_names_its_holder_and_refuses_a_second_open(tmp_path):
+def test_the_lock_names_its_holder_and_refuses_a_second_take(tmp_path):
     path = str(tmp_path / "kernel.lock")
-    first = Lock(path)
+    first = Lock(path, "kernel")
     first.setup(None)
     try:
         name, pid, _ = holder(path).split()
         assert (name, int(pid)) == (socket.gethostname(), os.getpid())
-        with pytest.raises(Refused, match="open already in this process"):
-            Lock(path).setup(None)
+        with pytest.raises(Refused, match="the kernel of this space runs in this process already"):
+            Lock(path, "kernel").setup(None)
     finally:
         first.cleanup()
-    again = Lock(path)
+    again = Lock(path, "kernel")
     again.setup(None)
     again.cleanup()
 
@@ -334,22 +338,21 @@ def test_a_lock_another_process_holds_refuses_the_open(tmp_path):
     code = (
         "import sys, time\n"
         "from nuspace.space.blocks.lock import Lock\n"
-        f"Lock({path!r}).setup(None)\n"
+        f"Lock({path!r}, 'kernel').setup(None)\n"
         "print('held', flush=True)\n"
         "time.sleep(60)\n"
     )
     other = subprocess.Popen([sys.executable, "-c", code], stdout=subprocess.PIPE, text=True)  # noqa: S603
     try:
         assert other.stdout.readline().strip() == "held"
-        with pytest.raises(
-            Refused, match=f"open on {socket.gethostname()}, pid {other.pid}. Close it there"
-        ):
-            Lock(path).setup(None)
+        told = f"the kernel of this space runs on {socket.gethostname()}, pid {other.pid}. Stop it"
+        with pytest.raises(Refused, match=told):
+            Lock(path, "kernel").setup(None)
     finally:
         other.kill()
         other.wait()
     # Its holder died: the lock went with it.
-    mine = Lock(path)
+    mine = Lock(path, "kernel")
     mine.setup(None)
     mine.cleanup()
 
@@ -360,8 +363,8 @@ def test_a_lock_the_file_system_cannot_take_opens_with_a_warning(tmp_path, monke
 
     monkeypatch.setattr(lock_module.fcntl, "lockf", nolock)
     path = str(tmp_path / "kernel.lock")
-    lock = Lock(path)
-    with pytest.warns(LockWarning, match="opening without it"):
+    lock = Lock(path, "web")
+    with pytest.warns(LockWarning, match="going on without it"):
         lock.setup(None)
     assert not holder(path)
     lock.cleanup()
@@ -549,7 +552,7 @@ async def test_a_clean_close_ends_what_is_live_so_the_reopen_reaps_nothing(tmp_p
         keyed = [nuspace.plane.keyed(key) for key in (init.KEY, *init.BOOTED)]
         ids = {(await nu.arun(nuspace.atomic(k), ctx))[0] for k in keyed}
         assert planes == ids
-        with pytest.raises(Refused, match="open already in this process"):
+        with pytest.raises(Refused, match="the kernel of this space runs in this process already"):
             await nu.arun(local.headless(root))
     finally:
         done.set()
@@ -703,6 +706,104 @@ def test_with_plane_compiles(monkeypatch, web, open_browser):
 def test_with_plane_by_an_unknown_name_is_missing():
     with pytest.raises(Missing):
         presets.with_plane(None, "nobody.nothing")
+
+
+# --- The notifier ---------------------------------------------------------------------
+
+
+def _answers(path: Path) -> bool:
+    return ping(socket_path_for(path), 0.2)
+
+
+def test_a_joiner_keeps_the_server_when_its_owner_leaves_and_the_last_out_stops_it(tmp_path):
+    path = tmp_path / "valkey"
+    owner, joiner = Notifier(str(path)), Notifier(str(path))
+    owner.setup(None)
+    try:
+        joiner.setup(None)
+        assert owner.owned
+        assert not joiner.owned
+        assert len(holders(path)) == 2
+        owner.cleanup()
+        assert _answers(path), "the owner left first and took the server along"
+        assert len(holders(path)) == 1
+    finally:
+        owner.cleanup()
+        joiner.cleanup()
+    assert not _answers(path)
+    assert holders(path) == []
+
+
+#: A process owning or joining the notifier at argv[1], saying which, until its stdin closes.
+_NOTIFIED = """
+import sys
+from nuspace.space.blocks.notifier import Notifier
+n = Notifier(sys.argv[1])
+n.setup(None)
+print("owned" if n.owned else "joined", flush=True)
+sys.stdin.read()
+n.cleanup()
+"""
+
+
+def _notified(path: Path) -> subprocess.Popen:
+    return subprocess.Popen(  # noqa: S603
+        [sys.executable, "-c", _NOTIFIED, str(path)],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        text=True,
+    )
+
+
+def test_processes_coming_up_together_start_one_server(tmp_path):
+    path = tmp_path / "valkey"
+    procs = [_notified(path) for _ in range(4)]
+    try:
+        said = sorted(p.stdout.readline().strip() for p in procs)
+        assert said == ["joined", "joined", "joined", "owned"]
+    finally:
+        for p in procs:
+            p.communicate("", timeout=20)
+    assert not _answers(path)
+    assert holders(path) == []
+
+
+def test_a_holder_that_crashed_is_pruned_and_the_last_clean_exit_stops_the_server(tmp_path):
+    path = tmp_path / "valkey"
+    crashed = _notified(path)
+    assert crashed.stdout.readline().strip() == "owned"
+    mine = Notifier(str(path))
+    mine.setup(None)
+    try:
+        crashed.kill()
+        crashed.wait()
+        # No watchdog: the server outlives its owner, for the holder left.
+        assert _answers(path)
+    finally:
+        mine.cleanup()
+    assert not _answers(path)
+    assert holders(path) == []
+
+
+# --- Logs ------------------------------------------------------------------------------
+
+
+def test_the_log_block_points_logging_at_its_file_while_it_holds(tmp_path):
+    path = tmp_path / "kernel" / "kernel.log"
+    held = Logged(str(path), "kernel")
+    held.setup(None)
+    logging.getLogger("nuspace.test").info("from nuspace")
+    logging.getLogger("somelib").info("not this")
+    logging.getLogger("somelib").warning("but this")
+    held.cleanup()
+    logging.getLogger("nuspace.test").warning("after")
+    said = path.read_text()
+    assert f"kernel up on {socket.gethostname()}, pid {os.getpid()}" in said
+    assert "from nuspace" in said
+    assert "but this" in said
+    assert "not this" not in said
+    assert "kernel down" in said
+    assert "after" not in said
 
 
 # --- Browse ----------------------------------------------------------------------------

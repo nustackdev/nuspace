@@ -1,21 +1,22 @@
-"""The space lock: one open holds a space at a time.
+"""A driver's lock: one of each driver runs on a space at a time.
 
-A file the assembly names (local: ``kernel/kernel.lock``), taken first at
-open, before the notification server and the stores, held until the space
-closes. A POSIX record lock
-(``fcntl.lockf``), which NFS carries across machines, so red and blue never
-open one space on the shared grid together. The file says who holds it,
-``host pid opened_at``, read back when the lock is refused and told as
-``open on <host>, pid <pid>``.
+An assembly takes one lock per driver it runs, a file it names (local:
+``kernel/kernel.lock``, ``devices/web/web.lock``), first, before the
+notification server and the stores, held until the driver stops. A POSIX
+record lock (``fcntl.lockf``), which NFS carries across machines, so red
+and blue never run two kernels of one space on the shared grid. The file
+says who holds it, ``host pid taken_at``, read back when the lock is
+refused and told with what it guards: ``the kernel of this space runs on
+red, pid 1234``.
 
-Best effort: a file system that cannot lock at all opens with a warning.
-A lock held by a live host refuses the open. A host that died frees the
-lock with its process, so the next open takes it, and reap ends what the
-dead host left live. On NFSv4 a holder on a machine that died frees it
-only once its lease runs out (about 90 s); until then the open is refused.
+Best effort: a file system that cannot lock at all goes on with a warning.
+A lock held by a live process refuses. A process that died frees the lock
+with it, so the next one takes it, and reap ends what a dead kernel left
+live. On NFSv4 a holder on a machine that died frees it only once its
+lease runs out (about 90 s); until then it is refused.
 
-A POSIX lock is the process's, so a second open in the same process would
-take it again: the paths held here are kept in a set and refused too.
+A POSIX lock is the process's, so a second take in the same process would
+succeed: the paths held here are kept in a set and refused too.
 """
 
 from __future__ import annotations
@@ -48,11 +49,11 @@ _MINE: set[str] = set()
 
 
 class LockWarning(UserWarning):
-    """The host lock could not be taken for a reason other than another host holding it."""
+    """A lock could not be taken for a reason other than another process holding it."""
 
 
 def holder(path: str) -> str:
-    """Who the lock file says holds it, ``host pid opened_at``, or ``""`` when it says nothing."""
+    """Who the lock file says holds it, ``host pid taken_at``, or ``""`` when it says nothing."""
     try:
         return Path(path).read_text(encoding="utf-8").strip()
     except OSError:
@@ -60,43 +61,46 @@ def holder(path: str) -> str:
 
 
 def _told(record: str) -> str:
-    """A holder record as a refusal tells it: ``open on <host>, pid <pid>``."""
+    """A holder record as a refusal tells it: ``on <host>, pid <pid>``."""
     host, _, rest = record.partition(" ")
     pid = rest.partition(" ")[0]
     if not pid:
-        return "open in a host that left no record"
-    return f"open on {host}, pid {pid}"
+        return "in a process that left no record"
+    return f"on {host}, pid {pid}"
 
 
 class Lock:
-    """The host lock on ``path``, taken at setup, released at cleanup.
+    """The lock on ``path`` guarding ``what``, taken at setup, released at cleanup.
 
     Args:
         path: The lock file, absolute, in the space's data dir.
+        what: What it guards, as a refusal names it: ``"kernel"``, ``"web"``.
 
     Raises:
-        Refused: Another host, or another open in this process, holds it.
+        Refused: Another process, or another bracket in this one, holds it.
     """
 
-    def __init__(self, path: str) -> None:
+    def __init__(self, path: str, what: str) -> None:
         self.path = path
+        self.what = what
         self._fd: int | None = None
 
     def setup(self, ctx: Context) -> None:
         """Take the lock without waiting, and write who holds it."""
         if self.path in _MINE:
-            msg = f"the space is open already in this process ({os.getpid()})"
+            msg = f"the {self.what} of this space runs in this process already, pid {os.getpid()}"
             raise Refused(msg)
+        Path(self.path).parent.mkdir(parents=True, exist_ok=True)
         fd = os.open(self.path, os.O_RDWR | os.O_CREAT, 0o644)
         try:
             fcntl.lockf(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except OSError as exc:
             os.close(fd)
             if exc.errno in _HELD:
-                msg = f"the space is {_told(holder(self.path))}. Close it there first"
+                msg = f"the {self.what} of this space runs {_told(holder(self.path))}. Stop it there first"
                 raise Refused(msg) from None
             warnings.warn(
-                f"could not take the host lock {self.path} ({exc}), opening without it",
+                f"could not take the {self.what} lock {self.path} ({exc}), going on without it",
                 LockWarning,
                 stacklevel=2,
             )

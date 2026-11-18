@@ -123,7 +123,7 @@ def _opening(root: str, throwaway: bool, blobs: Provide | None, body: nu.Nu) -> 
     outer = [
         nu.Provide(Marked, {"root": root}),
         nu.Provide(DataDir, {"root": root, "dirs": DIRS}),
-        nu.Provide(Lock, {"path": str(Path(data) / KERNEL_LOCK)}),
+        nu.Provide(Lock, {"path": str(Path(data) / KERNEL_LOCK), "what": "kernel"}),
         binding.notifier(data),
         binding.stores(data, [s.root for s in STORES]),
     ]
