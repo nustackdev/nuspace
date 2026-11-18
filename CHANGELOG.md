@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Kernel and web always take a space's path; the example initializes its space first
 - Run initializes a new space first; infra, kernel and web each run alone too
 - Kernel requires infra, web requires a kernel; run holds infra through kernel crashes
 - Infra runs as its own entry point, owning the notification server while it lives

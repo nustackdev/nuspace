@@ -809,17 +809,17 @@ async def test_a_plane_made_through_open_lands_its_web_row(tmp_path):
 
 
 @pytest.mark.parametrize("open_browser", [True, False])
-def test_opening_on_a_plane_compiles(monkeypatch, open_browser):
+def test_opening_on_a_plane_compiles(monkeypatch, open_browser, tmp_path):
     _points(monkeypatch, [])
-    web = local.web(None, plane=_COUNTER, open_browser=open_browser, static=None)
+    web = local.web(tmp_path, plane=_COUNTER, open_browser=open_browser, static=None)
     run = local.run(None, plane=_COUNTER, open_browser=open_browser, static=None)
     for term in (web, run):
         nu.validate(nu.compile(term))
 
 
-def test_a_plane_by_an_unknown_name_is_missing():
+def test_a_plane_by_an_unknown_name_is_missing(tmp_path):
     with pytest.raises(Missing):
-        local.web(None, plane="nobody.nothing")
+        local.web(tmp_path, plane="nobody.nothing")
     with pytest.raises(Missing):
         local.run(None, plane="nobody.nothing")
 

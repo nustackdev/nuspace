@@ -3,8 +3,9 @@
 Every Plane, Cell and content kind comes from an installed extension, found
 through its entry point.
 The space's root is ``examples/example.nuspace``, its data in ``.nuspace/``
-inside it, kept between runs. ``local.run`` starts its kernel and its web
-as two processes, and starts web again if it stops.
+inside it, kept between runs. ``local.init`` initializes it, a no-op once
+done; ``local.run`` then holds its infra here, starts its kernel and its
+web as two processes, and starts web again if it stops.
 
 Run it::
 
@@ -27,6 +28,7 @@ STORE = str(Path(__file__).parent / "example.nuspace")
 if __name__ == "__main__":
     # The drivers run in child processes of their own; this one only watches them.
     try:
+        nu.run_in_loop(local.init(STORE))
         nu.run_in_loop(local.run(STORE))
     except KeyboardInterrupt:
         print("stopped")

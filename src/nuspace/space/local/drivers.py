@@ -17,8 +17,9 @@ leaves infra and web up; web's tabs hear again once a kernel is back.
 
 Each takes its own lock, so one of each runs on a space, in one process
 or several. None makes or inits a space: each refuses one whose init has
-not run (``local.init``), except a throwaway root, which it makes and
-inits first. The kernel and web open the space the same way
+not run (``local.init``). Only infra takes a throwaway root (path None),
+which it makes and inits first: nothing else could find it, so the
+kernel and web take a path. The kernel and web open the space the same way
 (:mod:`.opening`) and meet only through the stores, the notifier and two
 files of local's: ``devices/web/session.addr``, where web's tab sessions
 answer (:mod:`.session`), and the uploads dir, both named by :mod:`.layout`.
@@ -154,7 +155,7 @@ def infra(path: str | os.PathLike[str] | None = None, *, body: nu.Nu | None = No
 
 
 def kernel(
-    path: str | os.PathLike[str] | None = None,
+    path: str | os.PathLike[str],
     *,
     extensions: Sequence[str] | None = None,
     envs: Mapping[str, EnvFactory] | None = None,
@@ -178,8 +179,7 @@ def kernel(
 
     Args:
         path: The space's root, initialized (``local.init``); its data in
-            ``.nuspace/``. None is a throwaway one, made and initialized
-            here, removed at close: no infra runs on it, so it is refused.
+            ``.nuspace/``.
         extensions: The installed packages whose extensions register, by
             entry point name. None registers every installed one, ``()`` none.
         envs: Env factories of the space's own, ahead of every package's.
@@ -198,7 +198,7 @@ def kernel(
             assembly's space, no infra running on it, or a kernel of this
             space running already.
     """
-    root, throwaway = resolve_root(path)
+    root, _ = resolve_root(path)
     data = str(data_dir(root))
     reg = space_registry(extensions=extensions, envs=envs)
     blobs = binding.blobs(data) if blobs is None else blobs
@@ -210,7 +210,7 @@ def kernel(
         _kernel.bound(backends=backends, envs=factories, space_envs=space_envs),
         body=driver if body is None else nu.Race(driver, body),
     )
-    driven = bracketed(
+    return bracketed(
         root,
         locks=[(KERNEL_LOCK, "kernel")],
         log=(KERNEL_LOG, "kernel"),
@@ -218,7 +218,6 @@ def kernel(
         blobs=blobs,
         body=path_set(root) >> opened() >> running,
     )
-    return fresh(root, throwaway, driven)
 
 
 #: Seconds the kernel waits for infra whose lock is held but whose server is not up yet.
@@ -271,7 +270,7 @@ def opened_on(spec: PlaneSpec, host: str, port: int, browse: bool) -> nu.Nu:
 
 
 def web(
-    path: str | os.PathLike[str] | None = None,
+    path: str | os.PathLike[str],
     *,
     extensions: Sequence[str] | None = None,
     host: str = "127.0.0.1",
@@ -311,7 +310,7 @@ def web(
         Refused: As :func:`kernel`, with web for the kernel; or no kernel
             running on the space.
     """
-    root, throwaway = resolve_root(path)
+    root, _ = resolve_root(path)
     data = str(data_dir(root))
     reg = space_registry(extensions=extensions)
     blobs = binding.blobs(data) if blobs is None else blobs
@@ -336,7 +335,7 @@ def web(
         recorded,
         body=nu.Race(served, *beside) if beside else served,
     )
-    driven = bracketed(
+    return bracketed(
         root,
         locks=[(WEB_LOCK, "web")],
         log=(WEB_LOG, "web"),
@@ -344,4 +343,3 @@ def web(
         blobs=blobs,
         body=running,
     )
-    return fresh(root, throwaway, driven)

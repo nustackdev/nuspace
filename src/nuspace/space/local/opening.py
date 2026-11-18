@@ -28,8 +28,9 @@ inside the brackets of the ones before::
 The requirement comes before the lock, so a driver holding its lock has
 what it runs on up: web looks only for the kernel's lock. Infra binds no
 store and needs nothing: it shares the init check, the data dir, a lock
-and a log. A throwaway root (path None) is made by the entry point
-itself, so it runs ``init`` on it first, at setup (:func:`fresh`).
+and a log. A throwaway root (path None), which only infra and ``run``
+take, is made by the entry point itself, so it runs ``init`` on it
+first, at setup (:func:`fresh`).
 ``open`` shares only the bindings and the init check: it locks nothing
 and makes nothing.
 """
