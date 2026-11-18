@@ -8,8 +8,7 @@ it. Each is declared as a :class:`~nuspace.shapes.store.Store` record::
     State   what programs keep
 
 That is the logical split. Where each lives is an assembly's call: local
-keeps one SQLite file per store, another assembly may shard one store
-across several backends by top-level slot.
+keeps one SQLite file per store.
 
 A device keeps its own stores beside these (the web device:
 :mod:`nuspace.web.stores`).

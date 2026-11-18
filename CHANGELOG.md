@@ -29,7 +29,6 @@ separately here.
 - Web runs as one driver handed its addresses; a session cell without web fails plainly
 - A pane whose run a kernel ended on stop or crash asks for it again
 - Tabs of an earlier open are cleared by a commit, never by deleting files
-- An assembly can split one store across several backends by its top-level slots
 - A space records which assembly made it; local alone decides where stores live
 - The kernel owns its whole life in one driver, from reap to close
 - Reap and close end only started runs; asked runs stay pending for the next kernel

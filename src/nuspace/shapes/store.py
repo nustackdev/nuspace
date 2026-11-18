@@ -7,8 +7,8 @@ read it and neither imports the other for it. A store has no ops of its
 own: its init term is the one thing it runs, and the store's declaration
 builds it.
 
-Where a store lives (its file, its backend, its notify channel, how it is
-sharded) is not here: an assembly decides it (``nuspace.space.local.layout``).
+Where a store lives (its file, its backend, its notify channel) is not
+here: an assembly decides it (``nuspace.space.local.layout``).
 """
 
 from __future__ import annotations
