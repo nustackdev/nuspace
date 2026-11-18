@@ -1,7 +1,7 @@
 """``nuspace init``: make a directory a space, without opening it to run.
 
-The stores only, through :func:`~nuspace.space.local.init`: ``.nuspace/``
-with its stores, the system planes and the web planes, seeded as the first
+The stores only, through the assembly's ``init`` (``local`` for a new
+space, :func:`~nuspace._cli._meta.assembly`): ``.nuspace/`` with its stores, the system planes and the web planes, seeded as the first
 open would. Without PATH it is the current directory, said so when that sits
 inside another space. No venv, no packaging: the directory is not set up
 for code of its own yet.
@@ -17,10 +17,9 @@ from rich.text import Text
 import nu
 from nuspace._branding import BLUE, PURPLE
 from nuspace.errors import Refused
-from nuspace.space import local
 from nuspace.space.blocks.meta import is_space
 
-from .._meta import console, nearest_space, path_argument, tilde
+from .._meta import assembly, console, nearest_space, path_argument, tilde
 
 
 __all__ = ["init"]
@@ -40,8 +39,9 @@ def init(path: str | None) -> None:
     if path is None:
         _warn_if_nested(root)
     there = is_space(root)
+    space = assembly(str(root))
     try:
-        nu.eval_in_loop(nu.compile(local.init(root)), nu.Context())
+        nu.eval_in_loop(nu.compile(space.init(root)), nu.Context())
     except Refused as e:
         raise click.ClickException(str(e)) from None
     what = "Already a space" if there else "Initialized a space"

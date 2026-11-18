@@ -1,4 +1,4 @@
-"""The command line: help and version, each command wired to its local entry point, init, verse, telemetry.
+"""The command line: help and version, each command wired to its assembly's entry point, init, verse, telemetry.
 
 Nothing here opens a space for real but ``init`` and the refusals: the
 entry points and the hold are swapped for recorders, so a test sees what a
@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import json
 import socket
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -26,7 +27,7 @@ from nuspace._telemetry import config
 from nuspace.shapes import Space
 from nuspace.shapes.stores import CORE
 from nuspace.space import local
-from nuspace.space.blocks.meta import DATA_DIR
+from nuspace.space.blocks.meta import DATA_DIR, Meta, is_space, read_meta, write_meta
 from nuspace.space.local.layout import STORES
 from nuspace.specs import CellSpec, ContentSpec, Extension, PlaneSpec
 from nuspace.web import WEB_STORE, Web
@@ -190,6 +191,34 @@ def test_run_headless_maps_to_the_kernel_alone(monkeypatch, held, tmp_path):
     assert held == ["term"]
 
 
+def test_run_web_maps_to_web_alone(monkeypatch, held):
+    serve, headless, web = _Recorder(), _Recorder(), _Recorder()
+    monkeypatch.setattr(local, "run", serve)
+    monkeypatch.setattr(local, "kernel", headless)
+    monkeypatch.setattr(local, "web", web)
+    result = _invoke("run", "/tmp/space", "--web", "-p", "9004", "--no-browser")
+    assert result.exit_code == 0, result.output
+    assert web.calls == [
+        (
+            (_abs("/tmp/space"),),
+            {"plane": None, "host": "127.0.0.1", "port": 9004, "open_browser": False},
+        )
+    ]
+    assert serve.calls == headless.calls == []
+    assert held == ["term"]
+
+
+def test_run_refuses_headless_and_web_together(monkeypatch, held):
+    web, headless = _Recorder(), _Recorder()
+    monkeypatch.setattr(local, "web", web)
+    monkeypatch.setattr(local, "kernel", headless)
+    result = _invoke("run", "/tmp/space", "--web", "--headless")
+    assert result.exit_code == 2
+    assert "not both" in result.output
+    assert web.calls == headless.calls == []
+    assert held == []
+
+
 @pytest.fixture
 def listening():
     """A socket listening on a loopback port, so that port is taken."""
@@ -298,6 +327,60 @@ def test_run_refuses_a_space_of_an_older_format(tmp_path, old):
     assert not (tmp_path / DATA_DIR / SPACE_FILE).exists()
 
 
+# --- which assembly ---------------------------------------------------------------
+
+
+def _made_by(root: Path, name: str) -> None:
+    """``root`` a space whose ``meta.json`` names the assembly ``name``."""
+    write_meta(root, Meta(assembly=name, made_at="2026-11-18T00:00:00+00:00"))
+
+
+def test_run_calls_the_assembly_meta_json_names(monkeypatch, held, tmp_path):
+    kernel = _Recorder()
+    other = SimpleNamespace(run=_Recorder(), kernel=kernel, web=_Recorder(), open=None, init=None)
+    monkeypatch.setitem(sys.modules, "nuspace.space.other", other)
+    _made_by(tmp_path, "other")
+    result = _invoke("run", "--headless", str(tmp_path))
+    assert result.exit_code == 0, result.output
+    assert kernel.calls == [((str(tmp_path),), {"body": None})]
+    assert held == ["term"]
+
+
+@pytest.mark.parametrize("name", ["nowhere", "blocks", "../local", ""])
+def test_run_refuses_an_assembly_that_does_not_import(headless, tmp_path, name):
+    _made_by(tmp_path, name)
+    result = _invoke("run", "--headless", str(tmp_path))
+    assert result.exit_code == 1, result.output
+    assert repr(name) in _said(result)
+    assert "Traceback" not in result.output
+    assert headless.calls == []
+
+
+def test_init_refuses_an_assembly_that_does_not_import(tmp_path):
+    _made_by(tmp_path, "nowhere")
+    result = _invoke("init", str(tmp_path))
+    assert result.exit_code == 1, result.output
+    assert "'nowhere' does not import" in _said(result)
+    assert not (tmp_path / DATA_DIR / SPACE_FILE).exists()
+
+
+def test_run_refuses_a_meta_json_that_does_not_read(headless, tmp_path):
+    (tmp_path / DATA_DIR).mkdir()
+    (tmp_path / DATA_DIR / "meta.json").write_text("{")
+    result = _invoke("run", "--headless", str(tmp_path))
+    assert result.exit_code == 1, result.output
+    assert "does not read" in _said(result)
+    assert headless.calls == []
+
+
+def test_a_new_space_and_a_throwaway_are_local(monkeypatch, held, tmp_path):
+    kernel = _Recorder()
+    monkeypatch.setattr(local, "kernel", kernel)
+    assert _invoke("run", "--headless", str(tmp_path / "new")).exit_code == 0
+    assert _invoke("run", "--headless", "--tmp").exit_code == 0
+    assert [args for args, _ in kernel.calls] == [(str(tmp_path / "new"),), (None,)]
+
+
 # --- run --with ---------------------------------------------------------------
 
 
@@ -311,6 +394,16 @@ def test_run_from_opens_the_named_plane(monkeypatch, held, verse, tmp_path):
     assert kwargs == {"host": "127.0.0.1", "port": 9002, "open_browser": False}
     assert "plane agents.crew" in result.output
     assert held == ["term"]
+
+
+def test_run_web_with_opens_the_named_plane(monkeypatch, held, verse):
+    web = _Recorder()
+    monkeypatch.setattr(local, "web", web)
+    result = _invoke("run", "/tmp/space", "--web", "--with", "agents.crew", "-p", "9005")
+    assert result.exit_code == 0, result.output
+    ((args, kwargs),) = web.calls
+    assert (args, kwargs.pop("plane").name) == ((_abs("/tmp/space"),), "agents.crew")
+    assert kwargs == {"host": "127.0.0.1", "port": 9005, "open_browser": True}
 
 
 def test_run_from_tells_apart_two_packages_sharing_a_name(monkeypatch, held, verse):
@@ -390,6 +483,8 @@ def test_init_makes_a_space_and_seeds_it(tmp_path):
     assert result.exit_code == 0, result.output
     assert "Initialized" in result.output
     assert (path / DATA_DIR / SPACE_FILE).is_file()
+    assert is_space(path)
+    assert read_meta(path).assembly == "local"
     assert _read(path, nuspace.plane.exists(Web.roles["home"])) is True
 
     again = _invoke("init", str(path))

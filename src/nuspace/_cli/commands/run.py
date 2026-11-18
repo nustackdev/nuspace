@@ -1,21 +1,29 @@
-"""``nuspace run``: run a space, its kernel and web as two processes, or the kernel alone.
+"""``nuspace run``: run a space, its kernel and web as two processes, or one of them alone.
 
-By default :func:`~nuspace.space.local.run`: the kernel and web, each in a
-process of its own, web started again if it dies. ``--headless`` is
-:func:`~nuspace.space.local.kernel` alone, in this process. Runs until
-interrupted, then the kernel ends what it started and the brackets stop
-the workers. Which space is :func:`~nuspace._cli._meta.space_root`: PATH,
-made a space if it is not one, else the nearest space up from here, else
-home. ``--tmp`` is a throwaway one, gone at close. The header names the
-space's root either way.
+The space's assembly (:func:`~nuspace._cli._meta.assembly`, ``local`` for
+a new space) does the work, through its entry points:
+
+- by default its ``run``: the kernel and web, each in a process of its
+  own, web started again if it dies.
+- ``--headless``: its ``kernel`` alone, in this process.
+- ``--web``: its ``web`` alone, in this process, beside a kernel run
+  elsewhere (``--headless`` in another shell) or none yet: what web asks
+  for waits until a kernel runs.
+
+Runs until interrupted, then the kernel ends what it started and the
+brackets stop the workers. Which space is
+:func:`~nuspace._cli._meta.space_root`: PATH, made a space if it is not
+one, else the nearest space up from here, else home. ``--tmp`` is a
+throwaway one, gone at close. The header names the space's root either way.
 
 ``--with`` names a Plane an installed package adds, ``pkg.plane`` as
 ``nuspace verse`` lists them, or a bare name for a nuverse Plane: web
 makes it in the space once and the tab opens on it. Headless, the kernel
 makes it beside its driver. The next run with the same name reopens the
-newest plane made from it, unless removed. The header names the Plane: its id is only known once the space
-is open. A space whose kernel runs elsewhere, or of an older store
-format, is refused with a short error.
+newest plane made from it, unless removed. The header names the Plane:
+its id is only known once the space is open. A space whose kernel (or
+web) runs already, or of an older store format, is refused with a short
+error.
 
 The port: ``--port`` binds that one and a taken one is a short error.
 Without it, the first free port from 8080 up.
@@ -30,12 +38,11 @@ import rich_click as click
 
 import nu
 from nuspace.errors import Refused
-from nuspace.space import local
 from nuspace.space.local._plane import plane_of
 from nuspace.specs import registered_name
 
 from .._installed import resolve
-from .._meta import announce, hold, path_argument, space_root, tmp_option
+from .._meta import announce, assembly, hold, path_argument, space_root, tmp_option
 
 
 __all__ = ["run"]
@@ -81,11 +88,12 @@ def _port(host: str, port: int | None) -> int:
 
 
 @click.command(
-    short_help="Open a space, in a browser or headless.",
+    short_help="Run a space: its kernel and web, or one of them.",
     help=(
-        "Open the space at PATH, made if missing, and serve it in a browser, or headless:"
-        " kernel and services, nothing drawn. Without PATH, the nearest space up from"
-        " here, else the home space at ~."
+        "Run the space at PATH, made if missing: its kernel and its web, each in a process"
+        " of its own, web started again if it stops. --headless runs the kernel alone,"
+        " --web the web alone. Without PATH, the nearest space up from here, else the"
+        " home space at ~."
     ),
 )
 @path_argument
@@ -100,7 +108,15 @@ def _port(host: str, port: int | None) -> int:
     ),
 )
 @click.option(
-    "--headless", is_flag=True, help="Serve no browser. --host, --port and --no-browser go unused."
+    "--headless",
+    is_flag=True,
+    help="The kernel alone, no web. --host, --port and --no-browser go unused.",
+)
+@click.option(
+    "--web",
+    "web_only",
+    is_flag=True,
+    help="The web alone, no kernel: run one with --headless in another shell.",
 )
 @click.option("--host", default="127.0.0.1", show_default=True, help="Interface to bind.")
 @click.option(
@@ -115,12 +131,16 @@ def run(
     tmp: bool,
     plane: str | None,
     headless: bool,
+    web_only: bool,
     host: str,
     port: int | None,
     no_browser: bool,
 ) -> None:
     """Run until Ctrl+C."""
+    if headless and web_only:
+        raise click.UsageError("Give --headless or --web, not both.")
     path = space_root(path, tmp=tmp)
+    space = assembly(path)
     if not headless:
         port = _port(host, port)
     made = None
@@ -129,11 +149,14 @@ def run(
         if plane is not None:
             spec = resolve(plane)
             made = registered_name(spec)
+        served = {"host": host, "port": port, "open_browser": not no_browser}
         if headless:
             body = None if spec is None else nu.let("", lambda p: plane_of(spec, p)) >> nu.Park()
-            term = local.kernel(path, body=body)
+            term = space.kernel(path, body=body)
+        elif web_only:
+            term = space.web(path, plane=spec, **served)
         else:
-            term = local.run(path, plane=spec, host=host, port=port, open_browser=not no_browser)
+            term = space.run(path, plane=spec, **served)
     except Refused as e:
         raise click.ClickException(str(e)) from None
     announce(path, headless=headless, plane=made)

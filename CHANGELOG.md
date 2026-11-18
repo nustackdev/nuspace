@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- The command line runs whichever assembly made a space, and runs web alone too
 - Kernel and web run as separate supervised processes; open gives ops without drivers
 - Registry warnings name the assembly as the source of a space's own envs
 - Each driver gets its own lock and log; processes share one notifier safely

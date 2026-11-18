@@ -2,8 +2,8 @@
 
 Pure command line, not an API: nothing imports it, workers least of all.
 
-A space is a directory one process locks at a time, so a command that opens
-one holds it for as long as it is up.
+A command that runs a driver holds that driver's lock for as long as it is
+up: one kernel and one web per space.
 """
 
 from .main import cli, main
