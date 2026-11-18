@@ -52,10 +52,16 @@ async function mount(readOnly: boolean, focusReq: FocusReq | null = null) {
 	return { ...calls, content };
 }
 
-function press(el: HTMLElement, key: string, mod = false) {
+function press(el: HTMLElement, key: string, mod = false, shift = false) {
 	act(() => {
 		el.dispatchEvent(
-			new KeyboardEvent("keydown", { key, metaKey: mod, bubbles: true, cancelable: true }),
+			new KeyboardEvent("keydown", {
+				key,
+				metaKey: mod,
+				shiftKey: shift,
+				bubbles: true,
+				cancelable: true,
+			}),
 		);
 	});
 }
@@ -76,8 +82,9 @@ describe("a read-only source", () => {
 		expect(content.tabIndex).toBe(0);
 	});
 
-	it("never saves or runs, on mod+enter or Escape", async () => {
+	it("never saves or runs, on shift+enter, mod+enter or Escape", async () => {
 		const { content, onCommit, onEscape } = await mount(true);
+		press(content, "Enter", false, true);
 		press(content, "Enter", true);
 		press(content, "Escape");
 		expect(onCommit).not.toHaveBeenCalled();

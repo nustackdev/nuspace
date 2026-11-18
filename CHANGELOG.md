@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Code cells save on shift+Enter, matching the kit; cmd+Enter still adds a cell
 - Enter in a plane title opens an input line instead of a text cell
 - Window chrome bars share one height, button size and edge lines
 - Sidebar controls share one glyph size, icons keep theirs

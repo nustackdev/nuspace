@@ -9,7 +9,7 @@
 // The wrapper's real job is the boundary: ArrowUp on line 1 and ArrowDown on
 // the last line have to leave the editor and land in the neighbouring cell,
 // and Escape has to hand control back to cell selection. Saving is the
-// block's own: cmd+enter and blur commit, and an arrow out is a blur. Escape
+// block's own: shift+enter and blur commit, and an arrow out is a blur. Escape
 // closes the editor before a blur can land, so it commits for itself.
 
 import { Code, type CodeProps, type FocusAt, Shortcut } from "@nustackdev/ui-kit";
@@ -35,7 +35,7 @@ export type CodeBoxProps = {
 	source: string;
 	focusReq: FocusReq | null;
 	onFocusConsumed: () => void;
-	/** Cmd+Enter, Escape, or blur with changes. Restarts this cell only. */
+	/** Shift+Enter, Escape, or blur with changes. Restarts this cell only. */
 	onCommit: (source: string) => void;
 	onExit: (dir: ExitDir, column: number | undefined) => void;
 	onEscape: () => void;
@@ -194,14 +194,14 @@ export function SourceEditor(props: Omit<CodeBoxProps, "onDirty">) {
 						<>
 							<span className={docSourceDot} aria-hidden="true" />
 							unsaved
-							<Shortcut keys={["mod", "enter"]} size="sm" />
+							<Shortcut keys={["shift", "enter"]} size="sm" />
 							save
 						</>
 					) : saved ? (
 						"saved"
 					) : (
 						<>
-							<Shortcut keys={["mod", "enter"]} size="sm" />
+							<Shortcut keys={["shift", "enter"]} size="sm" />
 							save
 							<Shortcut keys={["esc"]} size="sm" />
 							close
