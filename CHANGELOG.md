@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- An assembly can split one store across several backends by its top-level slots
 - A space records which assembly made it; local alone decides where stores live
 - The kernel owns its whole life in one driver, from reap to close
 - Reap and close end only started runs; asked runs stay pending for the next kernel
