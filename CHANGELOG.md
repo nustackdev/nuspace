@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Reap and close end only started runs; asked runs stay pending for the next kernel
 - The kernel makes its own live run indexes; the space store init no longer does
 - Running a space splits into reusable blocks and one local assembly, behaviour unchanged
 - Code cells save on shift+Enter, matching the kit; cmd+Enter still adds a cell

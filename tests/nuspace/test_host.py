@@ -504,6 +504,9 @@ async def test_a_clean_close_ends_what_is_live_so_the_reopen_reaps_nothing(tmp_p
         assert info["path"] == str(root.resolve())
         assert info["opened_at"] >= before
         runs = await _until(ctx, nu.list(live.plane_runs.keys()), lambda rs: len(rs) == 4)
+        # Close ends only what was started: an ask still pending is the next kernel's to start.
+        up = nu.List.of(*(Space.exec.plane_runs[r].started_at.exists() for r in runs))
+        await _until(ctx, up, all)
         planes = {
             (await nu.arun(nuspace.atomic(Space.exec.plane_runs[r].plane), ctx))[0] for r in runs
         }
@@ -516,7 +519,7 @@ async def test_a_clean_close_ends_what_is_live_so_the_reopen_reaps_nothing(tmp_p
         done.set()
         await asyncio.wait_for(task, 15)
     capfd.readouterr()
-    # The close ended every run, cell run and worker interrupted; the reopen's reap finds none.
+    # The close ended every started run, its cell runs and workers interrupted; reap finds none.
     ctx, done, task = await _opened(root)
     try:
         assert "nuspace reap" not in capfd.readouterr().err
@@ -695,13 +698,16 @@ def test_nuspace_run_stops_on_ctrl_c_ends_what_is_live_and_leaves_no_process(tmp
 
 
 async def test_a_host_killed_mid_run_is_reaped_killed_at_the_next_open(tmp_path, capfd):
-    """SIGKILL, as a crash: no close runs, so the reopen's reap ends what was live, killed."""
+    """SIGKILL, as a crash: no close runs, so the reopen's reap ends what was started, killed."""
     root = tmp_path / "space"
     run = _nuspace_run(root)
     try:
         live = Space.exec.indexes.live.plane_runs
         term = nu.list(live.keys())
         runs = await _apoll(root, term, lambda rs: len(rs) == 4, stores=stores.CORE)
+        # Reap ends only what was started: an ask still pending is the next kernel's to start.
+        up = nu.List.of(*(Space.exec.plane_runs[r].started_at.exists() for r in runs))
+        await _apoll(root, up, all, stores=stores.CORE)
     finally:
         os.killpg(run.pid, signal.SIGKILL)
         run.wait()

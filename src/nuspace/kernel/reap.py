@@ -1,21 +1,28 @@
-"""Reap: at open, whatever the live indexes still list was left by a host that is gone.
+"""Reap: as a kernel starts, whatever an earlier kernel started and left live was left by a crash.
 
-Runs once at open, after the lock, the format check and a fresh conn.db,
-before spare workers and drivers: the kernel trusts the live indexes, so
-they must say the truth before it folds over them. A host that closes
-cleanly ends what it had live itself (:mod:`.close`), so a plane run, cell
-run or worker still listed live belongs to a host that crashed. Each is
-ended ``killed`` with a warning on stderr, then ``indexes.live`` is erased
-and made again, empty.
+The first step of the kernel's driver, before the kernel folds
+over the live indexes: it trusts them, so they must say the truth first. A
+kernel that closes cleanly ends what it started itself (:mod:`.close`), so
+a started plane run, its cell runs, or a worker still listed live belongs
+to a kernel that crashed. Each is ended ``killed`` with a warning on
+stderr.
 
-The processes are not touched: a worker dies with its host (mp_pool's
-parent watch kills a worker whose host is gone). Kill by handle, the
+Only what a kernel started is a leftover (:func:`.records.end_started`). A
+plane run asked for and never started (by nav, by an ``open``, by a system
+plane) is an ask: it stays live and pending, and this kernel starts it. So
+``live`` is not erased: the ends take what they end out of it, and the
+asks stay listed.
+
+The processes are not touched: a worker dies with its kernel (mp_pool's
+parent watch kills a worker whose parent is gone). Kill by handle, the
 backend's ``areap``, comes in only if leftovers show up.
 
 Walks the live indexes only, never history: O(what was live). Never blocks
-an open: should the warnings fail, that is reported and the ends go on;
+a start: should the warnings fail, that is reported and the ends go on;
 should the ends fail (indexes a crash left half written), the failure is
-reported and ``live`` is cleared anyway, the records left as they are.
+reported and ``live`` is erased and made again, empty, the records left as
+they are. That fallback drops the pending asks from ``live`` too: their
+rows stay, never started and never ended.
 """
 
 from __future__ import annotations
@@ -28,14 +35,14 @@ from nuspace.utils import keys_of
 
 from .interactions import ErrorText
 from .live import init_live
-from .records import end_live
+from .records import end_started, started
 
 
 __all__ = ["LEFT_OVER", "reap"]
 
 
 #: The error a reaped run or worker is ended with.
-LEFT_OVER = "Left live by a host that is gone, reaped at open"
+LEFT_OVER = "Left live by a kernel that is gone, reaped at its next start"
 
 _live = Space.exec.indexes.live
 
@@ -46,17 +53,20 @@ def _warn(*parts: object) -> nu.Nu:
 
 
 def _warnings() -> nu.Nu:
-    """A line per leftover plane run and per leftover worker, read before anything is ended."""
+    """A line per started leftover plane run and per leftover worker, read before anything ends."""
     runs = Space.exec.plane_runs
     workers = Space.exec.workers
     return nu.ForEachDo(
         keys_of(_live.plane_runs),
-        lambda r: _warn(
-            "plane run ",
-            r,
-            " of plane ",
-            runs[nu.Str(r)].plane.fallback("?"),
-            " was left live, ending it killed",
+        lambda r: nu.IfDo(
+            started(nu.Str(r)),
+            _warn(
+                "plane run ",
+                r,
+                " of plane ",
+                runs[nu.Str(r)].plane.fallback("?"),
+                " was left live, ending it killed",
+            ),
         ),
     ) >> nu.ForEachDo(
         keys_of(_live.workers),
@@ -71,20 +81,15 @@ def _warnings() -> nu.Nu:
 
 
 def _clear() -> nu.Nu:
-    """``indexes.live`` erased and made again, empty. Bare."""
+    """``indexes.live`` erased and made again, empty. Bare. The fallback only."""
     return _live.erase() >> init_live()
 
 
-def _ends() -> nu.Nu:
-    """Every leftover cell run, worker and plane run ended killed, then live cleared. Bare."""
-    return end_live(EXIT_KILLED, LEFT_OVER) >> _clear()
-
-
 def reap() -> nu.Nu:
-    """End what the last open left live, killed, with a warning; then clear ``indexes.live``.
+    """End what an earlier kernel started and left live, killed, with a warning. Asks stay pending.
 
     Two steps: the warnings, read in a snapshot, then one commit. Each
-    step catches its own raise, so neither blocks the open. Cost: O(what
+    step catches its own raise, so neither blocks the start. Cost: O(what
     was live).
     """
 
@@ -96,4 +101,4 @@ def reap() -> nu.Nu:
         return _warn("could not end the leftovers, clearing live only: ", why) >> atomic(_clear())
 
     warned = nu.TryCatch(atomic(_warnings()), catch=unlisted)
-    return warned >> nu.TryCatch(atomic(_ends()), catch=cleared)
+    return warned >> nu.TryCatch(atomic(end_started(EXIT_KILLED, LEFT_OVER)), catch=cleared)

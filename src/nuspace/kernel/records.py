@@ -1,5 +1,9 @@
 """The record writes the kernel, reap and close share: the end ops, guarded, and the live sets read.
 
+Reap and close end only what a kernel started (:func:`end_started`): a
+plane run asked for and never started is an ask, not a leftover, and stays
+live and pending for the next kernel to start.
+
 The end ops raise on a run or worker that ended already: ending twice is a
 driver bug. A driver often races another writer to an end that is normal
 (a kill and a body finishing at once, every cell run on a dead ``async``
@@ -19,9 +23,10 @@ from nuspace.utils import keys_of
 __all__ = [
     "cell_runs_of",
     "end_cell_run",
-    "end_live",
     "end_plane_run",
+    "end_started",
     "end_worker",
+    "started",
     "workers_of",
 ]
 
@@ -74,27 +79,42 @@ def _run_exit(plane_run: nu.StrArg, exit: nu.StrArg) -> nu.Nu:
     return nu.If((nu.Str(exit) == EXIT_INTERRUPTED).and_(failed), EXIT_FAILED, exit)
 
 
-def end_live(exit: nu.StrArg, error: nu.StrArg) -> nu.Nu:
-    """Every live cell run, worker and plane run ended ``exit`` with ``error``. Bare.
+def started(plane_run: nu.StrArg) -> nu.Bool:
+    """Whether a kernel started the plane run (``started_at`` set). A read: one point read."""
+    return nu.Bool(Space.exec.plane_runs[plane_run].started_at.exists())
+
+
+def end_started(exit: nu.StrArg, error: nu.StrArg) -> nu.Nu:
+    """Every live run a kernel started, and every live worker, ended ``exit`` with ``error``. Bare.
+
+    A plane run is ended only if it was started; every cell run of one is
+    ended, started or not, since it belongs to an ended run. Every live
+    worker is ended: only a kernel makes workers, so none outlives the
+    kernel that made it. A plane run asked for and never started is left
+    live and pending, with no cell run and no worker.
 
     Each through its guarded end, so one ended meanwhile is skipped. Cell
-    runs first, read off every plane run that still has a live cell run set
-    (an ended plane run keeps one until its last cell run ends), then the
-    workers, then the plane runs. A plane run ended ``interrupted`` whose
-    cell's last run failed ends ``failed``. Walks the live indexes only,
-    never history: O(what is live).
+    runs first, read off every started plane run that still has a live cell
+    run set (an ended plane run keeps one until its last cell run ends),
+    then the workers, then the plane runs. A plane run ended
+    ``interrupted`` whose cell's last run failed ends ``failed``. Walks the
+    live indexes only, never history: O(what is live).
     """
     live = Space.exec.indexes.live
     by_run = live.plane_run_to_cell_runs
+
+    def cells_of(r: nu.Str) -> nu.Nu:
+        ids = keys_of(by_run[r].ids)
+        return nu.ForEachDo(ids, lambda cr: end_cell_run(nu.Str(cr), exit, error))
+
     cell_runs = nu.ForEachDo(
-        keys_of(by_run),
-        lambda r: nu.ForEachDo(
-            keys_of(by_run[nu.Str(r)].ids), lambda cr: end_cell_run(nu.Str(cr), exit, error)
-        ),
+        keys_of(by_run), lambda r: nu.IfDo(started(nu.Str(r)), cells_of(nu.Str(r)))
     )
     workers = nu.ForEachDo(keys_of(live.workers), lambda w: end_worker(nu.Str(w), exit, error))
     plane_runs = nu.ForEachDo(
         keys_of(live.plane_runs),
-        lambda r: end_plane_run(nu.Str(r), _run_exit(nu.Str(r), exit), error),
+        lambda r: nu.IfDo(
+            started(nu.Str(r)), end_plane_run(nu.Str(r), _run_exit(nu.Str(r), exit), error)
+        ),
     )
     return cell_runs >> workers >> plane_runs

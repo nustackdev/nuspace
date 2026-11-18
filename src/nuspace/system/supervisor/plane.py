@@ -5,10 +5,10 @@ One cell, ``main``, runs :func:`driver`: one arm per supervised plane
 plane run of its plane ``by`` supervisor, remembers its id
 (``Supervised.run``), and only ever reads that run:
 
-    no run yet, or one from an earlier open    plane_run.add(by="supervisor"), no wait
-    its run live                               left alone until it ends
-    its run ended, the policy covers the exit  plane_run.add after the wait
-    anything else                              left down until supervised again
+    no run yet, or an ended one of an earlier open    plane_run.add(by="supervisor"), no wait
+    its run live                                      left alone until it ends
+    its run ended, the policy covers the exit         plane_run.add after the wait
+    anything else                                     left down until supervised again
 
 =============  ===========================  =====================
 policy         restarts after exit          never after
@@ -20,7 +20,9 @@ policy         restarts after exit          never after
 ``interrupted`` and ``killed`` are somebody asking, so they are respected.
 A run from an earlier open (``created_at`` before ``Space.info.opened_at``)
 was ended by that open's close, or by reap after a crash, so every
-supervised plane runs again at each open, whatever its exit.
+supervised plane runs again at each open, whatever its exit. One still
+live was asked for and never started (close and reap leave asks pending):
+the kernel starts it, so it is left alone like any live run.
 init leaves supervised planes to it, so a plane both booted and
 supervised gets this one run, not a second one from init.
 
@@ -137,7 +139,9 @@ def _pass(plane: nu.Str) -> nu.Nu:
     def look(held: nu.ObjectRef) -> nu.Nu:
         mine = nu.Str(held)
         opened = Space.info.opened_at.fallback(0.0)
-        earlier = nu.If(runs.contains(mine), runs[mine].created_at < opened, True)
+        pending = Space.exec.indexes.live.plane_runs.contains(mine)
+        old = (runs[mine].created_at < opened).and_(pending.not_())
+        earlier = nu.If(runs.contains(mine), old, True)
         fresh = nu.Bool(nu.If(mine == "", True, earlier))
         exit_ = runs[mine].exit.fallback("")
         always = row.policy.fallback("") == ALWAYS

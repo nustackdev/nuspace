@@ -778,8 +778,8 @@ async def test_release_lets_go_of_the_worker_the_arm_took(store, taken, stopped)
 # --- Reap ------------------------------------------------------------------------------
 
 
-async def test_reap_ends_what_was_live_and_clears_live(store, capfd):
-    """A crash simulated in the store: records left live, as a host that died leaves them."""
+async def test_reap_ends_what_was_started_and_keeps_the_asks(store, capfd):
+    """A crash simulated in the store: records left live, as a kernel that died leaves them."""
     await store.run(
         nuspace.atomic(
             nuspace.plane.add("p", backend="async")
@@ -788,8 +788,10 @@ async def test_reap_ends_what_was_live_and_clears_live(store, capfd):
         )
     )
     r_live = await store.made(nuspace.atomic(nuspace.plane_run.add("p", into=MADE)))
+    await store.run(nuspace.atomic(nuspace.plane_run.start(r_live)))
     r_done = await store.made(nuspace.atomic(nuspace.plane_run.add("p", into=MADE)))
     await store.run(nuspace.atomic(nuspace.plane_run.end(r_done, EXIT_OK)))
+    asked = await store.made(nuspace.atomic(nuspace.plane_run.add("p", by="nav", into=MADE)))
     w = await store.made(nuspace.atomic(nuspace.worker.add(r_live, "async", into=MADE)))
     await store.run(nuspace.atomic(nuspace.worker.start(w, handle={"pid": 1})))
     crs = []
@@ -802,24 +804,43 @@ async def test_reap_ends_what_was_live_and_clears_live(store, capfd):
     err = capfd.readouterr().err
     assert f"nuspace reap: plane run {r_live} of plane p was left live" in err
     assert f"nuspace reap: worker {w} on async was left live" in err
+    assert asked not in err
     rows = Space.exec
     for ref in (rows.plane_runs[r_live], rows.workers[w], *(rows.cell_runs[cr] for cr in crs)):
         rec = await store.read(ref.extract())
         assert (rec["exit"], rec["error"]) == (EXIT_KILLED, LEFT_OVER)
         assert rec["ended_at"] >= rec["created_at"]
     assert (await store.read(rows.plane_runs[r_done].exit)) == EXIT_OK
+    # The ask was never started: it stays live and pending, nothing else does.
+    rec = await store.read(rows.plane_runs[asked].extract())
+    assert "ended_at" not in rec and "started_at" not in rec
     assert await store.read(_live.extract()) == {
-        "plane_runs": {},
-        "plane_to_plane_runs": {},
-        "cell_to_cell_runs": {},
-        "plane_run_to_cell_runs": {},
-        "plane_run_to_failed_cells": {},
-        "plane_run_to_workers": {},
+        "plane_runs": {asked: True},
+        "plane_to_plane_runs": {"p": {"ids": {asked: True}}},
+        "cell_to_cell_runs": {"c1": {"ids": {}}, "c2": {"ids": {}}},
+        "plane_run_to_cell_runs": {asked: {"ids": {}}},
+        "plane_run_to_failed_cells": {asked: {"ids": {}}},
+        "plane_run_to_workers": {asked: {"ids": {}}},
         "workers": {},
     }
     # Live is usable again: a new run lands in it.
     r = await store.made(nuspace.atomic(nuspace.plane_run.add("p", into=MADE)))
+    assert sorted(await store.read(nu.list(_live.plane_runs.keys()))) == sorted([asked, r])
+
+
+async def test_reap_ends_a_worker_left_live_by_an_ask_it_never_started(store, capfd):
+    """A kernel that died while launching an ask's worker: the worker ends, the ask stays."""
+    await store.run(nuspace.atomic(nuspace.plane.add("p", backend="async")))
+    r = await store.made(nuspace.atomic(nuspace.plane_run.add("p", into=MADE)))
+    w = await store.made(nuspace.atomic(nuspace.worker.add(r, "async", into=MADE)))
+    await store.run(reap())
+    assert f"nuspace reap: worker {w} on async was left live" in capfd.readouterr().err
+    rows = Space.exec
+    assert await store.read(rows.workers[w].exit) == EXIT_KILLED
+    assert await store.read(rows.plane_runs[r].ended_at.exists()) is False
     assert await store.read(nu.list(_live.plane_runs.keys())) == [r]
+    assert await store.read(nu.Not(_live.workers)) is True
+    assert await store.read(nu.Not(_live.plane_run_to_workers[r].ids)) is True
 
 
 async def test_reap_on_a_clean_store_writes_nothing_and_says_nothing(store, capfd):
@@ -832,6 +853,7 @@ async def test_reap_clears_live_even_when_the_ends_fail(store, capfd):
     """An index naming a run whose row a half written op left inconsistent: live is cleared anyway."""
     await store.run(nuspace.atomic(nuspace.plane.add("p", backend="async")))
     r = await store.made(nuspace.atomic(nuspace.plane_run.add("p", into=MADE)))
+    await store.run(nuspace.atomic(nuspace.plane_run.start(r)))
     # The plane's live set lost the run: plane_run.end's strict delete raises.
     await store.run(nuspace.atomic(_live.plane_to_plane_runs["p"].ids.del_item(r)))
     await store.run(reap())
@@ -842,6 +864,7 @@ async def test_reap_clears_live_even_when_the_ends_fail(store, capfd):
 async def test_reap_ends_the_leftovers_even_when_the_warnings_fail(store, capfd, monkeypatch):
     await store.run(nuspace.atomic(nuspace.plane.add("p", backend="async")))
     r = await store.made(nuspace.atomic(nuspace.plane_run.add("p", into=MADE)))
+    await store.run(nuspace.atomic(nuspace.plane_run.start(r)))
     monkeypatch.setattr(reap_module, "_warnings", lambda: nu.Raise("list boom"))
     await store.run(reap())
     assert "nuspace reap: could not list the leftovers: " in capfd.readouterr().err
@@ -853,7 +876,7 @@ async def test_reap_ends_the_leftovers_even_when_the_warnings_fail(store, capfd,
 
 
 async def _live_run(store) -> tuple[str, str, list[str]]:
-    """A plane run left live in the store, as a closing host finds it: its worker and two cell runs."""
+    """A started plane run left live in the store, as a closing kernel finds it: a worker, two cell runs."""
     await store.run(
         nuspace.atomic(
             nuspace.plane.add("p", backend="async")
@@ -862,6 +885,7 @@ async def _live_run(store) -> tuple[str, str, list[str]]:
         )
     )
     r = await store.made(nuspace.atomic(nuspace.plane_run.add("p", into=MADE)))
+    await store.run(nuspace.atomic(nuspace.plane_run.start(r)))
     w = await store.made(nuspace.atomic(nuspace.worker.add(r, "async", into=MADE)))
     await store.run(nuspace.atomic(nuspace.worker.start(w, handle={"pid": 1})))
     crs = []
@@ -888,6 +912,20 @@ async def test_close_ends_what_is_live_interrupted_and_skips_what_ended(store, c
     assert (await store.read(rows.workers[gone].exit)) == EXIT_OK
     assert await store.read(nu.Not(_live.plane_runs)) is True
     assert await store.read(nu.list(_live.workers.keys())) == [gone]
+
+
+async def test_close_leaves_an_ask_pending_and_ends_the_worker_it_held(store):
+    r, _, _ = await _live_run(store)
+    asked = await store.made(nuspace.atomic(nuspace.plane_run.add("p", by="nav", into=MADE)))
+    w = await store.made(nuspace.atomic(nuspace.worker.add(asked, "async", into=MADE)))
+    await store.run(close())
+    rows = Space.exec
+    assert await store.read(rows.plane_runs[r].exit) == EXIT_INTERRUPTED
+    assert (await store.read(rows.workers[w].extract()))["error"] == CLOSED
+    rec = await store.read(rows.plane_runs[asked].extract())
+    assert "ended_at" not in rec and "started_at" not in rec
+    assert await store.read(nu.list(_live.plane_runs.keys())) == [asked]
+    assert await store.read(nu.Not(_live.workers)) is True
 
 
 async def test_close_ends_a_plane_run_whose_cell_failed_failed(store):
@@ -929,6 +967,51 @@ async def test_a_cell_arm_cancelled_mid_run_leaves_its_worker_to_the_close(tmp_p
         (w,) = row["workers"]
         assert (w["exit"], w["error"]) == (EXIT_KILLED, LEFT_OVER)
         assert (only_cell(row)["exit"], row["exit"]) == (EXIT_KILLED, EXIT_KILLED)
+    finally:
+        await k.close()
+
+
+class _Stuck(AsyncBackend):
+    """One worker per plane run, whose launch never comes back: its run is never started."""
+
+    placement = PER_PLANE_RUN
+
+    async def alaunch(self, worker: str) -> dict[str, object]:
+        await asyncio.Event().wait()
+        return {}
+
+
+class _Shared(AsyncBackend):
+    """``async`` with one worker per plane run, standing in for ``_Stuck`` at the next start."""
+
+    placement = PER_PLANE_RUN
+
+
+async def _held_worker(k: Kernel, r: str) -> str:
+    """The one worker the plane run holds, once the kernel has taken it."""
+    held = await k.until(k.live, lambda x: x["plane_run_to_workers"].get(r, {}).get("ids"))
+    (w,) = held["plane_run_to_workers"][r]["ids"]
+    return w
+
+
+async def test_an_ask_the_kernel_never_started_survives_reap_and_runs_at_the_next_start(tmp_path):
+    """A kernel gone (no close) while its worker for an ask launches: reap ends the worker only."""
+    data = str(tmp_path / "space")
+    k = await opened("nuspace-stuck", data=data, backends={"stuck": _Stuck})
+    try:
+        p, _ = await k.plane(SET_42, backend="stuck")
+        r = await k.start(p, by="nav")
+        w = await _held_worker(k, r)
+    finally:
+        await k.close()
+    k = await opened("nuspace-stuck", data=data, backends={"stuck": _Shared})
+    try:
+        row = await k.run_row(r, ended, SLOW)
+        assert (row["exit"], only_cell(row)["exit"]) == (EXIT_OK, EXIT_OK)
+        assert row["by"] == "nav"
+        old, new = sorted(row["workers"], key=lambda x: x["id"] != w)
+        assert (old["id"], old["exit"], old["error"]) == (w, EXIT_KILLED, LEFT_OVER)
+        assert new["exit"] == EXIT_OK
     finally:
         await k.close()
 
