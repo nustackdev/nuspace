@@ -1,10 +1,14 @@
-"""``nuspace init``: make a directory a space, without opening it to run.
+"""``nuspace init``: make a directory a space and initialize it, without running it.
 
-The stores only, through the assembly's ``init`` (``local`` for a new
-space, :func:`~nuspace._cli._meta.assembly`): ``.nuspace/`` with its stores, the system planes and the web planes, seeded as the first
-open would. Without PATH it is the current directory, said so when that sits
-inside another space. No venv, no packaging: the directory is not set up
-for code of its own yet.
+The assembly's ``init`` (``local`` for a new space,
+:func:`~nuspace._cli._meta.assembly`): ``.nuspace/`` with its stores, the
+system planes and the web planes, then ``"init": true`` in its
+``meta.json``. A plain ``nuspace run`` does the same before it runs; the
+single component runs (``--infra``, ``--kernel``, ``--web``) need it done.
+It runs again on a space already initialized, changing nothing, and is
+refused while any of its components runs. Without PATH it is the current
+directory, said so when that sits inside another space. No venv, no
+packaging: the directory is not set up for code of its own yet.
 """
 
 from __future__ import annotations
@@ -14,37 +18,32 @@ from pathlib import Path
 import rich_click as click
 from rich.text import Text
 
-import nu
 from nuspace._branding import BLUE, PURPLE
-from nuspace.errors import Refused
-from nuspace.space.blocks.meta import is_space
 
-from .._meta import assembly, console, nearest_space, path_argument, tilde
+from .._meta import assembly, console, initialize, initialized, nearest_space, path_argument, tilde
 
 
 __all__ = ["init"]
 
 
 @click.command(
-    short_help="Make a directory a space, without running it.",
+    short_help="Make a directory a space and initialize it, without running it.",
     help=(
-        "Make PATH a space, the current directory without one: its data in .nuspace/,"
-        " the system planes seeded, nothing run. No venv or packaging is set up yet."
+        "Make PATH a space and initialize it, the current directory without one: its data"
+        " in .nuspace/, the system planes seeded, nothing run. Needed before run --infra,"
+        " --kernel or --web; a plain run does it itself. No venv or packaging is set up yet."
     ),
 )
 @path_argument
 def init(path: str | None) -> None:
-    """Make the space, or say it already is one."""
+    """Make and initialize the space, or say it already was."""
     root = Path(path or ".").expanduser().resolve()
     if path is None:
         _warn_if_nested(root)
-    there = is_space(root)
     space = assembly(str(root))
-    try:
-        nu.eval_in_loop(nu.compile(space.init(root)), nu.Context())
-    except Refused as e:
-        raise click.ClickException(str(e)) from None
-    what = "Already a space" if there else "Initialized a space"
+    before = initialized(str(root))
+    initialize(space, str(root))
+    what = "Already initialized" if before else "Initialized a space"
     console.print(Text.assemble((what, f"bold {PURPLE}"), ("  ", ""), (tilde(root), BLUE)))
     again = "nuspace run" if path is None else f"nuspace run {path}"
     console.print(Text.assemble(("open it with: ", "dim"), (again, f"bold {BLUE}")))

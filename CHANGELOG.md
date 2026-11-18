@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Run initializes a new space first; infra, kernel and web each run alone too
 - Kernel requires infra, web requires a kernel; run holds infra through kernel crashes
 - Infra runs as its own entry point, owning the notification server while it lives
 - Entry points check what they need running through one requirement block, refusing otherwise

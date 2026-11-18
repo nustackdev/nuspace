@@ -78,11 +78,34 @@ class _Recorder:
 
 
 @pytest.fixture
-def held(monkeypatch):
-    """The terms the commands would hold, in order. Nothing is run."""
+def kept(monkeypatch):
+    """The terms the commands would hold, in order. Nothing is held: a space run inits for real."""
     terms: list = []
     monkeypatch.setattr(run_command, "hold", lambda term, **_: terms.append(term))
     return terms
+
+
+@pytest.fixture
+def inits(monkeypatch):
+    """The roots ``nuspace run`` initialized first, in order. No init runs."""
+    roots: list = []
+    monkeypatch.setattr(run_command, "initialize", lambda space, root: roots.append(root))
+    return roots
+
+
+@pytest.fixture
+def held(kept, inits):
+    """:func:`kept`, with no init run either: nothing is run."""
+    return kept
+
+
+@pytest.fixture
+def entries(monkeypatch):
+    """Every entry point of local but ``init``, recorded, by name."""
+    recorders = {name: _Recorder() for name in ("run", "infra", "kernel", "web", "open")}
+    for name, recorder in recorders.items():
+        monkeypatch.setattr(local, name, recorder)
+    return recorders
 
 
 def _plane(name: str, description: str = "") -> PlaneSpec:
@@ -163,7 +186,7 @@ def test_version(flag):
 # --- run -------------------------------------------------------------------------
 
 
-def test_run_runs_kernel_and_web_by_default(monkeypatch, held):
+def test_run_runs_kernel_and_web_by_default(monkeypatch, held, inits):
     serve, headless = _Recorder(), _Recorder()
     monkeypatch.setattr(local, "run", serve)
     monkeypatch.setattr(local, "kernel", headless)
@@ -177,9 +200,10 @@ def test_run_runs_kernel_and_web_by_default(monkeypatch, held):
     ]
     assert headless.calls == []
     assert held == ["term"]
+    assert inits == [_abs("/tmp/space")]
 
 
-def test_run_headless_maps_to_infra_around_the_kernel(monkeypatch, held, tmp_path):
+def test_run_headless_maps_to_infra_around_the_kernel(monkeypatch, held, inits, tmp_path):
     serve, headless, infra = _Recorder(), _Recorder(), _Recorder()
     monkeypatch.setattr(local, "run", serve)
     monkeypatch.setattr(local, "kernel", headless)
@@ -191,9 +215,10 @@ def test_run_headless_maps_to_infra_around_the_kernel(monkeypatch, held, tmp_pat
     assert serve.calls == []
     assert "headless" in result.output
     assert held == ["term"]
+    assert inits == [_home_root(tmp_path)]
 
 
-def test_run_web_maps_to_web_alone(monkeypatch, held):
+def test_run_web_maps_to_web_alone(monkeypatch, held, inits):
     serve, headless, web = _Recorder(), _Recorder(), _Recorder()
     monkeypatch.setattr(local, "run", serve)
     monkeypatch.setattr(local, "kernel", headless)
@@ -208,6 +233,7 @@ def test_run_web_maps_to_web_alone(monkeypatch, held):
     ]
     assert serve.calls == headless.calls == []
     assert held == ["term"]
+    assert inits == []
 
 
 def test_run_refuses_headless_and_web_together(monkeypatch, held):
@@ -219,6 +245,95 @@ def test_run_refuses_headless_and_web_together(monkeypatch, held):
     assert "not both" in result.output
     assert web.calls == headless.calls == []
     assert held == []
+
+
+@pytest.mark.parametrize("args", [["--no-browser", "-p", "9006"], ["--headless"]])
+def test_run_on_a_fresh_directory_initializes_it_then_runs(kept, entries, tmp_path, args):
+    path = tmp_path / "fresh"
+    result = _invoke("run", str(path), *args)
+    assert result.exit_code == 0, result.output
+    assert read_meta(path).init is True
+    assert (path / DATA_DIR / SPACE_FILE).is_file()
+    ran = "kernel" if "--headless" in args else "run"
+    assert [a for a, _ in entries[ran].calls] == [(str(path),)]
+    assert kept == ["term"]
+
+
+def test_run_does_not_init_a_space_initialized_already(held, inits, entries, tmp_path):
+    write_meta(tmp_path, Meta(assembly="local", made_at="2026-11-19T00:00:00+00:00", init=True))
+    result = _invoke("run", str(tmp_path), "--headless")
+    assert result.exit_code == 0, result.output
+    assert inits == []
+    assert held == ["term"]
+
+
+@pytest.mark.parametrize("flag", ["--infra", "--kernel", "--web"])
+def test_one_component_on_a_fresh_directory_is_refused(tmp_path, flag):
+    """Never initialized for it: the entry point's own check refuses, before anything is made."""
+    path = tmp_path / "fresh"
+    result = _invoke("run", str(path), flag, "--no-browser")
+    assert result.exit_code == 1, result.output
+    said = _said(result)
+    assert "is not initialized: run nuspace init, or local.init" in said
+    assert "Traceback" not in result.output
+    assert not (path / DATA_DIR).exists()
+
+
+@pytest.mark.parametrize(
+    ("args", "called"),
+    [
+        ([], {"run": {"plane": None, "host": "127.0.0.1", "port": 9007, "open_browser": False}}),
+        (["--headless"], {"infra": {"body": "term"}, "kernel": {"body": None}}),
+        (["--infra"], {"infra": {}}),
+        (["--kernel"], {"kernel": {"body": None}}),
+        (
+            ["--web"],
+            {"web": {"plane": None, "host": "127.0.0.1", "port": 9007, "open_browser": False}},
+        ),
+    ],
+)
+def test_each_way_to_run_builds_its_term(held, inits, entries, tmp_path, args, called):
+    result = _invoke("run", str(tmp_path), *args, "-p", "9007", "--no-browser")
+    assert result.exit_code == 0, result.output
+    got = {name: r.calls for name, r in entries.items() if r.calls}
+    assert got == {name: [((str(tmp_path),), kwargs)] for name, kwargs in called.items()}
+    assert held == ["term"]
+    alone = {"--infra", "--kernel", "--web"} & set(args)
+    assert inits == ([] if alone else [str(tmp_path)])
+
+
+def test_kernel_alone_makes_the_plane_with_in_its_body(held, inits, entries, verse):
+    result = _invoke("run", "/tmp/space", "--kernel", "--with", "tools.chat")
+    assert result.exit_code == 0, result.output
+    ((args, kwargs),) = entries["kernel"].calls
+    assert args == (_abs("/tmp/space"),)
+    assert kwargs["body"] is not None
+    assert "kernel alone" in result.output
+    assert inits == []
+
+
+@pytest.mark.parametrize(
+    ("args", "said"),
+    [
+        (["--infra", "--kernel"], "Give one of --infra, --kernel or --web"),
+        (["--kernel", "--web"], "Give one of --infra, --kernel or --web"),
+        (["--infra", "--web"], "Give one of --infra, --kernel or --web"),
+        (["--infra", "--kernel", "--web"], "Give one of --infra, --kernel or --web"),
+        (["--infra", "--headless"], "Give --headless or --infra, not both"),
+        (["--kernel", "--headless"], "Give --headless or --kernel, not both"),
+        (["--web", "--headless"], "Give --headless or --web, not both"),
+        (["--infra", "--tmp"], "--tmp with --infra"),
+        (["--kernel", "--tmp"], "--tmp with --kernel"),
+        (["--web", "--tmp"], "--tmp with --web"),
+        (["--infra", "--with", "jobs"], "infra alone"),
+    ],
+)
+def test_run_refuses_flags_that_do_not_go_together(held, inits, entries, args, said):
+    result = _invoke("run", *args)
+    assert result.exit_code == 2, result.output
+    assert said in _said(result)
+    assert all(r.calls == [] for r in entries.values())
+    assert held == inits == []
 
 
 @pytest.fixture
@@ -304,11 +419,36 @@ def test_run_falls_back_to_the_home_space(headless, tmp_path):
     assert "Path: ~/.nuspace" in _said(result)
 
 
-def test_run_tmp_is_a_throwaway(headless):
+@pytest.mark.parametrize("args", [["--headless", "--tmp"], ["--tmp", "--no-browser"]])
+def test_run_tmp_is_a_throwaway_initialized_then_removed(entries, held, inits, args):
+    """One throwaway root for whatever runs on it, initialized first, removed once the hold ends."""
+    result = _invoke("run", *args)
+    assert result.exit_code == 0, result.output
+    (root,) = inits
+    assert Path(root).name.startswith("nuspace-")
+    calls = {name: [a for a, _ in r.calls] for name, r in entries.items() if r.calls}
+    if "--headless" in args:
+        assert calls == {"infra": [(root,)], "kernel": [(root,)]}
+    else:
+        assert calls == {"run": [(root,)]}
+    assert not Path(root).exists()
+    assert "throwaway" in result.output
+
+
+def test_run_tmp_removes_the_throwaway_it_initialized(monkeypatch, entries):
+    """A real init on the throwaway root: initialized while held, gone once the hold ends."""
+    seen = []
+
+    def hold(term):
+        ((root,), _) = entries["kernel"].calls[0]
+        seen.append((root, read_meta(root).init))
+
+    monkeypatch.setattr(run_command, "hold", hold)
     result = _invoke("run", "--headless", "--tmp")
     assert result.exit_code == 0, result.output
-    assert headless.calls == [((None,), {"body": None})]
-    assert "throwaway" in result.output
+    ((root, init),) = seen
+    assert init is True
+    assert not Path(root).exists()
 
 
 def test_run_refuses_a_path_and_tmp(headless):
@@ -382,7 +522,9 @@ def test_a_new_space_and_a_throwaway_are_local(monkeypatch, held, tmp_path):
     monkeypatch.setattr(local, "kernel", kernel)
     assert _invoke("run", "--headless", str(tmp_path / "new")).exit_code == 0
     assert _invoke("run", "--headless", "--tmp").exit_code == 0
-    assert [args for args, _ in kernel.calls] == [(str(tmp_path / "new"),), (None,)]
+    ((new,), (throwaway,)) = [args for args, _ in kernel.calls]
+    assert new == str(tmp_path / "new")
+    assert Path(throwaway).name.startswith("nuspace-")
 
 
 # --- run --with ---------------------------------------------------------------
@@ -491,9 +633,23 @@ def test_init_makes_a_space_and_seeds_it(tmp_path):
     assert read_meta(path).assembly == "local"
     assert _read(path, nuspace.plane.exists(Web.roles["home"])) is True
 
+    assert read_meta(path).init is True
+
     again = _invoke("init", str(path))
     assert again.exit_code == 0, again.output
-    assert "Already a space" in again.output
+    assert "Already initialized" in again.output
+
+
+def test_init_initializes_a_space_made_but_not_initialized(tmp_path):
+    """A meta.json without the flag, or a space made before meta.json: init runs, and says so."""
+    made, before = tmp_path / "made", tmp_path / "before"
+    _made_by(made, "local")
+    _space(before)
+    for path in (made, before):
+        result = _invoke("init", str(path))
+        assert result.exit_code == 0, result.output
+        assert "Initialized a space" in result.output
+        assert read_meta(path).init is True
 
 
 def test_init_makes_the_current_directory_a_space(tmp_path):

@@ -40,6 +40,8 @@ __all__ = [
     "assembly",
     "console",
     "hold",
+    "initialize",
+    "initialized",
     "nearest_space",
     "path_argument",
     "space_root",
@@ -74,9 +76,11 @@ def path_argument(fn: _F) -> _F:
 
 
 def tmp_option(fn: _F) -> _F:
-    """``--tmp``: a throwaway space instead of one found, for the commands that open one."""
+    """``--tmp``: a throwaway space instead of one found, for the commands that run one."""
     return click.option(
-        "--tmp", is_flag=True, help="A throwaway space in a temp dir, gone at close."
+        "--tmp",
+        is_flag=True,
+        help="A throwaway space in a temp dir, initialized, gone at close. Not with one component alone.",
     )(fn)
 
 
@@ -138,11 +142,12 @@ def tilde(path: str | Path) -> str:
         return str(root)
 
 
-def announce(path: str | None, *, headless: bool = False, plane: str | None = None) -> None:
+def announce(path: str | None, *, alone: str | None = None, plane: str | None = None) -> None:
     """Say which space this is, and how to stop it when no server line will.
 
     Served, the web server prints the URL and how to stop once it is up, so
-    the header leaves both to it.
+    the header leaves both to it. ``alone`` says what runs without web,
+    eg ``headless``. ``path`` None is a throwaway space.
     """
     console.print(
         header(
@@ -159,8 +164,29 @@ def announce(path: str | None, *, headless: bool = False, plane: str | None = No
         console.print(
             Text.assemble(("plane ", "dim"), (plane, BLUE)), highlight=False, soft_wrap=True
         )
-    if headless:
-        console.print("[dim]headless, Ctrl+C to stop[/dim]")
+    if alone is not None:
+        console.print(f"[dim]{alone}, Ctrl+C to stop[/dim]")
+
+
+def initialized(root: str) -> bool:
+    """Whether the space at ``root`` says its assembly's init ran: ``"init": true`` in its meta.json."""
+    try:
+        meta = read_meta(root)
+    except Refused as e:
+        raise click.ClickException(str(e)) from None
+    return meta is not None and meta.init
+
+
+def initialize(space: ModuleType, root: str) -> None:
+    """The assembly's ``init`` on the space at ``root``, run to its end. A refusal is a short error.
+
+    Its own term, run before the one a command holds: an init yields
+    nothing, so it is not a step of that term.
+    """
+    try:
+        nu.eval_in_loop(nu.compile(space.init(root)), nu.Context())
+    except Refused as e:
+        raise click.ClickException(str(e)) from None
 
 
 def hold(term: nu.Nu) -> object:
