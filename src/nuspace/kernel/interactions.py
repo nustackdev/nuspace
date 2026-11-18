@@ -79,7 +79,7 @@ class _Pure(ScalarQuery):
 
 
 class Body(_Pure):
-    """A cell run's whole life on its worker, as a term: :func:`~.body.build_body`. Host only.
+    """A cell run's whole life on its worker, as a term: :func:`~.body.build_body`. Kernel only.
 
     Resolves the plane run's env specs through the
     :class:`~.envs.KernelConfig` on the context (none bound resolves no

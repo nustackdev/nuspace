@@ -1,11 +1,12 @@
-"""The host: the registry, where a space lives, the lock, the open's resources, and open_space for real.
+"""Running a space: the registry, where a space lives, the blocks, and local's entry points for real.
 
-The registry is plain python. The layout, the lock and the resources are
-file system work, tested on their own. ``make_space`` and ``open_space``
-run for real on sqlite with a private notification server: headless, with
-real workers, held open while the test reads. Two tests run ``nuspace run``
-in a process of its own: one stops it with SIGINT, as Ctrl+C does, one
-kills it with SIGKILL, as a crash does.
+The registry is plain python. The layout, the lock, the notifier and the
+resources are file system work, tested on their own. ``local.init``,
+``kernel``, ``web`` and ``open`` run for real on sqlite with the space's
+notifier, with real workers, held open while the test reads. ``local.run``
+runs in a process of its own with its two children: killed web comes back,
+a killed kernel ends it. ``nuspace run`` stops on SIGINT, as Ctrl+C does,
+and ``nuspace run --headless`` is killed with SIGKILL, as a crash is.
 """
 
 from __future__ import annotations
@@ -52,10 +53,20 @@ from nuspace.space.blocks.meta import (
 )
 from nuspace.space.blocks.notifier import Notifier, holders
 from nuspace.space.blocks.resources import DataDir, Throwaway
-from nuspace.space.local import presets
 from nuspace.space.local._disk import Marked
-from nuspace.space.local.layout import DIRS, KERNEL_LOCK, is_older, made_before
+from nuspace.space.local._plane import plane_of
+from nuspace.space.local.layout import (
+    DIRS,
+    KERNEL_LOCK,
+    KERNEL_LOG,
+    VALKEY_DIR,
+    WEB_LOCK,
+    WEB_LOG,
+    is_older,
+    made_before,
+)
 from nuspace.space.local.layout import STORES as PLACES
+from nuspace.space.local.supervise import Restarts
 from nuspace.specs import (
     GROUP,
     CellSpec,
@@ -381,14 +392,14 @@ def test_a_throwaway_root_is_made_at_setup_and_removed_with_its_data_at_cleanup(
     assert not root.exists()
 
 
-# --- make_space -------------------------------------------------------------------------
+# --- local.init -------------------------------------------------------------------------
 
 
 _EVERY_STORE = (*stores.CORE, WEB_STORE, CONN_STORE)
 
 
 async def _aread(root: Path, term: nu.Nu, stores=_EVERY_STORE) -> object:
-    """``term`` read from the space at ``root``, its stores opened plain, beside any host."""
+    """``term`` read from the space at ``root``, its stores opened plain, beside any driver."""
     data = data_dir(root)
     navs = [
         nustd.kv.sqlite_navigator(str(data / PLACES[s.root].file), tags=(s.root,)) for s in stores
@@ -403,10 +414,10 @@ def _read(root: Path, term: nu.Nu, stores=_EVERY_STORE) -> object:
 
 
 async def _apoll(root: Path, term: nu.Nu, pred, stores=_EVERY_STORE, timeout: float = 30.0):
-    """``term`` read from ``root`` until ``pred`` holds of it, while a host runs the space."""
+    """``term`` read from ``root`` until ``pred`` holds of it, while a driver runs the space."""
     deadline = time.monotonic() + timeout
     while True:
-        with contextlib.suppress(Exception):  # the host may not have made the stores yet
+        with contextlib.suppress(Exception):  # the kernel may not have made the stores yet
             value = await _aread(root, term, stores)
             if pred(value):
                 return value
@@ -426,11 +437,11 @@ def _write(root: Path, store, term: nu.Nu) -> None:
     asyncio.run(_awrite(root, store, term))
 
 
-def _make(root: Path, **kwargs) -> None:
-    nu.eval_in_loop(nu.compile(local.make_space(root, **kwargs)), nu.Context())
+def _make(root: Path) -> None:
+    nu.eval_in_loop(nu.compile(local.init(root)), nu.Context())
 
 
-def test_make_space_seeds_a_fresh_space_and_keeps_an_existing_one(tmp_path):
+def test_init_seeds_a_fresh_space_and_keeps_an_existing_one(tmp_path):
     root = tmp_path / "space"
     _make(root)
     assert is_space(root)
@@ -461,7 +472,7 @@ def test_a_space_made_before_meta_opens_with_its_data_and_gets_its_meta(tmp_path
     assert _read(root, Space.info.created_at) == created
 
 
-def test_make_space_makes_every_store_and_leaves_conn_and_web_as_they_are(tmp_path):
+def test_init_makes_every_store_and_leaves_conn_and_web_as_they_are(tmp_path):
     root = tmp_path / "space"
     _make(root)
     assert (data_dir(root) / PLACES[Web].file).exists()
@@ -470,7 +481,7 @@ def test_make_space_makes_every_store_and_leaves_conn_and_web_as_they_are(tmp_pa
     home = _read(root, Web.roles["home"])
     _write(root, WEB_STORE, nuspace.web.Web.recents.set([home]))
     _make(root)
-    # Conn is web's driver's to clear, when web starts: making a space runs no driver.
+    # Conn is web's driver's to clear, when web starts: init runs no driver.
     assert _read(root, Conn.connections["tab"].order.extract()) == ["p"]
     assert _read(root, nuspace.web.Web.recents.extract()) == [home]
     assert _read(root, Web.roles["home"]) == home
@@ -491,21 +502,40 @@ def test_a_space_of_another_format_is_refused_before_anything_is_written(tmp_pat
     _make(root)
 
 
-# --- open_space, for real ---------------------------------------------------------------
+# --- local.kernel and local.web, for real ------------------------------------------------
 
 
-async def _opened(root: Path, **kwargs):
-    """``local.headless`` on this loop, held open: ``(ctx, done, task)``. Close with ``done.set()``."""
+async def _held(entry, root: Path, **kwargs):
+    """``entry`` (``local.kernel``, ``local.web``) on this loop, held open: ``(ctx, done, task)``.
+
+    Close with ``done.set()``.
+    """
     loop = asyncio.get_running_loop()
     ready, done = loop.create_future(), asyncio.Event()
     hold = nu.With(MADE_STORE, body=nu.let(_Hold(ready, done), lambda _: nu.Noop()))
-    term = local.headless(root, spares=0, name="nuspace-host", extensions=(), body=hold, **kwargs)
-    task = asyncio.create_task(nu.arun(term))
+    task = asyncio.create_task(nu.arun(entry(root, body=hold, **kwargs)))
     waiting = asyncio.ensure_future(asyncio.shield(ready))
     finished, _ = await asyncio.wait({waiting, task}, timeout=30, return_when="FIRST_COMPLETED")
     if task in finished:
         task.result()
     return await waiting, done, task
+
+
+async def _opened(root: Path):
+    """``local.kernel`` held open, no spares, no extensions: ``(ctx, done, task)``."""
+    return await _held(local.kernel, root, spares=0, name="nuspace-test", extensions=())
+
+
+async def _served(root: Path):
+    """``local.web`` held open on a free port, no tab, no bundle: ``(ctx, done, task)``."""
+    return await _held(
+        local.web, root, port=_free_port(), open_browser=False, static=None, extensions=()
+    )
+
+
+async def _close(done: asyncio.Event, task: asyncio.Task) -> None:
+    done.set()
+    await asyncio.wait_for(task, 15)
 
 
 async def _until(ctx, term, pred, timeout: float = 20.0):
@@ -553,7 +583,7 @@ async def test_a_clean_close_ends_what_is_live_so_the_reopen_reaps_nothing(tmp_p
         ids = {(await nu.arun(nuspace.atomic(k), ctx))[0] for k in keyed}
         assert planes == ids
         with pytest.raises(Refused, match="the kernel of this space runs in this process already"):
-            await nu.arun(local.headless(root))
+            await nu.arun(local.kernel(root))
     finally:
         done.set()
         await asyncio.wait_for(task, 15)
@@ -578,9 +608,18 @@ async def test_a_clean_close_ends_what_is_live_so_the_reopen_reaps_nothing(tmp_p
         await asyncio.wait_for(task, 15)
 
 
-def test_served_open_compiles_and_validates(tmp_path):
-    term = local.serve(tmp_path, extensions=["testing"], open_browser=False, static=None, port=0)
-    nu.validate(nu.compile(term))
+def test_every_entry_point_compiles_and_validates(tmp_path):
+    web = local.web(tmp_path, extensions=["testing"], open_browser=False, static=None, port=0)
+    for term in (
+        local.kernel(tmp_path, extensions=["testing"]),
+        web,
+        local.open(tmp_path, body=nu.Noop()),
+        local.init(tmp_path),
+        local.run(tmp_path, extensions=["testing"], static=None, port=0),
+    ):
+        nu.validate(nu.compile(term))
+    # Building touches nothing.
+    assert not data_dir(tmp_path).exists()
 
 
 #: A process holding a store's file open, as a worker does, until its stdin closes.
@@ -596,7 +635,7 @@ sys.stdin.read()
 async def test_web_clears_conn_by_a_commit_while_a_worker_holds_its_file(tmp_path):
     """W2 and W7: at web's start Conn is emptied in place, and the runs nav asked for are stopped."""
     root = tmp_path / "space"
-    await nu.arun(local.make_space(root))
+    await nu.arun(local.init(root))
     conn = data_dir(root) / PLACES[Conn].file
     await _awrite(root, CONN_STORE, Conn.connections["old-tab"].order.set(["p"]))
 
@@ -617,14 +656,8 @@ async def test_web_clears_conn_by_a_commit_while_a_worker_holds_its_file(tmp_pat
         loop = asyncio.get_running_loop()
         ready, done = loop.create_future(), asyncio.Event()
         hold = nu.With(MADE_STORE, body=nu.let(_Hold(ready, done), lambda _: nu.Noop()))
-        term = local.serve(
-            root,
-            port=_free_port(),
-            open_browser=False,
-            static=None,
-            spares=0,
-            extensions=(),
-            body=hold,
+        term = local.web(
+            root, port=_free_port(), open_browser=False, static=None, extensions=(), body=hold
         )
         task = asyncio.create_task(nu.arun(term))
         try:
@@ -653,29 +686,30 @@ async def test_web_clears_conn_by_a_commit_while_a_worker_holds_its_file(tmp_pat
         holder.communicate("")
 
 
-# --- with_plane -------------------------------------------------------------------------
+# --- plane= --------------------------------------------------------------------------------
 
 
 _COUNTER = PlaneSpec("nudemos.counter", "Counter", cells=(("count", "1"),), backend="async")
 
 
-async def test_with_plane_reuses_the_newest_plane_of_its_spec_or_makes_one(store):
-    await store.run(presets._plane_of(_COUNTER, MADE))
+async def test_the_plane_opened_on_is_the_newest_of_its_spec_or_a_new_one(store):
+    await store.run(plane_of(_COUNTER, MADE))
     first = await store.run(MADE)
     assert first.startswith("p_")
-    await store.run(presets._plane_of(_COUNTER, MADE))
+    await store.run(plane_of(_COUNTER, MADE))
     assert await store.run(MADE) == first
     await store.run(nuspace.atomic(nuspace.plane.remove(first)))
-    await store.run(presets._plane_of(_COUNTER, MADE))
+    await store.run(plane_of(_COUNTER, MADE))
     second = await store.run(MADE)
     assert second not in ("", first)
     ids = Space.indexes.spec_planes[registered_name(_COUNTER)].ids
     assert await store.read(nu.list(ids.keys())) == [first, second]
 
 
-async def test_with_plane_headless_lands_the_web_row_of_a_spec_that_shows_on_the_web(tmp_path):
-    """No web driver runs, but the web device's stores are open: add_plane writes the web row."""
+async def test_a_plane_made_through_open_lands_its_web_row(tmp_path):
+    """No web runs, but open binds web's stores: making a spec's plane writes its web row."""
     root = tmp_path / "space"
+    await nu.arun(local.init(root))
     spec = PlaneSpec(
         "nudemos.board",
         "Board",
@@ -683,29 +717,235 @@ async def test_with_plane_headless_lands_the_web_row_of_a_spec_that_shows_on_the
         backend="async",
         web=WebOptions(width="board"),
     )
-    term = presets.with_plane(root, spec, web=False, spares=0, name="nuspace-host", extensions=())
-    task = asyncio.create_task(nu.arun(term))
-    try:
-        planes = await _apoll(root, nu.list(Web.planes.keys()), bool)
-        assert len(planes) == 1
-        assert await _aread(root, Space.planes[planes[0]].spec) == registered_name(spec)
-        assert await _aread(root, Web.planes[planes[0]].width) == "board"
-    finally:
-        task.cancel()
-        with contextlib.suppress(asyncio.CancelledError):
-            await asyncio.wait_for(task, 15)
+    await nu.arun(local.open(root, body=nu.let("", lambda p: plane_of(spec, p))))
+    made = Space.indexes.spec_planes[registered_name(spec)].ids
+    planes = await _aread(root, nu.list(made.keys()))
+    assert len(planes) == 1
+    assert planes[0] in await _aread(root, nu.list(Web.planes.keys()))
+    assert await _aread(root, Web.planes[planes[0]].width) == "board"
 
 
-@pytest.mark.parametrize(("web", "open_browser"), [(True, True), (True, False), (False, False)])
-def test_with_plane_compiles(monkeypatch, web, open_browser):
+@pytest.mark.parametrize("open_browser", [True, False])
+def test_opening_on_a_plane_compiles(monkeypatch, open_browser):
     _points(monkeypatch, [])
-    term = presets.with_plane(None, _COUNTER, web=web, open_browser=open_browser, static=None)
-    nu.validate(nu.compile(term))
+    web = local.web(None, plane=_COUNTER, open_browser=open_browser, static=None)
+    run = local.run(None, plane=_COUNTER, open_browser=open_browser, static=None)
+    for term in (web, run):
+        nu.validate(nu.compile(term))
 
 
-def test_with_plane_by_an_unknown_name_is_missing():
+def test_a_plane_by_an_unknown_name_is_missing():
     with pytest.raises(Missing):
-        presets.with_plane(None, "nobody.nothing")
+        local.web(None, plane="nobody.nothing")
+    with pytest.raises(Missing):
+        local.run(None, plane="nobody.nothing")
+
+
+def test_run_refuses_an_option_no_entry_point_takes_or_one_that_does_not_pickle():
+    with pytest.raises(TypeError, match="no entry point takes: nobody"):
+        local.run(None, nobody=1)
+    with pytest.raises(TypeError, match="must pickle"):
+        local.run(None, envs={"db": lambda: None})
+
+
+# --- Logs ------------------------------------------------------------------------------
+
+
+def test_the_log_block_points_logging_at_its_file_while_it_holds(tmp_path):
+    path = tmp_path / "kernel" / "kernel.log"
+    held = Logged(str(path), "kernel")
+    held.setup(None)
+    logging.getLogger("nuspace.test").info("from nuspace")
+    logging.getLogger("somelib").info("not this")
+    logging.getLogger("somelib").warning("but this")
+    held.cleanup()
+    logging.getLogger("nuspace.test").warning("after")
+    said = path.read_text()
+    assert f"kernel up on {socket.gethostname()}, pid {os.getpid()}" in said
+    assert "from nuspace" in said
+    assert "but this" in said
+    assert "not this" not in said
+    assert "kernel down" in said
+    assert "after" not in said
+
+
+# --- Browse ----------------------------------------------------------------------------
+
+
+def _free_port() -> int:
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        return int(s.getsockname()[1])
+
+
+async def test_browse_opens_once_the_port_answers(monkeypatch):
+    opened: list[str] = []
+    monkeypatch.setattr(browse.webbrowser, "open", opened.append)
+    server = await asyncio.start_server(lambda r, w: w.close(), "127.0.0.1", 0)
+    port = server.sockets[0].getsockname()[1]
+    try:
+        url = f"http://127.0.0.1:{port}/p_x"
+        await browse.browse(url, "0.0.0.0", port)  # noqa: S104
+    finally:
+        server.close()
+        await server.wait_closed()
+    assert opened == [url]
+
+
+async def test_browse_gives_up_quietly(monkeypatch):
+    opened: list[str] = []
+    monkeypatch.setattr(browse.webbrowser, "open", opened.append)
+    await browse.browse("http://x", "127.0.0.1", _free_port(), timeout=0.2)
+    assert opened == []
+
+
+async def test_browse_as_a_term_reads_its_url_at_run_time(monkeypatch):
+    opened: list[str] = []
+    monkeypatch.setattr(browse.webbrowser, "open", opened.append)
+    server = await asyncio.start_server(lambda r, w: w.close(), "127.0.0.1", 0)
+    port = server.sockets[0].getsockname()[1]
+    base = f"http://127.0.0.1:{port}/"
+    term = nu.let("p_x", lambda plane: browse.Browse(nu.Str(base) + nu.Str(plane), "", port))
+    try:
+        await nu.arun(term)
+    finally:
+        server.close()
+        await server.wait_closed()
+    assert opened == [base + "p_x"]
+
+
+# --- local.open ---------------------------------------------------------------------
+
+
+def _open(root: Path, body: nu.Nu) -> object:
+    value, _ = asyncio.run(nu.arun(local.open(root, body=body)))
+    return value
+
+
+def _free(root: Path, path: str, what: str) -> None:
+    """The lock at ``path`` in ``root``'s data dir is free: this process takes it and lets it go."""
+    lock = Lock(str(data_dir(root) / path), what)
+    lock.setup(None)
+    lock.cleanup()
+
+
+def _asked(root: Path, plane: str) -> str:
+    """A plane made and a run of it asked for through ``local.open``, one commit. The run's id."""
+
+    def asked(run: nu.ObjectRef) -> nu.Nu:
+        made = nuspace.plane.add(plane, name="Mine", backend="async")
+        return made >> nuspace.plane_run.add(plane, into=run)
+
+    _open(root, nuspace.atomic(nu.let("", asked)))
+    (run,) = _read(root, nu.list(Space.exec.indexes.live.plane_to_plane_runs[plane].ids.keys()))
+    return run
+
+
+def test_open_refuses_where_there_is_no_space(tmp_path):
+    with pytest.raises(Missing, match="no space at"):
+        _open(tmp_path / "none", nu.Noop())
+    assert not (tmp_path / "none").exists()
+    # A space made before meta.json is adopted by init or a driver, never by open.
+    _made_before(tmp_path / "before")
+    with pytest.raises(Missing, match="no space at"):
+        _open(tmp_path / "before", nu.Noop())
+    assert not is_space(tmp_path / "before")
+
+
+def test_open_with_nothing_up_writes_and_leaves_nothing_up(tmp_path):
+    root = tmp_path / "space"
+    _make(root)
+    _open(root, nuspace.atomic(nuspace.plane.add("p_mine", name="Mine", backend="async")))
+    assert _read(root, Space.planes["p_mine"].name) == "Mine"
+    valkey = data_dir(root) / VALKEY_DIR
+    assert not (valkey / "valkey.pid").exists()
+    assert holders(valkey) == []
+    assert not _answers(valkey)
+    # No driver lock was taken: both are free.
+    _free(root, KERNEL_LOCK, "kernel")
+    _free(root, WEB_LOCK, "web")
+
+
+async def test_open_beside_a_live_kernel_joins_its_notifier_and_the_kernel_hears_the_write(
+    tmp_path,
+):
+    root = tmp_path / "space"
+    ctx, done, task = await _opened(root)
+    try:
+        valkey = data_dir(root) / VALKEY_DIR
+        pid = (valkey / "valkey.pid").read_text()
+        run = await asyncio.to_thread(_asked, root, "p_mine")
+        # The kernel hears the ask through the notifier and starts the run.
+        started = Space.exec.plane_runs[run].started_at.exists()
+        await _until(ctx, started, bool)
+        name, _ = await nu.arun(nuspace.atomic(Space.planes["p_mine"].name), ctx)
+        assert name == "Mine"
+        # The kernel's server is the kernel's still: not stopped, not replaced.
+        assert (valkey / "valkey.pid").read_text() == pid
+        assert _answers(valkey)
+    finally:
+        await _close(done, task)
+
+
+async def test_a_run_asked_through_open_with_nothing_up_is_started_by_the_next_kernel(tmp_path):
+    root = tmp_path / "space"
+    await nu.arun(local.init(root))
+    run = await asyncio.to_thread(_asked, root, "p_mine")
+    assert await _aread(root, Space.exec.plane_runs[run].started_at.exists()) is False
+    ctx, done, task = await _opened(root)
+    try:
+        await _until(ctx, Space.exec.plane_runs[run].started_at.exists(), bool)
+        row, _ = await nu.arun(nuspace.atomic(Space.exec.plane_runs[run].extract()), ctx)
+        assert row["plane"] == "p_mine"
+        # Started, not reaped: the kernel's start left the ask alone (K2).
+        assert row.get("error") != LEFT_OVER
+    finally:
+        await _close(done, task)
+
+
+# --- One of each driver ---------------------------------------------------------------
+
+
+async def test_a_second_kernel_and_a_second_web_are_refused_and_init_too(tmp_path):
+    root = tmp_path / "space"
+    _, done, task = await _opened(root)
+    try:
+        with pytest.raises(Refused, match="the kernel of this space runs in this process already"):
+            await nu.arun(local.kernel(root, extensions=()))
+        with pytest.raises(Refused, match="the kernel of this space runs"):
+            await nu.arun(local.init(root))
+        # Web beside the kernel is fine: one lock per driver.
+        _, wdone, wtask = await _served(root)
+        try:
+            with pytest.raises(Refused, match="the web of this space runs in this process"):
+                await nu.arun(local.web(root, port=_free_port(), static=None, extensions=()))
+        finally:
+            await _close(wdone, wtask)
+    finally:
+        await _close(done, task)
+    # Web alone up: init is refused by its lock too.
+    _, wdone, wtask = await _served(root)
+    try:
+        with pytest.raises(Refused, match="the web of this space runs"):
+            await nu.arun(local.init(root))
+    finally:
+        await _close(wdone, wtask)
+    await nu.arun(local.init(root))
+
+
+async def test_each_driver_logs_to_its_own_file(tmp_path):
+    root = tmp_path / "space"
+    _, done, task = await _opened(root)
+    await _close(done, task)
+    _, done, task = await _served(root)
+    await _close(done, task)
+    kernel_log = (data_dir(root) / KERNEL_LOG).read_text()
+    web_log = (data_dir(root) / WEB_LOG).read_text()
+    assert f"kernel up on {socket.gethostname()}, pid {os.getpid()}" in kernel_log
+    assert "kernel down" in kernel_log
+    assert "web up" in web_log
+    assert "web down" in web_log
+    assert "web" not in kernel_log
 
 
 # --- The notifier ---------------------------------------------------------------------
@@ -785,87 +1025,119 @@ def test_a_holder_that_crashed_is_pruned_and_the_last_clean_exit_stops_the_serve
     assert holders(path) == []
 
 
-# --- Logs ------------------------------------------------------------------------------
+# --- local.run ------------------------------------------------------------------------
 
 
-def test_the_log_block_points_logging_at_its_file_while_it_holds(tmp_path):
-    path = tmp_path / "kernel" / "kernel.log"
-    held = Logged(str(path), "kernel")
-    held.setup(None)
-    logging.getLogger("nuspace.test").info("from nuspace")
-    logging.getLogger("somelib").info("not this")
-    logging.getLogger("somelib").warning("but this")
-    held.cleanup()
-    logging.getLogger("nuspace.test").warning("after")
-    said = path.read_text()
-    assert f"kernel up on {socket.gethostname()}, pid {os.getpid()}" in said
-    assert "from nuspace" in said
-    assert "but this" in said
-    assert "not this" not in said
-    assert "kernel down" in said
-    assert "after" not in said
+def test_web_restarts_are_allowed_five_times_a_minute():
+    restarts = Restarts()
+    assert all(restarts.allow(t) for t in (0.0, 1.0, 2.0, 3.0, 4.0))
+    assert not restarts.allow(5.0)
+    assert restarts.allow(61.5)
 
 
-# --- Browse ----------------------------------------------------------------------------
+def _tree(pid: int) -> dict[int, str]:
+    """``pid``'s descendants, pid to command line."""
+    out = subprocess.run(["ps", "-eo", "pid,ppid,args"], capture_output=True, text=True).stdout  # noqa: S607
+    rows = [line.split(None, 2) for line in out.splitlines()[1:]]
+    kids: dict[int, list[tuple[int, str]]] = {}
+    for r in rows:
+        if len(r) == 3:
+            kids.setdefault(int(r[1]), []).append((int(r[0]), r[2]))
+    found, todo = {}, [pid]
+    while todo:
+        for child, args in kids.get(todo.pop(), []):
+            found[child] = args
+            todo.append(child)
+    return found
 
 
-def _free_port() -> int:
-    with socket.socket() as s:
-        s.bind(("127.0.0.1", 0))
-        return int(s.getsockname()[1])
+def _alive(pids) -> list[int]:
+    """Those of ``pids`` still running: not gone, and not a zombie waiting for its parent."""
+    out = subprocess.run(["ps", "-eo", "pid,stat"], capture_output=True, text=True).stdout  # noqa: S607
+    running = {
+        int(r[0]) for r in (line.split() for line in out.splitlines()[1:]) if "Z" not in r[1]
+    }
+    return [p for p in pids if p in running]
 
 
-async def test_browse_opens_once_the_port_answers(monkeypatch):
-    opened: list[str] = []
-    monkeypatch.setattr(browse.webbrowser, "open", opened.append)
-    server = await asyncio.start_server(lambda r, w: w.close(), "127.0.0.1", 0)
-    port = server.sockets[0].getsockname()[1]
+def _child(pid: int, what: str, *, not_: int | None = None, timeout: float = 30.0) -> int:
+    """The pid of ``run``'s child ``what`` (``kernel``, ``web``), once there is one (other than ``not_``)."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        for child, args in _tree(pid).items():
+            if f"local._child {what} " in args and child != not_ and _alive([child]):
+                return child
+        time.sleep(0.1)
+    msg = f"no {what} child came up"
+    raise AssertionError(msg)
+
+
+def _gone(pids, timeout: float = 20.0) -> list[int]:
+    deadline = time.monotonic() + timeout
+    while _alive(pids) and time.monotonic() < deadline:
+        time.sleep(0.1)
+    return _alive(pids)
+
+
+#: ``local.run`` on argv[1], web on the port argv[2]; prints what it yields.
+_RUN = """
+import sys
+import nu
+from nuspace.space import local
+term = local.run(sys.argv[1], port=int(sys.argv[2]), static=None, open_browser=False,
+                 extensions=(), spares=0)
+value, _ = nu.eval_in_loop(nu.compile(term), nu.Context())
+print("yielded", value, flush=True)
+"""
+
+
+def test_run_restarts_a_killed_web_and_ends_with_a_killed_kernel(tmp_path):
+    root = tmp_path / "space"
+    env = dict(os.environ, NUSPACE_TELEMETRY="0")
+    run = subprocess.Popen(  # noqa: S603
+        [sys.executable, "-c", _RUN, str(root), str(_free_port())],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        start_new_session=True,
+        env=env,
+    )
+    seen: set[int] = set()
     try:
-        url = f"http://127.0.0.1:{port}/p_x"
-        await browse.browse(url, "0.0.0.0", port)  # noqa: S104
+        kernel = _child(run.pid, "kernel")
+        web = _child(run.pid, "web")
+        _live_runs(root)
+        seen |= set(_tree(run.pid))
+        os.kill(web, signal.SIGKILL)
+        _child(run.pid, "web", not_=web)
+        assert _child(run.pid, "kernel") == kernel
+        seen |= set(_tree(run.pid))
+        # The new web is up: it logged its start.
+        deadline = time.monotonic() + 30
+        while (data_dir(root) / WEB_LOG).read_text().count("web up") < 2:
+            assert time.monotonic() < deadline, "the new web never came up"
+            time.sleep(0.1)
+        os.kill(kernel, signal.SIGKILL)
+        out, _ = run.communicate(timeout=60)
     finally:
-        server.close()
-        await server.wait_closed()
-    assert opened == [url]
-
-
-async def test_browse_gives_up_quietly(monkeypatch):
-    opened: list[str] = []
-    monkeypatch.setattr(browse.webbrowser, "open", opened.append)
-    await browse.browse("http://x", "127.0.0.1", _free_port(), timeout=0.2)
-    assert opened == []
-
-
-async def test_browse_as_a_term_reads_its_url_at_run_time(monkeypatch):
-    opened: list[str] = []
-    monkeypatch.setattr(browse.webbrowser, "open", opened.append)
-    server = await asyncio.start_server(lambda r, w: w.close(), "127.0.0.1", 0)
-    port = server.sockets[0].getsockname()[1]
-    base = f"http://127.0.0.1:{port}/"
-    term = nu.let("p_x", lambda plane: browse.Browse(nu.Str(base) + nu.Str(plane), "", port))
-    try:
-        await nu.arun(term)
-    finally:
-        server.close()
-        await server.wait_closed()
-    assert opened == [base + "p_x"]
+        if run.poll() is None:
+            os.killpg(run.pid, signal.SIGKILL)
+            run.wait()
+    said = out.decode()
+    assert "web exited (137), starting it again" in said
+    assert "the kernel exited (137), stopping web" in said
+    assert "yielded 137" in said
+    assert _gone(seen) == [], [_tree(p) for p in seen]
+    assert not _answers(data_dir(root) / VALKEY_DIR)
 
 
 # --- nuspace run and Ctrl+C ----------------------------------------------------------------
 
 
-def _left(pid: int, data: Path) -> list[str]:
-    """Processes still up from the run: in its session, or naming its data dir or socket."""
-    out = subprocess.run(["ps", "-eo", "pid,sid,args"], capture_output=True, text=True).stdout  # noqa: S607
-    rows = [line.split(None, 2) for line in out.splitlines()[1:]]
-    return [r[2] for r in rows if len(r) == 3 and (r[1] == str(pid) or str(data) in r[2])]
-
-
-def _nuspace_run(root: Path) -> subprocess.Popen:
-    """``nuspace run --headless`` on ``root``, in a session of its own."""
+def _nuspace_run(root: Path, *args: str) -> subprocess.Popen:
+    """``nuspace run`` on ``root`` with ``args``, in a session of its own."""
     env = dict(os.environ, NUSPACE_TELEMETRY="0")
     return subprocess.Popen(  # noqa: S603
-        [sys.executable, "-m", "nuspace._cli", "run", "--headless", str(root)],
+        [sys.executable, "-m", "nuspace._cli", "run", *args, str(root)],
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         start_new_session=True,
@@ -874,20 +1146,27 @@ def _nuspace_run(root: Path) -> subprocess.Popen:
 
 
 def _live_runs(root: Path, n: int = 4) -> list[str]:
-    """The live plane runs of the space a host runs, once there are ``n`` (init and its boots)."""
+    """The live plane runs of the space a kernel runs, once there are ``n`` (init and its boots)."""
     live = Space.exec.indexes.live.plane_runs
     term = nu.list(live.keys())
-    return asyncio.run(_apoll(root, term, lambda rs: len(rs) == n, stores=stores.CORE))
+    runs = asyncio.run(_apoll(root, term, lambda rs: len(rs) == n, stores=stores.CORE))
+    # Close and reap end only what was started: wait until every one is.
+    up = nu.List.of(*(Space.exec.plane_runs[r].started_at.exists() for r in runs))
+    asyncio.run(_apoll(root, up, all, stores=stores.CORE))
+    return runs
 
 
 def test_nuspace_run_stops_on_ctrl_c_ends_what_is_live_and_leaves_no_process(tmp_path):
     root = tmp_path / "space"
-    run = _nuspace_run(root)
+    run = _nuspace_run(root, "--no-browser", "-p", str(_free_port()))
     try:
         runs = _live_runs(root)
-        assert _left(run.pid, data_dir(root)), "the space never came up"
-        run.send_signal(signal.SIGINT)
-        out, _ = run.communicate(timeout=20)
+        _child(run.pid, "web")
+        up = _tree(run.pid)
+        assert up, "the space never came up"
+        # Ctrl+C reaches the terminal's group: run's own, not its children's.
+        os.killpg(run.pid, signal.SIGINT)
+        out, _ = run.communicate(timeout=60)
     finally:
         if run.poll() is None:
             os.killpg(run.pid, signal.SIGKILL)
@@ -895,19 +1174,19 @@ def test_nuspace_run_stops_on_ctrl_c_ends_what_is_live_and_leaves_no_process(tmp
     assert run.returncode == 0, out.decode()
     assert "Stopped" in out.decode()
     assert "nuspace close" not in out.decode()
-    time.sleep(0.5)
-    assert _left(run.pid, data_dir(root)) == []
+    assert _gone(up) == [], {p: up[p] for p in _alive(up)}
     # The cancelled kernel arms and the close did not end anything twice.
     rows = _read(root, Space.exec.plane_runs.extract(), stores=stores.CORE)
     assert {(rows[r]["exit"], rows[r]["error"]) for r in runs} == {(EXIT_INTERRUPTED, CLOSED)}
     live = _read(root, Space.exec.indexes.live.extract(), stores=stores.CORE)
     assert live["plane_runs"] == {} and live["workers"] == {}
+    assert not _answers(data_dir(root) / VALKEY_DIR)
 
 
-async def test_a_host_killed_mid_run_is_reaped_killed_at_the_next_open(tmp_path, capfd):
+async def test_a_kernel_killed_mid_run_is_reaped_killed_at_the_next_start(tmp_path, capfd):
     """SIGKILL, as a crash: no close runs, so the reopen's reap ends what was started, killed."""
     root = tmp_path / "space"
-    run = _nuspace_run(root)
+    run = _nuspace_run(root, "--headless")
     try:
         live = Space.exec.indexes.live.plane_runs
         term = nu.list(live.keys())
@@ -942,7 +1221,7 @@ async def test_a_host_killed_mid_run_is_reaped_killed_at_the_next_open(tmp_path,
         ("nuspace.space", ("starlette", "uvicorn", "click", "nustd.ws_server")),
     ],
 )
-def test_importing_nuspace_or_the_host_pulls_in_no_server_and_no_cli(imported, absent):
+def test_importing_nuspace_or_the_space_pulls_in_no_server_and_no_cli(imported, absent):
     code = f"import sys, {imported}\nprint(sorted(m for m in {absent!r} if m in sys.modules))"
     out = subprocess.run(  # noqa: S603 -- our own interpreter, a fixed script
         [sys.executable, "-c", code], capture_output=True, text=True, check=True

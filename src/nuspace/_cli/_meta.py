@@ -117,12 +117,12 @@ def announce(path: str | None, *, headless: bool = False, plane: str | None = No
         console.print("[dim]headless, Ctrl+C to stop[/dim]")
 
 
-def hold(term: nu.Nu) -> None:
-    """Run a space until interrupted (Ctrl+C), then let the brackets close it.
+def hold(term: nu.Nu) -> object:
+    """Run a space until interrupted (Ctrl+C), then let the brackets close it. What the term yields.
 
     Closing ends what is live, interrupted, then stops the workers, the
-    stores, the notification server and the lock, in that order. An open
-    the host refuses (another host holds the space, an older store format)
+    stores, the notification server and the lock, in that order. A run
+    refused (a kernel of the space runs elsewhere, an older store format)
     is a short error. What is still queued for telemetry (see
     :mod:`nuspace._telemetry`) gets a short grace to go at the end.
 
@@ -130,10 +130,12 @@ def hold(term: nu.Nu) -> None:
     and tested, and validating its whole tree costs seconds per start.
     """
     try:
-        nu.eval_in_loop(nu.compile(term), nu.Context())
+        value, _ = nu.eval_in_loop(nu.compile(term), nu.Context())
     except KeyboardInterrupt:
         console.print("[dim]Stopped[/dim]")
+        return None
     except Refused as e:
         raise click.ClickException(str(e)) from None
     finally:
         _telemetry.flush()
+    return value

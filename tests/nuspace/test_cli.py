@@ -1,8 +1,8 @@
-"""The command line: help and version, each command wired to its preset, init, verse, telemetry.
+"""The command line: help and version, each command wired to its local entry point, init, verse, telemetry.
 
 Nothing here opens a space for real but ``init`` and the refusals: the
-presets and the hold are swapped for recorders, so a test sees what a
-command asked for. A real ``nuspace run`` and its Ctrl+C are in test_host.
+entry points and the hold are swapped for recorders, so a test sees what a
+command asked for. A real ``nuspace run`` and its Ctrl+C are in test_space.
 """
 
 from __future__ import annotations
@@ -25,8 +25,8 @@ from nuspace._cli.commands import run as run_command
 from nuspace._telemetry import config
 from nuspace.shapes import Space
 from nuspace.shapes.stores import CORE
+from nuspace.space import local
 from nuspace.space.blocks.meta import DATA_DIR
-from nuspace.space.local import presets
 from nuspace.space.local.layout import STORES
 from nuspace.specs import CellSpec, ContentSpec, Extension, PlaneSpec
 from nuspace.web import WEB_STORE, Web
@@ -66,7 +66,7 @@ def _said(result) -> str:
 
 
 class _Recorder:
-    """Stands in for a preset: records the call, returns a marker term."""
+    """Stands in for an entry point: records the call, returns a marker term."""
 
     def __init__(self) -> None:
         self.calls: list[tuple[tuple, dict]] = []
@@ -162,26 +162,29 @@ def test_version(flag):
 # --- run -------------------------------------------------------------------------
 
 
-def test_run_serves_by_default(monkeypatch, held):
+def test_run_runs_kernel_and_web_by_default(monkeypatch, held):
     serve, headless = _Recorder(), _Recorder()
-    monkeypatch.setattr(presets, "serve", serve)
-    monkeypatch.setattr(presets, "headless", headless)
+    monkeypatch.setattr(local, "run", serve)
+    monkeypatch.setattr(local, "kernel", headless)
     result = _invoke("run", "/tmp/space", "--host", "localhost", "-p", "9001", "--no-browser")
     assert result.exit_code == 0, result.output
     assert serve.calls == [
-        ((_abs("/tmp/space"),), {"host": "localhost", "port": 9001, "open_browser": False})
+        (
+            (_abs("/tmp/space"),),
+            {"plane": None, "host": "localhost", "port": 9001, "open_browser": False},
+        )
     ]
     assert headless.calls == []
     assert held == ["term"]
 
 
-def test_run_headless_maps_to_the_headless_preset(monkeypatch, held, tmp_path):
+def test_run_headless_maps_to_the_kernel_alone(monkeypatch, held, tmp_path):
     serve, headless = _Recorder(), _Recorder()
-    monkeypatch.setattr(presets, "serve", serve)
-    monkeypatch.setattr(presets, "headless", headless)
+    monkeypatch.setattr(local, "run", serve)
+    monkeypatch.setattr(local, "kernel", headless)
     result = _invoke("run", "--headless")
     assert result.exit_code == 0, result.output
-    assert headless.calls == [((_home_root(tmp_path),), {})]
+    assert headless.calls == [((_home_root(tmp_path),), {"body": None})]
     assert serve.calls == []
     assert "headless" in result.output
     assert held == ["term"]
@@ -198,7 +201,7 @@ def listening():
 
 def test_run_refuses_a_taken_port_given(monkeypatch, held, listening):
     serve = _Recorder()
-    monkeypatch.setattr(presets, "serve", serve)
+    monkeypatch.setattr(local, "run", serve)
     result = _invoke("run", "/tmp/space", "-p", str(listening), "--no-browser")
     assert result.exit_code == 1, result.output
     assert f"Port {listening}" in _said(result)
@@ -209,12 +212,15 @@ def test_run_refuses_a_taken_port_given(monkeypatch, held, listening):
 
 def test_run_without_a_port_takes_the_first_free_from_8080(monkeypatch, held):
     serve = _Recorder()
-    monkeypatch.setattr(presets, "serve", serve)
+    monkeypatch.setattr(local, "run", serve)
     monkeypatch.setattr(run_command, "_bindable", lambda host, port: port >= 8082)
     result = _invoke("run", "/tmp/space", "--no-browser")
     assert result.exit_code == 0, result.output
     assert serve.calls == [
-        ((_abs("/tmp/space"),), {"host": "127.0.0.1", "port": 8082, "open_browser": False})
+        (
+            (_abs("/tmp/space"),),
+            {"plane": None, "host": "127.0.0.1", "port": 8082, "open_browser": False},
+        )
     ]
 
 
@@ -223,9 +229,9 @@ def test_run_without_a_port_takes_the_first_free_from_8080(monkeypatch, held):
 
 @pytest.fixture
 def headless(monkeypatch, held):
-    """The headless preset, recorded: what ``run --headless`` was asked to open."""
+    """The kernel entry point, recorded: what ``run --headless`` was asked to open."""
     recorder = _Recorder()
-    monkeypatch.setattr(presets, "headless", recorder)
+    monkeypatch.setattr(local, "kernel", recorder)
     return recorder
 
 
@@ -241,7 +247,7 @@ def _space(root) -> None:
 def test_run_opens_the_path_given(headless, tmp_path):
     result = _invoke("run", "--headless", "rel")
     assert result.exit_code == 0, result.output
-    assert headless.calls == [((str(tmp_path / "home" / "work" / "rel"),), {})]
+    assert headless.calls == [((str(tmp_path / "home" / "work" / "rel"),), {"body": None})]
     assert "~/work/rel" in result.output
 
 
@@ -253,7 +259,7 @@ def test_run_finds_the_nearest_space_up(headless, tmp_path, monkeypatch):
     monkeypatch.chdir(nested)
     result = _invoke("run", "--headless")
     assert result.exit_code == 0, result.output
-    assert headless.calls == [((str(root),), {})]
+    assert headless.calls == [((str(root),), {"body": None})]
     assert "~/work" in result.output
 
 
@@ -263,14 +269,14 @@ def test_run_falls_back_to_the_home_space(headless, tmp_path):
     (tmp_path / "home" / DATA_DIR / "config.json").write_text("{}")
     result = _invoke("run", "--headless")
     assert result.exit_code == 0, result.output
-    assert headless.calls == [((_home_root(tmp_path),), {})]
+    assert headless.calls == [((_home_root(tmp_path),), {"body": None})]
     assert "Path: ~/.nuspace" in _said(result)
 
 
 def test_run_tmp_is_a_throwaway(headless):
     result = _invoke("run", "--headless", "--tmp")
     assert result.exit_code == 0, result.output
-    assert headless.calls == [((None,), {})]
+    assert headless.calls == [((None,), {"body": None})]
     assert "throwaway" in result.output
 
 
@@ -297,11 +303,11 @@ def test_run_refuses_a_space_of_an_older_format(tmp_path, old):
 
 def test_run_from_opens_the_named_plane(monkeypatch, held, verse, tmp_path):
     opened = _Recorder()
-    monkeypatch.setattr(presets, "with_plane", opened)
+    monkeypatch.setattr(local, "run", opened)
     result = _invoke("run", "--with", "agents.crew", "-p", "9002", "--no-browser")
     assert result.exit_code == 0, result.output
     ((args, kwargs),) = opened.calls
-    assert (args[1].name, args[0]) == ("agents.crew", _home_root(tmp_path))
+    assert (kwargs.pop("plane").name, args[0]) == ("agents.crew", _home_root(tmp_path))
     assert kwargs == {"host": "127.0.0.1", "port": 9002, "open_browser": False}
     assert "plane agents.crew" in result.output
     assert held == ["term"]
@@ -309,16 +315,13 @@ def test_run_from_opens_the_named_plane(monkeypatch, held, verse, tmp_path):
 
 def test_run_from_tells_apart_two_packages_sharing_a_name(monkeypatch, held, verse):
     opened = _Recorder()
-    monkeypatch.setattr(presets, "with_plane", opened)
+    monkeypatch.setattr(local, "kernel", opened)
     result = _invoke("run", "/tmp/space", "--with", "tools.chat", "--headless")
     assert result.exit_code == 0, result.output
     ((args, kwargs),) = opened.calls
-    assert (args[1].name, args[1].description, args[0]) == (
-        "tools.chat",
-        "Talk.",
-        _abs("/tmp/space"),
-    )
-    assert kwargs == {"web": False}
+    # Headless, the kernel makes the plane beside its driver.
+    assert args == (_abs("/tmp/space"),)
+    assert kwargs["body"] is not None
     assert "plane tools.chat" in result.output
     assert "headless" in result.output
 
@@ -334,11 +337,11 @@ def test_run_from_refuses_anything_but_an_installed_pkg_plane(held, verse_defaul
 
 def test_run_from_takes_a_bare_name_as_a_nuverse_plane(monkeypatch, held, verse_default):
     opened = _Recorder()
-    monkeypatch.setattr(presets, "with_plane", opened)
-    result = _invoke("run", "--with", "jobs", "--headless")
+    monkeypatch.setattr(local, "run", opened)
+    result = _invoke("run", "--with", "jobs", "-p", "9003")
     assert result.exit_code == 0, result.output
-    ((args, _),) = opened.calls
-    assert (args[1].name, args[1].description) == ("nuverse.jobs", "Queue.")
+    ((_, kwargs),) = opened.calls
+    assert (kwargs["plane"].name, kwargs["plane"].description) == ("nuverse.jobs", "Queue.")
     assert _installed.resolve("jobs") == _installed.resolve("nuverse.jobs")
     assert _installed.resolve("tools.jobs").name == "tools.jobs"
 

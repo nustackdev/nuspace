@@ -199,13 +199,11 @@ def _free_port() -> int:
 
 
 async def _served(root: Path, port: int):
-    """``local.serve`` on this loop, held open: ``(done, task)``. Close with ``done.set()``."""
+    """``local.web`` on this loop, held open: ``(done, task)``. Close with ``done.set()``."""
     loop = asyncio.get_running_loop()
     ready, done = loop.create_future(), asyncio.Event()
     hold = nu.With(MADE_STORE, body=nu.let(_Hold(ready, done), lambda _: nu.Noop()))
-    term = local.serve(
-        root, port=port, open_browser=False, static=None, spares=0, extensions=(), body=hold
-    )
+    term = local.web(root, port=port, open_browser=False, static=None, extensions=(), body=hold)
     task = asyncio.create_task(nu.arun(term))
     waiting = asyncio.ensure_future(asyncio.shield(ready))
     finished, _ = await asyncio.wait({waiting, task}, timeout=30, return_when="FIRST_COMPLETED")

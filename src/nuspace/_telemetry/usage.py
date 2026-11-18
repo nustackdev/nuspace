@@ -109,7 +109,7 @@ def track(event: str) -> Track:
 def opened() -> Track:
     """A space opened: the id made if missing, then ``first_run`` and ``space_opened``. Never raises.
 
-    Run by the host before any cell runs, so the anonymous id is made here,
+    Run by the kernel before any cell runs, so the anonymous id is made here,
     once, and never by two workers racing to make their own.
     """
     return Track(TELEMETRY, "")

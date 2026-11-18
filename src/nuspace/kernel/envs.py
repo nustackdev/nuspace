@@ -59,7 +59,7 @@ class KernelConfig:
     """What the kernel is told at open: the env registry and the space-wide envs.
 
     Bound on the kernel's context (:func:`~nuspace.kernel.bound`), read when a
-    cell run's body is built. Host only: factories are python callables and
+    cell run's body is built. Kernel only: factories are python callables and
     never cross.
 
     Args:

@@ -1,18 +1,20 @@
-"""``nuspace run``: open a space, served in a browser or headless.
+"""``nuspace run``: run a space, its kernel and web as two processes, or the kernel alone.
 
-One flag, one :mod:`nuspace.space.local` preset: :func:`~nuspace.space.local.serve` by
-default, :func:`~nuspace.space.local.headless` with ``--headless``. Runs until
-interrupted, then the host ends what is live and the brackets stop the
-workers. Which space is :func:`~nuspace._cli._meta.space_root`: PATH, made
-a space if it is not one, else the nearest space up from here, else home.
-``--tmp`` is a throwaway one, gone at close. The header names the space's root either way.
+By default :func:`~nuspace.space.local.run`: the kernel and web, each in a
+process of its own, web started again if it dies. ``--headless`` is
+:func:`~nuspace.space.local.kernel` alone, in this process. Runs until
+interrupted, then the kernel ends what it started and the brackets stop
+the workers. Which space is :func:`~nuspace._cli._meta.space_root`: PATH,
+made a space if it is not one, else the nearest space up from here, else
+home. ``--tmp`` is a throwaway one, gone at close. The header names the
+space's root either way.
 
 ``--with`` names a Plane an installed package adds, ``pkg.plane`` as
-``nuspace verse`` lists them, or a bare name for a nuverse Plane: it is made
-in the space once, through :func:`~nuspace.space.local.with_plane`, and the tab
-opens on it. The next run with the same name reopens the newest plane made
-from it, unless removed. The header names the Plane: its id is only known
-once the space is open. A space open in another host, or of an older store
+``nuspace verse`` lists them, or a bare name for a nuverse Plane: web
+makes it in the space once and the tab opens on it. Headless, the kernel
+makes it beside its driver. The next run with the same name reopens the
+newest plane made from it, unless removed. The header names the Plane: its id is only known once the space
+is open. A space whose kernel runs elsewhere, or of an older store
 format, is refused with a short error.
 
 The port: ``--port`` binds that one and a taken one is a short error.
@@ -26,8 +28,10 @@ import socket
 
 import rich_click as click
 
+import nu
 from nuspace.errors import Refused
-from nuspace.space.local import presets
+from nuspace.space import local
+from nuspace.space.local._plane import plane_of
 from nuspace.specs import registered_name
 
 from .._installed import resolve
@@ -119,21 +123,20 @@ def run(
     path = space_root(path, tmp=tmp)
     if not headless:
         port = _port(host, port)
-    web = {"host": host, "port": port, "open_browser": not no_browser}
     made = None
     try:
+        spec = None
         if plane is not None:
             spec = resolve(plane)
             made = registered_name(spec)
-            if headless:
-                term = presets.with_plane(path, spec, web=False)
-            else:
-                term = presets.with_plane(path, spec, **web)
-        elif headless:
-            term = presets.headless(path)
+        if headless:
+            body = None if spec is None else nu.let("", lambda p: plane_of(spec, p)) >> nu.Park()
+            term = local.kernel(path, body=body)
         else:
-            term = presets.serve(path, **web)
+            term = local.run(path, plane=spec, host=host, port=port, open_browser=not no_browser)
     except Refused as e:
         raise click.ClickException(str(e)) from None
     announce(path, headless=headless, plane=made)
-    hold(term)
+    code = hold(term)
+    if code:
+        raise SystemExit(code)
