@@ -14,15 +14,29 @@ import time
 
 import pytest
 import pytest_asyncio
-from _support.kernel import SET_42, Kernel, _Hold, kernel_open, prog, workers_named
+from _support.kernel import (
+    RAISES,
+    SET_42,
+    Kernel,
+    _Hold,
+    init_stores,
+    kernel_open,
+    navigators,
+    prog,
+    workers_named,
+)
 from _support.made import MADE_STORE
 
 import nu
 import nuspace
 import nuspace.web as web
 import nustd.kv
-from nuspace.kernel import Env
-from nuspace.shapes import Space
+import nustd.mp_pool
+from nuspace import kernel
+from nuspace.kernel import CLOSED, LEFT_OVER, Env
+from nuspace.kernel.kernel import loop
+from nuspace.shapes import EXIT_FAILED, Space
+from nuspace.space.local import binding
 from nuspace.web.nav import BY, nav
 from nuspace.web.stores import CONN_STORE, WEB_STORE
 
@@ -246,6 +260,22 @@ async def test_a_pane_on_a_plane_with_no_view_runs_nothing_until_it_is_on_the_we
 
 
 @module_loop
+async def test_a_failed_plane_waits_for_its_restart_and_never_loops(space):
+    k = space
+    p, _ = await web_plane(k, RAISES)
+    await k.do(web.open_tab("e1"))
+    await k.do(web.set_panes("e1", [p]))
+    run = await pane_run(k, "e1", p)
+    assert (await ended(k, run))["exit"] == EXIT_FAILED
+    await asyncio.sleep(1.0)
+    runs = Space.exec.indexes.history.plane_to_plane_runs[p].runs
+    assert await k.read(nu.list(runs.keys())) == [run]
+    await k.do(web.restart_pane("e1", p))
+    await pane_run(k, "e1", p, not_=run)
+    await k.do(web.close_tab("e1"))
+
+
+@module_loop
 async def test_closing_leaves_no_workers(space):
     """Last in the module: the space closed with nav in it leaves no worker up."""
     k = space
@@ -258,3 +288,100 @@ async def test_closing_leaves_no_workers(space):
     while workers_named(NAME) and time.monotonic() < deadline:
         await asyncio.sleep(0.05)
     assert workers_named(NAME) == []
+
+
+# --- nav across kernels ------------------------------------------------------------------
+#
+# nav in one context with the stores, and a kernel in a task of its own on the
+# same files, started and stopped under it, as local runs them in two processes.
+
+
+class _Up:
+    """A kernel on the stores at ``data``, run in a task of its own until :meth:`down`."""
+
+    def __init__(self, data: str, term: nu.Nu, name: str) -> None:
+        loop_ = asyncio.get_running_loop()
+        self.ready, self.done = loop_.create_future(), asyncio.Event()
+        pool = nustd.mp_pool.pool(name=name, init=navigators(data), spares=0, grace=2.0)
+        held = nu.let(_Hold(self.ready, self.done), lambda _: nu.Noop())
+        body = nu.Race(term, nu.With(MADE_STORE, body=held))
+        opened = nu.With(navigators(data), pool, kernel.bound(envs=ENVS), body=body)
+        self.task = asyncio.create_task(nu.arun(opened))
+
+    async def up(self) -> None:
+        waiting = asyncio.ensure_future(asyncio.shield(self.ready))
+        finished, _ = await asyncio.wait(
+            {waiting, self.task}, timeout=30, return_when="FIRST_COMPLETED"
+        )
+        if self.task in finished:
+            self.task.result()
+
+    async def down(self) -> None:
+        self.done.set()
+        await asyncio.wait_for(self.task, 15)
+
+
+async def _nav_alone(data: str) -> Kernel:
+    """nav and the stores at ``data``, no kernel: run ops through it as through a kernel."""
+    loop_ = asyncio.get_running_loop()
+    ready, done = loop_.create_future(), asyncio.Event()
+    mem = nu.With(*(nustd.kv.memory_navigator(tags=(s.root,)) for s in (WEB_STORE, CONN_STORE)))
+    init = init_stores() >> nustd.kv.atomic(WEB_STORE.init()) >> nustd.kv.atomic(CONN_STORE.init())
+    held = nu.let(_Hold(ready, done), lambda _: nu.Noop())
+    body = nu.With(MADE_STORE, mem, body=init >> nu.Race(nav(), held))
+    task = asyncio.create_task(
+        nu.arun(nu.With(binding.notifier(data), navigators(data), body=body))
+    )
+    waiting = asyncio.ensure_future(asyncio.shield(ready))
+    finished, _ = await asyncio.wait({waiting, task}, timeout=30, return_when="FIRST_COMPLETED")
+    if task in finished:
+        task.result()
+    return Kernel(await waiting, done, task, data)
+
+
+async def _started(k: Kernel, run: str) -> None:
+    started = Space.exec.plane_runs[run].started_at.exists()
+    await k.until(lambda: k.read(started), bool, SLOW)
+
+
+async def _asks_again(tmp_path, first: nu.Nu, why: str) -> None:
+    """A pane's run ended by kernel ``first`` going away, as ``why``: nav asks again, the next kernel starts it."""
+    data = str(tmp_path / "data")
+    (tmp_path / "data" / "store").mkdir(parents=True)
+    k = await _nav_alone(data)
+    try:
+        p, _ = await web_plane(k, FOREVER)
+        await k.do(web.open_tab("k1"))
+        await k.do(web.set_panes("k1", [p]))
+        run = await pane_run(k, "k1", p)
+        one = _Up(data, first, f"{NAME}-one")
+        await one.up()
+        await _started(k, run)
+        await one.down()
+        if why == LEFT_OVER:
+            # A crash ends nothing: the run is left started, for the next kernel's reap.
+            assert not await k.read(Space.exec.plane_runs[run].ended_at.exists())
+        else:
+            assert (await ended(k, run))["error"] == why
+        two = _Up(data, kernel.driver(), f"{NAME}-two")
+        await two.up()
+        try:
+            assert (await ended(k, run))["error"] == why
+            again = await pane_run(k, "k1", p, not_=run)
+            await _started(k, again)
+            assert await k.read(Space.exec.plane_runs[again].by) == BY
+            await k.do(web.close_tab("k1"))
+            await ended(k, again)
+        finally:
+            await two.down()
+    finally:
+        await k.close()
+
+
+async def test_nav_asks_again_after_a_kernel_close(tmp_path):
+    await _asks_again(tmp_path, kernel.driver(), CLOSED)
+
+
+async def test_nav_asks_again_after_a_reap(tmp_path):
+    # Reap and the loop, no close: going down is a crash.
+    await _asks_again(tmp_path, kernel.reap() >> loop(), LEFT_OVER)

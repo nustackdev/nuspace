@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- A pane whose run a kernel ended on stop or crash asks for it again
 - Tabs of an earlier open are cleared by a commit, never by deleting files
 - An assembly can split one store across several backends by its top-level slots
 - A space records which assembly made it; local alone decides where stores live
