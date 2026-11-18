@@ -21,6 +21,7 @@ import signal
 import socket
 import subprocess
 import sys
+import threading
 import time
 import warnings
 from typing import TYPE_CHECKING
@@ -32,6 +33,7 @@ from _support.made import MADE, MADE_STORE
 import nu
 import nuspace
 import nustd.kv
+import nustd.valkey
 from nuspace.errors import Missing, Refused
 from nuspace.kernel import CLOSED, LEFT_OVER, Env
 from nuspace.shapes import EXIT_INTERRUPTED, EXIT_KILLED, FORMAT, Space, stores
@@ -51,7 +53,7 @@ from nuspace.space.blocks.meta import (
     stamp,
     write_meta,
 )
-from nuspace.space.blocks.notifier import Notifier, holders
+from nuspace.space.blocks.notifier import Joined, served
 from nuspace.space.blocks.resources import DataDir, Throwaway
 from nuspace.space.local._disk import Marked
 from nuspace.space.local._plane import plane_of
@@ -656,9 +658,11 @@ async def test_web_clears_conn_by_a_commit_while_a_worker_holds_its_file(tmp_pat
         loop = asyncio.get_running_loop()
         ready, done = loop.create_future(), asyncio.Event()
         hold = nu.With(MADE_STORE, body=nu.let(_Hold(ready, done), lambda _: nu.Noop()))
-        term = local.web(
+        web = local.web(
             root, port=_free_port(), open_browser=False, static=None, extensions=(), body=hold
         )
+        # Web runs only beside a kernel; both in this process, meeting through the files.
+        term = nu.Race(local.kernel(root, spares=0, extensions=()), web)
         task = asyncio.create_task(nu.arun(term))
         try:
             waiting = asyncio.ensure_future(asyncio.shield(ready))
@@ -858,8 +862,8 @@ def test_open_with_nothing_up_writes_and_leaves_nothing_up(tmp_path):
     _open(root, nuspace.atomic(nuspace.plane.add("p_mine", name="Mine", backend="async")))
     assert _read(root, Space.planes["p_mine"].name) == "Mine"
     valkey = data_dir(root) / VALKEY_DIR
+    # Nobody listens with no kernel up: open started no server, published nothing.
     assert not (valkey / "valkey.pid").exists()
-    assert holders(valkey) == []
     assert not _answers(valkey)
     # No driver lock was taken: both are free.
     _free(root, KERNEL_LOCK, "kernel")
@@ -923,21 +927,50 @@ async def test_a_second_kernel_and_a_second_web_are_refused_and_init_too(tmp_pat
             await _close(wdone, wtask)
     finally:
         await _close(done, task)
-    # Web alone up: init is refused by its lock too.
-    _, wdone, wtask = await _served(root)
+    await nu.arun(local.init(root))
+
+
+async def test_web_is_refused_with_no_kernel_running(tmp_path):
+    root = tmp_path / "space"
+    await nu.arun(local.init(root))
+    started = time.monotonic()
+    with pytest.raises(Refused, match="the kernel of this space is not running: start it first"):
+        await nu.arun(local.web(root, port=_free_port(), static=None, extensions=()))
+    # No kernel lock held: only the short grace for one starting beside it, not the long wait.
+    assert time.monotonic() - started < 10
+    _free(root, WEB_LOCK, "web")
+    assert not _answers(data_dir(root) / VALKEY_DIR)
+
+
+async def test_web_hears_again_once_a_stopped_kernel_is_back(tmp_path):
+    """The kernel's server goes with it; web stays up, and a write of web's reaches the next kernel."""
+    root = tmp_path / "space"
+    _, done, task = await _opened(root)
+    wctx, wdone, wtask = await _served(root)
     try:
-        with pytest.raises(Refused, match="the web of this space runs"):
-            await nu.arun(local.init(root))
+        await _close(done, task)
+        assert not _answers(data_dir(root) / VALKEY_DIR)
+        assert not wtask.done(), "web went down with the kernel"
+        ctx, done, task = await _opened(root)
+        try:
+            made = nuspace.plane.add("p_back", name="Back", backend="async")
+            await nu.arun(nuspace.atomic(made), wctx)
+            asked = nu.let("", lambda r: nuspace.plane_run.add("p_back", into=r) >> nu.Noop())
+            await nu.arun(nuspace.atomic(asked), wctx)
+            runs = Space.exec.indexes.live.plane_to_plane_runs["p_back"].ids
+            ids = await _until(wctx, nu.list(runs.keys()), lambda rs: len(rs) == 1)
+            await _until(ctx, Space.exec.plane_runs[ids[0]].started_at.exists(), bool)
+        finally:
+            await _close(done, task)
     finally:
         await _close(wdone, wtask)
-    await nu.arun(local.init(root))
 
 
 async def test_each_driver_logs_to_its_own_file(tmp_path):
     root = tmp_path / "space"
     _, done, task = await _opened(root)
-    await _close(done, task)
-    _, done, task = await _served(root)
+    _, wdone, wtask = await _served(root)
+    await _close(wdone, wtask)
     await _close(done, task)
     kernel_log = (data_dir(root) / KERNEL_LOG).read_text()
     web_log = (data_dir(root) / WEB_LOG).read_text()
@@ -945,7 +978,8 @@ async def test_each_driver_logs_to_its_own_file(tmp_path):
     assert "kernel down" in kernel_log
     assert "web up" in web_log
     assert "web down" in web_log
-    assert "web" not in kernel_log
+    # One process here, so the kernel's file hears web too; web's file only its own run.
+    assert "kernel" not in web_log
 
 
 # --- The notifier ---------------------------------------------------------------------
@@ -955,74 +989,64 @@ def _answers(path: Path) -> bool:
     return ping(socket_path_for(path), 0.2)
 
 
-def test_a_joiner_keeps_the_server_when_its_owner_leaves_and_the_last_out_stops_it(tmp_path):
+def test_the_server_goes_with_its_owner_however_it_ends(tmp_path):
     path = tmp_path / "valkey"
-    owner, joiner = Notifier(str(path)), Notifier(str(path))
-    owner.setup(None)
+    server = nustd.valkey.ValkeyServer(data_dir=path)
+    server.setup(None)
     try:
-        joiner.setup(None)
-        assert owner.owned
-        assert not joiner.owned
-        assert len(holders(path)) == 2
-        owner.cleanup()
-        assert _answers(path), "the owner left first and took the server along"
-        assert len(holders(path)) == 1
+        assert _answers(path)
     finally:
-        owner.cleanup()
-        joiner.cleanup()
+        server.cleanup()
     assert not _answers(path)
-    assert holders(path) == []
-
-
-#: A process owning or joining the notifier at argv[1], saying which, until its stdin closes.
-_NOTIFIED = """
-import sys
-from nuspace.space.blocks.notifier import Notifier
-n = Notifier(sys.argv[1])
-n.setup(None)
-print("owned" if n.owned else "joined", flush=True)
-sys.stdin.read()
-n.cleanup()
-"""
-
-
-def _notified(path: Path) -> subprocess.Popen:
-    return subprocess.Popen(  # noqa: S603
-        [sys.executable, "-c", _NOTIFIED, str(path)],
+    # Killed: the keeper stops the server with its owner.
+    owner = subprocess.Popen(  # noqa: S603
+        [sys.executable, "-c", _HOLD_SERVED, str(path)],
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         text=True,
     )
-
-
-def test_processes_coming_up_together_start_one_server(tmp_path):
-    path = tmp_path / "valkey"
-    procs = [_notified(path) for _ in range(4)]
     try:
-        said = sorted(p.stdout.readline().strip() for p in procs)
-        assert said == ["joined", "joined", "joined", "owned"]
+        assert owner.stdout.readline().strip() == "up"
+        assert _answers(path)
+        owner.kill()
+        owner.wait()
+        deadline = time.monotonic() + 10
+        while _answers(path) and time.monotonic() < deadline:
+            time.sleep(0.05)
+        assert not _answers(path)
     finally:
-        for p in procs:
-            p.communicate("", timeout=20)
-    assert not _answers(path)
-    assert holders(path) == []
+        owner.kill()
 
 
-def test_a_holder_that_crashed_is_pruned_and_the_last_clean_exit_stops_the_server(tmp_path):
+#: A process serving the notifier at argv[1] until its stdin closes or it is killed.
+_HOLD_SERVED = """
+import sys
+from nustd.valkey.resources import ValkeyServer
+s = ValkeyServer(data_dir=sys.argv[1])
+s.setup(None)
+print("up", flush=True)
+sys.stdin.read()
+s.cleanup()
+"""
+
+
+def test_a_join_refuses_with_no_server_and_waits_for_one_coming_up(tmp_path):
     path = tmp_path / "valkey"
-    crashed = _notified(path)
-    assert crashed.stdout.readline().strip() == "owned"
-    mine = Notifier(str(path))
-    mine.setup(None)
+    with pytest.raises(Refused, match="start one"):
+        Joined(str(path), "start one", wait=5.0, waiting=lambda: False).setup(None)
+    server = nustd.valkey.ValkeyServer(data_dir=path)
+    starting = threading.Timer(0.5, server.setup, args=(None,))
+    starting.start()
     try:
-        crashed.kill()
-        crashed.wait()
-        # No watchdog: the server outlives its owner, for the holder left.
+        Joined(str(path), "start one", wait=10.0).setup(None)
         assert _answers(path)
     finally:
-        mine.cleanup()
-    assert not _answers(path)
-    assert holders(path) == []
+        starting.join()
+        server.cleanup()
+
+
+def test_served_is_nustds_own_server(tmp_path):
+    assert isinstance(served(tmp_path / "valkey"), nu.Provide)
 
 
 # --- local.run ------------------------------------------------------------------------

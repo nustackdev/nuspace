@@ -123,7 +123,7 @@ def kernel_open(
     """
     (Path(data) / "store").mkdir(parents=True, exist_ok=True)
     held = () if blobs is None else (blobs,)
-    served = nu.With(binding.notifier(data), navigators(data), *held)
+    served = nu.With(binding.served(data), navigators(data), *held)
     init = navigators(data) if blobs is None else worker_context(navigators(data), blobs)
     pool = nustd.mp_pool.pool(name=name, init=init, spares=spares, grace=grace)
     if driver:

@@ -369,7 +369,7 @@ async def _nav_alone(data: str) -> Kernel:
     held = nu.let(_Hold(ready, done), lambda _: nu.Noop())
     body = nu.With(MADE_STORE, mem, body=init >> nu.Race(nav(), held))
     task = asyncio.create_task(
-        nu.arun(nu.With(binding.notifier(data), navigators(data), body=body))
+        nu.arun(nu.With(binding.served(data), navigators(data), body=body))
     )
     waiting = asyncio.ensure_future(asyncio.shield(ready))
     finished, _ = await asyncio.wait({waiting, task}, timeout=30, return_when="FIRST_COMPLETED")

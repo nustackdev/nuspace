@@ -5,7 +5,8 @@ installed) while the kernel and every plane run it holds go on. They
 share nothing in memory: the stores, the notifier and local's files are
 all they meet through.
 
-- **Start.** The kernel first, then web. Each is ``python -m
+- **Start.** The kernel first, then web once the kernel's notification
+  server answers (web joins it). Each is ``python -m
   nuspace.space.local._child kernel|web ROOT`` (:mod:`._child`), its
   options pickled on stdin, in a session of its own: a Ctrl+C on the
   terminal reaches only this process.
@@ -42,7 +43,9 @@ from nu.engine.structure import Declared
 from nu.lang import Command, Ref
 
 from ..blocks.meta import data_dir, resolve_root
+from ..blocks.notifier import answers
 from ..blocks.resources import Throwaway
+from . import binding
 from ._plane import found
 from .layout import WEB_LOG
 
@@ -71,6 +74,9 @@ GRACE = 30.0
 
 #: How often run looks at its children.
 _POLL = 0.1
+
+#: Seconds run waits for the kernel's notification server before it gives up.
+KERNEL_UP = 60.0
 
 #: The options each entry point takes, so ``run`` hands each its own.
 _KERNEL = frozenset({"extensions", "envs", "space_envs", "backends", "spares", "name", "blobs"})
@@ -152,6 +158,17 @@ async def supervise(root: str, kernel: bytes, web: bytes, rest: bytes) -> int:
     kernel_child = _spawn("kernel", root, kernel)
     web_child = None
     try:
+        valkey = binding.valkey_dir(data_dir(root))
+        deadline = time.monotonic() + KERNEL_UP
+        while not answers(valkey):
+            code = kernel_child.poll()
+            if code is not None:
+                _say(f"the kernel exited ({_status(code)}) before it came up")
+                return _status(code)
+            if time.monotonic() >= deadline:
+                _say(f"the kernel did not come up within {KERNEL_UP:.0f} s, stopping")
+                return 1
+            await asyncio.sleep(_POLL)
         web_child = _spawn("web", root, web)
         restarts = Restarts()
         while True:

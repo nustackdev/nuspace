@@ -1,8 +1,12 @@
 """local.kernel and local.web: one driver each, in the process that runs the term.
 
 Both open the space the same way (:mod:`._common`), each under its own
-lock, so one kernel and one web run on a space, in one process or two, in
-any order. They meet only through the stores, the notifier and two files
+lock, so one kernel and one web run on a space, in one process or two.
+The kernel owns the notification server and web joins it, so web starts
+only beside a running kernel: it waits a moment for one coming up, else
+it is refused. A kernel stopped under a live web takes the server with
+it; web's tabs hear again once a kernel is back. They meet only through
+the stores, the notifier and two files
 of local's: ``devices/web/session.addr``, where web's tab sessions answer
 (:mod:`._session`), and the uploads dir, both named by :mod:`.layout`.
 
@@ -33,6 +37,7 @@ re-import the main module.
 
 from __future__ import annotations
 
+import time
 import warnings
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -45,10 +50,12 @@ from nuspace.specs import RegistryWarning, space_registry
 from nuspace.web.env import SESSION_ENV
 
 from ..blocks.browse import Browse
+from ..blocks.lock import held
 from ..blocks.meta import data_dir, resolve_root
+from ..blocks.notifier import Joined
 from ..blocks.workers import DEFAULT_NAME, DEFAULT_SPARES, worker_pool
 from . import binding
-from ._common import STORES, opening, path_set
+from ._common import ROOTS, opening, path_set
 from ._disk import Wiped
 from ._plane import found, plane_of
 from ._session import Recorded, free_address, session_env
@@ -125,7 +132,7 @@ def kernel(
     reg = space_registry(extensions=extensions, envs=envs)
     blobs = binding.blobs(data) if blobs is None else blobs
     factories = _envs(reg.envs, session_env(data))
-    bindings = binding.stores(data, [s.root for s in STORES])
+    bindings = binding.stores(data, ROOTS)
     driver = _kernel.driver()
     running = nu.With(
         worker_pool(bindings, blobs, name=name, spares=spares),
@@ -137,8 +144,48 @@ def kernel(
         throwaway=throwaway,
         locks=[(KERNEL_LOCK, "kernel")],
         log=(KERNEL_LOG, "kernel"),
+        notifier=binding.served(data),
         blobs=blobs,
         body=path_set(root) >> opened() >> running,
+    )
+
+
+#: Seconds web waits for a kernel whose lock is held but whose server is not up yet.
+KERNEL_WAIT = 30.0
+
+#: Seconds web waits at first for a kernel starting beside it, its lock not taken yet.
+KERNEL_GRACE = 2.0
+
+
+class _Coming:
+    """Whether a kernel is coming up: its lock held, or still inside the first grace seconds."""
+
+    def __init__(self, lock: str, grace: float = KERNEL_GRACE) -> None:
+        self.lock = lock
+        self.grace = grace
+        self._since: float | None = None
+
+    def __call__(self) -> bool:
+        now = time.monotonic()
+        if self._since is None:
+            self._since = now
+        return held(self.lock) or now - self._since < self.grace
+
+
+def _kernels(data: str) -> nu.Provide:
+    """The kernel's notification server joined, or web refused: no kernel, nothing to serve."""
+    refusal = (
+        "the kernel of this space is not running: start it first"
+        " (nuspace run, or nuspace run --headless beside this)"
+    )
+    return nu.Provide(
+        Joined,
+        {
+            "path": binding.valkey_dir(data),
+            "refusal": refusal,
+            "wait": KERNEL_WAIT,
+            "waiting": _Coming(str(Path(data) / KERNEL_LOCK)),
+        },
     )
 
 
@@ -172,11 +219,11 @@ def web(
 ) -> nu.With:
     """The space's web in this process, served until ``body`` returns, or until cancelled without one.
 
-    See the module for the order. No kernel needs to run: what web asks
-    for (nav's plane runs) waits pending until one does. A space of
-    another store format, another assembly's, or one whose web runs
-    elsewhere, is refused before anything is written. Logs to
-    ``devices/web/web.log``.
+    See the module for the order. A kernel must run on the space: web joins
+    its notification server, waiting up to :data:`KERNEL_WAIT` seconds for
+    one coming up, and is refused when there is none. A space of another
+    store format, another assembly's, or one whose web runs elsewhere, is
+    refused before anything is written. Logs to ``devices/web/web.log``.
 
     Args:
         path: The space's root, as :func:`kernel`.
@@ -195,7 +242,8 @@ def web(
 
     Raises:
         Missing: No plane spec of the name ``plane`` (at build).
-        Refused: As :func:`kernel`, with web for the kernel.
+        Refused: As :func:`kernel`, with web for the kernel; or no kernel
+            running on the space.
     """
     root, throwaway = resolve_root(path)
     data = str(data_dir(root))
@@ -227,6 +275,7 @@ def web(
         throwaway=throwaway,
         locks=[(WEB_LOCK, "web")],
         log=(WEB_LOG, "web"),
+        notifier=_kernels(data),
         blobs=blobs,
         body=running,
     )

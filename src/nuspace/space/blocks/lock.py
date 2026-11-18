@@ -38,7 +38,7 @@ if TYPE_CHECKING:
     from nu.lang.runtime import Context
 
 
-__all__ = ["Lock", "LockWarning", "holder"]
+__all__ = ["Lock", "LockWarning", "held", "holder"]
 
 
 #: Errors a non blocking lock raises when somebody else holds it.
@@ -58,6 +58,29 @@ def holder(path: str) -> str:
         return Path(path).read_text(encoding="utf-8").strip()
     except OSError:
         return ""
+
+
+def held(path: str) -> bool:
+    """Whether a process holds the lock on ``path`` now. A look, nothing taken.
+
+    This process's own locks are answered from the set: a second descriptor
+    on the file, closed, would drop the lock this process holds on it.
+    """
+    if path in _MINE:
+        return True
+    try:
+        fd = os.open(path, os.O_RDWR)
+    except OSError:
+        return False
+    try:
+        fcntl.lockf(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError as exc:
+        return exc.errno in _HELD
+    else:
+        fcntl.lockf(fd, fcntl.LOCK_UN)
+        return False
+    finally:
+        os.close(fd)
 
 
 def _told(record: str) -> str:

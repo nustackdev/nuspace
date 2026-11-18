@@ -6,11 +6,12 @@
 - :func:`init`: the space made and seeded as its first kernel and web
   would, nothing run. Refused while either driver runs.
 
-``open`` makes nothing, resets nothing and seeds nothing. It joins the
-notifier a live kernel or web owns, or owns one for its own life, so a
-write lands in the stores and a live kernel hears it. A plane run asked
-for through it is started by the live kernel, or left pending for the
-next kernel to start.
+``open`` makes nothing, resets nothing and seeds nothing. With a kernel
+up it joins the kernel's notification server, so a write lands in the
+stores and the kernel and web hear it. With none up nobody listens: it
+binds the same files publishing nothing, and starts no server. A plane
+run asked for through it is started by the live kernel, or left pending
+for the next kernel to start.
 """
 
 from __future__ import annotations
@@ -23,8 +24,9 @@ from nuspace.errors import Missing, Refused
 from nuspace.web.planes import ensure as web_planes
 
 from ..blocks.meta import data_dir, read_meta, resolve_root
+from ..blocks.notifier import Heard
 from . import binding
-from ._common import bound, opening, path_set
+from ._common import ROOTS, opening, path_set
 from .layout import ASSEMBLY, KERNEL_LOCK, WEB_LOCK
 
 
@@ -80,7 +82,8 @@ def open(
 
     Ops run as in a cell: brackets, ``nuspace.atomic``, named targets, no
     ``Here``. Takes no lock: beside a live kernel and web, or with nothing
-    up. Joins the notifier that answers, or owns one until ``body`` ends.
+    up. Publishes to the kernel's notification server when it answers as
+    this opens, else publishes nothing (nobody listens).
 
     Args:
         path: The space's root. It must be a local space already.
@@ -94,7 +97,12 @@ def open(
     root, _ = resolve_root(path)
     data = str(data_dir(root))
     blobs = binding.blobs(data) if blobs is None else blobs
-    return nu.With(nu.Provide(Found, {"root": root}), *bound(data, blobs), body=body)
+    stores = Heard(
+        binding.valkey_dir(data),
+        served=binding.stores(data, ROOTS),
+        unserved=binding.quiet(data, ROOTS),
+    )
+    return nu.With(nu.Provide(Found, {"root": root}), stores, blobs, body=body)
 
 
 def init(path: str | os.PathLike[str]) -> nu.With:
@@ -103,7 +111,8 @@ def init(path: str | os.PathLike[str]) -> nu.With:
     The data dir, ``meta.json``, every store and its containers (the
     kernel's live indexes too), the system planes and web's planes, made
     where missing; ``Space.info.path`` written. No reap, no workers, no
-    driver, so Conn is left as it is. A space already there keeps what it
+    driver, no notification server (no driver runs to hear it), so Conn is
+    left as it is. A space already there keeps what it
     holds. Both driver locks are held while it works.
 
     Raises:
@@ -116,6 +125,7 @@ def init(path: str | os.PathLike[str]) -> nu.With:
         throwaway=False,
         locks=[(KERNEL_LOCK, "kernel"), (WEB_LOCK, "web")],
         log=None,
+        notifier=None,
         blobs=None,
         body=path_set(root) >> system.ensure() >> web_planes(),
     )

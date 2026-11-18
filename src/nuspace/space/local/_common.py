@@ -9,13 +9,17 @@ way, each step inside the brackets of the ones before::
     the data dir          made, with local's dirs
     locks                 one per driver the entry point runs, or Refused
     log                   this process's logging at the driver's file
-    the notifier          joined, or started and owned (:mod:`..blocks.notifier`)
-    Space, State, Web, Conn   bound (:mod:`.binding`)
+    the notifier          the kernel's: started and owned by the kernel,
+                          joined by web (refused with no kernel up), none
+                          for init (nobody to hear it)
+    Space, State, Web, Conn   bound (:mod:`.binding`), publishing when a
+                          notifier is there, quiet when not
     blobs                 when the entry point binds them
     inits                 the Space store's format, each store's containers,
                           a commit per store, the kernel's live indexes too
 
-``open`` shares only the bindings: it marks, locks, inits nothing.
+``open`` shares only the bindings: it marks, locks, inits nothing, and
+publishes only when a kernel's server answers.
 """
 
 from __future__ import annotations
@@ -46,11 +50,14 @@ if TYPE_CHECKING:
     from nuspace.shapes import Store
 
 
-__all__ = ["STORES", "bound", "inits", "opening", "path_set"]
+__all__ = ["ROOTS", "STORES", "inits", "opening", "path_set"]
 
 
 #: Every store local binds: the core ones, then web's.
 STORES = (*CORE, WEB_STORE, CONN_STORE)
+
+#: Their roots, as the bindings take them.
+ROOTS = tuple(s.root for s in STORES)
 
 
 def _each(stores: Iterable[Store]) -> nu.Nu:
@@ -71,20 +78,13 @@ def path_set(root: str) -> nu.Nu:
     return nustd.kv.atomic(Space.info.path.set(root))
 
 
-def bound(data: str, blobs: Provide | None) -> list[nu.Nu]:
-    """The notifier, every store bound to it, and ``blobs`` when given: what every process binds."""
-    held: list[nu.Nu] = [binding.notifier(data), binding.stores(data, [s.root for s in STORES])]
-    if blobs is not None:
-        held.append(blobs)
-    return held
-
-
 def opening(
     root: str,
     *,
     throwaway: bool,
     locks: Sequence[tuple[str, str]],
     log: tuple[str, str] | None,
+    notifier: nu.Nu | None,
     blobs: Provide | None,
     body: nu.Nu,
 ) -> nu.With:
@@ -95,6 +95,8 @@ def opening(
         throwaway: Make the root, and remove it with everything in it at the end.
         locks: ``(file, what)`` per driver, the file relative to the data dir.
         log: ``(file, what)``, this process's log while it runs, or None.
+        notifier: The notification server's bracket, served or joined: the
+            stores publish to it. None binds them quiet.
         blobs: The blob store's spec, or None to bind none.
         body: What runs inside, after the inits.
     """
@@ -109,5 +111,10 @@ def opening(
     outer += [nu.Provide(Lock, {"path": str(Path(data) / f), "what": w}) for f, w in locks]
     if log is not None:
         outer.append(logs(Path(data) / log[0], log[1]))
-    outer += bound(data, blobs)
+    if notifier is None:
+        outer.append(binding.quiet(data, ROOTS))
+    else:
+        outer += [notifier, binding.stores(data, ROOTS)]
+    if blobs is not None:
+        outer.append(blobs)
     return nu.With(*outer, body=inits() >> body)
