@@ -55,7 +55,8 @@ from nuspace.space.blocks.meta import (
     stamp,
     write_meta,
 )
-from nuspace.space.blocks.notifier import Joined, served
+from nuspace.space.blocks.notifier import answers, served
+from nuspace.space.blocks.required import Required
 from nuspace.space.blocks.resources import DataDir, Throwaway
 from nuspace.space.local.disk import Marked
 from nuspace.space.local.layout import (
@@ -1173,19 +1174,34 @@ s.cleanup()
 """
 
 
-def test_a_join_refuses_with_no_server_and_waits_for_one_coming_up(tmp_path):
+def test_a_requirement_refuses_after_its_grace_and_waits_for_one_coming_up(tmp_path):
     path = tmp_path / "valkey"
+    up = functools.partial(answers, str(path))
+    started = time.monotonic()
     with pytest.raises(Refused, match="start one"):
-        Joined(str(path), "start one", wait=5.0, waiting=lambda: False).setup(None)
+        Required(up, "start one", wait=5.0, waiting=lambda: False, grace=0.3).setup(None)
+    # Nothing on its way: refused once the grace is out, not at the end of the wait.
+    assert 0.3 <= time.monotonic() - started < 3
     server = nustd.valkey.ValkeyServer(data_dir=path)
     starting = threading.Timer(0.5, server.setup, args=(None,))
     starting.start()
     try:
-        Joined(str(path), "start one", wait=10.0).setup(None)
+        Required(up, "start one", wait=10.0).setup(None)
         assert _answers(path)
     finally:
         starting.join()
         server.cleanup()
+
+
+async def test_a_requirement_waits_on_the_loop_while_it_is_on_its_way():
+    flag = {"up": False, "coming": True}
+    loop = asyncio.get_running_loop()
+    loop.call_later(0.3, flag.update, {"up": True})
+    req = Required(lambda: flag["up"], "start it", wait=5.0, waiting=lambda: flag["coming"])
+    await req.asetup(None)
+    flag.update(up=False, coming=False)
+    with pytest.raises(Refused, match="start it"):
+        await req.asetup(None)
 
 
 def test_served_is_nustds_own_server(tmp_path):

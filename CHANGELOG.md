@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Entry points check what they need running through one requirement block, refusing otherwise
 - Init flags a space once set up; kernel, web and open refuse one without
 - Core, kernel and web each set up a space through their own init
 - The space runtime's modules and helpers drop leading underscores, named for what they hold

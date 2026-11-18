@@ -2,7 +2,8 @@
 
 - :mod:`.meta`: the data dir, ``meta.json``, how a space is found, root resolving.
 - :mod:`.lock`: a POSIX record lock named for what it guards.
-- :mod:`.notifier`: the notification server: owned by one process, joined by the rest.
+- :mod:`.notifier`: the notification server: owned by one process, published to by the rest.
+- :mod:`.required`: what an entry point needs running, checked at its start, or a refusal.
 - :mod:`.logs`: this process's logging pointed at a file.
 - :mod:`.navigators`: a store's root bound to kv navigators, any backend.
 - :mod:`.workers`: what every worker comes up holding, and the pool.
@@ -27,7 +28,8 @@ from .meta import (
     stamp,
     write_meta,
 )
-from .notifier import Heard, Joined, answers, served
+from .notifier import Heard, answers, served
+from .required import Required
 from .resources import DataDir, Throwaway, Warmed
 from .workers import worker_context, worker_pool
 
@@ -39,11 +41,11 @@ __all__ = [
     "BrowserRef",
     "DataDir",
     "Heard",
-    "Joined",
     "Lock",
     "LockWarning",
     "Logged",
     "Meta",
+    "Required",
     "Throwaway",
     "Warmed",
     "answers",

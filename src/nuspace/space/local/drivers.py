@@ -39,7 +39,7 @@ re-import the main module.
 
 from __future__ import annotations
 
-import time
+import functools
 import warnings
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -54,7 +54,8 @@ from nuspace.web.env import SESSION_ENV
 from ..blocks.browse import Browse
 from ..blocks.lock import held
 from ..blocks.meta import data_dir, resolve_root
-from ..blocks.notifier import Joined
+from ..blocks.notifier import answers
+from ..blocks.required import Required
 from ..blocks.workers import DEFAULT_NAME, DEFAULT_SPARES, worker_pool
 from . import binding
 from .disk import Wiped
@@ -156,38 +157,24 @@ def kernel(
 #: Seconds web waits for a kernel whose lock is held but whose server is not up yet.
 KERNEL_WAIT = 30.0
 
-#: Seconds web waits at first for a kernel starting beside it, its lock not taken yet.
+#: Seconds web looks again at first for a kernel starting beside it, its lock not taken yet.
 KERNEL_GRACE = 2.0
 
 
-class Coming:
-    """Whether a kernel is coming up: its lock held, or still inside the first grace seconds."""
-
-    def __init__(self, lock: str, grace: float = KERNEL_GRACE) -> None:
-        self.lock = lock
-        self.grace = grace
-        self._since: float | None = None
-
-    def __call__(self) -> bool:
-        now = time.monotonic()
-        if self._since is None:
-            self._since = now
-        return held(self.lock) or now - self._since < self.grace
-
-
 def kernels(data: str) -> nu.Provide:
-    """The kernel's notification server joined, or web refused: no kernel, nothing to serve."""
+    """The kernel's notification server answering, or web refused: no kernel, nothing to serve."""
     refusal = (
         "the kernel of this space is not running: start it first"
         " (nuspace run, or nuspace run --headless beside this)"
     )
     return nu.Provide(
-        Joined,
+        Required,
         {
-            "path": binding.valkey_dir(data),
+            "check": functools.partial(answers, binding.valkey_dir(data)),
             "refusal": refusal,
             "wait": KERNEL_WAIT,
-            "waiting": Coming(str(Path(data) / KERNEL_LOCK)),
+            "waiting": functools.partial(held, str(Path(data) / KERNEL_LOCK)),
+            "grace": KERNEL_GRACE,
         },
     )
 
