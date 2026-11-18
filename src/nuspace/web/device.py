@@ -38,8 +38,11 @@ Beside the socket the server answers plain routes:
   queued as ``space_loaded`` (see :mod:`nuspace._telemetry`), so the browser
   never talks to PostHog and follows the same opt out.
 - ``GET|HEAD /blobs/<id>`` and ``POST /blobs``: the blob store
-  (``nuspace.Blobs``) the assembly binds around the driver, served for
-  leaves and downloads, taking uploads, same origin.
+  (``nuspace.Blobs``) served for leaves and downloads, taking uploads,
+  same origin. The routes read a backend of their own, built from the same
+  spec the assembly binds around the driver and held open beside the
+  server (nustd's ``serve_blobs``), so both reach one store. The routes
+  run outside any tree, so they cannot read the bound one.
 - ``POST /_nu/upload/{sid}``: the upload intake, where a tab posts a picked
   file's bytes when a cell asks for them. They land in the upload area
   (a dir the assembly picks, and wipes when it starts web), and a cell's
@@ -56,14 +59,11 @@ from starlette.routing import Route
 import nu
 import nuspace
 from nuspace import _telemetry
-from nuspace.errors import Missing
 from nuspace.ops.brackets import atomic
-from nuspace.shapes import Blobs
 from nuspace.shapes import blobs as blob_mount
 from nuspace.specs import space_registry
 from nuspace.utils import keys_of
-from nustd.blob.fabric import BlobFabric
-from nustd.blob.http.serving import routes
+from nustd.blob.http.serving import serve_blobs
 from nustd.ui.core import WsSession
 from nustd.ui.uploads import uploads
 from nustd.ws_server import SID_ATTR, listen, run_once, session_for, sessions_fold
@@ -83,9 +83,8 @@ if TYPE_CHECKING:
 
     from starlette.requests import Request
 
-    from nu.lang.runtime import Context
+    from nu.context.fabric import Provide
     from nuspace.specs import Registry
-    from nustd.blob import BlobBackend
     from nustd.ui.core import Ref
 
 
@@ -94,7 +93,6 @@ __all__ = [
     "OPEN_WAIT",
     "ROUTES",
     "WEB_WAIT",
-    "HeldBlobs",
     "connection",
     "pane_arm",
     "server",
@@ -235,59 +233,6 @@ async def space_loaded(request: Request) -> Response:
 ROUTES = (Route("/api/telemetry/space-loaded", space_loaded, methods=["POST"]),)
 
 
-class _Blobs:
-    """The routes' view of the ``Blobs`` backend, filled at setup from the one the context binds.
-
-    The routes are built with the server, before any bracket runs, so they
-    hold this and it hands each call to the backend :class:`HeldBlobs`
-    found. One backend for the routes and every run: the assembly's.
-    """
-
-    __slots__ = ("backend",)
-
-    def __init__(self) -> None:
-        self.backend: BlobBackend | None = None
-
-    def __getattr__(self, name: str) -> object:
-        if self.backend is None:
-            msg = "the Blobs store is not bound: the assembly binds it around web's driver"
-            raise RuntimeError(msg)
-        return getattr(self.backend, name)
-
-
-class HeldBlobs:
-    """Bracket: the ``Blobs`` backend in context, handed to the routes' view at setup.
-
-    Args:
-        view: The routes' view.
-
-    Raises:
-        Missing: No ``Blobs`` store is bound around web.
-    """
-
-    def __init__(self, view: _Blobs) -> None:
-        self.view = view
-
-    def setup(self, ctx: Context) -> None:
-        """Find the bound backend; it is the assembly's to open and close."""
-        if not ctx.fabrics.has(BlobFabric, Blobs.name):
-            msg = "web serves the Blobs store, and none is bound around its driver"
-            raise Missing(msg)
-        self.view.backend = ctx.fabrics.get(BlobFabric, Blobs.name).backend
-
-    def cleanup(self) -> None:
-        """Let go of the backend."""
-        self.view.backend = None
-
-    async def asetup(self, ctx: Context) -> None:
-        """Async shim: a lookup."""
-        self.setup(ctx)
-
-    async def acleanup(self) -> None:
-        """Async shim."""
-        self.cleanup()
-
-
 def server(
     *,
     registry: Registry,
@@ -298,11 +243,13 @@ def server(
     log_level: str,
     session_address: str,
     upload_root: str,
+    blobs: Provide,
 ) -> nu.With:
     """The server: one arm per tab, the tab sessions, uploads and blobs. Never returns.
 
-    Needs the stores bound and the ``Blobs`` store in context. Every
-    concrete place it serves at is given: what web's driver was handed.
+    Needs the stores bound and the ``Blobs`` store in context, for the
+    runs. Every concrete place it serves at is given: what web's driver
+    was handed.
 
     Args:
         registry: What the space registered: its PlaneSpecs, what the
@@ -315,12 +262,14 @@ def server(
         log_level: How much the server says.
         session_address: ``host:port`` where workers reach the tab sessions.
         upload_root: The upload area's dir, absolute.
+        blobs: The ``Blobs`` store's spec, the one the assembly binds
+            around the driver: the routes serve the same store.
     """
     sid = nu.Str(nu.Attr(SID_ATTR))
-    view = _Blobs()
     area, upload_routes = uploads(upload_root)
+    held, blob_routes = serve_blobs({blob_mount: blobs})
     return nu.With(
-        nu.Provide(HeldBlobs, {"view": view}),
+        *held,
         listen(
             session_cls=WsSession,
             static=static,
@@ -329,7 +278,7 @@ def server(
             log_level=log_level,
             banner=BANNER,
             open_browser=open_browser,
-            routes=(*ROUTES, *upload_routes, *routes(blob_mount, view)),
+            routes=(*ROUTES, *upload_routes, *blob_routes),
         ),
         # After the server: the area follows its connections.
         area,

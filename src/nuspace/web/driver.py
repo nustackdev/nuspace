@@ -36,6 +36,7 @@ from .stores import init_conn, init_web, reset_conn
 
 
 if TYPE_CHECKING:
+    from nu.context.fabric import Provide
     from nuspace.specs import Registry
 
 
@@ -66,6 +67,7 @@ def driver(
     log_level: str,
     session_address: str,
     upload_root: str,
+    blobs: Provide,
 ) -> nu.Nu:
     """Web, its whole life: Conn cleared, nav's old runs stopped, then server and nav.
 
@@ -86,6 +88,8 @@ def driver(
             the assembly's choice. The kernel's session env is handed the same.
         upload_root: The upload area's dir, absolute, the assembly's choice.
             Wiping it before start is the assembly's too.
+        blobs: The ``Blobs`` store's spec, the same one the assembly binds
+            around the driver: the server's blob routes serve that store.
     """
     # Here, not at the top: importing nuspace.web must not load the server.
     from .device import server
@@ -99,6 +103,7 @@ def driver(
         log_level=log_level,
         session_address=session_address,
         upload_root=upload_root,
+        blobs=blobs,
     )
     return (
         _cleared()

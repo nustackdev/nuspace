@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Web serves blobs from the same store spec the assembly binds around it
 - Kernel and web always take a space's path; the example initializes its space first
 - Run initializes a new space first; infra, kernel and web each run alone too
 - Kernel requires infra, web requires a kernel; run holds infra through kernel crashes
