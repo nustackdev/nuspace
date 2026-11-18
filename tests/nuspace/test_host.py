@@ -168,18 +168,18 @@ def test_discover_loads_extensions_and_factories_and_skips_the_broken(monkeypatc
     assert any("'plain' is installed twice" in s for s in said)
 
 
-def test_the_host_env_wins_over_an_installed_one(monkeypatch):
+def test_the_assembly_env_wins_over_an_installed_one(monkeypatch):
     installed = Extension(
         (_plane("plain", "Installed"), _plane("jobs")), (), (), {"db": _env("installed")}
     )
     _points(monkeypatch, [_Point("installed", lambda: installed)])
     with pytest.warns(RegistryWarning) as caught:
-        reg = space_registry(envs={"db": _env("host")})
+        reg = space_registry(envs={"db": _env("mine")})
     assert {str(w.message) for w in caught} == {
-        "Env 'db' from installed ignored: open_space registered it first",
+        "Env 'db' from installed ignored: the assembly registered it first",
     }
     assert list(reg.planes) == ["installed.plain", "installed.jobs"]
-    assert reg.envs["db"]().label == "host"
+    assert reg.envs["db"]().label == "mine"
 
 
 def test_installed_planes_are_named_after_their_package(monkeypatch):

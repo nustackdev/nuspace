@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Registry warnings name the assembly as the source of a space's own envs
 - Each driver gets its own lock and log; processes share one notifier safely
 - Kernel and web code now name no file, store backend, port or process
 - Web runs as one driver handed its addresses; a session cell without web fails plainly

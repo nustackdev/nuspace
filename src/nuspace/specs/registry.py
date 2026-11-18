@@ -5,7 +5,7 @@ An :class:`Extension` is a bundle of specs, one tuple per extension point
 :class:`~.specs.ContentSpec`), and env factories. A package ships one
 through the ``nuspace.extensions`` entry point group, and that is the only
 way anything registers: what registers is what installed packages'
-extensions add. A host picks which packages a space takes
+extensions add. An assembly picks which packages a space takes
 (:func:`space_registry`), never adds specs of its own; its own env
 factories are the one thing it passes, being callables, not specs.
 
@@ -17,7 +17,7 @@ takes, and what the store keys a kind's items by; a cell keeps the short
 name as its own. Two packages may share a short name without a clash.
 
 The installed extensions are browsed the same way in any process, the
-host's or a worker's: loaded from the entry points once, then cached. So a
+kernel's, web's or a worker's: loaded from the entry points once, then cached. So a
 name alone is enough to find what it names, with no registry object handed
 over:
 
@@ -31,7 +31,7 @@ over:
   under, for code holding the package's own spec rather than the registry's.
 
 Names are unique per kind. On a clash the first discovered one wins, a
-host's env over an installed one, and every entry dropped is reported as a
+the assembly's env over an installed one, and every entry dropped is reported as a
 :class:`RegistryWarning`.
 """
 
@@ -76,8 +76,8 @@ __all__ = [
 #: The entry point group extensions register under.
 GROUP = "nuspace.extensions"
 
-#: Where a host's own env factories come from, for warnings.
-HOST = "open_space"
+#: Where the assembly's own env factories come from, as warnings name it.
+OWN = "the assembly"
 
 
 class RegistryWarning(UserWarning):
@@ -231,16 +231,16 @@ class Registry:
 
         Args:
             extensions: Package to its extension, as :func:`discover` gives them.
-            envs: The host's own env factories, ahead of every package's.
+            envs: The assembly's own env factories, ahead of every package's.
         """
         exts = list(extensions.items())
-        host = ((n, HOST, f) for n, f in (envs or {}).items())
+        own = ((n, OWN, f) for n, f in (envs or {}).items())
         return cls(
             planes=_merge("plane", ((p.name, pkg, p) for pkg, e in exts for p in e.planes)),
             cells=_merge("cell", ((s.name, pkg, s) for pkg, e in exts for s in e.cells)),
             contents=_contents(exts),
             envs=_merge(
-                "env", [*host, *((n, pkg, f) for pkg, e in exts for n, f in e.envs.items())]
+                "env", [*own, *((n, pkg, f) for pkg, e in exts for n, f in e.envs.items())]
             ),
         )
 
@@ -250,13 +250,13 @@ def space_registry(
     extensions: Sequence[str] | None = None,
     envs: Mapping[str, EnvFactory] | None = None,
 ) -> Registry:
-    """What a space registers: the installed packages' extensions, and the host's env factories.
+    """What a space registers: the installed packages' extensions, and the assembly's env factories.
 
     Args:
         extensions: The packages to take, by entry point name, in any order:
             their precedence is the entry points'. None takes every
             installed one, ``()`` none.
-        envs: Env factories of the host's own, ahead of every package's.
+        envs: Env factories of the assembly's own, ahead of every package's.
 
     Raises:
         LookupError: ``extensions`` names a package not installed.
