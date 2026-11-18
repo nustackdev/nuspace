@@ -5,6 +5,8 @@ running it does the work.
 
 - :func:`run`: the kernel and web as two processes, watched over
   (:mod:`.supervise`). What ``nuspace run`` does.
+- :func:`infra`: what the space runs on, the notification server, in this
+  process, under its own lock.
 - :func:`kernel`, :func:`web`: one driver in this process, under its own lock.
 - :func:`open`: the stores bound around a body of ops, no driver, no lock.
 - :func:`init`: a space made and every component's init run, nothing run
@@ -15,9 +17,9 @@ Where everything lives on disk is :mod:`.layout`, how the stores are bound
 """
 
 from .access import open
-from .drivers import kernel, web
+from .drivers import infra, kernel, web
 from .opening import init
 from .supervise import run
 
 
-__all__ = ["init", "kernel", "open", "run", "web"]
+__all__ = ["infra", "init", "kernel", "open", "run", "web"]

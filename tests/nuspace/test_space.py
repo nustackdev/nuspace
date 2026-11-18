@@ -61,6 +61,8 @@ from nuspace.space.blocks.resources import DataDir, Throwaway
 from nuspace.space.local.disk import Marked
 from nuspace.space.local.layout import (
     DIRS,
+    INFRA_LOCK,
+    INFRA_LOG,
     KERNEL_LOCK,
     KERNEL_LOG,
     VALKEY_DIR,
@@ -671,6 +673,7 @@ async def test_a_clean_close_ends_what_is_live_so_the_reopen_reaps_nothing(tmp_p
 def test_every_entry_point_compiles_and_validates(tmp_path):
     web = local.web(tmp_path, extensions=["testing"], open_browser=False, static=None, port=0)
     for term in (
+        local.infra(tmp_path),
         local.kernel(tmp_path, extensions=["testing"]),
         web,
         local.open(tmp_path, body=nu.Noop()),
@@ -982,13 +985,14 @@ async def _not_initialized(root: Path, how: str) -> None:
 
 
 @pytest.mark.parametrize("how", ["flag false", "flag missing", "made before"])
-async def test_kernel_web_and_open_refuse_a_space_not_initialized(tmp_path, how):
+async def test_infra_kernel_web_and_open_refuse_a_space_not_initialized(tmp_path, how):
     root = tmp_path / "space"
     await _not_initialized(root, how)
     meta = data_dir(root) / META_FILE
     said = meta.read_text() if meta.exists() else None
     refusal = f"the space at {root} is not initialized: run nuspace init, or local.init"
     terms = {
+        "infra": local.infra(root),
         "kernel": local.kernel(root, spares=0, extensions=()),
         "web": local.web(root, port=_free_port(), static=None, extensions=()),
         "open": local.open(root, body=nu.Noop()),
@@ -999,6 +1003,7 @@ async def test_kernel_web_and_open_refuse_a_space_not_initialized(tmp_path, how)
         assert str(refused.value) == refusal, what
     # Refused before anything is written: no meta made or changed, no driver's log.
     assert (meta.read_text() if meta.exists() else None) == said
+    assert not (data_dir(root) / INFRA_LOG).exists()
     assert not (data_dir(root) / KERNEL_LOG).exists()
     assert not (data_dir(root) / WEB_LOG).exists()
     await nu.arun(local.init(root))
@@ -1035,6 +1040,73 @@ async def test_open_after_a_kernel_alone_lands_a_desk_op(tmp_path):
         local.open(root, body=nuspace.atomic(Web.desks[desk].entries.extract()))
     )
     assert [i["original"] for i in items.values()] == [{"plane": plane, "params": {}}]
+
+
+# --- local.infra -----------------------------------------------------------------------
+
+
+#: ``local.infra`` on argv[1] until killed.
+_INFRA = """
+import sys
+import nu
+from nuspace.space import local
+nu.eval_in_loop(nu.compile(local.infra(sys.argv[1])), nu.Context())
+"""
+
+
+def _valkeys(valkey: Path) -> list[str]:
+    """The processes serving the notifier of the dir ``valkey``: its server and its keeper."""
+    out = subprocess.run(["ps", "-eo", "pid,stat,args"], capture_output=True, text=True).stdout  # noqa: S607
+    marks = (str(valkey), str(socket_path_for(valkey)))
+    rows = (line.split(None, 2) for line in out.splitlines()[1:])
+    return [r[2] for r in rows if len(r) == 3 and "Z" not in r[1] and any(m in r[2] for m in marks)]
+
+
+def test_infra_owns_the_notifier_and_it_dies_with_infra(tmp_path):
+    root = tmp_path / "space"
+    _make(root)
+    valkey = data_dir(root) / VALKEY_DIR
+    env = dict(os.environ, NUSPACE_TELEMETRY="0")
+    infra = subprocess.Popen([sys.executable, "-c", _INFRA, str(root)], env=env)  # noqa: S603
+    try:
+        deadline = time.monotonic() + 30
+        while not _answers(valkey):
+            assert infra.poll() is None, "infra exited"
+            assert time.monotonic() < deadline, "infra never served the notifier"
+            time.sleep(0.05)
+        assert lock_module.held(str(data_dir(root) / INFRA_LOCK))
+        assert (
+            f"infra up on {socket.gethostname()}, pid {infra.pid}"
+            in (data_dir(root) / INFRA_LOG).read_text()
+        )
+        assert _valkeys(valkey)
+        os.kill(infra.pid, signal.SIGKILL)
+        infra.wait()
+        deadline = time.monotonic() + 10
+        while (_answers(valkey) or _valkeys(valkey)) and time.monotonic() < deadline:
+            time.sleep(0.05)
+        assert not _answers(valkey)
+        assert _valkeys(valkey) == []
+    finally:
+        if infra.poll() is None:
+            infra.kill()
+            infra.wait()
+
+
+async def test_init_is_refused_while_infra_runs(tmp_path):
+    root = tmp_path / "space"
+    await nu.arun(local.init(root))
+    _, done, task = await _held(local.infra, root)
+    try:
+        assert _answers(data_dir(root) / VALKEY_DIR)
+        with pytest.raises(Refused, match="the infra of this space runs"):
+            await nu.arun(local.init(root))
+        with pytest.raises(Refused, match="the infra of this space runs in this process already"):
+            await nu.arun(local.infra(root))
+    finally:
+        await _close(done, task)
+    assert not _answers(data_dir(root) / VALKEY_DIR)
+    await nu.arun(local.init(root))
 
 
 # --- One of each driver ---------------------------------------------------------------

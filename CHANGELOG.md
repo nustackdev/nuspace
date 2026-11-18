@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Infra runs as its own entry point, owning the notification server while it lives
 - Entry points check what they need running through one requirement block, refusing otherwise
 - Init flags a space once set up; kernel, web and open refuse one without
 - Core, kernel and web each set up a space through their own init

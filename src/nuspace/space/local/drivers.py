@@ -52,14 +52,26 @@ from nuspace.specs import RegistryWarning, space_registry
 from nuspace.web.env import SESSION_ENV
 
 from ..blocks.browse import Browse
-from ..blocks.lock import held
+from ..blocks.lock import Lock, held
+from ..blocks.logs import logged_to
 from ..blocks.meta import data_dir, resolve_root
 from ..blocks.notifier import answers
 from ..blocks.required import Required
+from ..blocks.resources import DataDir
 from ..blocks.workers import DEFAULT_NAME, DEFAULT_SPARES, worker_pool
 from . import binding
-from .disk import Wiped
-from .layout import KERNEL_LOCK, KERNEL_LOG, SESSION_ADDR, UPLOADS_DIR, WEB_LOCK, WEB_LOG
+from .disk import Initialized, Wiped
+from .layout import (
+    DIRS,
+    INFRA_LOCK,
+    INFRA_LOG,
+    KERNEL_LOCK,
+    KERNEL_LOG,
+    SESSION_ADDR,
+    UPLOADS_DIR,
+    WEB_LOCK,
+    WEB_LOG,
+)
 from .opening import ROOTS, bracketed, fresh, path_set
 from .plane import found, plane_of
 from .session import Recorded, free_address, session_env
@@ -74,7 +86,7 @@ if TYPE_CHECKING:
     from nuspace.specs import PlaneSpec
 
 
-__all__ = ["kernel", "web"]
+__all__ = ["infra", "kernel", "web"]
 
 
 def merged_envs(registered: Mapping[str, EnvFactory], session: EnvFactory) -> dict[str, EnvFactory]:
@@ -88,6 +100,37 @@ def merged_envs(registered: Mapping[str, EnvFactory], session: EnvFactory) -> di
         )
     merged[SESSION_ENV] = session
     return merged
+
+
+def infra(path: str | os.PathLike[str] | None = None, *, body: nu.Nu | None = None) -> nu.Nu:
+    """The space's infra in this process, run until ``body`` returns, or until cancelled without one.
+
+    Infra is what the space runs on: in local, the notification server. It
+    is served with nustd's keeper watching this process, so the server
+    lives exactly as long as it: however this process ends, the server
+    goes with it. It binds no store: it has nothing of its own to write.
+    Logs to ``infra/infra.log``.
+
+    Args:
+        path: The space's root, initialized (``local.init``). None is a
+            throwaway one, made and initialized here, removed at close.
+        body: Nu run inside infra, eg the drivers. Infra stops when it returns.
+
+    Raises:
+        Refused: A space not initialized, another assembly's space, or
+            infra of this space running already.
+    """
+    root, throwaway = resolve_root(path)
+    data = str(data_dir(root))
+    served = nu.With(
+        nu.Provide(Initialized, {"root": root}),
+        nu.Provide(DataDir, {"root": root, "dirs": DIRS}),
+        nu.Provide(Lock, {"path": str(Path(data) / INFRA_LOCK), "what": "infra"}),
+        logged_to(Path(data) / INFRA_LOG, "infra"),
+        binding.served(data),
+        body=nu.Park() if body is None else body,
+    )
+    return fresh(root, throwaway, served)
 
 
 def kernel(
