@@ -20,6 +20,7 @@ import nustd.kv
 from nu.lang import ScalarQuery
 from nuspace.kernel import init_live
 from nuspace.shapes.stores import SPACE_STORE, STATE_STORE
+from nuspace.space.local.layout import STORES as PLACES
 from nuspace.web.stores import CONN_STORE, WEB_STORE
 
 
@@ -94,7 +95,8 @@ def _navigators(backend: str, root: Path) -> tuple[nu.Nu, ...]:
     """Every store's navigator on one backend: in memory, or the space's sqlite files under ``root``."""
     if backend == "sqlite":
         return tuple(
-            nustd.kv.sqlite_navigator(str(root / s.file), tags=(s.root,)) for s in STORES_OF_A_SPACE
+            nustd.kv.sqlite_navigator(str(root / PLACES[s.root].file), tags=(s.root,))
+            for s in STORES_OF_A_SPACE
         )
     return tuple(nustd.kv.memory_navigator(tags=(s.root,)) for s in STORES_OF_A_SPACE)
 

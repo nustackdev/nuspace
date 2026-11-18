@@ -4,8 +4,12 @@ A space keeps its data split by what the data is, one root shape per
 store. The root class is the store's tag: kv refs find their navigator by
 it. Each is declared as a :class:`~nuspace.shapes.store.Store` record::
 
-    Space   nuspace.space   what the space is
-    State   nuspace.state   what programs keep
+    Space   what the space is
+    State   what programs keep
+
+That is the logical split. Where each lives is an assembly's call: local
+keeps one SQLite file per store, another assembly may shard one store
+across several backends by top-level slot.
 
 A device keeps its own stores beside these (the web device:
 :mod:`nuspace.web.stores`).
@@ -50,7 +54,7 @@ def _format() -> nu.Nu:
     """
     info = Space.info
     other = info.format.exists().and_(info.format != FORMAT)
-    msg = f"space.db is of another store format; this nuspace reads format {FORMAT} only"
+    msg = f"the Space store holds another store format; this nuspace reads format {FORMAT} only"
     return (
         nu.IfDo(other, nu.Raise(msg, exc_cls=Refused))
         >> info.format.init(FORMAT)
@@ -83,7 +87,7 @@ def _root() -> nu.Nu:
 
 
 def init_space() -> nu.Nu:
-    """``space.db`` ready: format checked, every fixed container and the root plane made where missing.
+    """The Space store ready: format checked, every fixed container and the root plane made where missing.
 
     One term, one commit: the format, ``created_at``, the containers and the
     root plane land together. ``info.path`` is the assembly's, ``info.opened_at``
@@ -113,7 +117,7 @@ def init_space() -> nu.Nu:
 
 
 def init_state() -> nu.Nu:
-    """``state.db`` ready: the three scopes and the three content roots made where missing."""
+    """The State store ready: the three scopes and the three content roots made where missing."""
     return (
         State.cells.init(nu.Dict.create())
         >> State.planes.init(nu.Dict.create())
@@ -125,10 +129,10 @@ def init_state() -> nu.Nu:
 
 
 #: What the space is: info, planes, cells, indexes, execution.
-SPACE_STORE = Store(Space, "store/space.db", "nuspace.space", init_space)
+SPACE_STORE = Store(Space, init_space)
 
 #: What programs keep: state at three scopes, and content.
-STATE_STORE = Store(State, "store/state.db", "nuspace.state", init_state)
+STATE_STORE = Store(State, init_state)
 
 #: The stores every open of a space has, whatever its devices.
 CORE = (SPACE_STORE, STATE_STORE)

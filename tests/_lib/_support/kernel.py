@@ -29,16 +29,14 @@ import nu
 import nuspace
 import nustd.kv
 import nustd.mp_pool
-import nustd.valkey
 from _support.made import MADE, MADE_STORE
 from nu.lang import ScalarQuery
 from nuspace import kernel
 from nuspace.kernel.kernel import loop
 from nuspace.shapes import Space
 from nuspace.shapes.stores import CORE
-from nuspace.space.blocks.navigators import navigators as host_navigators
-from nuspace.space.blocks.notifier import VALKEY_DIR
 from nuspace.space.blocks.workers import worker_context
+from nuspace.space.local import binding
 
 
 if TYPE_CHECKING:
@@ -93,7 +91,7 @@ STORES = CORE
 
 def navigators(data: str) -> nu.With:
     """Every core store under ``data``, notified through its server, as any process opens them."""
-    return host_navigators(data, STORES)
+    return binding.stores(data, [s.root for s in STORES])
 
 
 def init_stores() -> nu.Nu:
@@ -125,8 +123,8 @@ def kernel_open(
     """
     (Path(data) / "store").mkdir(parents=True, exist_ok=True)
     held = () if blobs is None else (blobs,)
-    served = nu.With(nustd.valkey.server(Path(data) / VALKEY_DIR), navigators(data), *held)
-    init = navigators(data) if blobs is None else worker_context(data, STORES, blobs)
+    served = nu.With(binding.notifier(data), navigators(data), *held)
+    init = navigators(data) if blobs is None else worker_context(navigators(data), blobs)
     pool = nustd.mp_pool.pool(name=name, init=init, spares=spares, grace=grace)
     if driver:
         drivers = nu.With(pool, kernel.bound(**bound), body=nu.Race(kernel.driver(), body))

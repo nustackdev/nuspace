@@ -17,10 +17,10 @@ from rich.text import Text
 import nu
 from nuspace._branding import BLUE, PURPLE
 from nuspace.errors import Refused
-from nuspace.space.blocks.meta import find_space, is_space
+from nuspace.space.blocks.meta import is_space
 from nuspace.space.local import make_space
 
-from .._meta import console, path_argument, tilde
+from .._meta import console, nearest_space, path_argument, tilde
 
 
 __all__ = ["init"]
@@ -52,7 +52,7 @@ def init(path: str | None) -> None:
 
 def _warn_if_nested(root: Path) -> None:
     """Say so when ``root`` sits inside another space. The home space, everyone's fallback, does not count."""
-    outer = find_space(root.parent) if root != root.parent else None
+    outer = nearest_space(root.parent) if root != root.parent else None
     if outer is not None and outer != Path.home().resolve():
         console.print(
             Text.assemble(

@@ -32,10 +32,10 @@ from nuspace.space import local
 from nuspace.space.blocks.meta import data_dir
 from nuspace.space.blocks.resources import Fresh
 from nuspace.space.blocks.workers import worker_context
-from nuspace.space.local import blobs as host_blobs
+from nuspace.space.local import binding
+from nuspace.space.local.layout import BLOBS_DIR, UPLOADS_DIR
 from nuspace.web.env import SessionWrap
 from nuspace.web.session import SessionPipe, piped_session
-from nuspace.web.stores import UPLOADS_DIR
 from nustd.blob.backends import FilesBackend
 from nustd.ui.core import WsSession
 from nustd.ui.uploads import UploadView, tab_dir
@@ -59,11 +59,9 @@ def _backend(spec: nu.Provide) -> type:
 
 
 def test_the_default_store_is_files_in_the_data_dir(tmp_path):
-    spec = host_blobs.default_spec(tmp_path / ".nuspace")
+    spec = binding.blobs(tmp_path / ".nuspace")
     assert _backend(spec) is FilesBackend
-    assert str(nustd.blob.backend_of(spec).root) == str(
-        tmp_path / ".nuspace" / host_blobs.BLOBS_DIR
-    )
+    assert str(nustd.blob.backend_of(spec).root) == str(tmp_path / ".nuspace" / BLOBS_DIR)
 
 
 def test_the_mount_serves_under_blobs():
@@ -74,7 +72,8 @@ def test_the_mount_serves_under_blobs():
 
 def test_the_worker_context_pickles_with_the_store(tmp_path):
     spec = nustd.blob.lmdb(nuspace.Blobs, tmp_path / "blobs")
-    pickle.loads(pickle.dumps(worker_context(str(tmp_path), CORE, spec)))  # noqa: S301 -- our own term
+    bindings = binding.stores(str(tmp_path), [s.root for s in CORE])
+    pickle.loads(pickle.dumps(worker_context(bindings, spec)))  # noqa: S301 -- our own term
 
 
 # --- a cell puts, the host reads --------------------------------------------------------
@@ -96,7 +95,7 @@ PUTS = prog(
 @pytest.mark.parametrize("backend", ["async", "mp"])
 async def test_a_cells_put_lands_in_the_store_the_host_reads(tmp_path, backend):
     data = tmp_path / ".nuspace"
-    spec = nustd.blob.lmdb(nuspace.Blobs, data / host_blobs.BLOBS_DIR)
+    spec = nustd.blob.lmdb(nuspace.Blobs, data / BLOBS_DIR)
     k = await opened(data=str(data), blobs=spec)
     try:
         p, (c,) = await k.plane(PUTS, backend=backend)
@@ -264,7 +263,7 @@ async def test_a_served_space_serves_blobs_and_takes_uploads(tmp_path):
         await asyncio.wait_for(task, 15)
     # The area goes with the server; the store stays.
     assert not (data_dir(root) / UPLOADS_DIR).exists()
-    assert (data_dir(root) / host_blobs.BLOBS_DIR).is_dir()
+    assert (data_dir(root) / BLOBS_DIR).is_dir()
 
 
 def test_the_snap_cell_builds():

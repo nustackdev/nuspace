@@ -1,53 +1,42 @@
-"""Navigators: a space's stores bound to kv navigators, the same way in every process.
+"""Navigators: a store's root shape bound to kv navigators, whatever the backend.
 
-Every process opens a store the same way, through :func:`navigators`: the
-SQLite file under the space's data dir, notified through the space's one
-Valkey server (:mod:`.notifier`) on the store's own channel. The host,
-every worker and a script all name the channels explicitly, from the
-store records, so no store ever falls back to a default channel.
+kv refs find their navigator by the root shape they hang from, so binding
+a store is binding its root. The backend is a parameter: the caller hands
+a stack, any ``nustd.kv`` navigator preset with its own arguments filled
+in, and this block puts it under the root's tag::
+
+    stack = functools.partial(nustd.kv.sqlite_navigator_redis, path, redis_url=url)
+    navigators.navigator(Space, stack)
+
+Each process binds the same stores the same way: an assembly builds the
+term once and hands it to its workers too.
 """
 
 from __future__ import annotations
 
-from pathlib import Path
-from typing import TYPE_CHECKING
-
-import nu
-import nustd.kv
-import nustd.valkey
-
-from .notifier import VALKEY_DIR
+from typing import TYPE_CHECKING, Protocol
 
 
 if TYPE_CHECKING:
-    import os
-    from collections.abc import Iterable
-
-    from nuspace.shapes import Store
+    import nu
 
 
-__all__ = ["navigators"]
+__all__ = ["Stack", "navigator"]
 
 
-def navigators(data: str | os.PathLike[str], stores: Iterable[Store]) -> nu.With:
-    """``stores`` as any process opens them: each its SQLite file, tagged by its root, on its channel.
+class Stack(Protocol):
+    """A kv stack: a ``nustd.kv`` navigator preset with all but its tags given."""
 
-    The channel is the store's own (:attr:`Store.channel`), passed by name,
-    so two stores never wake each other's subscribers, even on equal keys.
-    Needs the server of :func:`~.notifier.notifier` up: it is reached at its
-    socket, derived from ``data``, so a worker builds the same address on
-    its own.
+    def __call__(self, *, tags: tuple[object, ...]) -> nu.With:
+        """The preset's bracket, every binding it makes under ``tags``."""
+        ...
+
+
+def navigator(root: type[nu.Shape], stack: Stack) -> nu.With:
+    """``root`` bound to one kv stack: every ref under it reads and writes there.
 
     Args:
-        data: The space's data dir, absolute: workers get it pickled.
-        stores: The stores to open, eg :data:`~nuspace.shapes.stores.CORE`.
+        root: The store's root shape, the tag its refs resolve under.
+        stack: The backend, eg ``partial(nustd.kv.sqlite_navigator, path)``.
     """
-    url = nustd.valkey.url_for(Path(data) / VALKEY_DIR)
-    return nu.With(
-        *(
-            nustd.kv.sqlite_navigator_redis(
-                str(Path(data) / s.file), tags=(s.root,), redis_url=url, channel_prefix=s.channel
-            )
-            for s in stores
-        )
-    )
+    return stack(tags=(root,))

@@ -1,14 +1,13 @@
-"""The web device's stores, beside the core ones in the space's data dir.
+"""The web device's stores: their roots and inits, and Conn's reset.
 
-Files, roots and channels::
+    Web    persistent: web planes, recents, desks, roles
+    Conn   per web start: browser tabs, cleared by one commit when web starts
 
-    devices/web/web_state.db   Web    nuspace.web    persistent
-    devices/web/conn.db        Conn   nuspace.conn   deleted and made fresh at every open
-
-Opened at every open, served or headless (the web device's driver runs
-only when served), so a web row a program writes always lands. Their init
-terms are bare, as the core ones are (:mod:`nuspace.shapes.stores`): the
-caller brackets each store on its own.
+Where each lives (a file, a channel) is an assembly's call
+(``nuspace.space.local.layout``). Bound at every open, served or headless
+(the web device's driver runs only when served), so a web row a program
+writes always lands. Their init terms are bare, as the core ones are
+(:mod:`nuspace.shapes.stores`): the caller brackets each store on its own.
 """
 
 from __future__ import annotations
@@ -19,11 +18,11 @@ from nuspace.shapes import Store
 from .shapes import Conn, Web
 
 
-__all__ = ["CONN_STORE", "WEB_STORE", "init_conn", "init_web"]
+__all__ = ["CONN_STORE", "WEB_STORE", "init_conn", "init_web", "reset_conn"]
 
 
 def init_web() -> nu.Nu:
-    """``web_state.db`` ready: web planes, recents, desks and roles made where missing."""
+    """The Web store ready: web planes, recents, desks and roles made where missing."""
     return (
         Web.planes.init(nu.Dict.create())
         >> Web.recents.init(nu.List.create())
@@ -33,15 +32,21 @@ def init_web() -> nu.Nu:
 
 
 def init_conn() -> nu.Nu:
-    """``conn.db`` ready: the connections dict made where missing."""
+    """The Conn store ready: the connections dict made where missing."""
     return Conn.connections.init(nu.Dict.create())
 
 
+def reset_conn() -> nu.Nu:
+    """Conn emptied: every tab of a web that is gone dropped. Bare, one commit when bracketed.
+
+    No tab outlives the web serving it, so web clears Conn as it starts.
+    A commit on the store, never a deleted file: a worker may hold it open.
+    """
+    return Conn.connections.set(nu.Dict.create())
+
+
 #: Web planes, recents, desks, roles.
-WEB_STORE = Store(Web, "devices/web/web_state.db", "nuspace.web", init_web)
+WEB_STORE = Store(Web, init_web)
 
 #: Browser tabs: their panes and sidebar folds.
-CONN_STORE = Store(Conn, "devices/web/conn.db", "nuspace.conn", init_conn, fresh=True)
-
-#: The upload area inside the data dir: files tabs posted, wiped at every open.
-UPLOADS_DIR = "devices/web/uploads"
+CONN_STORE = Store(Conn, init_conn)

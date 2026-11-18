@@ -1,79 +1,127 @@
-"""What every assembly shares about a space on disk: the data dir, how a space is found, its root.
+"""What every assembly shares about a space on disk: the data dir, ``meta.json``, how a space is found, its root.
 
 A space is a directory, any one, its data kept in ``.nuspace/`` the way a
-repository keeps ``.git/``::
+repository keeps ``.git/``. One file in it is common to every assembly::
 
     <space root>/
       .nuspace/
-        host.lock                  the lock of the open holding the space
-        store/space.db             Space
-        store/state.db             State
-        store/blobs/               Blobs, the blob store (LMDB, or files on a network disk)
-        devices/web/web_state.db   Web, with the web device
-        devices/web/conn.db        Conn, made fresh at every open
-        devices/web/uploads/       files tabs posted, wiped at every open
-        infra/valkey/              the notification server's dir, per open
+        meta.json      {"assembly": "local", "made_at": "<iso time>"}
+        ...            the rest is the assembly's own layout
 
-The store files are the store records' (:mod:`nuspace.shapes.stores`,
-:mod:`nuspace.web.stores`). The Space store's file is the mark of a
-space: ``~/.nuspace`` holds the user's config whether or not home is a space.
+``meta.json`` marks the space and names the assembly that made it, so a
+tool knows which assembly opens it. ``~/.nuspace`` holds the user's
+config whether or not home is a space: a data dir alone is no space.
 """
 
 from __future__ import annotations
 
+import json
+import os
 import tempfile
 import uuid
+from dataclasses import asdict, dataclass
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING
 
-from nuspace.shapes.stores import SPACE_STORE
-
-
-if TYPE_CHECKING:
-    import os
+from nuspace.errors import Refused
 
 
 __all__ = [
     "DATA_DIR",
-    "LOCK_FILE",
-    "OLDER",
+    "META_FILE",
+    "Meta",
     "data_dir",
     "find_space",
-    "is_older",
     "is_space",
+    "read_meta",
     "resolve_root",
+    "stamp",
+    "write_meta",
 ]
 
 
 #: The directory inside a space's root holding its data.
 DATA_DIR = ".nuspace"
 
-#: The host lock's file inside :data:`DATA_DIR`.
-LOCK_FILE = "host.lock"
-
-#: What a nuspace of an older store format kept, in :data:`DATA_DIR` or loose
-#: in the root: its stores, or a RocksDB store's ``CURRENT``. Refused, no converter.
-OLDER = ("kernel.sqlite", "state.sqlite", "CURRENT")
+#: The one file every assembly keeps in :data:`DATA_DIR`.
+META_FILE = "meta.json"
 
 
-def data_dir(root: str | Path) -> Path:
+@dataclass(frozen=True)
+class Meta:
+    """What ``meta.json`` says.
+
+    Attributes:
+        assembly: The name of the assembly that made the space, eg ``"local"``.
+        made_at: When ``meta.json`` was written, an ISO 8601 time in UTC.
+    """
+
+    assembly: str
+    made_at: str
+
+
+def data_dir(root: str | os.PathLike[str]) -> Path:
     """The data dir of the space whose root is ``root``."""
     return Path(root) / DATA_DIR
 
 
-def is_space(root: str | Path) -> bool:
-    """Whether ``root`` is a space of this nuspace: its data dir holds a Space store."""
-    return (data_dir(root) / SPACE_STORE.file).is_file()
+def _meta_file(root: str | os.PathLike[str]) -> Path:
+    return data_dir(root) / META_FILE
 
 
-def is_older(root: str | Path) -> bool:
-    """Whether ``root`` holds a space of an older store format, and none of this one."""
-    if is_space(root):
-        return False
-    return any((data_dir(root) / f).is_file() or (Path(root) / f).is_file() for f in OLDER)
+def is_space(root: str | os.PathLike[str]) -> bool:
+    """Whether ``root`` is a space: its data dir holds ``meta.json``."""
+    return _meta_file(root).is_file()
 
 
-def find_space(start: str | Path) -> Path | None:
+def read_meta(root: str | os.PathLike[str]) -> Meta | None:
+    """``meta.json`` of the space at ``root``, or None when there is none.
+
+    Raises:
+        Refused: The file is there but does not read as a meta.
+    """
+    file = _meta_file(root)
+    try:
+        raw = file.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return None
+    try:
+        data = json.loads(raw)
+        return Meta(assembly=str(data["assembly"]), made_at=str(data["made_at"]))
+    except (ValueError, KeyError, TypeError):
+        msg = f"{file} does not read as a space's meta; fix or remove it"
+        raise Refused(msg) from None
+
+
+def write_meta(root: str | os.PathLike[str], meta: Meta) -> None:
+    """Write ``meta.json`` of the space at ``root`` whole: a reader never sees half of it."""
+    file = _meta_file(root)
+    file.parent.mkdir(parents=True, exist_ok=True)
+    part = file.with_name(f".{META_FILE}.{os.getpid()}")
+    part.write_text(json.dumps(asdict(meta)) + "\n", encoding="utf-8")
+    part.replace(file)
+
+
+def stamp(root: str | os.PathLike[str], assembly: str) -> Meta:
+    """The space at ``root`` marked as ``assembly``'s: its meta, written now when there is none.
+
+    Raises:
+        Refused: Another assembly made the space, or its meta does not read.
+    """
+    meta = read_meta(root)
+    if meta is None:
+        meta = Meta(assembly=assembly, made_at=datetime.now(UTC).isoformat(timespec="seconds"))
+        write_meta(root, meta)
+    elif meta.assembly != assembly:
+        msg = (
+            f"{root} is a space of the {meta.assembly!r} assembly, not {assembly!r}."
+            f" Open it with {meta.assembly!r}"
+        )
+        raise Refused(msg)
+    return meta
+
+
+def find_space(start: str | os.PathLike[str]) -> Path | None:
     """The nearest space at or above ``start``, as ``git`` finds a repository. None when there is none."""
     here = Path(start).expanduser().resolve()
     return next((d for d in (here, *here.parents) if is_space(d)), None)

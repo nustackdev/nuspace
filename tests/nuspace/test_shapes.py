@@ -36,6 +36,7 @@ from nuspace.shapes import (
     Worker,
 )
 from nuspace.shapes.stores import SPACE_STORE, STATE_STORE
+from nuspace.space.local.layout import STORES as PLACES
 from nuspace.web.shapes import RECENTS_CAP, Conn, Desk, Pane, Tab, Web, WebPlane
 from nuspace.web.stores import CONN_STORE, WEB_STORE
 
@@ -66,9 +67,9 @@ def slots(shape: type[nu.Shape]) -> set[str]:
 # --- Layout ---------------------------------------------------------------------------------
 
 
-def test_each_store_has_its_own_root_file_and_channel():
+def test_each_store_has_its_own_root_and_local_gives_it_a_file_and_channel():
     stores = (SPACE_STORE, STATE_STORE, WEB_STORE, CONN_STORE)
-    assert [(s.root, s.file, s.channel) for s in stores] == [
+    assert [(s.root, PLACES[s.root].file, PLACES[s.root].channel) for s in stores] == [
         (Space, "store/space.db", "nuspace.space"),
         (State, "store/state.db", "nuspace.state"),
         (Web, "devices/web/web_state.db", "nuspace.web"),
@@ -285,7 +286,7 @@ async def test_live_cleared_at_open_is_made_again_empty(store):
 async def test_the_store_files_sit_where_the_layout_says(disk):
     root = disk.path
     for store in (SPACE_STORE, STATE_STORE, WEB_STORE, CONN_STORE):
-        with sqlite3.connect(f"{root}/{store.file}") as db:
+        with sqlite3.connect(f"{root}/{PLACES[store.root].file}") as db:
             assert db.execute("select count(*) from sqlite_master").fetchone()[0] > 0
     assert await disk.read(Space.info.format) == FORMAT
 

@@ -20,13 +20,15 @@ import nu
 from nuspace import _telemetry
 from nuspace._branding import BLUE, header
 from nuspace.errors import Refused
-from nuspace.space.blocks.meta import DATA_DIR, find_space
+from nuspace.space.blocks.meta import DATA_DIR, is_space
+from nuspace.space.local.layout import made_before
 
 
 __all__ = [
     "announce",
     "console",
     "hold",
+    "nearest_space",
     "path_argument",
     "space_root",
     "tilde",
@@ -64,7 +66,7 @@ def space_root(path: str | None, *, tmp: bool = False) -> str | None:
     """The root of the space a command means, absolute. None with ``tmp``, a throwaway.
 
     PATH when given, else the nearest space at or above the current
-    directory, else home.
+    directory (:func:`nearest_space`), else home.
     """
     if tmp:
         if path is not None:
@@ -72,7 +74,13 @@ def space_root(path: str | None, *, tmp: bool = False) -> str | None:
         return None
     if path is not None:
         return str(Path(path).expanduser().resolve())
-    return str(find_space(Path.cwd()) or Path.home())
+    return str(nearest_space(Path.cwd()) or Path.home())
+
+
+def nearest_space(start: str | Path) -> Path | None:
+    """The nearest space at or above ``start``, one made before ``meta.json`` too. None when there is none."""
+    here = Path(start).expanduser().resolve()
+    return next((d for d in (here, *here.parents) if is_space(d) or made_before(d)), None)
 
 
 def tilde(path: str | Path) -> str:

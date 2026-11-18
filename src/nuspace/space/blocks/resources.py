@@ -12,9 +12,7 @@ import shutil
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from nuspace.errors import Refused
-
-from .meta import DATA_DIR, is_older
+from .meta import data_dir
 
 
 if TYPE_CHECKING:
@@ -57,31 +55,23 @@ class Throwaway:
 
 
 class DataDir:
-    """The space's data dir, made with the folders its store files sit in. Refuses an older space.
+    """The space's data dir, made with the dirs the assembly keeps in it.
 
     Args:
         root: The space's root, absolute.
-        files: The store files, relative to the data dir.
-
-    Raises:
-        Refused: ``root`` holds a space of an older store format. No converter.
+        dirs: The dirs to make, relative to the data dir.
     """
 
-    def __init__(self, root: str, files: Sequence[str]) -> None:
+    def __init__(self, root: str, dirs: Sequence[str]) -> None:
         self.root = root
-        self.files = tuple(files)
+        self.dirs = tuple(dirs)
 
     def setup(self, ctx: Context) -> None:
-        """Refuse an older space, then make the data dir and its store folders."""
-        if is_older(self.root):
-            msg = (
-                f"{self.root} holds a space of an older nuspace store format."
-                " There is no converter: open a fresh directory."
-            )
-            raise Refused(msg)
-        data = Path(self.root) / DATA_DIR
-        for file in self.files:
-            (data / file).parent.mkdir(parents=True, exist_ok=True)
+        """Make the data dir and each of its dirs, where missing."""
+        data = data_dir(self.root)
+        data.mkdir(parents=True, exist_ok=True)
+        for d in self.dirs:
+            (data / d).mkdir(parents=True, exist_ok=True)
 
     async def asetup(self, ctx: Context) -> None:
         """Async shim: making directories is sync work."""

@@ -37,9 +37,22 @@ from nuspace.space import local
 from nuspace.space.blocks import browse
 from nuspace.space.blocks import lock as lock_module
 from nuspace.space.blocks.lock import Lock, LockWarning, holder
-from nuspace.space.blocks.meta import DATA_DIR, LOCK_FILE, data_dir, find_space, is_older, is_space
+from nuspace.space.blocks.meta import (
+    DATA_DIR,
+    META_FILE,
+    Meta,
+    data_dir,
+    find_space,
+    is_space,
+    read_meta,
+    stamp,
+    write_meta,
+)
 from nuspace.space.blocks.resources import DataDir, Fresh, Throwaway
 from nuspace.space.local import presets
+from nuspace.space.local._disk import Marked
+from nuspace.space.local.layout import DIRS, KERNEL_LOCK, is_older, made_before
+from nuspace.space.local.layout import STORES as PLACES
 from nuspace.specs import (
     GROUP,
     CellSpec,
@@ -229,13 +242,18 @@ def test_the_tests_specs_register_through_their_installed_package():
 
 
 def _mark(root: Path) -> None:
-    """``root`` made a space as far as finding one goes: its Space store file."""
-    file = data_dir(root) / stores.SPACE_STORE.file
+    """``root`` made a space as far as finding one goes: its ``meta.json``."""
+    write_meta(root, Meta("local", "2026-11-18T00:00:00+00:00"))
+
+
+def _made_before(root: Path) -> None:
+    """``root`` made a space as one was before ``meta.json``: its Space store file alone."""
+    file = data_dir(root) / PLACES[Space].file
     file.parent.mkdir(parents=True)
     file.touch()
 
 
-def test_a_space_is_found_by_its_space_store_up_from_here(tmp_path):
+def test_a_space_is_found_by_its_meta_up_from_here(tmp_path):
     root = tmp_path / "space"
     nested = root / "a" / "b"
     nested.mkdir(parents=True)
@@ -255,17 +273,41 @@ def test_an_older_space_is_told_apart(tmp_path, old):
     (tmp_path / old).touch()
     assert is_older(tmp_path)
     with pytest.raises(Refused, match="older nuspace store format"):
-        DataDir(str(tmp_path), [stores.SPACE_STORE.file]).setup(None)
-    assert not (data_dir(tmp_path) / "store").exists()
+        Marked(str(tmp_path)).setup(None)
+    assert not (data_dir(tmp_path) / META_FILE).exists()
     _mark(tmp_path)
     assert not is_older(tmp_path)
 
 
 def test_the_data_dir_holds_a_folder_per_store(tmp_path):
-    files = [s.file for s in (*stores.CORE, WEB_STORE, CONN_STORE)]
-    DataDir(str(tmp_path), files).setup(None)
-    assert (data_dir(tmp_path) / "store").is_dir()
-    assert (data_dir(tmp_path) / "devices" / "web").is_dir()
+    DataDir(str(tmp_path), DIRS).setup(None)
+    for root in PLACES:
+        assert (data_dir(tmp_path) / PLACES[root].file).parent.is_dir()
+
+
+def test_meta_names_the_assembly_and_another_assembly_is_refused(tmp_path):
+    made = stamp(tmp_path, "local")
+    assert read_meta(tmp_path) == made
+    assert made.assembly == "local"
+    assert stamp(tmp_path, "local") == made
+    with pytest.raises(Refused, match="space of the 'local' assembly, not 'shard'"):
+        stamp(tmp_path, "shard")
+    (data_dir(tmp_path) / META_FILE).write_text("{oops")
+    with pytest.raises(Refused, match="does not read as a space's meta"):
+        read_meta(tmp_path)
+
+
+def test_a_space_made_before_meta_is_found_and_adopted_and_its_host_lock_ignored(tmp_path):
+    root = tmp_path / "space"
+    _made_before(root)
+    (data_dir(root) / "host.lock").write_text(f"{socket.gethostname()} 1 0\n")
+    assert made_before(root)
+    assert not is_space(root)
+    assert not is_older(root)
+    Marked(str(root)).setup(None)
+    assert read_meta(root).assembly == "local"
+    assert is_space(root)
+    assert not made_before(root)
 
 
 def test_fresh_deletes_a_store_file_and_what_sqlite_keeps_beside_it(tmp_path):
@@ -280,7 +322,7 @@ def test_fresh_deletes_a_store_file_and_what_sqlite_keeps_beside_it(tmp_path):
 
 
 def test_the_lock_names_its_holder_and_refuses_a_second_open(tmp_path):
-    path = str(tmp_path / LOCK_FILE)
+    path = str(tmp_path / "kernel.lock")
     first = Lock(path)
     first.setup(None)
     try:
@@ -296,7 +338,7 @@ def test_the_lock_names_its_holder_and_refuses_a_second_open(tmp_path):
 
 
 def test_a_lock_another_process_holds_refuses_the_open(tmp_path):
-    path = str(tmp_path / LOCK_FILE)
+    path = str(tmp_path / "kernel.lock")
     code = (
         "import sys, time\n"
         "from nuspace.space.blocks.lock import Lock\n"
@@ -325,7 +367,7 @@ def test_a_lock_the_file_system_cannot_take_opens_with_a_warning(tmp_path, monke
         raise OSError(errno.ENOLCK, "No locks available")
 
     monkeypatch.setattr(lock_module.fcntl, "lockf", nolock)
-    path = str(tmp_path / LOCK_FILE)
+    path = str(tmp_path / "kernel.lock")
     lock = Lock(path)
     with pytest.warns(LockWarning, match="opening without it"):
         lock.setup(None)
@@ -353,7 +395,9 @@ _EVERY_STORE = (*stores.CORE, WEB_STORE, CONN_STORE)
 async def _aread(root: Path, term: nu.Nu, stores=_EVERY_STORE) -> object:
     """``term`` read from the space at ``root``, its stores opened plain, beside any host."""
     data = data_dir(root)
-    navs = [nustd.kv.sqlite_navigator(str(data / s.file), tags=(s.root,)) for s in stores]
+    navs = [
+        nustd.kv.sqlite_navigator(str(data / PLACES[s.root].file), tags=(s.root,)) for s in stores
+    ]
     value, _ = await nu.arun(nu.With(*navs, body=nuspace.atomic(term)))
     return value
 
@@ -378,7 +422,7 @@ async def _apoll(root: Path, term: nu.Nu, pred, stores=_EVERY_STORE, timeout: fl
 
 
 def _write(root: Path, store, term: nu.Nu) -> None:
-    file = str(data_dir(root) / store.file)
+    file = str(data_dir(root) / PLACES[store.root].file)
     navs = nustd.kv.sqlite_navigator(file, tags=(store.root,))
     asyncio.run(nu.arun(nu.With(navs, body=nuspace.atomic(term))))
 
@@ -406,12 +450,24 @@ def test_make_space_seeds_a_fresh_space_and_keeps_an_existing_one(tmp_path):
     assert _read(root, Space.info.created_at) == info["created_at"]
 
 
+def test_a_space_made_before_meta_opens_with_its_data_and_gets_its_meta(tmp_path):
+    root = tmp_path / "space"
+    _make(root)
+    created = _read(root, Space.info.created_at)
+    (data_dir(root) / META_FILE).unlink()
+    (data_dir(root) / "host.lock").write_text("elsewhere 1 0\n")
+    assert made_before(root)
+    _make(root)
+    assert read_meta(root).assembly == "local"
+    assert _read(root, Space.info.created_at) == created
+
+
 def test_headless_opens_every_device_store_and_seeds_no_device_plane(tmp_path):
     root = tmp_path / "space"
     _make(root, devices=())
     assert is_space(root)
-    assert (data_dir(root) / WEB_STORE.file).exists()
-    assert (data_dir(root) / CONN_STORE.file).exists()
+    assert (data_dir(root) / PLACES[Web].file).exists()
+    assert (data_dir(root) / PLACES[Conn].file).exists()
     assert _read(root, Web.roles.extract()) == {}
     assert _read(root, nu.list(Web.planes.keys())) == []
     # conn.db is made fresh at a headless open too.
@@ -442,7 +498,7 @@ def test_a_space_of_another_format_is_refused_before_anything_is_written(tmp_pat
     # conn.db is recreated after the format check: the refused open left it.
     assert _read(root, Conn.connections["tab"].order.extract()) == ["p"]
     # The lock went with the refused open.
-    assert holder(str(data_dir(root) / LOCK_FILE))
+    assert holder(str(data_dir(root) / KERNEL_LOCK))
     _write(root, stores.SPACE_STORE, Space.info.format.set(FORMAT))
     _make(root)
 

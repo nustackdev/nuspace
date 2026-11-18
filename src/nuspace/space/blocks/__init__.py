@@ -1,32 +1,44 @@
 """The blocks: shared parts every assembly is built from. None of them knows a driver.
 
-- :mod:`.meta`: the data dir, how a space is found, root resolving.
+- :mod:`.meta`: the data dir, ``meta.json``, how a space is found, root resolving.
 - :mod:`.lock`: a POSIX record lock named for what it guards.
 - :mod:`.notifier`: the notification server every process reaches.
-- :mod:`.navigators`: stores bound to kv navigators.
+- :mod:`.navigators`: a store's root bound to kv navigators, any backend.
 - :mod:`.workers`: what every worker comes up holding, and the pool.
 - :mod:`.resources`: the throwaway root, the data dir, fresh files, warm imports.
 - :mod:`.browse`: a browser tab opened once a server answers.
 """
 
+from . import navigators
 from .browse import Browse, BrowserRef
 from .lock import Lock, LockWarning
-from .meta import DATA_DIR, data_dir, find_space, is_space, resolve_root
-from .navigators import navigators
-from .notifier import VALKEY_DIR, notifier
+from .meta import (
+    DATA_DIR,
+    META_FILE,
+    Meta,
+    data_dir,
+    find_space,
+    is_space,
+    read_meta,
+    resolve_root,
+    stamp,
+    write_meta,
+)
+from .notifier import notifier
 from .resources import DataDir, Fresh, Throwaway, Warmed
 from .workers import worker_context, worker_pool
 
 
 __all__ = [
     "DATA_DIR",
-    "VALKEY_DIR",
+    "META_FILE",
     "Browse",
     "BrowserRef",
     "DataDir",
     "Fresh",
     "Lock",
     "LockWarning",
+    "Meta",
     "Throwaway",
     "Warmed",
     "data_dir",
@@ -34,7 +46,10 @@ __all__ = [
     "is_space",
     "navigators",
     "notifier",
+    "read_meta",
     "resolve_root",
+    "stamp",
     "worker_context",
     "worker_pool",
+    "write_meta",
 ]

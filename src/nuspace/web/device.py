@@ -42,7 +42,7 @@ Beside the socket the server answers plain routes:
   uploads, same origin.
 - ``POST /_nu/upload/{sid}``: the upload intake, where a tab posts a picked
   file's bytes when a cell asks for them. They land in the upload area
-  (``.nuspace/devices/web/uploads/``, wiped at every open), and a cell's
+  (a dir the assembly picks, wiped at every open), and a cell's
   worker reads them there by path (:class:`~.session.ConnectedSession`).
 """
 
@@ -81,7 +81,6 @@ from .session import served_sessions
 from .shapes import Conn, Web
 from .shell import Shell
 from .sidebar import registered_entries, sidebar_feed
-from .stores import UPLOADS_DIR
 from .utils import Arms, cell_ui, field_dict, field_ids
 from .viewer import on_open, slash_entries, viewer_feed
 
@@ -258,7 +257,7 @@ def serve_web(
     open_browser: bool = True,
     log_level: str = "warning",
     session_address: str | None = None,
-    data: str | None = None,
+    upload_root: str | None = None,
     blobs: Provide | None = None,
 ) -> tuple[nu.Nu, dict[str, EnvFactory]]:
     """The web device: the term the host runs, and the envs it registers.
@@ -282,8 +281,8 @@ def serve_web(
         log_level: How much the server says.
         session_address: ``host:port`` for the tab socket. A free port by
             default.
-        data: The space's data dir, absolute: the upload area goes in it.
-            None puts the area in the system temp dir.
+        upload_root: The upload area's dir, absolute, the assembly's
+            choice; wiped at start. None puts the area in the system temp dir.
         blobs: The blob store's spec, served under ``/blobs``. None
             serves no blobs.
 
@@ -296,11 +295,10 @@ def serve_web(
     sid = nu.Str(nu.Attr(SID_ATTR))
     held, blob_routes = serve_blobs({blob_mount: blobs}) if blobs is not None else ([], [])
     # Fixed now, at build, so the session env hands workers the same root.
-    if data is None:
+    if upload_root is None:
         upload_root = str(Path(tempfile.gettempdir()) / f"nu-uploads-{uuid.uuid4().hex}")
         fresh = []
     else:
-        upload_root = str(Path(data) / UPLOADS_DIR)
         fresh = [nu.Provide(Fresh, {"paths": [], "dirs": [upload_root]})]
     area, upload_routes = uploads(upload_root)
     server = nu.With(

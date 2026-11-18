@@ -23,15 +23,17 @@ import nustd.kv
 from nuspace._cli import _installed, cli
 from nuspace._cli.commands import run as run_command
 from nuspace._telemetry import config
-from nuspace.shapes.stores import CORE, SPACE_STORE
+from nuspace.shapes import Space
+from nuspace.shapes.stores import CORE
 from nuspace.space.blocks.meta import DATA_DIR
 from nuspace.space.local import presets
+from nuspace.space.local.layout import STORES
 from nuspace.specs import CellSpec, ContentSpec, Extension, PlaneSpec
 from nuspace.web import WEB_STORE, Web
 
 
-#: The Space store's file in a space's data dir: the mark of a space.
-SPACE_FILE = SPACE_STORE.file
+#: The Space store's file in a space's data dir: what a space made before ``meta.json`` is told by.
+SPACE_FILE = STORES[Space].file
 
 
 @pytest.fixture(autouse=True)
@@ -228,7 +230,10 @@ def headless(monkeypatch, held):
 
 
 def _space(root) -> None:
-    """``root`` made a space as far as finding one goes: its Space store file in ``.nuspace/``."""
+    """``root`` made a space as one was before ``meta.json``: its Space store file in ``.nuspace/``.
+
+    Found the same as a space with its meta: the bridge local adopts.
+    """
     (root / DATA_DIR / SPACE_FILE).parent.mkdir(parents=True)
     (root / DATA_DIR / SPACE_FILE).touch()
 
@@ -369,7 +374,8 @@ def _read(root: Path, term: nu.Nu) -> object:
     """``term`` read from the space at ``root``, its core and web stores opened plain."""
     data = root / DATA_DIR
     navs = [
-        nustd.kv.sqlite_navigator(str(data / s.file), tags=(s.root,)) for s in (*CORE, WEB_STORE)
+        nustd.kv.sqlite_navigator(str(data / STORES[s.root].file), tags=(s.root,))
+        for s in (*CORE, WEB_STORE)
     ]
     value, _ = asyncio.run(nu.arun(nu.With(*navs, body=nuspace.atomic(term))))
     return value

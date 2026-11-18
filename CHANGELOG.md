@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- A space records which assembly made it; local alone decides where stores live
 - The kernel owns its whole life in one driver, from reap to close
 - Reap and close end only started runs; asked runs stay pending for the next kernel
 - The kernel makes its own live run indexes; the space store init no longer does

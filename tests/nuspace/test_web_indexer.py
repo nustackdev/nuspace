@@ -25,6 +25,7 @@ from nuspace import system
 from nuspace.shapes import Space, stores
 from nuspace.space import local
 from nuspace.space.blocks.meta import data_dir
+from nuspace.space.local.layout import STORES as PLACES
 from nuspace.system import reactions
 from nuspace.web import CONN_STORE, WEB_STORE
 from nuspace.web.home import indexer
@@ -324,7 +325,10 @@ EVERY_STORE = (*stores.CORE, WEB_STORE, CONN_STORE)
 
 async def _on_disk(root, term: nu.Nu) -> object:
     data = data_dir(root)
-    navs = [nustd.kv.sqlite_navigator(str(data / s.file), tags=(s.root,)) for s in EVERY_STORE]
+    navs = [
+        nustd.kv.sqlite_navigator(str(data / PLACES[s.root].file), tags=(s.root,))
+        for s in EVERY_STORE
+    ]
     value, _ = await nu.arun(nu.With(*navs, body=term))
     return value
 

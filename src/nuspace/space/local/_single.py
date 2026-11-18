@@ -2,14 +2,16 @@
 
 The order at open, each step inside the brackets of the ones before::
 
-    the data dir                  made; a space of an older format refused
-    host.lock                     taken, or Refused: a live host holds it
+    meta.json                     an older format refused, another assembly's refused,
+                                  written where missing (a space made before it is adopted)
+    the data dir                  made, with local's dirs
+    kernel.lock                   taken, or Refused: a live kernel holds it
     the notification server
-    Space, State                  their navigators
+    Space, State                  bound (:mod:`.binding`)
     blobs                         the blob store, plain files in store/blobs/ by default
-    format check                  space.db's format, then the core containers, a commit per store,
-                                  then the kernel's live indexes
-    fresh device stores           conn.db deleted, then every device's navigators, their containers
+    format check                  the Space store's format, then the core containers, a commit
+                                  per store, then the kernel's live indexes
+    fresh device stores           conn.db deleted, then every device's store bound, its containers
     path                          Space.info.path; the open told to telemetry
     device planes                 made where missing
     worker pool                   spare workers, each binding every store of the open, blobs too
@@ -50,15 +52,16 @@ from nuspace._telemetry.usage import opened
 from nuspace.shapes import Space
 from nuspace.shapes.stores import CORE
 from nuspace.specs import RegistryWarning, space_registry
+from nuspace.web.shapes import Conn
 
 from ..blocks.lock import Lock
-from ..blocks.meta import LOCK_FILE, data_dir, resolve_root
-from ..blocks.navigators import navigators
-from ..blocks.notifier import notifier
+from ..blocks.meta import data_dir, resolve_root
 from ..blocks.resources import DataDir, Fresh, Throwaway
 from ..blocks.workers import DEFAULT_NAME, DEFAULT_SPARES, worker_pool
-from .blobs import default_spec
+from . import binding
+from ._disk import Marked
 from .devices import device, device_stores
+from .layout import DIRS, KERNEL_LOCK, STORES, UPLOADS_DIR
 
 
 if TYPE_CHECKING:
@@ -118,16 +121,17 @@ def _opening(root: str, throwaway: bool, blobs: Provide | None, body: nu.Nu) -> 
     """
     data = str(data_dir(root))
     extra = device_stores()
-    files = [s.file for s in (*CORE, *extra)]
     inner = _inits(extra) >> body
     if extra:
-        fresh = [str(Path(data) / s.file) for s in extra if s.fresh]
-        inner = nu.With(nu.Provide(Fresh, {"paths": fresh}), navigators(data, extra), body=inner)
+        fresh = [str(Path(data) / STORES[Conn].file)]
+        bound = binding.stores(data, [s.root for s in extra])
+        inner = nu.With(nu.Provide(Fresh, {"paths": fresh}), bound, body=inner)
     outer = [
-        nu.Provide(DataDir, {"root": root, "files": files}),
-        nu.Provide(Lock, {"path": str(Path(data) / LOCK_FILE)}),
-        notifier(data),
-        navigators(data, CORE),
+        nu.Provide(Marked, {"root": root}),
+        nu.Provide(DataDir, {"root": root, "dirs": DIRS}),
+        nu.Provide(Lock, {"path": str(Path(data) / KERNEL_LOCK)}),
+        binding.notifier(data),
+        binding.stores(data, [s.root for s in CORE]),
     ]
     if blobs is not None:
         outer.append(blobs)
@@ -165,7 +169,8 @@ def open_space(
     the order. Every device's stores open, served or not. At a clean close
     (cancelled, or ``body`` returning) everything still live is ended
     ``interrupted`` before the stores close. A space of another store
-    format, or one a live host holds, is refused before anything is written.
+    format, another assembly's, or one a live kernel holds, is refused before
+    anything is written.
 
     Args:
         path: The space's root, any directory, made if missing; its data in
@@ -188,35 +193,36 @@ def open_space(
         blobs: The blob store (``nuspace.Blobs``): a ``nustd.blob`` spec,
             eg ``nustd.blob.s3(nuspace.Blobs, bucket="models")``. None is
             plain files in ``.nuspace/store/blobs/``
-            (:func:`~.blobs.default_spec`).
+            (:func:`~.binding.blobs`).
         body: Host nu run beside the drivers. The space closes when it returns.
         name: Process name prefix for workers.
 
     Raises:
         Missing: A device of no known name (at build).
-        Refused: An older store format, or the space open in another host.
+        Refused: An older store format, another assembly's space, or the
+            space open in another kernel.
     """
     root, throwaway = resolve_root(path)
     data = str(data_dir(root))
     opened_devices = [device(d) for d in devices]
     reg = space_registry(extensions=extensions, envs=envs)
-    blobs = default_spec(data) if blobs is None else blobs
+    blobs = binding.blobs(data) if blobs is None else blobs
     options = {
         "host": host,
         "port": port,
         "static": static,
         "open_browser": open_browser,
-        "data": data,
+        "upload_root": str(Path(data) / UPLOADS_DIR),
         "blobs": blobs,
     }
     served = {d.name: d.serve(registry=reg, **options) for d in opened_devices}
     factories = _envs(reg.envs, {n: e for n, (_, e) in served.items()})
-    stores = (*CORE, *device_stores())
+    bindings = binding.stores(data, [s.root for s in (*CORE, *device_stores())])
     drivers = nu.Race(
         kernel.driver(), *(t for t, _ in served.values()), nu.Park() if body is None else body
     )
     running = nu.With(
-        worker_pool(data, stores, blobs, name=name, spares=spares),
+        worker_pool(bindings, blobs, name=name, spares=spares),
         kernel.bound(backends=backends, envs=factories, space_envs=space_envs),
         body=drivers,
     )
@@ -235,7 +241,8 @@ def make_space(path: str | os.PathLike[str], *, devices: Sequence[str] = ("web",
 
     Raises:
         Missing: A device of no known name (at build).
-        Refused: An older store format, or the space open in another host.
+        Refused: An older store format, another assembly's space, or the
+            space open in another kernel.
     """
     root, _ = resolve_root(path)
     opened_devices = [device(d) for d in devices]
