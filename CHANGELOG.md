@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Run records the kernel's exit status in a ref the caller reads after
 - Waiting for infra, kernel or web and opening a tab are plain nu flow
 - Entry point checks and disk writes run as nu steps, not fake resources
 - Web serves blobs from the same store spec the assembly binds around it

@@ -42,10 +42,10 @@ import subprocess
 import sys
 import time
 from collections import deque
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
+import nu
 from nu.engine.structure import Declared
-from nu.lang import Command, Ref
 
 from ..blocks.lock import held
 from ..blocks.meta import data_dir, resolve_root
@@ -58,12 +58,11 @@ from .plane import found
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
 
-    import nu
     from nu.lang.runtime import Runtime
     from nuspace.specs import PlaneSpec
 
 
-__all__ = ["GRACE", "REFUSED", "RESTARTS", "WINDOW", "Restarts", "run"]
+__all__ = ["GRACE", "REFUSED", "RESTARTS", "WINDOW", "Restarts", "Supervised", "run"]
 
 
 #: A child's exit status when its start was refused: run does not try again.
@@ -203,30 +202,12 @@ async def supervise(root: str, kernel: bytes, web: bytes, rest: bytes) -> int:
         stop(kernel_child)
 
 
-class ChildrenRef(Ref):
-    """The Ref naming run's child processes, what :class:`Supervised` writes. Nothing is bound.
-
-    Declared so the engine keeps the run ordered and never folds it away
-    as a pure read.
-
-    Yields:
-        None.
-    """
-
-    def _compile(self, nid: int, children: tuple[Callable, ...]) -> Callable:
-        return lambda rt: None
-
-    def _acompile(self, nid: int, children: tuple[Callable, ...]) -> Callable:
-        async def athunk(rt: Runtime) -> None:
-            return None
-
-        return athunk
-
-
-class Supervised(Command):
-    """:func:`supervise` as a term: yields the kernel's exit status. Async only.
+class Supervised(nu.Command):
+    """:func:`supervise` as a term: the kernel's exit status written to ``into``. Async only.
 
     Args:
+        into: The Ref the status lands in, eg an ``nu.IntRef`` slot the
+            caller reads after the run.
         root: The space's root, absolute.
         kernel: The kernel's options, pickled.
         web: Web's options, pickled, first start.
@@ -235,8 +216,8 @@ class Supervised(Command):
 
     _mutates = Declared(value=frozenset({0}), name="mutates")
 
-    def __init__(self, root: str, kernel: bytes, web: bytes, rest: bytes) -> None:
-        super().__init__(ChildrenRef())
+    def __init__(self, into: nu.Ref, root: str, kernel: bytes, web: bytes, rest: bytes) -> None:
+        super().__init__(into)
         self._payload = dict(self._payload)
         self._payload.update(root=root, kernel=kernel, web=web, rest=rest)
 
@@ -248,10 +229,12 @@ class Supervised(Command):
         return thunk
 
     def _acompile(self, nid: int, children: tuple[Callable, ...]) -> Callable:
+        into = cast("nu.Ref", self._children[0])
         p = self._payload
 
-        async def athunk(rt: Runtime) -> int:
-            return await supervise(p["root"], p["kernel"], p["web"], p["rest"])
+        async def athunk(rt: Runtime) -> None:
+            code = await supervise(p["root"], p["kernel"], p["web"], p["rest"])
+            await into._awrite(rt, code, rt.program.children[nid][0])
 
         return athunk
 
@@ -269,17 +252,21 @@ def pickled(what: str, options: Mapping[str, object]) -> bytes:
 def run(
     path: str | os.PathLike[str] | None = None,
     *,
+    into: nu.Ref | None = None,
     plane: PlaneSpec | str | None = None,
     **options: object,
 ) -> nu.Nu:
     """The space at ``path``: infra in this process, its kernel and its web in two more, watched over.
 
-    See the module for what happens when either stops. Yields the kernel's
-    exit status, 0 at a Ctrl+C.
+    See the module for what happens when either stops. Yields nothing: the
+    kernel's exit status lands in ``into``, 0 at a Ctrl+C reaching them.
 
     Args:
         path: The space's root, initialized (``local.init``). None is a
             throwaway one, made and initialized here, removed at the end.
+        into: Where the kernel's exit status is written, eg an
+            ``nu.IntRef`` slot the caller binds and reads after. None
+            records it nowhere.
         plane: A plane spec, or its registered name, web opens on (see
             ``local.web``). Resolved or made by web, so a restarted web
             finds the same plane.
@@ -304,10 +291,14 @@ def run(
     web = {k: v for k, v in options.items() if k in WEB}
     if plane is not None:
         web["plane"] = plane
-    term = Supervised(
+    options_of = (
         root,
         pickled("kernel", kernel),
         pickled("web", web),
         pickled("web", {**web, "open_browser": False}),
     )
+    if into is None:
+        term = nu.let(0, lambda code: Supervised(code, *options_of))
+    else:
+        term = Supervised(into, *options_of)
     return fresh(root, throwaway, infra(root, body=term))
