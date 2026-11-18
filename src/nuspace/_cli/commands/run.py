@@ -39,30 +39,21 @@ short error. Without it, the first free port from 8080 up.
 
 from __future__ import annotations
 
-import contextlib
 import errno
-import shutil
 import socket
 
 import rich_click as click
 
 import nu
 from nuspace.errors import Refused
-from nuspace.space.blocks.meta import resolve_root
-from nuspace.space.local.plane import plane_of
+from nuspace.space.blocks.guarded import Guarded
+from nuspace.space.blocks.meta import InitDone, resolve_root
+from nuspace.space.blocks.resources import throwaway
+from nuspace.space.local.drivers import opened_on
 from nuspace.specs import registered_name
 
 from .._installed import resolve
-from .._meta import (
-    announce,
-    assembly,
-    hold,
-    initialize,
-    initialized,
-    path_argument,
-    space_root,
-    tmp_option,
-)
+from .._meta import EXIT, announce, assembly, hold, path_argument, space_root, tmp_option
 
 
 __all__ = ["run"]
@@ -204,35 +195,34 @@ def run(
     serves = alone == "web" or (alone is None and not headless)
     if serves:
         port = _port(host, port)
-    with contextlib.ExitStack() as throwaway:
-        root = path
-        if root is None:
-            root, _ = resolve_root(None)
-            throwaway.callback(shutil.rmtree, root, ignore_errors=True)
-        made = None
-        try:
-            spec = None
-            if plane is not None:
-                spec = resolve(plane)
-                made = registered_name(spec)
-            if alone is None and not initialized(root):
-                initialize(space, root)
-            served = {"host": host, "port": port, "open_browser": not no_browser}
-            body = None if spec is None else nu.let("", lambda p: plane_of(spec, p)) >> nu.Park()
-            if alone == "infra":
-                term = space.infra(root)
-            elif alone == "kernel":
-                term = space.kernel(root, body=body)
-            elif alone == "web":
-                term = space.web(root, plane=spec, **served)
-            elif headless:
-                term = space.infra(root, body=space.kernel(root, body=body))
-            else:
-                term = space.run(root, plane=spec, **served)
-        except Refused as e:
-            raise click.ClickException(str(e)) from None
-        quiet = None if serves else f"{alone} alone" if alone else "headless"
-        announce(path, alone=quiet, plane=made)
-        code = hold(term)
+    root = path if path is not None else resolve_root(None)[0]
+    made = None
+    try:
+        spec = None
+        if plane is not None:
+            spec = resolve(plane)
+            made = registered_name(spec)
+        served = {"host": host, "port": port, "open_browser": not no_browser}
+        body = None if spec is None else opened_on(spec)
+        if alone == "infra":
+            term = space.infra(root)
+        elif alone == "kernel":
+            term = space.kernel(root, body=body)
+        elif alone == "web":
+            term = space.web(root, plane=spec, **served)
+        elif headless:
+            term = space.infra(root, body=space.kernel(root, body=body))
+        else:
+            term = space.run(root, into=EXIT, plane=spec, **served)
+    except Refused as e:
+        raise click.ClickException(str(e)) from None
+    if alone is None:
+        # Plain and headless init first, a step of the same term: made if missing.
+        term = Guarded(term, nu.IfDo(nu.Not(InitDone(root)), space.init(root)))
+    if path is None:
+        term = throwaway(root, term)
+    quiet = None if serves else f"{alone} alone" if alone else "headless"
+    announce(path, alone=quiet, plane=made)
+    code = hold(term)
     if code:
         raise SystemExit(code)

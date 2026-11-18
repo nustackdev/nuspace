@@ -8,6 +8,10 @@ Which assembly runs it: the one its ``meta.json`` names, imported as
 ``nuspace.space.<name>``. A space without one yet, new, throwaway or made
 before ``meta.json``, is :data:`DEFAULT_ASSEMBLY`'s. The commands call only
 its entry points, so the command line is the same over any assembly.
+
+How it is held: one term, one run (:func:`hold`). What the CLI needs back,
+the kernel's exit status, an entry point writes into a ref the CLI hands
+it (:data:`EXIT`), bound to a dict the CLI reads once the run is over.
 """
 
 from __future__ import annotations
@@ -36,11 +40,12 @@ if TYPE_CHECKING:
 
 __all__ = [
     "DEFAULT_ASSEMBLY",
+    "EXIT",
+    "Out",
     "announce",
     "assembly",
     "console",
     "hold",
-    "initialize",
     "initialized",
     "nearest_space",
     "path_argument",
@@ -177,20 +182,23 @@ def initialized(root: str) -> bool:
     return meta is not None and meta.init
 
 
-def initialize(space: ModuleType, root: str) -> None:
-    """The assembly's ``init`` on the space at ``root``, run to its end. A refusal is a short error.
+class Out(nu.Shape):
+    """What a held run hands back to the CLI, in a dict the CLI binds and reads after.
 
-    Its own term, run before the one a command holds: an init yields
-    nothing, so it is not a step of that term.
+    Attributes:
+        code: The kernel's exit status, from an entry point that records it
+            (``run(..., into=EXIT)``). 0 when nothing wrote it.
     """
-    try:
-        nu.eval_in_loop(nu.compile(space.init(root)), nu.Context())
-    except Refused as e:
-        raise click.ClickException(str(e)) from None
+
+    code = nu.IntRef.slot()
 
 
-def hold(term: nu.Nu) -> object:
-    """Run a space until interrupted (Ctrl+C), then let the brackets close it. What the term yields.
+#: The ref an entry point writes the kernel's exit status into.
+EXIT = Out.code
+
+
+def hold(term: nu.Nu) -> int:
+    """Run a space until interrupted (Ctrl+C), then let the brackets close it. The exit status.
 
     Closing ends what is live, interrupted, then stops the workers, the
     stores, the notification server and the lock, in that order. A run
@@ -198,16 +206,20 @@ def hold(term: nu.Nu) -> object:
     is a short error. What is still queued for telemetry (see
     :mod:`nuspace._telemetry`) gets a short grace to go at the end.
 
+    The term runs with :class:`Out` bound, so whatever it writes to
+    :data:`EXIT` is read back: 0 when nothing did, or at a Ctrl+C here.
+
     Compiled and evaluated without law validation: the space program is ours
     and tested, and validating its whole tree costs seconds per start.
     """
+    out: dict[str, object] = {}
     try:
-        value, _ = nu.eval_in_loop(nu.compile(term), nu.Context())
+        nu.eval_in_loop(nu.compile(term), nu.Context().bind(dict, out, Out))
     except KeyboardInterrupt:
         console.print("[dim]Stopped[/dim]")
-        return None
+        return 0
     except Refused as e:
         raise click.ClickException(str(e)) from None
     finally:
         _telemetry.flush()
-    return value
+    return int(out.get("code", 0))

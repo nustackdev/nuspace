@@ -20,7 +20,7 @@ from rich.text import Text
 
 from nuspace._branding import BLUE, PURPLE
 
-from .._meta import assembly, console, initialize, initialized, nearest_space, path_argument, tilde
+from .._meta import assembly, console, hold, initialized, nearest_space, path_argument, tilde
 
 
 __all__ = ["init"]
@@ -42,7 +42,7 @@ def init(path: str | None) -> None:
         _warn_if_nested(root)
     space = assembly(str(root))
     before = initialized(str(root))
-    initialize(space, str(root))
+    hold(space.init(str(root)))
     what = "Already initialized" if before else "Initialized a space"
     console.print(Text.assemble((what, f"bold {PURPLE}"), ("  ", ""), (tilde(root), BLUE)))
     again = "nuspace run" if path is None else f"nuspace run {path}"

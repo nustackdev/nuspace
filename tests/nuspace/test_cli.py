@@ -2,7 +2,11 @@
 
 Nothing here opens a space for real but ``init`` and the refusals: the
 entry points and the hold are swapped for recorders, so a test sees what a
-command asked for. A real ``nuspace run`` and its Ctrl+C are in test_space.
+command asked for. ``run`` wraps the entry point's term, its init first and
+a throwaway root around it; :func:`_peel` takes those off again. A test
+that needs the init or the throwaway to happen holds the term for real,
+over recorded entry points that run nothing. A real ``nuspace run`` and its
+Ctrl+C are in test_space.
 """
 
 from __future__ import annotations
@@ -22,11 +26,13 @@ import nu
 import nuspace
 import nustd.kv
 from nuspace._cli import _installed, cli
+from nuspace._cli._meta import EXIT
 from nuspace._cli.commands import run as run_command
 from nuspace._telemetry import config
 from nuspace.shapes import Space
 from nuspace.shapes.stores import CORE
 from nuspace.space import local
+from nuspace.space.blocks.guarded import Guarded
 from nuspace.space.blocks.meta import DATA_DIR, Meta, is_space, read_meta, write_meta
 from nuspace.space.local.layout import STORES
 from nuspace.specs import CellSpec, ContentSpec, Extension, PlaneSpec
@@ -66,37 +72,73 @@ def _said(result) -> str:
     return " ".join(result.output.replace("│", " ").split())
 
 
+#: What a recorded entry point returns: a term that does nothing, held for real or not.
+MARK = nu.Noop()
+
+
 class _Recorder:
-    """Stands in for an entry point: records the call, returns a marker term."""
+    """Stands in for an entry point: records the call, returns :data:`MARK` or ``returns``."""
+
+    def __init__(self, returns: object = None) -> None:
+        self.calls: list[tuple[tuple, dict]] = []
+        self.returns = returns
+
+    def __call__(self, *args, **kwargs) -> object:
+        self.calls.append((args, kwargs))
+        if callable(self.returns):
+            return self.returns(*args, **kwargs)
+        return MARK if self.returns is None else self.returns
+
+
+def _peel(term: nu.Nu) -> tuple[nu.Nu, bool, str | None]:
+    """What ``run`` held, unwrapped: the entry point's term, whether init comes first, the throwaway root."""
+    throwaway = None
+    if isinstance(term, nu.With):
+        (made,) = term._payload["brackets"]
+        throwaway = made._payload["kwargs"]["path"]
+        (term,) = term._children
+    init = isinstance(term, Guarded)
+    if init:
+        term = term._children[0]
+    return term, init, throwaway
+
+
+class Held(list):
+    """The entry points' terms the commands would hold, unwrapped, in order. Nothing is held.
+
+    Attributes:
+        throwaways: The throwaway root each was wrapped in, None for none.
+    """
 
     def __init__(self) -> None:
-        self.calls: list[tuple[tuple, dict]] = []
+        super().__init__()
+        self.throwaways: list[str | None] = []
 
-    def __call__(self, *args, **kwargs) -> str:
-        self.calls.append((args, kwargs))
-        return "term"
+    def hold(self, term: nu.Nu) -> int:
+        inner, _, throwaway = _peel(term)
+        self.append(inner)
+        self.throwaways.append(throwaway)
+        return 0
 
 
 @pytest.fixture
-def kept(monkeypatch):
-    """The terms the commands would hold, in order. Nothing is held: a space run inits for real."""
-    terms: list = []
-    monkeypatch.setattr(run_command, "hold", lambda term, **_: terms.append(term))
+def held(monkeypatch):
+    """:class:`Held`: what the commands would hold. Nothing runs, no init either."""
+    terms = Held()
+    monkeypatch.setattr(run_command, "hold", terms.hold)
     return terms
 
 
 @pytest.fixture
 def inits(monkeypatch):
-    """The roots ``nuspace run`` initialized first, in order. No init runs."""
-    roots: list = []
-    monkeypatch.setattr(run_command, "initialize", lambda space, root: roots.append(root))
-    return roots
+    """The roots ``nuspace run`` puts local's init before, in order. Recorded at build, never run."""
+    recorder = _Recorder()
+    monkeypatch.setattr(local, "init", recorder)
+    return recorder.calls
 
 
-@pytest.fixture
-def held(kept, inits):
-    """:func:`kept`, with no init run either: nothing is run."""
-    return kept
+def _roots(calls) -> list[str]:
+    return [args[0] for args, _ in calls]
 
 
 @pytest.fixture
@@ -195,12 +237,18 @@ def test_run_runs_kernel_and_web_by_default(monkeypatch, held, inits):
     assert serve.calls == [
         (
             (_abs("/tmp/space"),),
-            {"plane": None, "host": "localhost", "port": 9001, "open_browser": False},
+            {
+                "into": EXIT,
+                "plane": None,
+                "host": "localhost",
+                "port": 9001,
+                "open_browser": False,
+            },
         )
     ]
     assert headless.calls == []
-    assert held == ["term"]
-    assert inits == [_abs("/tmp/space")]
+    assert held == [MARK]
+    assert _roots(inits) == [_abs("/tmp/space")]
 
 
 def test_run_headless_maps_to_infra_around_the_kernel(monkeypatch, held, inits, tmp_path):
@@ -211,11 +259,11 @@ def test_run_headless_maps_to_infra_around_the_kernel(monkeypatch, held, inits, 
     result = _invoke("run", "--headless")
     assert result.exit_code == 0, result.output
     assert headless.calls == [((_home_root(tmp_path),), {"body": None})]
-    assert infra.calls == [((_home_root(tmp_path),), {"body": "term"})]
+    assert infra.calls == [((_home_root(tmp_path),), {"body": MARK})]
     assert serve.calls == []
     assert "headless" in result.output
-    assert held == ["term"]
-    assert inits == [_home_root(tmp_path)]
+    assert held == [MARK]
+    assert _roots(inits) == [_home_root(tmp_path)]
 
 
 def test_run_web_maps_to_web_alone(monkeypatch, held, inits):
@@ -232,7 +280,7 @@ def test_run_web_maps_to_web_alone(monkeypatch, held, inits):
         )
     ]
     assert serve.calls == headless.calls == []
-    assert held == ["term"]
+    assert held == [MARK]
     assert inits == []
 
 
@@ -248,7 +296,8 @@ def test_run_refuses_headless_and_web_together(monkeypatch, held):
 
 
 @pytest.mark.parametrize("args", [["--no-browser", "-p", "9006"], ["--headless"]])
-def test_run_on_a_fresh_directory_initializes_it_then_runs(kept, entries, tmp_path, args):
+def test_run_on_a_fresh_directory_initializes_it_then_runs(entries, tmp_path, args):
+    """Held for real: local's init runs, then the recorded entry point, which runs nothing."""
     path = tmp_path / "fresh"
     result = _invoke("run", str(path), *args)
     assert result.exit_code == 0, result.output
@@ -256,15 +305,16 @@ def test_run_on_a_fresh_directory_initializes_it_then_runs(kept, entries, tmp_pa
     assert (path / DATA_DIR / SPACE_FILE).is_file()
     ran = "kernel" if "--headless" in args else "run"
     assert [a for a, _ in entries[ran].calls] == [(str(path),)]
-    assert kept == ["term"]
 
 
-def test_run_does_not_init_a_space_initialized_already(held, inits, entries, tmp_path):
+def test_run_does_not_init_a_space_initialized_already(monkeypatch, entries, tmp_path):
+    """Held for real: the init step looks at meta.json when it runs and leaves an initialized space."""
+    monkeypatch.setattr(local, "init", _Recorder(lambda root: nu.print(f"init ran on {root}")))
     write_meta(tmp_path, Meta(assembly="local", made_at="2026-11-19T00:00:00+00:00", init=True))
     result = _invoke("run", str(tmp_path), "--headless")
     assert result.exit_code == 0, result.output
-    assert inits == []
-    assert held == ["term"]
+    assert "init ran" not in result.output
+    assert [a for a, _ in entries["kernel"].calls] == [(str(tmp_path),)]
 
 
 @pytest.mark.parametrize("flag", ["--infra", "--kernel", "--web"])
@@ -282,8 +332,19 @@ def test_one_component_on_a_fresh_directory_is_refused(tmp_path, flag):
 @pytest.mark.parametrize(
     ("args", "called"),
     [
-        ([], {"run": {"plane": None, "host": "127.0.0.1", "port": 9007, "open_browser": False}}),
-        (["--headless"], {"infra": {"body": "term"}, "kernel": {"body": None}}),
+        (
+            [],
+            {
+                "run": {
+                    "into": EXIT,
+                    "plane": None,
+                    "host": "127.0.0.1",
+                    "port": 9007,
+                    "open_browser": False,
+                }
+            },
+        ),
+        (["--headless"], {"infra": {"body": MARK}, "kernel": {"body": None}}),
         (["--infra"], {"infra": {}}),
         (["--kernel"], {"kernel": {"body": None}}),
         (
@@ -297,9 +358,9 @@ def test_each_way_to_run_builds_its_term(held, inits, entries, tmp_path, args, c
     assert result.exit_code == 0, result.output
     got = {name: r.calls for name, r in entries.items() if r.calls}
     assert got == {name: [((str(tmp_path),), kwargs)] for name, kwargs in called.items()}
-    assert held == ["term"]
+    assert held == [MARK]
     alone = {"--infra", "--kernel", "--web"} & set(args)
-    assert inits == ([] if alone else [str(tmp_path)])
+    assert _roots(inits) == ([] if alone else [str(tmp_path)])
 
 
 def test_kernel_alone_makes_the_plane_with_in_its_body(held, inits, entries, verse):
@@ -365,7 +426,13 @@ def test_run_without_a_port_takes_the_first_free_from_8080(monkeypatch, held):
     assert serve.calls == [
         (
             (_abs("/tmp/space"),),
-            {"plane": None, "host": "127.0.0.1", "port": 8082, "open_browser": False},
+            {
+                "into": EXIT,
+                "plane": None,
+                "host": "127.0.0.1",
+                "port": 8082,
+                "open_browser": False,
+            },
         )
     ]
 
@@ -421,11 +488,12 @@ def test_run_falls_back_to_the_home_space(headless, tmp_path):
 
 @pytest.mark.parametrize("args", [["--headless", "--tmp"], ["--tmp", "--no-browser"]])
 def test_run_tmp_is_a_throwaway_initialized_then_removed(entries, held, inits, args):
-    """One throwaway root for whatever runs on it, initialized first, removed once the hold ends."""
+    """One throwaway root for whatever runs on it, its init first, all in the term held."""
     result = _invoke("run", *args)
     assert result.exit_code == 0, result.output
-    (root,) = inits
+    (root,) = _roots(inits)
     assert Path(root).name.startswith("nuspace-")
+    assert held.throwaways == [root]
     calls = {name: [a for a, _ in r.calls] for name, r in entries.items() if r.calls}
     if "--headless" in args:
         assert calls == {"infra": [(root,)], "kernel": [(root,)]}
@@ -436,15 +504,11 @@ def test_run_tmp_is_a_throwaway_initialized_then_removed(entries, held, inits, a
 
 
 def test_run_tmp_removes_the_throwaway_it_initialized(monkeypatch, entries):
-    """A real init on the throwaway root: initialized while held, gone once the hold ends."""
-    seen = []
-
-    def hold(term):
-        ((root,), _) = entries["kernel"].calls[0]
-        seen.append((root, read_meta(root).init))
-
-    monkeypatch.setattr(run_command, "hold", hold)
-    result = _invoke("run", "--headless", "--tmp")
+    """Held for real: initialized while the entry point runs, gone once the hold ends."""
+    seen: list[tuple[str, bool]] = []
+    looked = nu.host(lambda root: seen.append((root, read_meta(root).init)), name="Looked")
+    monkeypatch.setattr(local, "run", _Recorder(lambda root, **_: looked(root)))
+    result = _invoke("run", "--tmp", "--no-browser")
     assert result.exit_code == 0, result.output
     ((root, init),) = seen
     assert init is True
@@ -480,14 +544,20 @@ def _made_by(root: Path, name: str) -> None:
 def test_run_calls_the_assembly_meta_json_names(monkeypatch, held, tmp_path):
     kernel = _Recorder()
     other = SimpleNamespace(
-        run=_Recorder(), infra=_Recorder(), kernel=kernel, web=_Recorder(), open=None, init=None
+        run=_Recorder(),
+        infra=_Recorder(),
+        kernel=kernel,
+        web=_Recorder(),
+        open=None,
+        init=_Recorder(),
     )
     monkeypatch.setitem(sys.modules, "nuspace.space.other", other)
     _made_by(tmp_path, "other")
     result = _invoke("run", "--headless", str(tmp_path))
     assert result.exit_code == 0, result.output
     assert kernel.calls == [((str(tmp_path),), {"body": None})]
-    assert held == ["term"]
+    assert other.init.calls == [((str(tmp_path),), {})]
+    assert held == [MARK]
 
 
 @pytest.mark.parametrize("name", ["nowhere", "blocks", "../local", ""])
@@ -537,9 +607,9 @@ def test_run_from_opens_the_named_plane(monkeypatch, held, verse, tmp_path):
     assert result.exit_code == 0, result.output
     ((args, kwargs),) = opened.calls
     assert (kwargs.pop("plane").name, args[0]) == ("agents.crew", _home_root(tmp_path))
-    assert kwargs == {"host": "127.0.0.1", "port": 9002, "open_browser": False}
+    assert kwargs == {"into": EXIT, "host": "127.0.0.1", "port": 9002, "open_browser": False}
     assert "plane agents.crew" in result.output
-    assert held == ["term"]
+    assert held == [MARK]
 
 
 def test_run_web_with_opens_the_named_plane(monkeypatch, held, verse):
