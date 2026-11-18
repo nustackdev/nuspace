@@ -28,10 +28,11 @@ import nustd.valkey
 from _support.made import MADE, MADE_STORE
 from nu.lang import ScalarQuery
 from nuspace import kernel
-from nuspace.host.space import worker_context
-from nuspace.host.stores import CORE, VALKEY_DIR
-from nuspace.host.stores import navigators as host_navigators
 from nuspace.shapes import Space
+from nuspace.shapes.stores import CORE
+from nuspace.space.blocks.navigators import navigators as host_navigators
+from nuspace.space.blocks.notifier import VALKEY_DIR
+from nuspace.space.blocks.workers import worker_context
 
 
 if TYPE_CHECKING:
@@ -111,7 +112,7 @@ def kernel_open(
     backends and config, and inside them the kernel racing ``body``. Reap
     needs no backend, so nothing is spawned before it. ``blobs``, a blob
     store spec, is bound in the host and in every worker, the workers through
-    the host's own :func:`~nuspace.host.space.worker_context`.
+    the host's own :func:`~nuspace.space.blocks.workers.worker_context`.
     """
     (Path(data) / "store").mkdir(parents=True, exist_ok=True)
     held = () if blobs is None else (blobs,)

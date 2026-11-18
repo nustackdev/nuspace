@@ -13,7 +13,7 @@ Both are plain nustd values (``nustd.blob.StoreRef``,
 ``nustd.blob.http.BlobMount``), so their terms are nustd's. The store is
 bound once per process, host and every worker, like the kv stores; the web
 device serves it under ``/blobs``. Which backend it gets is the host's
-(:mod:`nuspace.host.blobs`).
+(:mod:`nuspace.space.local.blobs`).
 
 Workers import this module: nothing here may pull in a server.
 """

@@ -23,8 +23,9 @@ import nustd.kv
 from nuspace._cli import _installed, cli
 from nuspace._cli.commands import run as run_command
 from nuspace._telemetry import config
-from nuspace.host import CORE, SPACE_STORE, presets
-from nuspace.host.layout import DATA_DIR
+from nuspace.shapes.stores import CORE, SPACE_STORE
+from nuspace.space.blocks.meta import DATA_DIR
+from nuspace.space.local import presets
 from nuspace.specs import CellSpec, ContentSpec, Extension, PlaneSpec
 from nuspace.web import WEB_STORE, Web
 

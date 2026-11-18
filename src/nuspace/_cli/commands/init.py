@@ -1,6 +1,6 @@
 """``nuspace init``: make a directory a space, without opening it to run.
 
-The stores only, through :func:`~nuspace.host.make_space`: ``.nuspace/``
+The stores only, through :func:`~nuspace.space.local.make_space`: ``.nuspace/``
 with its stores, the system planes and the web planes, seeded as the first
 open would. Without PATH it is the current directory, said so when that sits
 inside another space. No venv, no packaging: the directory is not set up
@@ -17,7 +17,8 @@ from rich.text import Text
 import nu
 from nuspace._branding import BLUE, PURPLE
 from nuspace.errors import Refused
-from nuspace.host import find_space, is_space, make_space
+from nuspace.space.blocks.meta import find_space, is_space
+from nuspace.space.local import make_space
 
 from .._meta import console, path_argument, tilde
 

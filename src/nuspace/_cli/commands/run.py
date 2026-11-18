@@ -1,7 +1,7 @@
 """``nuspace run``: open a space, served in a browser or headless.
 
-One flag, one :mod:`nuspace.host` preset: :func:`~nuspace.host.serve` by
-default, :func:`~nuspace.host.headless` with ``--headless``. Runs until
+One flag, one :mod:`nuspace.space.local` preset: :func:`~nuspace.space.local.serve` by
+default, :func:`~nuspace.space.local.headless` with ``--headless``. Runs until
 interrupted, then the host ends what is live and the brackets stop the
 workers. Which space is :func:`~nuspace._cli._meta.space_root`: PATH, made
 a space if it is not one, else the nearest space up from here, else home.
@@ -9,7 +9,7 @@ a space if it is not one, else the nearest space up from here, else home.
 
 ``--with`` names a Plane an installed package adds, ``pkg.plane`` as
 ``nuspace verse`` lists them, or a bare name for a nuverse Plane: it is made
-in the space once, through :func:`~nuspace.host.with_plane`, and the tab
+in the space once, through :func:`~nuspace.space.local.with_plane`, and the tab
 opens on it. The next run with the same name reopens the newest plane made
 from it, unless removed. The header names the Plane: its id is only known
 once the space is open. A space open in another host, or of an older store
@@ -27,7 +27,7 @@ import socket
 import rich_click as click
 
 from nuspace.errors import Refused
-from nuspace.host import presets
+from nuspace.space.local import presets
 from nuspace.specs import registered_name
 
 from .._installed import resolve

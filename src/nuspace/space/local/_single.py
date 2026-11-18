@@ -35,27 +35,27 @@ re-import the main module.
 
 from __future__ import annotations
 
-import tempfile
-import uuid
 import warnings
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import nu
 import nustd.kv
-import nustd.mp_pool
 import nustd.time
 from nuspace import kernel, system
 from nuspace._telemetry.usage import opened
 from nuspace.shapes import Space
+from nuspace.shapes.stores import CORE
 from nuspace.specs import RegistryWarning, space_registry
 
+from ..blocks.lock import Lock
+from ..blocks.meta import LOCK_FILE, data_dir, resolve_root
+from ..blocks.navigators import navigators
+from ..blocks.notifier import notifier
+from ..blocks.resources import DataDir, Fresh, Throwaway
+from ..blocks.workers import DEFAULT_NAME, DEFAULT_SPARES, worker_pool
 from .blobs import default_spec
 from .devices import device, device_stores
-from .layout import LOCK_FILE, data_dir
-from .lock import HostLock
-from .resources import DataDir, Fresh, Throwaway, Warmed
-from .stores import CORE, navigators, notifier
 
 
 if TYPE_CHECKING:
@@ -69,39 +69,7 @@ if TYPE_CHECKING:
     from .devices import Device
 
 
-__all__ = [
-    "DEFAULT_GRACE",
-    "DEFAULT_NAME",
-    "DEFAULT_SPARES",
-    "make_space",
-    "open_space",
-    "stamp",
-    "worker_context",
-    "worker_pool",
-]
-
-
-#: Process name prefix for the pool's workers, so a space shows in a process list.
-DEFAULT_NAME = "nuspace"
-
-#: How many idle workers the pool keeps up: one for the plane being opened,
-#: one for the tab beside it.
-DEFAULT_SPARES = 2
-
-#: Seconds a worker gets to end once let go, or when the space closes: torn
-#: down politely, killed past it.
-DEFAULT_GRACE = 2.0
-
-
-def _root(path: str | os.PathLike[str] | None) -> tuple[str, bool]:
-    """The space's root, absolute, and whether it is a throwaway one.
-
-    A throwaway root is only named here, in the temp dir; :class:`Throwaway`
-    makes it at open and removes it at close.
-    """
-    if path is None:
-        return str(Path(tempfile.gettempdir()) / f"nuspace-{uuid.uuid4().hex[:8]}"), True
-    return str(Path(path).expanduser().resolve()), False
+__all__ = ["make_space", "open_space", "stamp"]
 
 
 def _inits(stores: Iterable[Store]) -> nu.Nu:
@@ -120,46 +88,6 @@ def stamp(root: str) -> nu.Nu:
     """
     info = Space.info
     return nustd.kv.atomic(info.path.set(root) >> info.opened_at.set(nustd.time.time()))
-
-
-def worker_context(data: str, stores: Sequence[Store], blobs: Provide) -> nu.With:
-    """What every worker comes up holding. Pickled to the child, entered there.
-
-    Process scope only, since the pool pays it on every launch: every store
-    of the open, opened by the worker itself on the host's files and server,
-    the blob store, a dict for host local records, and the warm module
-    cache. Whatever one run needs rides in its body.
-
-    Args:
-        data: The space's data dir, absolute.
-        stores: The stores of the open, core ones and the devices'.
-        blobs: The blob store's spec (``nuspace.Blobs``).
-    """
-    return nu.With(navigators(data, stores), blobs, nu.Provide(dict, {}), nu.Provide(Warmed, {}))
-
-
-def worker_pool(
-    data: str,
-    stores: Sequence[Store],
-    blobs: Provide,
-    *,
-    name: str = DEFAULT_NAME,
-    spares: int = DEFAULT_SPARES,
-    grace: float = DEFAULT_GRACE,
-) -> nu.Provide:
-    """The fleet, every worker holding :func:`worker_context`. Closing stops them all.
-
-    Args:
-        data: The space's data dir, absolute.
-        stores: The stores every worker binds.
-        blobs: The blob store's spec every worker binds.
-        name: Process name prefix.
-        spares: Idle workers to keep up, so a launch does not wait for a spawn.
-        grace: Seconds a worker gets to end, polite first, killed past it.
-    """
-    return nustd.mp_pool.pool(
-        name=name, init=worker_context(data, stores, blobs), spares=spares, grace=grace
-    )
 
 
 def _envs(
@@ -196,7 +124,7 @@ def _opening(root: str, throwaway: bool, blobs: Provide | None, body: nu.Nu) -> 
         inner = nu.With(nu.Provide(Fresh, {"paths": fresh}), navigators(data, extra), body=inner)
     outer = [
         nu.Provide(DataDir, {"root": root, "files": files}),
-        nu.Provide(HostLock, {"path": str(Path(data) / LOCK_FILE)}),
+        nu.Provide(Lock, {"path": str(Path(data) / LOCK_FILE)}),
         notifier(data),
         navigators(data, CORE),
     ]
@@ -266,7 +194,7 @@ def open_space(
         Missing: A device of no known name (at build).
         Refused: An older store format, or the space open in another host.
     """
-    root, throwaway = _root(path)
+    root, throwaway = resolve_root(path)
     data = str(data_dir(root))
     opened_devices = [device(d) for d in devices]
     reg = space_registry(extensions=extensions, envs=envs)
@@ -311,6 +239,6 @@ def make_space(path: str | os.PathLike[str], *, devices: Sequence[str] = ("web",
         Missing: A device of no known name (at build).
         Refused: An older store format, or the space open in another host.
     """
-    root, _ = _root(path)
+    root, _ = resolve_root(path)
     opened_devices = [device(d) for d in devices]
     return _opening(root, False, None, _seeds(opened_devices))

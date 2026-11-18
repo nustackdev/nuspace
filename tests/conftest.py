@@ -18,7 +18,7 @@ from _support.made import MADE, MADE_STORE
 import nu
 import nustd.kv
 from nu.lang import ScalarQuery
-from nuspace.host.stores import SPACE_STORE, STATE_STORE
+from nuspace.shapes.stores import SPACE_STORE, STATE_STORE
 from nuspace.web.stores import CONN_STORE, WEB_STORE
 
 

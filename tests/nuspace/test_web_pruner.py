@@ -19,9 +19,10 @@ import nu
 import nuspace
 import nuspace.web as web
 from nu.lang import ScalarQuery
-from nuspace import host, system
+from nuspace import system
 from nuspace.errors import Refused
 from nuspace.shapes import Space
+from nuspace.space import local
 from nuspace.system import reactions
 from nuspace.web.desks import pruner
 from nuspace.web.desks.model import item_problem, items_of
@@ -354,7 +355,7 @@ async def test_a_removal_prunes_with_no_browser_and_a_bulk_removal_is_one_run(tm
     loop = asyncio.get_running_loop()
     ready, done = loop.create_future(), asyncio.Event()
     hold = nu.let(_Hold(ready, done), lambda _: nu.Noop())
-    term = host.open_space(
+    term = local.open_space(
         tmp_path / "space",
         open_browser=False,
         static=None,

@@ -7,7 +7,7 @@ Files, roots and channels::
 
 Opened at every open, served or headless (the web device's driver runs
 only when served), so a web row a program writes always lands. Their init
-terms are bare, as the core ones are (:mod:`nuspace.host.stores`): the
+terms are bare, as the core ones are (:mod:`nuspace.shapes.stores`): the
 caller brackets each store on its own.
 """
 

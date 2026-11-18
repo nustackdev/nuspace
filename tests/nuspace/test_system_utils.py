@@ -5,8 +5,8 @@ from __future__ import annotations
 import nu
 import nuspace
 import nustd.kv
-from nuspace.host.stores import STATE_STORE
 from nuspace.shapes import State
+from nuspace.shapes.stores import STATE_STORE
 from nuspace.utils.policies import isolated, report, restarting
 from nuspace.web.utils import Arms, field_str
 

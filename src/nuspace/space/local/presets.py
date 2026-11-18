@@ -19,8 +19,8 @@ from nuspace.ops.brackets import atomic
 from nuspace.shapes import Space
 from nuspace.specs import add_plane, plane_spec, registered_name
 
-from .interactions import Browse
-from .space import open_space
+from ..blocks.browse import Browse
+from ._single import open_space
 
 
 if TYPE_CHECKING:

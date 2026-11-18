@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING
 
 from nuspace.errors import Refused
 
-from .layout import DATA_DIR, is_older
+from .meta import DATA_DIR, is_older
 
 
 if TYPE_CHECKING:

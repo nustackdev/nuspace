@@ -60,9 +60,9 @@ from starlette.routing import Route
 import nu
 import nuspace
 from nuspace import _telemetry
-from nuspace.host.resources import Fresh
 from nuspace.ops.brackets import atomic
 from nuspace.shapes import blobs as blob_mount
+from nuspace.space.blocks.resources import Fresh
 from nuspace.specs import space_registry
 from nuspace.utils import keys_of
 from nustd.blob.http.serving import serve_blobs

@@ -21,9 +21,10 @@ from _support.system import as_indexer, catch_up, keyed
 import nu
 import nuspace
 import nustd.kv
-from nuspace import host, system
-from nuspace.host.layout import data_dir
-from nuspace.shapes import Space
+from nuspace import system
+from nuspace.shapes import Space, stores
+from nuspace.space import local
+from nuspace.space.blocks.meta import data_dir
 from nuspace.system import reactions
 from nuspace.web import CONN_STORE, WEB_STORE
 from nuspace.web.home import indexer
@@ -318,7 +319,7 @@ async def test_a_wake_counts_an_existing_space_with_no_add():
 # --- At open --------------------------------------------------------------------------------
 
 
-EVERY_STORE = (*host.CORE, WEB_STORE, CONN_STORE)
+EVERY_STORE = (*stores.CORE, WEB_STORE, CONN_STORE)
 
 
 async def _on_disk(root, term: nu.Nu) -> object:
@@ -337,7 +338,7 @@ def _free_port() -> int:
 async def test_an_open_counts_an_existing_space_with_no_indexer_state(tmp_path):
     root = tmp_path / "space"
     # A space from before the indexer: made without the web device, so no indexer, no state.
-    await nu.arun(host.make_space(root, devices=()))
+    await nu.arun(local.make_space(root, devices=()))
 
     def plane_and_cell(made: nu.ObjectRef) -> nu.Nu:
         added = nuspace.atomic(nuspace.plane.add(backend="async", into=made))
@@ -346,7 +347,7 @@ async def test_an_open_counts_an_existing_space_with_no_indexer_state(tmp_path):
     for _ in range(2):
         await _on_disk(root, nu.let("", plane_and_cell))
     assert await _on_disk(root, nuspace.atomic(nuspace.plane.keyed(indexer.KEY))) == ""
-    term = host.serve(
+    term = local.serve(
         root, open_browser=False, static=None, port=_free_port(), extensions=(), spares=0
     )
     task = asyncio.create_task(nu.arun(term))

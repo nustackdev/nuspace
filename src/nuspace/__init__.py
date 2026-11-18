@@ -18,7 +18,7 @@ The top level holds the everyday names only:
   add_cell) and ``nuspace.errors`` (what an op raises).
 
 ``nuspace.kernel``, ``nuspace.system.*``, ``nuspace.web``,
-``nuspace.host`` and ``nuspace.utils`` stay namespaced.
+``nuspace.space`` and ``nuspace.utils`` stay namespaced.
 
 Workers import this package: nothing here may pull in a server.
 """

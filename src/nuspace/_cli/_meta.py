@@ -20,7 +20,7 @@ import nu
 from nuspace import _telemetry
 from nuspace._branding import BLUE, header
 from nuspace.errors import Refused
-from nuspace.host.layout import DATA_DIR, find_space
+from nuspace.space.blocks.meta import DATA_DIR, find_space
 
 
 __all__ = [

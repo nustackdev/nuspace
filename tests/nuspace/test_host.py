@@ -30,15 +30,16 @@ from _support.made import MADE, MADE_STORE
 import nu
 import nuspace
 import nustd.kv
-from nuspace import host
 from nuspace.errors import Missing, Refused
-from nuspace.host import interactions, presets
-from nuspace.host import lock as lock_module
-from nuspace.host.layout import DATA_DIR, LOCK_FILE, data_dir, find_space, is_older, is_space
-from nuspace.host.lock import HostLock, LockWarning, holder
-from nuspace.host.resources import DataDir, Fresh, Throwaway
 from nuspace.kernel import CLOSED, LEFT_OVER, Env
-from nuspace.shapes import EXIT_INTERRUPTED, EXIT_KILLED, FORMAT, Space
+from nuspace.shapes import EXIT_INTERRUPTED, EXIT_KILLED, FORMAT, Space, stores
+from nuspace.space import local
+from nuspace.space.blocks import browse
+from nuspace.space.blocks import lock as lock_module
+from nuspace.space.blocks.lock import Lock, LockWarning, holder
+from nuspace.space.blocks.meta import DATA_DIR, LOCK_FILE, data_dir, find_space, is_older, is_space
+from nuspace.space.blocks.resources import DataDir, Fresh, Throwaway
+from nuspace.space.local import presets
 from nuspace.specs import (
     GROUP,
     CellSpec,
@@ -229,7 +230,7 @@ def test_the_tests_specs_register_through_their_installed_package():
 
 def _mark(root: Path) -> None:
     """``root`` made a space as far as finding one goes: its Space store file."""
-    file = data_dir(root) / host.SPACE_STORE.file
+    file = data_dir(root) / stores.SPACE_STORE.file
     file.parent.mkdir(parents=True)
     file.touch()
 
@@ -254,14 +255,14 @@ def test_an_older_space_is_told_apart(tmp_path, old):
     (tmp_path / old).touch()
     assert is_older(tmp_path)
     with pytest.raises(Refused, match="older nuspace store format"):
-        DataDir(str(tmp_path), [host.SPACE_STORE.file]).setup(None)
+        DataDir(str(tmp_path), [stores.SPACE_STORE.file]).setup(None)
     assert not (data_dir(tmp_path) / "store").exists()
     _mark(tmp_path)
     assert not is_older(tmp_path)
 
 
 def test_the_data_dir_holds_a_folder_per_store(tmp_path):
-    files = [s.file for s in (*host.CORE, WEB_STORE, CONN_STORE)]
+    files = [s.file for s in (*stores.CORE, WEB_STORE, CONN_STORE)]
     DataDir(str(tmp_path), files).setup(None)
     assert (data_dir(tmp_path) / "store").is_dir()
     assert (data_dir(tmp_path) / "devices" / "web").is_dir()
@@ -280,16 +281,16 @@ def test_fresh_deletes_a_store_file_and_what_sqlite_keeps_beside_it(tmp_path):
 
 def test_the_lock_names_its_holder_and_refuses_a_second_open(tmp_path):
     path = str(tmp_path / LOCK_FILE)
-    first = HostLock(path)
+    first = Lock(path)
     first.setup(None)
     try:
         name, pid, _ = holder(path).split()
         assert (name, int(pid)) == (socket.gethostname(), os.getpid())
         with pytest.raises(Refused, match="open already in this process"):
-            HostLock(path).setup(None)
+            Lock(path).setup(None)
     finally:
         first.cleanup()
-    again = HostLock(path)
+    again = Lock(path)
     again.setup(None)
     again.cleanup()
 
@@ -298,8 +299,8 @@ def test_a_lock_another_process_holds_refuses_the_open(tmp_path):
     path = str(tmp_path / LOCK_FILE)
     code = (
         "import sys, time\n"
-        "from nuspace.host.lock import HostLock\n"
-        f"HostLock({path!r}).setup(None)\n"
+        "from nuspace.space.blocks.lock import Lock\n"
+        f"Lock({path!r}).setup(None)\n"
         "print('held', flush=True)\n"
         "time.sleep(60)\n"
     )
@@ -309,12 +310,12 @@ def test_a_lock_another_process_holds_refuses_the_open(tmp_path):
         with pytest.raises(
             Refused, match=f"open on {socket.gethostname()}, pid {other.pid}. Close it there"
         ):
-            HostLock(path).setup(None)
+            Lock(path).setup(None)
     finally:
         other.kill()
         other.wait()
     # Its holder died: the lock went with it.
-    mine = HostLock(path)
+    mine = Lock(path)
     mine.setup(None)
     mine.cleanup()
 
@@ -325,7 +326,7 @@ def test_a_lock_the_file_system_cannot_take_opens_with_a_warning(tmp_path, monke
 
     monkeypatch.setattr(lock_module.fcntl, "lockf", nolock)
     path = str(tmp_path / LOCK_FILE)
-    lock = HostLock(path)
+    lock = Lock(path)
     with pytest.warns(LockWarning, match="opening without it"):
         lock.setup(None)
     assert not holder(path)
@@ -346,7 +347,7 @@ def test_a_throwaway_root_is_made_at_setup_and_removed_with_its_data_at_cleanup(
 # --- make_space -------------------------------------------------------------------------
 
 
-_EVERY_STORE = (*host.CORE, WEB_STORE, CONN_STORE)
+_EVERY_STORE = (*stores.CORE, WEB_STORE, CONN_STORE)
 
 
 async def _aread(root: Path, term: nu.Nu, stores=_EVERY_STORE) -> object:
@@ -383,7 +384,7 @@ def _write(root: Path, store, term: nu.Nu) -> None:
 
 
 def _make(root: Path, **kwargs) -> None:
-    nu.eval_in_loop(nu.compile(host.make_space(root, **kwargs)), nu.Context())
+    nu.eval_in_loop(nu.compile(local.make_space(root, **kwargs)), nu.Context())
 
 
 def test_make_space_seeds_a_fresh_space_and_keeps_an_existing_one(tmp_path):
@@ -399,7 +400,7 @@ def test_make_space_seeds_a_fresh_space_and_keeps_an_existing_one(tmp_path):
     assert set(_read(root, nu.list(init.boot_list().keys()))) == booted
     # A second make keeps what is there: a booted plane stays booted.
     booting = nuspace.at.plane(id=keyed[init.KEY]).state(init.Boot).planes
-    _write(root, host.STATE_STORE, booting.set_item("mine", True))
+    _write(root, stores.STATE_STORE, booting.set_item("mine", True))
     _make(root)
     assert "mine" in _read(root, nu.list(init.boot_list().keys()))
     assert _read(root, Space.info.created_at) == info["created_at"]
@@ -434,7 +435,7 @@ def test_conn_is_made_fresh_at_every_open_web_is_kept(tmp_path):
 def test_a_space_of_another_format_is_refused_before_anything_is_written(tmp_path):
     root = tmp_path / "space"
     _make(root)
-    _write(root, host.SPACE_STORE, Space.info.format.set(FORMAT + 1))
+    _write(root, stores.SPACE_STORE, Space.info.format.set(FORMAT + 1))
     _write(root, CONN_STORE, Conn.connections["tab"].order.set(["p"]))
     with pytest.raises(Refused, match="another store format"):
         _make(root)
@@ -442,24 +443,24 @@ def test_a_space_of_another_format_is_refused_before_anything_is_written(tmp_pat
     assert _read(root, Conn.connections["tab"].order.extract()) == ["p"]
     # The lock went with the refused open.
     assert holder(str(data_dir(root) / LOCK_FILE))
-    _write(root, host.SPACE_STORE, Space.info.format.set(FORMAT))
+    _write(root, stores.SPACE_STORE, Space.info.format.set(FORMAT))
     _make(root)
 
 
 def test_an_unknown_device_is_refused_at_build(tmp_path):
     with pytest.raises(Missing, match="no device 'tv'"):
-        host.open_space(tmp_path, devices=("tv",))
+        local.open_space(tmp_path, devices=("tv",))
 
 
 # --- open_space, for real ---------------------------------------------------------------
 
 
 async def _opened(root: Path, **kwargs):
-    """``host.headless`` on this loop, held open: ``(ctx, done, task)``. Close with ``done.set()``."""
+    """``local.headless`` on this loop, held open: ``(ctx, done, task)``. Close with ``done.set()``."""
     loop = asyncio.get_running_loop()
     ready, done = loop.create_future(), asyncio.Event()
     hold = nu.With(MADE_STORE, body=nu.let(_Hold(ready, done), lambda _: nu.Noop()))
-    term = host.headless(root, spares=0, name="nuspace-host", extensions=(), body=hold, **kwargs)
+    term = local.headless(root, spares=0, name="nuspace-host", extensions=(), body=hold, **kwargs)
     task = asyncio.create_task(nu.arun(term))
     waiting = asyncio.ensure_future(asyncio.shield(ready))
     finished, _ = await asyncio.wait({waiting, task}, timeout=30, return_when="FIRST_COMPLETED")
@@ -510,7 +511,7 @@ async def test_a_clean_close_ends_what_is_live_so_the_reopen_reaps_nothing(tmp_p
         ids = {(await nu.arun(nuspace.atomic(k), ctx))[0] for k in keyed}
         assert planes == ids
         with pytest.raises(Refused, match="open already in this process"):
-            await nu.arun(host.headless(root))
+            await nu.arun(local.headless(root))
     finally:
         done.set()
         await asyncio.wait_for(task, 15)
@@ -536,7 +537,7 @@ async def test_a_clean_close_ends_what_is_live_so_the_reopen_reaps_nothing(tmp_p
 
 
 def test_served_open_compiles_and_validates(tmp_path):
-    term = host.serve(tmp_path, extensions=["testing"], open_browser=False, static=None, port=0)
+    term = local.serve(tmp_path, extensions=["testing"], open_browser=False, static=None, port=0)
     nu.validate(nu.compile(term))
 
 
@@ -606,12 +607,12 @@ def _free_port() -> int:
 
 async def test_browse_opens_once_the_port_answers(monkeypatch):
     opened: list[str] = []
-    monkeypatch.setattr(interactions.webbrowser, "open", opened.append)
+    monkeypatch.setattr(browse.webbrowser, "open", opened.append)
     server = await asyncio.start_server(lambda r, w: w.close(), "127.0.0.1", 0)
     port = server.sockets[0].getsockname()[1]
     try:
         url = f"http://127.0.0.1:{port}/p_x"
-        await interactions.browse(url, "0.0.0.0", port)  # noqa: S104
+        await browse.browse(url, "0.0.0.0", port)  # noqa: S104
     finally:
         server.close()
         await server.wait_closed()
@@ -620,18 +621,18 @@ async def test_browse_opens_once_the_port_answers(monkeypatch):
 
 async def test_browse_gives_up_quietly(monkeypatch):
     opened: list[str] = []
-    monkeypatch.setattr(interactions.webbrowser, "open", opened.append)
-    await interactions.browse("http://x", "127.0.0.1", _free_port(), timeout=0.2)
+    monkeypatch.setattr(browse.webbrowser, "open", opened.append)
+    await browse.browse("http://x", "127.0.0.1", _free_port(), timeout=0.2)
     assert opened == []
 
 
 async def test_browse_as_a_term_reads_its_url_at_run_time(monkeypatch):
     opened: list[str] = []
-    monkeypatch.setattr(interactions.webbrowser, "open", opened.append)
+    monkeypatch.setattr(browse.webbrowser, "open", opened.append)
     server = await asyncio.start_server(lambda r, w: w.close(), "127.0.0.1", 0)
     port = server.sockets[0].getsockname()[1]
     base = f"http://127.0.0.1:{port}/"
-    term = nu.let("p_x", lambda plane: interactions.Browse(nu.Str(base) + nu.Str(plane), "", port))
+    term = nu.let("p_x", lambda plane: browse.Browse(nu.Str(base) + nu.Str(plane), "", port))
     try:
         await nu.arun(term)
     finally:
@@ -666,7 +667,7 @@ def _live_runs(root: Path, n: int = 4) -> list[str]:
     """The live plane runs of the space a host runs, once there are ``n`` (init and its boots)."""
     live = Space.exec.indexes.live.plane_runs
     term = nu.list(live.keys())
-    return asyncio.run(_apoll(root, term, lambda rs: len(rs) == n, stores=host.CORE))
+    return asyncio.run(_apoll(root, term, lambda rs: len(rs) == n, stores=stores.CORE))
 
 
 def test_nuspace_run_stops_on_ctrl_c_ends_what_is_live_and_leaves_no_process(tmp_path):
@@ -687,9 +688,9 @@ def test_nuspace_run_stops_on_ctrl_c_ends_what_is_live_and_leaves_no_process(tmp
     time.sleep(0.5)
     assert _left(run.pid, data_dir(root)) == []
     # The cancelled kernel arms and the close did not end anything twice.
-    rows = _read(root, Space.exec.plane_runs.extract(), stores=host.CORE)
+    rows = _read(root, Space.exec.plane_runs.extract(), stores=stores.CORE)
     assert {(rows[r]["exit"], rows[r]["error"]) for r in runs} == {(EXIT_INTERRUPTED, CLOSED)}
-    live = _read(root, Space.exec.indexes.live.extract(), stores=host.CORE)
+    live = _read(root, Space.exec.indexes.live.extract(), stores=stores.CORE)
     assert live["plane_runs"] == {} and live["workers"] == {}
 
 
@@ -700,7 +701,7 @@ async def test_a_host_killed_mid_run_is_reaped_killed_at_the_next_open(tmp_path,
     try:
         live = Space.exec.indexes.live.plane_runs
         term = nu.list(live.keys())
-        runs = await _apoll(root, term, lambda rs: len(rs) == 4, stores=host.CORE)
+        runs = await _apoll(root, term, lambda rs: len(rs) == 4, stores=stores.CORE)
     finally:
         os.killpg(run.pid, signal.SIGKILL)
         run.wait()
@@ -725,7 +726,7 @@ async def test_a_host_killed_mid_run_is_reaped_killed_at_the_next_open(tmp_path,
     ("imported", "absent"),
     [
         ("nuspace", ("starlette", "uvicorn", "click", "nustd.ws_server", "nuspace._telemetry")),
-        ("nuspace.host", ("starlette", "uvicorn", "click", "nustd.ws_server")),
+        ("nuspace.space", ("starlette", "uvicorn", "click", "nustd.ws_server")),
     ],
 )
 def test_importing_nuspace_or_the_host_pulls_in_no_server_and_no_cli(imported, absent):

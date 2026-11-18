@@ -1,4 +1,4 @@
-"""The host lock: one host holds a space open at a time.
+"""The space lock: one open holds a space at a time.
 
 ``.nuspace/host.lock``, taken first at open, before the notification server
 and the stores, held until the space closes. A POSIX record lock
@@ -36,7 +36,7 @@ if TYPE_CHECKING:
     from nu.lang.runtime import Context
 
 
-__all__ = ["HostLock", "LockWarning", "holder"]
+__all__ = ["Lock", "LockWarning", "holder"]
 
 
 #: Errors a non blocking lock raises when somebody else holds it.
@@ -67,7 +67,7 @@ def _told(record: str) -> str:
     return f"open on {host}, pid {pid}"
 
 
-class HostLock:
+class Lock:
     """The host lock on ``path``, taken at setup, released at cleanup.
 
     Args:

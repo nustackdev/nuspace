@@ -1,11 +1,11 @@
-"""Where a space keeps its data: the data dir inside the space's root, and how a space is found.
+"""What every assembly shares about a space on disk: the data dir, how a space is found, its root.
 
 A space is a directory, any one, its data kept in ``.nuspace/`` the way a
 repository keeps ``.git/``::
 
     <space root>/
       .nuspace/
-        host.lock                  the host holding the space open
+        host.lock                  the lock of the open holding the space
         store/space.db             Space
         store/state.db             State
         store/blobs/               Blobs, the blob store (LMDB, or files on a network disk)
@@ -14,16 +14,23 @@ repository keeps ``.git/``::
         devices/web/uploads/       files tabs posted, wiped at every open
         infra/valkey/              the notification server's dir, per open
 
-The store files are the store records' (:mod:`.stores`,
+The store files are the store records' (:mod:`nuspace.shapes.stores`,
 :mod:`nuspace.web.stores`). The Space store's file is the mark of a
 space: ``~/.nuspace`` holds the user's config whether or not home is a space.
 """
 
 from __future__ import annotations
 
+import tempfile
+import uuid
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-from .stores import SPACE_STORE
+from nuspace.shapes.stores import SPACE_STORE
+
+
+if TYPE_CHECKING:
+    import os
 
 
 __all__ = [
@@ -34,6 +41,7 @@ __all__ = [
     "find_space",
     "is_older",
     "is_space",
+    "resolve_root",
 ]
 
 
@@ -69,3 +77,14 @@ def find_space(start: str | Path) -> Path | None:
     """The nearest space at or above ``start``, as ``git`` finds a repository. None when there is none."""
     here = Path(start).expanduser().resolve()
     return next((d for d in (here, *here.parents) if is_space(d)), None)
+
+
+def resolve_root(path: str | os.PathLike[str] | None) -> tuple[str, bool]:
+    """The space's root, absolute, and whether it is a throwaway one.
+
+    None names a throwaway root in the temp dir: the assembly makes it and
+    removes it at the end. Anything else is expanded and resolved.
+    """
+    if path is None:
+        return str(Path(tempfile.gettempdir()) / f"nuspace-{uuid.uuid4().hex[:8]}"), True
+    return str(Path(path).expanduser().resolve()), False

@@ -26,13 +26,13 @@ import nuspace
 import nustd.blob
 import nustd.kv
 from nu.lang import ScalarQuery
-from nuspace import host
-from nuspace.host import blobs as host_blobs
-from nuspace.host.layout import data_dir
-from nuspace.host.resources import Fresh
-from nuspace.host.space import worker_context
-from nuspace.host.stores import CORE
 from nuspace.shapes import EXIT_OK
+from nuspace.shapes.stores import CORE
+from nuspace.space import local
+from nuspace.space.blocks.meta import data_dir
+from nuspace.space.blocks.resources import Fresh
+from nuspace.space.blocks.workers import worker_context
+from nuspace.space.local import blobs as host_blobs
 from nuspace.web.env import SessionWrap
 from nuspace.web.session import SessionPipe, piped_session
 from nuspace.web.stores import UPLOADS_DIR
@@ -200,11 +200,11 @@ def _free_port() -> int:
 
 
 async def _served(root: Path, port: int):
-    """``host.serve`` on this loop, held open: ``(done, task)``. Close with ``done.set()``."""
+    """``local.serve`` on this loop, held open: ``(done, task)``. Close with ``done.set()``."""
     loop = asyncio.get_running_loop()
     ready, done = loop.create_future(), asyncio.Event()
     hold = nu.With(MADE_STORE, body=nu.let(_Hold(ready, done), lambda _: nu.Noop()))
-    term = host.serve(
+    term = local.serve(
         root, port=port, open_browser=False, static=None, spares=0, extensions=(), body=hold
     )
     task = asyncio.create_task(nu.arun(term))

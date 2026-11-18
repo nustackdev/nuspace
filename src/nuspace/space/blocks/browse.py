@@ -1,4 +1,4 @@
-"""The host's own nu interactions: opening a browser tab once the web device answers.
+"""Browse: opening a browser tab once the web server answers, as a term.
 
 - :class:`BrowserRef`: the browser, what :class:`Browse` writes. Nothing is bound.
 - :class:`Browse`: open a url once a server takes connections.
