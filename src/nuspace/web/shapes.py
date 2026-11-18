@@ -72,7 +72,7 @@ class Desk(nu.Shape):
 
 
 class Web(nu.Shape):
-    """The root of ``web_state.db``, and its store's tag.
+    """The root of the Web store, and its tag.
 
     ``planes`` is every web plane by plane id. ``recents`` is plane ids,
     most recent first, at most :data:`RECENTS_CAP`, a small list. A removed

@@ -130,7 +130,7 @@ def _field(cell: ItemRef, label: str, help: str = "") -> ui.FieldRef:
 space = _board(page_.space, span={(1, 0): 2})  # location: two columns
 name = _field(space[0, 0], "Name").control.to(ui.TextRef.slot(weight="medium"))
 store_format = _field(space[0, 1], "Store format").control.to(ui.TextRef.slot(mono=True))
-location = _field(space[1, 0], "Location", "The space directory: space.db and its stores")
+location = _field(space[1, 0], "Location", "The space's root directory, where its data lives")
 where = location.control.to(ui.TextRef.slot(mono=True, size="sm"))
 created = _field(space[2, 0], "Created").control.to(ui.RelativeTimeRef)
 up = _field(space[2, 1], "Up", "Since this open").control.to(

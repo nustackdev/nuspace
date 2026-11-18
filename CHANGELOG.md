@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Kernel and web code now name no file, store backend, port or process
 - Web runs as one driver handed its addresses; a session cell without web fails plainly
 - A pane whose run a kernel ended on stop or crash asks for it again
 - Tabs of an earlier open are cleared by a commit, never by deleting files

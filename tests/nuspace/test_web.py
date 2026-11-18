@@ -12,9 +12,12 @@ from __future__ import annotations
 
 import asyncio
 import pickle
+import re
 import subprocess
 import sys
+from pathlib import Path
 
+import pytest
 from _support.made import MADE
 from _support.specs import TEXT_SRC
 
@@ -133,6 +136,20 @@ def test_the_session_env_asks_where_web_is_at_every_cell_run():
     assert factory("s1").wrap.address == "127.0.0.1:9"
     at[0] = "127.0.0.1:10"
     assert factory("s1").wrap.address == "127.0.0.1:10"
+
+
+@pytest.mark.parametrize("driver", ["kernel", "web"])
+def test_a_driver_names_no_file_store_backend_or_process(driver):
+    """The border: a driver works on shapes and context. Nothing of an assembly's shows in its code."""
+    src = Path(nuspace.__file__).parent / driver
+    banned = re.compile(r"\.db\b|Path\(|data_dir|sqlite|valkey|\bos\.")
+    hits = [
+        f"{f.relative_to(src)}:{n}: {line.strip()}"
+        for f in sorted(src.rglob("*.py"))
+        for n, line in enumerate(f.read_text().splitlines(), 1)
+        if banned.search(line)
+    ]
+    assert hits == []
 
 
 # --- Sidebar rows ------------------------------------------------------------------

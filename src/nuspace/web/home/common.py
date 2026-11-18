@@ -81,7 +81,7 @@ VERSIONS = {"nuspace": version("nuspace"), "nu": version("nucore")}
 
 def _name(path: object) -> str:
     text = str(path or "").rstrip("/")
-    return Path(text).name if text else "Throwaway store"
+    return text.rpartition("/")[2] if text else "Throwaway store"
 
 
 def _where(path: object) -> str:
