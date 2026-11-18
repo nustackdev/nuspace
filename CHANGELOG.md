@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Tabs of an earlier open are cleared by a commit, never by deleting files
 - An assembly can split one store across several backends by its top-level slots
 - A space records which assembly made it; local alone decides where stores live
 - The kernel owns its whole life in one driver, from reap to close

@@ -11,11 +11,13 @@ The order at open, each step inside the brackets of the ones before::
     blobs                         the blob store, plain files in store/blobs/ by default
     format check                  the Space store's format, then the core containers, a commit
                                   per store, then the kernel's live indexes
-    fresh device stores           conn.db deleted, then every device's store bound, its containers
+    device stores                 every device's store bound, its containers, then Conn cleared
+                                  by one commit (no tab outlives an open)
     path                          Space.info.path; the open told to telemetry
     device planes                 made where missing
     worker pool                   spare workers, each binding every store of the open, blobs too
     backends, kernel config
+    uploads                       the dir wiped, when web is served
     race                          the kernel's driver, each device's driver, the body
 
 The kernel's driver (``nuspace.kernel.driver``) owns the kernel's life:
@@ -52,16 +54,16 @@ from nuspace._telemetry.usage import opened
 from nuspace.shapes import Space
 from nuspace.shapes.stores import CORE
 from nuspace.specs import RegistryWarning, space_registry
-from nuspace.web.shapes import Conn
+from nuspace.web.stores import reset_conn
 
 from ..blocks.lock import Lock
 from ..blocks.meta import data_dir, resolve_root
-from ..blocks.resources import DataDir, Fresh, Throwaway
+from ..blocks.resources import DataDir, Throwaway
 from ..blocks.workers import DEFAULT_NAME, DEFAULT_SPARES, worker_pool
 from . import binding
-from ._disk import Marked
+from ._disk import Marked, Wiped
 from .devices import device, device_stores
-from .layout import DIRS, KERNEL_LOCK, STORES, UPLOADS_DIR
+from .layout import DIRS, KERNEL_LOCK, UPLOADS_DIR
 
 
 if TYPE_CHECKING:
@@ -115,17 +117,15 @@ def _opening(root: str, throwaway: bool, blobs: Provide | None, body: nu.Nu) -> 
     """The brackets every open shares, from the data dir to every device's stores, around ``body``.
 
     ``body`` runs with every store open and initialized: the format checked,
-    the fresh stores made again, the blob store bound (unless ``blobs``
+    Conn cleared, the blob store bound (unless ``blobs``
     is None: nothing runs). Every device's stores, whichever devices the
     open serves.
     """
     data = str(data_dir(root))
     extra = device_stores()
-    inner = _inits(extra) >> body
+    inner = _inits(extra) >> nustd.kv.atomic(reset_conn()) >> body
     if extra:
-        fresh = [str(Path(data) / STORES[Conn].file)]
-        bound = binding.stores(data, [s.root for s in extra])
-        inner = nu.With(nu.Provide(Fresh, {"paths": fresh}), bound, body=inner)
+        inner = nu.With(binding.stores(data, [s.root for s in extra]), body=inner)
     outer = [
         nu.Provide(Marked, {"root": root}),
         nu.Provide(DataDir, {"root": root, "dirs": DIRS}),
@@ -207,12 +207,13 @@ def open_space(
     opened_devices = [device(d) for d in devices]
     reg = space_registry(extensions=extensions, envs=envs)
     blobs = binding.blobs(data) if blobs is None else blobs
+    uploads = str(Path(data) / UPLOADS_DIR)
     options = {
         "host": host,
         "port": port,
         "static": static,
         "open_browser": open_browser,
-        "upload_root": str(Path(data) / UPLOADS_DIR),
+        "upload_root": uploads,
         "blobs": blobs,
     }
     served = {d.name: d.serve(registry=reg, **options) for d in opened_devices}
@@ -226,6 +227,8 @@ def open_space(
         kernel.bound(backends=backends, envs=factories, space_envs=space_envs),
         body=drivers,
     )
+    if "web" in served:
+        running = nu.With(nu.Provide(Wiped, {"dirs": [uploads]}), body=running)
     return _opening(
         root, throwaway, blobs, _path(root) >> opened() >> _seeds(opened_devices) >> running
     )

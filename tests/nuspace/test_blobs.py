@@ -30,9 +30,9 @@ from nuspace.shapes import EXIT_OK
 from nuspace.shapes.stores import CORE
 from nuspace.space import local
 from nuspace.space.blocks.meta import data_dir
-from nuspace.space.blocks.resources import Fresh
 from nuspace.space.blocks.workers import worker_context
 from nuspace.space.local import binding
+from nuspace.space.local._disk import Wiped
 from nuspace.space.local.layout import BLOBS_DIR, UPLOADS_DIR
 from nuspace.web.env import SessionWrap
 from nuspace.web.session import SessionPipe, piped_session
@@ -181,11 +181,11 @@ def test_the_session_wrap_carries_the_upload_root_and_pickles():
     assert (wrap.address, wrap.sid, wrap.uploads) == ("127.0.0.1:9", "s1", "/tmp/up")
 
 
-def test_fresh_removes_whole_dirs(tmp_path):
+def test_wiped_removes_whole_dirs(tmp_path):
     gone = tmp_path / "area"
     (gone / "tab").mkdir(parents=True)
     (gone / "tab" / "f").write_bytes(b"x")
-    Fresh([], dirs=[str(gone), str(tmp_path / "never")]).setup(None)
+    Wiped([str(gone), str(tmp_path / "never")]).setup(None)
     assert not gone.exists()
 
 

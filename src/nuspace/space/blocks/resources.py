@@ -1,4 +1,4 @@
-"""The resources an open binds around the stores: the throwaway root, the data dir, fresh files, warm imports.
+"""The resources an assembly binds around the stores: the throwaway root, the data dir, warm imports.
 
 Each is a plain class for ``nu.Provide``: its setup runs when the bracket
 opens, its cleanup when it closes, and none binds anything a program reads.
@@ -21,11 +21,7 @@ if TYPE_CHECKING:
     from nu.lang.runtime import Context
 
 
-__all__ = ["DataDir", "Fresh", "Throwaway", "Warmed"]
-
-
-#: What SQLite keeps beside a database file.
-_SIDE = ("-wal", "-shm", "-journal")
+__all__ = ["DataDir", "Throwaway", "Warmed"]
 
 
 class Throwaway:
@@ -75,32 +71,6 @@ class DataDir:
 
     async def asetup(self, ctx: Context) -> None:
         """Async shim: making directories is sync work."""
-        self.setup(ctx)
-
-
-class Fresh:
-    """Store files and dirs deleted at setup, so what they hold starts empty. Before their users.
-
-    Args:
-        paths: The database files, absolute. What SQLite keeps beside each
-            goes too.
-        dirs: Whole dirs, absolute, eg the web device's upload area.
-    """
-
-    def __init__(self, paths: Sequence[str], dirs: Sequence[str] = ()) -> None:
-        self.paths = tuple(paths)
-        self.dirs = tuple(dirs)
-
-    def setup(self, ctx: Context) -> None:
-        """Delete each file and its side files, then each dir, where there."""
-        for path in self.paths:
-            for suffix in ("", *_SIDE):
-                Path(path + suffix).unlink(missing_ok=True)
-        for path in self.dirs:
-            shutil.rmtree(path, ignore_errors=True)
-
-    async def asetup(self, ctx: Context) -> None:
-        """Async shim: deleting files is sync work."""
         self.setup(ctx)
 
 

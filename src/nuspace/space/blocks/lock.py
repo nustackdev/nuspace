@@ -1,7 +1,8 @@
 """The space lock: one open holds a space at a time.
 
-``.nuspace/host.lock``, taken first at open, before the notification server
-and the stores, held until the space closes. A POSIX record lock
+A file the assembly names (local: ``kernel/kernel.lock``), taken first at
+open, before the notification server and the stores, held until the space
+closes. A POSIX record lock
 (``fcntl.lockf``), which NFS carries across machines, so red and blue never
 open one space on the shared grid together. The file says who holds it,
 ``host pid opened_at``, read back when the lock is refused and told as

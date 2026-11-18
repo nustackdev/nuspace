@@ -1,10 +1,11 @@
 """The web device's two stores: Web (web planes, recents, desks, roles) and Conn (browser tabs).
 
-Each its own root and tag, in its own file under ``devices/web/``, so a
-space opened without the web device carries no web data. Core never reads
+Each its own root and tag, its own store (where it lives is the
+assembly's call), so a space opened without the web device carries no
+web data. Core never reads
 them; they name plane and plane run ids only::
 
-    Web                                  web_state.db, persistent
+    Web                                  persistent
       planes[plane_id]                   WebPlane: editable, width
       recents                            [plane id], most recent first, capped
       desks[desk_id]                     Desk, in sidebar order
@@ -13,7 +14,7 @@ them; they name plane and plane run ids only::
       desks_seeded                       True once Favorites was seeded
       roles[role]                        plane id: home, settings, search
 
-    Conn                                 conn.db, made fresh at every open
+    Conn                                 cleared when web starts
       connections[sid]                   Tab
         order                            [plane id], the panes left to right
         panes[plane_id]                  Pane: params, plane_run, restart
@@ -124,6 +125,6 @@ class Tab(nu.Shape):
 
 
 class Conn(nu.Shape):
-    """The root of ``conn.db``, and its store's tag. Deleted and made fresh at every open."""
+    """The root of the Conn store, and its tag. Cleared by one commit when web starts."""
 
     connections = nustd.kv.DictRef.slot(Tab)

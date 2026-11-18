@@ -5,7 +5,7 @@
 - :mod:`.notifier`: the notification server every process reaches.
 - :mod:`.navigators`: a store's root bound to kv navigators, any backend.
 - :mod:`.workers`: what every worker comes up holding, and the pool.
-- :mod:`.resources`: the throwaway root, the data dir, fresh files, warm imports.
+- :mod:`.resources`: the throwaway root, the data dir, warm imports.
 - :mod:`.browse`: a browser tab opened once a server answers.
 """
 
@@ -25,7 +25,7 @@ from .meta import (
     write_meta,
 )
 from .notifier import notifier
-from .resources import DataDir, Fresh, Throwaway, Warmed
+from .resources import DataDir, Throwaway, Warmed
 from .workers import worker_context, worker_pool
 
 
@@ -35,7 +35,6 @@ __all__ = [
     "Browse",
     "BrowserRef",
     "DataDir",
-    "Fresh",
     "Lock",
     "LockWarning",
     "Meta",

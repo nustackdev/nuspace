@@ -62,7 +62,6 @@ import nuspace
 from nuspace import _telemetry
 from nuspace.ops.brackets import atomic
 from nuspace.shapes import blobs as blob_mount
-from nuspace.space.blocks.resources import Fresh
 from nuspace.specs import space_registry
 from nuspace.utils import keys_of
 from nustd.blob.http.serving import serve_blobs
@@ -266,8 +265,8 @@ def serve_web(
     run (:func:`~.home.indexer.wake`) and one desk pruner run
     (:func:`~.desks.pruner.wake`), then runs the server (one arm per tab)
     and nav side by side. It never returns; it goes beside the
-    kernel, inside the stores (Space, State, Web, Conn) with ``conn.db``
-    fresh, so no tab of a previous open is left.
+    kernel, inside the stores (Space, State, Web, Conn) with Conn
+    cleared (:func:`~.stores.reset_conn`), so no tab of a previous open is left.
 
     Args:
         registry: What the space registered: its PlaneSpecs, what the
@@ -282,7 +281,8 @@ def serve_web(
         session_address: ``host:port`` for the tab socket. A free port by
             default.
         upload_root: The upload area's dir, absolute, the assembly's
-            choice; wiped at start. None puts the area in the system temp dir.
+            choice, and so is wiping it before start. None puts the area in
+            the system temp dir.
         blobs: The blob store's spec, served under ``/blobs``. None
             serves no blobs.
 
@@ -297,13 +297,9 @@ def serve_web(
     # Fixed now, at build, so the session env hands workers the same root.
     if upload_root is None:
         upload_root = str(Path(tempfile.gettempdir()) / f"nu-uploads-{uuid.uuid4().hex}")
-        fresh = []
-    else:
-        fresh = [nu.Provide(Fresh, {"paths": [], "dirs": [upload_root]})]
     area, upload_routes = uploads(upload_root)
     server = nu.With(
         *held,
-        *fresh,
         listen(
             session_cls=WsSession,
             static=static,

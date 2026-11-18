@@ -48,7 +48,7 @@ from nuspace.space.blocks.meta import (
     stamp,
     write_meta,
 )
-from nuspace.space.blocks.resources import DataDir, Fresh, Throwaway
+from nuspace.space.blocks.resources import DataDir, Throwaway
 from nuspace.space.local import presets
 from nuspace.space.local._disk import Marked
 from nuspace.space.local.layout import DIRS, KERNEL_LOCK, is_older, made_before
@@ -308,14 +308,6 @@ def test_a_space_made_before_meta_is_found_and_adopted_and_its_host_lock_ignored
     assert read_meta(root).assembly == "local"
     assert is_space(root)
     assert not made_before(root)
-
-
-def test_fresh_deletes_a_store_file_and_what_sqlite_keeps_beside_it(tmp_path):
-    db = tmp_path / "conn.db"
-    for f in (db, tmp_path / "conn.db-wal", tmp_path / "conn.db-shm", tmp_path / "keep.db"):
-        f.write_text("x")
-    Fresh([str(db), str(tmp_path / "never.db")]).setup(None)
-    assert sorted(p.name for p in tmp_path.iterdir()) == ["keep.db"]
 
 
 # --- The host lock -----------------------------------------------------------------

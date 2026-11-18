@@ -1,9 +1,8 @@
 """``nuspace.web``: the ops over the web device's stores, Web and Conn.
 
-Web (``web_state.db``) says which planes are on the web and how they show,
+Web says which planes are on the web and how they show,
 what was opened lately and which plane fills each role (the desk ops are
-:mod:`.desks.ops`). Conn (``conn.db``, fresh at every
-open) holds the open tabs: each one's panes in order, each pane's params,
+:mod:`.desks.ops`). Conn (cleared when web starts) holds the open tabs: each one's panes in order, each pane's params,
 the plane run nav keeps for it and its restart token, and the sidebar
 branches it has open. The browser turns clicks into these ops; nav runs
 what the panes show.

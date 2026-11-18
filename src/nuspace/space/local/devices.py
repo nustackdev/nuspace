@@ -10,7 +10,7 @@ headless, so a program writing a device's rows (``add_plane`` of a spec
 with ``web=``) works either way. Only the devices an open names seed their
 planes and run their drivers.
 
-- ``web``: the browser. Stores Web and Conn (Conn made fresh at every
+- ``web``: the browser. Stores Web and Conn (Conn cleared at every
   open), the home, settings and search planes, the server and nav.
 """
 
