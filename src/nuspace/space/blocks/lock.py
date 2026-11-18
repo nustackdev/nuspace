@@ -4,8 +4,8 @@ An assembly takes one lock per component it runs, a file it names
 (local: ``infra/infra.lock``, ``kernel/kernel.lock``,
 ``devices/web/web.lock``), before the notification server and the
 stores, held until the component stops. Another process may look
-whether it is held (:func:`held`): web runs only while the kernel's is. A POSIX
-record lock (``fcntl.lockf``), which NFS carries across machines, so red
+whether it is held (:func:`held`, :data:`Held` in a term): web runs
+only while the kernel's is. A POSIX record lock (``fcntl.lockf``), which NFS carries across machines, so red
 and blue never run two kernels of one space on the shared grid. The file
 says who holds it, ``host pid taken_at``, read back when the lock is
 refused and told with what it guards: ``the kernel of this space runs on
@@ -33,6 +33,7 @@ import warnings
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import nu
 from nuspace.errors import Refused
 
 
@@ -40,7 +41,7 @@ if TYPE_CHECKING:
     from nu.lang.runtime import Context
 
 
-__all__ = ["Lock", "LockWarning", "held", "holder"]
+__all__ = ["Held", "Lock", "LockWarning", "held", "holder"]
 
 
 #: Errors a non blocking lock raises when somebody else holds it.
@@ -83,6 +84,10 @@ def held(path: str) -> bool:
         return False
     finally:
         os.close(fd)
+
+
+#: ``Held(path)``: :func:`held` as a query, asked when the term runs.
+Held = nu.host(held)
 
 
 def told(record: str) -> str:

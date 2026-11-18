@@ -25,12 +25,15 @@ inside the brackets of the ones before::
                           infra's notification server
     blobs                 when the entry point binds them
 
-The requirement comes before the lock, so a driver holding its lock has
-what it runs on up: web looks only for the kernel's lock. Infra binds no
-store and needs nothing: it shares the init check, the data dir, a lock
-and a log. A throwaway root (path None), which only infra and ``run``
-take, is made by the entry point itself, so it runs ``init`` on it
-first, at setup (:func:`fresh`).
+The init check, the requirement and the data dir are steps, run in order
+before the brackets (:class:`~..blocks.guarded.Guarded`); the lock, the
+log and the stores are brackets, held while the body runs. The requirement
+comes before the lock, so a driver holding its lock has what it runs on
+up: web looks only for the kernel's lock. Infra binds no store and needs
+nothing: it shares the init check, the data dir, a lock and a log. A
+throwaway root (path None), which only infra and ``run`` take, is made by
+the entry point itself, so its ``init`` runs first, a step of the same
+term (:func:`fresh`).
 ``open`` shares only the bindings and the init check: it locks nothing
 and makes nothing.
 """
@@ -47,12 +50,13 @@ from nuspace import kernel
 from nuspace.shapes import Space, stores
 from nuspace.web.stores import CONN_STORE, WEB_STORE
 
+from ..blocks.guarded import Guarded
 from ..blocks.lock import Lock
 from ..blocks.logs import logged_to
-from ..blocks.meta import data_dir, resolve_root
-from ..blocks.resources import DataDir, Throwaway
+from ..blocks.meta import data_dir, data_made, resolve_root
+from ..blocks.resources import throwaway
 from . import binding
-from .disk import Flagged, Initialized, Marked
+from .disk import checked, flagged, marked
 from .layout import DIRS, INFRA_LOCK, KERNEL_LOCK, WEB_LOCK
 
 
@@ -61,10 +65,9 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
 
     from nu.context.fabric import Provide
-    from nu.lang.runtime import Context
 
 
-__all__ = ["ROOTS", "STORES", "Prepared", "bracketed", "fresh", "init", "path_set"]
+__all__ = ["ROOTS", "STORES", "bracketed", "fresh", "init", "initialized", "path_set"]
 
 
 #: Every store local binds: the core ones, then web's.
@@ -82,21 +85,20 @@ def path_set(root: str) -> nu.Nu:
     return nustd.kv.atomic(Space.info.path.set(root))
 
 
-def initialized(root: str) -> nu.With:
-    """``init`` on the absolute ``root``: see the module for its steps."""
+def initialized(root: str) -> nu.Nu:
+    """``init`` on the absolute ``root``: see the module for its steps. Yields nothing."""
     data = str(data_dir(root))
     locks = [(INFRA_LOCK, "infra"), (KERNEL_LOCK, "kernel"), (WEB_LOCK, "web")]
-    flagged = nu.With(nu.Provide(Flagged, {"root": root}), body=nu.Noop())
-    return nu.With(
-        nu.Provide(Marked, {"root": root}),
-        nu.Provide(DataDir, {"root": root, "dirs": DIRS}),
+    inits = stores.init() >> kernel.init() >> nuspace.web.init() >> path_set(root)
+    held = nu.With(
         *(nu.Provide(Lock, {"path": str(Path(data) / f), "what": w}) for f, w in locks),
         binding.quiet(data, ROOTS),
-        body=stores.init() >> kernel.init() >> nuspace.web.init() >> path_set(root) >> flagged,
+        body=inits >> flagged(root),
     )
+    return marked(root) >> data_made(root, DIRS) >> held
 
 
-def init(path: str | os.PathLike[str]) -> nu.With:
+def init(path: str | os.PathLike[str]) -> nu.Nu:
     """The space at ``path`` made and initialized: every component's init, then the flag. Nothing runs.
 
     The data dir, ``meta.json``, every store and its containers, the
@@ -114,30 +116,14 @@ def init(path: str | os.PathLike[str]) -> nu.With:
     return initialized(root)
 
 
-class Prepared:
-    """The space at ``root`` initialized at setup, ``init``'s term run to its end. Async only.
+def fresh(root: str, throwaway_root: bool, term: nu.Nu) -> nu.Nu:
+    """``term`` as is, or for a throwaway ``root``: the root made and initialized, ``term``, the root removed.
 
-    For a throwaway root, which the entry point makes itself: a bracket and
-    not a step before the body, so the term keeps what its body yields.
-
-    Args:
-        root: The space's root, absolute.
+    Yields what ``term`` yields.
     """
-
-    def __init__(self, root: str) -> None:
-        self.root = root
-
-    async def asetup(self, ctx: Context) -> None:
-        """Run ``init`` on the root, on its own context."""
-        await nu.aeval(nu.compile(initialized(self.root)), nu.Context())
-
-
-def fresh(root: str, throwaway: bool, term: nu.Nu) -> nu.Nu:
-    """``term`` as is, or for a throwaway ``root``: the root made and initialized, ``term``, the root removed."""
-    if not throwaway:
+    if not throwaway_root:
         return term
-    made = [nu.Provide(Throwaway, {"path": root}), nu.Provide(Prepared, {"root": root})]
-    return nu.With(*made, body=term)
+    return throwaway(root, Guarded(term, initialized(root)))
 
 
 def bracketed(
@@ -148,29 +134,28 @@ def bracketed(
     required: nu.Nu,
     blobs: Provide | None,
     body: nu.Nu,
-) -> nu.With:
-    """The brackets of a driver's entry point, from the init check, around ``body``.
+) -> nu.Nu:
+    """The steps and brackets of a driver's entry point, from the init check, around ``body``.
+
+    Yields what ``body`` yields.
 
     Args:
         root: The space's root, absolute.
         locks: ``(file, what)`` per driver, the file relative to the data dir.
         log: ``(file, what)``, this process's log while it runs, or None.
-        required: What the driver needs running, checked before its lock
-            (:class:`~..blocks.required.Required`): what it requires is up
+        required: What the driver needs running, looked for before its lock
+            (:func:`~..blocks.required.required`): what it requires is up
             by the time it holds its lock.
         blobs: The blob store's spec, or None to bind none.
         body: What runs inside, every store ready.
     """
     data = str(data_dir(root))
-    outer: list[nu.Nu] = [
-        nu.Provide(Initialized, {"root": root}),
-        required,
-        nu.Provide(DataDir, {"root": root, "dirs": DIRS}),
+    held: list[nu.Nu] = [
+        nu.Provide(Lock, {"path": str(Path(data) / f), "what": w}) for f, w in locks
     ]
-    outer += [nu.Provide(Lock, {"path": str(Path(data) / f), "what": w}) for f, w in locks]
     if log is not None:
-        outer.append(logged_to(Path(data) / log[0], log[1]))
-    outer.append(binding.stores(data, ROOTS))
+        held.append(logged_to(Path(data) / log[0], log[1]))
+    held.append(binding.stores(data, ROOTS))
     if blobs is not None:
-        outer.append(blobs)
-    return nu.With(*outer, body=body)
+        held.append(blobs)
+    return Guarded(nu.With(*held, body=body), checked(root), required, data_made(root, DIRS))

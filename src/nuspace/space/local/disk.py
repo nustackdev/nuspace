@@ -1,8 +1,15 @@
 """What local does on disk around an entry point: the space marked, flagged, checked; the uploads dir wiped.
 
-``init`` marks the space (:class:`Marked`), and flags it once its inits are
-done (:class:`Flagged`). Every other entry point checks that flag first
-(:class:`Initialized`) and refuses a space without it.
+``init`` marks the space (:func:`marked`), and flags it once its inits are
+done (:func:`flagged`). Every other entry point checks that flag first
+(:func:`checked`) and refuses a space without it. ``open`` looks for a
+space at all before that (:func:`found`).
+
+Each check is a query saying why not, ``""`` when fine (:data:`InitRefusal`,
+:data:`MarkRefusal`, :data:`FoundRefusal`), raised by
+:func:`~..blocks.guarded.refused`. Each write is a Command through
+``meta.json``'s Ref or the disk's. All are steps: put them before a body
+(``Guarded(body, checked(root))``) or in a flow.
 
 A space made before ``meta.json`` (its Space store, no meta) is local's:
 ``init`` gives it its ``meta.json``. This is the one bridge from before. A space of the older store format
@@ -15,132 +22,129 @@ outlives the web that served it, so local wipes the dir before web starts.
 
 from __future__ import annotations
 
-import shutil
 from typing import TYPE_CHECKING
 
-from nuspace.errors import Refused
+import nu
+from nuspace.errors import Missing
 
-from ..blocks.meta import read_meta, set_init, stamp
-from .layout import ASSEMBLY, is_older
+from ..blocks.disk import DISK, RemoveTree
+from ..blocks.guarded import refused
+from ..blocks.meta import MetaRef, SetInit, Stamp, is_space, read_meta
+from .layout import ASSEMBLY, is_older, made_before
 
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
-    from nu.lang.runtime import Context
+
+__all__ = [
+    "FoundRefusal",
+    "InitRefusal",
+    "MarkRefusal",
+    "checked",
+    "flagged",
+    "found",
+    "marked",
+    "wiped",
+]
 
 
-__all__ = ["Flagged", "Initialized", "Marked", "Wiped"]
-
-
-def refuse_older(root: str) -> None:
-    """Refuse ``root`` when it holds a space of an older store format."""
+def older_refusal(root: str) -> str:
+    """Why ``root`` is refused for holding a space of an older store format, or ``""``."""
     if is_older(root):
-        msg = (
+        return (
             f"{root} holds a space of an older nuspace store format."
             " There is no converter: open a fresh directory."
         )
-        raise Refused(msg)
+    return ""
 
 
-class Marked:
-    """The space at ``root`` checked and marked as local's, at setup. Before anything is written.
-
-    Args:
-        root: The space's root, absolute.
+def other_refusal(root: str) -> str:
+    """Why ``root`` is refused for being another assembly's space, or ``""``.
 
     Raises:
-        Refused: ``root`` holds a space of an older store format, or one
-            another assembly made.
+        Refused: Its ``meta.json`` does not read.
     """
-
-    def __init__(self, root: str) -> None:
-        self.root = root
-
-    def setup(self, ctx: Context) -> None:
-        """Refuse an older space or another assembly's; write ``meta.json`` where missing."""
-        refuse_older(self.root)
-        stamp(self.root, ASSEMBLY)
-
-    async def asetup(self, ctx: Context) -> None:
-        """Async shim: a check and a small file write."""
-        self.setup(ctx)
+    meta = read_meta(root)
+    if meta is not None and meta.assembly != ASSEMBLY:
+        return (
+            f"{root} is a space of the {meta.assembly!r} assembly, not {ASSEMBLY!r}."
+            f" Open it with {meta.assembly!r}"
+        )
+    return ""
 
 
-class Initialized:
-    """The space at ``root`` checked at setup: local's, and its init done. Writes nothing.
+def mark_refusal(root: str) -> str:
+    """Why ``root`` cannot be marked local's: an older space, or another assembly's. ``""`` when it can."""
+    return older_refusal(root) or other_refusal(root)
 
-    Every entry point but ``init`` holds it outermost, so a space is
-    refused before anything is made or locked.
 
-    Args:
-        root: The space's root, absolute.
+def init_refusal(root: str) -> str:
+    """Why ``root`` is no local space initialized: older, another assembly's, or not init. ``""`` when it is."""
+    why = mark_refusal(root)
+    if why:
+        return why
+    meta = read_meta(root)
+    if meta is None or not meta.init:
+        return f"the space at {root} is not initialized: run nuspace init, or local.init"
+    return ""
+
+
+def found_refusal(root: str) -> str:
+    """Why there is no space at ``root`` at all, or ``""``. A space of any kind counts."""
+    if is_space(root) or made_before(root) or is_older(root):
+        return ""
+    return f"no space at {root}: make one with local.init"
+
+
+#: ``MarkRefusal(root)``: :func:`mark_refusal` as a query.
+MarkRefusal = nu.host(mark_refusal)
+
+#: ``InitRefusal(root)``: :func:`init_refusal` as a query.
+InitRefusal = nu.host(init_refusal)
+
+#: ``FoundRefusal(root)``: :func:`found_refusal` as a query.
+FoundRefusal = nu.host(found_refusal)
+
+
+def marked(root: str) -> nu.Nu:
+    """The space at ``root`` checked and marked as local's: ``meta.json`` written where missing.
 
     Raises:
-        Refused: ``root`` holds a space of an older store format, or one
-            another assembly made, or its ``meta.json`` is missing or lacks
-            ``"init": true`` (a space made before this flag too).
+        Refused: (at run) ``root`` holds a space of an older store format,
+            or one another assembly made.
     """
-
-    def __init__(self, root: str) -> None:
-        self.root = root
-
-    def setup(self, ctx: Context) -> None:
-        """Read ``meta.json``: refuse an older space, another assembly's, or one not initialized."""
-        refuse_older(self.root)
-        meta = read_meta(self.root)
-        if meta is not None and meta.assembly != ASSEMBLY:
-            msg = (
-                f"{self.root} is a space of the {meta.assembly!r} assembly, not {ASSEMBLY!r}."
-                f" Open it with {meta.assembly!r}"
-            )
-            raise Refused(msg)
-        if meta is None or not meta.init:
-            msg = f"the space at {self.root} is not initialized: run nuspace init, or local.init"
-            raise Refused(msg)
-
-    async def asetup(self, ctx: Context) -> None:
-        """Async shim: one small file read."""
-        self.setup(ctx)
+    return refused(MarkRefusal(root)) >> Stamp(MetaRef(root), ASSEMBLY)
 
 
-class Flagged:
-    """The space at ``root`` flagged initialized at setup: ``"init": true`` in its ``meta.json``.
+def checked(root: str) -> nu.Nu:
+    """The space at ``root`` checked: local's, and its init done. Writes nothing.
 
-    Run as the last step of ``init``, a bracket around nothing: the flag is
-    written only once every init before it is done.
+    Every entry point but ``init`` takes it first, so a space is refused
+    before anything is made or locked.
 
-    Args:
-        root: The space's root, absolute, marked already.
+    Raises:
+        Refused: (at run) ``root`` holds a space of an older store format,
+            or one another assembly made, or its ``meta.json`` is missing or
+            lacks ``"init": true`` (a space made before this flag too).
     """
-
-    def __init__(self, root: str) -> None:
-        self.root = root
-
-    def setup(self, ctx: Context) -> None:
-        """Write the flag."""
-        set_init(self.root)
-
-    async def asetup(self, ctx: Context) -> None:
-        """Async shim: a small file write."""
-        self.setup(ctx)
+    return refused(InitRefusal(root))
 
 
-class Wiped:
-    """Dirs removed with all they hold, at setup. Before anything writes in them.
+def found(root: str) -> nu.Nu:
+    """The space at ``root`` checked: there is one, of any kind. :func:`checked` comes after.
 
-    Args:
-        dirs: The dirs, absolute. A missing one is fine.
+    Raises:
+        Missing: (at run) No space there at all.
     """
+    return refused(FoundRefusal(root), Missing)
 
-    def __init__(self, dirs: Sequence[str]) -> None:
-        self.dirs = tuple(dirs)
 
-    def setup(self, ctx: Context) -> None:
-        """Remove each dir, where there."""
-        for d in self.dirs:
-            shutil.rmtree(d, ignore_errors=True)
+def flagged(root: str) -> nu.Nu:
+    """``"init": true`` in the ``meta.json`` of the space at ``root``: the last step of ``init``."""
+    return SetInit(MetaRef(root))
 
-    async def asetup(self, ctx: Context) -> None:
-        """Async shim: removing files is sync work."""
-        self.setup(ctx)
+
+def wiped(dirs: Sequence[str]) -> nu.Nu:
+    """Each of ``dirs``, absolute, removed with all it holds. A missing one is fine."""
+    return RemoveTree(DISK, *dirs)

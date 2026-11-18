@@ -18,13 +18,12 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import nu
-from nuspace.errors import Missing
 
-from ..blocks.meta import data_dir, is_space, resolve_root
-from ..blocks.notifier import Heard
+from ..blocks.guarded import Guarded
+from ..blocks.meta import data_dir, resolve_root
+from ..blocks.notifier import Answers, Heard
 from . import binding
-from .disk import Initialized
-from .layout import is_older, made_before
+from .disk import checked, found
 from .opening import ROOTS
 
 
@@ -32,38 +31,9 @@ if TYPE_CHECKING:
     import os
 
     from nu.context.fabric import Provide
-    from nu.lang.runtime import Context
 
 
 __all__ = ["open"]
-
-
-class Found:
-    """The space at ``root`` checked at setup: there is one. The init check comes after it.
-
-    A space of any kind counts: one with ``meta.json``, one made before it,
-    one of an older store format. :class:`~.disk.Initialized` refuses the
-    ones open does not take.
-
-    Args:
-        root: The space's root, absolute.
-
-    Raises:
-        Missing: No space there at all.
-    """
-
-    def __init__(self, root: str) -> None:
-        self.root = root
-
-    def setup(self, ctx: Context) -> None:
-        """Look for a space at ``root``."""
-        if not (is_space(self.root) or made_before(self.root) or is_older(self.root)):
-            msg = f"no space at {self.root}: make one with local.init"
-            raise Missing(msg)
-
-    async def asetup(self, ctx: Context) -> None:
-        """Async shim: one small file read."""
-        self.setup(ctx)
 
 
 def open(
@@ -71,13 +41,13 @@ def open(
     *,
     body: nu.Nu,
     blobs: Provide | None = None,
-) -> nu.With:
+) -> nu.Nu:
     """The space at ``path``'s stores bound around ``body``, a body of ops. No driver runs.
 
     Ops run as in a cell: brackets, ``nuspace.atomic``, named targets, no
     ``Here``. Takes no lock: beside a live kernel and web, or with nothing
     up. Publishes to infra's notification server when it answers as
-    this opens, else publishes nothing (nobody listens).
+    this starts, else publishes nothing (nobody listens).
 
     Args:
         path: The space's root. It must be a local space, initialized.
@@ -93,9 +63,8 @@ def open(
     data = str(data_dir(root))
     blobs = binding.blobs(data) if blobs is None else blobs
     stores = Heard(
-        binding.valkey_dir(data),
-        served=binding.stores(data, ROOTS),
-        unserved=binding.quiet(data, ROOTS),
+        nu.With(binding.stores(data, ROOTS), blobs, body=body),
+        nu.With(binding.quiet(data, ROOTS), blobs, body=body),
+        Answers(binding.valkey_dir(data)),
     )
-    checked = [nu.Provide(Found, {"root": root}), nu.Provide(Initialized, {"root": root})]
-    return nu.With(*checked, stores, blobs, body=body)
+    return Guarded(stores, found(root), checked(root))

@@ -11,6 +11,8 @@ separately here.
 
 ## Unreleased
 
+- Waiting for infra, kernel or web and opening a tab are plain nu flow
+- Entry point checks and disk writes run as nu steps, not fake resources
 - Web serves blobs from the same store spec the assembly binds around it
 - Kernel and web always take a space's path; the example initializes its space first
 - Run initializes a new space first; infra, kernel and web each run alone too

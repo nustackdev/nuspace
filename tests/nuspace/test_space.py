@@ -42,24 +42,27 @@ from nuspace.shapes import EXIT_INTERRUPTED, EXIT_KILLED, FORMAT, Space, stores
 from nuspace.space import local
 from nuspace.space.blocks import browse
 from nuspace.space.blocks import lock as lock_module
+from nuspace.space.blocks.disk import DISK, DiskBackend, MakeDirs
 from nuspace.space.blocks.lock import Lock, LockWarning, holder
 from nuspace.space.blocks.logs import Logged
 from nuspace.space.blocks.meta import (
     DATA_DIR,
     META_FILE,
     Meta,
+    MetaRef,
+    SetInit,
+    Stamp,
     data_dir,
+    data_made,
     find_space,
     is_space,
     read_meta,
-    set_init,
-    stamp,
     write_meta,
 )
-from nuspace.space.blocks.notifier import answers, served
-from nuspace.space.blocks.required import Required
-from nuspace.space.blocks.resources import DataDir, Throwaway
-from nuspace.space.local.disk import Marked
+from nuspace.space.blocks.notifier import Answers, Heard, served
+from nuspace.space.blocks.required import required
+from nuspace.space.blocks.resources import Throwaway
+from nuspace.space.local.disk import marked
 from nuspace.space.local.layout import (
     DIRS,
     INFRA_LOCK,
@@ -269,6 +272,18 @@ def _mark(root: Path) -> None:
     write_meta(root, Meta("local", "2026-11-18T00:00:00+00:00"))
 
 
+def stamp(root: Path, assembly: str) -> Meta:
+    """``Stamp`` run on ``root``: its meta, written when there is none."""
+    nu.run(Stamp(MetaRef(str(root)), assembly))
+    return read_meta(root)
+
+
+def set_init(root: Path, init: bool = True) -> Meta:
+    """``SetInit`` run on ``root``: its meta with the flag set."""
+    nu.run(SetInit(MetaRef(str(root)), init))
+    return read_meta(root)
+
+
 def _made_before(root: Path) -> None:
     """``root`` made a space as one was before ``meta.json``: its Space store file alone."""
     file = data_dir(root) / PLACES[Space].file
@@ -296,16 +311,32 @@ def test_an_older_space_is_told_apart(tmp_path, old):
     (tmp_path / old).touch()
     assert is_older(tmp_path)
     with pytest.raises(Refused, match="older nuspace store format"):
-        Marked(str(tmp_path)).setup(None)
+        nu.run(marked(str(tmp_path)))
     assert not (data_dir(tmp_path) / META_FILE).exists()
     _mark(tmp_path)
     assert not is_older(tmp_path)
 
 
 def test_the_data_dir_holds_a_folder_per_store(tmp_path):
-    DataDir(str(tmp_path), DIRS).setup(None)
+    nu.run(data_made(str(tmp_path), DIRS))
     for root in PLACES:
         assert (data_dir(tmp_path) / PLACES[root].file).parent.is_dir()
+
+
+def test_the_disk_commands_go_through_the_backend_bound(tmp_path):
+    """A test binds its own disk: nothing reaches the file system."""
+
+    class Seen(DiskBackend):
+        def __init__(self) -> None:
+            self.made: list[str] = []
+
+        def make_dirs(self, path: str) -> None:
+            self.made.append(path)
+
+    seen = Seen()
+    nu.run(MakeDirs(DISK, str(tmp_path / "a")), nu.Context().bind(DiskBackend, seen))
+    assert seen.made == [str(tmp_path / "a")]
+    assert not (tmp_path / "a").exists()
 
 
 def test_meta_names_the_assembly_and_another_assembly_is_refused(tmp_path):
@@ -341,7 +372,7 @@ def test_a_space_made_before_meta_is_found_and_adopted_and_its_host_lock_ignored
     assert made_before(root)
     assert not is_space(root)
     assert not is_older(root)
-    Marked(str(root)).setup(None)
+    nu.run(marked(str(root)))
     assert read_meta(root).assembly == "local"
     assert is_space(root)
     assert not made_before(root)
@@ -861,40 +892,57 @@ def _free_port() -> int:
         return int(s.getsockname()[1])
 
 
-async def test_browse_opens_once_the_port_answers(monkeypatch):
-    opened: list[str] = []
-    monkeypatch.setattr(browse.webbrowser, "open", opened.append)
+class Tabs(browse.BrowserBackend):
+    """A browser that records the urls it is handed and opens none."""
+
+    def __init__(self) -> None:
+        self.opened: list[str] = []
+
+    def open(self, url: str) -> None:
+        self.opened.append(url)
+
+
+async def test_a_tab_opens_once_the_port_answers():
+    tabs = Tabs()
     server = await asyncio.start_server(lambda r, w: w.close(), "127.0.0.1", 0)
     port = server.sockets[0].getsockname()[1]
     try:
         url = f"http://127.0.0.1:{port}/p_x"
-        await browse.browse(url, "0.0.0.0", port)  # noqa: S104
+        term = browse.tab_opened(url, "0.0.0.0", port)  # noqa: S104
+        await nu.arun(term, nu.Context().bind(browse.BrowserBackend, tabs))
     finally:
         server.close()
         await server.wait_closed()
-    assert opened == [url]
+    assert tabs.opened == [url]
 
 
-async def test_browse_gives_up_quietly(monkeypatch):
-    opened: list[str] = []
-    monkeypatch.setattr(browse.webbrowser, "open", opened.append)
-    await browse.browse("http://x", "127.0.0.1", _free_port(), timeout=0.2)
-    assert opened == []
+async def test_a_tab_gives_up_quietly():
+    tabs = Tabs()
+    term = browse.tab_opened("http://x", "127.0.0.1", _free_port(), timeout=0.2)
+    await nu.arun(term, nu.Context().bind(browse.BrowserBackend, tabs))
+    assert tabs.opened == []
 
 
-async def test_browse_as_a_term_reads_its_url_at_run_time(monkeypatch):
-    opened: list[str] = []
-    monkeypatch.setattr(browse.webbrowser, "open", opened.append)
+async def test_a_tab_reads_its_url_at_run_time():
+    tabs = Tabs()
     server = await asyncio.start_server(lambda r, w: w.close(), "127.0.0.1", 0)
     port = server.sockets[0].getsockname()[1]
     base = f"http://127.0.0.1:{port}/"
-    term = nu.let("p_x", lambda plane: browse.Browse(nu.Str(base) + nu.Str(plane), "", port))
+    term = nu.let("p_x", lambda plane: browse.tab_opened(nu.Str(base) + nu.Str(plane), "", port))
     try:
-        await nu.arun(term)
+        await nu.arun(term, nu.Context().bind(browse.BrowserBackend, tabs))
     finally:
         server.close()
         await server.wait_closed()
-    assert opened == [base + "p_x"]
+    assert tabs.opened == [base + "p_x"]
+
+
+def test_open_tab_writes_the_browser_ref():
+    tabs = Tabs()
+    term = browse.OpenTab(browse.BROWSER, "http://x")
+    nu.validate(nu.compile(term))
+    nu.run(term, nu.Context().bind(browse.BrowserBackend, tabs))
+    assert tabs.opened == ["http://x"]
 
 
 # --- local.open ---------------------------------------------------------------------
@@ -1315,17 +1363,18 @@ s.cleanup()
 
 def test_a_requirement_refuses_after_its_grace_and_waits_for_one_coming_up(tmp_path):
     path = tmp_path / "valkey"
-    up = functools.partial(answers, str(path))
+    up = Answers(str(path))
     started = time.monotonic()
     with pytest.raises(Refused, match="start one"):
-        Required(up, "start one", wait=5.0, waiting=lambda: False, grace=0.3).setup(None)
+        term = required(up, "start one", wait=5.0, waiting=nu.Literal(False), grace=0.3)
+        asyncio.run(nu.arun(term))
     # Nothing on its way: refused once the grace is out, not at the end of the wait.
     assert 0.3 <= time.monotonic() - started < 3
     server = nustd.valkey.ValkeyServer(data_dir=path)
     starting = threading.Timer(0.5, server.setup, args=(None,))
     starting.start()
     try:
-        Required(up, "start one", wait=10.0).setup(None)
+        asyncio.run(nu.arun(required(up, "start one", wait=10.0)))
         assert _answers(path)
     finally:
         starting.join()
@@ -1334,13 +1383,24 @@ def test_a_requirement_refuses_after_its_grace_and_waits_for_one_coming_up(tmp_p
 
 async def test_a_requirement_waits_on_the_loop_while_it_is_on_its_way():
     flag = {"up": False, "coming": True}
+    up = nu.host(lambda: flag["up"], name="Up")
+    coming = nu.host(lambda: flag["coming"], name="Coming")
     loop = asyncio.get_running_loop()
     loop.call_later(0.3, flag.update, {"up": True})
-    req = Required(lambda: flag["up"], "start it", wait=5.0, waiting=lambda: flag["coming"])
-    await req.asetup(None)
+    req = required(up(), "start it", wait=5.0, waiting=coming())
+    nu.validate(nu.compile(req))
+    await nu.arun(req)
     flag.update(up=False, coming=False)
     with pytest.raises(Refused, match="start it"):
-        await req.asetup(None)
+        await nu.arun(req)
+
+
+def test_heard_runs_one_tree_by_its_condition():
+    def heard(cond: bool) -> nu.Nu:
+        return Heard(nu.Literal("served"), nu.Literal("quiet"), nu.Literal(cond))
+
+    assert nu.run(heard(True))[0] == "served"
+    assert nu.run(heard(False))[0] == "quiet"
 
 
 def test_served_is_nustds_own_server(tmp_path):
@@ -1401,16 +1461,19 @@ def _gone(pids, timeout: float = 20.0) -> list[int]:
     return _alive(pids)
 
 
-#: ``local.run`` on argv[1], web on the port argv[2]; prints what it yields.
+#: ``local.run`` on argv[1], web on the port argv[2]; prints the kernel's status it records.
 _RUN = """
 import sys
 import nu
 from nuspace.space import local
+class Out(nu.Shape):
+    code = nu.IntRef.slot()
 nu.eval_in_loop(nu.compile(local.init(sys.argv[1])), nu.Context())
-term = local.run(sys.argv[1], port=int(sys.argv[2]), static=None, open_browser=False,
-                 extensions=(), spares=0)
-value, _ = nu.eval_in_loop(nu.compile(term), nu.Context())
-print("yielded", value, flush=True)
+term = local.run(sys.argv[1], into=Out.code, port=int(sys.argv[2]), static=None,
+                 open_browser=False, extensions=(), spares=0)
+out = {}
+nu.eval_in_loop(nu.compile(term), nu.Context().bind(dict, out, Out))
+print("exited", out.get("code"), flush=True)
 """
 
 
@@ -1461,7 +1524,7 @@ def test_run_restarts_a_killed_web_and_ends_with_a_killed_kernel_infra_up_till_t
     said = out.decode()
     assert "web exited (137), starting it again" in said
     assert "the kernel exited (137), stopping web" in said
-    assert "yielded 137" in said
+    assert "exited 137" in said
     assert _gone(seen) == [], [_tree(p) for p in seen]
     assert not _answers(valkey)
     assert _valkeys(valkey) == []

@@ -1,9 +1,9 @@
-"""The resources an assembly binds around the stores: the throwaway root, the data dir, warm imports.
+"""The resources an assembly holds for a run: the throwaway root, warm imports.
 
-Each is a plain class for ``nu.Provide``: its setup runs when the bracket
-opens, its cleanup when it closes, and none binds anything a program reads.
-They are how an open touches the file system, so building an open's term
-touches nothing.
+Each is a plain class for ``nu.Provide``, holding something for the span
+of its bracket: its setup runs when the bracket opens, its cleanup when it
+closes. Building a term touches nothing. One-shot writes (the data dir
+made, a dir wiped) are no resources: they are disk Commands (:mod:`.disk`).
 """
 
 from __future__ import annotations
@@ -12,16 +12,14 @@ import shutil
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .meta import data_dir
+import nu
 
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
-
     from nu.lang.runtime import Context
 
 
-__all__ = ["DataDir", "Throwaway", "Warmed"]
+__all__ = ["Throwaway", "Warmed", "throwaway"]
 
 
 class Throwaway:
@@ -50,28 +48,17 @@ class Throwaway:
         shutil.rmtree(self.path, ignore_errors=True)
 
 
-class DataDir:
-    """The space's data dir, made with the dirs the assembly keeps in it.
+def throwaway(root: str, body: nu.Nu) -> nu.With:
+    """``body`` run on the throwaway ``root``: made before, removed with all it holds after.
+
+    The body is what makes it a space, its init first. Outermost, so
+    whatever the body opens is closed by the time the root goes.
 
     Args:
-        root: The space's root, absolute.
-        dirs: The dirs to make, relative to the data dir.
+        root: The directory, absolute, eg from ``resolve_root(None)``.
+        body: What runs on it. The term yields what it yields.
     """
-
-    def __init__(self, root: str, dirs: Sequence[str]) -> None:
-        self.root = root
-        self.dirs = tuple(dirs)
-
-    def setup(self, ctx: Context) -> None:
-        """Make the data dir and each of its dirs, where missing."""
-        data = data_dir(self.root)
-        data.mkdir(parents=True, exist_ok=True)
-        for d in self.dirs:
-            (data / d).mkdir(parents=True, exist_ok=True)
-
-    async def asetup(self, ctx: Context) -> None:
-        """Async shim: making directories is sync work."""
-        self.setup(ctx)
+    return nu.With(nu.Provide(Throwaway, {"path": root}), body=body)
 
 
 class Warmed:

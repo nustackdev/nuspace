@@ -9,7 +9,7 @@ A local space runs in three layers, each assuming the ones under it:
 
 The drivers never check what they run on: if infra goes under a kernel,
 the kernel fails as it fails. Every check is here, at the entry point,
-once, at setup (:class:`~..blocks.required.Required`): the kernel refuses
+once, at its start (:func:`~..blocks.required.required`): the kernel refuses
 with no infra answering, web with no kernel lock held. Each waits a short
 grace for what it needs starting beside it, and the kernel up to
 :data:`INFRA_WAIT` seconds while infra's lock is held. A kernel that stops
@@ -60,7 +60,6 @@ re-import the main module.
 
 from __future__ import annotations
 
-import functools
 import warnings
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -72,16 +71,16 @@ from nuspace._telemetry.usage import opened
 from nuspace.specs import RegistryWarning, space_registry
 from nuspace.web.env import SESSION_ENV
 
-from ..blocks.browse import Browse
-from ..blocks.lock import Lock, held
+from ..blocks.browse import tab_opened
+from ..blocks.guarded import Guarded
+from ..blocks.lock import Held, Lock
 from ..blocks.logs import logged_to
-from ..blocks.meta import data_dir, resolve_root
-from ..blocks.notifier import answers
-from ..blocks.required import Required
-from ..blocks.resources import DataDir
+from ..blocks.meta import data_dir, data_made, resolve_root
+from ..blocks.notifier import Answers
+from ..blocks.required import required
 from ..blocks.workers import DEFAULT_NAME, DEFAULT_SPARES, worker_pool
 from . import binding
-from .disk import Initialized, Wiped
+from .disk import checked, wiped
 from .layout import (
     DIRS,
     INFRA_LOCK,
@@ -144,14 +143,12 @@ def infra(path: str | os.PathLike[str] | None = None, *, body: nu.Nu | None = No
     root, throwaway = resolve_root(path)
     data = str(data_dir(root))
     served = nu.With(
-        nu.Provide(Initialized, {"root": root}),
-        nu.Provide(DataDir, {"root": root, "dirs": DIRS}),
         nu.Provide(Lock, {"path": str(Path(data) / INFRA_LOCK), "what": "infra"}),
         logged_to(Path(data) / INFRA_LOG, "infra"),
         binding.served(data),
         body=nu.Park() if body is None else body,
     )
-    return fresh(root, throwaway, served)
+    return fresh(root, throwaway, Guarded(served, checked(root), data_made(root, DIRS)))
 
 
 def kernel(
@@ -227,34 +224,37 @@ INFRA_WAIT = 30.0
 GRACE = 2.0
 
 
-def needs_infra(data: str) -> nu.Provide:
+def needs_infra(data: str) -> nu.Nu:
     """Infra's notification server answering, or the kernel refused: start infra first."""
-    return nu.Provide(
-        Required,
-        {
-            "check": functools.partial(answers, binding.valkey_dir(data)),
-            "refusal": "infra of this space is not running: start it first",
-            "wait": INFRA_WAIT,
-            "waiting": functools.partial(held, str(Path(data) / INFRA_LOCK)),
-            "grace": GRACE,
-        },
+    return required(
+        Answers(binding.valkey_dir(data)),
+        "infra of this space is not running: start it first",
+        wait=INFRA_WAIT,
+        waiting=Held(str(Path(data) / INFRA_LOCK)),
+        grace=GRACE,
     )
 
 
-def needs_kernel(data: str) -> nu.Provide:
+def needs_kernel(data: str) -> nu.Nu:
     """The kernel's lock held, or web refused: start the kernel first. A kernel up has infra up."""
-    return nu.Provide(
-        Required,
-        {
-            "check": functools.partial(held, str(Path(data) / KERNEL_LOCK)),
-            "refusal": "the kernel of this space is not running: start it first",
-            "wait": GRACE,
-        },
+    return required(
+        Held(str(Path(data) / KERNEL_LOCK)),
+        "the kernel of this space is not running: start it first",
+        wait=GRACE,
     )
 
 
-def opened_on(spec: PlaneSpec, host: str, port: int, browse: bool) -> nu.Nu:
-    """The plane of ``spec`` resolved or made, a tab opened on it once web answers, then held."""
+def opened_on(
+    spec: PlaneSpec, *, browse: bool = False, host: str = "127.0.0.1", port: int = 8080
+) -> nu.Nu:
+    """The plane of ``spec`` resolved or made, with ``browse`` a tab opened on it once web answers, then held.
+
+    Args:
+        spec: The plane's spec.
+        browse: Open a tab on the plane once web at ``host:port`` answers.
+        host: Where web binds.
+        port: The port web binds.
+    """
 
     def on(plane: nu.ObjectRef) -> nu.Nu:
         steps = [plane_of(spec, plane)]
@@ -263,7 +263,7 @@ def opened_on(spec: PlaneSpec, host: str, port: int, browse: bool) -> nu.Nu:
             from nuspace.web.interactions import Href
 
             url = nu.Str(f"http://{host}:{port}") + nu.Str(Href(plane, {}))
-            steps.append(Browse(url, host, port))
+            steps.append(tab_opened(url, host, port))
         return nu.Sequential(*steps, nu.Park())
 
     return nu.let("", on)
@@ -325,15 +325,17 @@ def web(
         log_level="warning",
         session_address=address,
         upload_root=uploads,
+        blobs=blobs,
     )
-    beside = [] if plane is None else [opened_on(found(plane), host, port, open_browser)]
+    beside = []
+    if plane is not None:
+        beside.append(opened_on(found(plane), browse=open_browser, host=host, port=port))
     if body is not None:
         beside.append(body)
     recorded = nu.Provide(Recorded, {"path": str(Path(data) / SESSION_ADDR), "address": address})
-    running = nu.With(
-        nu.Provide(Wiped, {"dirs": [uploads]}),
-        recorded,
-        body=nu.Race(served, *beside) if beside else served,
+    running = Guarded(
+        nu.With(recorded, body=nu.Race(served, *beside) if beside else served),
+        wiped([uploads]),
     )
     return bracketed(
         root,
