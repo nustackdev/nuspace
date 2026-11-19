@@ -5,8 +5,8 @@ driver fails as it fails when what it runs on goes. So the check lives in
 the entry point, once, before anything else: the kernel's needs infra
 answering, web's needs a kernel running. :func:`required` is that check as
 flow, a step to put before the body (``required(...) >> body``).
-:func:`refused` is the plain one: a query saying why not, raised when it
-says something.
+:func:`refused` is the plain one: a condition and what a refusal says,
+raised when the condition holds.
 
 A requirement may be coming up beside the entry point, eg two shells
 started at once, or a supervisor starting its children in order. So it
@@ -28,17 +28,16 @@ __all__ = ["EVERY", "refused", "required"]
 EVERY = 0.05
 
 
-def refused(why: nu.Nu, exc_cls: type[Exception] = Refused) -> nu.Nu:
-    """``exc_cls(why)`` raised when the query ``why`` says something, nothing when it says ``""``.
-
-    ``why`` is read once, held in a let, so the check and the message come
-    from one look.
+def refused(cond: nu.Nu, why: nu.Nu | str, exc_cls: type[Exception] = Refused) -> nu.Nu:
+    """``exc_cls(why)`` raised when the query ``cond`` holds, nothing when it does not. A step.
 
     Args:
-        why: A query yielding the refusal, ``""`` when there is none.
+        cond: A query: whether to refuse.
+        why: What the refusal says, a ``Str`` term built of the run's values,
+            read only when it refuses.
         exc_cls: What is raised: ``Refused``, or ``Missing`` for no space at all.
     """
-    return nu.let(why, lambda said: nu.IfDo(said, nu.Raise(said, exc_cls=exc_cls)))
+    return nu.IfDo(cond, nu.Raise(why, exc_cls=exc_cls))
 
 
 def looking(seconds: float, cond: nu.Nu) -> nu.Nu:

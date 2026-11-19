@@ -6,8 +6,13 @@ nearest space at or above the current directory, else the home space (root
 
 Which assembly runs it: the one its ``meta.json`` names, imported as
 ``nuspace.space.<name>``. A space without one yet, new, throwaway or made
-before ``meta.json``, is :data:`DEFAULT_ASSEMBLY`'s. The commands call only
-its entry points, so the command line is the same over any assembly.
+before ``meta.json``, is :data:`DEFAULT_ASSEMBLY`'s. The command line reads
+``meta.json`` the way the assemblies do, one small term over a read only
+mount of its own (:func:`space_meta`). The commands call only the
+assembly's entry points, so the command line is the same over any assembly.
+
+Finding a space is plain Python, the command line being a host program:
+argv to a root, the nearest one up from here looked for file by file.
 
 How it is held: one term, one run (:func:`hold`). What the CLI needs back,
 the kernel's exit status, an entry point writes into a ref the CLI hands
@@ -27,15 +32,18 @@ from rich.console import Console
 from rich.text import Text
 
 import nu
+import nustd.fs
 from nuspace import _telemetry
 from nuspace._branding import BLUE, header
 from nuspace.errors import Refused
-from nuspace.space.blocks.meta import DATA_DIR, is_space, read_meta
-from nuspace.space.local.layout import made_before
+from nuspace.space.blocks.meta import DATA_DIR, META_FILE, meta_in
+from nuspace.space.local.layout import MADE_BEFORE
 
 
 if TYPE_CHECKING:
     from types import ModuleType
+
+    from nuspace.space.blocks.meta import Meta
 
 
 __all__ = [
@@ -49,6 +57,7 @@ __all__ = [
     "initialized",
     "nearest_space",
     "path_argument",
+    "space_meta",
     "space_root",
     "tilde",
     "tmp_option",
@@ -104,10 +113,39 @@ def space_root(path: str | None, *, tmp: bool = False) -> str | None:
     return str(nearest_space(Path.cwd()) or Path.home())
 
 
+def _is_space(root: Path) -> bool:
+    """Whether ``root`` holds a space: ``meta.json`` in its data dir, or a store made before it."""
+    data = root / DATA_DIR
+    return (data / META_FILE).is_file() or (data / MADE_BEFORE).is_file()
+
+
 def nearest_space(start: str | Path) -> Path | None:
     """The nearest space at or above ``start``, one made before ``meta.json`` too. None when there is none."""
     here = Path(start).expanduser().resolve()
-    return next((d for d in (here, *here.parents) if is_space(d) or made_before(d)), None)
+    return next((d for d in (here, *here.parents) if _is_space(d)), None)
+
+
+#: The tag the command line mounts a space's root under, read only, to read its ``meta.json``.
+MOUNT = nustd.fs.FsRef("nuspace.cli")
+
+
+def space_meta(root: str) -> Meta | None:
+    """``meta.json`` of the space at ``root``, or None when there is none: a small term run here.
+
+    The root mounted read only, nothing made, the meta read as every
+    assembly reads it. A root not there yet is no space.
+
+    Raises:
+        click.ClickException: The file is there but does not read as a meta.
+    """
+    read = meta_in(MOUNT / f"{DATA_DIR}/{META_FILE}")
+    term = nustd.fs.mount(root, tag=MOUNT, readonly=True, create=False, follow="any", body=read)
+    try:
+        return nu.run(term)[0]
+    except (FileNotFoundError, NotADirectoryError):
+        return None
+    except Refused as e:
+        raise click.ClickException(str(e)) from None
 
 
 def assembly(root: str | None) -> ModuleType:
@@ -119,10 +157,7 @@ def assembly(root: str | None) -> ModuleType:
     """
     name = DEFAULT_ASSEMBLY
     if root is not None:
-        try:
-            meta = read_meta(root)
-        except Refused as e:
-            raise click.ClickException(str(e)) from None
+        meta = space_meta(root)
         if meta is not None:
             name = meta.assembly
     module = None
@@ -175,10 +210,7 @@ def announce(path: str | None, *, alone: str | None = None, plane: str | None = 
 
 def initialized(root: str) -> bool:
     """Whether the space at ``root`` says its assembly's init ran: ``"init": true`` in its meta.json."""
-    try:
-        meta = read_meta(root)
-    except Refused as e:
-        raise click.ClickException(str(e)) from None
+    meta = space_meta(root)
     return meta is not None and meta.init
 
 

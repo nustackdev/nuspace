@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- A space's metadata is read, checked and written as nu ops over one form
 - Entry points run their checks as plain sequences, since none of them yields a value
 - Open browser tabs through the shared nustd fabric instead of a copy of our own
 - Run keeps the kernel and web in pooled workers, each built where it runs

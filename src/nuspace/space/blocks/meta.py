@@ -1,4 +1,4 @@
-"""What every assembly shares about a space on disk: the data dir, ``meta.json``, how a space is found, its root.
+"""What every assembly shares about a space on disk: the data dir, ``meta.json``, read and written as nu terms.
 
 A space is a directory, any one, its data kept in ``.nuspace/`` the way a
 repository keeps ``.git/``. One file in it is common to every assembly::
@@ -13,28 +13,27 @@ tool knows which assembly opens it. ``init`` says whether the assembly's
 init ran to its end: a plain flag, false until then, false when missing. ``~/.nuspace`` holds the user's
 config whether or not home is a space: a data dir alone is no space.
 
-A term reads and writes ``meta.json`` through an fs mount the assembly
-binds over the data dir (``nustd.fs``), parsed and written with
-``nustd.json``: :func:`meta_in`, :func:`stamp`, :func:`set_init`,
-:func:`init_done` each take the file on that mount, a ``FileRef``, so the
-block never knows the assembly's tag. Plain Python outside a term, eg the
-command line finding a space before anything runs, reads it with
-:func:`read_meta`.
+:class:`Meta` is the value, :class:`MetaForm` its Form: a term yielding a
+``Meta`` reads ``m.assembly`` in the tree, and makes its next value with
+``m.with_init(flag)``. Everything here is nu ops over that form: the file
+is read through an fs mount the assembly binds (``nustd.fs``), parsed and
+written with ``nustd.json``, stamped with ``nustd.datetime``, and each
+refusal is a ``Raise`` of a formatted ``Str``. :func:`meta_in`,
+:func:`stamp`, :func:`set_init`, :func:`init_done` each take the file on
+that mount, a ``FileRef``, so the block never knows the assembly's tag.
+The command line reads it the same way, over a mount of its own.
 """
 
 from __future__ import annotations
 
-import json
-import tempfile
-import uuid
-from dataclasses import asdict, dataclass, replace
-from datetime import UTC, datetime
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import nu
 import nustd.json
 from nuspace.errors import Refused
+from nustd.datetime import datetime, timezone
 
 from .required import refused
 
@@ -49,14 +48,13 @@ __all__ = [
     "DATA_DIR",
     "META_FILE",
     "Meta",
-    "data_dir",
-    "find_space",
+    "MetaForm",
     "init_done",
-    "is_space",
     "meta_in",
-    "other_refusal",
-    "read_meta",
+    "not_other",
+    "ran",
     "resolve_root",
+    "said",
     "set_init",
     "stamp",
 ]
@@ -71,7 +69,7 @@ META_FILE = "meta.json"
 
 @dataclass(frozen=True)
 class Meta:
-    """What ``meta.json`` says.
+    """What ``meta.json`` says. The plain value; :class:`MetaForm` is its Form.
 
     Attributes:
         assembly: The name of the assembly that made the space, eg ``"local"``.
@@ -84,132 +82,129 @@ class Meta:
     init: bool = False
 
 
-def data_dir(root: str | os.PathLike[str]) -> Path:
-    """The data dir of the space whose root is ``root``."""
-    return Path(root) / DATA_DIR
+class MetaForm(nu.Form, nu.TypedNu[Meta]):
+    """A :class:`Meta` as a Form: its fields read in the tree, its next value made there.
 
-
-def meta_file(root: str | os.PathLike[str]) -> Path:
-    return data_dir(root) / META_FILE
-
-
-def is_space(root: str | os.PathLike[str]) -> bool:
-    """Whether ``root`` is a space: its data dir holds ``meta.json``."""
-    return meta_file(root).is_file()
-
-
-def unreadable(root: str | os.PathLike[str]) -> str:
-    """What a refusal says of a ``meta.json`` that does not read."""
-    return f"{meta_file(root)} does not read as a space's meta; fix or remove it"
-
-
-def meta_of(data: object, root: str) -> Meta | None:
-    """The :class:`Meta` in ``data``, ``meta.json`` as loaded, or None when there is none (``null``).
-
-    Raises:
-        Refused: ``data`` does not read as a meta.
+    Build one with :meth:`of`, :meth:`made` or :meth:`loads`, or wrap a
+    term yielding a ``Meta``: ``MetaForm(ref).assembly``.
     """
-    if data is None:
-        return None
-    try:
-        init = data.get("init", False)  # type: ignore[attr-defined]
-        if not isinstance(init, bool):
-            raise TypeError(init)
-        return Meta(assembly=str(data["assembly"]), made_at=str(data["made_at"]), init=init)  # type: ignore[index]
-    except (ValueError, KeyError, TypeError, AttributeError):
-        raise Refused(unreadable(root)) from None
+
+    # --- constructors --------------------------------------------------------
+
+    @classmethod
+    def of(cls, assembly: nu.StrArg, made_at: nu.StrArg, init: nu.BoolArg = False) -> MetaForm:
+        """A meta from its three fields, built on every run."""
+        return MetaForm(nu.Literal(factory=Meta, assembly=assembly, made_at=made_at, init=init))
+
+    @classmethod
+    def made(cls, assembly: nu.StrArg) -> MetaForm:
+        """A new meta marking a space as ``assembly``'s, made now: UTC, to the second, init not run."""
+        now = datetime.now(timezone.utc()).replace(microsecond=0)
+        return cls.of(assembly, now.isoformat())
+
+    @classmethod
+    def loads(cls, text: nu.StrArg) -> MetaForm:
+        """The meta ``meta.json``'s ``text`` holds, or None for ``null``. No field is type checked: it is our file.
+
+        Raises:
+            ValueError: (at run) ``text`` is no JSON.
+            KeyError: (at run) A field is missing.
+            TypeError: (at run) The JSON is no object.
+        """
+
+        def built(data: nu.ObjectRef) -> nu.Nu:
+            fields = nu.Dict(data)
+            meta = cls.of(
+                nu.GetItem(data, "assembly"),
+                nu.GetItem(data, "made_at"),
+                fields.get_item("init", False),
+            )
+            return nu.If(nu.Is(data, None), nu.Literal(None), meta)
+
+        return MetaForm(nu.let(nustd.json.loads(text), built))
+
+    # --- fields --------------------------------------------------------------
+
+    @property
+    def assembly(self) -> nu.Str:
+        """The name of the assembly that made the space."""
+        return nu.Str(nu.GetAttr(self, "assembly"))
+
+    @property
+    def made_at(self) -> nu.Str:
+        """When the space was marked, ISO 8601 in UTC."""
+        return nu.Str(nu.GetAttr(self, "made_at"))
+
+    @property
+    def init(self) -> nu.Bool:
+        """Whether the assembly's init ran to its end."""
+        return nu.Bool(nu.GetAttr(self, "init"))
+
+    # --- next values ---------------------------------------------------------
+
+    def with_init(self, flag: nu.BoolArg) -> MetaForm:
+        """This meta with ``init`` set to ``flag``."""
+        return MetaForm.of(self.assembly, self.made_at, flag)
+
+    def as_dict(self) -> nu.Dict:
+        """What ``meta.json`` holds of this meta: its three fields."""
+        return nu.Dict.of(assembly=self.assembly, made_at=self.made_at, init=self.init)
 
 
-def read_meta(root: str | os.PathLike[str]) -> Meta | None:
-    """``meta.json`` of the space at ``root``, or None when there is none. Plain Python, outside a term.
-
-    Raises:
-        Refused: The file is there but does not read as a meta.
-    """
-    try:
-        raw = meta_file(root).read_text(encoding="utf-8")
-    except FileNotFoundError:
-        return None
-    try:
-        data = json.loads(raw)
-    except ValueError:
-        raise Refused(unreadable(root)) from None
-    if data is None:
-        raise Refused(unreadable(root))
-    return meta_of(data, str(root))
+def said(template: str, **fields: object) -> nu.Str:
+    """``template`` with its ``{name}`` fields filled at run: a refusal's text, eg ``said("{root} is gone", root=r)``."""
+    return nu.Str(template).format_map(nu.Dict.of(**fields))
 
 
-#: ``MetaOf(data, root)``: :func:`meta_of` as a query.
-MetaOf = nu.host(meta_of)
-
-
-def meta_in(file: FileRef, root: str) -> nu.Nu:
+def meta_in(file: FileRef) -> MetaForm:
     """``meta.json`` read through its mount: the :class:`Meta`, or None when there is none. A query.
+
+    A missing file, or one holding ``null``, is no meta. Anything else that
+    does not read as one raises once, inside, and is refused here.
 
     Args:
         file: ``meta.json`` on the assembly's mount of the data dir.
-        root: The space's root, absolute, as a refusal names it.
 
     Raises:
         Refused: (at run) The file is there but does not read as a meta.
     """
+    unreadable = said("{file} does not read as a space's meta; fix or remove it", file=file.where())
     loaded = nu.TryCatch(
-        nustd.json.loads(file.read_text(default="null")),
-        errors=ValueError,
-        catch=nu.Raise(unreadable(root), exc_cls=Refused),
+        MetaForm.loads(file.read_text(default="null")),
+        errors=(ValueError, KeyError, TypeError),
+        catch=nu.Raise(unreadable, exc_cls=Refused),
     )
-    return MetaOf(loaded, root)
+    return MetaForm(loaded)
 
 
-def other_refusal(meta: Meta | None, root: str, assembly: str) -> str:
-    """Why ``root`` is refused for being another assembly's space, or ``""``."""
-    if meta is not None and meta.assembly != assembly:
-        return (
-            f"{root} is a space of the {meta.assembly!r} assembly, not {assembly!r}."
-            f" Open it with {meta.assembly!r}"
-        )
-    return ""
+def ran(meta: nu.Nu) -> nu.Bool:
+    """Whether ``meta``, a meta or None, says its assembly's init ran. ``meta`` is read twice: hand it a ref."""
+    return nu.Bool(nu.And(nu.Not(nu.Is(meta, None)), MetaForm(meta).init))
 
 
-#: ``OtherRefusal(meta, root, assembly)``: :func:`other_refusal` as a query.
-OtherRefusal = nu.host(other_refusal)
-
-
-def made(assembly: str) -> dict[str, object]:
-    """A new meta marking a space as ``assembly``'s, as ``meta.json`` holds it, made now."""
-    return asdict(Meta(assembly=assembly, made_at=datetime.now(UTC).isoformat(timespec="seconds")))
-
-
-def with_init(meta: Meta | None, root: str, init: bool) -> dict[str, object]:
-    """``meta`` with ``init`` set, as ``meta.json`` holds it.
+def not_other(meta: nu.Nu, root: nu.StrArg, assembly: str) -> nu.Nu:
+    """The space at ``root`` refused when ``meta``, a meta or None, is another assembly's. A step.
 
     Raises:
-        Refused: There is no meta.
+        Refused: (at run) Another assembly made the space.
     """
-    if meta is None:
-        msg = f"no space at {root} to set init on"
-        raise Refused(msg)
-    return asdict(replace(meta, init=init))
+    other = MetaForm(meta).assembly
+    why = said(
+        "{root} is a space of the {other!r} assembly, not {assembly!r}. Open it with {other!r}",
+        root=root,
+        other=other,
+        assembly=assembly,
+    )
+    return refused(nu.And(nu.Not(nu.Is(meta, None)), other != assembly), why)
 
 
-def is_init(meta: Meta | None) -> bool:
-    """Whether ``meta`` says its assembly's init ran."""
-    return meta is not None and meta.init
+def dumped(meta: MetaForm) -> nu.Str:
+    """``meta`` as the text ``meta.json`` holds: one JSON line."""
+    return nustd.json.dumps(meta.as_dict()) + "\n"
 
 
-#: ``Made(assembly)``, ``WithInit(meta, root, init)``, ``IsInit(meta)``: the helpers above as queries.
-Made = nu.host(made)
-WithInit = nu.host(with_init)
-IsInit = nu.host(is_init)
-
-
-def dumped(data: object) -> nu.Nu:
-    """``data`` as the text ``meta.json`` holds: one JSON line."""
-    return nustd.json.dumps(data) + "\n"
-
-
-def stamp(file: FileRef, root: str, assembly: str) -> nu.Nu:
-    """The space marked as ``assembly``'s: its ``meta.json`` written when there is none.
+def stamp(file: FileRef, root: nu.StrArg, assembly: str) -> nu.Nu:
+    """The space marked as ``assembly``'s: its ``meta.json`` written when there is none. A step.
 
     Args:
         file: ``meta.json`` on the assembly's mount of the data dir.
@@ -220,17 +215,17 @@ def stamp(file: FileRef, root: str, assembly: str) -> nu.Nu:
         Refused: (at run) Another assembly made the space, or its meta does not read.
     """
     return nu.let(
-        meta_in(file, root),
+        meta_in(file),
         lambda meta: nu.IfDo(
             nu.Is(meta, None),
-            file.write_text(dumped(Made(assembly))),
-            refused(OtherRefusal(meta, root, assembly)),
+            nu.let(MetaForm.made(assembly), lambda made: file.write_text(dumped(MetaForm(made)))),
+            not_other(meta, root, assembly),
         ),
     )
 
 
-def set_init(file: FileRef, root: str, init: bool = True) -> nu.Nu:
-    """``init`` set in the space's ``meta.json``, the file written whole.
+def set_init(file: FileRef, root: nu.StrArg, init: bool = True) -> nu.Nu:
+    """``init`` set in the space's ``meta.json``, the file written whole. A step.
 
     Args:
         file: ``meta.json`` on the assembly's mount of the data dir.
@@ -240,34 +235,34 @@ def set_init(file: FileRef, root: str, init: bool = True) -> nu.Nu:
     Raises:
         Refused: (at run) There is no meta, or it does not read.
     """
-    return file.write_text(dumped(WithInit(meta_in(file, root), root, init)))
+    none = said("no space at {root} to set init on", root=root)
+    return nu.let(
+        meta_in(file),
+        lambda meta: (
+            refused(nu.Is(meta, None), none)
+            >> file.write_text(dumped(MetaForm(meta).with_init(init)))
+        ),
+    )
 
 
-def init_done(file: FileRef, root: str) -> nu.Nu:
+def init_done(file: FileRef) -> nu.Bool:
     """Whether the space says its assembly's init ran: ``"init": true`` in its meta. A query.
 
     Args:
         file: ``meta.json`` on a mount of the data dir.
-        root: The space's root, absolute, as a refusal names it.
 
     Raises:
         Refused: (at run) The file is there but does not read as a meta.
     """
-    return IsInit(meta_in(file, root))
+    return nu.Bool(nu.let(meta_in(file), lambda meta: ran(meta)))
 
 
-def find_space(start: str | os.PathLike[str]) -> Path | None:
-    """The nearest space at or above ``start``, as ``git`` finds a repository. None when there is none."""
-    here = Path(start).expanduser().resolve()
-    return next((d for d in (here, *here.parents) if is_space(d)), None)
+def resolve_root(path: str | os.PathLike[str] | nu.Nu) -> str | nu.Nu:
+    """The root an entry point runs on: a term as it is (eg a temp dir's mount), a path absolute, ``~`` expanded.
 
-
-def resolve_root(path: str | os.PathLike[str] | None) -> tuple[str, bool]:
-    """The space's root, absolute, and whether it is a throwaway one.
-
-    None names a throwaway root in the temp dir: the assembly makes it and
-    removes it at the end. Anything else is expanded and resolved.
+    Nothing on disk is looked at: the mount over the root resolves it when
+    it opens, and says where it is with ``where()``.
     """
-    if path is None:
-        return str(Path(tempfile.gettempdir()) / f"nuspace-{uuid.uuid4().hex[:8]}"), True
-    return str(Path(path).expanduser().resolve()), False
+    if isinstance(path, nu.Nu):
+        return path
+    return str(Path(path).expanduser().absolute())
