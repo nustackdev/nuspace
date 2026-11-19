@@ -76,9 +76,9 @@ import nuspace.web
 import nustd.fs
 from nuspace import kernel as _kernel
 from nuspace._telemetry.usage import opened
-from nuspace.fabrics.browser import tab_opened
 from nuspace.specs import RegistryWarning, space_registry
 from nuspace.web.env import SESSION_ENV
+from nustd.webbrowser import tab_opened
 
 from ..blocks.guarded import Guarded
 from ..blocks.logs import logged_to
