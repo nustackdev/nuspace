@@ -55,7 +55,6 @@ from nuspace import kernel
 from nuspace.shapes import Space, stores
 from nuspace.web.stores import CONN_STORE, WEB_STORE
 
-from ..blocks.guarded import Guarded
 from ..blocks.logs import logged_to
 from ..blocks.meta import data_dir, resolve_root
 from ..blocks.resources import throwaway
@@ -123,11 +122,11 @@ def init(path: str | os.PathLike[str]) -> nu.Nu:
 def fresh(root: str, throwaway_root: bool, term: nu.Nu) -> nu.Nu:
     """``term`` as is, or for a throwaway ``root``: the root made and initialized, ``term``, the root removed.
 
-    Yields what ``term`` yields.
+    Yields nothing.
     """
     if not throwaway_root:
         return term
-    return throwaway(root, Guarded(term, initialized(root)))
+    return throwaway(root, initialized(root) >> term)
 
 
 def bracketed(
@@ -141,7 +140,7 @@ def bracketed(
 ) -> nu.Nu:
     """The steps and brackets of a driver's entry point, from the init check, around ``body``.
 
-    Yields what ``body`` yields.
+    Yields nothing.
 
     Args:
         root: The space's root, absolute.
@@ -161,4 +160,4 @@ def bracketed(
     held.append(binding.stores(data, ROOTS))
     if blobs is not None:
         held.append(blobs)
-    return entered(root, told(Guarded(nu.With(*held, body=body), required, DATA.mkdir(*DIRS))))
+    return entered(root, told(required >> DATA.mkdir(*DIRS) >> nu.With(*held, body=body)))

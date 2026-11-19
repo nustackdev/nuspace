@@ -36,7 +36,7 @@ import nu
 import nustd.json
 from nuspace.errors import Refused
 
-from .guarded import refused
+from .required import refused
 
 
 if TYPE_CHECKING:

@@ -48,7 +48,6 @@ import rich_click as click
 import nu
 import nustd.fs
 from nuspace.errors import Refused
-from nuspace.space.blocks.guarded import Guarded
 from nuspace.space.blocks.meta import META_FILE, data_dir, init_done, resolve_root
 from nuspace.space.blocks.resources import throwaway
 from nuspace.space.local.drivers import opened_on
@@ -121,7 +120,7 @@ def initialized_first(space: ModuleType, root: str, term: nu.Nu) -> nu.Nu:
     """
     ready = init_done(DATA / META_FILE, root)
     step = nu.IfDo(nu.Not(ready), space.init(root))
-    return Guarded(term, nustd.fs.mount(str(data_dir(root)), tag=DATA, body=step))
+    return nustd.fs.mount(str(data_dir(root)), tag=DATA, body=step) >> term
 
 
 #: The flags that run one component alone, by the name of the entry point.

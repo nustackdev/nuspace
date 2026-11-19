@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Entry points run their checks as plain sequences, since none of them yields a value
 - Open browser tabs through the shared nustd fabric instead of a copy of our own
 - Run keeps the kernel and web in pooled workers, each built where it runs
 - Opening a browser tab is its own fabric, apart from the space's building blocks

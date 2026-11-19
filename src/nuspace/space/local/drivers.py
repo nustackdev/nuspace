@@ -80,7 +80,6 @@ from nuspace.specs import RegistryWarning, space_registry
 from nuspace.web.env import SESSION_ENV
 from nustd.webbrowser import tab_opened
 
-from ..blocks.guarded import Guarded
 from ..blocks.logs import logged_to
 from ..blocks.meta import data_dir, resolve_root
 from ..blocks.notifier import Answers
@@ -156,7 +155,7 @@ def infra(path: str | os.PathLike[str] | None = None, *, body: nu.Nu | None = No
         binding.served(data),
         body=nu.Park() if body is None else body,
     )
-    return fresh(root, throwaway, entered(root, told(Guarded(served, DATA.mkdir(*DIRS)))))
+    return fresh(root, throwaway, entered(root, told(DATA.mkdir(*DIRS) >> served)))
 
 
 def kernel(
@@ -341,9 +340,8 @@ def web(
     if body is not None:
         beside.append(body)
     recorded = nustd.fs.Hold(DATA / SESSION_ADDR, address + "\n")
-    running = Guarded(
-        nu.With(recorded, body=nu.Race(served, *beside) if beside else served),
-        DATA.remove(UPLOADS_DIR, tree=True),
+    running = DATA.remove(UPLOADS_DIR, tree=True) >> nu.With(
+        recorded, body=nu.Race(served, *beside) if beside else served
     )
     return bracketed(
         root,

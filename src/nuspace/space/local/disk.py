@@ -14,8 +14,8 @@ before that (:func:`found`). The mount of a driver never makes the data
 dir, so a refused space is left as it was.
 
 Each check is a query saying why not, ``""`` when fine, raised by
-:func:`~..blocks.guarded.refused`. Each write is a write on the mount.
-All are steps: put them before a body (``Guarded(body, ...)``) or in a flow.
+:func:`~..blocks.required.refused`. Each write is a write on the mount.
+All are steps: put them before a body (``step >> body``) or in a flow.
 
 A driver's lock is ``nustd.fs.Lock``, refused with ``FsLocked``;
 :func:`told` turns that into local's own refusal, naming what runs where.
@@ -36,8 +36,8 @@ import nu
 import nustd.fs
 from nuspace.errors import Missing, Refused
 
-from ..blocks.guarded import Guarded, refused
 from ..blocks.meta import data_dir, is_space, meta_in, other_refusal, set_init, stamp
+from ..blocks.required import refused
 from .layout import ASSEMBLY, DATA, META, is_older, made_before
 
 
@@ -65,7 +65,7 @@ __all__ = [
 
 
 def mounted(root: str, body: nu.Nu, *, create: bool = False) -> nu.Nu:
-    """``body`` with local's mount of the data dir of ``root`` bound. Yields what ``body`` yields.
+    """``body`` with local's mount of the data dir of ``root`` bound. Yields nothing.
 
     Args:
         root: The space's root, absolute.
@@ -147,14 +147,14 @@ def marked(root: str, body: nu.Nu) -> nu.Nu:
     ``init``'s way in, where :func:`entered` is every other entry point's:
     an older store format refused before the mount opens, which makes the
     data dir when missing, then the meta stamped inside it, then ``body``.
-    Yields what ``body`` yields.
+    Yields nothing.
 
     Raises:
         Refused: (at run) ``root`` holds a space of an older store format,
             or one another assembly made.
     """
-    inside = mounted(root, Guarded(body, stamp(META, root, ASSEMBLY)), create=True)
-    return Guarded(inside, refused(OlderRefusal(root)))
+    inside = mounted(root, stamp(META, root, ASSEMBLY) >> body, create=True)
+    return refused(OlderRefusal(root)) >> inside
 
 
 def checked(root: str) -> nu.Nu:
@@ -174,14 +174,14 @@ def entered(root: str, body: nu.Nu) -> nu.Nu:
     Before the mount opens: no older store format, a data dir there. Inside
     it, before ``body``: :func:`checked`. The mount never makes the data
     dir, so a space refused is left as it was. Every entry point but
-    ``init`` runs its body through this. Yields what ``body`` yields.
+    ``init`` runs its body through this. Yields nothing.
 
     Raises:
         Refused: (at run) An older store format, another assembly's space,
             or one whose init has not run.
     """
-    inside = mounted(root, Guarded(body, checked(root)))
-    return Guarded(inside, refused(OlderRefusal(root)), refused(BareRefusal(root)))
+    inside = mounted(root, checked(root) >> body)
+    return refused(OlderRefusal(root)) >> refused(BareRefusal(root)) >> inside
 
 
 def found(root: str) -> nu.Nu:
@@ -204,7 +204,7 @@ def held(lock: FileRef) -> nu.Nu:
 
 
 def told(term: nu.Nu) -> nu.Nu:
-    """``term``, a lock it takes held elsewhere told as local's refusal. Yields what ``term`` yields.
+    """``term``, a lock it takes held elsewhere told as local's refusal. Yields nothing.
 
     ``nustd.fs.Lock`` refuses with ``FsLocked``, naming the holder's record;
     this raises ``Refused`` with what runs and where: ``the kernel of this

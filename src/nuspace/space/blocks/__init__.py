@@ -1,9 +1,8 @@
 """The blocks: shared parts every assembly is built from. None of them knows a driver.
 
 - :mod:`.meta`: the data dir, ``meta.json`` read and written through an fs mount, how a space is found, root resolving.
-- :mod:`.guarded`: steps before a body, its value kept; the refusal step.
 - :mod:`.notifier`: the notification server: owned by one process, published to by the rest.
-- :mod:`.required`: what an entry point needs running, looked for at its start, or a refusal.
+- :mod:`.required`: what an entry point needs running, looked for at its start, or a refusal; the refusal step.
 - :mod:`.logs`: this process's logging pointed at a file.
 - :mod:`.navigators`: a store's root bound to kv navigators, any backend.
 - :mod:`.workers`: what every worker comes up holding, and the pool.
@@ -11,7 +10,6 @@
 """
 
 from . import navigators
-from .guarded import Guarded, refused
 from .logs import Logged, logged_to
 from .meta import (
     DATA_DIR,
@@ -29,7 +27,7 @@ from .meta import (
     stamp,
 )
 from .notifier import Answers, answers, served
-from .required import required
+from .required import refused, required
 from .resources import Throwaway, Warmed, throwaway
 from .workers import worker_context, worker_pool
 
@@ -38,7 +36,6 @@ __all__ = [
     "DATA_DIR",
     "META_FILE",
     "Answers",
-    "Guarded",
     "Logged",
     "Meta",
     "Throwaway",
