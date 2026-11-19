@@ -8,11 +8,9 @@
 - :mod:`.navigators`: a store's root bound to kv navigators, any backend.
 - :mod:`.workers`: what every worker comes up holding, and the pool.
 - :mod:`.resources`: what a run holds: the throwaway root, warm imports.
-- :mod:`.browse`: a browser tab opened once a server answers.
 """
 
 from . import navigators
-from .browse import BROWSER, BrowserBackend, BrowserRef, Listening, OpenTab, tab_opened
 from .guarded import Guarded, refused
 from .logs import Logged, logged_to
 from .meta import (
@@ -37,17 +35,12 @@ from .workers import worker_context, worker_pool
 
 
 __all__ = [
-    "BROWSER",
     "DATA_DIR",
     "META_FILE",
     "Answers",
-    "BrowserBackend",
-    "BrowserRef",
     "Guarded",
-    "Listening",
     "Logged",
     "Meta",
-    "OpenTab",
     "Throwaway",
     "Warmed",
     "answers",
@@ -66,7 +59,6 @@ __all__ = [
     "served",
     "set_init",
     "stamp",
-    "tab_opened",
     "throwaway",
     "worker_context",
     "worker_pool",
