@@ -41,19 +41,25 @@ from __future__ import annotations
 
 import errno
 import socket
+from typing import TYPE_CHECKING
 
 import rich_click as click
 
 import nu
+import nustd.fs
 from nuspace.errors import Refused
 from nuspace.space.blocks.guarded import Guarded
-from nuspace.space.blocks.meta import InitDone, resolve_root
+from nuspace.space.blocks.meta import META_FILE, data_dir, init_done, resolve_root
 from nuspace.space.blocks.resources import throwaway
 from nuspace.space.local.drivers import opened_on
 from nuspace.specs import registered_name
 
 from .._installed import resolve
 from .._meta import EXIT, announce, assembly, hold, path_argument, space_root, tmp_option
+
+
+if TYPE_CHECKING:
+    from types import ModuleType
 
 
 __all__ = ["run"]
@@ -96,6 +102,26 @@ def _port(host: str, port: int | None) -> int:
     raise click.ClickException(
         f"No free port on {host} in {DEFAULT_PORT}-{DEFAULT_PORT + _SCAN - 1}. Pick one with -p."
     )
+
+
+#: The tag the command line binds its own mount of a space's data dir under, to read its meta.json.
+MOUNT = "nuspace.cli"
+
+#: The data dir, as the command line's mount.
+DATA = nustd.fs.FsRef(MOUNT)
+
+
+def initialized_first(space: ModuleType, root: str, term: nu.Nu) -> nu.Nu:
+    """``term`` after the space at ``root`` is initialized by its assembly, when its meta.json says it is not.
+
+    A step of the same term, so a throwaway root made by the term's own
+    bracket is there by then. The data dir is read through a mount of the
+    command line's own, made when missing: the init that follows makes it
+    anyway.
+    """
+    ready = init_done(DATA / META_FILE, root)
+    step = nu.IfDo(nu.Not(ready), space.init(root))
+    return Guarded(term, nustd.fs.mount(str(data_dir(root)), tag=DATA, body=step))
 
 
 #: The flags that run one component alone, by the name of the entry point.
@@ -218,7 +244,7 @@ def run(
         raise click.ClickException(str(e)) from None
     if alone is None:
         # Plain and headless init first, a step of the same term: made if missing.
-        term = Guarded(term, nu.IfDo(nu.Not(InitDone(root)), space.init(root)))
+        term = initialized_first(space, root, term)
     if path is None:
         term = throwaway(root, term)
     quiet = None if serves else f"{alone} alone" if alone else "headless"

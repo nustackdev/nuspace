@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- A space's files, locks and metadata go through one mounted data directory
 - Open yields nothing; a body keeps results in a ref, like everything else
 - The command line runs init and throwaway spaces inside one held term
 - Run records the kernel's exit status in a ref the caller reads after

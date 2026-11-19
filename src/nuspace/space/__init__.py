@@ -1,6 +1,6 @@
 """``nuspace.space``: running a space. A namespaced runtime, not ops (unlike ``nuspace.<object>.<verb>``).
 
-- :mod:`.blocks`: the parts an assembly is built from: the lock, the
+- :mod:`.blocks`: the parts an assembly is built from: the checks, the
   notifier, navigators, the workers' context, ``meta.json``, root resolving.
 - :mod:`.local`: the assembly nuspace ships, ``from nuspace.space import local``.
 

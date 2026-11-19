@@ -24,8 +24,14 @@ kernel and web take a path. The kernel and web open the space the same way
 files of local's: ``devices/web/session.addr``, where web's tab sessions
 answer (:mod:`.session`), and the uploads dir, both named by :mod:`.layout`.
 
+Each runs with local's mount of the data dir bound (:func:`~.disk.entered`),
+and the files local keeps there, the locks, ``session.addr`` and the
+uploads dir, go through it (``nustd.fs``).
+
 ``infra``::
 
+    the space checked     an older format, no data dir: refused
+    the mount             local's, over the data dir
     the init check        refused when meta.json lacks "init": true
     the data dir          local's dirs, made where missing
     infra/infra.lock      one infra per space, or Refused
@@ -45,7 +51,8 @@ answer (:mod:`.session`), and the uploads dir, both named by :mod:`.layout`.
 ``web``, inside the shared brackets::
 
     uploads               the dir wiped: no tab of a web before outlives it
-    session.addr          the address picked for the tab sessions, recorded
+    session.addr          the address picked for the tab sessions, held
+                          (``nustd.fs.Hold``): removed at a clean stop
     race                  web's driver (Conn cleared, nav's old runs stopped,
                           wakes, server and nav), the plane opened on
                           when given, and the body when given
@@ -66,6 +73,7 @@ from typing import TYPE_CHECKING
 
 import nu
 import nuspace.web
+import nustd.fs
 from nuspace import kernel as _kernel
 from nuspace._telemetry.usage import opened
 from nuspace.specs import RegistryWarning, space_registry
@@ -73,15 +81,15 @@ from nuspace.web.env import SESSION_ENV
 
 from ..blocks.browse import tab_opened
 from ..blocks.guarded import Guarded
-from ..blocks.lock import Held, Lock
 from ..blocks.logs import logged_to
-from ..blocks.meta import data_dir, data_made, resolve_root
+from ..blocks.meta import data_dir, resolve_root
 from ..blocks.notifier import Answers
 from ..blocks.required import required
 from ..blocks.workers import DEFAULT_NAME, DEFAULT_SPARES, worker_pool
 from . import binding
-from .disk import checked, wiped
+from .disk import entered, held, told
 from .layout import (
+    DATA,
     DIRS,
     INFRA_LOCK,
     INFRA_LOG,
@@ -94,7 +102,7 @@ from .layout import (
 )
 from .opening import ROOTS, bracketed, fresh, path_set
 from .plane import found, plane_of
-from .session import Recorded, free_address, session_env
+from .session import free_address, session_env
 
 
 if TYPE_CHECKING:
@@ -143,12 +151,12 @@ def infra(path: str | os.PathLike[str] | None = None, *, body: nu.Nu | None = No
     root, throwaway = resolve_root(path)
     data = str(data_dir(root))
     served = nu.With(
-        nu.Provide(Lock, {"path": str(Path(data) / INFRA_LOCK), "what": "infra"}),
+        nustd.fs.Lock(DATA / INFRA_LOCK, "infra"),
         logged_to(Path(data) / INFRA_LOG, "infra"),
         binding.served(data),
         body=nu.Park() if body is None else body,
     )
-    return fresh(root, throwaway, Guarded(served, checked(root), data_made(root, DIRS)))
+    return fresh(root, throwaway, entered(root, told(Guarded(served, DATA.mkdir(*DIRS)))))
 
 
 def kernel(
@@ -230,15 +238,15 @@ def needs_infra(data: str) -> nu.Nu:
         Answers(binding.valkey_dir(data)),
         "infra of this space is not running: start it first",
         wait=INFRA_WAIT,
-        waiting=Held(str(Path(data) / INFRA_LOCK)),
+        waiting=held(DATA / INFRA_LOCK),
         grace=GRACE,
     )
 
 
-def needs_kernel(data: str) -> nu.Nu:
+def needs_kernel() -> nu.Nu:
     """The kernel's lock held, or web refused: start the kernel first. A kernel up has infra up."""
     return required(
-        Held(str(Path(data) / KERNEL_LOCK)),
+        held(DATA / KERNEL_LOCK),
         "the kernel of this space is not running: start it first",
         wait=GRACE,
     )
@@ -332,16 +340,16 @@ def web(
         beside.append(opened_on(found(plane), browse=open_browser, host=host, port=port))
     if body is not None:
         beside.append(body)
-    recorded = nu.Provide(Recorded, {"path": str(Path(data) / SESSION_ADDR), "address": address})
+    recorded = nustd.fs.Hold(DATA / SESSION_ADDR, address + "\n")
     running = Guarded(
         nu.With(recorded, body=nu.Race(served, *beside) if beside else served),
-        wiped([uploads]),
+        DATA.remove(UPLOADS_DIR, tree=True),
     )
     return bracketed(
         root,
         locks=[(WEB_LOCK, "web")],
         log=(WEB_LOG, "web"),
-        required=needs_kernel(data),
+        required=needs_kernel(),
         blobs=blobs,
         body=running,
     )

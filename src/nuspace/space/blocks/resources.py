@@ -1,14 +1,18 @@
-"""The resources an assembly holds for a run: the throwaway root, warm imports.
+"""What an assembly holds for a run: the throwaway root, warm imports.
 
-Each is a plain class for ``nu.Provide``, holding something for the span
-of its bracket: its setup runs when the bracket opens, its cleanup when it
-closes. Building a term touches nothing. One-shot writes (the data dir
-made, a dir wiped) are no resources: they are disk Commands (:mod:`.disk`).
+:class:`Throwaway` is a bracket (``nu.Bracket``): it makes the root when it
+opens and removes it when it closes. The root is a real path, known when
+the term is built, since the stores' SQLite files are opened by path:
+``nustd.fs.tmp`` would name it only once it runs. :class:`Warmed` is a
+plain class for ``nu.Provide``, held for a worker's span. Building a term
+touches nothing. One-shot writes (the data dir made, a dir wiped) are no
+resources: they are fs writes on the assembly's mount.
 """
 
 from __future__ import annotations
 
 import shutil
+from contextlib import contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -16,39 +20,41 @@ import nu
 
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
+
     from nu.lang.runtime import Context
 
 
 __all__ = ["Throwaway", "Warmed", "throwaway"]
 
 
-class Throwaway:
-    """A space's root that goes when its bracket closes.
+class Throwaway(nu.Bracket):
+    """A space's root that goes when the bracket closes.
 
     Outermost, so the stores, the server and the lock are closed by the
     time the directory is removed.
 
     Args:
-        path: The directory, made at setup (a term run twice finds it gone).
+        path: The directory, absolute, made when the bracket opens (a term
+            run twice finds it gone), removed with all it holds when it
+            closes, raised or not.
+        body: What runs on it. Yields what it yields.
     """
 
-    def __init__(self, path: str) -> None:
-        self.path = path
+    def __init__(self, path: str | nu.Nu, *, body: nu.Nu | None = None) -> None:
+        # Children: [body, path].
+        super().__init__(body, path)
 
-    def setup(self, ctx: Context) -> None:
-        """Make the directory."""
-        Path(self.path).mkdir(parents=True, exist_ok=True)
-
-    async def asetup(self, ctx: Context) -> None:
-        """Async shim: making a directory is sync work."""
-        self.setup(ctx)
-
-    def cleanup(self) -> None:
-        """Remove the directory and everything the open left in it."""
-        shutil.rmtree(self.path, ignore_errors=True)
+    @contextmanager
+    def _open(self, ctx: Context, path: str) -> Iterator[None]:  # pyright: ignore[reportIncompatibleMethodOverride] - config named
+        Path(path).mkdir(parents=True, exist_ok=True)
+        try:
+            yield
+        finally:
+            shutil.rmtree(path, ignore_errors=True)
 
 
-def throwaway(root: str, body: nu.Nu) -> nu.With:
+def throwaway(root: str, body: nu.Nu) -> Throwaway:
     """``body`` run on the throwaway ``root``: made before, removed with all it holds after.
 
     The body is what makes it a space, its init first. Outermost, so
@@ -58,7 +64,7 @@ def throwaway(root: str, body: nu.Nu) -> nu.With:
         root: The directory, absolute, eg from ``resolve_root(None)``.
         body: What runs on it. The term yields what it yields.
     """
-    return nu.With(nu.Provide(Throwaway, {"path": root}), body=body)
+    return Throwaway(root, body=body)
 
 
 class Warmed:

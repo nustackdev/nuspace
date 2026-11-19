@@ -6,6 +6,8 @@ not. It needs no infra, no kernel and no device, only a space initialized
 ops such as desk edits work through it.
 
 ``open`` makes nothing, resets nothing, seeds nothing and takes no lock.
+Like every entry point it binds local's mount of the data dir, so the
+checks read ``meta.json`` through it.
 With infra up it publishes to infra's notification server, so a write
 lands in the stores and the kernel and web hear it. With none up nobody
 listens: it binds the same files publishing nothing, and starts no
@@ -25,7 +27,7 @@ import nu
 from ..blocks.meta import data_dir, resolve_root
 from ..blocks.notifier import Answers
 from . import binding
-from .disk import checked, found
+from .disk import entered, found
 from .opening import ROOTS
 
 
@@ -68,4 +70,4 @@ def open(
     published = nu.With(binding.stores(data, ROOTS), blobs, body=body)
     quiet = nu.With(binding.quiet(data, ROOTS), blobs, body=body)
     chosen = nu.IfDo(Answers(binding.valkey_dir(data)), published, quiet)
-    return found(root) >> checked(root) >> chosen
+    return found(root) >> entered(root, chosen)

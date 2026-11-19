@@ -1,10 +1,11 @@
-"""What local's entry points share: ``init``, and the brackets from the init check to every store bound.
+"""What local's entry points share: ``init``, and the steps and brackets from the init check to every store bound.
 
-``init`` makes the space and runs each component's init, once::
+``init`` makes the space and runs each component's init, once, with
+local's mount of the data dir bound (made when missing)::
 
     meta.json             an older format refused, another assembly's refused,
                           written where missing (a space made before it is adopted)
-    the data dir          made, with local's dirs
+    the data dir          local's dirs, made where missing
     locks                 infra's, the kernel's, web's: refused while any runs
     Space, State, Web, Conn   bound quiet: nothing runs, so nobody listens
     inits                 core's (the Space format checked first), the
@@ -15,27 +16,30 @@
 The kernel and web open the space the same way after it, each step
 inside the brackets of the ones before::
 
+    the space checked     before the mount: no older format, a data dir there
+    the mount             local's, over the data dir, never making it
     the init check        refused when meta.json lacks "init": true
     the requirement       what the driver runs on, up, or Refused: infra
                           for the kernel, the kernel for web
     the data dir          local's dirs, made where missing
-    lock                  the driver's, or Refused
+    lock                  the driver's (``nustd.fs.Lock``), or Refused
     log                   this process's logging at the driver's file
     Space, State, Web, Conn   bound (:mod:`.binding`), publishing to
                           infra's notification server
     blobs                 when the entry point binds them
 
-The init check, the requirement and the data dir are steps, run in order
-before the brackets (:class:`~..blocks.guarded.Guarded`); the lock, the
-log and the stores are brackets, held while the body runs. The requirement
-comes before the lock, so a driver holding its lock has what it runs on
-up: web looks only for the kernel's lock. Infra binds no store and needs
-nothing: it shares the init check, the data dir, a lock and a log. A
-throwaway root (path None), which only infra and ``run`` take, is made by
-the entry point itself, so its ``init`` runs first, a step of the same
-term (:func:`fresh`).
-``open`` shares only the bindings and the init check: it locks nothing
-and makes nothing.
+The checks, the requirement and the data dir are steps, run in order
+before the brackets (:class:`~..blocks.guarded.Guarded`); the mount, the
+lock, the log and the stores are brackets, held while the body runs. A
+lock held elsewhere is told as local's refusal (:func:`~.disk.told`). The
+requirement comes before the lock, so a driver holding its lock has what
+it runs on up: web looks only for the kernel's lock. Infra binds no store
+and needs nothing: it shares the checks, the mount, the data dir, a lock
+and a log. A throwaway root (path None), which only infra and ``run``
+take, is made by the entry point itself, so its ``init`` runs first, a
+step of the same term (:func:`fresh`).
+``open`` shares only the bindings, the mount and the checks: it locks
+nothing and makes nothing.
 """
 
 from __future__ import annotations
@@ -45,19 +49,19 @@ from typing import TYPE_CHECKING
 
 import nu
 import nuspace.web
+import nustd.fs
 import nustd.kv
 from nuspace import kernel
 from nuspace.shapes import Space, stores
 from nuspace.web.stores import CONN_STORE, WEB_STORE
 
 from ..blocks.guarded import Guarded
-from ..blocks.lock import Lock
 from ..blocks.logs import logged_to
-from ..blocks.meta import data_dir, data_made, resolve_root
+from ..blocks.meta import data_dir, resolve_root
 from ..blocks.resources import throwaway
 from . import binding
-from .disk import checked, flagged, marked
-from .layout import DIRS, INFRA_LOCK, KERNEL_LOCK, WEB_LOCK
+from .disk import entered, flagged, marked, told
+from .layout import DATA, DIRS, INFRA_LOCK, KERNEL_LOCK, WEB_LOCK
 
 
 if TYPE_CHECKING:
@@ -91,11 +95,11 @@ def initialized(root: str) -> nu.Nu:
     locks = [(INFRA_LOCK, "infra"), (KERNEL_LOCK, "kernel"), (WEB_LOCK, "web")]
     inits = stores.init() >> kernel.init() >> nuspace.web.init() >> path_set(root)
     held = nu.With(
-        *(nu.Provide(Lock, {"path": str(Path(data) / f), "what": w}) for f, w in locks),
+        *(nustd.fs.Lock(DATA / f, w) for f, w in locks),
         binding.quiet(data, ROOTS),
         body=inits >> flagged(root),
     )
-    return marked(root) >> data_made(root, DIRS) >> held
+    return marked(root, told(DATA.mkdir(*DIRS) >> held))
 
 
 def init(path: str | os.PathLike[str]) -> nu.Nu:
@@ -141,7 +145,8 @@ def bracketed(
 
     Args:
         root: The space's root, absolute.
-        locks: ``(file, what)`` per driver, the file relative to the data dir.
+        locks: ``(file, what)`` per driver, the file relative to the data dir,
+            taken on local's mount.
         log: ``(file, what)``, this process's log while it runs, or None.
         required: What the driver needs running, looked for before its lock
             (:func:`~..blocks.required.required`): what it requires is up
@@ -150,12 +155,10 @@ def bracketed(
         body: What runs inside, every store ready.
     """
     data = str(data_dir(root))
-    held: list[nu.Nu] = [
-        nu.Provide(Lock, {"path": str(Path(data) / f), "what": w}) for f, w in locks
-    ]
+    held: list[nu.Nu] = [nustd.fs.Lock(DATA / f, w) for f, w in locks]
     if log is not None:
         held.append(logged_to(Path(data) / log[0], log[1]))
     held.append(binding.stores(data, ROOTS))
     if blobs is not None:
         held.append(blobs)
-    return Guarded(nu.With(*held, body=body), checked(root), required, data_made(root, DIRS))
+    return entered(root, told(Guarded(nu.With(*held, body=body), required, DATA.mkdir(*DIRS))))

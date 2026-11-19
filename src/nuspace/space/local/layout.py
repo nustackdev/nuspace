@@ -17,7 +17,9 @@ Inside the data dir (``.nuspace/``, with ``meta.json``, both the blocks')::
     infra/infra.log            what infra says
     infra/valkey/              the notification server's dir
 
-Every name is relative to the data dir. A space made before ``meta.json``
+Every name is relative to the data dir, which local's entry points bind
+as one ``nustd.fs`` mount under a tag of local's own (:data:`DATA`): the
+files local reads and writes there go through it. A space made before ``meta.json``
 holds :data:`MADE_BEFORE` and no meta: local adopts it. A space of the
 store format before that holds one of :data:`OLDER`: refused.
 """
@@ -28,10 +30,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import nustd.fs
 from nuspace.shapes import Space, State
 from nuspace.web.shapes import Conn, Web
 
-from ..blocks.meta import data_dir, is_space
+from ..blocks.meta import META_FILE, data_dir, is_space
 
 
 if TYPE_CHECKING:
@@ -43,12 +46,15 @@ if TYPE_CHECKING:
 __all__ = [
     "ASSEMBLY",
     "BLOBS_DIR",
+    "DATA",
     "DIRS",
     "INFRA_LOCK",
     "INFRA_LOG",
     "KERNEL_LOCK",
     "KERNEL_LOG",
     "MADE_BEFORE",
+    "META",
+    "MOUNT",
     "OLDER",
     "SESSION_ADDR",
     "STORES",
@@ -64,6 +70,15 @@ __all__ = [
 
 #: The name ``meta.json`` gives this assembly.
 ASSEMBLY = "local"
+
+#: The tag local binds its mount of the data dir under, so no other mount is mistaken for it.
+MOUNT = "nuspace.local"
+
+#: The data dir, as local's mount: ``DATA / KERNEL_LOCK`` is the kernel's lock file on it.
+DATA = nustd.fs.FsRef(MOUNT)
+
+#: ``meta.json`` on local's mount.
+META = DATA / META_FILE
 
 
 @dataclass(frozen=True)

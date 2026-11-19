@@ -1,9 +1,7 @@
 """The blocks: shared parts every assembly is built from. None of them knows a driver.
 
-- :mod:`.meta`: the data dir, ``meta.json`` (its Ref and Commands), how a space is found, root resolving.
-- :mod:`.disk`: the disk as a fabric: its Ref and the Commands that write it.
+- :mod:`.meta`: the data dir, ``meta.json`` read and written through an fs mount, how a space is found, root resolving.
 - :mod:`.guarded`: steps before a body, its value kept; the refusal step.
-- :mod:`.lock`: a POSIX record lock named for what it guards.
 - :mod:`.notifier`: the notification server: owned by one process, published to by the rest.
 - :mod:`.required`: what an entry point needs running, looked for at its start, or a refusal.
 - :mod:`.logs`: this process's logging pointed at a file.
@@ -15,26 +13,22 @@
 
 from . import navigators
 from .browse import BROWSER, BrowserBackend, BrowserRef, Listening, OpenTab, tab_opened
-from .disk import DISK, DiskBackend, DiskRef, MakeDirs, RemoveIfHolds, RemoveTree, WriteWhole
 from .guarded import Guarded, refused
-from .lock import Held, Lock, LockWarning, held
 from .logs import Logged, logged_to
 from .meta import (
     DATA_DIR,
     META_FILE,
-    InitDone,
     Meta,
-    MetaRef,
-    SetInit,
-    Stamp,
     data_dir,
-    data_made,
     find_space,
     init_done,
     is_space,
+    meta_in,
+    other_refusal,
     read_meta,
     resolve_root,
-    write_meta,
+    set_init,
+    stamp,
 )
 from .notifier import Answers, answers, served
 from .required import required
@@ -45,48 +39,35 @@ from .workers import worker_context, worker_pool
 __all__ = [
     "BROWSER",
     "DATA_DIR",
-    "DISK",
     "META_FILE",
     "Answers",
     "BrowserBackend",
     "BrowserRef",
-    "DiskBackend",
-    "DiskRef",
     "Guarded",
-    "Held",
-    "InitDone",
     "Listening",
-    "Lock",
-    "LockWarning",
     "Logged",
-    "MakeDirs",
     "Meta",
-    "MetaRef",
     "OpenTab",
-    "RemoveIfHolds",
-    "RemoveTree",
-    "SetInit",
-    "Stamp",
     "Throwaway",
     "Warmed",
-    "WriteWhole",
     "answers",
     "data_dir",
-    "data_made",
     "find_space",
-    "held",
     "init_done",
     "is_space",
     "logged_to",
+    "meta_in",
     "navigators",
+    "other_refusal",
     "read_meta",
     "refused",
     "required",
     "resolve_root",
     "served",
+    "set_init",
+    "stamp",
     "tab_opened",
     "throwaway",
     "worker_context",
     "worker_pool",
-    "write_meta",
 ]
