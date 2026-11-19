@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- An example script reads and changes a space with no kernel or web running
 - Run supervises kernel and web as one tree, restarting web with backoff
 - Nuspace runs on the current nu core, every node and bracket in its style
 - Entry points take a root term, so a throwaway space is a temp mount
