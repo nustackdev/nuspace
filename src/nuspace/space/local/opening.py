@@ -37,8 +37,8 @@ requirement comes before the lock, so a driver holding its lock has what
 it runs on up: web looks only for the kernel's lock. Infra binds no store
 and needs nothing: it shares the checks, the mounts, the data dir, a lock
 and a log. A throwaway root (path None), which only infra and ``run``
-take, is a ``nustd.fs.tmp`` mount whose ``where()`` the entry point runs
-on, its ``init`` first, a step of the same term (:func:`fresh`). Any
+take, is a ``nustd.fs.tmp`` dir whose path, handed to a lambda, the entry
+point runs on, its ``init`` first, a step of the same term (:func:`fresh`). Any
 entry point takes its root as a term too: every path under it is asked
 of the mounts when the term runs.
 ``open`` shares only the bindings, the mount and the checks: it locks
@@ -124,14 +124,16 @@ def init(path: str | os.PathLike[str] | nu.Nu) -> nu.Nu:
 def fresh(path: str | os.PathLike[str] | nu.Nu | None, on: Callable[[nu.Nu], nu.Nu]) -> nu.Nu:
     """``on(root)``, the term an entry point builds on its root; for ``path`` None on a throwaway one.
 
-    A throwaway root is a ``nustd.fs.tmp`` mount (``nuspace-`` in the
-    system's temp dir), initialized first, the term run on its ``where()``,
-    the dir removed once all of it closed. Yields nothing.
+    A throwaway root is a ``nustd.fs.tmp`` dir (``nuspace-`` in the
+    system's temp dir), initialized first, the term built on the
+    ``nu.Attr`` its lambda hands over the dir's path, the dir removed once
+    all of it closed. The path is a plain value in the attrs, so a term
+    teleported with them (``carry=True``) reads it in its worker too.
+    Yields nothing.
     """
     if path is not None:
         return on(resolve_root(path))
-    body = nu.let(TMP.where(), lambda root: initialized(root) >> on(root))
-    return nustd.fs.tmp(tag=TMP, prefix="nuspace-", body=body)
+    return nustd.fs.tmp(tag=TMP, prefix="nuspace-", body=lambda root: initialized(root) >> on(root))
 
 
 def bracketed(

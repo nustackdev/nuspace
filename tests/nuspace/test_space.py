@@ -37,6 +37,7 @@ import nu
 import nuspace
 import nustd.fs
 import nustd.kv
+import nustd.mp
 import nustd.valkey
 from nuspace._cli._meta import nearest_space
 from nuspace.errors import Missing, Refused
@@ -64,7 +65,7 @@ from nuspace.space.local.layout import (
 )
 from nuspace.space.local.layout import STORES as PLACES
 from nuspace.space.local.plane import plane_of
-from nuspace.space.local.watch import Restarts
+from nuspace.space.local.watch import REFUSED, ended
 from nuspace.specs import (
     GROUP,
     CellSpec,
@@ -1383,11 +1384,23 @@ def test_served_is_nustds_own_server(tmp_path):
 # --- local.run ------------------------------------------------------------------------
 
 
-def test_web_restarts_are_allowed_five_times_a_minute():
-    restarts = Restarts()
-    assert all(restarts.allow(t) for t in (0.0, 1.0, 2.0, 3.0, 4.0))
-    assert not restarts.allow(5.0)
-    assert restarts.allow(61.5)
+@pytest.mark.parametrize(
+    ("error", "code", "said"),
+    [
+        (Refused("a web runs"), REFUSED, "was refused (a web runs)"),
+        (nustd.mp.Interrupted(), 0, "was interrupted"),
+        (nustd.mp.WorkerGone(cause="crashed", exitcode=-9), 137, "exited (137, crashed)"),
+        (nustd.mp.WorkerGone(exitcode=3), 3, "exited (3, gone)"),
+        (nustd.mp.WorkerGone(), 1, "exited (1, gone)"),
+        (ValueError("bad"), 1, "failed (ValueError: bad)"),
+    ],
+)
+def test_a_drivers_end_maps_to_runs_status_and_how_it_is_said(error, code, said):
+    def raised() -> None:
+        raise error
+
+    told = nu.TryCatch(nu.host(raised, name="Raised")(), catch=ended)
+    assert nu.run(told)[0] == (code, said)
 
 
 def _tree(pid: int) -> dict[int, str]:
@@ -1451,14 +1464,18 @@ def _gone(pids, timeout: float = 20.0) -> list[int]:
 _RUN = """
 import sys
 import nu
+import nustd.webbrowser
 from nuspace.space import local
 class Out(nu.Shape):
     code = nu.IntRef.slot()
+class Seen(nustd.webbrowser.Browser):
+    def open(self, url):
+        print("tab", url, flush=True)
 nu.eval_in_loop(nu.compile(local.init(sys.argv[1])), nu.Context())
 term = local.run(sys.argv[1], into=Out.code, port=int(sys.argv[2]), static=None,
-                 open_browser=False, extensions=(), spares=0)
+                 extensions=(), spares=0)
 out = {}
-nu.eval_in_loop(nu.compile(term), nu.Context().bind(dict, out, Out))
+nu.eval_in_loop(nu.compile(nu.Provide(Seen, {}, term)), nu.Context().bind(dict, out, Out))
 print("exited", out.get("code"), flush=True)
 """
 
@@ -1466,8 +1483,9 @@ print("exited", out.get("code"), flush=True)
 def test_run_restarts_a_killed_web_and_ends_with_a_killed_kernel_infra_up_till_the_end(tmp_path):
     root = tmp_path / "space"
     env = dict(os.environ, NUSPACE_TELEMETRY="0")
+    port = _free_port()
     run = subprocess.Popen(  # noqa: S603
-        [sys.executable, "-c", _RUN, str(root), str(_free_port())],
+        [sys.executable, "-c", _RUN, str(root), str(port)],
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         start_new_session=True,
@@ -1508,6 +1526,9 @@ def test_run_restarts_a_killed_web_and_ends_with_a_killed_kernel_infra_up_till_t
             os.killpg(run.pid, signal.SIGKILL)
             run.wait()
     said = out.decode()
+    # One tab, opened by run beside web's first start: the restarted web opens none.
+    assert said.count("tab ") == 1, said
+    assert f"tab http://localhost:{port}\n" in said
     assert "web exited (137, crashed), starting it again" in said
     assert "the kernel exited (137, crashed), stopping web" in said
     assert "exited 137" in said

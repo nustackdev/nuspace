@@ -22,7 +22,7 @@ Runs until interrupted, then the kernel ends what it started and the
 brackets stop the workers. Which space is
 :func:`~nuspace._cli._meta.space_root`: PATH, else the nearest space up
 from here, else home. ``--tmp`` is a throwaway one, made and initialized
-here, gone at close: a ``nustd.fs.tmp`` dir whose ``where()`` the
+here, gone at close: a ``nustd.fs.tmp`` dir whose path the
 assembly's entry points run on, its init first. Only plain and headless
 take it, since nothing another shell runs could find it. The header names
 the space's root either way.
@@ -48,7 +48,6 @@ from typing import TYPE_CHECKING
 
 import rich_click as click
 
-import nu
 import nustd.fs
 from nuspace.errors import Refused
 from nuspace.space.local.drivers import opened_on
@@ -70,6 +69,8 @@ from .._meta import (
 if TYPE_CHECKING:
     from collections.abc import Callable
     from types import ModuleType
+
+    import nu
 
 
 __all__ = ["run"]
@@ -121,11 +122,11 @@ TMP = nustd.fs.FsRef("nuspace.cli.tmp")
 def throwaway_on(space: ModuleType, on: Callable[[nu.Nu], nu.Nu]) -> nu.Nu:
     """``on(root)`` on a throwaway root, initialized by ``space`` first: a ``nustd.fs.tmp`` dir, gone at close.
 
-    The entry points take the dir's ``where()`` as their root, a term, so
-    one term makes the root, inits it, runs on it and removes it.
+    The entry points take the ``nu.Attr`` the tmp lambda hands over the
+    dir's path as their root, so one term makes the root, inits it, runs on
+    it and removes it, and the workers ``run`` teleports to read it too.
     """
-    body = nu.let(TMP.where(), lambda root: space.init(root) >> on(root))
-    return nustd.fs.tmp(tag=TMP, prefix="nuspace-", body=body)
+    return nustd.fs.tmp(tag=TMP, prefix="nuspace-", body=lambda root: space.init(root) >> on(root))
 
 
 #: The flags that run one component alone, by the name of the entry point.

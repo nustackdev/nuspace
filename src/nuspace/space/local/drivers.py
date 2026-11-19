@@ -19,8 +19,8 @@ Each takes its own lock, so one of each runs on a space, in one process
 or several. None makes or inits a space: each refuses one whose init has
 not run (``local.init``). Only infra takes a throwaway root (path None),
 a ``nustd.fs.tmp`` dir it inits first: nothing else could find it, so the
-kernel and web take a root, a path or a term yielding one (eg the temp
-dir's ``where()``, beside infra in one term). The kernel and web open the space the same way
+kernel and web take a root, a path or a term yielding one (eg the
+``nu.Attr`` a ``nustd.fs.tmp`` lambda hands, beside infra in one term). The kernel and web open the space the same way
 (:mod:`.opening`) and meet only through the stores, the notifier and two
 files of local's: ``devices/web/session.addr``, where web's tab sessions
 answer (:mod:`.session`), and the uploads dir, both named by :mod:`.layout`.
