@@ -5,6 +5,10 @@ an ``open``, and each worker (the pool gets the same term pickled). The
 stores go through the navigators block, one stack per root, so the
 drivers only ever see the root shapes. Names come from :mod:`.layout`.
 
+Every path is a path on local's mount of the data dir, asked when the term
+runs (``DATA.where(name)``), so a binding needs that mount bound around it:
+an entry point's, or a worker's own (:mod:`.drivers`).
+
 Infra owns the Valkey server (:func:`served`); the kernel, web and every
 worker publish to it. With no infra up nobody listens, so ``open`` and
 ``init`` bind :func:`quiet` stores then: the same files, nothing published.
@@ -13,7 +17,6 @@ worker publish to it. With no infra up nobody listens, so ``open`` and
 from __future__ import annotations
 
 import functools
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 import nu
@@ -24,11 +27,10 @@ from nuspace.shapes import Blobs
 
 from ..blocks import navigators
 from ..blocks import notifier as _notifier
-from .layout import BLOBS_DIR, STORES, VALKEY_DIR
+from .layout import BLOBS_DIR, DATA, STORES, VALKEY_DIR
 
 
 if TYPE_CHECKING:
-    import os
     from collections.abc import Iterable
 
     from nu.context.fabric import Provide
@@ -37,38 +39,41 @@ if TYPE_CHECKING:
 __all__ = ["blobs", "quiet", "served", "stores", "valkey_dir", "valkey_url"]
 
 
-def valkey_dir(data: str | os.PathLike[str]) -> str:
-    """The notification server's dir under the data dir ``data``."""
-    return str(Path(data) / VALKEY_DIR)
+def valkey_dir() -> nu.Nu:
+    """The notification server's dir, absolute, on local's mount of the data dir. A query."""
+    return DATA.where(VALKEY_DIR)
 
 
-def valkey_url(data: str | os.PathLike[str]) -> str:
-    """The notification server's url, a unix socket in the data dir ``data``."""
-    return nustd.valkey.url_for(valkey_dir(data))
+def valkey_url() -> nu.Nu:
+    """The notification server's url, a unix socket derived from its dir. A query.
+
+    ``nustd.valkey.url_for`` hashes the dir, a plain function over a
+    value: it runs on every evaluation, the dir read from the mount first.
+    """
+    return nu.Literal(factory=nustd.valkey.url_for, data_dir=valkey_dir())
 
 
-def served(data: str | os.PathLike[str]) -> Provide:
+def served() -> Provide:
     """The space's notification server, started and owned for the body: infra's."""
-    return _notifier.served(valkey_dir(data))
+    return _notifier.served(valkey_dir())
 
 
-def stores(data: str | os.PathLike[str], roots: Iterable[type[nu.Shape]]) -> nu.With:
-    """Each of ``roots`` bound to its SQLite file under ``data``, notified on its own channel.
+def stores(roots: Iterable[type[nu.Shape]]) -> nu.With:
+    """Each of ``roots`` bound to its SQLite file on the data dir, notified on its own channel.
 
     Needs the server of :func:`served` up: its publishers connect at setup.
 
     Args:
-        data: The space's data dir, absolute: workers get the term pickled.
         roots: The stores' root shapes, eg ``(Space, State)``.
     """
-    url = valkey_url(data)
+    url = valkey_url()
     return nu.With(
         *(
             navigators.navigator(
                 root,
                 functools.partial(
                     nustd.kv.sqlite_navigator_redis,
-                    str(Path(data) / STORES[root].file),
+                    DATA.where(STORES[root].file),
                     redis_url=url,
                     channel_prefix=STORES[root].channel,
                 ),
@@ -78,32 +83,39 @@ def stores(data: str | os.PathLike[str], roots: Iterable[type[nu.Shape]]) -> nu.
     )
 
 
-def quiet(data: str | os.PathLike[str], roots: Iterable[type[nu.Shape]]) -> nu.With:
-    """Each of ``roots`` bound to its SQLite file under ``data``, publishing nothing.
+def quiet(roots: Iterable[type[nu.Shape]]) -> nu.With:
+    """Each of ``roots`` bound to its SQLite file on the data dir, publishing nothing.
 
     For a process on a space with no infra up, so no server to publish to
     and nobody to hear it. A kernel starting later reads the stores as
     they are, so nothing is missed.
 
     Args:
-        data: The space's data dir, absolute.
         roots: The stores' root shapes.
     """
     return nu.With(
         *(
             navigators.navigator(
                 root,
-                functools.partial(nustd.kv.sqlite_navigator, str(Path(data) / STORES[root].file)),
+                functools.partial(nustd.kv.sqlite_navigator, DATA.where(STORES[root].file)),
             )
             for root in roots
         )
     )
 
 
-def blobs(data: str | os.PathLike[str]) -> Provide:
-    """The blob store: plain files under the data dir ``data``. Any size the disk holds.
+def blobs() -> Provide:
+    """The blob store: plain files in the data dir's ``store/blobs``. Any size the disk holds.
+
+    ``nustd.blob.files`` fixes its dir when the tree is built, so this is
+    its ``Provide`` with the dir a query on the mount instead.
 
     An assembly of one's own picks any other ``nustd.blob`` spec, eg
     ``nustd.blob.lmdb(nuspace.Blobs, path)`` for many small blobs.
     """
-    return nustd.blob.files(Blobs, Path(data) / BLOBS_DIR)
+    options = nu.Dict.of(root=DATA.where(BLOBS_DIR))
+    return nu.Provide(
+        nustd.blob.BlobFabric,
+        {"backend": nustd.blob.FilesBackend, "options": options},
+        tag=Blobs.name,
+    )

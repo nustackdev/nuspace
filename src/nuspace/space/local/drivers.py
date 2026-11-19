@@ -18,19 +18,25 @@ leaves infra and web up; web's tabs hear again once a kernel is back.
 Each takes its own lock, so one of each runs on a space, in one process
 or several. None makes or inits a space: each refuses one whose init has
 not run (``local.init``). Only infra takes a throwaway root (path None),
-which it makes and inits first: nothing else could find it, so the
-kernel and web take a path. The kernel and web open the space the same way
+a ``nustd.fs.tmp`` dir it inits first: nothing else could find it, so the
+kernel and web take a root, a path or a term yielding one (eg the temp
+dir's ``where()``, beside infra in one term). The kernel and web open the space the same way
 (:mod:`.opening`) and meet only through the stores, the notifier and two
 files of local's: ``devices/web/session.addr``, where web's tab sessions
 answer (:mod:`.session`), and the uploads dir, both named by :mod:`.layout`.
 
-Each runs with local's mount of the data dir bound (:func:`~.disk.entered`),
-and the files local keeps there, the locks, ``session.addr`` and the
-uploads dir, go through it (``nustd.fs``).
+Each runs with local's mounts of the root and the data dir bound
+(:func:`~.disk.entered`), and the files local keeps there, the locks,
+``session.addr`` and the uploads dir, go through them (``nustd.fs``).
+Every absolute path a driver hands on (a store's file, a log, the
+notification server's dir) is asked of the data dir's mount when the term
+runs. What leaves this process, or a nustd preset fixes when its tree is
+built, is made from those values where it opens (``nu.Literal(factory=...)``):
+the cell workers' context, the session env, web's upload area.
 
 ``infra``::
 
-    the space checked     an older format, no data dir: refused
+    the root              there, mounted read only; an older format, no data dir: refused
     the mount             local's, over the data dir
     the init check        refused when meta.json lacks "init": true
     the data dir          local's dirs, made where missing
@@ -42,7 +48,8 @@ uploads dir, go through it (``nustd.fs``).
 ``kernel``, inside the shared brackets::
 
     path, telemetry       Space.info.path; the open told to telemetry
-    worker pool           spare workers, each binding the same stores and blobs
+    worker pool           spare workers, each mounting the data dir and
+                          binding the same stores and blobs
     kernel config         backends, the registry's envs, the session env
                           reading session.addr at every cell run
     race                  the kernel's driver (reap, stamp, system planes,
@@ -67,8 +74,8 @@ re-import the main module.
 
 from __future__ import annotations
 
+import functools
 import warnings
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 import nu
@@ -81,10 +88,10 @@ from nuspace.web.env import SESSION_ENV
 from nustd.webbrowser import tab_opened
 
 from ..blocks.logs import logged_to
-from ..blocks.meta import data_dir, resolve_root
+from ..blocks.meta import resolve_root
 from ..blocks.notifier import Answers
 from ..blocks.required import required
-from ..blocks.workers import DEFAULT_NAME, DEFAULT_SPARES, worker_pool
+from ..blocks.workers import DEFAULT_NAME, DEFAULT_SPARES, worker_context, worker_pool
 from . import binding
 from .disk import entered, held, told
 from .layout import (
@@ -129,7 +136,9 @@ def merged_envs(registered: Mapping[str, EnvFactory], session: EnvFactory) -> di
     return merged
 
 
-def infra(path: str | os.PathLike[str] | None = None, *, body: nu.Nu | None = None) -> nu.Nu:
+def infra(
+    path: str | os.PathLike[str] | nu.Nu | None = None, *, body: nu.Nu | None = None
+) -> nu.Nu:
     """The space's infra in this process, run until ``body`` returns, or until cancelled without one.
 
     Infra is what the space runs on: in local, the notification server. It
@@ -139,27 +148,39 @@ def infra(path: str | os.PathLike[str] | None = None, *, body: nu.Nu | None = No
     Logs to ``infra/infra.log``.
 
     Args:
-        path: The space's root, initialized (``local.init``). None is a
-            throwaway one, made and initialized here, removed at close.
+        path: The space's root, initialized (``local.init``), or a term
+            yielding it. None is a throwaway one, made and initialized
+            here, removed at close.
         body: Nu run inside infra, eg the drivers. Infra stops when it returns.
 
     Raises:
         Refused: A space not initialized, another assembly's space, or
             infra of this space running already.
     """
-    root, throwaway = resolve_root(path)
-    data = str(data_dir(root))
     served = nu.With(
         nustd.fs.Lock(DATA / INFRA_LOCK, "infra"),
-        logged_to(Path(data) / INFRA_LOG, "infra"),
-        binding.served(data),
+        logged_to(DATA.where(INFRA_LOG), "infra"),
+        binding.served(),
         body=nu.Park() if body is None else body,
     )
-    return fresh(root, throwaway, entered(root, told(DATA.mkdir(*DIRS) >> served)))
+    return fresh(path, lambda root: entered(root, told(DATA.mkdir(*DIRS) >> served)))
+
+
+def workers_on(data: str, blobs: nu.Nu) -> nu.Nu:
+    """What a cell worker enters: local's mount of the data dir at ``data``, then :func:`worker_context`.
+
+    Called where the kernel's pool opens, ``data`` the data dir's
+    ``where()`` there, so the bracket shipped holds it as a plain value and
+    every path under it is asked of the worker's own mount.
+    """
+    return nu.With(
+        nustd.fs.mount(data, tag=DATA, create=False),
+        worker_context(binding.stores(ROOTS), blobs),
+    )
 
 
 def kernel(
-    path: str | os.PathLike[str],
+    path: str | os.PathLike[str] | nu.Nu,
     *,
     extensions: Sequence[str] | None = None,
     envs: Mapping[str, EnvFactory] | None = None,
@@ -183,7 +204,7 @@ def kernel(
 
     Args:
         path: The space's root, initialized (``local.init``); its data in
-            ``.nuspace/``.
+            ``.nuspace/``. A path, or a term yielding one.
         extensions: The installed packages whose extensions register, by
             entry point name. None registers every installed one, ``()`` none.
         envs: Env factories of the space's own, ahead of every package's.
@@ -202,25 +223,26 @@ def kernel(
             assembly's space, no infra running on it, or a kernel of this
             space running already.
     """
-    root, _ = resolve_root(path)
-    data = str(data_dir(root))
     reg = space_registry(extensions=extensions, envs=envs)
-    blobs = binding.blobs(data) if blobs is None else blobs
-    factories = merged_envs(reg.envs, session_env(data))
-    bindings = binding.stores(data, ROOTS)
+    blobs = binding.blobs() if blobs is None else blobs
+    session = nu.Literal(
+        factory=session_env, address=DATA.where(SESSION_ADDR), uploads=DATA.where(UPLOADS_DIR)
+    )
+    factories = nu.Literal(factory=functools.partial(merged_envs, reg.envs), session=session)
+    pool_init = nu.Literal(factory=workers_on, data=DATA.where(), blobs=nu.Literal(blobs))
     driver = _kernel.driver()
     running = nu.With(
-        worker_pool(bindings, blobs, name=name, spares=spares),
-        _kernel.bound(backends=backends, envs=factories, space_envs=space_envs),
+        worker_pool(pool_init, name=name, spares=spares),
+        _kernel.bound(backends=backends, envs=factories, space_envs=space_envs),  # type: ignore[arg-type]  # a config child, made at open
         body=driver if body is None else nu.Race(driver, body),
     )
     return bracketed(
-        root,
+        resolve_root(path),
         locks=[(KERNEL_LOCK, "kernel")],
         log=(KERNEL_LOG, "kernel"),
-        required=needs_infra(data),
+        required=needs_infra(),
         blobs=blobs,
-        body=path_set(root) >> opened() >> running,
+        body=path_set() >> opened() >> running,
     )
 
 
@@ -231,10 +253,10 @@ INFRA_WAIT = 30.0
 GRACE = 2.0
 
 
-def needs_infra(data: str) -> nu.Nu:
+def needs_infra() -> nu.Nu:
     """Infra's notification server answering, or the kernel refused: start infra first."""
     return required(
-        Answers(binding.valkey_dir(data)),
+        Answers(binding.valkey_dir()),
         "infra of this space is not running: start it first",
         wait=INFRA_WAIT,
         waiting=held(DATA / INFRA_LOCK),
@@ -277,7 +299,7 @@ def opened_on(
 
 
 def web(
-    path: str | os.PathLike[str],
+    path: str | os.PathLike[str] | nu.Nu,
     *,
     extensions: Sequence[str] | None = None,
     host: str = "127.0.0.1",
@@ -296,6 +318,9 @@ def web(
     initialized, of another store format, another assembly's, or one whose
     web runs elsewhere, is refused before anything is written. Logs to
     ``devices/web/web.log``.
+
+    Web's driver is made where it starts, from the upload area's dir on the
+    data dir's mount: the uploads preset fixes its dir when its tree is built.
 
     Args:
         path: The space's root, as :func:`kernel`.
@@ -317,13 +342,11 @@ def web(
         Refused: As :func:`kernel`, with web for the kernel; or no kernel
             running on the space.
     """
-    root, _ = resolve_root(path)
-    data = str(data_dir(root))
     reg = space_registry(extensions=extensions)
-    blobs = binding.blobs(data) if blobs is None else blobs
-    uploads = str(Path(data) / UPLOADS_DIR)
+    blobs = binding.blobs() if blobs is None else blobs
     address = free_address()
-    served = nuspace.web.driver(
+    driver = functools.partial(
+        nuspace.web.driver,
         registry=reg,
         host=host,
         port=port,
@@ -331,8 +354,9 @@ def web(
         open_browser=open_browser and plane is None,
         log_level="warning",
         session_address=address,
-        upload_root=uploads,
-        blobs=blobs,
+    )
+    served = nu.Eval(
+        nu.Literal(factory=driver, upload_root=DATA.where(UPLOADS_DIR), blobs=nu.Literal(blobs))
     )
     beside = []
     if plane is not None:
@@ -344,7 +368,7 @@ def web(
         recorded, body=nu.Race(served, *beside) if beside else served
     )
     return bracketed(
-        root,
+        resolve_root(path),
         locks=[(WEB_LOCK, "web")],
         log=(WEB_LOG, "web"),
         required=needs_kernel(),

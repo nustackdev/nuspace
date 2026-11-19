@@ -11,8 +11,10 @@ all they meet through.
 Each is built inside its worker: what goes over is a small term,
 ``nu.Eval`` of a ``Literal`` whose factory is the entry point
 (``drivers.kernel``, ``drivers.web``) and whose children are its root and
-options. No driver tree is pickled here, and nothing a driver holds (the
-uploads area, a server) is made in this process.
+options. The root is a value there: it is the root's ``where()`` here,
+asked when run starts its workers, so a throwaway root's temp dir reaches
+them as the path it is. No driver tree is pickled here, and nothing a
+driver holds (the uploads area, a server) is made in this process.
 
 - **Start.** Infra's checks, lock and server here, then the kernel's
   worker, then web's once the kernel's lock is held (a kernel holding its
@@ -31,10 +33,10 @@ uploads area, a server) is made in this process.
 - **The kernel ends**: run ends with the kernel's status, and closing the
   pool stops web. Infra answers until then: the server never went with the
   kernel.
-- **path None**: one throwaway root made and initialized here, before
-  infra's init check, both workers use it, and it is removed once all is
-  gone. Any other path must be initialized already (``local.init``):
-  infra's init check refuses it.
+- **path None**: one throwaway root, a ``nustd.fs.tmp`` dir, made and
+  initialized here before infra's init check; both workers use it, and it
+  is removed once all is gone. Any other path must be initialized already
+  (``local.init``): infra's init check refuses it.
 
 What a driver starts in its own worker ends with it. The kernel's cell
 workers lead their own process groups and each watches its parent, the
@@ -52,6 +54,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import functools
 import sys
 import time
 from collections import deque
@@ -63,10 +66,9 @@ from nu.engine.structure import Declared
 from nu.lang import wire
 from nuspace.errors import Refused
 
-from ..blocks.meta import data_dir, resolve_root
 from . import drivers
 from .disk import held
-from .layout import DATA, KERNEL_LOCK, WEB_LOG
+from .layout import DATA, KERNEL_LOCK, ROOT, WEB_LOG
 from .opening import fresh
 from .plane import found
 
@@ -251,12 +253,12 @@ class Watched(nu.ScalarAction):
 
     Args:
         pool: The pool, a ``nustd.mp.PoolRef``.
-        kernel: The kernel's term, quoted (``nu.Literal``): data shipped to
-            its worker, never run here.
-        web: Web's term for its first start, quoted.
-        rest: Web's term for a restart, quoted.
+        kernel: A query yielding the kernel's term (:func:`shipped`): data
+            shipped to its worker, never run here.
+        web: A query yielding web's term for its first start.
+        rest: A query yielding web's term for a restart.
         up: A query: whether the kernel holds its lock, asked at each look.
-        log: Web's log file, absolute, as a give up names it.
+        log: Web's log file, absolute, or a query yielding it, as a give up names it.
     """
 
     _mutates = Declared(value=frozenset({0}), name="mutates")
@@ -264,7 +266,7 @@ class Watched(nu.ScalarAction):
     def __init__(
         self, pool: nu.Nu, kernel: nu.Nu, web: nu.Nu, rest: nu.Nu, up: nu.Nu, log: nu.StrArg
     ) -> None:
-        super().__init__(pool, nu.Literal(kernel), nu.Literal(web), nu.Literal(rest), up, log)
+        super().__init__(pool, kernel, web, rest, up, log)
 
     def _compile(self, nid: int, children: tuple[Callable, ...]) -> Callable:
         def thunk(rt: Runtime) -> None:
@@ -288,31 +290,42 @@ class Watched(nu.ScalarAction):
         return athunk
 
 
-def built(
-    what: str, entry: Callable[..., nu.Nu], root: str, options: Mapping[str, object]
-) -> nu.Nu:
-    """``entry(path=root, **options)`` built and run where this term runs: in a worker.
+def quoted(what: str, options: Mapping[str, object]) -> dict[str, object]:
+    """``options`` as an entry point's ``Literal`` children: a term-valued one quoted, so it is handed over as the term it is.
 
-    A term-valued option is quoted, so it is handed to the entry point as
-    the term it is. The term goes to the worker pickled: checked here.
+    They go to the worker pickled: checked here, when run is built.
 
     Raises:
         TypeError: An option does not pickle.
     """
     quoted = {k: nu.Literal(v) if isinstance(v, nu.Nu) else v for k, v in options.items()}
-    term = nu.Eval(nu.Literal(factory=entry, path=root, **quoted))
     try:
-        wire.dumps(term)
+        wire.dumps(nu.Literal(factory=dict, **quoted))
     except Exception as e:  # whatever cloudpickle raises
         msg = (
             f"local.run hands the {what} its options in another process, and they must pickle: {e}"
         )
         raise TypeError(msg) from None
-    return term
+    return quoted
+
+
+def built(entry: Callable[..., nu.Nu], options: Mapping[str, object], root: str) -> nu.Nu:
+    """``entry(path=root, **options)`` built and run where this term runs: in a worker.
+
+    Called where run starts its workers, ``root`` the root's ``where()``
+    there: the term shipped holds it as a plain path.
+    """
+    return nu.Eval(nu.Literal(factory=entry, path=root, **options))
+
+
+def shipped(what: str, entry: Callable[..., nu.Nu], options: Mapping[str, object]) -> nu.Nu:
+    """A query yielding the term run ships to a worker for ``entry``: :func:`built` on the root's ``where()``."""
+    made = functools.partial(built, entry, quoted(what, options))
+    return nu.Literal(factory=made, root=ROOT.where())
 
 
 def run(
-    path: str | os.PathLike[str] | None = None,
+    path: str | os.PathLike[str] | nu.Nu | None = None,
     *,
     into: nu.Ref | None = None,
     plane: PlaneSpec | str | None = None,
@@ -324,8 +337,9 @@ def run(
     kernel's status lands in ``into``, 0 at a Ctrl+C.
 
     Args:
-        path: The space's root, initialized (``local.init``). None is a
-            throwaway one, made and initialized here, removed at the end.
+        path: The space's root, initialized (``local.init``), or a term
+            yielding it. None is a throwaway one, made and initialized
+            here, removed at the end.
         into: Where the kernel's status is written, eg an ``nu.IntRef``
             slot the caller binds and reads after. None records it nowhere.
         plane: A plane spec, or its registered name, web opens on (see
@@ -347,19 +361,22 @@ def run(
         raise TypeError(msg)
     if plane is not None:
         found(plane)
-    root, throwaway = resolve_root(path)
     kernel = {k: v for k, v in options.items() if k in KERNEL}
     web = {k: v for k, v in options.items() if k in WEB}
     if plane is not None:
         web["plane"] = plane
-    watched = Watched(
-        POOL,
-        built("kernel", drivers.kernel, root, kernel),
-        built("web", drivers.web, root, web),
-        built("web", drivers.web, root, {**web, "open_browser": False}),
-        held(DATA / KERNEL_LOCK),
-        str(data_dir(root) / WEB_LOG),
-    )
-    body = nu.let(0, lambda code: code.set(watched)) if into is None else into.set(watched)
-    pooled = nustd.mp.pool(name=POOL_NAME, grace=GRACE, tags=(POOL_TAG,), body=body)
-    return fresh(root, throwaway, drivers.infra(root, body=pooled))
+
+    def on(root: nu.Nu) -> nu.Nu:
+        watched = Watched(
+            POOL,
+            shipped("kernel", drivers.kernel, kernel),
+            shipped("web", drivers.web, web),
+            shipped("web", drivers.web, {**web, "open_browser": False}),
+            held(DATA / KERNEL_LOCK),
+            DATA.where(WEB_LOG),
+        )
+        body = nu.let(0, lambda code: code.set(watched)) if into is None else into.set(watched)
+        pooled = nustd.mp.pool(name=POOL_NAME, grace=GRACE, tags=(POOL_TAG,), body=body)
+        return drivers.infra(root, body=pooled)
+
+    return fresh(path, on)

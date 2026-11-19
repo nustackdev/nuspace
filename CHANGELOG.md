@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Entry points take a root term, so a throwaway space is a temp mount
 - Checks before a space opens look through a read only mount of its root
 - A space's metadata is read, checked and written as nu ops over one form
 - Entry points run their checks as plain sequences, since none of them yields a value

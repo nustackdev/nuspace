@@ -13,16 +13,19 @@ work, through its entry points:
   Each refuses to start without what it needs running.
 
 Plain and headless, a space whose assembly's ``init`` has not run is
-initialized first, made if missing. The single component flags never
+initialized first, made if missing: its ``meta.json`` read as the command
+starts (:func:`~nuspace._cli._meta.initialized`), the init a step before
+the run in the same term. The single component flags never
 init: they refuse a space not initialized (``nuspace init`` does it).
 
 Runs until interrupted, then the kernel ends what it started and the
 brackets stop the workers. Which space is
 :func:`~nuspace._cli._meta.space_root`: PATH, else the nearest space up
 from here, else home. ``--tmp`` is a throwaway one, made and initialized
-here, gone at close; only plain and headless take it, since nothing
-another shell runs could find it. The header names the space's root
-either way.
+here, gone at close: a ``nustd.fs.tmp`` dir whose ``where()`` the
+assembly's entry points run on, its init first. Only plain and headless
+take it, since nothing another shell runs could find it. The header names
+the space's root either way.
 
 ``--with`` names a Plane an installed package adds, ``pkg.plane`` as
 ``nuspace verse`` lists them, or a bare name for a nuverse Plane: web
@@ -48,16 +51,24 @@ import rich_click as click
 import nu
 import nustd.fs
 from nuspace.errors import Refused
-from nuspace.space.blocks.meta import META_FILE, data_dir, init_done, resolve_root
-from nuspace.space.blocks.resources import throwaway
 from nuspace.space.local.drivers import opened_on
 from nuspace.specs import registered_name
 
 from .._installed import resolve
-from .._meta import EXIT, announce, assembly, hold, path_argument, space_root, tmp_option
+from .._meta import (
+    EXIT,
+    announce,
+    assembly,
+    hold,
+    initialized,
+    path_argument,
+    space_root,
+    tmp_option,
+)
 
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from types import ModuleType
 
 
@@ -103,24 +114,18 @@ def _port(host: str, port: int | None) -> int:
     )
 
 
-#: The tag the command line binds its own mount of a space's data dir under, to read its meta.json.
-MOUNT = "nuspace.cli"
-
-#: The data dir, as the command line's mount.
-DATA = nustd.fs.FsRef(MOUNT)
+#: The tag the command line mounts a throwaway space's temp dir under.
+TMP = nustd.fs.FsRef("nuspace.cli.tmp")
 
 
-def initialized_first(space: ModuleType, root: str, term: nu.Nu) -> nu.Nu:
-    """``term`` after the space at ``root`` is initialized by its assembly, when its meta.json says it is not.
+def throwaway_on(space: ModuleType, on: Callable[[nu.Nu], nu.Nu]) -> nu.Nu:
+    """``on(root)`` on a throwaway root, initialized by ``space`` first: a ``nustd.fs.tmp`` dir, gone at close.
 
-    A step of the same term, so a throwaway root made by the term's own
-    bracket is there by then. The data dir is read through a mount of the
-    command line's own, made when missing: the init that follows makes it
-    anyway.
+    The entry points take the dir's ``where()`` as their root, a term, so
+    one term makes the root, inits it, runs on it and removes it.
     """
-    ready = init_done(DATA / META_FILE, root)
-    step = nu.IfDo(nu.Not(ready), space.init(root))
-    return nustd.fs.mount(str(data_dir(root)), tag=DATA, body=step) >> term
+    body = nu.let(TMP.where(), lambda root: space.init(root) >> on(root))
+    return nustd.fs.tmp(tag=TMP, prefix="nuspace-", body=body)
 
 
 #: The flags that run one component alone, by the name of the entry point.
@@ -220,32 +225,35 @@ def run(
     serves = alone == "web" or (alone is None and not headless)
     if serves:
         port = _port(host, port)
-    root = path if path is not None else resolve_root(None)[0]
-    made = None
     try:
         spec = None
+        made = None
         if plane is not None:
             spec = resolve(plane)
             made = registered_name(spec)
         served = {"host": host, "port": port, "open_browser": not no_browser}
         body = None if spec is None else opened_on(spec)
-        if alone == "infra":
-            term = space.infra(root)
-        elif alone == "kernel":
-            term = space.kernel(root, body=body)
-        elif alone == "web":
-            term = space.web(root, plane=spec, **served)
-        elif headless:
-            term = space.infra(root, body=space.kernel(root, body=body))
+
+        def on(root: str | nu.Nu) -> nu.Nu:
+            if alone == "infra":
+                return space.infra(root)
+            if alone == "kernel":
+                return space.kernel(root, body=body)
+            if alone == "web":
+                return space.web(root, plane=spec, **served)
+            if headless:
+                return space.infra(root, body=space.kernel(root, body=body))
+            return space.run(root, into=EXIT, plane=spec, **served)
+
+        if path is None:
+            term = throwaway_on(space, on)
+        elif alone is None and not initialized(path):
+            # Plain and headless init first, a step of the same term: made if missing.
+            term = space.init(path) >> on(path)
         else:
-            term = space.run(root, into=EXIT, plane=spec, **served)
+            term = on(path)
     except Refused as e:
         raise click.ClickException(str(e)) from None
-    if alone is None:
-        # Plain and headless init first, a step of the same term: made if missing.
-        term = initialized_first(space, root, term)
-    if path is None:
-        term = throwaway(root, term)
     quiet = None if serves else f"{alone} alone" if alone else "headless"
     announce(path, alone=quiet, plane=made)
     code = hold(term)

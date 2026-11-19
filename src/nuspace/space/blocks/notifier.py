@@ -43,11 +43,12 @@ def answers(path: str | os.PathLike[str]) -> bool:
     return ping(socket_path_for(Path(path)), PING)
 
 
-#: ``Answers(path)``: :func:`answers` as a query, asked when the term runs.
+#: ``Answers(path)``: :func:`answers` as a query, asked when the term runs. A ping over
+#: the server's socket, which nu has no op for: ``path`` may be a query too.
 Answers = nu.host(answers)
 
 
-def served(path: str | os.PathLike[str]) -> nu.Provide:
+def served(path: str | os.PathLike[str] | nu.Nu) -> nu.Provide:
     """The server of the dir ``path`` started for the body and stopped at its end. The owner's.
 
     Put before the navigators in a ``nu.With``: the server answers before
@@ -56,6 +57,7 @@ def served(path: str | os.PathLike[str]) -> nu.Provide:
     worker build on their own.
 
     Args:
-        path: The server's dir, absolute.
+        path: The server's dir, absolute, or a query yielding it: read when
+            the bracket opens.
     """
-    return nustd.valkey.server(Path(path).resolve())
+    return nustd.valkey.server(path)  # type: ignore[arg-type]  # a config child, a term is read at open

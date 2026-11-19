@@ -6,8 +6,8 @@ not. It needs no infra, no kernel and no device, only a space initialized
 ops such as desk edits work through it.
 
 ``open`` makes nothing, resets nothing, seeds nothing and takes no lock.
-Like every entry point it binds local's mount of the data dir, so the
-checks read ``meta.json`` through it.
+Like every entry point it binds local's mounts of the root and the data
+dir, so the checks look through them.
 With infra up it publishes to infra's notification server, so a write
 lands in the stores and the kernel and web hear it. With none up nobody
 listens: it binds the same files publishing nothing, and starts no
@@ -24,10 +24,10 @@ from typing import TYPE_CHECKING
 
 import nu
 
-from ..blocks.meta import data_dir, resolve_root
+from ..blocks.meta import resolve_root
 from ..blocks.notifier import Answers
 from . import binding
-from .disk import entered, found
+from .disk import entered
 from .opening import ROOTS
 
 
@@ -41,7 +41,7 @@ __all__ = ["open"]
 
 
 def open(
-    path: str | os.PathLike[str],
+    path: str | os.PathLike[str] | nu.Nu,
     *,
     body: nu.Nu,
     blobs: Provide | None = None,
@@ -55,7 +55,8 @@ def open(
     the body writes what it keeps into a ref the caller holds.
 
     Args:
-        path: The space's root. It must be a local space, initialized.
+        path: The space's root, a path or a term yielding one. It must be a
+            local space, initialized.
         body: What runs with the stores bound.
         blobs: The blob store, as ``local.kernel``. None is local's files.
 
@@ -64,10 +65,8 @@ def open(
         Refused: A space not initialized, another assembly's, or of an
             older store format (at run).
     """
-    root, _ = resolve_root(path)
-    data = str(data_dir(root))
-    blobs = binding.blobs(data) if blobs is None else blobs
-    published = nu.With(binding.stores(data, ROOTS), blobs, body=body)
-    quiet = nu.With(binding.quiet(data, ROOTS), blobs, body=body)
-    chosen = nu.IfDo(Answers(binding.valkey_dir(data)), published, quiet)
-    return found(root) >> entered(root, chosen)
+    blobs = binding.blobs() if blobs is None else blobs
+    published = nu.With(binding.stores(ROOTS), blobs, body=body)
+    quiet = nu.With(binding.quiet(ROOTS), blobs, body=body)
+    chosen = nu.IfDo(Answers(binding.valkey_dir()), published, quiet)
+    return entered(resolve_root(path), chosen, any_space=True)

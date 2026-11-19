@@ -1,7 +1,7 @@
 """What local's entry points share: ``init``, and the steps and brackets from the init check to every store bound.
 
 ``init`` makes the space and runs each component's init, once, with
-local's mount of the data dir bound (made when missing)::
+local's mounts of the root and the data dir bound (both made when missing)::
 
     meta.json             an older format refused, another assembly's refused,
                           written where missing (a space made before it is adopted)
@@ -16,7 +16,8 @@ local's mount of the data dir bound (made when missing)::
 The kernel and web open the space the same way after it, each step
 inside the brackets of the ones before::
 
-    the space checked     before the mount: no older format, a data dir there
+    the root              there, or Refused; then local's read only mount of it
+    the space checked     through it: no older format, a data dir there
     the mount             local's, over the data dir, never making it
     the init check        refused when meta.json lacks "init": true
     the requirement       what the driver runs on, up, or Refused: infra
@@ -29,22 +30,23 @@ inside the brackets of the ones before::
     blobs                 when the entry point binds them
 
 The checks, the requirement and the data dir are steps, run in order
-before the brackets (:class:`~..blocks.guarded.Guarded`); the mount, the
-lock, the log and the stores are brackets, held while the body runs. A
+before the brackets (``step >> body``); the mounts, the lock, the log and
+the stores are brackets, held while the body runs. A
 lock held elsewhere is told as local's refusal (:func:`~.disk.told`). The
 requirement comes before the lock, so a driver holding its lock has what
 it runs on up: web looks only for the kernel's lock. Infra binds no store
-and needs nothing: it shares the checks, the mount, the data dir, a lock
+and needs nothing: it shares the checks, the mounts, the data dir, a lock
 and a log. A throwaway root (path None), which only infra and ``run``
-take, is made by the entry point itself, so its ``init`` runs first, a
-step of the same term (:func:`fresh`).
+take, is a ``nustd.fs.tmp`` mount whose ``where()`` the entry point runs
+on, its ``init`` first, a step of the same term (:func:`fresh`). Any
+entry point takes its root as a term too: every path under it is asked
+of the mounts when the term runs.
 ``open`` shares only the bindings, the mount and the checks: it locks
 nothing and makes nothing.
 """
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 import nu
@@ -56,21 +58,20 @@ from nuspace.shapes import Space, stores
 from nuspace.web.stores import CONN_STORE, WEB_STORE
 
 from ..blocks.logs import logged_to
-from ..blocks.meta import data_dir, resolve_root
-from ..blocks.resources import throwaway
+from ..blocks.meta import resolve_root
 from . import binding
 from .disk import entered, flagged, marked, told
-from .layout import DATA, DIRS, INFRA_LOCK, KERNEL_LOCK, WEB_LOCK
+from .layout import DATA, DIRS, INFRA_LOCK, KERNEL_LOCK, ROOT, WEB_LOCK
 
 
 if TYPE_CHECKING:
     import os
-    from collections.abc import Sequence
+    from collections.abc import Callable, Sequence
 
     from nu.context.fabric import Provide
 
 
-__all__ = ["ROOTS", "STORES", "bracketed", "fresh", "init", "initialized", "path_set"]
+__all__ = ["ROOTS", "STORES", "TMP", "bracketed", "fresh", "init", "initialized", "path_set"]
 
 
 #: Every store local binds: the core ones, then web's.
@@ -79,32 +80,34 @@ STORES = (*stores.CORE, WEB_STORE, CONN_STORE)
 #: Their roots, as the bindings take them.
 ROOTS = tuple(s.root for s in STORES)
 
+#: The tag a throwaway root's temp dir is mounted under.
+TMP = nustd.fs.FsRef("nuspace.local.tmp")
 
-def path_set(root: str) -> nu.Nu:
-    """``Space.info.path``, the space's root as this process found it. One commit.
+
+def path_set() -> nu.Nu:
+    """``Space.info.path``, the space's root as local's mount of it found it. One commit.
 
     The assembly's to write; ``opened_at`` is the kernel's (its driver).
     """
-    return nustd.kv.atomic(Space.info.path.set(root))
+    return nustd.kv.atomic(Space.info.path.set(ROOT.where()))
 
 
-def initialized(root: str) -> nu.Nu:
-    """``init`` on the absolute ``root``: see the module for its steps. Yields nothing."""
-    data = str(data_dir(root))
+def initialized(root: str | nu.Nu) -> nu.Nu:
+    """``init`` on ``root``, a path or a term yielding one: see the module for its steps. Yields nothing."""
     locks = [(INFRA_LOCK, "infra"), (KERNEL_LOCK, "kernel"), (WEB_LOCK, "web")]
-    inits = stores.init() >> kernel.init() >> nuspace.web.init() >> path_set(root)
+    inits = stores.init() >> kernel.init() >> nuspace.web.init() >> path_set()
     held = nu.With(
         *(nustd.fs.Lock(DATA / f, w) for f, w in locks),
-        binding.quiet(data, ROOTS),
-        body=inits >> flagged(root),
+        binding.quiet(ROOTS),
+        body=inits >> flagged(),
     )
     return marked(root, told(DATA.mkdir(*DIRS) >> held))
 
 
-def init(path: str | os.PathLike[str]) -> nu.Nu:
+def init(path: str | os.PathLike[str] | nu.Nu) -> nu.Nu:
     """The space at ``path`` made and initialized: every component's init, then the flag. Nothing runs.
 
-    The data dir, ``meta.json``, every store and its containers, the
+    The root, the data dir, ``meta.json``, every store and its containers, the
     kernel's live indexes and system planes, web's planes, made where
     missing; ``Space.info.path`` written; then ``"init": true`` in
     ``meta.json``. No reap, no workers, no driver, no notification server.
@@ -115,22 +118,24 @@ def init(path: str | os.PathLike[str]) -> nu.Nu:
         Refused: An older store format, another assembly's space, or
             infra, a kernel or a web of this space running.
     """
-    root, _ = resolve_root(path)
-    return initialized(root)
+    return initialized(resolve_root(path))
 
 
-def fresh(root: str, throwaway_root: bool, term: nu.Nu) -> nu.Nu:
-    """``term`` as is, or for a throwaway ``root``: the root made and initialized, ``term``, the root removed.
+def fresh(path: str | os.PathLike[str] | nu.Nu | None, on: Callable[[nu.Nu], nu.Nu]) -> nu.Nu:
+    """``on(root)``, the term an entry point builds on its root; for ``path`` None on a throwaway one.
 
-    Yields nothing.
+    A throwaway root is a ``nustd.fs.tmp`` mount (``nuspace-`` in the
+    system's temp dir), initialized first, the term run on its ``where()``,
+    the dir removed once all of it closed. Yields nothing.
     """
-    if not throwaway_root:
-        return term
-    return throwaway(root, initialized(root) >> term)
+    if path is not None:
+        return on(resolve_root(path))
+    body = nu.let(TMP.where(), lambda root: initialized(root) >> on(root))
+    return nustd.fs.tmp(tag=TMP, prefix="nuspace-", body=body)
 
 
 def bracketed(
-    root: str,
+    root: str | nu.Nu,
     *,
     locks: Sequence[tuple[str, str]],
     log: tuple[str, str] | None,
@@ -143,7 +148,7 @@ def bracketed(
     Yields nothing.
 
     Args:
-        root: The space's root, absolute.
+        root: The space's root, a path or a term yielding one.
         locks: ``(file, what)`` per driver, the file relative to the data dir,
             taken on local's mount.
         log: ``(file, what)``, this process's log while it runs, or None.
@@ -153,11 +158,10 @@ def bracketed(
         blobs: The blob store's spec, or None to bind none.
         body: What runs inside, every store ready.
     """
-    data = str(data_dir(root))
     held: list[nu.Nu] = [nustd.fs.Lock(DATA / f, w) for f, w in locks]
     if log is not None:
-        held.append(logged_to(Path(data) / log[0], log[1]))
-    held.append(binding.stores(data, ROOTS))
+        held.append(logged_to(DATA.where(log[0]), log[1]))
+    held.append(binding.stores(ROOTS))
     if blobs is not None:
         held.append(blobs)
     return entered(root, told(required >> DATA.mkdir(*DIRS) >> nu.With(*held, body=body)))

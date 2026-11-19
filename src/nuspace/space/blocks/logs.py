@@ -87,11 +87,12 @@ class Logged:
             self._level = None
 
 
-def logged_to(path: str | os.PathLike[str], what: str) -> nu.Provide:
+def logged_to(path: str | nu.Nu, what: str) -> nu.Provide:
     """This process's logging at ``path`` while the bracket holds (:class:`Logged`).
 
     Args:
-        path: The log file, absolute.
+        path: The log file, absolute, or a query yielding it (eg a path on
+            the assembly's mount): read when the bracket opens.
         what: What logs there, eg ``"kernel"``.
     """
-    return nu.Provide(Logged, {"path": str(path), "what": what})
+    return nu.Provide(Logged, {"path": path, "what": what})

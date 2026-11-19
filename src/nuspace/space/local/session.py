@@ -20,8 +20,6 @@ from typing import TYPE_CHECKING
 
 from nuspace.web.env import session_env as _session_env
 
-from .layout import SESSION_ADDR, UPLOADS_DIR
-
 
 if TYPE_CHECKING:
     import os
@@ -68,12 +66,17 @@ class AddressFile:
         return address
 
 
-def session_env(data: str | os.PathLike[str]) -> EnvFactory:
-    """The session env factory local hands the kernel of the space whose data dir is ``data``.
+def session_env(address: str, uploads: str) -> EnvFactory:
+    """The session env factory local hands the kernel: the address read from ``address`` at every cell run.
 
-    The address comes from :data:`~.layout.SESSION_ADDR` at every cell run,
-    the uploads from :data:`~.layout.UPLOADS_DIR`: the same two web is handed.
+    Both paths are absolute, asked of local's mount of the data dir where
+    the kernel's config is bound (:data:`~.layout.SESSION_ADDR`,
+    :data:`~.layout.UPLOADS_DIR`): the same two web is handed. Built with
+    ``nu.Literal(factory=session_env, ...)``, so it is made from those
+    values when the config opens.
+
+    Args:
+        address: The file web holds its address in, absolute.
+        uploads: The upload area's dir, absolute.
     """
-    return _session_env(
-        AddressFile(Path(data) / SESSION_ADDR), uploads=str(Path(data) / UPLOADS_DIR)
-    )
+    return _session_env(AddressFile(address), uploads=uploads)
