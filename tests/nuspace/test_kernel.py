@@ -63,7 +63,7 @@ from nuspace.kernel.backends import PER_PLANE_RUN, provided
 from nuspace.kernel.kernel import _release
 from nuspace.shapes import EXIT_FAILED, EXIT_INTERRUPTED, EXIT_KILLED, EXIT_OK, Space, State
 from nuspace.system import init
-from nustd.mp_pool import WorkerPool
+from nustd.mp import WorkerPool
 
 
 module_loop = pytest.mark.asyncio(loop_scope="module")
@@ -563,9 +563,9 @@ _TICKS = nu.TryCatch(
 @contextlib.asynccontextmanager
 async def _backend(cls: type[Backend]):
     """A bare backend over a bare pool, no store: bodies here are plain Nu."""
-    pool = {"name": "nuspace-test-backend", "init": PROBE_INIT}
+    pool = {"name": "nuspace-test-backend", "init": nu.Literal(PROBE_INIT)}
     ctx = nu.Context()
-    async with nu.Provide(WorkerPool, pool)._aopen(ctx):
+    async with nu.Provide(WorkerPool, pool)._aenter(ctx):
         backend = cls()
         await backend.asetup(ctx)
         try:
@@ -1074,7 +1074,7 @@ async def test_reap_after_a_host_crash(tmp_path):
     finally:
         if host.poll() is None:
             host.kill()
-    # mp_pool's parent watch: every worker goes with its host.
+    # nustd.mp's parent watch: every worker goes with its host.
     await _all_gone(left["pids"])
 
     k = await opened("nuspace-reopened", data=data, spares=0)

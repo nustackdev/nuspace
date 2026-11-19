@@ -20,6 +20,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from nu.context import Fabric
+
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
@@ -55,7 +57,7 @@ class UnknownEnvError(LookupError):
     """A spec names an env no factory was registered for."""
 
 
-class KernelConfig:
+class KernelConfig(Fabric):
     """What the kernel is told at open: the env registry and the space-wide envs.
 
     Bound on the kernel's context (:func:`~nuspace.kernel.bound`), read when a

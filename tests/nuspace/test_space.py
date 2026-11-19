@@ -14,8 +14,8 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-import errno
 import functools
+import json
 import logging
 import os
 import signal
@@ -26,6 +26,7 @@ import sys
 import threading
 import time
 import warnings
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
@@ -34,50 +35,36 @@ from _support.made import MADE, MADE_STORE
 
 import nu
 import nuspace
+import nustd.fs
 import nustd.kv
 import nustd.valkey
+from nuspace._cli._meta import nearest_space
 from nuspace.errors import Missing, Refused
 from nuspace.kernel import CLOSED, LEFT_OVER, Env
 from nuspace.shapes import EXIT_INTERRUPTED, EXIT_KILLED, FORMAT, Space, stores
 from nuspace.space import local
-from nuspace.space.blocks import browse
-from nuspace.space.blocks import lock as lock_module
-from nuspace.space.blocks.disk import DISK, DiskBackend, MakeDirs
-from nuspace.space.blocks.lock import Lock, LockWarning, holder
+from nuspace.space.blocks import meta as meta_ops
 from nuspace.space.blocks.logs import Logged
-from nuspace.space.blocks.meta import (
-    DATA_DIR,
-    META_FILE,
-    Meta,
-    MetaRef,
-    SetInit,
-    Stamp,
-    data_dir,
-    data_made,
-    find_space,
-    is_space,
-    read_meta,
-    write_meta,
-)
+from nuspace.space.blocks.meta import DATA_DIR, META_FILE, Meta, meta_in
 from nuspace.space.blocks.notifier import Answers, served
 from nuspace.space.blocks.required import required
-from nuspace.space.blocks.resources import Throwaway
-from nuspace.space.local.disk import marked
+from nuspace.space.local import disk
 from nuspace.space.local.layout import (
+    DATA,
     DIRS,
     INFRA_LOCK,
     INFRA_LOG,
     KERNEL_LOCK,
     KERNEL_LOG,
+    META,
+    ROOT,
     VALKEY_DIR,
     WEB_LOCK,
     WEB_LOG,
-    is_older,
-    made_before,
 )
 from nuspace.space.local.layout import STORES as PLACES
 from nuspace.space.local.plane import plane_of
-from nuspace.space.local.supervise import Restarts
+from nuspace.space.local.watch import Restarts
 from nuspace.specs import (
     GROUP,
     CellSpec,
@@ -98,7 +85,7 @@ from nustd.valkey.resources import ping, socket_path_for
 
 
 if TYPE_CHECKING:
-    from pathlib import Path
+    from collections.abc import AsyncIterator
 
 
 def _plane(name: str, label: str = "") -> PlaneSpec:
@@ -267,20 +254,72 @@ def test_the_tests_specs_register_through_their_installed_package():
 # --- Layout ------------------------------------------------------------------------
 
 
+def data_dir(root: Path) -> Path:
+    """The data dir of the space at ``root``, as local lays it out."""
+    return Path(root) / DATA_DIR
+
+
+def _on_root(root: Path, term: nu.Nu, *, create: bool = False) -> object:
+    """``term`` run with local's read only mount of ``root`` bound, as the checks before the data dir run."""
+    return nu.run(disk.rooted(str(root), term, create=create))[0]
+
+
+def _on_data(root: Path, term: nu.Nu, *, create: bool = False) -> object:
+    """``term`` run with local's mounts of ``root`` and its data dir bound, as an entry point runs."""
+    return _on_root(root, disk.mounted(term, create=create), create=create)
+
+
+def read_meta(root: Path) -> Meta | None:
+    """``meta.json`` of the space at ``root``, read through local's mounts as every entry point reads it."""
+    if not data_dir(root).is_dir():
+        return None
+    return _on_data(root, meta_in(META))
+
+
+def write_meta(root: Path, meta: Meta) -> None:
+    """``root`` a space whose ``meta.json`` holds ``meta``, written plain."""
+    data_dir(root).mkdir(parents=True, exist_ok=True)
+    fields = {"assembly": meta.assembly, "made_at": meta.made_at, "init": meta.init}
+    (data_dir(root) / META_FILE).write_text(json.dumps(fields) + "\n")
+
+
+def is_space(root: Path) -> bool:
+    return Path(root).is_dir() and _on_root(root, disk.is_space())
+
+
+def is_older(root: Path) -> bool:
+    return _on_root(root, disk.is_older())
+
+
+def made_before(root: Path) -> bool:
+    return _on_root(root, disk.made_before())
+
+
+def holder(path: Path) -> dict | None:
+    """The record a lock file names its last holder by, None for none. Read by a process holding no lock."""
+    said = Path(path).read_text() if Path(path).exists() else ""
+    return json.loads(said) if said.strip() else None
+
+
+def held(root: Path, lock: str) -> bool:
+    """Whether some process holds the lock file ``lock`` of the space at ``root`` now."""
+    return _on_data(root, disk.held(DATA / lock))
+
+
 def _mark(root: Path) -> None:
     """``root`` made a space as far as finding one goes: its ``meta.json``."""
     write_meta(root, Meta("local", "2026-11-18T00:00:00+00:00"))
 
 
 def stamp(root: Path, assembly: str) -> Meta:
-    """``Stamp`` run on ``root``: its meta, written when there is none."""
-    nu.run(Stamp(MetaRef(str(root)), assembly))
+    """The meta stamp run on ``root``, as ``init`` runs it: its meta, written when there is none."""
+    _on_data(root, meta_ops.stamp(META, ROOT.where(), assembly), create=True)
     return read_meta(root)
 
 
 def set_init(root: Path, init: bool = True) -> Meta:
-    """``SetInit`` run on ``root``: its meta with the flag set."""
-    nu.run(SetInit(MetaRef(str(root)), init))
+    """The init flag set on ``root``'s meta, as ``init`` sets it last."""
+    _on_data(root, meta_ops.set_init(META, ROOT.where(), init))
     return read_meta(root)
 
 
@@ -296,13 +335,13 @@ def test_a_space_is_found_by_its_meta_up_from_here(tmp_path):
     nested = root / "a" / "b"
     nested.mkdir(parents=True)
     assert not is_space(root)
-    assert find_space(nested) is None
+    assert nearest_space(nested) is None
     # A data dir alone (the user's ~/.nuspace config) is no space.
     (root / DATA_DIR).mkdir()
-    assert find_space(nested) is None
+    assert nearest_space(nested) is None
     _mark(root)
     assert is_space(root)
-    assert find_space(nested) == root.resolve()
+    assert nearest_space(nested) == root.resolve()
 
 
 @pytest.mark.parametrize("old", ["CURRENT", "kernel.sqlite", f"{DATA_DIR}/kernel.sqlite"])
@@ -311,32 +350,16 @@ def test_an_older_space_is_told_apart(tmp_path, old):
     (tmp_path / old).touch()
     assert is_older(tmp_path)
     with pytest.raises(Refused, match="older nuspace store format"):
-        nu.run(marked(str(tmp_path)))
+        nu.run(disk.marked(str(tmp_path), nu.Noop()))
     assert not (data_dir(tmp_path) / META_FILE).exists()
     _mark(tmp_path)
     assert not is_older(tmp_path)
 
 
 def test_the_data_dir_holds_a_folder_per_store(tmp_path):
-    nu.run(data_made(str(tmp_path), DIRS))
+    _on_data(tmp_path, DATA.mkdir(*DIRS), create=True)
     for root in PLACES:
         assert (data_dir(tmp_path) / PLACES[root].file).parent.is_dir()
-
-
-def test_the_disk_commands_go_through_the_backend_bound(tmp_path):
-    """A test binds its own disk: nothing reaches the file system."""
-
-    class Seen(DiskBackend):
-        def __init__(self) -> None:
-            self.made: list[str] = []
-
-        def make_dirs(self, path: str) -> None:
-            self.made.append(path)
-
-    seen = Seen()
-    nu.run(MakeDirs(DISK, str(tmp_path / "a")), nu.Context().bind(DiskBackend, seen))
-    assert seen.made == [str(tmp_path / "a")]
-    assert not (tmp_path / "a").exists()
 
 
 def test_meta_names_the_assembly_and_another_assembly_is_refused(tmp_path):
@@ -360,9 +383,6 @@ def test_the_init_flag_is_a_plain_bool_false_when_missing(tmp_path):
     assert set_init(tmp_path).init is True
     assert '"init": true' in (data_dir(tmp_path) / META_FILE).read_text()
     assert read_meta(tmp_path) == Meta("local", "2026-11-18T00:00:00+00:00", init=True)
-    (data_dir(tmp_path) / META_FILE).write_text(raw[:-1] + ', "init": "yes"}')
-    with pytest.raises(Refused, match="does not read as a space's meta"):
-        read_meta(tmp_path)
 
 
 def test_a_space_made_before_meta_is_found_and_adopted_and_its_host_lock_ignored(tmp_path):
@@ -372,7 +392,7 @@ def test_a_space_made_before_meta_is_found_and_adopted_and_its_host_lock_ignored
     assert made_before(root)
     assert not is_space(root)
     assert not is_older(root)
-    nu.run(marked(str(root)))
+    nu.run(disk.marked(str(root), nu.Noop()))
     assert read_meta(root).assembly == "local"
     assert is_space(root)
     assert not made_before(root)
@@ -381,68 +401,76 @@ def test_a_space_made_before_meta_is_found_and_adopted_and_its_host_lock_ignored
 # --- The lock ----------------------------------------------------------------------
 
 
-def test_the_lock_names_its_holder_and_refuses_a_second_take(tmp_path):
-    path = str(tmp_path / "kernel.lock")
-    first = Lock(path, "kernel")
-    first.setup(None)
+@contextlib.asynccontextmanager
+async def _locked(root: Path, lock: str, what: str) -> AsyncIterator[None]:
+    """The lock file ``lock`` of the space at ``root`` held by this process, on this loop, while inside."""
+    loop = asyncio.get_running_loop()
+    ready, done = loop.create_future(), asyncio.Event()
+    body = nu.let(_Hold(ready, done), lambda _: nu.Noop())
+    term = disk.rooted(str(root), disk.mounted(nustd.fs.Lock(DATA / lock, what, body=body)))
+    task = asyncio.create_task(nu.arun(term))
+    waiting = asyncio.ensure_future(asyncio.shield(ready))
+    finished, _ = await asyncio.wait({waiting, task}, timeout=30, return_when="FIRST_COMPLETED")
+    if task in finished:
+        task.result()
     try:
-        name, pid, _ = holder(path).split()
-        assert (name, int(pid)) == (socket.gethostname(), os.getpid())
-        with pytest.raises(Refused, match="the kernel of this space runs in this process already"):
-            Lock(path, "kernel").setup(None)
+        yield
     finally:
-        first.cleanup()
-    again = Lock(path, "kernel")
-    again.setup(None)
-    again.cleanup()
+        done.set()
+        await asyncio.wait_for(task, 15)
+
+
+def _take(root: Path, lock: str, what: str, body: nu.Nu | None = None) -> None:
+    """The lock file ``lock`` of ``root`` taken as an entry point takes one, refused as local refuses."""
+    taken = nustd.fs.Lock(DATA / lock, what, body=nu.Noop() if body is None else body)
+    _on_data(root, disk.told(taken))
+
+
+def test_the_lock_names_its_holder_and_refuses_a_second_take(tmp_path):
+    data_dir(tmp_path).mkdir()
+    told = f"the kernel of this space runs on {socket.gethostname()}, pid {os.getpid()}. Stop it"
+    second = nustd.fs.Lock(DATA / KERNEL_LOCK, "kernel", body=nu.Noop())
+    with pytest.raises(Refused, match=told):
+        _take(tmp_path, KERNEL_LOCK, "kernel", second)
+    record = holder(data_dir(tmp_path) / KERNEL_LOCK)
+    assert (record["host"], record["pid"], record["what"]) == (
+        socket.gethostname(),
+        os.getpid(),
+        "kernel",
+    )
+    _take(tmp_path, KERNEL_LOCK, "kernel")
+
+
+#: Takes the kernel's lock of the space at argv[1], says so, then sleeps.
+_HOLDS = """
+import sys
+import nu
+import nustd.fs
+from nuspace.space.local import disk
+from nuspace.space.local.layout import DATA, KERNEL_LOCK
+said = nu.host(lambda: print("held", flush=True), name="Said")
+lock = nustd.fs.Lock(DATA / KERNEL_LOCK, "kernel", body=nu.let(said(), lambda _: nu.Delay(60)))
+nu.run(disk.rooted(sys.argv[1], disk.mounted(lock)))
+"""
 
 
 def test_a_lock_another_process_holds_refuses_the_open(tmp_path):
-    path = str(tmp_path / "kernel.lock")
-    code = (
-        "import sys, time\n"
-        "from nuspace.space.blocks.lock import Lock\n"
-        f"Lock({path!r}, 'kernel').setup(None)\n"
-        "print('held', flush=True)\n"
-        "time.sleep(60)\n"
+    data_dir(tmp_path).mkdir()
+    other = subprocess.Popen(  # noqa: S603
+        [sys.executable, "-c", _HOLDS, str(tmp_path)], stdout=subprocess.PIPE, text=True
     )
-    other = subprocess.Popen([sys.executable, "-c", code], stdout=subprocess.PIPE, text=True)  # noqa: S603
     try:
         assert other.stdout.readline().strip() == "held"
+        assert held(tmp_path, KERNEL_LOCK)
         told = f"the kernel of this space runs on {socket.gethostname()}, pid {other.pid}. Stop it"
         with pytest.raises(Refused, match=told):
-            Lock(path, "kernel").setup(None)
+            _take(tmp_path, KERNEL_LOCK, "kernel")
     finally:
         other.kill()
-        other.wait()
+        other.communicate()
     # Its holder died: the lock went with it.
-    mine = Lock(path, "kernel")
-    mine.setup(None)
-    mine.cleanup()
-
-
-def test_a_lock_the_file_system_cannot_take_opens_with_a_warning(tmp_path, monkeypatch):
-    def nolock(fd, cmd):
-        raise OSError(errno.ENOLCK, "No locks available")
-
-    monkeypatch.setattr(lock_module.fcntl, "lockf", nolock)
-    path = str(tmp_path / "kernel.lock")
-    lock = Lock(path, "web")
-    with pytest.warns(LockWarning, match="going on without it"):
-        lock.setup(None)
-    assert not holder(path)
-    lock.cleanup()
-
-
-def test_a_throwaway_root_is_made_at_setup_and_removed_with_its_data_at_cleanup(tmp_path):
-    root = tmp_path / "tmp-space"
-    throwaway = Throwaway(str(root))
-    throwaway.setup(None)
-    assert root.is_dir()
-    (data_dir(root) / "store").mkdir(parents=True)
-    (data_dir(root) / "store" / "space.db").write_text("x")
-    throwaway.cleanup()
-    assert not root.exists()
+    assert not held(tmp_path, KERNEL_LOCK)
+    _take(tmp_path, KERNEL_LOCK, "kernel")
 
 
 # --- local.init -------------------------------------------------------------------------
@@ -693,7 +721,10 @@ async def test_a_clean_close_ends_what_is_live_so_the_reopen_reaps_nothing(tmp_p
         keyed = [nuspace.plane.keyed(key) for key in (init.KEY, *init.BOOTED)]
         ids = {(await nu.arun(nuspace.atomic(k), ctx))[0] for k in keyed}
         assert planes == ids
-        with pytest.raises(Refused, match="the kernel of this space runs in this process already"):
+        with pytest.raises(
+            Refused,
+            match=f"the kernel of this space runs on {socket.gethostname()}, pid {os.getpid()}",
+        ):
             await nu.arun(local.kernel(root))
     finally:
         done.set()
@@ -859,7 +890,7 @@ def test_run_refuses_an_option_no_entry_point_takes_or_one_that_does_not_pickle(
     with pytest.raises(TypeError, match="no entry point takes: nobody"):
         local.run(None, nobody=1)
     with pytest.raises(TypeError, match="must pickle"):
-        local.run(None, envs={"db": lambda: None})
+        local.run(None, envs={"db": threading.Lock()})
 
 
 # --- Logs ------------------------------------------------------------------------------
@@ -867,12 +898,13 @@ def test_run_refuses_an_option_no_entry_point_takes_or_one_that_does_not_pickle(
 
 def test_the_log_block_points_logging_at_its_file_while_it_holds(tmp_path):
     path = tmp_path / "kernel" / "kernel.log"
-    held = Logged(str(path), "kernel")
-    held.setup(None)
-    logging.getLogger("nuspace.test").info("from nuspace")
-    logging.getLogger("somelib").info("not this")
-    logging.getLogger("somelib").warning("but this")
-    held.cleanup()
+
+    def said() -> None:
+        logging.getLogger("nuspace.test").info("from nuspace")
+        logging.getLogger("somelib").info("not this")
+        logging.getLogger("somelib").warning("but this")
+
+    nu.run(Logged(str(path), "kernel", body=nu.host(said, name="Said")()))
     logging.getLogger("nuspace.test").warning("after")
     said = path.read_text()
     assert f"kernel up on {socket.gethostname()}, pid {os.getpid()}" in said
@@ -883,66 +915,10 @@ def test_the_log_block_points_logging_at_its_file_while_it_holds(tmp_path):
     assert "after" not in said
 
 
-# --- Browse ----------------------------------------------------------------------------
-
-
 def _free_port() -> int:
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))
         return int(s.getsockname()[1])
-
-
-class Tabs(browse.BrowserBackend):
-    """A browser that records the urls it is handed and opens none."""
-
-    def __init__(self) -> None:
-        self.opened: list[str] = []
-
-    def open(self, url: str) -> None:
-        self.opened.append(url)
-
-
-async def test_a_tab_opens_once_the_port_answers():
-    tabs = Tabs()
-    server = await asyncio.start_server(lambda r, w: w.close(), "127.0.0.1", 0)
-    port = server.sockets[0].getsockname()[1]
-    try:
-        url = f"http://127.0.0.1:{port}/p_x"
-        term = browse.tab_opened(url, "0.0.0.0", port)  # noqa: S104
-        await nu.arun(term, nu.Context().bind(browse.BrowserBackend, tabs))
-    finally:
-        server.close()
-        await server.wait_closed()
-    assert tabs.opened == [url]
-
-
-async def test_a_tab_gives_up_quietly():
-    tabs = Tabs()
-    term = browse.tab_opened("http://x", "127.0.0.1", _free_port(), timeout=0.2)
-    await nu.arun(term, nu.Context().bind(browse.BrowserBackend, tabs))
-    assert tabs.opened == []
-
-
-async def test_a_tab_reads_its_url_at_run_time():
-    tabs = Tabs()
-    server = await asyncio.start_server(lambda r, w: w.close(), "127.0.0.1", 0)
-    port = server.sockets[0].getsockname()[1]
-    base = f"http://127.0.0.1:{port}/"
-    term = nu.let("p_x", lambda plane: browse.tab_opened(nu.Str(base) + nu.Str(plane), "", port))
-    try:
-        await nu.arun(term, nu.Context().bind(browse.BrowserBackend, tabs))
-    finally:
-        server.close()
-        await server.wait_closed()
-    assert tabs.opened == [base + "p_x"]
-
-
-def test_open_tab_writes_the_browser_ref():
-    tabs = Tabs()
-    term = browse.OpenTab(browse.BROWSER, "http://x")
-    nu.validate(nu.compile(term))
-    nu.run(term, nu.Context().bind(browse.BrowserBackend, tabs))
-    assert tabs.opened == ["http://x"]
 
 
 # --- local.open ---------------------------------------------------------------------
@@ -960,9 +936,7 @@ def _open(root: Path, body: nu.Nu) -> None:
 
 def _free(root: Path, path: str, what: str) -> None:
     """The lock at ``path`` in ``root``'s data dir is free: this process takes it and lets it go."""
-    lock = Lock(str(data_dir(root) / path), what)
-    lock.setup(None)
-    lock.cleanup()
+    _take(root, path, what)
 
 
 def _asked(root: Path, plane: str) -> str:
@@ -1147,7 +1121,7 @@ def test_infra_owns_the_notifier_and_it_dies_with_infra(tmp_path):
             assert infra.poll() is None, "infra exited"
             assert time.monotonic() < deadline, "infra never served the notifier"
             time.sleep(0.05)
-        assert lock_module.held(str(data_dir(root) / INFRA_LOCK))
+        assert held(root, INFRA_LOCK)
         assert (
             f"infra up on {socket.gethostname()}, pid {infra.pid}"
             in (data_dir(root) / INFRA_LOG).read_text()
@@ -1174,7 +1148,8 @@ async def test_init_is_refused_while_infra_runs(tmp_path):
         assert _answers(data_dir(root) / VALKEY_DIR)
         with pytest.raises(Refused, match="the infra of this space runs"):
             await nu.arun(local.init(root))
-        with pytest.raises(Refused, match="the infra of this space runs in this process already"):
+        here = f"the infra of this space runs on {socket.gethostname()}, pid {os.getpid()}"
+        with pytest.raises(Refused, match=here):
             await nu.arun(local.infra(root))
     finally:
         await _close(done, task)
@@ -1189,14 +1164,15 @@ async def test_a_second_kernel_and_a_second_web_are_refused_and_init_too(tmp_pat
     root = tmp_path / "space"
     _, done, task = await _opened(root)
     try:
-        with pytest.raises(Refused, match="the kernel of this space runs in this process already"):
+        here = f"of this space runs on {socket.gethostname()}, pid {os.getpid()}"
+        with pytest.raises(Refused, match=f"the kernel {here}"):
             await nu.arun(local.kernel(root, extensions=()))
-        with pytest.raises(Refused, match="of this space runs in this process already"):
+        with pytest.raises(Refused, match=here):
             await nu.arun(local.init(root))
         # Web beside the kernel is fine: one lock per driver.
         _, wdone, wtask = await _served(root)
         try:
-            with pytest.raises(Refused, match="the web of this space runs in this process"):
+            with pytest.raises(Refused, match=f"the web {here}"):
                 await nu.arun(local.web(root, port=_free_port(), static=None, extensions=()))
         finally:
             await _close(wdone, wtask)
@@ -1257,20 +1233,18 @@ async def test_the_kernel_waits_for_infra_coming_up(tmp_path):
     """Infra's lock held, its server not up yet: the kernel waits past its grace, then comes up."""
     root = tmp_path / "space"
     await nu.arun(local.init(root))
-    lock = Lock(str(data_dir(root) / INFRA_LOCK), "infra")
-    lock.setup(None)
     server = nustd.valkey.ValkeyServer(data_dir=data_dir(root) / VALKEY_DIR)
     starting = threading.Timer(3.0, server.setup, args=(None,))
-    try:
-        started = time.monotonic()
-        starting.start()
-        _, done, task = await _kernel(root)
-        assert time.monotonic() - started >= 3.0
-        await _close(done, task)
-    finally:
-        starting.join()
-        server.cleanup()
-        lock.cleanup()
+    async with _locked(root, INFRA_LOCK, "infra"):
+        try:
+            started = time.monotonic()
+            starting.start()
+            _, done, task = await _kernel(root)
+            assert time.monotonic() - started >= 3.0
+            await _close(done, task)
+        finally:
+            starting.join()
+            server.cleanup()
 
 
 async def test_web_hears_again_once_a_stopped_kernel_is_back(tmp_path):
@@ -1441,12 +1415,25 @@ def _alive(pids) -> list[int]:
     return [p for p in pids if p in running]
 
 
-def _child(pid: int, what: str, *, not_: int | None = None, timeout: float = 30.0) -> int:
-    """The pid of ``run``'s child ``what`` (``kernel``, ``web``), once there is one (other than ``not_``)."""
+#: The lock each of ``run``'s workers takes, by what runs in it: its record names the worker's pid.
+_LOCKS = {"kernel": KERNEL_LOCK, "web": WEB_LOCK}
+
+
+def _child(
+    pid: int, root: Path, what: str, *, not_: int | None = None, timeout: float = 30.0
+) -> int:
+    """The pid of ``run``'s worker ``what`` (``kernel``, ``web``), once one holds its lock (other than ``not_``).
+
+    Both are workers of one pool, titled alike: the lock each takes on the
+    space names which is which.
+    """
     deadline = time.monotonic() + timeout
+    lock = data_dir(root) / _LOCKS[what]
     while time.monotonic() < deadline:
-        for child, args in _tree(pid).items():
-            if f"local.child {what} " in args and child != not_ and _alive([child]):
+        with contextlib.suppress(OSError, ValueError):
+            record = holder(lock)
+            child = None if record is None else record["pid"]
+            if child is not None and child != not_ and child in _tree(pid) and _alive([child]):
                 return child
         time.sleep(0.1)
     msg = f"no {what} child came up"
@@ -1488,13 +1475,13 @@ def test_run_restarts_a_killed_web_and_ends_with_a_killed_kernel_infra_up_till_t
     )
     seen: set[int] = set()
     try:
-        kernel = _child(run.pid, "kernel")
-        web = _child(run.pid, "web")
+        kernel = _child(run.pid, root, "kernel")
+        web = _child(run.pid, root, "web")
         _live_runs(root)
         seen |= set(_tree(run.pid))
         os.kill(web, signal.SIGKILL)
-        _child(run.pid, "web", not_=web)
-        assert _child(run.pid, "kernel") == kernel
+        _child(run.pid, root, "web", not_=web)
+        assert _child(run.pid, root, "kernel") == kernel
         seen |= set(_tree(run.pid))
         # The new web is up: it logged its start.
         deadline = time.monotonic() + 30
@@ -1504,11 +1491,11 @@ def test_run_restarts_a_killed_web_and_ends_with_a_killed_kernel_infra_up_till_t
         valkey = data_dir(root) / VALKEY_DIR
         assert _answers(valkey)
         # Web held stopped, so run waits on it: the moment between the kernel's death and run's end.
-        web = _child(run.pid, "web")
+        web = _child(run.pid, root, "web")
         os.kill(web, signal.SIGSTOP)
         os.kill(kernel, signal.SIGKILL)
         deadline = time.monotonic() + 30
-        while lock_module.held(str(data_dir(root) / KERNEL_LOCK)):
+        while held(root, KERNEL_LOCK):
             assert time.monotonic() < deadline, "the killed kernel kept its lock"
             time.sleep(0.1)
         # The kernel is gone; infra, in run's own process, still answers.
@@ -1521,8 +1508,8 @@ def test_run_restarts_a_killed_web_and_ends_with_a_killed_kernel_infra_up_till_t
             os.killpg(run.pid, signal.SIGKILL)
             run.wait()
     said = out.decode()
-    assert "web exited (137), starting it again" in said
-    assert "the kernel exited (137), stopping web" in said
+    assert "web exited (137, crashed), starting it again" in said
+    assert "the kernel exited (137, crashed), stopping web" in said
     assert "exited 137" in said
     assert _gone(seen) == [], [_tree(p) for p in seen]
     assert not _answers(valkey)
@@ -1561,7 +1548,7 @@ def test_nuspace_run_stops_on_ctrl_c_ends_what_is_live_and_leaves_no_process(tmp
     run = _nuspace_run(root, "--no-browser", "-p", str(_free_port()))
     try:
         runs = _live_runs(root)
-        _child(run.pid, "web")
+        _child(run.pid, root, "web")
         up = _tree(run.pid)
         assert up, "the space never came up"
         # Ctrl+C reaches the terminal's group: run's own, not its children's.
@@ -1579,7 +1566,10 @@ def test_nuspace_run_stops_on_ctrl_c_ends_what_is_live_and_leaves_no_process(tmp
     rows = _read(root, Space.exec.plane_runs.extract(), stores=stores.CORE)
     assert {(rows[r]["exit"], rows[r]["error"]) for r in runs} == {(EXIT_INTERRUPTED, CLOSED)}
     live = _read(root, Space.exec.indexes.live.extract(), stores=stores.CORE)
-    assert live["plane_runs"] == {} and live["workers"] == {}
+    # Only asks stay live, never started, for the next kernel: web's wakes may land just before the stop.
+    left = {r: rows[r] for r in live["plane_runs"]}
+    assert all(row.get("started_at") is None for row in left.values()), left
+    assert live["workers"] == {}
     assert not _answers(data_dir(root) / VALKEY_DIR)
 
 

@@ -13,7 +13,7 @@ plane) is an ask: it stays live and pending, and this kernel starts it. So
 ``live`` is not erased: the ends take what they end out of it, and the
 asks stay listed.
 
-The processes are not touched: a worker dies with its kernel (mp_pool's
+The processes are not touched: a worker dies with its kernel (``nustd.mp``'s
 parent watch kills a worker whose parent is gone). Kill by handle, the
 backend's ``areap``, comes in only if leftovers show up.
 

@@ -20,5 +20,5 @@ class Made(nu.Shape):
 #: The ref a test passes an op as ``into``.
 MADE = Made.id
 
-#: Binds an empty dict for :class:`Made` to live in, for as long as the harness is open.
-MADE_STORE = nu.Provide(dict, {}, tag=Made)
+#: A frame for :class:`Made`, a bracket held open for as long as the harness is.
+MADE_STORE = nu.Frame(Made, None)

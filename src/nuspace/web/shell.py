@@ -76,8 +76,8 @@ class Boot(Command):
         seeds: Mapping[str, Mapping[str, Any]] | None = None,
     ) -> None:
         super().__init__()
-        self._payload["shape_cls"] = shape_cls
-        self._payload["seeds"] = {name: dict(props) for name, props in (seeds or {}).items()}
+        self.shape_cls = shape_cls
+        self.seeds = {name: dict(props) for name, props in (seeds or {}).items()}
 
     def _compile(self, nid: int, children: tuple[Callable, ...]) -> Callable:
         def thunk(rt: Runtime) -> None:
@@ -87,8 +87,7 @@ class Boot(Command):
         return thunk
 
     def _acompile(self, nid: int, children: tuple[Callable, ...]) -> Callable:
-        seeds = self._payload["seeds"]
-        chains = [_seeded(chain, seeds) for chain in boot_chains((), self._payload["shape_cls"])]
+        chains = [_seeded(chain, self.seeds) for chain in boot_chains((), self.shape_cls)]
 
         async def athunk(rt: Runtime) -> None:
             session = rt.ctx.fabrics.get(Session)

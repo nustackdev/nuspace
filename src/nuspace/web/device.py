@@ -39,10 +39,10 @@ Beside the socket the server answers plain routes:
   never talks to PostHog and follows the same opt out.
 - ``GET|HEAD /blobs/<id>`` and ``POST /blobs``: the blob store
   (``nuspace.Blobs``) served for leaves and downloads, taking uploads,
-  same origin. The routes read a backend of their own, built from the same
-  spec the assembly binds around the driver and held open beside the
-  server (nustd's ``serve_blobs``), so both reach one store. The routes
-  run outside any tree, so they cannot read the bound one.
+  same origin. The routes read a backend of their own, handed in by the
+  assembly over the same store it binds around the driver, and held open
+  beside the server (nustd's ``serve_blobs``). The routes run outside any
+  tree, so they cannot read the bound one.
 - ``POST /_nu/upload/{sid}``: the upload intake, where a tab posts a picked
   file's bytes when a cell asks for them. They land in the upload area
   (a dir the assembly picks, and wipes when it starts web), and a cell's
@@ -83,8 +83,8 @@ if TYPE_CHECKING:
 
     from starlette.requests import Request
 
-    from nu.context.fabric import Provide
     from nuspace.specs import Registry
+    from nustd.blob import BlobBackend
     from nustd.ui.core import Ref
 
 
@@ -243,7 +243,7 @@ def server(
     log_level: str,
     session_address: str,
     upload_root: str,
-    blobs: Provide,
+    blobs: BlobBackend,
 ) -> nu.With:
     """The server: one arm per tab, the tab sessions, uploads and blobs. Never returns.
 
@@ -262,8 +262,8 @@ def server(
         log_level: How much the server says.
         session_address: ``host:port`` where workers reach the tab sessions.
         upload_root: The upload area's dir, absolute.
-        blobs: The ``Blobs`` store's spec, the one the assembly binds
-            around the driver: the routes serve the same store.
+        blobs: The backend the blob routes serve, not open yet: the same
+            store as the ``Blobs`` spec the assembly binds around the driver.
     """
     sid = nu.Str(nu.Attr(SID_ATTR))
     area, upload_routes = uploads(upload_root)

@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Nuspace runs on the current nu core, every node and bracket in its style
 - Entry points take a root term, so a throwaway space is a temp mount
 - Checks before a space opens look through a read only mount of its root
 - A space's metadata is read, checked and written as nu ops over one form

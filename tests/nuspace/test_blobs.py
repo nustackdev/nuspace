@@ -14,6 +14,7 @@ import contextlib
 import pickle
 import socket
 import time
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import httpx
@@ -24,16 +25,16 @@ from _support.made import MADE_STORE
 import nu
 import nuspace
 import nustd.blob
+import nustd.fs
 import nustd.kv
-from nu.lang import ScalarQuery
+from nu.lang import ScalarQuery, wire
 from nuspace.shapes import EXIT_OK
 from nuspace.shapes.stores import CORE
 from nuspace.space import local
-from nuspace.space.blocks.meta import data_dir
+from nuspace.space.blocks.meta import DATA_DIR
 from nuspace.space.blocks.workers import worker_context
 from nuspace.space.local import binding
-from nuspace.space.local.disk import wiped
-from nuspace.space.local.layout import BLOBS_DIR, UPLOADS_DIR
+from nuspace.space.local.layout import BLOBS_DIR, DATA, UPLOADS_DIR
 from nuspace.web.env import SessionWrap
 from nuspace.web.session import SessionPipe, piped_session
 from nustd.blob.backends import FilesBackend
@@ -43,7 +44,6 @@ from nustd.ui.uploads import UploadView, tab_dir
 
 if TYPE_CHECKING:
     from collections.abc import Callable
-    from pathlib import Path
 
     from nu.lang.runtime import Runtime
 
@@ -51,29 +51,38 @@ if TYPE_CHECKING:
 pytestmark = pytest.mark.timeout(60)
 
 
-def _backend(spec: nu.Provide) -> type:
-    return nustd.blob.backend_of(spec).__class__
+def data_dir(root: Path) -> Path:
+    return Path(root) / DATA_DIR
 
 
 # --- the default store ------------------------------------------------------------------
 
 
 def test_the_default_store_is_files_in_the_data_dir(tmp_path):
-    spec = binding.blobs(tmp_path / ".nuspace")
-    assert _backend(spec) is FilesBackend
-    assert str(nustd.blob.backend_of(spec).root) == str(tmp_path / ".nuspace" / BLOBS_DIR)
+    data = tmp_path / DATA_DIR
+    put = nuspace.Blobs.put(b"on disk", mime="text/plain", name="d.txt")
+    bid = nu.run(nustd.fs.mount(str(data), tag=DATA, body=nu.With(binding.blobs(), body=put)))[0]
+    assert (data / BLOBS_DIR / "blobs" / bid[:2] / bid).read_bytes() == b"on disk"
+
+
+def test_web_serves_a_backend_over_the_same_dir(tmp_path):
+    data = tmp_path / DATA_DIR
+    backend = nu.run(nustd.fs.mount(str(data), tag=DATA, body=binding.blob_backend()))[0]
+    assert isinstance(backend, FilesBackend)
+    assert str(backend.root) == str(data / BLOBS_DIR)
 
 
 def test_the_mount_serves_under_blobs():
     bid = "0123456789abcdef0123456789abcdef"
     assert nuspace.blobs.url(bid) == f"/blobs/{bid}"
-    assert nuspace.Blobs.name == "blobs"
+    assert nu.run(nuspace.Blobs.name)[0] == "blobs"
 
 
 def test_the_worker_context_pickles_with_the_store(tmp_path):
     spec = nustd.blob.lmdb(nuspace.Blobs, tmp_path / "blobs")
-    bindings = binding.stores(str(tmp_path), [s.root for s in CORE])
-    pickle.loads(pickle.dumps(worker_context(bindings, spec)))  # noqa: S301 -- our own term
+    bindings = binding.stores([s.root for s in CORE])
+    # As the pool ships a worker its init: nu's wire, not plain pickle.
+    wire.loads(wire.dumps(worker_context(bindings, spec)))
 
 
 # --- a cell puts, the host reads --------------------------------------------------------
@@ -127,18 +136,21 @@ class ReadUpload(ScalarQuery):
     """The bytes of upload ``token``, through the view the run has bound."""
 
     def __init__(self, token: str) -> None:
-        super().__init__()
-        self._payload = {"token": token}
+        super().__init__(token)
 
     def _compile(self, nid: int, children: tuple[Callable, ...]) -> Callable:
+        (token,) = children
+
         def thunk(rt: Runtime) -> bytes:
-            return rt.ctx.fabrics.get(UploadView).path(self._payload["token"]).read_bytes()
+            return rt.ctx.fabrics.get(UploadView).path(token(rt)).read_bytes()
 
         return thunk
 
     def _acompile(self, nid: int, children: tuple[Callable, ...]) -> Callable:
+        (token,) = children
+
         async def athunk(rt: Runtime) -> bytes:
-            return rt.ctx.fabrics.get(UploadView).path(self._payload["token"]).read_bytes()
+            return rt.ctx.fabrics.get(UploadView).path(await token(rt)).read_bytes()
 
         return athunk
 
@@ -179,14 +191,6 @@ async def test_a_worker_reads_a_posted_file_by_path_through_its_session(tmp_path
 def test_the_session_wrap_carries_the_upload_root_and_pickles():
     wrap = pickle.loads(pickle.dumps(SessionWrap("127.0.0.1:9", "s1", "/tmp/up")))  # noqa: S301
     assert (wrap.address, wrap.sid, wrap.uploads) == ("127.0.0.1:9", "s1", "/tmp/up")
-
-
-def test_wiped_removes_whole_dirs(tmp_path):
-    gone = tmp_path / "area"
-    (gone / "tab").mkdir(parents=True)
-    (gone / "tab" / "f").write_bytes(b"x")
-    nu.run(wiped([str(gone), str(tmp_path / "never")]))
-    assert not gone.exists()
 
 
 # --- a served space ----------------------------------------------------------------------

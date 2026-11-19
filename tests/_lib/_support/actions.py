@@ -23,18 +23,21 @@ class Block(ScalarQuery):
     """Holds the loop it runs on for ``seconds``, so nothing else on it runs meanwhile."""
 
     def __init__(self, seconds: float) -> None:
-        super().__init__()
-        self._payload = {"seconds": seconds}
+        super().__init__(seconds)
 
     def _compile(self, nid: int, children: tuple[Callable, ...]) -> Callable:
+        (seconds,) = children
+
         def thunk(rt: Runtime) -> object:
-            time.sleep(self._payload["seconds"])
+            time.sleep(seconds(rt))
 
         return thunk
 
     def _acompile(self, nid: int, children: tuple[Callable, ...]) -> Callable:
+        (seconds,) = children
+
         async def athunk(rt: Runtime) -> object:
-            time.sleep(self._payload["seconds"])  # blocking is the point
+            time.sleep(await seconds(rt))  # blocking is the point
 
         return athunk
 
@@ -43,17 +46,20 @@ class Crash(ScalarQuery):
     """Ends the process it runs in, at once, with ``code``."""
 
     def __init__(self, code: int = 3) -> None:
-        super().__init__()
-        self._payload = {"code": code}
+        super().__init__(code)
 
     def _compile(self, nid: int, children: tuple[Callable, ...]) -> Callable:
+        (code,) = children
+
         def thunk(rt: Runtime) -> object:
-            os._exit(self._payload["code"])
+            os._exit(code(rt))
 
         return thunk
 
     def _acompile(self, nid: int, children: tuple[Callable, ...]) -> Callable:
+        (code,) = children
+
         async def athunk(rt: Runtime) -> object:
-            os._exit(self._payload["code"])
+            os._exit(await code(rt))
 
         return athunk

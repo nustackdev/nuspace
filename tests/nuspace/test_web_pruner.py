@@ -291,10 +291,11 @@ class _Hold(ScalarQuery):
 
     def __init__(self, opened: asyncio.Future, done: asyncio.Event) -> None:
         super().__init__()
-        self._payload = {"opened": opened, "done": done}
+        self.opened = opened
+        self.done = done
 
     def _acompile(self, nid: int, children: tuple[Callable, ...]) -> Callable:
-        opened, done = self._payload["opened"], self._payload["done"]
+        opened, done = self.opened, self.done
 
         async def athunk(rt: object) -> object:
             opened.set_result(rt.ctx)

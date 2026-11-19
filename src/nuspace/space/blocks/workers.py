@@ -45,16 +45,16 @@ def worker_context(bindings: nu.Nu, blobs: Provide) -> nu.With:
     """What every worker comes up holding. Pickled to the child, entered there.
 
     Process scope only, since the pool pays it on every launch: the stores
-    as the assembly binds them, the blob store, a dict for process local
-    records, and the warm module cache. Whatever one run needs rides in its
-    body.
+    as the assembly binds them, the blob store and the warm module cache.
+    Whatever one run needs rides in its body, its mem shapes in frames of
+    their own.
 
     Args:
         bindings: Every store bound to its navigators, the same term the
             assembly opens its own stores with. Must pickle.
         blobs: The blob store's spec (``nuspace.Blobs``).
     """
-    return nu.With(bindings, blobs, nu.Provide(dict, {}), nu.Provide(Warmed, {}))
+    return nu.With(bindings, blobs, nu.Provide(Warmed, {}))
 
 
 def worker_pool(

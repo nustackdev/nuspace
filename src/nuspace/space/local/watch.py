@@ -8,13 +8,12 @@ and a kernel that dies takes neither the server nor web with it. They
 share nothing in memory: the stores, the notifier and local's files are
 all they meet through.
 
-Each is built inside its worker: what goes over is a small term,
-``nu.Eval`` of a ``Literal`` whose factory is the entry point
-(``drivers.kernel``, ``drivers.web``) and whose children are its root and
-options. The root is a value there: it is the root's ``where()`` here,
-asked when run starts its workers, so a throwaway root's temp dir reaches
-them as the path it is. No driver tree is pickled here, and nothing a
-driver holds (the uploads area, a server) is made in this process.
+Each driver's term is built here, when run starts its workers, and
+teleported to its worker as it is: the entry point (``drivers.kernel``,
+``drivers.web``) called on the root's ``where()``, a plain path by then,
+so a throwaway root's temp dir reaches both as the path it is. Building a
+term opens nothing: whatever a driver holds (the uploads area, a server)
+is opened in its worker, when the term runs there.
 
 - **Start.** Infra's checks, lock and server here, then the kernel's
   worker, then web's once the kernel's lock is held (a kernel holding its
@@ -111,7 +110,7 @@ POOL = nustd.mp.PoolRef(POOL_TAG)
 
 #: The options each entry point takes, so ``run`` hands each its own.
 KERNEL = frozenset({"extensions", "envs", "space_envs", "backends", "spares", "name", "blobs"})
-WEB = frozenset({"extensions", "host", "port", "static", "open_browser", "blobs"})
+WEB = frozenset({"extensions", "host", "port", "static", "open_browser", "blobs", "blob_backend"})
 
 
 class Restarts:
@@ -199,7 +198,7 @@ async def watch(
 
     Args:
         pool: The pool both workers are launched from.
-        kernel: The kernel's term, built in its worker.
+        kernel: The kernel's term, built here, run in its worker.
         web: Web's term, for its first start.
         rest: Web's term, for a restart (no tab opened).
         up: Whether the kernel holds its lock now.
@@ -290,37 +289,36 @@ class Watched(nu.ScalarAction):
         return athunk
 
 
-def quoted(what: str, options: Mapping[str, object]) -> dict[str, object]:
-    """``options`` as an entry point's ``Literal`` children: a term-valued one quoted, so it is handed over as the term it is.
+def pickled(what: str, options: Mapping[str, object]) -> Mapping[str, object]:
+    """``options``, checked to pickle: the entry point's term carries them to its worker.
 
-    They go to the worker pickled: checked here, when run is built.
+    Checked here, when run is built, so a bad option is told at once.
 
     Raises:
         TypeError: An option does not pickle.
     """
-    quoted = {k: nu.Literal(v) if isinstance(v, nu.Nu) else v for k, v in options.items()}
     try:
-        wire.dumps(nu.Literal(factory=dict, **quoted))
+        wire.dumps(dict(options))
     except Exception as e:  # whatever cloudpickle raises
         msg = (
             f"local.run hands the {what} its options in another process, and they must pickle: {e}"
         )
         raise TypeError(msg) from None
-    return quoted
+    return options
 
 
 def built(entry: Callable[..., nu.Nu], options: Mapping[str, object], root: str) -> nu.Nu:
-    """``entry(path=root, **options)`` built and run where this term runs: in a worker.
+    """``entry(root, **options)``: the driver's term, teleported to its worker as it is.
 
     Called where run starts its workers, ``root`` the root's ``where()``
-    there: the term shipped holds it as a plain path.
+    there: the term holds it as a plain path.
     """
-    return nu.Eval(nu.Literal(factory=entry, path=root, **options))
+    return entry(root, **options)
 
 
 def shipped(what: str, entry: Callable[..., nu.Nu], options: Mapping[str, object]) -> nu.Nu:
     """A query yielding the term run ships to a worker for ``entry``: :func:`built` on the root's ``where()``."""
-    made = functools.partial(built, entry, quoted(what, options))
+    made = functools.partial(built, entry, pickled(what, options))
     return nu.Literal(factory=made, root=ROOT.where())
 
 

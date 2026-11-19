@@ -28,6 +28,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, ClassVar
 
+from nu.context import Fabric
 from nu.lang import is_null
 
 
@@ -60,7 +61,7 @@ class UnknownBackendError(LookupError):
     """A plane run names a backend nobody registered, or names none."""
 
 
-class Backend:
+class Backend(Fabric):
     """What runs cells on workers. Subclass it, register the subclass by name at open.
 
     Every method is async and runs in the kernel's process. Worker ids are the kernel's:
@@ -110,7 +111,7 @@ class Backend:
         """Tear down a worker an earlier open left, known only by its handle.
 
         Not called yet: reap marks leftovers killed and relies on the
-        backend's own guard (mp_pool's parent watch kills a worker whose
+        backend's own guard (``nustd.mp``'s parent watch kills a worker whose
         kernel died). Kill by handle comes in only if leftovers show up. The
         default does nothing.
         """

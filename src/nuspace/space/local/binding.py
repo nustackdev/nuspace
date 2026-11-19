@@ -36,7 +36,7 @@ if TYPE_CHECKING:
     from nu.context.fabric import Provide
 
 
-__all__ = ["blobs", "quiet", "served", "stores", "valkey_dir", "valkey_url"]
+__all__ = ["blob_backend", "blobs", "quiet", "served", "stores", "valkey_dir", "valkey_url"]
 
 
 def valkey_dir() -> nu.Nu:
@@ -119,3 +119,12 @@ def blobs() -> Provide:
         {"backend": nustd.blob.FilesBackend, "options": options},
         tag=Blobs.name,
     )
+
+
+def blob_backend() -> nu.Nu:
+    """The backend over :func:`blobs`' dir, not open yet, made where it runs: what web's blob routes serve.
+
+    The routes answer outside any tree, so they take a plain backend of
+    their own rather than the bound store: the same dir is the same store.
+    """
+    return nu.Literal(factory=nustd.blob.FilesBackend, root=DATA.where(BLOBS_DIR))

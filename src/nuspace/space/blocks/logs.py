@@ -14,6 +14,7 @@ from __future__ import annotations
 import logging
 import os
 import socket
+from contextlib import contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -21,6 +22,8 @@ import nu
 
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
+
     from nu.lang.runtime import Context
 
 
@@ -37,57 +40,55 @@ OWN = "nuspace"
 LOGGER = "nuspace.space"
 
 
-class Logged:
-    """Bracket: the root logger writing to ``path`` from setup to cleanup.
+class Logged(nu.Bracket):
+    """Bracket: the root logger writing to ``path`` while the body runs.
 
     The ``nuspace`` logger is set to INFO while it holds, if it was
-    above, and put back at cleanup; the root logger's level is left.
+    above, and put back on exit; the root logger's level is left. Nothing
+    reads it from the context, so it binds nothing: the handler lives in the
+    open's own frame.
 
     Args:
-        path: The log file, absolute. Appended to, made with its dir if missing.
+        path: The log file, absolute, or a query yielding it (eg a path on
+            the assembly's mount). Appended to, made with its dir if missing.
         what: What logs there, for the up and down lines: ``"kernel"``, ``"web"``.
+        body: What runs with logging pointed at the file. None inside a ``nu.With``.
+
+    Notes:
+        - Children are ``[body, path, what]``, both config values evaluated
+          on entry.
     """
 
-    def __init__(self, path: str, what: str) -> None:
-        self.path = path
-        self.what = what
-        self._handler: logging.Handler | None = None
-        self._level: int | None = None
+    def __init__(self, path: str | nu.Nu, what: nu.StrArg, body: nu.Nu | None = None) -> None:
+        super().__init__(body, path, what)
 
-    def setup(self, ctx: Context) -> None:
-        """Add the file's handler to the root logger, and say the driver is up."""
-        Path(self.path).parent.mkdir(parents=True, exist_ok=True)
-        handler = logging.FileHandler(self.path, encoding="utf-8")
+    @contextmanager
+    def _open(self, ctx: Context, path: str, what: str) -> Iterator[None]:
+        """Add the file's handler to the root logger, say the driver is up, then down."""
+        Path(path).parent.mkdir(parents=True, exist_ok=True)
+        handler = logging.FileHandler(path, encoding="utf-8")
         handler.setFormatter(logging.Formatter(FORMAT))
         handler.setLevel(logging.INFO)
         own = logging.getLogger(OWN)
-        if own.getEffectiveLevel() > logging.INFO:
-            self._level = own.level
+        level = own.level if own.getEffectiveLevel() > logging.INFO else None
+        if level is not None:
             own.setLevel(logging.INFO)
-        logging.getLogger().addHandler(handler)
-        self._handler = handler
+        root = logging.getLogger()
+        root.addHandler(handler)
         logging.getLogger(LOGGER).info(
-            "%s up on %s, pid %d", self.what, socket.gethostname(), os.getpid()
+            "%s up on %s, pid %d", what, socket.gethostname(), os.getpid()
         )
-
-    async def asetup(self, ctx: Context) -> None:
-        """Async shim: opening a file is sync work."""
-        self.setup(ctx)
-
-    def cleanup(self) -> None:
-        """Say the driver stopped, and take the handler off again."""
-        handler, self._handler = self._handler, None
-        if handler is None:
-            return
-        logging.getLogger(LOGGER).info("%s down, pid %d", self.what, os.getpid())
-        logging.getLogger().removeHandler(handler)
-        handler.close()
-        if self._level is not None:
-            logging.getLogger(OWN).setLevel(self._level)
-            self._level = None
+        try:
+            yield
+        finally:
+            logging.getLogger(LOGGER).info("%s down, pid %d", what, os.getpid())
+            root.removeHandler(handler)
+            handler.close()
+            if level is not None:
+                own.setLevel(level)
 
 
-def logged_to(path: str | nu.Nu, what: str) -> nu.Provide:
+def logged_to(path: str | nu.Nu, what: str) -> Logged:
     """This process's logging at ``path`` while the bracket holds (:class:`Logged`).
 
     Args:
@@ -95,4 +96,4 @@ def logged_to(path: str | nu.Nu, what: str) -> nu.Provide:
             the assembly's mount): read when the bracket opens.
         what: What logs there, eg ``"kernel"``.
     """
-    return nu.Provide(Logged, {"path": path, "what": what})
+    return Logged(path, what)

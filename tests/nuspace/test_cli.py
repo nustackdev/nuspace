@@ -2,10 +2,10 @@
 
 Nothing here opens a space for real but ``init`` and the refusals: the
 entry points and the hold are swapped for recorders, so a test sees what a
-command asked for. ``run`` wraps the entry point's term, its init first and
-a throwaway root around it; :func:`_peel` takes those off again. A test
-that needs the init or the throwaway to happen holds the term for real,
-over recorded entry points that run nothing. A real ``nuspace run`` and its
+command asked for. ``run`` puts the entry point's term after its init;
+:func:`_peel` takes that off again. A throwaway root is a term known only
+once it runs, so a test of one, or one that needs the init to happen,
+holds the term for real, over recorded entry points that run nothing. A real ``nuspace run`` and its
 Ctrl+C are in test_space.
 """
 
@@ -25,6 +25,7 @@ from click.testing import CliRunner
 import nu
 import nuspace
 import nustd.kv
+from nu.core.flows import Sequential
 from nuspace._cli import _installed, cli
 from nuspace._cli._meta import EXIT
 from nuspace._cli.commands import run as run_command
@@ -32,8 +33,7 @@ from nuspace._telemetry import config
 from nuspace.shapes import Space
 from nuspace.shapes.stores import CORE
 from nuspace.space import local
-from nuspace.space.blocks.guarded import Guarded
-from nuspace.space.blocks.meta import DATA_DIR, Meta, is_space, read_meta, write_meta
+from nuspace.space.blocks.meta import DATA_DIR, META_FILE
 from nuspace.space.local.layout import STORES
 from nuspace.specs import CellSpec, ContentSpec, Extension, PlaneSpec
 from nuspace.web import WEB_STORE, Web
@@ -90,35 +90,30 @@ class _Recorder:
         return MARK if self.returns is None else self.returns
 
 
-def _peel(term: nu.Nu) -> tuple[nu.Nu, bool, str | None]:
-    """What ``run`` held, unwrapped: the entry point's term, whether init comes first, the throwaway root."""
-    throwaway = None
-    if isinstance(term, nu.With):
-        (made,) = term._payload["brackets"]
-        throwaway = made._payload["kwargs"]["path"]
-        (term,) = term._children
-    init = isinstance(term, Guarded)
-    if init:
-        term = term._children[0]
-    return term, init, throwaway
+def _peel(term: nu.Nu) -> nu.Nu:
+    """What ``run`` held, unwrapped: the entry point's term, the init before it taken off."""
+    if isinstance(term, Sequential):
+        _, term = term._children
+    return term
 
 
 class Held(list):
-    """The entry points' terms the commands would hold, unwrapped, in order. Nothing is held.
-
-    Attributes:
-        throwaways: The throwaway root each was wrapped in, None for none.
-    """
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.throwaways: list[str | None] = []
+    """The entry points' terms the commands would hold, unwrapped, in order. Nothing is held."""
 
     def hold(self, term: nu.Nu) -> int:
-        inner, _, throwaway = _peel(term)
-        self.append(inner)
-        self.throwaways.append(throwaway)
+        self.append(_peel(term))
         return 0
+
+
+def _meta(root: Path) -> dict:
+    """What the space at ``root`` holds in its ``meta.json``."""
+    return json.loads((Path(root) / DATA_DIR / META_FILE).read_text())
+
+
+def _write_meta(root: Path, **fields: object) -> None:
+    """``root`` a space whose ``meta.json`` holds ``fields``."""
+    (Path(root) / DATA_DIR).mkdir(parents=True, exist_ok=True)
+    (Path(root) / DATA_DIR / META_FILE).write_text(json.dumps(fields) + "\n")
 
 
 @pytest.fixture
@@ -301,7 +296,7 @@ def test_run_on_a_fresh_directory_initializes_it_then_runs(entries, tmp_path, ar
     path = tmp_path / "fresh"
     result = _invoke("run", str(path), *args)
     assert result.exit_code == 0, result.output
-    assert read_meta(path).init is True
+    assert _meta(path)["init"] is True
     assert (path / DATA_DIR / SPACE_FILE).is_file()
     ran = "kernel" if "--headless" in args else "run"
     assert [a for a, _ in entries[ran].calls] == [(str(path),)]
@@ -310,7 +305,7 @@ def test_run_on_a_fresh_directory_initializes_it_then_runs(entries, tmp_path, ar
 def test_run_does_not_init_a_space_initialized_already(monkeypatch, entries, tmp_path):
     """Held for real: the init step looks at meta.json when it runs and leaves an initialized space."""
     monkeypatch.setattr(local, "init", _Recorder(lambda root: nu.print(f"init ran on {root}")))
-    write_meta(tmp_path, Meta(assembly="local", made_at="2026-11-19T00:00:00+00:00", init=True))
+    _write_meta(tmp_path, assembly="local", made_at="2026-11-19T00:00:00+00:00", init=True)
     result = _invoke("run", str(tmp_path), "--headless")
     assert result.exit_code == 0, result.output
     assert "init ran" not in result.output
@@ -486,19 +481,28 @@ def test_run_falls_back_to_the_home_space(headless, tmp_path):
     assert "Path: ~/.nuspace" in _said(result)
 
 
+def _seen(ran: list[tuple[str, str]], name: str) -> _Recorder:
+    """An entry point that, when it runs, says it ran on its root, then runs its body when given."""
+    saw = nu.host(lambda root: ran.append((name, root)), name=f"Saw{name.capitalize()}")
+
+    def entry(root: nu.Nu, body: nu.Nu | None = None, **_: object) -> nu.Nu:
+        return saw(root) if body is None else saw(root) >> body
+
+    return _Recorder(entry)
+
+
 @pytest.mark.parametrize("args", [["--headless", "--tmp"], ["--tmp", "--no-browser"]])
-def test_run_tmp_is_a_throwaway_initialized_then_removed(entries, held, inits, args):
-    """One throwaway root for whatever runs on it, its init first, all in the term held."""
+def test_run_tmp_is_a_throwaway_initialized_then_removed(monkeypatch, args):
+    """Held for real: one throwaway root for whatever runs on it, its init first, gone at close."""
+    ran: list[tuple[str, str]] = []
+    for name in ("init", "run", "infra", "kernel"):
+        monkeypatch.setattr(local, name, _seen(ran, name))
     result = _invoke("run", *args)
     assert result.exit_code == 0, result.output
-    (root,) = _roots(inits)
+    names = [name for name, _ in ran]
+    assert names == (["init", "infra", "kernel"] if "--headless" in args else ["init", "run"])
+    (root,) = {root for _, root in ran}
     assert Path(root).name.startswith("nuspace-")
-    assert held.throwaways == [root]
-    calls = {name: [a for a, _ in r.calls] for name, r in entries.items() if r.calls}
-    if "--headless" in args:
-        assert calls == {"infra": [(root,)], "kernel": [(root,)]}
-    else:
-        assert calls == {"run": [(root,)]}
     assert not Path(root).exists()
     assert "throwaway" in result.output
 
@@ -506,7 +510,7 @@ def test_run_tmp_is_a_throwaway_initialized_then_removed(entries, held, inits, a
 def test_run_tmp_removes_the_throwaway_it_initialized(monkeypatch, entries):
     """Held for real: initialized while the entry point runs, gone once the hold ends."""
     seen: list[tuple[str, bool]] = []
-    looked = nu.host(lambda root: seen.append((root, read_meta(root).init)), name="Looked")
+    looked = nu.host(lambda root: seen.append((root, _meta(root)["init"])), name="Looked")
     monkeypatch.setattr(local, "run", _Recorder(lambda root, **_: looked(root)))
     result = _invoke("run", "--tmp", "--no-browser")
     assert result.exit_code == 0, result.output
@@ -538,7 +542,7 @@ def test_run_refuses_a_space_of_an_older_format(tmp_path, old):
 
 def _made_by(root: Path, name: str) -> None:
     """``root`` a space whose ``meta.json`` names the assembly ``name``."""
-    write_meta(root, Meta(assembly=name, made_at="2026-11-18T00:00:00+00:00"))
+    _write_meta(root, assembly=name, made_at="2026-11-18T00:00:00+00:00")
 
 
 def test_run_calls_the_assembly_meta_json_names(monkeypatch, held, tmp_path):
@@ -594,7 +598,8 @@ def test_a_new_space_and_a_throwaway_are_local(monkeypatch, held, tmp_path):
     assert _invoke("run", "--headless", "--tmp").exit_code == 0
     ((new,), (throwaway,)) = [args for args, _ in kernel.calls]
     assert new == str(tmp_path / "new")
-    assert Path(throwaway).name.startswith("nuspace-")
+    # The throwaway's root is known once it runs: the kernel is handed a term yielding it.
+    assert isinstance(throwaway, nu.Nu)
 
 
 # --- run --with ---------------------------------------------------------------
@@ -699,11 +704,10 @@ def test_init_makes_a_space_and_seeds_it(tmp_path):
     assert result.exit_code == 0, result.output
     assert "Initialized" in result.output
     assert (path / DATA_DIR / SPACE_FILE).is_file()
-    assert is_space(path)
-    assert read_meta(path).assembly == "local"
+    assert _meta(path)["assembly"] == "local"
     assert _read(path, nuspace.plane.exists(Web.roles["home"])) is True
 
-    assert read_meta(path).init is True
+    assert _meta(path)["init"] is True
 
     again = _invoke("init", str(path))
     assert again.exit_code == 0, again.output
@@ -719,7 +723,7 @@ def test_init_initializes_a_space_made_but_not_initialized(tmp_path):
         result = _invoke("init", str(path))
         assert result.exit_code == 0, result.output
         assert "Initialized a space" in result.output
-        assert read_meta(path).init is True
+        assert _meta(path)["init"] is True
 
 
 def test_init_makes_the_current_directory_a_space(tmp_path):

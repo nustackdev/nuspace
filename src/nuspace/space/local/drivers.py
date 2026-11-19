@@ -32,7 +32,8 @@ Every absolute path a driver hands on (a store's file, a log, the
 notification server's dir) is asked of the data dir's mount when the term
 runs. What leaves this process, or a nustd preset fixes when its tree is
 built, is made from those values where it opens (``nu.Literal(factory=...)``):
-the cell workers' context, the session env, web's upload area.
+the cell workers' context, the session env, web's upload area and the
+backend its blob routes serve.
 
 ``infra``::
 
@@ -118,6 +119,7 @@ if TYPE_CHECKING:
     from nu.context.fabric import Provide
     from nuspace.kernel import Backend, EnvFactory
     from nuspace.specs import PlaneSpec
+    from nustd.blob import BlobBackend
 
 
 __all__ = ["infra", "kernel", "web"]
@@ -308,6 +310,7 @@ def web(
     open_browser: bool = True,
     plane: PlaneSpec | str | None = None,
     blobs: Provide | None = None,
+    blob_backend: BlobBackend | nu.Nu | None = None,
     body: nu.Nu | None = None,
 ) -> nu.Nu:
     """The space's web in this process, served until ``body`` returns, or until cancelled without one.
@@ -321,6 +324,8 @@ def web(
 
     Web's driver is made where it starts, from the upload area's dir on the
     data dir's mount: the uploads preset fixes its dir when its tree is built.
+    The blob routes serve a backend of their own over the same store, made
+    there too.
 
     Args:
         path: The space's root, as :func:`kernel`.
@@ -335,15 +340,25 @@ def web(
             open on: its newest plane, made from it when there is none, and
             the tab opens on it rather than on home.
         blobs: The blob store, as :func:`kernel`. Both must bind the same.
+        blob_backend: The backend web's blob routes serve, not open yet, or
+            a term yielding one: the same store as ``blobs``, eg
+            ``nustd.blob.S3Backend(bucket="models")``. None is plain files
+            in ``.nuspace/store/blobs/`` (:func:`~.binding.blob_backend`),
+            and needs ``blobs`` None too.
         body: Nu run beside web. Web stops when it returns.
 
     Raises:
+        TypeError: ``blobs`` given without the ``blob_backend`` its routes serve.
         Missing: No plane spec of the name ``plane`` (at build).
         Refused: As :func:`kernel`, with web for the kernel; or no kernel
             running on the space.
     """
+    if blobs is not None and blob_backend is None:
+        msg = "local.web serves its blob routes over a backend: give blob_backend with blobs"
+        raise TypeError(msg)
     reg = space_registry(extensions=extensions)
     blobs = binding.blobs() if blobs is None else blobs
+    blob_backend = binding.blob_backend() if blob_backend is None else blob_backend
     address = free_address()
     driver = functools.partial(
         nuspace.web.driver,
@@ -356,7 +371,7 @@ def web(
         session_address=address,
     )
     served = nu.Eval(
-        nu.Literal(factory=driver, upload_root=DATA.where(UPLOADS_DIR), blobs=nu.Literal(blobs))
+        nu.Literal(factory=driver, upload_root=DATA.where(UPLOADS_DIR), blobs=blob_backend)
     )
     beside = []
     if plane is not None:

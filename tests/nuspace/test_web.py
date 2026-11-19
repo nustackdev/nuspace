@@ -127,7 +127,7 @@ def test_the_driver_compiles_and_validates():
         log_level="warning",
         session_address="127.0.0.1:9",
         upload_root="/tmp/nowhere",
-        blobs=nustd.blob.files(nuspace.Blobs, "/tmp/nowhere-blobs"),
+        blobs=nustd.blob.FilesBackend("/tmp/nowhere-blobs"),
     )
     nu.validate(nu.compile(term))
 

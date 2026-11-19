@@ -130,36 +130,33 @@ class Require(ScalarQuery):
         cond: What must hold. NULL counts as not holding.
         value: What it yields when it does.
         msg: The error's message, any term.
-        exc_cls: The error raised.
+        exc_cls: The error raised, a config child.
 
     Example:
         Require(Space.planes.contains(p), Space.planes[p].name, "no plane", exc_cls=Missing)
     """
 
     def __init__(
-        self, cond: nu.Nu, value: object, msg: object, *, exc_cls: type[BaseException]
+        self, cond: nu.Nu, value: object, msg: object, *, exc_cls: type[BaseException] | nu.Nu
     ) -> None:
-        super().__init__(cond, value, msg)
-        self._payload["exc_cls"] = exc_cls
+        super().__init__(cond, value, msg, exc_cls)
 
     def _compile(self, nid: int, children: tuple[Callable, ...]) -> Callable:
-        cond, value, msg = children
-        exc_cls = self._payload["exc_cls"]
+        cond, value, msg, exc_cls = children
 
         def thunk(rt: Runtime) -> object:
             if cond(rt):
                 return value(rt)
-            raise exc_cls(msg(rt))
+            raise exc_cls(rt)(msg(rt))
 
         return thunk
 
     def _acompile(self, nid: int, children: tuple[Callable, ...]) -> Callable:
-        cond, value, msg = children
-        exc_cls = self._payload["exc_cls"]
+        cond, value, msg, exc_cls = children
 
         async def athunk(rt: Runtime) -> object:
             if await cond(rt):
                 return await value(rt)
-            raise exc_cls(await msg(rt))
+            raise (await exc_cls(rt))(await msg(rt))
 
         return athunk

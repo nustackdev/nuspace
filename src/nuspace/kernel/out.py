@@ -25,6 +25,7 @@ import threading
 import time
 from collections import deque
 
+from nu.context import Fabric
 from nuspace.shapes.cell_run import OUT_CAP
 
 
@@ -42,7 +43,7 @@ current: contextvars.ContextVar[RunOut | None] = contextvars.ContextVar(
 _INSTALL = threading.Lock()
 
 
-class RunOut:
+class RunOut(Fabric):
     """One cell run's output not yet in the store. Thread safe.
 
     Entries are ``[ts, stream, text]``, one per line, the shape of a

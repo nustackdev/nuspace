@@ -12,6 +12,7 @@ import datetime
 import itertools
 import socket
 import time
+from pathlib import Path
 
 import pytest
 from _support.kernel import opened
@@ -24,7 +25,7 @@ import nustd.kv
 from nuspace import system
 from nuspace.shapes import Space, stores
 from nuspace.space import local
-from nuspace.space.blocks.meta import data_dir
+from nuspace.space.blocks.meta import DATA_DIR
 from nuspace.space.local.layout import STORES as PLACES
 from nuspace.system import reactions
 from nuspace.web import CONN_STORE, WEB_STORE
@@ -324,7 +325,7 @@ EVERY_STORE = (*stores.CORE, WEB_STORE, CONN_STORE)
 
 
 async def _on_disk(root, term: nu.Nu) -> object:
-    data = data_dir(root)
+    data = Path(root) / DATA_DIR
     navs = [
         nustd.kv.sqlite_navigator(str(data / PLACES[s.root].file), tags=(s.root,))
         for s in EVERY_STORE

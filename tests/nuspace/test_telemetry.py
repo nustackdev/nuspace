@@ -59,6 +59,8 @@ class _Posted(list):
 @pytest.fixture
 def posted(monkeypatch):
     """A real install, every POST recorded and answered with ``posted.answer``."""
+    # What other tests in this process queued goes first, dropped by the dev install it still is.
+    send.flush(5)
     sent = _Posted()
 
     def urlopen(request, timeout, context):

@@ -57,42 +57,44 @@ TELEMETRY = TelemetryRef()
 
 
 class Track(Command):
-    """Queue the event in the payload, through the :data:`TELEMETRY` Ref in slot 0. Never raises.
+    """Queue the event, through the :data:`TELEMETRY` Ref in slot 0. Never raises.
 
     ``""`` is the open: :func:`nuspace._telemetry.opened`. Anything else is
     one event, :func:`nuspace._telemetry.track`.
 
     Args:
         ref: :data:`TELEMETRY`.
-        event: What happened, a plain str.
+        event: What happened: a str, or any Nu yielding one. A config child.
     """
 
     _mutates = Declared(value=frozenset({0}), name="mutates")
 
     def __init__(self, ref: TelemetryRef, event: str) -> None:
-        super().__init__(ref)
-        self._payload = dict(self._payload)
-        self._payload["event"] = event
+        super().__init__(ref, event)
 
-    def _tell(self) -> None:
+    @staticmethod
+    def _tell(event: str) -> None:
         # Imported on first tell, never on import: importing nuspace reaches no telemetry.
         from nuspace import _telemetry
 
-        event = self._payload["event"]
         if event:
             _telemetry.track(event)
         else:
             _telemetry.opened()
 
     def _compile(self, nid: int, children: tuple[Callable, ...]) -> Callable:
+        event = children[1]
+
         def thunk(rt: Runtime) -> None:
-            self._tell()
+            self._tell(event(rt))
 
         return thunk
 
     def _acompile(self, nid: int, children: tuple[Callable, ...]) -> Callable:
+        event = children[1]
+
         async def athunk(rt: Runtime) -> None:
-            self._tell()
+            self._tell(await event(rt))
 
         return athunk
 

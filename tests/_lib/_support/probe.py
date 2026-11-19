@@ -16,5 +16,5 @@ class Probe(nu.Shape):
     cleaned = nu.BoolRef.slot()
 
 
-#: A worker ``init`` that binds an empty dict for :class:`Probe` to live in.
-PROBE_INIT = nu.Provide(dict, {}, tag=Probe)
+#: A worker ``init``: a frame for :class:`Probe`, open for the worker's life.
+PROBE_INIT = nu.Frame(Probe, None)

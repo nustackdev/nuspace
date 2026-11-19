@@ -1,6 +1,6 @@
 """What an assembly holds for a run: warm imports.
 
-:class:`Warmed` is a plain class for ``nu.Provide``, held for a worker's
+:class:`Warmed` is a fabric for ``nu.Provide``, held for a worker's
 span. Building a term touches nothing. A throwaway root is no resource of
 its own: it is ``nustd.fs.tmp``, its ``where()`` the root the entry point
 runs on. One-shot writes (the data dir made, a dir wiped) are fs writes on
@@ -11,6 +11,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+import nu
+
 
 if TYPE_CHECKING:
     from nu.lang.runtime import Context
@@ -19,7 +21,7 @@ if TYPE_CHECKING:
 __all__ = ["Warmed"]
 
 
-class Warmed:
+class Warmed(nu.Fabric):
     """The imports a cell run needs, paid while nobody waits on the worker.
 
     A spare sits idle until a body arrives, so whatever it imports then is on
@@ -36,7 +38,3 @@ class Warmed:
         """
         import nu.prog  # noqa: F401 -- imported for the module cache
         import nustd.ui  # noqa: F401
-
-    async def asetup(self, ctx: Context) -> None:
-        """Async shim: importing is sync work."""
-        self.setup(ctx)

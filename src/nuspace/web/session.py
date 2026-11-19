@@ -36,20 +36,20 @@ from __future__ import annotations
 import asyncio
 import itertools
 import struct
-from contextlib import ExitStack, asynccontextmanager, suppress
+from contextlib import ExitStack, asynccontextmanager, contextmanager, suppress
 from typing import TYPE_CHECKING, Any, ClassVar
 
 import msgpack
 
 import nu
-from nu.core.spans.bracket import _LifecycleBracket
+from nu.lang import is_null
 from nustd.ui.core.protocol import decode, encode
 from nustd.ui.core.session import Session
 from nustd.ui.uploads import UploadView
 
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncIterator, Callable
+    from collections.abc import AsyncIterator, Callable, Iterator
 
     from nu.lang.runtime import Context
     from nustd.ui.core.protocol import Frame
@@ -304,7 +304,7 @@ class PipeSession(Session):
         return self._pipe.subscribe(self._sid, tuple(path))
 
 
-class ConnectedSession(_LifecycleBracket):
+class ConnectedSession(nu.Bracket):
     """Bind connection ``sid`` as the session, over the pipe at ``address``.
 
     Opening asks the host whether the connection is live, so a run for a tab
@@ -317,26 +317,41 @@ class ConnectedSession(_LifecycleBracket):
         uploads: The upload area's root. Given, the tab's
             :class:`UploadView` is bound too, so the upload refs read what
             the tab posted to the host.
+
+    Notes:
+        - Children are ``[body, address, sid, uploads]``: each config value
+          a plain value or any Nu, evaluated on entry.
+        - Async only: the pipe is a socket on the worker's loop.
     """
 
-    def __init__(self, address: str, sid: str, uploads: str | None = None) -> None:
-        super().__init__()
-        self._payload["address"] = address
-        self._payload["sid"] = sid
-        self._payload["uploads"] = uploads
+    def __init__(
+        self,
+        address: nu.StrArg,
+        sid: nu.StrArg,
+        uploads: str | nu.Nu | None = None,
+        body: nu.Nu | None = None,
+    ) -> None:
+        super().__init__(body, address, sid, uploads)
+
+    @contextmanager
+    def _open(self, ctx: Context, address: str, sid: str, uploads: str | None) -> Iterator[None]:
+        msg = "A connected session is async only; use nu.arun"
+        raise RuntimeError(msg)
+        yield  # pragma: no cover - a generator, for the context manager
 
     @asynccontextmanager
-    async def _aopen(self, ctx: Context) -> AsyncIterator[None]:
-        sid = self._payload["sid"]
-        pipe = await _Pipe.acquire(self._payload["address"])
+    async def _aopen(
+        self, ctx: Context, address: str, sid: str, uploads: str | None
+    ) -> AsyncIterator[None]:
+        pipe = await _Pipe.acquire(address)
         try:
             if not await pipe.request(_OPEN, sid):
                 msg = f"No live connection for {sid!r}"
                 raise LookupError(msg)
             with ExitStack() as bound:
                 bound.enter_context(ctx.fabrics.bind(Session, PipeSession(pipe, sid)))
-                if self._payload["uploads"] is not None:
-                    view = UploadView(self._payload["uploads"], sid)
+                if uploads is not None and not is_null(uploads):
+                    view = UploadView(uploads, sid)
                     bound.enter_context(ctx.fabrics.bind(UploadView, view))
                 yield
         finally:
@@ -379,15 +394,18 @@ class _Worker:
         self.subs.clear()
 
 
-class SessionPipe:
+class SessionPipe(nu.Fabric):
     """The host end: routes every worker's messages to the ws server's book.
 
     Runs on the loop the browser sockets live on and only ever reads and
-    writes messages there, so a worker can never hold that loop up.
+    writes messages there, so a worker can never hold that loop up. Async
+    only: it listens on that loop.
 
     Args:
         address: ``host:port`` to listen on.
     """
+
+    async_only = True
 
     def __init__(self, address: str) -> None:
         self.address = address

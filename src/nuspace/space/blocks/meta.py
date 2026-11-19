@@ -14,7 +14,7 @@ init ran to its end: a plain flag, false until then, false when missing. ``~/.nu
 config whether or not home is a space: a data dir alone is no space.
 
 :class:`Meta` is the value, :class:`MetaForm` its Form: a term yielding a
-``Meta`` reads ``m.assembly`` in the tree, and makes its next value with
+``Meta`` reads ``m.assembly()`` in the tree, and makes its next value with
 ``m.with_init(flag)``. Everything here is nu ops over that form: the file
 is read through an fs mount the assembly binds (``nustd.fs``), parsed and
 written with ``nustd.json``, stamped with ``nustd.datetime``, and each
@@ -86,7 +86,8 @@ class MetaForm(nu.Form, nu.TypedNu[Meta]):
     """A :class:`Meta` as a Form: its fields read in the tree, its next value made there.
 
     Build one with :meth:`of`, :meth:`made` or :meth:`loads`, or wrap a
-    term yielding a ``Meta``: ``MetaForm(ref).assembly``.
+    term yielding a ``Meta``: ``MetaForm(ref).assembly()``. Fields read as
+    methods, as nustd's forms do.
     """
 
     # --- constructors --------------------------------------------------------
@@ -125,17 +126,14 @@ class MetaForm(nu.Form, nu.TypedNu[Meta]):
 
     # --- fields --------------------------------------------------------------
 
-    @property
     def assembly(self) -> nu.Str:
         """The name of the assembly that made the space."""
         return nu.Str(nu.GetAttr(self, "assembly"))
 
-    @property
     def made_at(self) -> nu.Str:
         """When the space was marked, ISO 8601 in UTC."""
         return nu.Str(nu.GetAttr(self, "made_at"))
 
-    @property
     def init(self) -> nu.Bool:
         """Whether the assembly's init ran to its end."""
         return nu.Bool(nu.GetAttr(self, "init"))
@@ -144,11 +142,11 @@ class MetaForm(nu.Form, nu.TypedNu[Meta]):
 
     def with_init(self, flag: nu.BoolArg) -> MetaForm:
         """This meta with ``init`` set to ``flag``."""
-        return MetaForm.of(self.assembly, self.made_at, flag)
+        return MetaForm.of(self.assembly(), self.made_at(), flag)
 
     def as_dict(self) -> nu.Dict:
         """What ``meta.json`` holds of this meta: its three fields."""
-        return nu.Dict.of(assembly=self.assembly, made_at=self.made_at, init=self.init)
+        return nu.Dict.of(assembly=self.assembly(), made_at=self.made_at(), init=self.init())
 
 
 def said(template: str, **fields: object) -> nu.Str:
@@ -179,7 +177,7 @@ def meta_in(file: FileRef) -> MetaForm:
 
 def ran(meta: nu.Nu) -> nu.Bool:
     """Whether ``meta``, a meta or None, says its assembly's init ran. ``meta`` is read twice: hand it a ref."""
-    return nu.Bool(nu.And(nu.Not(nu.Is(meta, None)), MetaForm(meta).init))
+    return nu.Bool(nu.And(nu.Not(nu.Is(meta, None)), MetaForm(meta).init()))
 
 
 def not_other(meta: nu.Nu, root: nu.StrArg, assembly: str) -> nu.Nu:
@@ -188,7 +186,7 @@ def not_other(meta: nu.Nu, root: nu.StrArg, assembly: str) -> nu.Nu:
     Raises:
         Refused: (at run) Another assembly made the space.
     """
-    other = MetaForm(meta).assembly
+    other = MetaForm(meta).assembly()
     why = said(
         "{root} is a space of the {other!r} assembly, not {assembly!r}. Open it with {other!r}",
         root=root,

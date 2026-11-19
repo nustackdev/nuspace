@@ -150,11 +150,11 @@ class EventField(ScalarQuery):
             msg = f"EventField kind {kind!r} is none of {sorted(_KINDS)}"
             raise ValueError(msg)
         super().__init__(row)
-        self._payload["field"] = field
-        self._payload["kind"] = kind
+        self.field = field
+        self.kind = kind
 
     def _read(self, row: object) -> object:
-        field, kind = self._payload["field"], self._payload["kind"]
+        field, kind = self.field, self.kind
         test, what = _KINDS[kind]
         held = row.get(field) if isinstance(row, Mapping) else None
         if not test(held):

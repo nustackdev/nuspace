@@ -1,4 +1,4 @@
-"""What the process backends share: workers from ``nustd.mp_pool``, each cell run a blocking request on one.
+"""What the process backends share: workers from ``nustd.mp``, each cell run a blocking request on one.
 
 Both sit on the pool, unchanged: a worker is a pool process, a warm spare
 when the pool keeps some (a cold launch when there is none). The two differ
@@ -23,7 +23,7 @@ from __future__ import annotations
 import contextlib
 from typing import TYPE_CHECKING
 
-from nustd.mp_pool import Interrupted, UnknownWorker, WorkerGone, WorkerPool
+from nustd.mp import Interrupted, UnknownWorker, WorkerGone, WorkerPool
 
 from .base import Backend
 
@@ -43,11 +43,13 @@ _LET_GO = frozenset({"stopped", "killed"})
 
 
 class PoolBackend(Backend):
-    """A backend whose workers are ``nustd.mp_pool`` processes. Subclass for placement.
+    """A backend whose workers are ``nustd.mp`` processes. Subclass for placement.
 
     Opened inside the pool, so it is there to take from and to stop into,
-    and closed before it.
+    and closed before it. Async only: the pool it drives is.
     """
+
+    async_only = True
 
     def __init__(self) -> None:
         self._pool: WorkerPool | None = None
@@ -114,7 +116,7 @@ class PoolBackend(Backend):
     async def arun(self, worker: str, cell_run: str, body: nu.Nu) -> str:
         """Run the body on the worker's process, until it ends.
 
-        Cancelled, ``mp_pool`` cancels the body's task in the worker.
+        Cancelled, ``nustd.mp`` cancels the body's task in the worker.
 
         Raises:
             RuntimeError: The worker is not on the books: never launched,

@@ -17,9 +17,8 @@ from contextlib import asynccontextmanager, contextmanager
 from typing import TYPE_CHECKING
 
 from nu.context import FabricRef
-from nu.core.spans.bracket import _LifecycleBracket
 from nu.engine.structure import Declared
-from nu.lang import ScalarAction, ScalarQuery, is_null
+from nu.lang import Bracket, ScalarAction, ScalarQuery, is_null
 
 from . import out as _out
 from .envs import KernelConfig
@@ -121,7 +120,7 @@ class Body(_Pure):
         return build_body(str(plane_run), str(cell_run), str(plane), str(cell), envs)
 
 
-class Captured(_LifecycleBracket):
+class Captured(Bracket):
     """Capture the body's output into a fresh :class:`~.out.RunOut`, bound on the context.
 
     A bracket for ``nu.With``. Only meaningful on a loop: the contextvar
@@ -167,7 +166,7 @@ class TakeOut(ScalarAction):
     Args:
         extra: Text appended first as one stderr entry, eg a traceback.
             NULL or "" appends nothing.
-        final: Take unfinished lines too.
+        final: Take unfinished lines too. A config child.
 
     Yields:
         A list of ``[ts, stream, text]``, ``[]`` outside a cell run.
@@ -175,27 +174,27 @@ class TakeOut(ScalarAction):
 
     _mutates = Declared(value=frozenset({0}), name="mutates")
 
-    def __init__(self, extra: object = "", *, final: bool = False) -> None:
-        super().__init__(RunOutRef(), extra)
-        self._payload["final"] = final
+    def __init__(self, extra: object = "", *, final: nu.BoolArg = False) -> None:
+        super().__init__(RunOutRef(), extra, final)
 
-    def _take(self, held: object, extra: object) -> list:
+    @staticmethod
+    def _take(held: object, extra: object, final: object) -> list:
         if not isinstance(held, _out.RunOut):
             return []
         extra = _value(extra, "")
         if extra:
             held.note(_out.STDERR, str(extra))
-        return held.take(final=self._payload["final"])
+        return held.take(final=bool(final))
 
     def _compile(self, nid: int, children: tuple[Callable, ...]) -> Callable:
         def thunk(rt: Runtime) -> object:
-            return self._take(children[0](rt), children[1](rt))
+            return self._take(*(c(rt) for c in children))
 
         return thunk
 
     def _acompile(self, nid: int, children: tuple[Callable, ...]) -> Callable:
         async def athunk(rt: Runtime) -> object:
-            return self._take(await children[0](rt), await children[1](rt))
+            return self._take(*[await c(rt) for c in children])
 
         return athunk
 
@@ -205,18 +204,17 @@ class ErrorText(_Pure):
 
     Args:
         error: What ``TryCatch`` bound, a ``CaughtError``.
-        full: The traceback rather than the one line.
+        full: The traceback rather than the one line. A config child.
     """
 
-    def __init__(self, error: object, *, full: bool = False) -> None:
-        super().__init__(error)
-        self._payload["full"] = full
+    def __init__(self, error: object, *, full: nu.BoolArg = False) -> None:
+        super().__init__(error, full)
 
-    def _apply(self, error: object) -> object:
+    def _apply(self, error: object, full: object) -> object:
         exc = getattr(error, "exception", None)
         if exc is None:
             return str(_value(error, ""))
-        if self._payload["full"]:
+        if full:
             return "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
         text = str(exc)
         return f"{type(exc).__name__}: {text}" if text else type(exc).__name__

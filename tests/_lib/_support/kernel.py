@@ -27,8 +27,9 @@ from typing import TYPE_CHECKING
 
 import nu
 import nuspace
+import nustd.fs
 import nustd.kv
-import nustd.mp_pool
+import nustd.mp
 from _support.made import MADE, MADE_STORE
 from nu.lang import ScalarQuery
 from nuspace import kernel
@@ -37,6 +38,7 @@ from nuspace.shapes import Space
 from nuspace.shapes.stores import CORE
 from nuspace.space.blocks.workers import worker_context
 from nuspace.space.local import binding
+from nuspace.space.local.layout import DATA
 
 
 if TYPE_CHECKING:
@@ -90,8 +92,12 @@ STORES = CORE
 
 
 def navigators(data: str) -> nu.With:
-    """Every core store under ``data``, notified through its server, as any process opens them."""
-    return binding.stores(data, [s.root for s in STORES])
+    """Every core store under ``data``, notified through its server, as any process opens them.
+
+    Local's mount of the data dir first: local's bindings ask it for every path.
+    """
+    mount = nustd.fs.mount(data, tag=DATA, create=False)
+    return nu.With(mount, binding.stores([s.root for s in STORES]))
 
 
 def init_stores() -> nu.Nu:
@@ -113,7 +119,7 @@ def kernel_open(
 ) -> nu.With:
     """The kernel open on the space whose data dir is ``data``, beside ``body``.
 
-    The open's order: server and stores, a dict, the containers, reap;
+    The open's order: server and stores, the containers, reap;
     then the pool (spare workers, each opening the stores itself), the
     backends and config, and inside them the kernel racing ``body``. Reap
     needs no backend, so nothing is spawned before it. ``blobs``, a blob
@@ -123,18 +129,15 @@ def kernel_open(
     """
     (Path(data) / "store").mkdir(parents=True, exist_ok=True)
     held = () if blobs is None else (blobs,)
-    served = nu.With(binding.served(data), navigators(data), *held)
+    mount = nustd.fs.mount(data, tag=DATA)
+    served = nu.With(mount, binding.served(), navigators(data), *held)
     init = navigators(data) if blobs is None else worker_context(navigators(data), blobs)
-    pool = nustd.mp_pool.pool(name=name, init=init, spares=spares, grace=grace)
+    pool = nustd.mp.pool(name=name, init=init, spares=spares, grace=grace)
     if driver:
         drivers = nu.With(pool, kernel.bound(**bound), body=nu.Race(kernel.driver(), body))
-        return nu.With(served, nu.Provide(dict, {}), body=init_stores() >> drivers)
+        return nu.With(served, body=init_stores() >> drivers)
     drivers = nu.With(pool, kernel.bound(**bound), body=nu.Race(loop(), body))
-    return nu.With(
-        served,
-        nu.Provide(dict, {}),
-        body=init_stores() >> kernel.reap() >> drivers,
-    )
+    return nu.With(served, body=init_stores() >> kernel.reap() >> drivers)
 
 
 # --- The harness ------------------------------------------------------------------
@@ -145,10 +148,11 @@ class _Hold(ScalarQuery):
 
     def __init__(self, opened: asyncio.Future, done: asyncio.Event) -> None:
         super().__init__()
-        self._payload = {"opened": opened, "done": done}
+        self.opened = opened
+        self.done = done
 
     def _acompile(self, nid: int, children: tuple[Callable, ...]) -> Callable:
-        opened, done = self._payload["opened"], self._payload["done"]
+        opened, done = self.opened, self.done
 
         async def athunk(rt: object) -> object:
             opened.set_result(rt.ctx)

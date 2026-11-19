@@ -31,13 +31,15 @@ from _support.made import MADE_STORE
 import nu
 import nuspace
 import nuspace.web as web
+import nustd.fs
 import nustd.kv
-import nustd.mp_pool
+import nustd.mp
 from nuspace import kernel
 from nuspace.kernel import CLOSED, LEFT_OVER, Env
 from nuspace.kernel.kernel import loop
 from nuspace.shapes import EXIT_FAILED, Space
 from nuspace.space.local import binding
+from nuspace.space.local.layout import DATA
 from nuspace.space.local.session import AddressFile
 from nuspace.web.env import session_env
 from nuspace.web.nav import BY, nav
@@ -341,7 +343,7 @@ class _Up:
     def __init__(self, data: str, term: nu.Nu, name: str) -> None:
         loop_ = asyncio.get_running_loop()
         self.ready, self.done = loop_.create_future(), asyncio.Event()
-        pool = nustd.mp_pool.pool(name=name, init=navigators(data), spares=0, grace=2.0)
+        pool = nustd.mp.pool(name=name, init=navigators(data), spares=0, grace=2.0)
         held = nu.let(_Hold(self.ready, self.done), lambda _: nu.Noop())
         body = nu.Race(term, nu.With(MADE_STORE, body=held))
         opened = nu.With(navigators(data), pool, kernel.bound(envs=ENVS), body=body)
@@ -360,6 +362,11 @@ class _Up:
         await asyncio.wait_for(self.task, 15)
 
 
+def _mounted(data: str) -> nu.Provide:
+    """Local's mount of the data dir at ``data``: the notification server's dir is a path on it."""
+    return nustd.fs.mount(data, tag=DATA)
+
+
 async def _nav_alone(data: str) -> Kernel:
     """nav and the stores at ``data``, no kernel: run ops through it as through a kernel."""
     loop_ = asyncio.get_running_loop()
@@ -368,7 +375,9 @@ async def _nav_alone(data: str) -> Kernel:
     init = init_stores() >> nustd.kv.atomic(WEB_STORE.init()) >> nustd.kv.atomic(CONN_STORE.init())
     held = nu.let(_Hold(ready, done), lambda _: nu.Noop())
     body = nu.With(MADE_STORE, mem, body=init >> nu.Race(nav(), held))
-    task = asyncio.create_task(nu.arun(nu.With(binding.served(data), navigators(data), body=body)))
+    task = asyncio.create_task(
+        nu.arun(nu.With(_mounted(data), binding.served(), navigators(data), body=body))
+    )
     waiting = asyncio.ensure_future(asyncio.shield(ready))
     finished, _ = await asyncio.wait({waiting, task}, timeout=30, return_when="FIRST_COMPLETED")
     if task in finished:

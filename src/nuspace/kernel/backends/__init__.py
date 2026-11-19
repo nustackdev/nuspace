@@ -8,7 +8,7 @@ edit.
 
 - :mod:`.base`: the contract, placement, worker id keyed methods.
 - :mod:`.interactions`: the ref and the calls the kernel makes.
-- :mod:`.pool`: what both process backends share over ``nustd.mp_pool``.
+- :mod:`.pool`: what both process backends share over ``nustd.mp``.
 - :mod:`.async_`: ``async``, one worker per plane run.
 - :mod:`.mp`: ``mp``, one worker per cell run.
 """
