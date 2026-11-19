@@ -19,7 +19,11 @@ Inside the data dir (``.nuspace/``, with ``meta.json``, both the blocks')::
 
 Every name is relative to the data dir, which local's entry points bind
 as one ``nustd.fs`` mount under a tag of local's own (:data:`DATA`): the
-files local reads and writes there go through it. A space made before ``meta.json``
+files local reads and writes there go through it, and every absolute path
+a store, a log or the notification server takes is ``DATA.where(name)``,
+asked when the term runs. Around it sits a read only mount of the space's
+root (:data:`ROOT`), which the checks before the data dir's mount look
+through, and whose ``where()`` is the root itself, absolute. A space made before ``meta.json``
 holds :data:`MADE_BEFORE` and no meta: local adopts it. A space of the
 store format before that holds one of :data:`OLDER`: refused.
 """
@@ -27,19 +31,16 @@ store format before that holds one of :data:`OLDER`: refused.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 import nustd.fs
 from nuspace.shapes import Space, State
 from nuspace.web.shapes import Conn, Web
 
-from ..blocks.meta import META_FILE, data_dir, is_space
+from ..blocks.meta import META_FILE
 
 
 if TYPE_CHECKING:
-    import os
-
     import nu
 
 
@@ -56,6 +57,8 @@ __all__ = [
     "META",
     "MOUNT",
     "OLDER",
+    "ROOT",
+    "ROOT_MOUNT",
     "SESSION_ADDR",
     "STORES",
     "UPLOADS_DIR",
@@ -63,8 +66,6 @@ __all__ = [
     "WEB_LOCK",
     "WEB_LOG",
     "Placed",
-    "is_older",
-    "made_before",
 ]
 
 
@@ -79,6 +80,12 @@ DATA = nustd.fs.FsRef(MOUNT)
 
 #: ``meta.json`` on local's mount.
 META = DATA / META_FILE
+
+#: The tag local binds its read only mount of the space's root under.
+ROOT_MOUNT = "nuspace.local.root"
+
+#: The space's root, as local's read only mount: ``ROOT.where()`` is the root, absolute.
+ROOT = nustd.fs.FsRef(ROOT_MOUNT)
 
 
 @dataclass(frozen=True)
@@ -136,15 +143,3 @@ MADE_BEFORE = STORES[Space].file
 #: What a nuspace of an older store format kept, in the data dir or loose
 #: in the root: its stores, or a RocksDB store's ``CURRENT``. Refused, no converter.
 OLDER = ("kernel.sqlite", "state.sqlite", "CURRENT")
-
-
-def made_before(root: str | os.PathLike[str]) -> bool:
-    """Whether ``root`` holds a local space made before ``meta.json``: its Space store and no meta."""
-    return not is_space(root) and (data_dir(root) / MADE_BEFORE).is_file()
-
-
-def is_older(root: str | os.PathLike[str]) -> bool:
-    """Whether ``root`` holds a space of an older store format, and none of this one."""
-    if is_space(root) or made_before(root):
-        return False
-    return any((data_dir(root) / f).is_file() or (Path(root) / f).is_file() for f in OLDER)
