@@ -2,15 +2,16 @@
 
 ## Packages shipped from this repo
 
-- **nuspace** (the runtime, the `nuspace` command) — 0.7.5
-- **nuspace-ui** (the compiled web bundle) — 0.7.4
+- **nuspace** (the runtime, the `nuspace` command) — 0.8.0
+- **nuspace-ui** (the compiled web bundle) — 0.7.5
 
 Below is the changelog for **nuspace** - the full commit stream. Newest first.
 The `nuspace-ui` wheel is the same source tree's vite output and is not tracked
 separately here.
 
-## Unreleased
+## 0.8.0 - 2026-11-20
 
+- Release nuspace 0.8.0
 - An example script reads and changes a space with no kernel or web running
 - Run supervises kernel and web as one tree, restarting web with backoff
 - Nuspace runs on the current nu core, every node and bracket in its style
