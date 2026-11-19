@@ -12,10 +12,10 @@ authors = [{ name = "Gor Arakelyan", email = "gorarkln@gmail.com" }]
 requires-python = ">=3.10"
 dependencies = [
     # The fabrics a space runs on, nothing more: kv for the store, valkey for
-    # its change notifications, ui for the browser, mp_pool for the workers,
+    # its change notifications, ui for the browser, mp for the workers,
     # proxy (invisibles) for the worker's session, blob for the media store.
     "nucore>=0.8.0",
-    "nustd[kv,ui,valkey,mp_pool,proxy,blob]>=0.8.0",
+    "nustd[kv,ui,valkey,mp,proxy,blob]>=0.8.0",
     # The store's change notifications run over virtuals' redis backend.
     "virtuals-py[redis]>=0.2.2",
     # The compiled web bundle. A separate distribution only because PyPI caps

@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Run keeps the kernel and web in pooled workers, each built where it runs
 - Opening a browser tab is its own fabric, apart from the space's building blocks
 - A space's files, locks and metadata go through one mounted data directory
 - Open yields nothing; a body keeps results in a ref, like everything else

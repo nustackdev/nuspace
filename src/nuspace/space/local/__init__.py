@@ -8,8 +8,9 @@ at its start, and refuses saying what to start first.
 Its entry points, each a term: building it touches nothing,
 running it does the work.
 
-- :func:`run`: infra in this process, the kernel and web as two more,
-  watched over (:mod:`.supervise`). What ``nuspace run`` does.
+- :func:`run`: infra in this process, the kernel and web each in a
+  worker of one ``nustd.mp`` pool, watched over (:mod:`.watch`). What
+  ``nuspace run`` does.
 - :func:`infra`: what the space runs on, the notification server, in this
   process, under its own lock, for as long as it runs.
 - :func:`kernel`: the kernel's driver in this process, under its own
@@ -28,7 +29,7 @@ Where everything lives on disk is :mod:`.layout`, how the stores are bound
 from .access import open
 from .drivers import infra, kernel, web
 from .opening import init
-from .supervise import run
+from .watch import run
 
 
 __all__ = ["infra", "init", "kernel", "open", "run", "web"]
