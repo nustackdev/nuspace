@@ -9,7 +9,8 @@ flow, a step to put before the body (``required(...) >> body``).
 raised when the condition holds.
 
 A requirement may be coming up beside the entry point, eg two shells
-started at once, or a supervisor starting its children in order. So it
+started at once, or ``local.run`` starting web as soon as its kernel
+worker is launched. So it
 looks again for a moment before it refuses: a short ``grace`` always,
 and up to ``wait`` seconds while ``waiting`` says it is on its way (a lock
 held, its server not up yet). Async only, as every entry point runs.

@@ -1,7 +1,7 @@
 """Logs: this process's logging pointed at a file, one per driver, so what a driver says outlives its terminal.
 
-A driver started by a supervisor, in a process of its own, has no
-terminal anybody reads. The assembly names a file per driver (local:
+A driver run in a worker (``local.run``'s kernel and web) or in a shell
+of its own may have no terminal anybody reads. The assembly names a file per driver (local:
 ``kernel/kernel.log``, ``devices/web/web.log``) and this bracket points
 the root logger at it while the driver runs: every library logging
 through :mod:`logging` lands there (warnings and up, ``nuspace``'s own

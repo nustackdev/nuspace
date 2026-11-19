@@ -15,7 +15,7 @@ Finding a space is plain Python, the command line being a host program:
 argv to a root, the nearest one up from here looked for file by file.
 
 How it is held: one term, one run (:func:`hold`). What the CLI needs back,
-the kernel's exit status, an entry point writes into a ref the CLI hands
+run's exit status, an entry point writes into a ref the CLI hands
 it (:data:`EXIT`), bound to a dict the CLI reads once the run is over.
 """
 
@@ -218,22 +218,25 @@ class Out(nu.Shape):
     """What a held run hands back to the CLI, in a dict the CLI binds and reads after.
 
     Attributes:
-        code: The kernel's exit status, from an entry point that records it
-            (``run(..., into=EXIT)``). 0 when nothing wrote it.
+        code: Run's exit status, from an entry point that records it
+            (``run(..., into=EXIT)``): the kernel's own when it ends, 2 for
+            a refusal, 1 when web gave up. 0 when nothing wrote it.
     """
 
     code = nu.IntRef.slot()
 
 
-#: The ref an entry point writes the kernel's exit status into.
+#: The ref an entry point writes run's exit status into.
 EXIT = Out.code
 
 
 def hold(term: nu.Nu) -> int:
     """Run a space until interrupted (Ctrl+C), then let the brackets close it. The exit status.
 
-    Closing ends what is live, interrupted, then stops the workers, the
-    stores, the notification server and the lock, in that order. A run
+    Closing unwinds the term's brackets from the inside out: the drivers
+    end what is live (in their workers under ``run``), the pool stops its
+    workers, then the stores, the notification server and the locks close.
+    A run
     refused (a kernel of the space runs elsewhere, an older store format)
     is a short error. What is still queued for telemetry (see
     :mod:`nuspace._telemetry`) gets a short grace to go at the end.
