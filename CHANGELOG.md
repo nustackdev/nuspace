@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Picking from the slash menu on an empty text cell no longer fails
 - New plane sits under New desk, and empty planes and desks offer an add row
 
 ## 0.8.0 - 2026-11-20

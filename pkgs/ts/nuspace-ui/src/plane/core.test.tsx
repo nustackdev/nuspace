@@ -579,7 +579,8 @@ describe("the plane api, from a sugar", () => {
 	});
 
 	it("standIn: the menu in the cell's place; Escape brings it back, a pick replaces it (r6_*)", () => {
-		render([cell("a"), cell("b")], { sugars: [on((c, api) => api.standIn(c))] });
+		const sugars = [on((c, api) => api.standIn(c))];
+		render([cell("a"), cell("b")], { sugars });
 		const a = mountDoc("a");
 		a.say({ kind: "slash" });
 		expect(row("a").hidden).toBe(true);
@@ -590,8 +591,14 @@ describe("the plane api, from a sugar", () => {
 
 		a.say({ kind: "slash" });
 		press(lines()[0], "Enter");
+		// The create is anchored on "a": its delete waits for the new cell,
+		// since the server may run the two in either order.
+		expect(ops().map(([op]) => op)).toEqual(["cell.create"]);
+		const made = notify.mock.calls[0][1] as { cell_id: string; after?: string };
+		expect(made).toMatchObject({ after: "a" });
+		expect(row("a").hidden).toBe(true);
+		render([cell("a"), cell(made.cell_id), cell("b")], { sugars });
 		expect(ops().map(([op]) => op)).toEqual(["cell.create", "cell.delete"]);
-		expect(notify.mock.calls[0][1]).toMatchObject({ after: "a" });
 		expect(notify.mock.calls[1][1]).toEqual({ cell_id: "a" });
 		expect(row("a").hidden).toBe(true);
 	});

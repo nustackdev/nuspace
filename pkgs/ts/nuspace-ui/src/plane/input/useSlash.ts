@@ -8,21 +8,27 @@
 // it; anything in it, the pick goes in after and the cell comes back as it
 // is now. Text is never lost to a pick. The rows step through every
 // package, folded or not (../../menu/rank.ts).
+//
+// The new cell is placed after the one it replaces, and the server runs
+// each op on its own path, in no set order: a delete sent with the create
+// can land first and leave the create's anchor removed. So the replaced
+// cell goes out of sight at once (`withdraw`) and its delete is sent only
+// once the new cell is in. Written to by then, it comes back instead.
 
-import { useCallback, useMemo } from "react";
-import type { Place, PlaneModel } from "../api";
+import { useCallback, useEffect, useMemo, useRef } from "react";
+import type { Place, PlaneModel, Withdrawal } from "../api";
 import type { CellSpec } from "../types";
 import { slashItems as listed } from "./slash";
 
 export function useSlash(
-	{ editor, patch, editorOf }: PlaneModel,
+	{ cells, editor, patch, editorOf }: PlaneModel,
 	cellSpecs: CellSpec[],
 	{
 		create,
-		remove,
+		withdraw,
 	}: {
 		create: (at: Place, spec: string) => string;
-		remove: (ids: string[], focus: null) => void;
+		withdraw: (ids: string[]) => Withdrawal;
 	},
 ) {
 	const slash = editor.slash;
@@ -31,17 +37,33 @@ export function useSlash(
 		[slash, cellSpecs],
 	);
 
+	/** A replaced cell out of sight, its delete waiting on the new cell `made`. */
+	const replacing = useRef<{ made: string; old: string; out: Withdrawal } | null>(null);
+
+	useEffect(() => {
+		const r = replacing.current;
+		if (!r || !cells.some((c) => c.id === r.made)) return;
+		replacing.current = null;
+		if (editorOf(r.old)?.blank() === false) r.out.restore();
+		else r.out.remove();
+	}, [cells, editorOf]);
+
 	const pickSlash = useCallback(
 		(item: CellSpec) => {
 			const s = editor.slash;
 			if (!s) return;
 			const replace = editor.ghost?.replace;
-			patch({ slash: null, ghost: null });
-			create({ after: s.cellId }, item.name);
+			// Withdrawn before the ghost goes, so the replaced cell never flashes back.
 			// The new cell is landed on, so the replaced one leaves the caret alone.
-			if (replace && editorOf(replace)?.blank() === true) remove([replace], null);
+			const out = replace && editorOf(replace)?.blank() === true ? withdraw([replace]) : null;
+			patch({ slash: null, ghost: null });
+			const made = create({ after: s.cellId }, item.name);
+			if (replace && out) {
+				replacing.current?.out.remove();
+				replacing.current = { made, old: replace, out };
+			}
 		},
-		[create, editorOf, editor.ghost, editor.slash, patch, remove],
+		[create, editorOf, editor.ghost, editor.slash, patch, withdraw],
 	);
 
 	/** Returns true when the menu consumed the key. */

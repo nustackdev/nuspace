@@ -167,7 +167,10 @@ export function Plane({
 	});
 	const startDrag = useCellDrag(model, reorder);
 	const { box, startBox, startRange } = useBoxSelect(model);
-	const { slash, pickSlash, slashKey, moveSlash } = useSlash(model, cellSpecs, { create, remove });
+	const { slash, pickSlash, slashKey, moveSlash } = useSlash(model, cellSpecs, {
+		create,
+		withdraw,
+	});
 
 	// Intents are heard at event time, from the input lines and the cells'
 	// markdown editors: they reach this render's routing through a ref.

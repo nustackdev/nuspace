@@ -415,8 +415,13 @@ describe("C. a blank prose cell", () => {
 		plane([cell("a"), cell("b")]);
 		mountDoc("a").say({ kind: "slash" });
 		press(lines()[0], "Enter");
+		// The delete waits for the new cell: sent together, it can land first
+		// and leave the create anchored on a removed cell.
+		expect(ops().map(([op]) => op)).toEqual(["cell.create"]);
+		const made = notify.mock.calls[0][1] as { cell_id: string };
+		expect(made).toMatchObject({ after: "a" });
+		plane([cell("a"), cell(made.cell_id), cell("b")]);
 		expect(ops().map(([op]) => op)).toEqual(["cell.create", "cell.delete"]);
-		expect(notify.mock.calls[0][1]).toMatchObject({ after: "a" });
 		expect(notify.mock.calls[1][1]).toEqual({ cell_id: "a" });
 	});
 
