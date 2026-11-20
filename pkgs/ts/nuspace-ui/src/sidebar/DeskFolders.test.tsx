@@ -181,7 +181,7 @@ describe("desk folders", () => {
 		feed({ [W]: WORK, [F]: { name: "Empty", items: [] } }, [W, F]);
 		draw();
 		const empty = folderOf("Empty")?.querySelector(`[data-desk-empty="${F}"]`);
-		expect(empty?.textContent).toBe("Drag planes here");
+		expect(empty?.textContent).toBe("Add or drop a plane");
 		expect(folderOf("Work")?.querySelector("[data-desk-empty]")).toBeNull();
 	});
 

@@ -9,26 +9,36 @@
 // pane dropped on it makes a desk of it (./newDesk.ts). Ringed while a drag
 // aims at it, with no hint: its own label says what the drop does. It is
 // always there, so nothing moves when a drag starts.
+//
+// Under New desk, New plane: the Add plane popup for a top-level plane, the
+// same as the header's menu and the Planes title's `+`.
 
-import { Plus } from "lucide-react";
+import { FilePlus, FolderPlus } from "lucide-react";
 import type * as React from "react";
 import { useEffect, useState } from "react";
 import { useRoles } from "../core/desks";
 import { hrefFor } from "../core/router";
 import { sidebarDropInto, sidebarIcon } from "../design";
 import { dragKind, endDrag, readDrag } from "../desk/dnd";
+import { ActionRow } from "./ActionRow";
+import { NEW_PLANE_KEYS, openAddPlane } from "./add";
 import { planeDragProps } from "./drag";
-import { navKey } from "./focus";
+import { NEW_PLANE_KEY, navKey } from "./focus";
 import { NAV_ITEMS } from "./nav";
 import { newDesk } from "./newDesk";
 import { SidebarRow } from "./SidebarRow";
 import { SidebarSection } from "./SidebarSection";
+import { ROOT_ID } from "./types";
 
 /** The New desk row's key. */
 export const NEW_DESK_KEY = navKey("new-desk");
 
-/** The nav rows' keys, the body's first: the roles, then New desk. */
-export const NAV_KEYS = [...NAV_ITEMS.map((item) => navKey(item.role)), NEW_DESK_KEY];
+/** The nav rows' keys, the body's first: the roles, then New desk and New plane. */
+export const NAV_KEYS = [
+	...NAV_ITEMS.map((item) => navKey(item.role)),
+	NEW_DESK_KEY,
+	NEW_PLANE_KEY,
+];
 
 export function NavSection({ selKey }: { selKey: string }) {
 	const roles = useRoles();
@@ -52,6 +62,13 @@ export function NavSection({ selKey }: { selKey: string }) {
 				);
 			})}
 			<NewDeskRow />
+			<ActionRow
+				rowKey={NEW_PLANE_KEY}
+				label="New plane"
+				icon={FilePlus}
+				keys={NEW_PLANE_KEYS}
+				onClick={() => openAddPlane({ parent: ROOT_ID })}
+			/>
 		</SidebarSection>
 	);
 }
@@ -101,7 +118,7 @@ function NewDeskRow() {
 			<SidebarRow
 				rowKey={NEW_DESK_KEY}
 				label="New desk"
-				icon={<Plus aria-hidden="true" className={sidebarIcon(false)} />}
+				icon={<FolderPlus aria-hidden="true" className={sidebarIcon(false)} />}
 				onClick={() => newDesk()}
 				drag={drop}
 				className={aimed ? sidebarDropInto : undefined}

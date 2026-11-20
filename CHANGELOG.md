@@ -9,6 +9,10 @@ Below is the changelog for **nuspace** - the full commit stream. Newest first.
 The `nuspace-ui` wheel is the same source tree's vite output and is not tracked
 separately here.
 
+## Unreleased
+
+- New plane sits under New desk, and empty planes and desks offer an add row
+
 ## 0.8.0 - 2026-11-20
 
 - Release nuspace 0.8.0

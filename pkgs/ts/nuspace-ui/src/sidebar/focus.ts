@@ -1,8 +1,8 @@
 // The sidebar body's one tab stop.
 //
 // The body is one tab stop and the arrows move through every row in it, in
-// the order they are drawn: the nav section, the desk folders, New plane,
-// the Planes tree, the Specs. A body with fifty rows is otherwise
+// the order they are drawn: the nav section (New desk, New plane last), the
+// desk folders, the Planes tree, the Specs. A body with fifty rows is otherwise
 // fifty tab stops. Section titles are not rows: the arrows pass them by.
 //
 // The kit's roving focus (`useRovingFocus`), with what the sidebar adds on

@@ -49,6 +49,9 @@ import type { DropEdge } from "./drag";
 /** A folder title's fold key. */
 export const folderKey = (desk: string) => `desk:${desk}`;
 
+/** The key of an empty desk's one row, "Add or drop a plane". */
+export const emptyKey = (desk: string) => `desk:${desk}:add`;
+
 /** An item row's key, also a strip row's fold key. Never a tree row's (a plane id). */
 export const itemKey = (desk: string, item: string) => `desk:${desk}:item:${item}`;
 

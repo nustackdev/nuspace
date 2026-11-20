@@ -10,6 +10,7 @@ import { applyDesksWrite, resetDesks } from "../core/desks";
 import { focusedRoute, knownDesks, resetRouter } from "../core/router";
 import { PLANE_MIME } from "../desk/dnd";
 import { ActionRow } from "./ActionRow";
+import { closeAddPlane } from "./add";
 import { SidebarBody } from "./harness";
 import { NAV_KEYS, NavSection, NEW_DESK_KEY } from "./NavSection";
 import { rolePlanes, useNavShortcuts } from "./nav";
@@ -67,7 +68,7 @@ describe("the nav section", () => {
 		);
 	}
 
-	it("draws home, search and settings, untitled, their shortcuts shown, then New desk", () => {
+	it("draws home, search and settings, untitled, their shortcuts shown, then New desk and New plane", () => {
 		draw(<Nav />);
 		const rows = [...host.querySelectorAll<HTMLElement>('[role="treeitem"]')];
 		expect(rows.map((r) => r.querySelector(".truncate")?.textContent)).toEqual([
@@ -75,6 +76,7 @@ describe("the nav section", () => {
 			"Search",
 			"Settings",
 			"New desk",
+			"New plane",
 		]);
 		expect(host.querySelector("h2, h3")).toBeNull();
 		for (const r of rows.slice(0, 3)) {
@@ -321,10 +323,46 @@ describe("the sidebar", () => {
 		expect(sections).toEqual(["Navigation", "Work", "Planes", "Specs"]);
 		expect(host.querySelector('[data-key="new-desk"]')).toBeNull();
 		expect(host.querySelector('[role="separator"]')).toBeNull();
+		const nav = host.querySelector('section[aria-label="Navigation"]');
+		expect(nav?.querySelector('[data-key="new-plane"]')?.textContent).toContain("New plane");
 		const planes = host.querySelector('section[aria-label="Planes"]');
-		expect(planes?.querySelector('[data-key="new-plane"]')?.textContent).toContain("New plane");
+		expect(planes?.querySelector('[data-key="new-plane"]')).toBeNull();
+		expect(planes?.querySelector('[aria-label="New plane"]')).not.toBeNull();
 		expect(planes?.querySelector('[data-key="x"]')).not.toBeNull();
 		expect(host.textContent).not.toMatch(/rail/i);
+	});
+
+	it("shows an Add a plane row in Planes while there are none, a click opening Add plane", () => {
+		const path = ["sidebar"];
+		const load = (children: string[]) =>
+			act(() => {
+				store.getState().write(path.map((seg) => [seg, null]));
+				store.getState().setProps(path, {
+					loaded: true,
+					registered: [],
+					tree: coerceTree([
+						{ id: ROOT_ID, kind: "space", title: "", parent: ROOT_ID, children },
+						...children.map((id) => ({
+							id,
+							kind: "plane",
+							title: id,
+							parent: ROOT_ID,
+							children: [],
+						})),
+					]),
+				});
+			});
+		load([]);
+		draw(<Sidebar path={path} />);
+		const planes = () => host.querySelector('section[aria-label="Planes"]');
+		const slot = planes()?.querySelector<HTMLElement>('[data-key="planes:add"]');
+		expect(slot?.textContent).toContain("Add a plane");
+		expect(slot?.querySelector("svg")).not.toBeNull();
+		act(() => slot?.click());
+		expect(document.querySelector('[role="dialog"]')).not.toBeNull();
+		act(() => closeAddPlane());
+		load(["x"]);
+		expect(planes()?.querySelector('[data-key="planes:add"]')).toBeNull();
 	});
 
 	it("focuses its body on a click in the empty room under the sections", () => {

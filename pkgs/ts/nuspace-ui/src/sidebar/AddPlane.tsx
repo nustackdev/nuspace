@@ -26,12 +26,14 @@ import {
 	CommandPalette,
 } from "@nustackdev/ui-kit";
 import { useEffect, useRef, useState } from "react";
-import { navigate, openPlane } from "../core/router";
+import { knownDesks, navigate, openItem, openPlane } from "../core/router";
 import { menuItem, menuPackage } from "../design";
+import { dropOn } from "../desk/dnd";
 import { DEFAULT_ICON } from "../icon/parse";
 import { MenuEntry, MenuKeys, PackageEntry } from "../menu/Entry";
 import { type MenuPackage, menuPackages, menuPinned, menuScore } from "../menu/rank";
 import { closeAddPlane, createPlane, useAddRequest } from "./add";
+import { titleTarget } from "./folders";
 import type { Notify } from "./ops";
 import { type Registered, ROOT_ID } from "./types";
 
@@ -96,8 +98,10 @@ export function AddPlane({
 		if (!req) return;
 		const planeId = createPlane(notify, entry, req.parent, entry === EMPTY);
 		if (req.parent && req.parent !== ROOT_ID) reveal(req.parent);
-		// From a pane: a link followed there (in place on a desk item). Else solo.
+		// From a pane: a link followed there (in place on a desk item). From a
+		// desk: pinned at its end and opened. Else solo.
 		if (req.pane) navigate({ plane: planeId, params: {} }, req.pane);
+		else if (req.desk) pinToDesk(req.desk, planeId);
 		else openPlane(planeId);
 	};
 
@@ -174,4 +178,12 @@ export function AddPlane({
 			{packages.length === 0 ? null : <MenuKeys action="Create" />}
 		</CommandPalette>
 	);
+}
+
+/** Plane `plane` pinned at the end of desk `desk`, and that item opened. */
+function pinToDesk(desk: string, plane: string): void {
+	dropOn({ kind: "plane", link: { plane, params: {} } }, titleTarget(desk));
+	const item = knownDesks()?.[desk]?.items.at(-1);
+	if (item) openItem(desk, item.id);
+	else openPlane(plane);
 }

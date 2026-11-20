@@ -477,12 +477,6 @@ export function sidebarDropLine(edge: "before" | "after"): string {
  * text, and a drop target for the first item. Ringed like a row while a drag
  * aims at it.
  */
-export const sidebarDeskEmpty = cn(
-	"relative flex h-7 select-none items-center rounded-md px-2",
-	"outline-1 -outline-offset-1 outline-border-default outline-dashed",
-	"text-sm text-text-muted",
-);
-
 /** The row being dragged, dimmed while it travels. */
 export const sidebarDragging = "opacity-50";
 

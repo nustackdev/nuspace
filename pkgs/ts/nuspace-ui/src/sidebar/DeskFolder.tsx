@@ -7,8 +7,9 @@
 // another, and takes a plane, item or pane: pinned at the end of the desk,
 // or from its bottom 20%, once rested on, at the top, over the first row.
 //
-// An empty desk's body is a dashed "Drag planes here" block, a drop target
-// for its first item. Otherwise the body is its rows (./folders.ts
+// An empty desk's body is one action row, "Add or drop a plane": a click
+// opens Add plane for a new plane pinned here, and it is the drop target for
+// the first item. Otherwise the body is its rows (./folders.ts
 // `folderRows`, drawn by ./DeskRows.tsx), and under the last row the space
 // that pins at the end of the desk, as the Planes tree's tail. The body
 // takes the drop for its rows: the row under the pointer (./drag.ts `rowAt`;
@@ -22,7 +23,6 @@ import type * as React from "react";
 import type { PlaneLook } from "../core/looks";
 import { closeDesk, renameDesk } from "../core/router";
 import {
-	sidebarDeskEmpty,
 	sidebarDragging,
 	sidebarDropInto,
 	sidebarDropLine,
@@ -35,6 +35,8 @@ import {
 import { DESK_MIME, type Target } from "../desk/dnd";
 import { setDragChip } from "../desk/drag";
 import type { Side } from "../desk/model";
+import { ActionRow } from "./ActionRow";
+import { openAddPlane } from "./add";
 import type { Folder } from "./DeskFolders";
 import { DeskRow, type DragProps, type DropProps } from "./DeskRows";
 import { DropHint, DropLine } from "./DropMarks";
@@ -42,6 +44,7 @@ import { bandAt, DROP_ROW, DROP_TAIL, edgeHolds, type Hint, rowAt } from "./drag
 import {
 	type Aim,
 	deskLabel,
+	emptyKey,
 	folderKey,
 	type Mark,
 	rowAim,
@@ -49,6 +52,7 @@ import {
 	titleTarget,
 } from "./folders";
 import { SectionAction, SidebarSection } from "./SidebarSection";
+import { ROOT_ID } from "./types";
 
 /**
  * Where a drag is aimed in the folders now: a desk's title (`key` null) or
@@ -294,16 +298,18 @@ export function DeskFolder({
 			}
 		>
 			{rows.length ? null : (
-				<div
-					data-desk-empty={id}
-					className={cn(sidebarDeskEmpty, aim?.key === EMPTY_KEY && ringOf(aim))}
-					{...dropHandlers(() => ({
-						aim: { target: end, mark: { ring: true } },
-						key: EMPTY_KEY,
-						desk: id,
-					}))}
-				>
-					Drag planes here
+				<div role="none" data-desk-empty={id} className={sidebarRowWrap}>
+					<ActionRow
+						rowKey={emptyKey(id)}
+						label="Add or drop a plane"
+						onClick={() => openAddPlane({ parent: ROOT_ID, desk: id })}
+						className={aim?.key === EMPTY_KEY ? ringOf(aim) : undefined}
+						drag={dropHandlers(() => ({
+							aim: { target: end, mark: { ring: true } },
+							key: EMPTY_KEY,
+							desk: id,
+						}))}
+					/>
 					{aim?.key === EMPTY_KEY ? <DropHint hint={aim.hint} at /> : null}
 				</div>
 			)}

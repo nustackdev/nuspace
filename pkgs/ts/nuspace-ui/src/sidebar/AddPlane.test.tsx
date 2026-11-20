@@ -1,15 +1,23 @@
 // The Add plane popup, rendered in jsdom: picking an entry sends the create
-// and opens the new Plane: solo from the sidebar, as a link from a pane. What it runs on is the server's business.
+// and opens the new Plane: solo from the sidebar, as a link from a pane, as
+// a desk's new last item from its empty slot. What it runs on is the server's business.
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { navigate, openPlane } from "../core/router";
+import { navigate, openItem, openPlane } from "../core/router";
+import { dropOn } from "../desk/dnd";
 import { AddPlane } from "./AddPlane";
 import { closeAddPlane, openAddPlane } from "./add";
 import { ROOT_ID } from "./types";
 
-vi.mock("../core/router", () => ({ navigate: vi.fn(), openPlane: vi.fn() }));
+vi.mock("../core/router", () => ({
+	navigate: vi.fn(),
+	openPlane: vi.fn(),
+	openItem: vi.fn(),
+	knownDesks: () => ({ d1: { name: "Work", items: [{ id: "i1" }] } }),
+}));
+vi.mock("../desk/dnd", () => ({ dropOn: vi.fn() }));
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -40,6 +48,8 @@ beforeEach(() => {
 	notify.mockClear();
 	vi.mocked(openPlane).mockClear();
 	vi.mocked(navigate).mockClear();
+	vi.mocked(openItem).mockClear();
+	vi.mocked(dropOn).mockClear();
 	host = document.createElement("div");
 	document.body.append(host);
 	root = createRoot(host);
@@ -80,6 +90,19 @@ describe("AddPlane", () => {
 		act(() => item("Jobs")?.click());
 		const [, args] = notify.mock.calls[0];
 		expect(navigate).toHaveBeenCalledWith({ plane: args.plane_id, params: {} }, "p1");
+		expect(openPlane).not.toHaveBeenCalled();
+	});
+
+	it("pins it at the end of the desk it was asked from, and opens that item", () => {
+		act(() => openAddPlane({ parent: ROOT_ID, desk: "d1" }));
+		act(() => item("Jobs")?.click());
+		const [, args] = notify.mock.calls[0];
+		expect(args.parent_id).toBe(ROOT_ID);
+		expect(dropOn).toHaveBeenCalledWith(
+			{ kind: "plane", link: { plane: args.plane_id, params: {} } },
+			{ kind: "end", desk: "d1" },
+		);
+		expect(openItem).toHaveBeenCalledWith("d1", "i1");
 		expect(openPlane).not.toHaveBeenCalled();
 	});
 

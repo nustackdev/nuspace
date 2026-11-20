@@ -27,7 +27,7 @@ import type { Desk, Links } from "../desk/model";
 import { type Aimed, type AimHit, DeskFolder } from "./DeskFolder";
 import type { DragProps, DropProps } from "./DeskRows";
 import { doesHint, refusedHint, useSettle } from "./drag";
-import { type FolderRow, folderKey, folderRows, useFolds } from "./folders";
+import { emptyKey, type FolderRow, folderKey, folderRows, useFolds } from "./folders";
 
 /** One desk's folder, as drawn. */
 export type Folder = { id: string; desk: Desk; folded: boolean; rows: FolderRow[] };
@@ -49,9 +49,11 @@ export function useFolders(): Folder[] {
 	);
 }
 
-/** The row keys the folders draw, in order. */
+/** The row keys the folders draw, in order: an open empty desk's add row too. */
 export function folderKeys(folders: Folder[]): string[] {
-	return folders.flatMap((f) => f.rows.map((r) => r.key));
+	return folders.flatMap((f) =>
+		f.rows.length ? f.rows.map((r) => r.key) : f.folded ? [] : [emptyKey(f.id)],
+	);
 }
 
 /** Every plane the folders link to, original and recent. */

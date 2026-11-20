@@ -19,6 +19,8 @@ export type AddRequest = {
 	parent: string;
 	/** The pane it was asked from (its plane): the new plane opens there as a link would. Solo when left out. */
 	pane?: string;
+	/** The desk it was asked from (an empty desk's slot): the new plane lands there as an item and opens. */
+	desk?: string;
 };
 
 let request: AddRequest | null = null;

@@ -1,6 +1,6 @@
 // The sidebar header, the fixed top bar: collapse, the wordmark, and a `+` on
 // the right, a menu of what can be made: New plane (the Add plane popup for a
-// top-level plane, the same as the New plane row and cmd/ctrl+alt+N) and New
+// top-level plane, the same as the nav's New plane row and cmd/ctrl+alt+N) and New
 // desk (./newDesk.ts).
 
 import {
@@ -13,7 +13,7 @@ import {
 	IconButton,
 	Shortcut,
 } from "@nustackdev/ui-kit";
-import { Columns3, FilePlus, PanelLeft, Plus } from "lucide-react";
+import { FilePlus, FolderPlus, PanelLeft, Plus } from "lucide-react";
 import {
 	chromeButton,
 	sidebarHeader,
@@ -60,7 +60,7 @@ export function SidebarHeader() {
 						<DropdownMenuShortcut keys={NEW_PLANE_KEYS} />
 					</DropdownMenuItem>
 					<DropdownMenuItem onSelect={() => newDesk()}>
-						<Columns3 />
+						<FolderPlus />
 						New desk
 					</DropdownMenuItem>
 				</DropdownMenuContent>

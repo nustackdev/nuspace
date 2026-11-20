@@ -2,7 +2,7 @@
 // node (../refs/sidebar.ts).
 //
 // Top to bottom: the header (its `+` menu makes a plane or a desk), the nav
-// section, the desk folders, the Planes tree, the Specs, the footer. The header and footer are fixed bars; the
+// section (New desk and New plane under it), the desk folders, the Planes tree (an add row while there are none), the Specs, the footer. The header and footer are fixed bars; the
 // sections between scroll in the kit's `ScrollArea`, 10px apart, with no
 // fills and no borders (design/sidebar.ts).
 //
@@ -30,8 +30,8 @@
 //   SidebarSection.tsx  the section piece: title, count, fold, actions
 //   SidebarRow.tsx      the row piece: icon, label, one trailing thing
 //   ActionRow.tsx       the "New ..." row
-//   NavSection.tsx      home, search, settings, through the roles (./nav.ts)
-//   DeskFolders.tsx     a folder per desk: its items, strips, chips, drops; New desk
+//   NavSection.tsx      home, search, settings (./nav.ts); New desk, New plane
+//   DeskFolders.tsx     a folder per desk: its items, strips, chips, drops
 //   folders.ts          their folds, rows, selection and drop targets
 //   links.ts            where a row's link goes
 //   PlanesTree.tsx      the Planes tree's rows, their menus, rename, drop marks
@@ -49,7 +49,7 @@
 
 import type { NodeProps } from "@nustackdev/ui-kit";
 import { pathKey, ScrollArea, Skeleton } from "@nustackdev/ui-kit";
-import { ChevronsDownUp } from "lucide-react";
+import { ChevronsDownUp, Plus } from "lucide-react";
 import { useCallback, useMemo, useRef } from "react";
 import { useSkeleton } from "../core/delay";
 import { useRoles } from "../core/desks";
@@ -66,9 +66,9 @@ import {
 } from "../design";
 import { ActionRow } from "./ActionRow";
 import { AddPlane } from "./AddPlane";
-import { NEW_PLANE_KEYS, openAddPlane } from "./add";
+import { openAddPlane } from "./add";
 import { DeskFolders, folderKeys, useFolders } from "./DeskFolders";
-import { NEW_PLANE_KEY, navKey, SidebarFocusContext, useSidebarFocus } from "./focus";
+import { navKey, SidebarFocusContext, useSidebarFocus } from "./focus";
 import { selectedKey, useFolds } from "./folders";
 import { useSidebarLinks } from "./links";
 import { NAV_KEYS, NavSection } from "./NavSection";
@@ -157,7 +157,7 @@ export function Sidebar({ path }: NodeProps) {
 				: [
 						...NAV_KEYS,
 						...folderKeys(folders),
-						...(planesFolded ? [] : [NEW_PLANE_KEY, ...rows.map((r) => r.key)]),
+						...(planesFolded ? [] : rows.length ? rows.map((r) => r.key) : [PLANES_ADD_KEY]),
 						...(specsFolded ? [] : lines.map((l) => l.key)),
 					],
 		[loading, folders, planesFolded, rows, specsFolded, lines],
@@ -201,21 +201,31 @@ export function Sidebar({ path }: NodeProps) {
 									folded={planesFolded}
 									onFoldedChange={foldPlanes}
 									actions={
-										<SectionAction
-											label="Collapse all planes"
-											tip="Collapse all"
-											onClick={collapseAll}
-										>
-											<ChevronsDownUp />
-										</SectionAction>
+										<>
+											<SectionAction
+												label="New plane"
+												tip="New plane"
+												onClick={() => openAddPlane({ parent: ROOT_ID })}
+											>
+												<Plus />
+											</SectionAction>
+											<SectionAction
+												label="Collapse all planes"
+												tip="Collapse all"
+												onClick={collapseAll}
+											>
+												<ChevronsDownUp />
+											</SectionAction>
+										</>
 									}
 								>
-									<ActionRow
-										rowKey={NEW_PLANE_KEY}
-										label="New plane"
-										keys={NEW_PLANE_KEYS}
-										onClick={() => openAddPlane({ parent: ROOT_ID })}
-									/>
+									{rows.length ? null : (
+										<ActionRow
+											rowKey={PLANES_ADD_KEY}
+											label="Add a plane"
+											onClick={() => openAddPlane({ parent: ROOT_ID })}
+										/>
+									)}
 									<PlanesTree
 										tree={tree}
 										rows={rows}
@@ -286,6 +296,9 @@ export function SidebarPlaceholder() {
 		</aside>
 	);
 }
+
+/** The key of the Planes section's add row, drawn while there are no planes. */
+const PLANES_ADD_KEY = "planes:add";
 
 /** The plane a solo route shows, "" for anything else. */
 function soloPlane(route: Route): string {
