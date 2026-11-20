@@ -21,7 +21,7 @@ class Cell(nu.Shape):
     (only ``"ui"`` is detected for now), worked out from the prog and
     written in the same commit, so it never goes stale. ``version`` counts
     prog writes: a cell run records the version it ran. ``plane`` is the
-    plane listing it in its ``cells``; ``cell.move`` can change it, both
+    plane listing it in its ``cells``; ``cell.transfer`` changes it, both
     sides in one commit. ``spec`` names the spec it was made from, ``""``
     for none. ``meta`` is free for programs.
 

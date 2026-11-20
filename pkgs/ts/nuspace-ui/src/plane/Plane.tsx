@@ -17,7 +17,8 @@
 //   selection/   the cell-selection keyboard, box and range select
 //   focus/       focus requests, navigation, the cells' documents
 //   input/       the input lines and the `/` menu
-//   cell/        one cell: its row, gutter, program, source editor
+//   cell/        one cell: its row, gutter, program, source editor, the
+//                plane picker its menu opens to move it (./transfer.ts)
 //   sugar/       the sets of rules bound to a class, the only class-aware code
 //
 // The core is kind-blind and works with no sugar at all: the input line
@@ -29,7 +30,7 @@
 import type { Path } from "@nustackdev/ui-core";
 import { markdownAt, pathKey } from "@nustackdev/ui-kit";
 import type * as React from "react";
-import { Fragment, useCallback, useEffect, useRef } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import {
 	docBoxSelect,
 	docColumn,
@@ -39,9 +40,11 @@ import {
 	docTail,
 	type PlaneWidth,
 } from "../design";
+import { clearPaneTargets, usePaneTargets } from "../pane/state";
 import type { FocusRequest, PlaneApi, PlaneHandle, PlaneModel } from "./api";
 import { cellUiPath } from "./cell/address";
 import { Cell } from "./cell/Cell";
+import { TransferPicker } from "./cell/TransferPicker";
 import { keyboardBusy } from "./focus/focusable";
 import { useCaret } from "./focus/useCaret";
 import { useEditors } from "./focus/useEditors";
@@ -58,6 +61,7 @@ import { type EditorPatch, type InputLine, patchEditor, readEditor, useEditorSta
 import { useCellDrag } from "./structure/useCellDrag";
 import { useStructure } from "./structure/useStructure";
 import { sugars as SUGARS, type Sugar } from "./sugar";
+import { targetsFrom } from "./transfer";
 import { type ActivePlane, type CellSpec, isBad } from "./types";
 
 const NO_CELL_SPECS: CellSpec[] = [];
@@ -230,6 +234,18 @@ export function Plane({
 
 	const { caret } = useCaret(model, { sugars, editable, focus });
 
+	// The cell whose "Move to plane" picker is open, null for none. Opening
+	// asks for the list afresh; it loads until the answer lands. A pick sends
+	// the op and nothing else: the cell leaves when the cells ship again.
+	const [transferring, setTransferring] = useState<string | null>(null);
+	const answered = usePaneTargets(panePath);
+	const targets = answered ? targetsFrom(answered, planeId) : null;
+	const openTransfer = (id: string) => {
+		clearPaneTargets(panePath);
+		notify("cell.targets", {});
+		setTransferring(id);
+	};
+
 	useEditors(viewerPath, cells, {
 		intent: (cell, i) => routing.current?.editor(cell, i) ?? false,
 		registered,
@@ -341,6 +357,7 @@ export function Plane({
 							onDrag={(e, onClick) => startDrag(e, cell.id, onClick)}
 							onDelete={() => remove([cell.id])}
 							onRestart={() => notify("cell.restart", { cell_id: cell.id })}
+							onTransfer={() => openTransfer(cell.id)}
 							// A text selection dragged out of what a document draws
 							// becomes a cell selection. The grip has its own drag.
 							onPress={
@@ -431,6 +448,19 @@ export function Plane({
 					onClose={putAway}
 				/>
 			) : null}
+
+			<TransferPicker
+				open={transferring !== null}
+				targets={targets}
+				onPick={(to) => {
+					if (transferring) notify("cell.transfer", { cell_id: transferring, plane_id: to });
+				}}
+				onClose={(picked) => {
+					// Dismissed, the cell stays selected, so its keys work straight after.
+					if (!picked && transferring) select([transferring]);
+					setTransferring(null);
+				}}
+			/>
 		</div>
 	);
 }

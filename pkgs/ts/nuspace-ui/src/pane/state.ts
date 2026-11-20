@@ -10,6 +10,8 @@
 //   set_cells   the cells in order, statuses folded in from what is kept
 //   set_status  each cell's state, kept by cell id and folded into the cells
 //   set_trail   the planes above, top first
+//   set_targets the answer to a `cell.targets` ask: where a cell can go
+//               (../plane/transfer.ts). Null while asked and not answered
 //   set_absent  why there is nothing to draw. Stands in for the head
 //   set_follow  whether the body follows its end (./scroll.ts)
 //   scroll      one shot: the body to its top, end or a cell. A command
@@ -32,6 +34,7 @@ import { getNode } from "@nustackdev/ui-core";
 import { nodeAt, tree, useTree } from "@nustackdev/ui-kit";
 import { LOCAL, localOf } from "../core/local";
 import { type EditorState, EMPTY_EDITOR, pruneEditor } from "../plane/state";
+import { coerceTargets, type Target } from "../plane/transfer";
 import {
 	type AbsentReason,
 	type Cell,
@@ -108,6 +111,11 @@ export function applyPaneWrite(props: Props, payload: unknown): void {
 		return;
 	}
 
+	if (op === "set_targets") {
+		props.targets = coerceTargets(p.planes);
+		return;
+	}
+
 	if (op === "set_follow") {
 		props.follow = coerceFollow(p.follow);
 		return;
@@ -148,6 +156,11 @@ export function patchPaneTitle(path: Path, title: string): void {
 	tree.getState().setProps(path, { head: { ...head, title } });
 }
 
+/** Forget the last answer to `cell.targets`, locally, as a new ask goes out: loading until it lands. */
+export function clearPaneTargets(path: Path): void {
+	if (nodeAt(path)) tree.getState().setProps(path, { targets: null });
+}
+
 // -- Reads -------------------------------------------------------------------
 //
 // One prop each, so a keystroke in the pane's editor state re-renders none
@@ -172,6 +185,11 @@ const NO_TRAIL: Crumb[] = [];
 /** The planes above the pane's, top first. Empty until it lands. */
 export function usePaneTrail(path: Path): Crumb[] {
 	return usePaneProp<Crumb[]>(path, "trail") ?? NO_TRAIL;
+}
+
+/** The answer to the last `cell.targets` ask. Null while none has landed since. */
+export function usePaneTargets(path: Path): Target[] | null {
+	return usePaneProp<Target[]>(path, "targets") ?? null;
 }
 
 /** Whether the pane's body follows its end. "none" until told. */

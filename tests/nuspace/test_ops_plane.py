@@ -198,6 +198,15 @@ async def test_remove_raises_on_missing_removed_root_and_system(store):
         await do(store, nuspace.plane.remove(nu.Str(ROOT)))
 
 
+async def unstamped(store, *ids):
+    """Zero ``modified_at`` on each plane, so a test sees which ones an op stamps."""
+    await do(store, nu.Sequential(*(planes[p].modified_at.set(0.0) for p in ids)))
+
+
+async def stamped(store, *ids):
+    return [await store.read(planes[p].modified_at) > 0 for p in ids]
+
+
 async def test_move_reorders_among_siblings_and_to_the_end(store):
     await do(store, nuspace.plane.add("a") >> nuspace.plane.add("b") >> nuspace.plane.add("c"))
     await do(store, nuspace.plane.move("c", before="a"))
@@ -206,40 +215,139 @@ async def test_move_reorders_among_siblings_and_to_the_end(store):
     assert await children(store) == ["a", "b", "c"]
     await do(store, nuspace.plane.move("a", after="b"))
     assert await children(store) == ["b", "a", "c"]
+    assert await store.read(planes["a"].parent) == ROOT
 
 
-async def test_move_reparents_with_both_sides_in_one_commit(store):
+async def test_move_stamps_the_parent_not_the_plane(store):
     await do(
         store,
-        nuspace.plane.add("a") >> nuspace.plane.add("b") >> nuspace.plane.add("x", parent="b"),
+        nuspace.plane.add("a")
+        >> nuspace.plane.add("x", parent="a")
+        >> nuspace.plane.add("y", parent="a"),
     )
-    await do(store, nuspace.plane.move("a", parent="b", before="x"))
-    assert await children(store) == ["b"]
-    assert await children(store, "b") == ["a", "x"]
-    assert await store.read(planes["a"].parent) == "b"
+    await unstamped(store, ROOT, "a", "x", "y")
+    await do(store, nuspace.plane.move("y", before="x"))
+    assert await children(store, "a") == ["y", "x"]
+    assert await stamped(store, ROOT, "a", "x", "y") == [False, True, False, False]
 
 
-async def test_move_refuses_root_a_cycle_and_a_bad_anchor(store):
+async def test_move_is_allowed_for_a_system_plane(store):
+    await do(store, nuspace.plane.add("a") >> nuspace.plane.add("s", system=True))
+    await do(store, nuspace.plane.move("s", before="a"))
+    assert await children(store) == ["s", "a"]
+
+
+async def test_move_refuses_root_and_a_bad_anchor(store):
     await do(
         store,
         nuspace.plane.add("a")
         >> nuspace.plane.add("b", parent="a")
-        >> nuspace.plane.add("c", parent="b")
-        >> nuspace.plane.add("d"),
+        >> nuspace.plane.add("d")
+        >> nuspace.plane.add("e")
+        >> nuspace.plane.remove("e"),
     )
     with pytest.raises(Refused, match="root"):
-        nuspace.plane.move(ROOT, parent="a")
-    with pytest.raises(Refused, match="under itself"):
-        await do(store, nuspace.plane.move("a", parent="c"))
-    with pytest.raises(Refused, match="under itself"):
-        await do(store, nuspace.plane.move("a", parent="a"))
+        nuspace.plane.move(ROOT)
+    with pytest.raises(Refused, match="root"):
+        await do(store, nuspace.plane.move(nu.Str(ROOT)))
     with pytest.raises(Refused, match="not on"):
         await do(store, nuspace.plane.move("d", before="b"))
     with pytest.raises(Refused, match="itself"):
         await do(store, nuspace.plane.move("d", before=nu.Str("d")))
     with pytest.raises(Missing):
-        await do(store, nuspace.plane.move("d", parent="nope"))
+        await do(store, nuspace.plane.move("nope"))
+    with pytest.raises(Missing):
+        await do(store, nuspace.plane.move("d", before="nope"))
+    with pytest.raises(Removed):
+        await do(store, nuspace.plane.move("e"))
+    with pytest.raises(Removed):
+        await do(store, nuspace.plane.move("d", before="e"))
+    with pytest.raises(TypeError):
+        nuspace.plane.move("d", before="a", after="a")
     assert await children(store) == ["a", "d"]
+
+
+async def test_transfer_reparents_with_both_sides_in_one_commit(store):
+    await do(
+        store,
+        nuspace.plane.add("a")
+        >> nuspace.plane.add("b")
+        >> nuspace.plane.add("x", parent="b")
+        >> nuspace.plane.add("y", parent="b")
+        >> nuspace.plane.add("k", parent="a")
+        >> nuspace.cell.add("a", "s", id="c"),
+    )
+    await do(store, nuspace.plane.transfer("a", "b", before="y"))
+    assert await children(store) == ["b"]
+    assert await children(store, "b") == ["x", "a", "y"]
+    assert await store.read(planes["a"].parent) == "b"
+    assert await children(store, "a") == ["k"]
+    assert await store.read(nu.list(planes["a"].cells.keys())) == ["c"]
+    await do(store, nuspace.plane.transfer("k", ROOT))
+    assert await children(store) == ["b", "k"]
+    assert await children(store, "a") == []
+
+
+async def test_transfer_stamps_the_plane_and_both_parents(store):
+    await do(
+        store,
+        nuspace.plane.add("a")
+        >> nuspace.plane.add("b")
+        >> nuspace.plane.add("c")
+        >> nuspace.plane.add("x", parent="a"),
+    )
+    await unstamped(store, ROOT, "a", "b", "c", "x")
+    await do(store, nuspace.plane.transfer("x", "b"))
+    assert await stamped(store, ROOT, "a", "b", "c", "x") == [False, True, True, False, True]
+
+
+async def test_transfer_refuses(store):
+    await do(
+        store,
+        nuspace.plane.add("a")
+        >> nuspace.plane.add("b", parent="a")
+        >> nuspace.plane.add("c", parent="b")
+        >> nuspace.plane.add("d")
+        >> nuspace.plane.add("s", system=True)
+        >> nuspace.plane.add("t", parent="d", system=True)
+        >> nuspace.plane.add("e")
+        >> nuspace.plane.remove("e"),
+    )
+    with pytest.raises(Refused, match="root"):
+        nuspace.plane.transfer(ROOT, "a")
+    with pytest.raises(Refused, match="root"):
+        await do(store, nuspace.plane.transfer(nu.Str(ROOT), "a"))
+    with pytest.raises(Refused, match="under root already"):
+        await do(store, nuspace.plane.transfer("d", ROOT))
+    with pytest.raises(Refused, match="plane s is a system plane"):
+        await do(store, nuspace.plane.transfer("s", "a"))
+    with pytest.raises(Refused, match="plane t is a system plane"):
+        await do(store, nuspace.plane.transfer("t", ROOT))
+    with pytest.raises(Refused, match="plane s is a system plane"):
+        await do(store, nuspace.plane.transfer("d", "s"))
+    with pytest.raises(Refused, match="under itself"):
+        await do(store, nuspace.plane.transfer("a", "c"))
+    with pytest.raises(Refused, match="under itself"):
+        await do(store, nuspace.plane.transfer("a", "a"))
+    with pytest.raises(Refused, match="not on"):
+        await do(store, nuspace.plane.transfer("d", "a", before="c"))
+    with pytest.raises(Refused, match="itself"):
+        await do(store, nuspace.plane.transfer("d", "a", before=nu.Str("d")))
+    with pytest.raises(Missing):
+        await do(store, nuspace.plane.transfer("d", "nope"))
+    with pytest.raises(Missing):
+        await do(store, nuspace.plane.transfer("nope", "a"))
+    with pytest.raises(Missing):
+        await do(store, nuspace.plane.transfer("d", "a", before="nope"))
+    with pytest.raises(Removed):
+        await do(store, nuspace.plane.transfer("d", "e"))
+    with pytest.raises(Removed):
+        await do(store, nuspace.plane.transfer("e", "a"))
+    with pytest.raises(TypeError):
+        nuspace.plane.transfer("d", "a", before="b", after="b")
+    assert await children(store) == ["a", "d", "s"]
+    assert await children(store, "a") == ["b"]
+    assert await children(store, "d") == ["t"]
 
 
 async def test_rename_icon_backend_and_meta_write_the_row(store):
@@ -312,3 +420,13 @@ async def test_on_change_fires_on_a_cell_write_and_on_children_change_on_a_child
     await fired(nuspace.plane.on_change("a"), nuspace.cell.rename("c1", "x"))
     await fired(nuspace.plane.on_children_change("a"), nuspace.plane.add("k", parent="a"))
     assert is_null(await store.read(planes["k"].removed_at))
+
+
+async def test_add_and_remove_stamp_the_parent_and_no_bystander(store):
+    await do(store, nuspace.plane.add("a") >> nuspace.plane.add("b"))
+    await unstamped(store, ROOT, "a", "b")
+    await do(store, nuspace.plane.add("x", parent="a"))
+    assert await stamped(store, ROOT, "a", "b") == [False, True, False]
+    await unstamped(store, ROOT, "a")
+    await do(store, nuspace.plane.remove("x"))
+    assert await stamped(store, ROOT, "a", "b") == [False, True, False]

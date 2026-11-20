@@ -52,6 +52,7 @@ __all__ = [
     "set_key",
     "set_meta",
     "title",
+    "transfer",
 ]
 
 
@@ -149,7 +150,8 @@ def add(
 ) -> nu.Nu:
     """Create a plane with no cells under ``parent``. Create only: an id taken raises.
 
-    One commit: the row, the id in the parent's ``children``, the key in
+    One commit: the row, the id in the parent's ``children`` (the parent's
+    ``modified_at`` stamped), the key in
     ``Space.indexes.plane_keys`` and the id in ``spec_planes[spec].ids``
     when given. Told to telemetry as made by nuspace, from a spec or by
     hand, reading no key. Cost: O(1), about 20 keys.
@@ -217,6 +219,7 @@ def add(
             >> key_free(Space.indexes.plane_keys, key, None, "plane")
             >> nu.let(nustd.time.time(), made)
             >> place(siblings, pid, before=before, after=after)
+            >> _touched(parent)
             >> when(key, Space.indexes.plane_keys.set_item(key, pid))
             >> when(spec, Space.indexes.spec_planes[spec].ids.set_item(pid, True))
         )
@@ -237,7 +240,8 @@ def remove(id: nu.StrArg) -> nu.Nu:
     Stamps ``removed_at`` and ``removed_by=id`` on the plane and on every
     plane and cell below it not removed yet (rows removed earlier keep
     their own stamp), and drops each stamped row's key from the key index
-    (the rows keep ``.key``). The plane leaves its parent's ``children``;
+    (the rows keep ``.key``). The plane leaves its parent's ``children``
+    (the parent's ``modified_at`` stamped);
     the rows below stay listed where they are, for a restore. The id goes
     into ``Space.indexes.removed``. Writes nothing about runs: the kernel
     stops the live plane runs of what it sees removed. Each plane and cell
@@ -280,6 +284,7 @@ def remove(id: nu.StrArg) -> nu.Nu:
         >> live(rows, id, "plane")
         >> refuse(row.system.fallback(False), Refused, "plane ", id, " is a system plane")
         >> rows[row.parent].children.del_item(id)
+        >> _touched(row.parent)
         >> nu.let(nustd.time.time(), stamped)
         >> keys.removed.set_item(id, True)
     )
@@ -288,39 +293,85 @@ def remove(id: nu.StrArg) -> nu.Nu:
 def move(
     id: nu.StrArg,
     *,
-    parent: nu.StrArg | None = None,
     before: nu.StrArg | None = None,
     after: nu.StrArg | None = None,
 ) -> nu.Nu:
-    """Move a plane under a new parent, or to a new spot among its siblings when ``parent`` is left out.
+    """Move a plane among its siblings: before or after one, or to the end. Same parent.
 
-    Before or after a sibling there, or at the end when neither is given.
-    The key and everything below it stay as they are. Cost: O(1) writes,
-    about 10 keys, plus O(depth) reads for the cycle check, which climbs
-    from the new parent to root.
+    Writes the parent's ``children`` order and stamps the parent's
+    ``modified_at``; the plane's own row is not written. Another parent is
+    :func:`transfer`. Cost: O(1), about 4 keys.
 
     Raises:
-        Missing: No plane, new parent or anchor with that id.
-        Removed: The plane, the new parent or the anchor is removed.
-        Refused: Root, a cycle, an anchor that is not a sibling there.
+        Missing: No plane or anchor with that id.
+        Removed: The plane or the anchor is removed.
+        Refused: Root, an anchor that is not a sibling, or the plane itself.
         TypeError: Both ``before`` and ``after``, at build.
     """
     anchor = anchor_of(before, after)
     rows = Space.planes
     row = rows[id]
-    target = row.parent if parent is None else parent
-    checks = _not_root(id, "moved") >> live(rows, id, "plane")
-    if parent is not None:
-        checks = checks >> live(rows, parent, "plane") >> no_cycle(id, parent)
-    siblings = rows[target].children
+    siblings = rows[row.parent].children
     return (
-        checks
-        >> anchored(siblings, rows, anchor, id, "plane", text("plane ", target))
-        >> rows[row.parent].children.del_item(id)
+        _not_root(id, "moved")
+        >> live(rows, id, "plane")
+        >> anchored(siblings, rows, anchor, id, "plane", text("plane ", row.parent))
+        >> siblings.del_item(id)
         >> place(siblings, id, before=before, after=after)
-        >> row.parent.set(target)
+        >> _touched(row.parent)
+    )
+
+
+def transfer(
+    id: nu.StrArg,
+    parent: nu.StrArg,
+    *,
+    before: nu.StrArg | None = None,
+    after: nu.StrArg | None = None,
+) -> nu.Nu:
+    """Transfer a plane under another parent: before or after a child there, or at the end.
+
+    One commit: out of the old parent's ``children``, into the new one's,
+    ``parent`` set, ``modified_at`` stamped on the plane and on both
+    parents. Everything below rides along as it is: cells, children, keys,
+    state, spec. Runs are untouched. Cost: O(1) writes, about 10 keys,
+    plus O(depth) reads for the cycle check, which climbs from the new
+    parent to root.
+
+    Raises:
+        Missing: No plane, new parent or anchor with that id.
+        Removed: The plane, the new parent or the anchor is removed.
+        Refused: Root, the same parent (that is :func:`move`), a system
+            plane, a system parent other than root, a cycle, an anchor
+            that is not a child of the new parent.
+        TypeError: Both ``before`` and ``after``, at build.
+    """
+    anchor = anchor_of(before, after)
+    rows = Space.planes
+    row = rows[id]
+    old = row.parent
+    siblings = rows[parent].children
+    system_parent = (nu.Str(parent) != ROOT).and_(rows[parent].system.fallback(False))
+    checks = (
+        _not_root(id, "transferred")
+        >> live(rows, id, "plane")
+        >> live(rows, parent, "plane")
+        >> refuse(nu.Str(parent) == old, Refused, "plane ", id, " is under ", parent, " already")
+        >> refuse(row.system.fallback(False), Refused, "plane ", id, " is a system plane")
+        >> refuse(system_parent, Refused, "plane ", parent, " is a system plane")
+        >> no_cycle(id, parent)
+        >> anchored(siblings, rows, anchor, id, "plane", text("plane ", parent))
+    )
+    # The old parent is read off the row, so everything about it comes before the row moves.
+    moved = (
+        rows[old].children.del_item(id)
+        >> _touched(old)
+        >> place(siblings, id, before=before, after=after)
+        >> row.parent.set(parent)
+        >> _touched(parent)
         >> _touched(id)
     )
+    return checks >> moved
 
 
 def rename(id: nu.StrArg, name: nu.StrArg) -> nu.Nu:

@@ -52,6 +52,7 @@ function render(
 					onPlus={noop}
 					onDelete={noop}
 					onRestart={noop}
+					onTransfer={noop}
 					onSelect={noop}
 					onFocusConsumed={noop}
 					onCommit={noop}

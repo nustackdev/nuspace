@@ -55,6 +55,12 @@ crumbs. The pane climbs ``parent`` itself (:func:`trail`), on any rename or
 move anywhere. Level, no re-checks: a missed notification leaves the display
 stale until the next change.
 
+**The transfer targets are asked for, never watched.** A pane's
+``cell.targets`` (its cell's "Move to plane" picker opening) is answered
+once with :func:`transfer_targets` on that pane: every web plane that is
+editable, not removed and not a system plane. The core op does not read
+``editable``; this list is where the web keeps to it.
+
 **A cell's classes are read off its spec, here.** Each shipped cell carries
 the classes of the installed CellSpec it was made from, and not the spec
 itself, so the browser binds behaviour to a class and never to who made a
@@ -104,6 +110,7 @@ __all__ = [
     "plane_head",
     "statuses",
     "trail",
+    "transfer_targets",
     "viewer_feed",
 ]
 
@@ -180,6 +187,28 @@ def plane_head(plane: nu.StrArg) -> nu.Dict:
         editable=flags.editable.fallback(False),
         width=flags.width.fallback("page"),
     )
+
+
+def transfer_targets() -> nu.List:
+    """``{id, title, icon}`` for every plane a cell can be transferred to, in web row order. Bare read.
+
+    A web plane that is editable, not removed and not a system plane. What
+    a ``cell.targets`` ask is answered with; the browser leaves the cell's
+    own plane out. Cost: O(web planes), a few reads each.
+    """
+
+    def target(at: nu.Attr) -> nu.Bool:
+        plane = nu.Str(at)
+        editable = nu.Bool(Web.planes[plane].editable.fallback(False))
+        system = nu.Bool(Space.planes[plane].system.fallback(False))
+        return editable.and_(nuspace.plane.exists(plane)).and_(system.not_())
+
+    def look(at: nu.Attr) -> nu.Dict:
+        plane = nu.Str(at)
+        row = Space.planes[plane]
+        return nu.Dict.of(id=plane, title=row.name.fallback(""), icon=row.icon.fallback(""))
+
+    return nu.List(keys_of(Web.planes)).iter().filter(target).map(look).to_list()
 
 
 class _Climb(nu.Shape):
@@ -487,6 +516,22 @@ def _events(
             "move",
             interactions.on_move_cell(pane),
             lambda c, ev: placed(ev, lambda **at: atomic(nuspace.cell.move(c, **at))),
+        ),
+        arms.event(
+            "targets",
+            interactions.on_targets(pane),
+            lambda _: nu.let(
+                atomic(transfer_targets()),
+                lambda held: interactions.set_targets(pane, nu.List(held)),
+            ),
+        ),
+        on_cell(
+            "transfer",
+            interactions.on_transfer_cell(pane),
+            lambda c, ev: placed(
+                ev,
+                lambda **at: atomic(nuspace.cell.transfer(c, field_str(ev, "plane_id"), **at)),
+            ),
         ),
         on_cell(
             "restart_cell",

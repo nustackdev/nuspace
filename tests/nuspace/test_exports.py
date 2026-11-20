@@ -40,9 +40,12 @@ def test_op_terms_go_over_the_wire_to_a_worker():
     terms = [
         nuspace.plane.add(key="k"),
         nuspace.plane.remove("p"),
-        nuspace.plane.move("p", parent="q"),
+        nuspace.plane.move("p", before="q"),
+        nuspace.plane.transfer("p", "q"),
         nuspace.cell.add("p", "src"),
         nuspace.cell.set_prog("c", "src"),
+        nuspace.cell.move("c", after="d"),
+        nuspace.cell.transfer("c", "p"),
         nuspace.plane.title("p"),
         nuspace.plane_run.add("p"),
         nuspace.plane_run.wait("r"),

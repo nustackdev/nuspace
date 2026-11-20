@@ -123,6 +123,10 @@ class PaneRef(SpaceRef):
         """Say what each of the pane's cells is doing."""
         return interactions.set_status(self, statuses)
 
+    def set_targets(self, planes: ListArg[dict]) -> Nu:
+        """Answer a ``cell.targets`` ask with the planes a cell can be transferred to."""
+        return interactions.set_targets(self, planes)
+
     def set_trail(self, trail: ListArg[dict]) -> Nu:
         """Say which planes sit above the pane's, top first."""
         return interactions.set_trail(self, trail)
@@ -205,6 +209,14 @@ class PaneRef(SpaceRef):
     def on_move_cell(self) -> Changed:
         """``{cell_id, before?, after?}``."""
         return interactions.on_move_cell(self)
+
+    def on_targets(self) -> Changed:
+        """``{}``."""
+        return interactions.on_targets(self)
+
+    def on_transfer_cell(self) -> Changed:
+        """``{cell_id, plane_id, before?, after?}``."""
+        return interactions.on_transfer_cell(self)
 
     def on_restart_cell(self) -> Changed:
         """``{cell_id}``."""

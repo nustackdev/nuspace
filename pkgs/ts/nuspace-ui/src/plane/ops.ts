@@ -73,6 +73,13 @@ export type Ops = {
 	"plane.remove_key": Record<string, never>;
 	/** One cell before or after another of its plane, neither for the end. */
 	"cell.move": { cell_id: string; before?: string; after?: string };
+	/** Ask for the planes a cell can be transferred to: answered once with
+	 *  `set_targets` on this pane's node (./transfer.ts). */
+	"cell.targets": Record<string, never>;
+	/** One cell to another plane, editable and not this one (./transfer.ts):
+	 *  before or after a cell there, neither for its end. It leaves this pane
+	 *  when the cells ship again. */
+	"cell.transfer": { cell_id: string; plane_id: string; before?: string; after?: string };
 	/** Run the cell again in this pane's run. With the run over, the whole
 	 *  pane runs again. */
 	"cell.restart": { cell_id: string };

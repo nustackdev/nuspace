@@ -10,6 +10,9 @@
   ``set_absent``. ``set_absent`` stands in for the head when the pane has
   no plane to draw, and a later ``set_head`` clears it. Any order is fine:
   the browser keeps each beside the others.
+- **Targets**, one ask and one answer on a pane's path: ``cell.targets``
+  asks for the planes a cell can be transferred to, ``set_targets``
+  answers once. Nothing watches them after.
 - **Scroll**, host or cell to browser, on the same path: ``set_follow`` is
   state the node keeps (pin the body to its end as it grows), ``scroll`` a
   one shot command, applied once per new ``seq``. Whether the user is at
@@ -60,6 +63,8 @@ __all__ = [
     "on_set_icon",
     "on_set_plane_key",
     "on_set_web",
+    "on_targets",
+    "on_transfer_cell",
     "on_update_cell",
     "scroll",
     "set_absent",
@@ -67,6 +72,7 @@ __all__ = [
     "set_follow",
     "set_head",
     "set_status",
+    "set_targets",
     "set_trail",
 ]
 
@@ -166,6 +172,15 @@ def set_trail(pane: Ref, trail: ListArg[dict]) -> Nu:
     return write(pane, "set_trail", trail=trail)
 
 
+def set_targets(pane: Ref, planes: ListArg[dict]) -> Nu:
+    """Answer a ``cell.targets``: the planes a cell can be transferred to, each ``{id, title, icon}``.
+
+    Every web plane that is editable, not removed and not a system plane,
+    the pane's own included: the browser leaves it out. Sent once per ask.
+    """
+    return write(pane, "set_targets", planes=planes)
+
+
 def set_follow(pane: Ref, follow: StrArg) -> Nu:
     """Say whether the pane's body follows its end: :data:`FOLLOW_NONE` or :data:`FOLLOW_BOTTOM`.
 
@@ -261,6 +276,16 @@ def on_delete_cell(pane: Ref) -> Changed:
 def on_move_cell(pane: Ref) -> Changed:
     """``{cell_id, before?, after?}``. Moves one cell among its plane's, neither anchor the end."""
     return event(pane, "cell.move")
+
+
+def on_targets(pane: Ref) -> Changed:
+    """``{}``. Asks for the planes a cell can be transferred to, answered with :func:`set_targets`."""
+    return event(pane, "cell.targets")
+
+
+def on_transfer_cell(pane: Ref) -> Changed:
+    """``{cell_id, plane_id, before?, after?}``. Transfers one cell to another plane, neither anchor its end."""
+    return event(pane, "cell.transfer")
 
 
 def on_restart_cell(pane: Ref) -> Changed:

@@ -344,12 +344,12 @@ async def test_a_removed_cell_gets_its_run_interrupted(space):
 
 
 @module_loop
-async def test_a_moved_cell_gets_its_run_on_the_old_plane_interrupted(space):
+async def test_a_transferred_cell_gets_its_run_on_the_old_plane_interrupted(space):
     p, (a, b) = await space.plane(FOREVER, FOREVER)
     q, _ = await space.plane()
     r = await space.start(p)
     await all_live(space, r, a, b)
-    await space.do(nuspace.cell.move(a, plane=q))
+    await space.do(nuspace.cell.transfer(a, q))
     row = await space.run_row(r, lambda x: ended(cell_of(x, a)), SLOW)
     assert cell_of(row, a)["exit"] == EXIT_INTERRUPTED
     assert live(cell_of(row, b))

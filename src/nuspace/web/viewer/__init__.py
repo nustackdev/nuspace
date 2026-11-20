@@ -17,6 +17,7 @@ from nuspace.web.viewer.feed import (
     plane_head,
     statuses,
     trail,
+    transfer_targets,
     viewer_feed,
 )
 from nuspace.web.viewer.interactions import (
@@ -48,6 +49,8 @@ from nuspace.web.viewer.interactions import (
     on_set_icon,
     on_set_plane_key,
     on_set_web,
+    on_targets,
+    on_transfer_cell,
     on_update_cell,
     scroll,
     set_absent,
@@ -55,6 +58,7 @@ from nuspace.web.viewer.interactions import (
     set_follow,
     set_head,
     set_status,
+    set_targets,
     set_trail,
 )
 from nuspace.web.viewer.ref import PaneRef, PanesRef, ViewerRef, pane_ref, slash_entries
@@ -94,6 +98,8 @@ __all__ = [
     "on_set_icon",
     "on_set_plane_key",
     "on_set_web",
+    "on_targets",
+    "on_transfer_cell",
     "on_update_cell",
     "pane_ref",
     "plane_cells",
@@ -104,9 +110,11 @@ __all__ = [
     "set_follow",
     "set_head",
     "set_status",
+    "set_targets",
     "set_trail",
     "slash_entries",
     "statuses",
     "trail",
+    "transfer_targets",
     "viewer_feed",
 ]

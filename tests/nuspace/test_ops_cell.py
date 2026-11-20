@@ -9,7 +9,7 @@ import nu
 import nuspace
 from nuspace.errors import Exists, Missing, Refused, Removed
 from nuspace.ops.interactions import Fabrics
-from nuspace.shapes import Space
+from nuspace.shapes import ROOT, Space
 
 
 STORES = ("memory", "sqlite")
@@ -195,24 +195,53 @@ async def test_set_key_moves_the_index_entry_and_refuses_a_key_another_cell_hold
         await do(store, nuspace.cell.remove_key("a"))
 
 
-async def test_move_reorders_and_takes_a_cell_to_another_plane(plane):
+async def unstamped(store, *rows):
+    """Zero ``modified_at`` on each row, so a test sees which ones an op stamps."""
+    await do(store, nu.Sequential(*(r.modified_at.set(0.0) for r in rows)))
+
+
+async def stamped(store, *rows):
+    return [await store.read(r.modified_at) > 0 for r in rows]
+
+
+async def test_move_reorders_within_the_plane(plane):
     store = plane
     await do(
         store,
         nuspace.cell.add("p", "s", id="a")
         >> nuspace.cell.add("p", "s", id="b")
-        >> nuspace.cell.add("q", "s", id="x"),
+        >> nuspace.cell.add("p", "s", id="c"),
+    )
+    await do(store, nuspace.cell.move("c", before="a"))
+    assert await listed(store) == ["c", "a", "b"]
+    await do(store, nuspace.cell.move("c"))
+    assert await listed(store) == ["a", "b", "c"]
+    await do(store, nuspace.cell.move("a", after="b"))
+    assert await listed(store) == ["b", "a", "c"]
+    assert await store.read(cells["a"].plane) == "p"
+
+
+async def test_move_stamps_the_plane_once_and_not_the_cell(plane):
+    store = plane
+    await do(store, nuspace.cell.add("p", "s", id="a") >> nuspace.cell.add("p", "s", id="b"))
+    await unstamped(store, cells["a"], planes["p"], planes["q"])
+    at, q_at = await version(store), await version(store, "q")
+    await do(store, nuspace.cell.move("a", after="b"))
+    assert await stamped(store, cells["a"], planes["p"], planes["q"]) == [False, True, False]
+    assert (await version(store), await version(store, "q")) == (at + 1, q_at)
+    assert await store.read(cells["a"].version) == 1
+
+
+async def test_move_is_allowed_on_a_system_plane(plane):
+    store = plane
+    await do(
+        store,
+        nuspace.plane.add("sys", backend="async", system=True)
+        >> nuspace.cell.add("sys", "s", id="a")
+        >> nuspace.cell.add("sys", "s", id="b"),
     )
     await do(store, nuspace.cell.move("b", before="a"))
-    assert await listed(store) == ["b", "a"]
-    await do(store, nuspace.cell.move("b"))
-    assert await listed(store) == ["a", "b"]
-    p_at, q_at = await version(store), await version(store, "q")
-    await do(store, nuspace.cell.move("a", plane="q", before="x"))
-    assert await listed(store) == ["b"]
-    assert await listed(store, "q") == ["a", "x"]
-    assert await store.read(cells["a"].plane) == "q"
-    assert (await version(store), await version(store, "q")) == (p_at + 1, q_at + 1)
+    assert await listed(store, "sys") == ["b", "a"]
 
 
 async def test_move_raises(plane):
@@ -222,12 +251,98 @@ async def test_move_raises(plane):
         await do(store, nuspace.cell.move("a", before="x"))
     with pytest.raises(Refused, match="itself"):
         nuspace.cell.move("a", after="a")
+    with pytest.raises(Refused, match="itself"):
+        await do(store, nuspace.cell.move("a", after=nu.Str("a")))
     with pytest.raises(Missing):
-        await do(store, nuspace.cell.move("a", plane="nope"))
+        await do(store, nuspace.cell.move("nope"))
+    with pytest.raises(Missing):
+        await do(store, nuspace.cell.move("a", before="nope"))
+    await do(store, nuspace.cell.add("p", "s", id="b") >> nuspace.cell.remove("b"))
+    with pytest.raises(Removed):
+        await do(store, nuspace.cell.move("b"))
+    with pytest.raises(Removed):
+        await do(store, nuspace.cell.move("a", before="b"))
+    with pytest.raises(TypeError):
+        nuspace.cell.move("a", before="x", after="x")
+    assert await listed(store) == ["a"]
+
+
+async def test_transfer_takes_a_cell_to_another_plane_in_one_commit(plane):
+    store = plane
+    await do(
+        store,
+        nuspace.cell.add("p", "s", id="a", key="ka")
+        >> nuspace.cell.add("p", "s", id="b")
+        >> nuspace.cell.add("q", "s", id="x")
+        >> nuspace.cell.add("q", "s", id="y"),
+    )
+    await do(store, nuspace.cell.transfer("a", "q", before="y"))
+    assert await listed(store) == ["b"]
+    assert await listed(store, "q") == ["x", "a", "y"]
+    assert await store.read(cells["a"].plane) == "q"
+    await do(store, nuspace.cell.transfer("b", "q"))
+    assert await listed(store) == []
+    assert await listed(store, "q") == ["x", "a", "y", "b"]
+
+
+async def test_transfer_stamps_the_cell_and_both_planes(plane):
+    store = plane
+    await do(
+        store,
+        nuspace.plane.add("r", backend="async")
+        >> nuspace.cell.add("p", "s", id="a", key="ka", spec="testing.plain"),
+    )
+    before = await store.read(cells["a"].extract())
+    await unstamped(store, cells["a"], planes["p"], planes["q"], planes["r"])
+    at = [await version(store, p) for p in "pqr"]
+    await do(store, nuspace.cell.transfer("a", "q"))
+    rows = [cells["a"], planes["p"], planes["q"], planes["r"]]
+    assert await stamped(store, *rows) == [True, True, True, False]
+    assert [await version(store, p) for p in "pqr"] == [at[0] + 1, at[1] + 1, at[2]]
+    after = await store.read(cells["a"].extract())
+    for k in ("version", "fabrics", "spec", "key", "prog", "name"):
+        assert after[k] == before[k], k
+
+
+async def test_transfer_raises(plane):
+    store = plane
+    await do(
+        store,
+        nuspace.plane.add("sys", backend="async", system=True)
+        >> nuspace.cell.add("p", "s", id="a")
+        >> nuspace.cell.add("p", "s", id="b")
+        >> nuspace.cell.add("q", "s", id="x")
+        >> nuspace.cell.add("sys", "s", id="z"),
+    )
+    with pytest.raises(Refused, match="on plane p already"):
+        await do(store, nuspace.cell.transfer("a", "p"))
+    with pytest.raises(Refused, match="plane sys is a system plane"):
+        await do(store, nuspace.cell.transfer("a", "sys"))
+    with pytest.raises(Refused, match="plane root is a system plane"):
+        await do(store, nuspace.cell.transfer("a", ROOT))
+    with pytest.raises(Refused, match="plane sys is a system plane"):
+        await do(store, nuspace.cell.transfer("z", "q"))
+    with pytest.raises(Refused, match="not on plane q"):
+        await do(store, nuspace.cell.transfer("a", "q", before="b"))
+    with pytest.raises(Refused, match="itself"):
+        nuspace.cell.transfer("a", "q", after="a")
+    with pytest.raises(Missing):
+        await do(store, nuspace.cell.transfer("a", "nope"))
+    with pytest.raises(Missing):
+        await do(store, nuspace.cell.transfer("nope", "q"))
+    with pytest.raises(Missing):
+        await do(store, nuspace.cell.transfer("a", "q", before="nope"))
     await do(store, nuspace.plane.add("r") >> nuspace.plane.remove("r"))
     with pytest.raises(Removed):
-        await do(store, nuspace.cell.move("a", plane="r"))
+        await do(store, nuspace.cell.transfer("a", "r"))
+    await do(store, nuspace.cell.remove("b"))
+    with pytest.raises(Removed):
+        await do(store, nuspace.cell.transfer("b", "q"))
+    with pytest.raises(TypeError):
+        nuspace.cell.transfer("a", "q", before="x", after="x")
     assert await listed(store) == ["a"]
+    assert await listed(store, "q") == ["x"]
+    assert await listed(store, "sys") == ["z"]
 
 
 async def test_edits_move_plane_version_and_set_prog_moves_cell_version(plane):
@@ -280,3 +395,13 @@ async def test_exists_and_title(plane):
     ]
     with pytest.raises(Missing):
         await store.read(nuspace.cell.title("nope"))
+
+
+async def test_add_and_remove_stamp_the_plane_and_no_bystander(plane):
+    store = plane
+    await unstamped(store, planes["p"], planes["q"])
+    await do(store, nuspace.cell.add("p", "s", id="a"))
+    assert await stamped(store, planes["p"], planes["q"]) == [True, False]
+    await unstamped(store, planes["p"], cells["a"])
+    await do(store, nuspace.cell.remove("a"))
+    assert await stamped(store, planes["p"], planes["q"]) == [True, False]

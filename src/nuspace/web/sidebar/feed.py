@@ -25,9 +25,9 @@ browser falls back to the registered PlaneSpec's icon when the plane has
 none.
 
 **Watches.** The tree ships again when a plane's name, icon, removal or
-children change, a web row comes or goes, or the tab opens or closes a
-branch. A cell writing its state or the kernel writing a
-run never wakes it. Level, with no re-checks: a missed notification leaves
+children (their order included) change, a web row comes or goes, or the
+tab opens or closes a branch. A cell writing its state or the kernel
+writing a run never wakes it. Level, with no re-checks: a missed notification leaves
 the tree stale until the next change.
 """
 
@@ -63,6 +63,26 @@ __all__ = ["create", "node", "rows", "sidebar_feed"]
 def node(parent_id: nu.Nu) -> nu.Str:
     """The store's plane for a browser parent id: :data:`ROOT_ID` is root."""
     return nu.Str(nu.Switch(parent_id, {ROOT_ID: ROOT}, default=parent_id))
+
+
+def _placed(
+    plane: nu.StrArg,
+    under: nu.StrArg,
+    *,
+    before: nu.StrArg | None = None,
+    after: nu.StrArg | None = None,
+) -> nu.Nu:
+    """A drag in the tree: a move among siblings under its own parent, a transfer under another.
+
+    One drag event always names the parent; the parent read and the write
+    land in the caller's bracket, so they are one commit.
+    """
+    same = nu.Str(under) == Space.planes[plane].parent
+    return nu.IfDo(
+        same,
+        nuspace.plane.move(plane, before=before, after=after),
+        nuspace.plane.transfer(plane, under, before=before, after=after),
+    )
 
 
 def _shown(plane: nu.StrArg) -> nu.Bool:
@@ -182,6 +202,8 @@ def _changes(sid: nu.StrArg) -> list[nu.Nu]:
         atomic(planes.on_descendants_change("*", "removed_at")),
         atomic(planes.on_descendants_change("*", "children")),
         atomic(planes.on_descendants_change("*", "children", "*")),
+        # A reorder writes only the ordered dict's order rows, one level further down.
+        atomic(planes.on_descendants_change("*", "children", "*", "*")),
         atomic(Web.planes.on_children_change()),
         atomic(Conn.connections[sid].expanded.on_change()),
     ]
@@ -214,7 +236,7 @@ def sidebar_feed(sidebar: Ref, sid: nu.StrArg, planes: Sequence[PlaneSpec], toas
 
     def moved(plane: nu.Str, event: nu.Attr) -> nu.Nu:
         under = node(field_str(event, "parent_id"))
-        return placed(event, lambda **at: atomic(nuspace.plane.move(plane, parent=under, **at)))
+        return placed(event, lambda **at: atomic(_placed(plane, under, **at)))
 
     return nu.ParallelAsync(
         arms.states("tree", _changes(sid), _ship(sidebar, sid)),

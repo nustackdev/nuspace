@@ -52,6 +52,7 @@ export function Cell({
 	onPlus,
 	onDelete,
 	onRestart,
+	onTransfer,
 	onPress,
 	onSelect,
 	onFocusConsumed,
@@ -86,6 +87,8 @@ export function Cell({
 	onDelete: () => void;
 	/** Run the cell again. */
 	onRestart: () => void;
+	/** Open the plane picker for this cell. */
+	onTransfer: () => void;
 	/** A press anywhere in the row: the plane may start a range select from it. */
 	onPress?: (e: React.PointerEvent) => void;
 	onSelect: () => void;
@@ -138,6 +141,7 @@ export function Cell({
 				onPlus={onPlus}
 				onDelete={onDelete}
 				onRestart={onRestart}
+				onTransfer={onTransfer}
 				onSelect={onSelect}
 			/>
 			{/* Before the body in the DOM, though the grid puts it on the right: the

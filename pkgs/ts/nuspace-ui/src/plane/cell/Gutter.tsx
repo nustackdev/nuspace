@@ -1,7 +1,8 @@
 // A cell's controls, one thin row in each gutter of its row.
 //
 // Left, what you do to the cell's place on the plane: add a line below, and
-// the grip, which drags and, clicked, opens the cell's menu. Right, what the
+// the grip, which drags and, clicked, opens the cell's menu. The menu can
+// also move the cell to another plane (../transfer.ts). Right, what the
 // cell is: the source toggle, its glyph tinted by the cell's status, and
 // beside it the identity toggle, which opens the cell's id and key. A
 // read-only plane has no place to change, so its left gutter keeps only the
@@ -30,6 +31,7 @@ import {
 	TooltipTrigger,
 } from "@nustackdev/ui-kit";
 import {
+	ArrowRightLeft,
 	AtSign,
 	Check,
 	Code,
@@ -67,9 +69,10 @@ export function LeftGutter({
 	onPlus,
 	onDelete,
 	onRestart,
+	onTransfer,
 	onSelect,
 }: {
-	/** The plane's setting. Off, only the menu remains, and it cannot delete. */
+	/** The plane's setting. Off, only the menu remains, and it cannot delete or move. */
 	editable: boolean;
 	cellId: string;
 	/** The cell's key, "" for none: no row copies it then. */
@@ -83,6 +86,8 @@ export function LeftGutter({
 	onDelete: () => void;
 	/** Run the cell again. */
 	onRestart: () => void;
+	/** Open the plane picker for this cell. */
+	onTransfer: () => void;
 	/** Select the cell and hand the plane the keyboard. */
 	onSelect: () => void;
 }) {
@@ -175,6 +180,15 @@ export function LeftGutter({
 						{editable ? (
 							<>
 								<DropdownMenuSeparator />
+								<DropdownMenuItem
+									onSelect={() => {
+										sent.current = true;
+										onTransfer();
+									}}
+								>
+									<ArrowRightLeft />
+									Move to plane…
+								</DropdownMenuItem>
 								<DropdownMenuItem
 									variant="danger"
 									onSelect={() => {

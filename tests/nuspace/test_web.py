@@ -29,7 +29,7 @@ import nustd.ui
 from nu.lang import wire
 from nuspace.kernel import build_body
 from nuspace.ops.plane import DEFAULT_ICON
-from nuspace.shapes import EXIT_FAILED, EXIT_INTERRUPTED, EXIT_OK, Space
+from nuspace.shapes import EXIT_FAILED, EXIT_INTERRUPTED, EXIT_OK, ROOT, Space
 from nuspace.specs import space_registry
 from nuspace.web.env import SessionWrap, session_env
 from nuspace.web.planes import ensure
@@ -37,7 +37,15 @@ from nuspace.web.shapes import Web
 from nuspace.web.shell import Shell
 from nuspace.web.sidebar import registered_entries, rows
 from nuspace.web.utils import CellRoot
-from nuspace.web.viewer import PROGRAM, plane_cells, plane_head, slash_entries, statuses, trail
+from nuspace.web.viewer import (
+    PROGRAM,
+    plane_cells,
+    plane_head,
+    slash_entries,
+    statuses,
+    trail,
+    transfer_targets,
+)
 from nustd.ui.core import OP_NOTIFY, Frame, WsSession
 from nustd.ui.core.session import Session
 
@@ -294,6 +302,21 @@ async def test_viewer_trail_climbs_whatever_the_sidebar_shows(store):
     assert await store.made(nuspace.atomic(trail("nope", into=MADE))) == []
 
 
+async def test_transfer_targets_are_editable_web_planes_alive_and_not_system(store):
+    await plane(store, "p1", "One", icon="lucide:book")
+    await plane(store, "p2", "Two")
+    await plane(store, "ro")
+    await do(store, web.set("ro", editable=False))
+    await plane(store, "off", on_web=False)
+    await plane(store, "gone")
+    await do(store, nuspace.plane.remove("gone"))
+    await store.run(ensure())
+    assert await store.read(transfer_targets()) == [
+        {"id": "p1", "title": "One", "icon": "lucide:book"},
+        {"id": "p2", "title": "Two", "icon": DEFAULT_ICON},
+    ]
+
+
 def test_slash_entries_ship_classes_and_one_default_per_class():
     entries = slash_entries(CELLS)
     assert entries[0]["name"] == TEXT
@@ -511,6 +534,13 @@ async def test_tab_live(store):
             {"plane_id": "p2", "parent_id": "space", "before": "p1"},
         )
         await _until(lambda: _tree(session)["space"]["children"] == ["p2", "p1"])
+        assert await store.read(Space.planes["p2"].parent) == ROOT
+        # The same parent again: a reorder among siblings, not a transfer.
+        session.notify(
+            ("sidebar", "ops", "plane.move"),
+            {"plane_id": "p2", "parent_id": "space", "after": "p1"},
+        )
+        await _until(lambda: _tree(session)["space"]["children"] == ["p1", "p2"])
         session.notify(("sidebar", "ops", "plane.delete"), {"plane_id": "p2"})
         await _until(lambda: "p2" not in _tree(session))
         # The tree ships its rows only.
@@ -565,6 +595,60 @@ async def test_a_pane_is_its_own_node(store):
         await asyncio.sleep(0.2)
         assert await store.read(Space.planes["p2"].name) == "Deux"
         assert session.toasts() == []
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+
+
+async def test_a_cell_transferred_from_a_pane_leaves_it(store):
+    """``cell.targets`` is answered once on the pane; ``cell.transfer`` moves the cell, a refusal toasts."""
+    from nuspace.web.device import connection
+
+    await plane(store, "p1", "One")
+    await plane(store, "p2", "Two")
+    await do(store, nuspace.cell.add("p1", "x = 1", id="c1", fabrics=[]))
+    await do(store, nuspace.cell.add("p1", "x = 2", id="c2", fabrics=[]))
+    await do(store, nuspace.cell.add("p2", "y = 1", id="d1", fabrics=[]))
+    session = FakeSession()
+    ctx = store.ctx.bind(Session, session)
+    task = asyncio.create_task(nu.arun(connection(nu.Str("s1"), registry=REGISTRY), ctx))
+
+    def ids(plane):
+        return [c["id"] for c in session.pane(plane, "set_cells")[-1]["cells"]]
+
+    try:
+        await _until(lambda: session.writes("set_tree"), BOOT_TIMEOUT)
+        session.notify(("viewer", "ops", "planes.open"), {"plane_ids": ["p1", "p2"], "params": {}})
+        await _until(lambda: session.pane("p1", "set_cells") and session.pane("p2", "set_cells"))
+        assert ids("p1") == ["c1", "c2"]
+        # Nothing ships the targets until a pane asks: then once, on that pane.
+        assert session.writes("set_targets") == []
+        session.notify((*PANE, "cell.targets"), {})
+        await _until(lambda: session.pane("p1", "set_targets"))
+        assert [t["id"] for t in session.pane("p1", "set_targets")[-1]["planes"]] == ["p1", "p2"]
+
+        # No anchor: the end of the target. An anchor there: before it.
+        session.notify((*PANE, "cell.transfer"), {"cell_id": "c1", "plane_id": "p2"})
+        await _until(lambda: ids("p1") == ["c2"] and ids("p2") == ["d1", "c1"])
+        session.notify(
+            (*PANE, "cell.transfer"), {"cell_id": "c2", "plane_id": "p2", "before": "d1"}
+        )
+        await _until(lambda: ids("p1") == [] and ids("p2") == ["c2", "d1", "c1"])
+        assert await store.read(Space.cells["c2"].plane) == "p2"
+
+        # Its own plane is refused, and toasts.
+        p2 = ("viewer", "panes", "p2", "ops")
+        session.notify((*p2, "cell.transfer"), {"cell_id": "d1", "plane_id": "p2"})
+        await _until(lambda: session.toasts())
+        assert session.toasts()[-1]["type"] == "Refused"
+        # A rename ships no targets: they are asked for again, fresh.
+        session.notify((*PANE, "plane.rename"), {"title": "Uno"})
+        await _until(lambda: session.pane("p1", "set_head")[-1]["title"] == "Uno")
+        await asyncio.sleep(0.2)
+        assert len(session.writes("set_targets")) == 1
+        session.notify((*PANE, "cell.targets"), {})
+        await _until(lambda: len(session.pane("p1", "set_targets")) == 2)
+        assert session.pane("p1", "set_targets")[-1]["planes"][0]["title"] == "Uno"
     finally:
         task.cancel()
         await asyncio.gather(task, return_exceptions=True)

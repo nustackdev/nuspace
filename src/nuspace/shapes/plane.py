@@ -60,7 +60,9 @@ class Plane(nu.Shape):
     reads it.
 
     Lifecycle: ``created_at`` is written once, ``modified_at`` on every
-    write to the row itself (not on cell edits, which move ``version``).
+    write to the row itself, its ``cells`` and ``children`` included: a
+    cell or child plane added, removed, moved or transferred (not on cell
+    edits, which move ``version``).
     A removed plane keeps its row: ``removed_at`` is set, and
     ``removed_by`` names the plane or cell whose removal stamped it
     (itself, or a plane above). Both are absent while it is in the space.

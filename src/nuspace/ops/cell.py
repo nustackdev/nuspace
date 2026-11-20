@@ -16,7 +16,7 @@ from typing import Any, Literal
 
 import nu
 import nustd.time
-from nuspace.errors import Exists, Missing
+from nuspace.errors import Exists, Missing, Refused
 from nuspace.shapes.space import Space
 from nuspace.utils import MintId, Require, anchor_of, place
 from nuspace.utils.checks import (
@@ -45,6 +45,7 @@ __all__ = [
     "set_meta",
     "set_prog",
     "title",
+    "transfer",
 ]
 
 
@@ -52,6 +53,17 @@ def _bump(plane: nu.StrArg) -> nu.Nu:
     """Count a write to one of the plane's cells on ``Plane.version``."""
     version = Space.planes[plane].version
     return version.set(version.fallback(0) + 1)
+
+
+def _touched(plane: nu.StrArg) -> nu.Nu:
+    """A change to the plane's ``cells``: its ``modified_at`` stamped, ``Plane.version`` +1."""
+    return Space.planes[plane].modified_at.set(nustd.time.time()) >> _bump(plane)
+
+
+def _not_system(plane: nu.StrArg) -> nu.Nu:
+    """Refuse a system plane as a transfer's source or target."""
+    system = Space.planes[plane].system.fallback(False)
+    return refuse(system, Refused, "plane ", plane, " is a system plane")
 
 
 def _removed() -> nu.Nu:
@@ -88,8 +100,8 @@ def add(
     prog, version 1, plane, spec, meta, created_at), the id in the plane's
     ``cells`` (before or after a sibling, else at the end), the key in
     ``Space.indexes.cell_keys``, the id in ``spec_cells[spec].ids`` when
-    given, and ``Plane.version`` +1. A plane run picks the cell up, or
-    reload does for a live one. Told to telemetry as made by nuspace, from a
+    given, the plane's ``modified_at`` stamped and ``Plane.version`` +1. A
+    plane run picks the cell up, or reload does for a live one. Told to telemetry as made by nuspace, from a
     spec or by hand, reading no key. Cost: O(1), about 20 keys.
 
     Working out the fabrics builds the prog in this process (its module
@@ -160,7 +172,7 @@ def add(
             >> place(listed, cid, before=before, after=after)
             >> when(key, Space.indexes.cell_keys.set_item(key, cid))
             >> when(spec, Space.indexes.spec_cells[spec].ids.set_item(cid, True))
-            >> _bump(plane)
+            >> _touched(plane)
         )
         writes = writes if into is None else writes >> into.set(cid)
         return writes >> told
@@ -184,8 +196,8 @@ def remove(id: nu.StrArg) -> nu.Nu:
 
     Stamps ``removed_at`` and ``removed_by=id``, takes the id out of its
     plane's ``cells``, drops its key from ``cell_keys`` (the row keeps
-    ``.key``), adds the id to ``Space.indexes.removed``, ``Plane.version``
-    +1. Writes nothing about runs: the kernel sees the removed cell and
+    ``.key``), adds the id to ``Space.indexes.removed``, stamps the plane's
+    ``modified_at``, ``Plane.version`` +1. Writes nothing about runs: the kernel sees the removed cell and
     interrupts its live cell runs. Told to telemetry. Cost: O(1), about 7
     keys.
 
@@ -201,7 +213,7 @@ def remove(id: nu.StrArg) -> nu.Nu:
         >> row.removed_at.set(nustd.time.time())
         >> row.removed_by.set(id)
         >> Space.indexes.removed.set_item(id, True)
-        >> _bump(row.plane)
+        >> _touched(row.plane)
         >> _removed()
     )
 
@@ -209,43 +221,79 @@ def remove(id: nu.StrArg) -> nu.Nu:
 def move(
     id: nu.StrArg,
     *,
-    plane: nu.StrArg | None = None,
     before: nu.StrArg | None = None,
     after: nu.StrArg | None = None,
 ) -> nu.Nu:
-    """Move a cell before or after a sibling, or to the end; with ``plane``, onto another plane.
+    """Move a cell among its plane's cells: before or after a sibling, or to the end.
 
-    Out of the old plane's ``cells``, into the target's, ``Cell.plane`` set,
-    ``Plane.version`` +1 on both. Left out, ``plane`` is the cell's own. The
-    kernel interrupts its live runs on the old plane; reload gives it a
-    first run in the new plane's live runs. Cost: O(1), about 10 keys.
+    Writes the plane's ``cells`` order, stamps the plane's ``modified_at``,
+    ``Plane.version`` +1; the cell's own row is not written. Another plane
+    is :func:`transfer`. Live runs keep going. Cost: O(1), about 5 keys.
 
     Raises:
-        Missing: No cell, target plane or anchor with that id.
-        Removed: The cell, the target plane or the anchor is removed.
-        Refused: An anchor not on the target plane, or the cell itself.
+        Missing: No cell or anchor with that id.
+        Removed: The cell or the anchor is removed.
+        Refused: An anchor not on the cell's plane, or the cell itself.
         TypeError: Both ``before`` and ``after``, at build.
     """
     anchor = anchor_of(before, after)
     row = Space.cells[id]
-    target = row.plane if plane is None else plane
-    listed = Space.planes[target].cells
-    checks = live(Space.cells, id, "cell")
-    if plane is not None:
-        checks = checks >> live(Space.planes, plane, "plane")
+    listed = Space.planes[row.plane].cells
+    return (
+        live(Space.cells, id, "cell")
+        >> anchored(listed, Space.cells, anchor, id, "cell", text("plane ", row.plane))
+        >> listed.del_item(id)
+        >> place(listed, id, before=before, after=after)
+        >> _touched(row.plane)
+    )
+
+
+def transfer(
+    id: nu.StrArg,
+    plane: nu.StrArg,
+    *,
+    before: nu.StrArg | None = None,
+    after: nu.StrArg | None = None,
+) -> nu.Nu:
+    """Transfer a cell to another plane: before or after a cell there, or at the end.
+
+    One commit: out of the old plane's ``cells``, into the target's,
+    ``Cell.plane`` set, ``modified_at`` stamped on the cell and on both
+    planes, ``Plane.version`` +1 on both. ``Cell.version``, fabrics, spec,
+    key and the cell's state stay; the plane state it reads is the new
+    plane's from its next run. The kernel interrupts its live runs on the
+    old plane; reload gives it a first run in the new plane's live runs.
+    Cost: O(1), about 12 keys.
+
+    Raises:
+        Missing: No cell, target plane or anchor with that id.
+        Removed: The cell, the target plane or the anchor is removed.
+        Refused: The cell's own plane (that is :func:`move`), a system
+            plane on either side, an anchor not on the target.
+        TypeError: Both ``before`` and ``after``, at build.
+    """
+    anchor = anchor_of(before, after)
+    row = Space.cells[id]
+    old = row.plane
+    listed = Space.planes[plane].cells
+    checks = (
+        live(Space.cells, id, "cell")
+        >> live(Space.planes, plane, "plane")
+        >> refuse(nu.Str(plane) == old, Refused, "cell ", id, " is on plane ", plane, " already")
+        >> _not_system(old)
+        >> _not_system(plane)
+        >> anchored(listed, Space.cells, anchor, id, "cell", text("plane ", plane))
+    )
     # The old plane is read off the row, so everything about it comes before the row moves.
     moved = (
-        Space.planes[row.plane].cells.del_item(id)
-        >> _bump(row.plane)
+        Space.planes[old].cells.del_item(id)
+        >> _touched(old)
         >> place(listed, id, before=before, after=after)
-        >> row.plane.set(target)
+        >> row.plane.set(plane)
         >> row.modified_at.set(nustd.time.time())
+        >> _touched(plane)
     )
-    if plane is not None:
-        moved = moved >> _bump(plane)
-    return (
-        checks >> anchored(listed, Space.cells, anchor, id, "cell", text("plane ", target)) >> moved
-    )
+    return checks >> moved
 
 
 def rename(id: nu.StrArg, name: nu.StrArg) -> nu.Nu:

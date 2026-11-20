@@ -11,6 +11,8 @@ separately here.
 
 ## Unreleased
 
+- Moving within a plane is split from transferring cells and planes elsewhere
+- A cell can move to another plane from its menu
 - Picking from the slash menu on an empty text cell no longer fails
 - New plane sits under New desk, and empty planes and desks offer an add row
 
