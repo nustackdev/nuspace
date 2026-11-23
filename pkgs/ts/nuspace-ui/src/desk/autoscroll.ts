@@ -3,11 +3,15 @@
 // up and down, a strip sideways, a pane's body up and down: anything
 // scrollable under the pointer, on either axis.
 //
-// One listener on the window for every drag, ours or not. The nearest
-// scrollable ancestor on each axis under the pointer that can still move
-// that way takes the scroll, faster the closer to its edge. It runs each
-// frame while drag events keep coming, so holding still near an edge keeps
-// scrolling, and stops on drop, on drag end, or when they stop coming.
+// The nearest scrollable ancestor on each axis under the pointer that can
+// still move that way takes the scroll, faster the closer to its edge. A
+// `dragScroll` runs it each frame from where its drag last was, so holding
+// still near an edge keeps scrolling, until the drag stops it.
+//
+// Native drags (the sidebar's, the desk's) all share one, fed by a listener
+// on the window (`useDragScroll`): it stops on drop, on drag end, or when
+// drag events stop coming. The cell drag, a pointer drag, runs its own
+// (../plane/layout/drag.ts) and stops it on release or Escape.
 
 import { useEffect } from "react";
 
@@ -54,37 +58,48 @@ function nudge(x: number, y: number): void {
 	}
 }
 
-/** Mount once, at the shell: scroll what is under a drag near its edges. */
-export function useDragScroll(): void {
-	useEffect(() => {
-		let at: { x: number; y: number; t: number } | null = null;
-		let frame = 0;
-		const tick = () => {
-			frame = 0;
-			if (!at || performance.now() - at.t > QUIET) {
-				at = null;
-				return;
-			}
-			nudge(at.x, at.y);
-			frame = requestAnimationFrame(tick);
-		};
-		const over = (e: DragEvent) => {
-			at = { x: e.clientX, y: e.clientY, t: performance.now() };
+/** A scroll that follows a drag: `to` where it is now, `stop` when it ends. */
+export type DragScroll = { to: (x: number, y: number) => void; stop: () => void };
+
+/** Scroll what is under a drag near its edges, each frame. Past `quiet` ms with no `to`, it stops by itself. */
+export function dragScroll(quiet = Number.POSITIVE_INFINITY): DragScroll {
+	let at: { x: number; y: number; t: number } | null = null;
+	let frame = 0;
+	const tick = () => {
+		frame = 0;
+		if (!at || performance.now() - at.t > quiet) {
+			at = null;
+			return;
+		}
+		nudge(at.x, at.y);
+		frame = requestAnimationFrame(tick);
+	};
+	return {
+		to(x, y) {
+			at = { x, y, t: performance.now() };
 			if (!frame) frame = requestAnimationFrame(tick);
-		};
-		const stop = () => {
+		},
+		stop() {
 			at = null;
 			cancelAnimationFrame(frame);
 			frame = 0;
-		};
+		},
+	};
+}
+
+/** Mount once, at the shell: scroll what is under a native drag near its edges. */
+export function useDragScroll(): void {
+	useEffect(() => {
+		const scroll = dragScroll(QUIET);
+		const over = (e: DragEvent) => scroll.to(e.clientX, e.clientY);
 		window.addEventListener("dragover", over, true);
-		window.addEventListener("drop", stop, true);
-		window.addEventListener("dragend", stop, true);
+		window.addEventListener("drop", scroll.stop, true);
+		window.addEventListener("dragend", scroll.stop, true);
 		return () => {
-			stop();
+			scroll.stop();
 			window.removeEventListener("dragover", over, true);
-			window.removeEventListener("drop", stop, true);
-			window.removeEventListener("dragend", stop, true);
+			window.removeEventListener("drop", scroll.stop, true);
+			window.removeEventListener("dragend", scroll.stop, true);
 		};
 	}, []);
 }

@@ -35,6 +35,10 @@
 // saying "Cell". A native drag hands it to the browser as its image; this
 // one carries it itself, and takes it away on drop or Escape.
 //
+// Held near the edge of a pane's body or the sidebar, it scrolls them
+// (../../desk/autoscroll.ts `dragScroll`), and aims again on every scroll,
+// so the mark stays under the pointer while what is under it moves.
+//
 // ## Where in a pane
 //
 // Against the rows the plane draws (`LAYOUT_ROW`), top to bottom:
@@ -54,6 +58,7 @@ import type { Path } from "@nustackdev/ui-core";
 import { CLICK_SLOP } from "@nustackdev/ui-kit";
 import type * as React from "react";
 import { useMemo, useSyncExternalStore } from "react";
+import { dragScroll } from "../../desk/autoscroll";
 import { CHIP_GRAB, dragChipOf } from "../../desk/drag";
 import { clearPaneTargets, paneLayout, panePath, paneTargets } from "../../pane/state";
 import { type LayoutOp, type Notify, sendOp } from "../ops";
@@ -314,6 +319,8 @@ export function startDrag(e: React.PointerEvent, source: Source, from: DragFrom)
 	const prevCursor = body.cursor;
 	let on = false;
 	let chip: HTMLElement | null = null;
+	let last = { x: x0, y: y0 };
+	const scroll = dragScroll();
 	const carry = (x: number, y: number) => {
 		if (!chip) return;
 		chip.style.left = `${x - CHIP_GRAB}px`;
@@ -341,14 +348,21 @@ export function startDrag(e: React.PointerEvent, source: Source, from: DragFrom)
 			from.notify("cell.targets", {});
 			from.onStart?.();
 		}
-		carry(ev.clientX, ev.clientY);
-		aim(ev.clientX, ev.clientY);
+		last = { x: ev.clientX, y: ev.clientY };
+		carry(last.x, last.y);
+		aim(last.x, last.y);
+		scroll.to(last.x, last.y);
+	};
+	const rescan = () => {
+		if (on) aim(last.x, last.y);
 	};
 	const stop = () => {
 		window.removeEventListener("pointermove", move);
 		window.removeEventListener("pointerup", up);
 		window.removeEventListener("pointercancel", up);
 		window.removeEventListener("keydown", key, true);
+		document.removeEventListener("scroll", rescan, true);
+		scroll.stop();
 		body.cursor = prevCursor;
 		chip?.remove();
 		chip = null;
@@ -374,4 +388,5 @@ export function startDrag(e: React.PointerEvent, source: Source, from: DragFrom)
 	window.addEventListener("pointerup", up);
 	window.addEventListener("pointercancel", up);
 	window.addEventListener("keydown", key, true);
+	document.addEventListener("scroll", rescan, true);
 }

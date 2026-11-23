@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Dragging a cell near the edge of a pane or the sidebar scrolls it
 - Web planes arrange cells in rows and strips, rearranged by drag and drop
 - Moving within a plane is split from transferring cells and planes elsewhere
 - A cell can move to another plane from its menu

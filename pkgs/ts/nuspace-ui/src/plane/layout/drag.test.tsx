@@ -12,6 +12,7 @@ import {
 	ALREADY_HERE,
 	aimAt,
 	CELL_CHIP,
+	dragNow,
 	gapAt,
 	LAYOUT_COLUMN,
 	LAYOUT_PLANE,
@@ -466,6 +467,49 @@ describe("a drag off a cell's grip", () => {
 		});
 		expect(notify).not.toHaveBeenCalled();
 		expect(grip.getAttribute("data-menu")).toBe("open");
+	});
+
+	it("aims again when what is under the pointer scrolls", () => {
+		drawn([
+			{ kind: "cell", cell: "a" },
+			{ kind: "cell", cell: "b" },
+			{ kind: "cell", cell: "c" },
+		]);
+		const row = (id: string) => host.querySelector(`[data-cell="${id}"]`) as HTMLElement;
+		/** Lay the rows out from `top`, 50 apart, each cell's box with them. */
+		const lay = (top: number) =>
+			["a", "b", "c"].forEach((id, i) => {
+				const box = { left: 0, top: top + 50 * i, width: 400, height: 40 };
+				place(row(id), box);
+				place(row(id).querySelector("[data-cell-body]") as Element, {
+					...box,
+					left: 50,
+					width: 300,
+				});
+			});
+		lay(0);
+		const grip = row("c").querySelector("[data-cell-grip]") as HTMLElement;
+		under = row("a");
+		act(() => {
+			grip.dispatchEvent(at("pointerdown", 0, 110));
+			window.dispatchEvent(at("pointermove", 200, 5));
+		});
+		expect(dragNow()?.aim?.spot).toEqual({ kind: "gap", plane: "p1", index: 0 });
+		// The body scrolls 50 down under a still pointer: b is under it now.
+		lay(-50);
+		under = row("b");
+		act(() => {
+			host.dispatchEvent(new Event("scroll"));
+		});
+		expect(dragNow()?.aim?.spot).toEqual({ kind: "gap", plane: "p1", index: 1 });
+		act(() => {
+			window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+		});
+		// Gone with the drag: a scroll after it aims nothing.
+		act(() => {
+			host.dispatchEvent(new Event("scroll"));
+		});
+		expect(dragNow()).toBeNull();
 	});
 
 	it("Escape drops the drag, sending nothing", () => {
