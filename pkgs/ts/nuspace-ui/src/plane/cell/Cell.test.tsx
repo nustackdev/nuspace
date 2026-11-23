@@ -44,7 +44,6 @@ function render(
 					editing={editing}
 					focusReq={null}
 					dragging={false}
-					dropAbove={false}
 					setEl={noop}
 					onPointerIn={noop}
 					onSetEditing={noop}

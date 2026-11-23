@@ -60,7 +60,7 @@ import type { PlaneHandle } from "../plane/api";
 import { Identity } from "../plane/Identity";
 import type { Notify, Ops } from "../plane/ops";
 import { Plane } from "../plane/Plane";
-import type { AbsentReason, ActivePlane, CellSpec, PaneHead } from "../plane/types";
+import type { AbsentReason, ActivePlane, CellSpec, LayoutItem, PaneHead } from "../plane/types";
 import { takeFresh } from "../sidebar/add";
 import { GoHome, NOT_FOUND_TEXT, NotFoundBody } from "./NotFound";
 import { PaneHeader } from "./PaneHeader";
@@ -74,6 +74,7 @@ import {
 	usePaneCells,
 	usePaneFollow,
 	usePaneHead,
+	usePaneLayout,
 	usePaneScroll,
 	usePaneScrolled,
 	usePaneTrail,
@@ -144,9 +145,10 @@ export function Pane({
 	const path = useMemo(() => panePath(viewerPath, planeId), [viewerKey, planeId]);
 	const head = usePaneHead(path);
 	const cells = usePaneCells(path);
+	const layout = usePaneLayout(path);
 	const trail = usePaneTrail(path);
 	const absent = usePaneAbsent(path);
-	const plane = usePlane(planeId, head, cells);
+	const plane = usePlane(planeId, head, cells, layout);
 
 	// The body's scroll, as the node says.
 	const viewport = useRef<HTMLDivElement | null>(null);
@@ -333,11 +335,25 @@ export function Pane({
 
 const NO_PLANE = null;
 
-/** The pane's plane as its body draws it: head and cells, once both landed. */
-function usePlane(planeId: string, head: PaneHead | null, cells: ActivePlane["cells"] | null) {
+/** The pane's plane as its body draws it: head, cells and their layout, once both landed. */
+function usePlane(
+	planeId: string,
+	head: PaneHead | null,
+	cells: ActivePlane["cells"] | null,
+	layout: LayoutItem[] | null,
+) {
 	return useMemo<ActivePlane | null>(
 		() =>
-			head && cells ? { plane_id: planeId, title: head.title, meta: head.meta, cells } : NO_PLANE,
-		[planeId, head, cells],
+			head && cells
+				? {
+						plane_id: planeId,
+						title: head.title,
+						meta: head.meta,
+						system: head.system,
+						cells,
+						layout: layout ?? undefined,
+					}
+				: NO_PLANE,
+		[planeId, head, cells, layout],
 	);
 }

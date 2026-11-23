@@ -92,7 +92,7 @@ class PanesRef(SpaceRef):
 
 
 class PaneRef(SpaceRef):
-    """One open plane, as one browser node: its head, cells, statuses and trail."""
+    """One open plane, as one browser node: its head, cells and layout, statuses and trail."""
 
     _wire_type: ClassVar[str] = "PaneRef"
 
@@ -111,9 +111,9 @@ class PaneRef(SpaceRef):
             self, title=title, icon=icon, key=key, system=system, editable=editable, width=width
         )
 
-    def set_cells(self, cells: ListArg[dict]) -> Nu:
-        """Replace the pane's cells, in order."""
-        return interactions.set_cells(self, cells)
+    def set_cells(self, cells: ListArg[dict], layout: ListArg[dict]) -> Nu:
+        """Replace the pane's cells, in order, and the layout drawing them."""
+        return interactions.set_cells(self, cells, layout)
 
     def set_absent(self, reason: StrArg) -> Nu:
         """Say the pane has nothing to draw: its plane is missing or headless."""
@@ -217,6 +217,22 @@ class PaneRef(SpaceRef):
     def on_transfer_cell(self) -> Changed:
         """``{cell_id, plane_id, before?, after?}``."""
         return interactions.on_transfer_cell(self)
+
+    def on_set_item(self) -> Changed:
+        """``{item_id, item}``."""
+        return interactions.on_set_item(self)
+
+    def on_move_item(self) -> Changed:
+        """``{item_id, before?, after?}``."""
+        return interactions.on_move_item(self)
+
+    def on_place_cell(self) -> Changed:
+        """``{cell_id, before?, after?}`` or ``{cell_id, into, column, index}``."""
+        return interactions.on_place_cell(self)
+
+    def on_transfer_placed(self) -> Changed:
+        """``{cell_id, plane_id, before?, after?}`` or ``{cell_id, plane_id, into, column, index}``."""
+        return interactions.on_transfer_placed(self)
 
     def on_restart_cell(self) -> Changed:
         """``{cell_id}``."""

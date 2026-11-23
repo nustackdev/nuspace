@@ -28,10 +28,20 @@ Two families per pane:
   on one of its cells. A failure toasts on the tab
   (:meth:`~nuspace.web.utils.Arms.event`).
 - **store to browser.** Four watches, each shipping what it changes and
-  nothing more: the head (name, icon, key, ``system`` and the web row), the
-  cells (the plane's ``version``, which counts every write to its cells),
-  the statuses and the trail. So a rename never reships a cell's source,
-  and a cell edit never reships the head.
+  nothing more: the head (name, icon, key, ``system`` and the web flags), the
+  cells with their layout (the plane's ``version``, which counts every write
+  to its cells, and the layout's own writes), the statuses and the trail. So
+  a rename never reships a cell's source, and a cell edit never reships the
+  head.
+
+**The layout ships with the cells.** One ``set_cells`` holds the cells and
+the layout drawing them (:mod:`nuspace.web.layout`), fixed up against those
+cells, read in one snapshot: the browser never holds a layout naming a cell
+it lacks, nor a cell no item draws. A layout drag reships the cells with it,
+which is cheap and keeps the two in step. Four layout events, what a drag
+and a resize send: ``layout.move``, ``layout.set``, ``layout.place``, each
+one commit, and ``layout.transfer``, two
+(:func:`~nuspace.web.layout.transfer_cell`).
 
 **A pane with nothing to draw is told why.** A plane not in the space, or
 removed, ships ``set_absent`` ``missing``; one with no web row
@@ -80,9 +90,16 @@ from nuspace.shapes import EXIT_FAILED, EXIT_INTERRUPTED, EXIT_KILLED, Space
 from nuspace.shapes.plane import ROOT
 from nuspace.specs import registered_name
 from nuspace.utils import keys_of
+from nuspace.web import layout
 from nuspace.web import ops as web
+from nuspace.web.interactions import EventField
 from nuspace.web.shapes import Conn, Web
-from nuspace.web.utils import Arms, field_dict, field_str, placed
+from nuspace.web.utils import (
+    Arms,
+    field_dict,
+    field_str,
+    placed,
+)
 from nuspace.web.viewer import interactions
 from nuspace.web.viewer.interactions import (
     ABSENT_HEADLESS,
@@ -287,8 +304,9 @@ def statuses(plane: nu.StrArg, run: nu.StrArg) -> nu.List:
 def _head(arms: Arms, pane: Ref, plane: nu.Str) -> nu.Nu:
     """The pane's head, or why it has none, shipped again on what changes it.
 
-    Watched from ``Space.planes``, which always exists, so a plane that
-    lands after its pane opened, or comes back from removal, is heard.
+    Watched from ``Space.planes`` and ``Web.planes``, which always exist, so
+    a plane that lands after its pane opened, or comes back from removal, is
+    heard.
     """
 
     def show(held: nu.ObjectRef) -> nu.Nu:
@@ -309,16 +327,29 @@ def _head(arms: Arms, pane: Ref, plane: nu.Str) -> nu.Nu:
     rows = Space.planes
     fields = ("name", "icon", "key", "system", "removed_at")
     changes = [atomic(rows.on_descendants_change(plane, f)) for f in fields]
-    changes.append(atomic(Web.planes[plane].on_change()))
+    # The web row's flags, not the whole row: a layout write never reships the head. A row
+    # lands with both flags written (``web.add``), so these hear it too.
+    changes.extend(atomic(Web.planes.on_descendants_change(plane, f)) for f in WEB_FLAGS)
     return arms.states("head", changes, ship)
 
 
 def _cells(arms: Arms, pane: Ref, plane: nu.Str, specs: Sequence[CellSpec]) -> nu.Nu:
-    """The pane's cells, shipped again when the plane's ``version`` moves: every cell write."""
-    ship = nu.let(
-        atomic(plane_cells(plane, specs)), lambda held: interactions.set_cells(pane, nu.List(held))
-    )
-    changes = [atomic(Space.planes.on_descendants_change(plane, "version"))]
+    """The pane's cells and their layout, one snapshot, shipped again on every cell write or layout write.
+
+    A cell write moves the plane's ``version``; a layout write is the
+    layout's own. Nothing else is watched.
+    """
+
+    def send(held: nu.ObjectRef) -> nu.Nu:
+        got = nu.Dict(held)
+        return interactions.set_cells(pane, nu.List(got["cells"]), nu.List(got["layout"]))
+
+    read = nu.Dict.of(cells=plane_cells(plane, specs), layout=layout.get_layout(plane))
+    ship = nu.let(atomic(read), send)
+    changes = [
+        atomic(Space.planes.on_descendants_change(plane, "version")),
+        atomic(Web.planes[plane].layout.on_change()),
+    ]
     return arms.states("cells", changes, ship)
 
 
@@ -461,6 +492,73 @@ def _web_flags(plane: nu.Str, event: nu.Attr) -> nu.Nu:
     return nu.IfDo(stray, bad, atomic(writes))
 
 
+def _anchors(event: nu.Attr) -> dict[str, nu.Str]:
+    """The event's ``before`` and ``after``, each ``""`` when left out, as terms the op branches on.
+
+    Handed over as terms, so the op is built once, not once per anchor as
+    :func:`~nuspace.web.utils.placed` builds a core op.
+    """
+    return {
+        "before": nu.Str(EventField(event, "before", "anchor")),
+        "after": nu.Str(EventField(event, "after", "anchor")),
+    }
+
+
+def _spot(event: nu.Attr) -> dict[str, nu.Nu]:
+    """The event's spot for one cell, as terms: its anchors, ``into`` (``""`` for none), ``column``, ``index``.
+
+    ``column`` and ``index`` may be left out (None); the op refuses a strip
+    spot without them.
+    """
+    return {
+        **_anchors(event),
+        "into": nu.Str(EventField(event, "into", "anchor")),
+        "column": EventField(event, "column", "index?"),
+        "index": EventField(event, "index", "index?"),
+    }
+
+
+def _layout_events(arms: Arms, pane: Ref, plane: nu.Str) -> list[nu.Nu]:
+    """Browser to store: the pane's four layout events, what a drag and a resize send.
+
+    ``layout.move`` (a reorder), ``layout.set`` (one item replaced: a strip
+    made, regrouped or resized), ``layout.place`` (one cell of the plane to a
+    spot), ``layout.transfer`` (a cell to another plane, then placed there,
+    two commits). The other layout ops (add, remove, write) have no event:
+    every arm is compiled with the tab's term when web starts, so an arm
+    nobody sends to only makes web slower to come up.
+    """
+
+    def on_item(name: str, change: nu.Nu, op: Callable[[nu.Str, nu.Attr], nu.Nu]) -> nu.Nu:
+        return arms.event(name, change, lambda ev: op(field_str(ev, "item_id"), ev))
+
+    def on_cell(name: str, change: nu.Nu, op: Callable[[nu.Str, nu.Attr], nu.Nu]) -> nu.Nu:
+        return arms.event(name, change, lambda ev: op(field_str(ev, "cell_id"), ev))
+
+    return [
+        on_item(
+            "layout_move",
+            interactions.on_move_item(pane),
+            lambda i, ev: atomic(layout.move_item(plane, i, **_anchors(ev))),
+        ),
+        on_item(
+            "layout_set",
+            interactions.on_set_item(pane),
+            lambda i, ev: atomic(layout.set_item(plane, i, field_dict(ev, "item"))),
+        ),
+        on_cell(
+            "layout_place",
+            interactions.on_place_cell(pane),
+            lambda c, ev: atomic(layout.place_cell(plane, c, **_spot(ev))),
+        ),
+        on_cell(
+            "layout_transfer",
+            interactions.on_transfer_placed(pane),
+            lambda c, ev: layout.transfer_cell(c, field_str(ev, "plane_id"), **_spot(ev)),
+        ),
+    ]
+
+
 def _events(
     arms: Arms, pane: Ref, sid: nu.StrArg, plane: nu.Str, specs: Sequence[CellSpec]
 ) -> list[nu.Nu]:
@@ -567,6 +665,7 @@ def _pane(
         _status(arms, pane, sid, plane),
         _trail(arms, pane, plane),
         *_events(arms, pane, sid, plane, specs),
+        *_layout_events(arms, pane, plane),
     )
     erased = nu.TryCatch(pane.erase(), catch=lambda _: nu.Noop())
     return nu.TryCatch(live, finally_=erased)

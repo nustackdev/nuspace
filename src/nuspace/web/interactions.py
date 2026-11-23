@@ -122,6 +122,11 @@ _KINDS: dict[str, tuple[Callable[[object], bool], str]] = {
         lambda v: isinstance(v, list) and all(isinstance(i, dict) for i in v),
         "a list of dicts",
     ),
+    # A place in a strip may be left out: it reads None.
+    "index?": (
+        lambda v: v is None or (isinstance(v, int) and not isinstance(v, bool) and v >= 0),
+        "a whole number, 0 or more",
+    ),
     # An anchor may be left out: it reads "", the end.
     "anchor": (lambda v: v is None or isinstance(v, str), "an id"),
 }
@@ -137,8 +142,9 @@ class EventField(ScalarQuery):
         row: The event.
         field: The field's name.
         kind: ``"str"``, ``"bool"``, ``"dict"``, ``"dicts"`` (a list of
-            dicts), ``"ids"`` (a list of strings) or ``"anchor"`` (a
-            string, or absent for ``""``).
+            dicts), ``"ids"`` (a list of strings), ``"index?"`` (an int, 0
+            or more, or absent for None) or ``"anchor"`` (a string, or
+            absent for ``""``).
 
     Raises:
         ValueError: The field is absent or of another kind. At build, a

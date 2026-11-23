@@ -28,6 +28,10 @@
 // line on a gap between rows, the ring on a row. A row also drags onto a desk folder
 // or the canvas, as a plane.
 //
+// A cell dragged off a pane lands on a row too (../plane/layout/drag.ts,
+// `PLANE_ROW`): it goes to the end of that plane. The row rings as a tree
+// drop would, "Move here", or refused when the plane takes no cell from it.
+//
 // The rows are flat siblings, never nested in each other's DOM, so a row's
 // `group/row` hover is its own.
 
@@ -71,9 +75,10 @@ import { PlaneIcon } from "../icon/PlaneIcon";
 import { planeIcon } from "../icon/parse";
 import { PlaneMenuItems } from "../menu/PlaneMenuItems";
 import { contextParts, dropdownParts } from "../menu/parts";
+import { PLANE_ROW, useSidebarAim } from "../plane/layout/drag";
 import { NEW_INSIDE_KEYS, openAddPlane } from "./add";
 import { DropHint, DropLine } from "./DropMarks";
-import { DROP_ROW, DROP_TAIL, useTreeDrag } from "./drag";
+import { DROP_ROW, DROP_TAIL, type Hint, refusedHint, useTreeDrag } from "./drag";
 import { useSidebarNav } from "./focus";
 import type { Notify } from "./ops";
 import { canDelete, deletePlane } from "./remove";
@@ -81,6 +86,9 @@ import { RowAction, SidebarRow } from "./SidebarRow";
 import { showsNoPlanes, type VisibleRow } from "./tree";
 import type { PlaneTree } from "./types";
 import { useDraft } from "./useDraft";
+
+/** What a cell dropped on a row says. */
+const MOVE_HERE: Hint = { label: "Move here", icon: "move" };
 
 export function PlanesTree({
 	tree,
@@ -106,12 +114,21 @@ export function PlanesTree({
 		notify,
 		reveal,
 	});
+	// A cell dragged onto a row: the same ring as a tree drop.
+	const cellAim = useSidebarAim();
+	const cellRing: { key: string; ok: boolean; hint: Hint } | null = cellAim
+		? {
+				key: cellAim.plane,
+				ok: cellAim.refused === null,
+				hint: cellAim.refused ? refusedHint(cellAim.refused) : MOVE_HERE,
+			}
+		: null;
 	const ringed = aim && "ring" in aim.mark ? aim.mark.ring : null;
 	const gap = aim && "gap" in aim.mark ? aim.mark : null;
 
 	const items: React.ReactNode[] = [];
 	rows.forEach((row, index) => {
-		const ring = ringed === row.key && aim ? aim : null;
+		const ring = ringed === row.key && aim ? aim : cellRing?.key === row.id ? cellRing : null;
 		// The line on the gap above this row, or under the last.
 		const line =
 			gap?.gap === index
@@ -125,7 +142,7 @@ export function PlanesTree({
 				key={row.key}
 				role="none"
 				className={cn(sidebarRowWrap, near && sidebarDropQuiet)}
-				{...{ [DROP_ROW]: row.key }}
+				{...{ [DROP_ROW]: row.key, [PLANE_ROW]: row.id }}
 			>
 				<PlaneRow
 					row={row}

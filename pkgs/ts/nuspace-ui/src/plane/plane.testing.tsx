@@ -27,7 +27,7 @@ import type { TitleIntent } from "./intents";
 import { Plane } from "./Plane";
 import { readEditor } from "./state";
 import type { Sugar } from "./sugar";
-import type { ActivePlane, Cell, CellSpec } from "./types";
+import type { ActivePlane, Cell, CellSpec, LayoutItem } from "./types";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 // The slash menu's popover sizes itself with a ResizeObserver, which jsdom
@@ -70,12 +70,15 @@ export function render(
 		sugars = [],
 		title = true,
 		focused = false,
+		layout,
 	}: {
 		specs?: CellSpec[];
 		editable?: boolean;
 		sugars?: Sugar[];
 		title?: boolean;
 		focused?: boolean;
+		/** How the cells draw; left out, one per row. */
+		layout?: LayoutItem[];
 	} = {},
 ) {
 	const plane: ActivePlane = {
@@ -83,6 +86,7 @@ export function render(
 		title: "",
 		meta: { editable, width: "page", key: "" },
 		cells,
+		layout,
 	};
 	act(() => {
 		root.render(

@@ -17,17 +17,25 @@
 // says. `withdraw` is the same path in two steps: the cells go out of sight
 // now and the delete is sent later, or they come back, for a caller whose
 // delete must wait on something else landing first.
+//
+// The plane is laid out (../layout/model.ts): a reorder moves items, never
+// cells (`layout.move`), and the keyboard moves the items holding the
+// selection, a strip as one. A cell made under a cell of a strip is made on
+// its own after the strip (the server's fix-up puts a new cell after its
+// predecessor's item), then placed in the column under that cell once it
+// has landed: two events, the second sent only after the first shows.
 
 import type { MarkdownHandle } from "@nustackdev/ui-kit";
 import { useCallback, useEffect, useRef } from "react";
 import { mintId } from "../../core/ids";
 import type { FocusRequest, FocusTarget, Place, PlaneModel } from "../api";
 import type { Ask } from "../focus/useFocusRouting";
-import { cellMoves } from "../ops";
+import { itemsInOrder, spotUnder, stepItems } from "../layout/model";
+import { orderMoves } from "../ops";
 import type { FocusReq, InputLine } from "../state";
 
 export function useStructure(
-	{ cells, patch, read, notify, index, rootRef, elRefs }: PlaneModel,
+	{ cells, layout, top, patch, read, notify, index, rootRef, elRefs }: PlaneModel,
 	{
 		request,
 		drop,
@@ -44,6 +52,16 @@ export function useStructure(
 	 *  `set_cells` prunes selection naming a cell it does not carry, so this
 	 *  waits here rather than in the editor state. */
 	const landing = useRef<{ id: string; open: boolean } | null>(null);
+
+	/** Cells made under a strip's cell, by id: the column spot each goes to once it lands. */
+	const placing = useRef(new Map<string, { into: string; column: number; index: number }>());
+	useEffect(() => {
+		for (const [id, spot] of placing.current) {
+			if (!cells.some((c) => c.id === id)) continue;
+			placing.current.delete(id);
+			notify("layout.place", { cell_id: id, ...spot });
+		}
+	}, [cells, notify]);
 
 	useEffect(() => {
 		const want = landing.current;
@@ -84,14 +102,10 @@ export function useStructure(
 			const i = at.after === null ? -1 : index(at.after);
 			// The top is before the first cell; an `after` that is gone is the end.
 			const place =
-				at.after === null
-					? cells.length > 0
-						? { before: cells[0].id }
-						: {}
-					: i < 0
-						? {}
-						: { after: at.after };
+				at.after === null ? (top ? { before: top } : {}) : i < 0 ? {} : { after: at.after };
 			notify("cell.create", { cell_id: id, name: spec, ...place });
+			const under = at.after && i >= 0 ? spotUnder(layout, at.after) : null;
+			if (under) placing.current.set(id, under);
 			if (want) {
 				const { landed, ...carry } = want;
 				request(id, { ...carry, to: "document", fresh: true, line }, landed);
@@ -100,7 +114,7 @@ export function useStructure(
 			}
 			return id;
 		},
-		[cells, index, notify, request],
+		[index, layout, notify, request, top],
 	);
 
 	/** The cells out of sight: hidden, their sources closed, out of the selection. */
@@ -167,36 +181,29 @@ export function useStructure(
 		[hide, patch, send],
 	);
 
-	const reorder = useCallback(
-		(ids: string[]) => {
-			for (const move of cellMoves(
-				cells.map((c) => c.id),
-				ids,
-			))
-				notify("cell.move", move);
+	/** The items in `next` order: one `layout.move` per item out of place. */
+	const moveItems = useCallback(
+		(next: string[]) => {
+			const now = layout.map((i) => i.id);
+			for (const { id, ...at } of orderMoves(now, next)) {
+				notify("layout.move", { item_id: id, ...at });
+			}
 		},
-		[cells, notify],
+		[layout, notify],
 	);
 
-	/** The selected cells one step up or down, as a block. */
+	const reorder = useCallback(
+		(ids: string[]) => moveItems(itemsInOrder(layout, ids)),
+		[layout, moveItems],
+	);
+
+	/** The items holding the selected cells one item up or down, as a block. */
 	const moveSelected = useCallback(
 		(dir: -1 | 1) => {
-			const sel = new Set(read().selected);
-			if (sel.size === 0) return;
-			const ids = cells.map((b) => b.id);
-			const picked = ids.filter((i) => sel.has(i));
-			const first = ids.indexOf(picked[0]);
-			const last = ids.indexOf(picked[picked.length - 1]);
-			if (dir < 0 && first === 0) return;
-			if (dir > 0 && last === ids.length - 1) return;
-			const rest = ids.filter((i) => !sel.has(i));
-			const anchorIdx = dir < 0 ? first - 1 : last + 1;
-			const anchorId = ids[anchorIdx];
-			const at = rest.indexOf(anchorId) + (dir < 0 ? 0 : 1);
-			rest.splice(at, 0, ...picked);
-			reorder(rest);
+			const next = stepItems(layout, read().selected, dir);
+			if (next) moveItems(next);
 		},
-		[cells, read, reorder],
+		[layout, read, moveItems],
 	);
 
 	return { commitSource, create, remove, withdraw, reorder, moveSelected };

@@ -1,5 +1,5 @@
 // Plane wire types + coercion: what a pane's writes carry (`set_head`,
-// `set_cells`, `set_status`, `set_trail`, `set_absent`).
+// `set_cells` with its layout, `set_status`, `set_trail`, `set_absent`).
 //
 // msgpack payloads arrive untyped, so every field is narrowed here and nowhere
 // else. Everything downstream can assume these shapes.
@@ -8,8 +8,9 @@
 // core only routes by them (./intents.ts); what a class means is the sugar
 // layer's (./sugar), the one place that knows any.
 //
-// Cell order is list position in the Plane's `order` on the server, so cells
-// arrive already in order and carry no `order` field to renormalise.
+// Cell order is list position in the Plane's `cells` on the server, so cells
+// arrive already in order and carry no `order` field to renormalise. On the
+// web that order is membership only: the layout beside it is how they draw.
 
 import { PLANE_WIDTHS, type PlaneWidth } from "../design";
 
@@ -95,6 +96,10 @@ export type ActivePlane = {
 	title: string;
 	meta: PlaneMeta;
 	cells: Cell[];
+	/** How the cells are drawn (`coerceLayout`). Left out, one cell per row, in `cells` order. */
+	layout?: LayoutItem[];
+	/** A protected plane: no cell is dropped onto it from another. */
+	system?: boolean;
 };
 
 /** One step of a pane's trail: a plane above it, by id and title. */
@@ -198,5 +203,78 @@ export function coerceCells(raw: unknown): Cell[] {
 			},
 		});
 	}
+	return out;
+}
+
+// -- Layout ------------------------------------------------------------------
+//
+// How a web plane arranges its cells, as `set_cells` ships it beside them
+// (`nuspace/web/layout`): items in drawing order, each one cell alone or a
+// strip of columns side by side at their shares, the cells of a column
+// stacked. Fixed up on the server against the same cells, so every cell sits
+// in exactly one item. The pure logic over it is ./layout/model.ts.
+
+/** One column of a strip: its cells top to bottom, and its share of the strip's width. */
+export type LayoutColumn = { cells: string[]; share: number };
+
+/** A cell alone on its row. */
+export type CellItem = { id: string; kind: "cell"; cell: string };
+
+/** Columns side by side, at their shares (summing to 1). Two cells or more. */
+export type StripItem = { id: string; kind: "strip"; columns: LayoutColumn[] };
+
+export type LayoutItem = CellItem | StripItem;
+
+/** An item as an op stores it: its id is the key, never in the value. */
+export type StoredItem =
+	| { kind: "cell"; cell: string }
+	| { kind: "strip"; columns: LayoutColumn[] };
+
+function coerceColumns(raw: unknown, live: Set<string>, seen: Set<string>): LayoutColumn[] {
+	if (!Array.isArray(raw)) return [];
+	const out: LayoutColumn[] = [];
+	for (const c of raw) {
+		if (!c || typeof c !== "object") continue;
+		const r = c as Record<string, unknown>;
+		const cells = (Array.isArray(r.cells) ? r.cells : [])
+			.map(String)
+			.filter((id) => live.has(id) && !seen.has(id));
+		for (const id of cells) seen.add(id);
+		const share = typeof r.share === "number" && r.share > 0 ? r.share : 0;
+		if (cells.length && share) out.push({ cells, share });
+	}
+	const total = out.reduce((a, c) => a + c.share, 0);
+	return out.map((c) => ({ ...c, share: c.share / total }));
+}
+
+/**
+ * A wire layout, kept to `cells`: what names no live cell, or one an earlier
+ * item holds, is dropped; a strip left with one cell reads as a cell item.
+ * A cell no item holds goes last on its own, its id its cell id. That never
+ * happens with a server that ships the layout; with none (an older one, a
+ * test) every cell is its own item, in `cells` order.
+ */
+export function coerceLayout(raw: unknown, cells: readonly { id: string }[]): LayoutItem[] {
+	const live = new Set(cells.map((c) => c.id));
+	const seen = new Set<string>();
+	const out: LayoutItem[] = [];
+	for (const e of Array.isArray(raw) ? raw : []) {
+		if (!e || typeof e !== "object") continue;
+		const r = e as Record<string, unknown>;
+		const id = typeof r.id === "string" ? r.id : "";
+		if (!id) continue;
+		if (r.kind === "cell") {
+			const cell = typeof r.cell === "string" ? r.cell : "";
+			if (!live.has(cell) || seen.has(cell)) continue;
+			seen.add(cell);
+			out.push({ id, kind: "cell", cell });
+		} else if (r.kind === "strip") {
+			const columns = coerceColumns(r.columns, live, seen);
+			const held = columns.flatMap((c) => c.cells);
+			if (held.length === 1) out.push({ id, kind: "cell", cell: held[0] });
+			else if (held.length > 1) out.push({ id, kind: "strip", columns });
+		}
+	}
+	for (const c of cells) if (!seen.has(c.id)) out.push({ id: c.id, kind: "cell", cell: c.id });
 	return out;
 }

@@ -332,13 +332,11 @@ describe("cell selection", () => {
 		press(plane, "ArrowDown", { shiftKey: true });
 		expect(selected()).toEqual(["b", "c"]);
 		press(plane, "ArrowUp", { metaKey: true });
-		// [b, c] up past a: each cell out of place moved after the one before it.
-		expect(ops().slice(-2)).toEqual([
-			["cell.move", "b"],
-			["cell.move", "c"],
-		]);
-		expect(notify.mock.calls.at(-2)?.[1]).toEqual({ cell_id: "b", before: "a" });
-		expect(notify.mock.calls.at(-1)?.[1]).toEqual({ cell_id: "c", after: "b" });
+		// [b, c] up past a: each item out of place moved after the one before it.
+		// No layout shipped: each cell is its own item, its id the cell's.
+		expect(notify.mock.calls.slice(-2).map((c) => c[0])).toEqual(["layout.move", "layout.move"]);
+		expect(notify.mock.calls.at(-2)?.[1]).toEqual({ item_id: "b", before: "a" });
+		expect(notify.mock.calls.at(-1)?.[1]).toEqual({ item_id: "c", after: "b" });
 		press(plane, "Escape");
 		expect(selected()).toEqual([]);
 	});

@@ -1,7 +1,7 @@
 // A plane's browser-owned editor state.
 //
 // Caret intent, cell selection, which cells are open in code mode, the slash
-// menu, the drag in flight. The server never sees any of it, none of it
+// menu. The server never sees any of it, none of it
 // survives a reload, and none of it should. It lives in the pane's own
 // PaneRef node, in its `local` prop (see core/local.ts), so each pane's
 // selection, ghost, slash menu and code toggles are its own, and a keystroke
@@ -82,13 +82,6 @@ export type SlashState = {
  *  pinned to while the page scrolls. */
 export type SlashAnchor = HTMLElement;
 
-export type DragState = {
-	id: string;
-	/** Insertion index in the current cell list, 0..cells.length. */
-	at: number;
-	y: number;
-};
-
 export type EditorState = {
 	/** Focus requests waiting for their cell, oldest first. At most one pulls. */
 	requests: FocusReq[];
@@ -120,7 +113,6 @@ export type EditorState = {
 	 * until it does, so a replaced cell never flashes back for a round trip.
 	 */
 	leaving: string[];
-	drag: DragState | null;
 	/**
 	 * Desired column, parked while the caret is "between" editors -- i.e.
 	 * while a cell is merely *selected*. Without this the column resets every
@@ -143,7 +135,6 @@ export const EMPTY_EDITOR: EditorState = {
 	slash: null,
 	ghost: null,
 	leaving: [],
-	drag: null,
 	column: null,
 	held: {},
 };
@@ -178,7 +169,6 @@ export function pruneEditor(local: EditorState, live: Set<string>): EditorState 
 			local.ghost && (local.ghost.after === null ? live.size > 0 : live.has(local.ghost.after))
 				? local.ghost
 				: null,
-		drag: null,
 	};
 }
 

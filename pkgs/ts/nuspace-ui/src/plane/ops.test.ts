@@ -1,22 +1,22 @@
 import { describe, expect, it } from "vitest";
 import { anchorAt } from "../sidebar/ops";
-import { cellMoves } from "./ops";
+import { orderMoves } from "./ops";
 
-describe("cellMoves", () => {
+describe("orderMoves", () => {
 	it("moves nothing for the same order", () => {
-		expect(cellMoves(["a", "b", "c"], ["a", "b", "c"])).toEqual([]);
+		expect(orderMoves(["a", "b", "c"], ["a", "b", "c"])).toEqual([]);
 	});
 
 	it("moves one cell to the top before the first", () => {
-		expect(cellMoves(["a", "b", "c"], ["c", "a", "b"])).toEqual([{ cell_id: "c", before: "a" }]);
+		expect(orderMoves(["a", "b", "c"], ["c", "a", "b"])).toEqual([{ id: "c", before: "a" }]);
 	});
 
 	it("moves one cell down after the one it lands under", () => {
-		expect(cellMoves(["a", "b", "c"], ["b", "c", "a"])).toEqual([
-			{ cell_id: "b", before: "a" },
-			{ cell_id: "c", after: "b" },
+		expect(orderMoves(["a", "b", "c"], ["b", "c", "a"])).toEqual([
+			{ id: "b", before: "a" },
+			{ id: "c", after: "b" },
 		]);
-		expect(cellMoves(["a", "b", "c"], ["a", "c", "b"])).toEqual([{ cell_id: "c", after: "a" }]);
+		expect(orderMoves(["a", "b", "c"], ["a", "c", "b"])).toEqual([{ id: "c", after: "a" }]);
 	});
 });
 

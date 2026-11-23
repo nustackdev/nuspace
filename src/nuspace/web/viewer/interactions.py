@@ -6,10 +6,16 @@
   its plane: the path says it.
 - **Writes**, host to browser, on a pane's own path, tagged with an ``op``
   key. Five, each with what one watch changes: ``set_head`` (how the pane
-  heads its plane), ``set_cells``, ``set_status``, ``set_trail`` and
-  ``set_absent``. ``set_absent`` stands in for the head when the pane has
+  heads its plane), ``set_cells`` (the cells and the layout drawing them),
+  ``set_status``, ``set_trail`` and ``set_absent``. ``set_absent`` stands in for the head when the pane has
   no plane to draw, and a later ``set_head`` clears it. Any order is fine:
   the browser keeps each beside the others.
+- **Layout**, the pane's plane's arrangement of its cells
+  (:mod:`nuspace.web.layout`): shipped fixed up with the cells, written
+  through four events: ``layout.move``, ``layout.set``, ``layout.place``
+  and ``layout.transfer``. A spot for one cell is ``before`` or ``after`` an
+  item id (neither the end), or ``into`` a strip item with its ``column`` and
+  ``index`` there.
 - **Targets**, one ask and one answer on a pane's path: ``cell.targets``
   asks for the planes a cell can be transferred to, ``set_targets``
   answers once. Nothing watches them after.
@@ -53,7 +59,9 @@ __all__ = [
     "on_delete_cell",
     "on_delete_plane",
     "on_move_cell",
+    "on_move_item",
     "on_open",
+    "on_place_cell",
     "on_remove_cell_key",
     "on_remove_plane_key",
     "on_rename_plane",
@@ -61,10 +69,12 @@ __all__ = [
     "on_restart_plane",
     "on_set_cell_key",
     "on_set_icon",
+    "on_set_item",
     "on_set_plane_key",
     "on_set_web",
     "on_targets",
     "on_transfer_cell",
+    "on_transfer_placed",
     "on_update_cell",
     "scroll",
     "set_absent",
@@ -148,9 +158,16 @@ def set_head(
     )
 
 
-def set_cells(pane: Ref, cells: ListArg[dict]) -> Nu:
-    """Replace the pane's cells, in order, each ``{id, key, source, draws, classes}``."""
-    return write(pane, "set_cells", cells=cells)
+def set_cells(pane: Ref, cells: ListArg[dict], layout: ListArg[dict]) -> Nu:
+    """Replace the pane's cells, in order, each ``{id, key, source, draws, classes}``, and the layout drawing them.
+
+    ``layout`` is the items as drawn, in order, fixed up against the cells
+    (:func:`~nuspace.web.layout.model.layout_view`): each ``{id, kind:
+    "cell", cell}`` or ``{id, kind: "strip", columns: [{cells, share}]}``.
+    Every cell sits in exactly one item; read from the same snapshot as the
+    cells, so the two always agree.
+    """
+    return write(pane, "set_cells", cells=cells, layout=layout)
 
 
 def set_absent(pane: Ref, reason: StrArg) -> Nu:
@@ -286,6 +303,40 @@ def on_targets(pane: Ref) -> Changed:
 def on_transfer_cell(pane: Ref) -> Changed:
     """``{cell_id, plane_id, before?, after?}``. Transfers one cell to another plane, neither anchor its end."""
     return event(pane, "cell.transfer")
+
+
+def on_set_item(pane: Ref) -> Changed:
+    """``{item_id, item}``. Replaces one layout item whole, in its place: a strip made, regrouped or resized.
+
+    Its cells are taken out of every other item, by the strip rules: a cell
+    dropped beside another is this one event.
+    """
+    return event(pane, "layout.set")
+
+
+def on_move_item(pane: Ref) -> Changed:
+    """``{item_id, before?, after?}``. Moves one layout item, neither anchor the end. A web plane's reorder."""
+    return event(pane, "layout.move")
+
+
+def on_place_cell(pane: Ref) -> Changed:
+    """``{cell_id, before?, after?}`` or ``{cell_id, into, column, index}``. One cell of the plane to a spot.
+
+    Out of whatever item held it, then its own item before or after an item
+    (neither the end), or into strip ``into``'s column ``column`` at
+    ``index``, counted with the cell taken out.
+    """
+    return event(pane, "layout.place")
+
+
+def on_transfer_placed(pane: Ref) -> Changed:
+    """``{cell_id, plane_id, before?, after?}`` or ``{cell_id, plane_id, into, column, index}``.
+
+    Transfers a cell to another plane, then places it in that plane's
+    layout at the spot, as ``layout.place`` there. Two commits: a place that
+    fails leaves the cell transferred, drawn last.
+    """
+    return event(pane, "layout.transfer")
 
 
 def on_restart_cell(pane: Ref) -> Changed:
