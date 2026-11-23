@@ -7,13 +7,15 @@
   [![PyPI](https://img.shields.io/pypi/v/nuspace?color=yellow)](https://pypi.org/project/nuspace/)
   [![Downloads](https://img.shields.io/pypi/dw/nuspace?color=green)](https://pypi.org/project/nuspace/)
   [![License](https://img.shields.io/badge/license-AGPL%20v3-orange.svg)](https://github.com/nustackdev/nuspace/blob/main/LICENSE.md)
-  [![Discord](https://img.shields.io/badge/discord-join-5865F2?logo=discord&logoColor=white)](https://discord.gg/tCa8YE7XVr)
 
-  [Website](https://nustack.dev) · [Docs](https://nustack.dev/docs/nuspace) · [Gallery](https://nustack.dev/#gallery) · [Discord](https://discord.gg/tCa8YE7XVr)
+  [![Discord](https://img.shields.io/badge/discord-join-5865F2?logo=discord&logoColor=white)](https://discord.gg/tCa8YE7XVr)
+  [![X](https://img.shields.io/twitter/follow/nustackdev?style=social)](https://x.com/nustackdev)
+
+  [Quick start](#quick-start) · [Gallery](#gallery) · [Usage](#usage) · [Docs](https://nustack.dev/docs/nuspace) · [Website](https://nustack.dev)
 
 </div>
 
-A society of tiny interconnected programs that hold data, run logic and render UI. Humans get the space as UI, agents get it as code.
+A society of tiny interconnected programs that hold data, run logic and render UI. Together, they compose into your: second brain, AI systems, data stack, software factory, research lab. Humans get the space as UI, agents get it as code.
 
 ## Quick start
 
@@ -205,9 +207,6 @@ Install nuspace and open my space with the quickstart page. Set up whatever's mi
 ```
 
 </details>
-
-> [!NOTE]
-> nuspace is early. Things move fast and the store format is not frozen yet.
 
 ## The stack
 

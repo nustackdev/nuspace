@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- README says what the space composes into, with uniform badges and links
 - nuspace-ui releases only at a nuspace version, checked before publishing
 
 ## 0.8.1 - 2026-11-23
