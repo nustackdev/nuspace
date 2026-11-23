@@ -12,7 +12,7 @@ No item ids: a row or a column is addressed by the cells in it.
 
 **Eventually consistent with ``cells``, through two ops only.** The raw slot
 is internal; :func:`get` and :func:`set` are the only readers and writers,
-both plain kv terms around one pure host, :data:`~.model.Reconcile`: cells
+both plain kv terms around one pure host, :data:`~.model.LayoutReconcile`: cells
 no longer on the plane dropped by the strip rules, a cell in two places kept
 by its first holder, a cell in no row appended as its own row. No pruner,
 no reaction.

@@ -2,7 +2,7 @@
 
 - :func:`rows_problem` (:data:`RowsProblem`): why a list is not a layout,
   ``""`` when it is. What :func:`~.ops.set` checks before it writes.
-- :func:`reconcile` (:data:`Reconcile`): a layout kept to the plane's
+- :func:`reconcile` (:data:`LayoutReconcile`): a layout kept to the plane's
   cells. It only reconciles: no op logic lives here.
 
 Both pure: new values only, their inputs untouched, no randomness, the same
@@ -22,7 +22,7 @@ from nuspace.web.strips import fraction, ids, keys_problem, listed, rescaled, sh
 __all__ = [
     "KIND_CELL",
     "KIND_STRIP",
-    "Reconcile",
+    "LayoutReconcile",
     "RowsProblem",
     "reconcile",
     "row_cells",
@@ -138,7 +138,7 @@ def _kept(row: Mapping, on_plane: set[str], seen: set[str]) -> dict | None:
 
 
 def reconcile(rows: object, cells: object) -> list[dict]:
-    """``rows`` kept to ``cells``, the plane's cell ids. Plain python, what :data:`Reconcile` runs.
+    """``rows`` kept to ``cells``, the plane's cell ids. Plain python, what :data:`LayoutReconcile` runs.
 
     - a cell not in ``cells`` (removed, transferred out) is dropped, then the
       strip rules (:func:`_kept`);
@@ -164,5 +164,5 @@ def reconcile(rows: object, cells: object) -> list[dict]:
     return out
 
 
-#: ``Reconcile(rows, cells)``: :func:`reconcile`, what :func:`~.ops.get` and :func:`~.ops.set` run.
-Reconcile = nu.host(reconcile, name="LayoutReconcile")
+#: ``LayoutReconcile(rows, cells)``: :func:`reconcile`, what :func:`~.ops.get` and :func:`~.ops.set` run.
+LayoutReconcile = nu.host(reconcile, name="LayoutReconcile")

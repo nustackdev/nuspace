@@ -10,7 +10,7 @@ slot but :func:`get` and :func:`set`. Code reading a layout calls
     nuspace.atomic(web.layout.set(plane, rows))
     web.layout.transfer(cell, other_plane, rows)   # two commits, brackets itself
 
-Both are plain kv terms around :data:`~.model.Reconcile`: two reads (the
+Both are plain kv terms around :data:`~.model.LayoutReconcile`: two reads (the
 slot and the plane's cells), one host call, at most one write. One commit
 each, O(that plane).
 
@@ -28,7 +28,7 @@ from nuspace.utils import keys_of
 from nuspace.utils.checks import live, refuse
 
 from ..shapes import Web
-from .model import Reconcile, RowsProblem
+from .model import LayoutReconcile, RowsProblem
 
 
 __all__ = ["get", "set", "transfer"]
@@ -46,7 +46,7 @@ def _cells(plane: nu.StrArg) -> nu.Nu:
 def get(plane: nu.StrArg, *, into: nu.Ref) -> nu.Nu:
     """The layout, reconciled with the plane's cells, set into ``into``. Heals the slot. Bare term.
 
-    ``let x = Reconcile(slot, cells)``, the slot written only when ``x``
+    ``let x = LayoutReconcile(slot, cells)``, the slot written only when ``x``
     differs from it, and only on a plane on the web (a missing slot reads
     ``[]``). 0 or 1 write. A plane with no cells and no slot reads ``[]``.
     Cost: O(rows + cells).
@@ -58,7 +58,7 @@ def get(plane: nu.StrArg, *, into: nu.Ref) -> nu.Nu:
             changed = Web.planes.contains(plane).and_(nu.List(x) != nu.List(held))
             return nu.IfDo(changed, slot.set(nu.List(x))) >> into.set(nu.List(x))
 
-        return nu.let(Reconcile(held, _cells(plane)), heal)
+        return nu.let(LayoutReconcile(held, _cells(plane)), heal)
 
     return nu.let(slot.fallback([]), reconciled)
 
@@ -83,7 +83,7 @@ def set(plane: nu.StrArg, rows: nu.ListArg[dict]) -> nu.Nu:
 
     def write(said: nu.ObjectRef) -> nu.Nu:
         shaped = refuse(nu.Str(said) != "", Refused, said)
-        return shaped >> _slot(plane).set(nu.List(Reconcile(rows, _cells(plane))))
+        return shaped >> _slot(plane).set(nu.List(LayoutReconcile(rows, _cells(plane))))
 
     return checks >> nu.let(RowsProblem(rows), write)
 
