@@ -11,11 +11,9 @@
   no plane to draw, and a later ``set_head`` clears it. Any order is fine:
   the browser keeps each beside the others.
 - **Layout**, the pane's plane's arrangement of its cells
-  (:mod:`nuspace.web.layout`): shipped fixed up with the cells, written
-  through four events: ``layout.move``, ``layout.set``, ``layout.place``
-  and ``layout.transfer``. A spot for one cell is ``before`` or ``after`` an
-  item id (neither the end), or ``into`` a strip item with its ``column`` and
-  ``index`` there.
+  (:mod:`nuspace.web.layout`): shipped reconciled with the cells, written
+  whole as ``rows`` by ``layout.set``, ``layout.transfer`` (the target's
+  rows) and ``cell.create`` (the rows with the new cell in place).
 - **Targets**, one ask and one answer on a pane's path: ``cell.targets``
   asks for the planes a cell can be transferred to, ``set_targets``
   answers once. Nothing watches them after.
@@ -59,9 +57,7 @@ __all__ = [
     "on_delete_cell",
     "on_delete_plane",
     "on_move_cell",
-    "on_move_item",
     "on_open",
-    "on_place_cell",
     "on_remove_cell_key",
     "on_remove_plane_key",
     "on_rename_plane",
@@ -69,12 +65,12 @@ __all__ = [
     "on_restart_plane",
     "on_set_cell_key",
     "on_set_icon",
-    "on_set_item",
+    "on_set_layout",
     "on_set_plane_key",
     "on_set_web",
     "on_targets",
     "on_transfer_cell",
-    "on_transfer_placed",
+    "on_transfer_layout",
     "on_update_cell",
     "scroll",
     "set_absent",
@@ -161,11 +157,11 @@ def set_head(
 def set_cells(pane: Ref, cells: ListArg[dict], layout: ListArg[dict]) -> Nu:
     """Replace the pane's cells, in order, each ``{id, key, source, draws, classes}``, and the layout drawing them.
 
-    ``layout`` is the items as drawn, in order, fixed up against the cells
-    (:func:`~nuspace.web.layout.model.layout_view`): each ``{id, kind:
-    "cell", cell}`` or ``{id, kind: "strip", columns: [{cells, share}]}``.
-    Every cell sits in exactly one item; read from the same snapshot as the
-    cells, so the two always agree.
+    ``layout`` is the rows, top to bottom, reconciled with the cells
+    (:func:`nuspace.web.layout.get`): each ``{kind: "cell", cell}`` or
+    ``{kind: "strip", columns: [{cells, share}]}``. Every cell sits in
+    exactly one row; read in the same commit as the cells, so the two
+    always agree.
     """
     return write(pane, "set_cells", cells=cells, layout=layout)
 
@@ -272,10 +268,12 @@ def on_restart_plane(pane: Ref) -> Changed:
 
 
 def on_create_cell(pane: Ref) -> Changed:
-    """``{cell_id, name, before?, after?}``. Browser minted id.
+    """``{cell_id, name, rows}``. Browser minted id.
 
     ``name`` names a CellSpec: the cell stores its source and takes its
-    name. ``before`` or ``after`` is a cell of the plane, neither the end.
+    name. ``rows`` is the plane's layout with the new cell in place: the
+    cell is added first, then the layout set. An id taken raises
+    ``Exists``, and the browser tries once more with a fresh one.
     """
     return event(pane, "cell.create")
 
@@ -305,36 +303,16 @@ def on_transfer_cell(pane: Ref) -> Changed:
     return event(pane, "cell.transfer")
 
 
-def on_set_item(pane: Ref) -> Changed:
-    """``{item_id, item}``. Replaces one layout item whole, in its place: a strip made, regrouped or resized.
-
-    Its cells are taken out of every other item, by the strip rules: a cell
-    dropped beside another is this one event.
-    """
+def on_set_layout(pane: Ref) -> Changed:
+    """``{rows}``. The plane's layout written whole: every reorder, strip, column, resize on a web plane."""
     return event(pane, "layout.set")
 
 
-def on_move_item(pane: Ref) -> Changed:
-    """``{item_id, before?, after?}``. Moves one layout item, neither anchor the end. A web plane's reorder."""
-    return event(pane, "layout.move")
+def on_transfer_layout(pane: Ref) -> Changed:
+    """``{cell_id, plane_id, rows}``. A cell to another plane, then that plane's layout as ``rows``.
 
-
-def on_place_cell(pane: Ref) -> Changed:
-    """``{cell_id, before?, after?}`` or ``{cell_id, into, column, index}``. One cell of the plane to a spot.
-
-    Out of whatever item held it, then its own item before or after an item
-    (neither the end), or into strip ``into``'s column ``column`` at
-    ``index``, counted with the cell taken out.
-    """
-    return event(pane, "layout.place")
-
-
-def on_transfer_placed(pane: Ref) -> Changed:
-    """``{cell_id, plane_id, before?, after?}`` or ``{cell_id, plane_id, into, column, index}``.
-
-    Transfers a cell to another plane, then places it in that plane's
-    layout at the spot, as ``layout.place`` there. Two commits: a place that
-    fails leaves the cell transferred, drawn last.
+    ``rows`` are the target's, the cell already in place. Two commits,
+    transfer first: a set that fails leaves the cell transferred, drawn last.
     """
     return event(pane, "layout.transfer")
 

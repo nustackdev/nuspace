@@ -14,7 +14,7 @@
 // the cells, and routes intents (./intents.ts):
 //
 //   structure/   create, the one remove, reorder
-//   layout/      how the cells are drawn (items, strips), and dragging
+//   layout/      how the cells are drawn (rows, strips), and dragging
 //                them within the pane, to another pane or a sidebar row
 //   selection/   the cell-selection keyboard, box and range select
 //   focus/       focus requests, navigation, the cells' documents
@@ -29,7 +29,8 @@
 //
 // The cells draw from the plane's layout (./layout/model.ts): a cell alone
 // on its row, or a strip of columns side by side at their shares (./layout/
-// Strip.tsx). Every row is the same `Cell` either way. The core reads the
+// Strip.tsx). A row has no id: React keys it, and a drag reads it, by its
+// first cell. Every row is the same `Cell` either way. The core reads the
 // cells in the layout's reading order, so the caret and the selection walk
 // what is drawn. A cell's markdown editor is found through
 // the kit by the cell's address and talks back only in intents, so
@@ -70,9 +71,9 @@ import {
 	useDragged,
 	useDragMark,
 } from "./layout/drag";
-import { inReadingOrder, plainLayout, resized } from "./layout/model";
+import { inReadingOrder, plainLayout, resized, rowKey } from "./layout/model";
 import { Strip } from "./layout/Strip";
-import { type Notify, sendOp } from "./ops";
+import type { Notify } from "./ops";
 import { useBoxSelect } from "./selection/useBoxSelect";
 import { useCellKeys } from "./selection/useCellKeys";
 import { type EditorPatch, type InputLine, patchEditor, readEditor, useEditorState } from "./state";
@@ -122,7 +123,6 @@ export function Plane({
 	const layout = useMemo(() => plane.layout ?? plainLayout(plane.cells), [plane]);
 	// The layout's reading order: what the caret, the selection and the keys walk.
 	const cells = useMemo(() => inReadingOrder(plane.cells, layout), [plane.cells, layout]);
-	const top = plane.cells[0]?.id ?? null;
 	// Per pane: two planes side by side never share a selection or a ghost.
 	const editor = useEditorState(panePath);
 	const viewerKey = pathKey(viewerPath);
@@ -149,7 +149,6 @@ export function Plane({
 		planeId,
 		cells,
 		layout,
-		top,
 		editor,
 		patch,
 		read,
@@ -336,7 +335,7 @@ export function Plane({
 
 	// One cell's row, and the input line under it when one is open there.
 	const byId = new Map(cells.map((c) => [c.id, c]));
-	const renderCell = (id: string, itemId?: string) => {
+	const renderCell = (id: string, alone?: boolean) => {
 		const cell = byId.get(id);
 		if (!cell) return null;
 		const selected = selectedIds.includes(cell.id);
@@ -369,7 +368,7 @@ export function Plane({
 					focusReq={source}
 					dragging={dragged === cell.id}
 					drop={markOn(mark, cell.id)}
-					itemId={itemId}
+					alone={alone}
 					setEl={(el) => setEl(cell.id, el)}
 					onPointerIn={() => {
 						if (editor.selected.length > 0) patch({ selected: [], anchor: null });
@@ -440,19 +439,19 @@ export function Plane({
 					<Ghost {...ghostProps(null, true)} />
 				</div>
 			) : null}
-			{layout.map((item) =>
-				item.kind === "cell" ? (
-					<Fragment key={item.id}>{renderCell(item.cell, item.id)}</Fragment>
+			{layout.map((row) =>
+				row.kind === "cell" ? (
+					<Fragment key={row.cell}>{renderCell(row.cell, true)}</Fragment>
 				) : (
 					<Strip
-						key={item.id}
-						item={item}
+						key={rowKey(row)}
+						row={row}
 						editable={editable}
-						dropAbove={mark?.kind === "strip" && mark.item === item.id}
+						dropAbove={mark?.kind === "strip" && mark.row === rowKey(row)}
 						renderCell={(id) => renderCell(id)}
 						onResize={(shares) => {
-							const op = resized(item, shares);
-							if (op) sendOp(notify, op);
+							const rows = resized(layout, rowKey(row), shares);
+							if (rows) notify("layout.set", { rows });
 						}}
 					/>
 				),

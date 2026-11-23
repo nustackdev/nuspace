@@ -1,10 +1,11 @@
-"""What desks and plane layouts share: ordered items of item id to item, some of them strips.
+"""What desks and plane layouts share: strips of parts at their shares, and the checks on them.
 
-Both a desk (:mod:`nuspace.web.desks`) and a web plane's layout
-(:mod:`nuspace.web.layout`) keep an ``OrderedDictRef`` of items, each a plain
-dict read and written whole, keyed by an item id. Some items are strips:
-parts side by side or stacked, each with a ``share``, the shares of one run
-of parts summing to 1. What they share lives here, once:
+A desk (:mod:`nuspace.web.desks`) keeps an ``OrderedDictRef`` of items, each
+a plain dict read and written whole, keyed by an item id. A web plane's
+layout (:mod:`nuspace.web.layout`) is one list of rows, no ids. Both hold
+strips: parts side by side or stacked, each with a ``share``, the shares of
+one run of parts summing to 1. What they share lives here, once (the ids and
+the placing are the desks' alone):
 
 - Ids: :data:`ITEM_ID`, :func:`mint_id` (:data:`NewId`), :func:`item_id_problem`
   (:data:`ItemIdProblem`).

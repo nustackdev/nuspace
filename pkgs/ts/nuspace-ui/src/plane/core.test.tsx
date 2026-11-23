@@ -15,8 +15,10 @@ import { type MarkdownHandle, type MarkdownIntent, pathKey, register } from "@nu
 import { act, useEffect } from "react";
 import { describe, expect, it, vi } from "vitest";
 import type { PlaneApi } from "./api";
+import { retriedCreate } from "./create";
 import {
 	cell,
+	createdAt,
 	draw,
 	endLine,
 	fakeDoc,
@@ -42,6 +44,7 @@ import {
 } from "./plane.testing";
 import { readEditor } from "./state";
 import { sugars as SUGARS, type Sugar } from "./sugar";
+import type { LayoutRow } from "./types";
 
 /** A program's view that is no markdown editor: drawn, never registered. */
 register("TestPlain", { component: () => <div /> });
@@ -137,11 +140,63 @@ describe("the input line, with no sugar", () => {
 		render([cell("a"), cell("b")]);
 		press(endLine(), "/");
 		press(endLine(), "Enter");
-		expect(notify).toHaveBeenCalledWith(
-			"cell.create",
-			expect.objectContaining({ name: "", after: "b" }),
-		);
+		const [op, args] = notify.mock.calls.at(-1) ?? [];
+		expect(op).toBe("cell.create");
+		expect(createdAt(args)).toMatchObject({ name: "", after: "b" });
 		expect(menu()).toBeNull();
+	});
+
+	it("creates under a strip's cell in its column, the rows sent with it in place", () => {
+		const layout: LayoutRow[] = [
+			{ kind: "cell", cell: "a" },
+			{
+				kind: "strip",
+				columns: [
+					{ cells: ["b", "c"], share: 0.5 },
+					{ cells: ["d"], share: 0.5 },
+				],
+			},
+			{ kind: "cell", cell: "e" },
+		];
+		render([cell("a"), cell("b"), cell("c"), cell("d"), cell("e")], { layout });
+		act(() =>
+			row("b").querySelector<HTMLButtonElement>("button[aria-label='Add a line below']")?.click(),
+		);
+		press(lines()[0], "/");
+		press(lines()[0], "Enter");
+		const [op, args] = notify.mock.calls.at(-1) ?? [];
+		expect(op).toBe("cell.create");
+		const id = args.cell_id as string;
+		expect(args.rows).toEqual([
+			{ kind: "cell", cell: "a" },
+			{
+				kind: "strip",
+				columns: [
+					{ cells: ["b", id, "c"], share: 0.5 },
+					{ cells: ["d"], share: 0.5 },
+				],
+			},
+			{ kind: "cell", cell: "e" },
+		]);
+	});
+
+	it("sends a create whose id was taken once more under a fresh id, then lets a second refusal toast", () => {
+		render([cell("a")]);
+		press(endLine(), "/");
+		press(endLine(), "Enter");
+		const first = notify.mock.calls.at(-1)?.[1] as { cell_id: string; rows: LayoutRow[] };
+		expect(retriedCreate("Exists", `cell ${first.cell_id} exists`)).toBe(true);
+		const [op, again] = notify.mock.calls.at(-1) ?? [];
+		expect(op).toBe("cell.create");
+		expect(again.cell_id).not.toBe(first.cell_id);
+		expect(again.rows).toEqual([
+			{ kind: "cell", cell: "a" },
+			{ kind: "cell", cell: again.cell_id },
+		]);
+		// Once only, and never for another refusal.
+		expect(retriedCreate("Exists", `cell ${first.cell_id} exists`)).toBe(false);
+		expect(retriedCreate("Exists", `cell ${again.cell_id} exists`)).toBe(false);
+		expect(retriedCreate("Refused", "cell x exists")).toBe(false);
 	});
 
 	it("goes up into the cell above, selected, and into the title from an empty plane", () => {
@@ -332,11 +387,18 @@ describe("cell selection", () => {
 		press(plane, "ArrowDown", { shiftKey: true });
 		expect(selected()).toEqual(["b", "c"]);
 		press(plane, "ArrowUp", { metaKey: true });
-		// [b, c] up past a: each item out of place moved after the one before it.
-		// No layout shipped: each cell is its own item, its id the cell's.
-		expect(notify.mock.calls.slice(-2).map((c) => c[0])).toEqual(["layout.move", "layout.move"]);
-		expect(notify.mock.calls.at(-2)?.[1]).toEqual({ item_id: "b", before: "a" });
-		expect(notify.mock.calls.at(-1)?.[1]).toEqual({ item_id: "c", after: "b" });
+		// [b, c] up past a, as a block: the whole new rows in one write.
+		// No layout shipped: each cell is its own row.
+		expect(notify.mock.calls.at(-1)).toEqual([
+			"layout.set",
+			{
+				rows: [
+					{ kind: "cell", cell: "b" },
+					{ kind: "cell", cell: "c" },
+					{ kind: "cell", cell: "a" },
+				],
+			},
+		]);
 		press(plane, "Escape");
 		expect(selected()).toEqual([]);
 	});
@@ -550,10 +612,9 @@ describe("the plane api, from a sugar", () => {
 			],
 		});
 		poke(mountDoc("a"));
-		expect(notify).toHaveBeenCalledWith(
-			"cell.create",
-			expect.objectContaining({ cell_id: made, after: "a" }),
-		);
+		const [op, args] = notify.mock.calls.find(([o]) => o === "cell.create") ?? [];
+		expect(op).toBe("cell.create");
+		expect(createdAt(args)).toMatchObject({ cell_id: made, after: "a" });
 		// A set_cells without the new cell yet must not drop its request.
 		render([cell("a"), cell("z")], { sugars: [] });
 		render([cell("a"), cell(made), cell("z")], { sugars: [] });
@@ -592,7 +653,7 @@ describe("the plane api, from a sugar", () => {
 		// The create is anchored on "a": its delete waits for the new cell,
 		// since the server may run the two in either order.
 		expect(ops().map(([op]) => op)).toEqual(["cell.create"]);
-		const made = notify.mock.calls[0][1] as { cell_id: string; after?: string };
+		const made = createdAt(notify.mock.calls[0][1]) as { cell_id: string; after?: string };
 		expect(made).toMatchObject({ after: "a" });
 		expect(row("a").hidden).toBe(true);
 		render([cell("a"), cell(made.cell_id), cell("b")], { sugars });

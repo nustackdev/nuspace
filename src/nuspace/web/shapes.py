@@ -7,7 +7,7 @@ them; they name plane and plane run ids only::
 
     Web                                  persistent
       planes[plane_id]                   WebPlane: editable, width, layout
-        layout[item_id]                  cell item or strip, in drawing order
+        layout                           [row], a cell or a strip, top to bottom
       recents                            [plane id], most recent first, capped
       desks[desk_id]                     Desk, in sidebar order
         name                             the desk's name
@@ -53,18 +53,18 @@ class WebPlane(nu.Shape):
     ``editable`` (its cells can be edited) and ``width`` (one of
     :data:`WIDTHS`, ``page`` when unset).
 
-    ``layout`` is how the plane draws its cells: every item by item id, in
-    drawing order, each a plain dict read and written whole, a cell item
-    ``{kind: "cell", cell}`` or a strip ``{kind: "strip", columns}``, each
-    column ``{cells, share}``. ``Plane.cells`` stays which cells are on the
-    plane; the layout only arranges them, and is fixed up when read
-    (:mod:`nuspace.web.layout`). Missing or empty, the plane draws its
-    cells one under another, in ``cells`` order.
+    ``layout`` is how the plane draws its cells: one plain list of rows,
+    read and written whole, each ``{kind: "cell", cell}`` or ``{kind:
+    "strip", columns: [{cells, share}]}``. ``Plane.cells`` stays which cells
+    are on the plane; the layout only arranges them. Internal: only
+    ``web.layout.get`` and ``web.layout.set`` read or write it, and both
+    reconcile it with the cells (:mod:`nuspace.web.layout`). Missing, the
+    plane draws each cell on its own row.
     """
 
     editable = nustd.kv.BoolRef.slot()
     width = nustd.kv.StrRef.slot()
-    layout = nustd.kv.OrderedDictRef.slot(nustd.kv.PrimitiveDictRef)
+    layout = nustd.kv.PrimitiveListRef.slot()
 
 
 class Desk(nu.Shape):

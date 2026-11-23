@@ -24,10 +24,11 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, vi } from "vitest";
 import type { PlaneHandle } from "./api";
 import type { TitleIntent } from "./intents";
+import { readingOrder } from "./layout/model";
 import { Plane } from "./Plane";
 import { readEditor } from "./state";
 import type { Sugar } from "./sugar";
-import type { ActivePlane, Cell, CellSpec, LayoutItem } from "./types";
+import type { ActivePlane, Cell, CellSpec, LayoutRow } from "./types";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 // The slash menu's popover sizes itself with a ResizeObserver, which jsdom
@@ -78,7 +79,7 @@ export function render(
 		title?: boolean;
 		focused?: boolean;
 		/** How the cells draw; left out, one per row. */
-		layout?: LayoutItem[];
+		layout?: LayoutRow[];
 	} = {},
 ) {
 	const plane: ActivePlane = {
@@ -268,6 +269,19 @@ export const row = (id: string) =>
 export const menu = () => document.querySelector("[role='listbox'][aria-label='Insert a cell']");
 export const selected = () => readEditor(PANE).selected;
 export const ops = () => notify.mock.calls.map(([op, args]) => [op, args.cell_id ?? args.cell_ids]);
+
+/**
+ * A `cell.create`'s args with where its rows put the new cell, read as the
+ * cell before it in reading order (`after`), or the one after it when it
+ * comes first (`before`): what a test of where a create lands checks.
+ */
+export function createdAt(args: Record<string, unknown>): Record<string, unknown> {
+	const order = readingOrder((args.rows as LayoutRow[] | undefined) ?? []);
+	const at = order.indexOf(String(args.cell_id));
+	if (at > 0) return { ...args, after: order[at - 1] };
+	if (at === 0 && order.length > 1) return { ...args, before: order[1] };
+	return args;
+}
 
 export const title = (i: TitleIntent) => {
 	let acted = false;

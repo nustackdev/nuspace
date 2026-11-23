@@ -1,34 +1,25 @@
-"""``nuspace.web.layout``: the layout model and its fix-up, the layout ops, transfer and place, and the pane.
+"""``nuspace.web.layout``: the rows' shape and the reconcile, ``get`` / ``set`` / ``transfer``, and the pane.
 
-Every op is a bare term, run here inside ``nuspace.atomic`` as a caller
-would (``transfer_cell`` brackets itself). The pane runs in one tab over a
-fake session, as ``test_web.py``.
+The ops are bare terms, run here inside ``nuspace.atomic`` as a caller
+would (``transfer`` brackets itself). The pane runs in one tab over a fake
+session, as ``test_web.py``.
 """
 
 from __future__ import annotations
 
 import asyncio
+import copy
 
 import pytest
+from _support.made import MADE
 
 import nu
 import nuspace
 import nuspace.web as web
-from nuspace.errors import Exists, Missing, Refused, Removed
+from nuspace.errors import Missing, Refused, Removed
 from nuspace.shapes import Space
 from nuspace.specs import space_registry
-from nuspace.web.items import ITEM_ID
-from nuspace.web.layout.model import (
-    cells_problem,
-    column_problem,
-    fills,
-    item_problem,
-    layout_view,
-    plan,
-    put_in,
-    taken_out,
-    write_problem,
-)
+from nuspace.web.layout.model import reconcile, rows_problem
 from nuspace.web.shapes import Web
 from nustd.ui.core import OP_NOTIFY, Frame, WsSession
 from nustd.ui.core.session import Session
@@ -53,9 +44,9 @@ def strip(*columns: list[str], shares: list[float] | None = None) -> dict:
     }
 
 
-def shown(view: list[dict]) -> list:
-    """A read as ``[cell]`` per cell item and ``[[cells], ...]`` per strip: what the eye sees."""
-    return [i["cell"] if i["kind"] == "cell" else [c["cells"] for c in i["columns"]] for i in view]
+def shown(rows: list[dict]) -> list:
+    """Rows as ``cell`` per cell row and ``[[cells], ...]`` per strip: what the eye sees."""
+    return [r["cell"] if r["kind"] == "cell" else [c["cells"] for c in r["columns"]] for r in rows]
 
 
 async def do(store, term):
@@ -63,402 +54,218 @@ async def do(store, term):
 
 
 async def plane(store, pid: str, *cells: str) -> None:
-    """A web plane with ``cells``, in that order."""
+    """A web plane with ``cells``."""
     await do(store, nuspace.plane.add(pid, backend="async"))
     await do(store, web.add(pid, editable=True))
     for c in cells:
         await do(store, nuspace.cell.add(pid, "x = 1", id=c, fabrics=[]))
 
 
-async def read(store, pid: str = "p1") -> list[dict]:
-    return await store.read(L.get_layout(pid))
+async def get(store, pid: str = "p1") -> list[dict]:
+    """The layout through ``get``, in its own commit: it may heal the slot."""
+    return await store.made(nuspace.atomic(L.get(pid, into=MADE)))
 
 
-async def stored(store, pid: str = "p1") -> dict:
-    layout = Web.planes[pid].layout
-    return await store.read(nu.If(layout.exists(), layout.extract(), nu.Literal({})))
-
-
-def ids_of(view: list[dict]) -> list[str]:
-    return [i["id"] for i in view]
+async def stored(store, pid: str = "p1") -> list | None:
+    """The raw slot, None when never written. Only a test reads it."""
+    slot = Web.planes[pid].layout
+    return await store.read(nu.If(slot.exists(), slot, None))
 
 
 # --- The model: shape --------------------------------------------------------------------
 
 
-def test_a_cell_item_and_a_strip_are_items():
-    assert item_problem(cell("c1")) == ""
-    assert item_problem(strip(["c1", "c2"], ["c3"], shares=[0.7, 0.3])) == ""
-    assert item_problem(strip(["c1", "c2"])) == ""
+def test_cell_rows_and_strips_are_a_layout():
+    assert rows_problem([]) == ""
+    assert rows_problem([cell("c1"), strip(["c2", "c3"], ["c4"], shares=[0.7, 0.3])]) == ""
+    # One cell in a strip, or a cell twice, is on the shape: the reconcile's to fix.
+    assert rows_problem([strip(["c1"]), cell("c1")]) == ""
 
 
 @pytest.mark.parametrize(
     ("held", "said"),
     [
-        ("nope", "item is not a dict"),
-        ({"kind": "plane", "cell": "c1"}, "item kind is not"),
-        ({"kind": "cell"}, "item has keys"),
-        ({"kind": "cell", "cell": "c1", "id": "abcdef"}, "item has keys"),
-        ({"kind": "cell", "cell": ""}, "item cell is not a cell id"),
-        ({"kind": "strip", "columns": []}, "strip has no columns"),
-        (strip(["c1"], ["c2"], shares=[0.5, 0.4]), "strip shares do not sum to 1"),
-        (strip(["c1"], ["c2"], shares=[0, 1]), "strip column 0 share is not a number"),
-        (strip([], ["c2", "c3"]), "strip column 0 cells is not a list of cell ids"),
-        (strip(["c1"]), "strip has one cell, a cell item then"),
-        (strip(["c1", "c2"], ["c1"]), "strip holds cell c1 twice"),
-        ({"kind": "strip", "columns": [{"cells": ["c1", "c2"]}]}, "strip column 0 has keys"),
+        ("nope", "layout is not a list of rows"),
+        ([1], "row 0 is not a dict"),
+        ([{"kind": "plane", "cell": "c1"}], "row 0 kind is not"),
+        ([cell("c1"), {"kind": "cell"}], "row 1 has keys"),
+        ([{"kind": "cell", "cell": "c1", "id": "x"}], "row 0 has keys"),
+        ([{"kind": "cell", "cell": ""}], "row 0 cell is not a cell id"),
+        ([{"kind": "strip", "columns": []}], "row 0 has no columns"),
+        ([strip(["c1"], ["c2"], shares=[0.5, 0.4])], "row 0 shares do not sum to 1"),
+        ([strip(["c1"], ["c2"], shares=[0, 1])], "row 0 column 0 share is not a number"),
+        ([strip([], ["c2", "c3"])], "row 0 column 0 cells is not a list of cell ids"),
+        ([{"kind": "strip", "columns": [{"cells": ["c1"]}]}], "row 0 column 0 has keys"),
     ],
 )
-def test_an_item_off_the_shape_says_why(held, said):
-    assert item_problem(held).startswith(said)
+def test_rows_off_the_shape_say_why(held, said):
+    assert rows_problem(held).startswith(said)
 
 
-def test_a_write_is_checked_whole():
-    good = {"sets": {"abcdef": cell("c1")}, "deletes": ["zzzzzz"], "order": None}
-    assert write_problem(good) == ""
-    assert write_problem({**good, "order": ["abcdef"]}) == ""
-    assert write_problem({**good, "sets": {"BAD": cell("c1")}}).startswith("item id 'BAD'")
-    assert write_problem({**good, "sets": {"abcdef": {"kind": "x"}}}).endswith("(item abcdef)")
-    assert write_problem({**good, "deletes": "x"}) == "write deletes is not a list of ids"
-    assert write_problem({**good, "order": [1]}) == "write order is not a list of ids"
-    assert write_problem({"sets": {}}).startswith("write has keys")
+# --- The model: the reconcile ------------------------------------------------------------
 
 
-def test_cells_must_be_on_the_plane_and_in_one_item():
-    entries = {"aaaaaa": cell("c1"), "bbbbbb": strip(["c2"], ["c3"])}
-    on = ["c1", "c2", "c3", "c4"]
-    assert cells_problem(entries, on, {"cccccc": cell("c4")}, []) == ""
-    assert cells_problem(entries, on, {"cccccc": cell("c9")}, []) == "cell c9 is not on the plane"
-    assert cells_problem(entries, on, {"cccccc": cell("c2")}, []) == (
-        "cell c2 is in items bbbbbb and cccccc"
-    )
-    # Moved between items in one write: out of one, into the other.
-    moved = {"aaaaaa": strip(["c1", "c2"]), "bbbbbb": cell("c3")}
-    assert cells_problem(entries, on, moved, []) == ""
-    # Deleted in the same write frees its cells.
-    assert cells_problem(entries, on, {"cccccc": strip(["c2", "c3"])}, ["bbbbbb"]) == ""
-    # Two stored items holding one cell, neither written: not this write's.
-    twice = {**entries, "dddddd": cell("c1")}
-    assert cells_problem(twice, on, {"cccccc": cell("c4")}, []) == ""
+def test_an_empty_layout_is_every_cell_its_own_row():
+    assert reconcile([], ["c1", "c2", "c3"]) == [cell("c1"), cell("c2"), cell("c3")]
+    assert reconcile(None, ["c1"]) == [cell("c1")]
+    assert reconcile([], []) == []
 
 
-def test_a_column_is_one_of_a_strips():
-    held = strip(["c1"], ["c2"])
-    assert column_problem(held, 1) == ""
-    assert column_problem(held, 2) == "column 2 is not one of the strip's 2"
-    assert column_problem(held, True).startswith("column True")
-    assert column_problem(cell("c1"), 0) == "item is not a strip"
-    assert put_in(held, "c9", 1, 0)["columns"][1]["cells"] == ["c9", "c2"]
-    assert put_in(held, "c9", 0, 99)["columns"][0]["cells"] == ["c1", "c9"]
+def test_a_layout_in_step_with_the_cells_reads_back_as_it_is():
+    rows = [strip(["c1", "c3"], ["c2"], shares=[0.3, 0.7]), cell("c4")]
+    assert reconcile(rows, ["c4", "c3", "c2", "c1"]) == rows
 
 
-# --- The model: the fix-up ---------------------------------------------------------------
-
-
-def test_an_empty_layout_reads_as_one_cell_item_per_cell_in_order():
-    view = layout_view({}, ["c1", "c2", "c3"])
-    assert shown(view) == ["c1", "c2", "c3"]
-    assert all(ITEM_ID.fullmatch(i) for i in ids_of(view))
-    # The same state reads the same ids, so the browser can anchor on them.
-    assert ids_of(layout_view(None, ["c1", "c2", "c3"])) == ids_of(view)
-    assert layout_view({}, []) == []
-
-
-def test_a_cell_no_longer_on_the_plane_is_skipped_and_its_item_stays():
-    entries = {"aaaaaa": cell("c1"), "bbbbbb": cell("c2"), "cccccc": cell("c3")}
-    # c2 removed or transferred out: skipped, nothing drawn in its place.
-    view = layout_view(entries, ["c1", "c3"])
-    assert [(i["id"], i["cell"]) for i in view] == [("aaaaaa", "c1"), ("cccccc", "c3")]
-    # Back on the plane, it reads where it was, whatever its place in cells.
-    view = layout_view(entries, ["c2", "c1", "c3"])
-    assert ids_of(view) == ["aaaaaa", "bbbbbb", "cccccc"]
-
-
-def test_the_strip_rules_after_skipping():
-    held = strip(["c1", "c2"], ["c3"], ["c4"], shares=[0.5, 0.25, 0.25])
-    # An empty column goes, the shares left rescale.
-    (one,) = layout_view({"aaaaaa": held}, ["c1", "c2", "c4"])
-    assert one["id"] == "aaaaaa"
-    assert [c["cells"] for c in one["columns"]] == [["c1", "c2"], ["c4"]]
-    assert [c["share"] for c in one["columns"]] == pytest.approx([2 / 3, 1 / 3])
-    # A cell out of a column that stays: the shares stay.
-    (one,) = layout_view({"aaaaaa": held}, ["c1", "c3", "c4"])
-    assert [c["share"] for c in one["columns"]] == [0.5, 0.25, 0.25]
-    # One cell left: a cell item, same id.
-    assert layout_view({"aaaaaa": held}, ["c3"]) == [{"id": "aaaaaa", "kind": "cell", "cell": "c3"}]
-    # None left: gone.
-    assert layout_view({"aaaaaa": held}, ["c9"]) == [layout_view({}, ["c9"])[0]]
-
-
-def test_a_new_cell_goes_after_its_predecessors_item():
-    entries = {"aaaaaa": cell("c3"), "bbbbbb": cell("c1")}
-    # c2 is after c1 in cells: right after c1's item, wherever that is.
-    assert shown(layout_view(entries, ["c1", "c2", "c3"])) == ["c3", "c1", "c2"]
-    # c0 is first in cells: the top.
-    assert shown(layout_view(entries, ["c0", "c1", "c3"])) == ["c0", "c3", "c1"]
-    # Two new in a row chain after each other.
-    assert shown(layout_view(entries, ["c3", "n1", "n2", "c1"])) == ["c3", "n1", "n2", "c1"]
-
-
-def test_a_new_cell_after_a_cell_inside_a_strip_goes_after_the_strip():
-    entries = {"aaaaaa": strip(["c1"], ["c3"]), "bbbbbb": cell("c4")}
-    view = layout_view(entries, ["c1", "c2", "c3", "n1", "c4"])
-    # c2 follows c1, n1 follows c3: both after the strip, in cells order.
-    assert shown(view) == [[["c1"], ["c3"]], "c2", "n1", "c4"]
-
-
-def test_a_cell_two_stored_items_hold_shows_in_the_first():
-    entries = {"aaaaaa": cell("c1"), "bbbbbb": strip(["c1", "c2"], ["c3"])}
-    assert shown(layout_view(entries, ["c1", "c2", "c3"])) == ["c1", [["c2"], ["c3"]]]
-
-
-def test_an_entry_off_the_shape_is_skipped_and_its_cell_filled():
-    entries = {"aaaaaa": {"kind": "pane"}, "bbbbbb": cell("c2")}
-    assert shown(layout_view(entries, ["c1", "c2"])) == ["c1", "c2"]
-
-
-def test_a_fill_id_never_takes_a_stored_one():
-    (first,) = layout_view({}, ["c1"])
-    # Store something under the id c1 would get: c1 reads under another.
-    (_, again) = layout_view({first["id"]: cell("c0")}, ["c0", "c1"])
-    assert again["cell"] == "c1" and again["id"] != first["id"]
-
-
-def test_fills_are_the_reads_additions_as_inserts():
-    entries = {"aaaaaa": cell("c2"), "bbbbbb": cell("gone")}
-    view = layout_view(entries, ["c0", "c1", "c2", "c3"])
-    got = fills(entries, ["c0", "c1", "c2", "c3"])
-    c0, c1, _, c3 = ids_of(view)
-    assert got == [
-        [c0, cell("c0"), "before", "aaaaaa"],
-        [c1, cell("c1"), "after", c0],
-        [c3, cell("c3"), "after", "aaaaaa"],
+def test_cells_no_longer_on_the_plane_go_by_the_strip_rules():
+    rows = [cell("c1"), strip(["c2", "c3"], ["c4"], shares=[0.6, 0.4]), strip(["c5"], ["c6"])]
+    # c1 removed: its row goes.
+    assert shown(reconcile(rows, ["c2", "c3", "c4", "c5", "c6"])) == [
+        [["c2", "c3"], ["c4"]],
+        [["c5"], ["c6"]],
     ]
-    # Applied in order the store reads back as the read did: the hidden item kept.
-    order = list(entries)
-    for item_id, _, side, anchor in got:
-        order.insert(order.index(anchor) + (side == "after"), item_id)
-    assert order == [c0, c1, "aaaaaa", c3, "bbbbbb"]
-    assert fills({}, ["c1"]) == [[ids_of(layout_view({}, ["c1"]))[0], cell("c1"), "end", ""]]
-    assert fills(entries, ["c2"]) == []
+    # c4 out: its column goes, the share left rescales to 1.
+    got = reconcile(rows, ["c1", "c2", "c3", "c5", "c6"])
+    assert got[1] == strip(["c2", "c3"], shares=[1.0])
+    # c2 and c3 out: the strip left with c4 alone is a cell row.
+    assert reconcile(rows, ["c1", "c4", "c5", "c6"])[1] == cell("c4")
+    # Every cell of a strip out: the strip goes.
+    assert shown(reconcile(rows, ["c1", "c5", "c6"])) == ["c1", [["c5"], ["c6"]]]
+    # A three column strip losing one: the two left keep their ratio.
+    three = [strip(["a"], ["b"], ["c"], shares=[0.2, 0.2, 0.6])]
+    shares = [c["share"] for c in reconcile(three, ["a", "c"])[0]["columns"]]
+    assert shares == pytest.approx([0.25, 0.75])
 
 
-def test_taken_out_follows_the_strip_rules():
-    entries = {
-        "aaaaaa": cell("c1"),
-        "bbbbbb": strip(["c1", "c2"], ["c3"]),
-        "cccccc": strip(["c4"], ["c1"], shares=[0.25, 0.75]),
-        "dddddd": cell("c5"),
-    }
-    got = taken_out(entries, ["c1"])
-    assert got["deletes"] == ["aaaaaa"]
-    assert got["sets"] == {"bbbbbb": strip(["c2"], ["c3"]), "cccccc": cell("c4")}
-    assert taken_out(entries, ["c9"]) == {"sets": {}, "deletes": []}
-    # Item ``but`` keeps its cells; several cells at once.
-    assert taken_out(entries, ["c1"], "aaaaaa")["deletes"] == []
-    assert taken_out(entries, ["c1", "c4"])["deletes"] == ["aaaaaa", "cccccc"]
+def test_a_cell_in_two_places_stays_with_its_first_holder():
+    rows = [strip(["c1"], ["c2"]), cell("c1"), strip(["c2", "c3"], ["c4"])]
+    assert shown(reconcile(rows, ["c1", "c2", "c3", "c4"])) == [
+        [["c1"], ["c2"]],
+        [["c3"], ["c4"]],
+    ]
+    # Twice inside one strip.
+    assert reconcile([strip(["c1", "c1"], ["c2"])], ["c1", "c2"]) == [strip(["c1"], ["c2"])]
 
 
-# --- The ops -----------------------------------------------------------------------------
+def test_new_cells_go_last_in_cells_order():
+    rows = [strip(["c1"], ["c2"])]
+    assert shown(reconcile(rows, ["c3", "c1", "c4", "c2"])) == [[["c1"], ["c2"]], "c3", "c4"]
 
 
-async def test_a_new_plane_reads_its_cells_in_order_and_stores_nothing(store):
+def test_a_row_off_the_shape_is_dropped_and_its_cells_go_last():
+    rows = [{"kind": "x"}, cell("c2"), {"kind": "cell", "cell": "c1", "id": "x"}]
+    assert reconcile(rows, ["c1", "c2"]) == [cell("c2"), cell("c1")]
+
+
+def test_reconcile_is_pure():
+    """New values only, inputs untouched, the same input the same output."""
+    rows = [strip(["a", "gone"], ["b"], shares=[0.5, 0.5]), cell("a"), strip(["c"])]
+    cells = ["c", "b", "a", "d"]
+    frozen = copy.deepcopy(rows), list(cells)
+    first = reconcile(rows, cells)
+    for _ in range(3):
+        assert reconcile(rows, cells) == first
+    assert (rows, cells) == frozen
+    # Nothing in the answer is a piece of the input: changing it changes nothing given.
+    kept = reconcile([strip(["a"], ["b"])], ["a", "b"])
+    given = [strip(["a"], ["b"])]
+    out = reconcile(given, ["a", "b"])
+    out[0]["columns"][0]["cells"].append("z")
+    assert given == kept
+
+
+# --- get and set -------------------------------------------------------------------------
+
+
+async def test_get_reconciles_and_writes_only_when_it_changed(store):
     await plane(store, "p1", "c1", "c2")
-    assert shown(await read(store)) == ["c1", "c2"]
-    assert await stored(store) == {}
+    assert await stored(store) is None
+    # First read: every cell its own row, healed into the slot.
+    assert await get(store) == [cell("c1"), cell("c2")]
+    assert await stored(store) == [cell("c1"), cell("c2")]
+    # In step: no write. The slot holds the same rows with their keys the other way
+    # round, equal as values; a write would put the reconcile's key order back.
+    turned = [{"cell": "c1", "kind": "cell"}, {"cell": "c2", "kind": "cell"}]
+    await do(store, Web.planes["p1"].layout.set(turned))
+    assert await get(store) == [cell("c1"), cell("c2")]
+    assert [list(r) for r in await stored(store)] == [["cell", "kind"], ["cell", "kind"]]
+    # A cell made with the core op lands last on the next get, one removed goes.
+    await do(store, nuspace.cell.add("p1", "x = 1", id="c3", before="c1", fabrics=[]))
+    await do(store, nuspace.cell.remove("c1"))
+    assert await get(store) == [cell("c2"), cell("c3")]
+    assert await stored(store) == [cell("c2"), cell("c3")]
 
 
-async def test_every_op_fills_first_with_the_reads_ids(store):
-    await plane(store, "p1", "c1", "c2", "c3")
-    before = await read(store)
-    c1, c2, c3 = ids_of(before)
-    # Anchored on items only the read had: they are stored first, then moved.
-    await do(store, L.move_item("p1", c3, before=c1))
-    assert ids_of(await read(store)) == [c3, c1, c2]
-    assert list(await stored(store)) == [c3, c1, c2]
-
-
-async def test_add_set_remove_and_move_items(store):
-    await plane(store, "p1", "c1", "c2", "c3")
-    c1, c2, c3 = ids_of(await read(store))
-    # A strip made of c1 and c2 in one write: the two cell items out, the strip in.
-    await do(store, L.write_items("p1", {"stripa": strip(["c1"], ["c2"])}, [c1, c2], ["stripa"]))
-    assert shown(await read(store)) == [[["c1"], ["c2"]], "c3"]
-    # Resize the strip's columns.
-    await do(store, L.set_item("p1", "stripa", strip(["c1"], ["c2"], shares=[0.7, 0.3])))
-    assert (await read(store))[0]["columns"][0]["share"] == 0.7
-    # Move the cell item first, then last.
-    await do(store, L.move_item("p1", c3, before="stripa"))
-    assert ids_of(await read(store)) == [c3, "stripa"]
-    await do(store, L.move_item("p1", c3))
-    assert ids_of(await read(store)) == ["stripa", c3]
-    # Remove the strip: its cells still on the plane read on their own.
-    await do(store, L.remove_item("p1", "stripa"))
-    assert shown(await read(store)) == ["c1", "c2", "c3"]
-    # Add: placed, then its cells out of every other item, so the anchor may empty.
-    c1, c2, c3 = ids_of(await read(store))
-    await do(store, L.add_item("p1", strip(["c3"], ["c1"]), id="stripb", before=c1))
-    assert ids_of(await read(store)) == ["stripb", c2]
-    assert shown(await read(store)) == [[["c3"], ["c1"]], "c2"]
-    # Set: a cell dropped beside another makes a strip in one op, out of where it was.
-    await do(store, L.set_item("p1", c2, strip(["c2", "c1"])))
-    assert shown(await read(store)) == ["c3", [["c2", "c1"]]]
-    # An id left out is minted.
-    await do(store, L.add_item("p1", cell("c1")))
-    added = (await read(store))[-1]
-    assert added["cell"] == "c1" and ITEM_ID.fullmatch(added["id"])
-
-
-async def test_a_removed_cell_is_skipped_and_its_item_stays(store):
-    await plane(store, "p1", "c1", "c2", "c3")
-    c1, _, c3 = ids_of(await read(store))
-    await do(store, L.move_item("p1", c1))
-    assert shown(await read(store)) == ["c2", "c3", "c1"]
-    await do(store, nuspace.cell.remove("c3"))
-    assert shown(await read(store)) == ["c2", "c1"]
-    assert (await stored(store))[c3] == cell("c3")
-    # Nothing can place it: it is not on the plane.
-    with pytest.raises(Refused, match="cell c3 is not on the plane"):
-        await do(store, L.set_item("p1", c3, cell("c3")))
-
-
-async def test_write_items_orders_and_skips_missing_deletes(store):
-    await plane(store, "p1", "c1", "c2", "c3")
-    c1, c2, c3 = ids_of(await read(store))
-    await do(store, L.write_items("p1", {}, ["zzzzzz"], [c3, c1]))
-    assert ids_of(await read(store)) == [c3, c1, c2]
-
-
-async def test_item_ops_refuse_what_they_cannot_do(store):
-    await plane(store, "p1", "c1", "c2")
-    await plane(store, "p2", "d1")
+async def test_get_on_a_plane_not_on_the_web_writes_nothing(store):
     await do(store, nuspace.plane.add("bare", backend="async"))
-    c1, c2 = ids_of(await read(store))
+    await do(store, nuspace.cell.add("bare", "x = 1", id="b1", fabrics=[]))
+    assert await get(store, "bare") == [cell("b1")]
+    assert not await store.read(Web.planes.contains("bare"))
+    assert await get(store, "nope") == []
+
+
+async def test_set_writes_the_rows_reconciled(store):
+    await plane(store, "p1", "c1", "c2", "c3")
+    rows = [strip(["c3"], ["c1"], shares=[0.4, 0.6]), cell("c2")]
+    await do(store, L.set("p1", rows))
+    assert await stored(store) == rows
+    # Stale rows: a cell gone since, a cell twice, a cell left out, a one cell strip.
+    await do(store, nuspace.cell.remove("c3"))
+    stale = [strip(["c3"], ["c1"]), cell("c1"), strip(["c9"])]
+    await do(store, L.set("p1", stale))
+    assert await stored(store) == [cell("c1"), cell("c2")]
+
+
+async def test_set_refuses_what_it_cannot_do(store):
+    await plane(store, "p1", "c1")
+    await do(store, nuspace.plane.add("bare", backend="async"))
     refusals = [
-        (L.add_item("nope", cell("c1")), Missing, "no plane nope"),
-        (L.add_item("bare", cell("c1")), Missing, "not on the web"),
-        (L.add_item("p1", cell("c1"), id="BAD"), Refused, "item id 'BAD'"),
-        (L.add_item("p1", {"kind": "x"}), Refused, "item kind"),
-        (L.add_item("p1", cell("c1"), id=c2), Exists, f"item {c2} exists"),
-        (L.add_item("p1", cell("d1")), Refused, "cell d1 is not on the plane"),
-        (L.add_item("p1", cell("c9"), before="zzzzzz"), Refused, "not on the plane"),
-        (L.set_item("p1", "zzzzzz", cell("c1")), Missing, "no item zzzzzz"),
-        (L.set_item("p1", c1, strip(["c1"], ["d1"])), Refused, "cell d1 is not on the plane"),
-        (L.set_item("p1", c1, strip(["c1"])), Refused, "strip has one cell"),
-        (L.remove_item("p1", "zzzzzz"), Missing, "no item zzzzzz"),
-        (L.move_item("p1", "zzzzzz"), Missing, "no item zzzzzz"),
-        (L.move_item("p1", c1, before="zzzzzz"), Missing, "no item zzzzzz"),
-        (L.move_item("p1", c1, after=c1), Refused, "cannot move next to itself"),
-        (L.write_items("p1", {"BAD": cell("c1")}), Refused, "item id 'BAD'"),
-        (L.write_items("p1", {"newone": cell("c1")}), Refused, "cell c1 is in items"),
+        (L.set("nope", []), Missing, "no plane nope"),
+        (L.set("bare", []), Missing, "plane bare is not on the web"),
+        (L.set("p1", [{"kind": "x"}]), Refused, "row 0 kind"),
+        (L.set("p1", [strip(["c1"], ["c2"], shares=[0.9, 0.9])]), Refused, "shares"),
     ]
     for term, exc, said in refusals:
         with pytest.raises(exc, match=said):
             await do(store, term)
-    with pytest.raises(TypeError):
-        L.move_item("p1", c1, before=c2, after=c2)
-    # Nothing was written: refused ops roll their fill back with them, and no web row was made.
-    assert await stored(store) == {}
+    assert await stored(store) is None
     assert not await store.read(Web.planes.contains("bare"))
     await do(store, nuspace.plane.remove("p1"))
     with pytest.raises(Removed):
-        await do(store, L.move_item("p1", c1))
+        await do(store, L.set("p1", []))
 
 
-# --- Placing one cell, and transfer then place -------------------------------------------
+# --- transfer ----------------------------------------------------------------------------
 
 
-async def test_place_cell_takes_it_out_and_puts_it_at_a_spot(store):
-    await plane(store, "p1", "c1", "c2", "c3", "c4")
-    c1, c2, _, c4 = ids_of(await read(store))
-    await do(store, L.write_items("p1", {"stripa": strip(["c1"], ["c2"])}, [c1, c2], ["stripa"]))
-    assert shown(await read(store)) == [[["c1"], ["c2"]], "c3", "c4"]
-    # Into a column: out of its own item, stacked under c1.
-    await do(store, L.place_cell("p1", "c3", into="stripa", column=0, index=1))
-    assert shown(await read(store)) == [[["c1", "c3"], ["c2"]], "c4"]
-    # Out of the strip to its own item before c4: the strip rules on what it left.
-    await do(store, L.place_cell("p1", "c2", before=c4, id="ownone"))
-    assert shown(await read(store)) == [[["c1", "c3"]], "c2", "c4"]
-    assert (await read(store))[0]["columns"][0]["share"] == 1
-    # No spot: last.
-    await do(store, L.place_cell("p1", "c1"))
-    assert shown(await read(store)) == ["c3", "c2", "c4", "c1"]
-    # Anchored on the item it leaves: placed first, then out of it.
-    await do(store, L.place_cell("p1", "c4", after="ownone"))
-    assert shown(await read(store)) == ["c3", "c2", "c4", "c1"]
-    c4_item = (await read(store))[2]["id"]
-    await do(store, L.place_cell("p1", "c4", before=c4_item, id="again1"))
-    assert ids_of(await read(store))[2] == "again1"
-
-
-async def test_place_cell_refuses_what_it_cannot_do(store):
-    await plane(store, "p1", "c1", "c2", "c3")
-    await plane(store, "p2", "d1")
-    c1, _, _ = ids_of(await read(store))
-    refusals = [
-        (L.place_cell("p1", "d1"), Refused, "cell d1 is not on plane p1"),
-        (L.place_cell("p1", "c2", into="zzzzzz", column=0, index=0), Missing, "no item"),
-        (L.place_cell("p1", "c2", into=c1, column=0, index=0), Refused, "is not a strip"),
-        (L.place_cell("p1", "c2", before="zzzzzz"), Missing, "no item zzzzzz"),
-    ]
-    for term, exc, said in refusals:
-        with pytest.raises(exc, match=said):
-            await do(store, term)
-    await do(store, L.set_item("p1", c1, strip(["c1"], ["c3"])))
-    with pytest.raises(Refused, match="column 2 is not one"):
-        await do(store, L.place_cell("p1", "c2", into=c1, column=2, index=0))
-    with pytest.raises(TypeError):
-        L.place_cell("p1", "c2", into=c1, column=0, index=0, before=c1)
-    with pytest.raises(TypeError):
-        L.place_cell("p1", "c2", into=c1)
-
-
-async def test_transfer_cell_transfers_then_places_in_two_commits(store):
+async def test_transfer_brings_the_cell_then_sets_the_targets_rows(store):
     await plane(store, "p1", "c1", "c2")
-    await plane(store, "p2", "d1", "d2", "d3")
-    d1, d2, d3 = ids_of(await read(store, "p2"))
-    await do(store, L.write_items("p2", {"stripb": strip(["d1"], ["d2"])}, [d1, d2], ["stripb"]))
-    await store.run(L.transfer_cell("c1", "p2", into="stripb", column=1, index=0))
+    await plane(store, "p2", "d1", "d2")
+    # Beside a cell on the target: a strip made there in the same drop.
+    rows = [strip(["d1"], ["c1"]), cell("d2")]
+    await store.run(L.transfer("c1", "p2", rows))
     assert await store.read(Space.cells["c1"].plane) == "p2"
-    assert shown(await read(store, "p2")) == [[["d1"], ["c1", "d2"]], "d3"]
-    assert shown(await read(store, "p1")) == ["c2"]
-    await store.run(L.transfer_cell("c2", "p2", before=d3))
-    assert shown(await read(store, "p2")) == [[["d1"], ["c1", "d2"]], "c2", "d3"]
-    # The old plane's item stays: transferred back, the cell reads where it was.
-    await do(store, L.move_item("p2", d3, before="stripb"))
-    p1_kept = await stored(store, "p1")
-    assert p1_kept == {}
-    # A failed place leaves the cell transferred, drawn last by the fix-up.
-    await plane(store, "p3", "e1")
-    with pytest.raises(Missing):
-        await store.run(L.transfer_cell("c2", "p3", before="zzzzzz"))
-    assert await store.read(Space.cells["c2"].plane) == "p3"
-    assert shown(await read(store, "p3")) == ["e1", "c2"]
-    # A cell on the plane already is only placed.
-    await store.run(L.transfer_cell("c2", "p3", before=ids_of(await read(store, "p3"))[0]))
-    assert shown(await read(store, "p3")) == ["c2", "e1"]
-    # A transfer refused writes nothing, and nothing is placed.
-    await do(store, nuspace.plane.add("sys", backend="async", system=True))
-    with pytest.raises(Refused):
-        await store.run(L.transfer_cell("c2", "sys"))
-    assert await store.read(Space.cells["c2"].plane) == "p3"
+    assert await stored(store, "p2") == rows
+    # The old plane heals on its next get.
+    assert await get(store, "p1") == [cell("c2")]
+    # Into a column, under a cell.
+    rows = [strip(["d1", "c2"], ["c1"]), cell("d2")]
+    await store.run(L.transfer("c2", "p2", rows))
+    assert shown(await get(store, "p2")) == [[["d1", "c2"], ["c1"]], "d2"]
+    assert await get(store, "p1") == []
 
 
-async def test_a_cell_transferred_back_shows_in_its_old_item(store):
-    await plane(store, "p1", "c1", "c2", "c3")
-    c1, _, c3 = ids_of(await read(store))
-    await do(store, L.write_items("p1", {"stripa": strip(["c1"], ["c3"])}, [c1, c3], ["stripa"]))
+async def test_a_failed_transfer_writes_nothing_and_a_failed_set_keeps_the_transfer(store):
+    await plane(store, "p1", "c1", "c2")
     await plane(store, "p2", "d1")
-    await store.run(L.transfer_cell("c3", "p2"))
-    assert shown(await read(store)) == ["c1", "c2"]
-    assert shown(await read(store, "p2")) == ["d1", "c3"]
-    # Back with the core op alone: its old strip shows it again.
-    await do(store, nuspace.cell.transfer("c3", "p1"))
-    assert shown(await read(store)) == [[["c1"], ["c3"]], "c2"]
-    # Back placed: out of its old strip, at the spot.
-    await store.run(L.transfer_cell("c3", "p2"))
-    await store.run(L.transfer_cell("c3", "p1", before="stripa"))
-    assert shown(await read(store)) == ["c3", "c1", "c2"]
+    await do(store, nuspace.plane.add("sys", backend="async", system=True))
+    await do(store, web.add("sys", editable=True))
+    with pytest.raises(Refused):
+        await store.run(L.transfer("c1", "sys", [cell("c1")]))
+    assert await store.read(Space.cells["c1"].plane) == "p1"
+    with pytest.raises(Refused, match="row 0"):
+        await store.run(L.transfer("c1", "p2", [{"kind": "x"}]))
+    assert await store.read(Space.cells["c1"].plane) == "p2"
+    assert await get(store, "p2") == [cell("d1"), cell("c1")]
 
 
 # --- The pane, one tab -------------------------------------------------------------------
@@ -492,6 +299,9 @@ class FakeSession(WsSession):
 #: A tab compiles its whole term before the first frame: slow on a loaded machine.
 BOOT_TIMEOUT = 30.0
 
+#: How long a pane is left to settle before its ships are counted.
+SETTLE = 0.3
+
 P1 = ("viewer", "panes", "p1", "ops")
 P2 = ("viewer", "panes", "p2", "ops")
 
@@ -518,100 +328,90 @@ async def test_the_pane_ships_its_layout_with_its_cells_and_hears_the_layout_eve
     await plane(store, "p2", "d1")
     session, task = _tab(store, "s1")
 
+    def ships(plane: str = "p1") -> int:
+        return len(session.pane(plane, "set_cells"))
+
     def last(plane: str = "p1") -> dict:
         return session.pane(plane, "set_cells")[-1]
 
     def view(plane: str = "p1") -> list:
         return shown(last(plane)["layout"])
 
+    async def settled() -> int:
+        await asyncio.sleep(SETTLE)
+        return ships()
+
     try:
         await _until(lambda: session.frames, BOOT_TIMEOUT)
         session.notify(("viewer", "ops", "planes.open"), {"plane_ids": ["p1", "p2"], "params": {}})
         await _until(lambda: session.pane("p1", "set_cells") and session.pane("p2", "set_cells"))
-        # Cells and layout in one write, read from one snapshot.
+        # Cells and layout in one write; the open healed the slot.
         assert [c["id"] for c in last()["cells"]] == ["c1", "c2", "c3"]
         assert view() == ["c1", "c2", "c3"]
-        c1, _, c3 = ids_of(last()["layout"])
+        assert await stored(store) == [cell("c1"), cell("c2"), cell("c3")]
         heads = len(session.pane("p1", "set_head"))
+        # The heal's own write reships once, and that get writes nothing: no loop.
+        shipped = await settled()
+        assert shipped <= 2
+        assert await settled() == shipped
 
-        # layout.move: the web plane's reorder, the layout only, cells order untouched.
-        session.notify((*P1, "layout.move"), {"item_id": c3, "before": c1})
-        await _until(lambda: view() == ["c3", "c1", "c2"])
-        assert await store.read(nu.list(Space.planes["p1"].cells.keys())) == ["c1", "c2", "c3"]
-        # layout.set: a cell dropped beside another makes a strip, out of its own item.
-        made = strip(["c1"], ["c2"])
-        session.notify((*P1, "layout.set"), {"item_id": c1, "item": made})
+        # layout.set: one write, one reship, its get finds nothing to heal.
+        session.notify((*P1, "layout.set"), {"rows": [cell("c3"), strip(["c1"], ["c2"])]})
         await _until(lambda: view() == ["c3", [["c1"], ["c2"]]])
-        # layout.set: a column resized.
-        resized = strip(["c1"], ["c2"], shares=[0.6, 0.4])
-        session.notify((*P1, "layout.set"), {"item_id": c1, "item": resized})
-        await _until(lambda: last()["layout"][1]["columns"][0]["share"] == 0.6)
-        # layout.place: a cell into a column.
-        session.notify(
-            (*P1, "layout.place"), {"cell_id": "c3", "into": c1, "column": 1, "index": 0}
-        )
-        await _until(lambda: view() == [[["c1"], ["c3", "c2"]]])
-        # layout.place: out to its own item, last.
-        session.notify((*P1, "layout.place"), {"cell_id": "c3"})
+        assert await settled() == shipped + 1
+        assert await store.read(nu.list(Space.planes["p1"].cells.keys())) == ["c1", "c2", "c3"]
+        # Stale rows are reconciled: c9 is no cell, c3 left out goes last.
+        session.notify((*P1, "layout.set"), {"rows": [strip(["c1"], ["c2", "c9"])]})
         await _until(lambda: view() == [[["c1"], ["c2"]], "c3"])
-        # A cell write reships the layout with the cells: a new cell after its predecessor.
-        await do(store, nuspace.cell.add("p1", "x = 1", id="c4", after="c1", fabrics=[]))
-        await _until(lambda: view() == [[["c1"], ["c2"]], "c4", "c3"])
-        # A removed cell is skipped.
-        await do(store, nuspace.cell.remove("c4"))
-        await _until(lambda: view() == [[["c1"], ["c2"]], "c3"])
+        shipped = await settled()
 
-        # layout.transfer: to another pane's plane, at a spot there, and back into a column.
-        (d1,) = ids_of(last("p2")["layout"])
-        session.notify((*P1, "layout.transfer"), {"cell_id": "c3", "plane_id": "p2", "before": d1})
-        await _until(lambda: view("p2") == ["c3", "d1"] and "c3" not in view())
+        # A core cell add: the version reships, get heals (the cell last), the heal reships.
+        await do(store, nuspace.cell.add("p1", "x = 1", id="c4", fabrics=[]))
+        await _until(lambda: view() == [[["c1"], ["c2"]], "c3", "c4"])
+        assert await settled() <= shipped + 2
+        shipped = await settled()
+        assert await settled() == shipped
+        # A removed cell goes, by the strip rules.
+        await do(store, nuspace.cell.remove("c2"))
+        await _until(lambda: view() == ["c1", "c3", "c4"])
+
+        # cell.create: the browser's id and its rows, the cell under c1 in a column.
+        rows = [strip(["c1", "c5"], ["c3"]), cell("c4")]
+        session.notify((*P1, "cell.create"), {"cell_id": "c5", "name": "", "rows": rows})
+        await _until(lambda: view() == [[["c1", "c5"], ["c3"]], "c4"])
+        # An id taken: Exists, nothing else written.
+        session.notify((*P1, "cell.create"), {"cell_id": "c5", "name": "", "rows": []})
+        await _until(lambda: len(session.toasts()) == 1)
+        assert session.toasts()[-1]["type"] == "Exists"
+
+        # layout.transfer: to the other pane, beside its cell, a strip made there.
         session.notify(
-            (*P2, "layout.transfer"),
-            {"cell_id": "c3", "plane_id": "p1", "into": c1, "column": 0, "index": 0},
+            (*P1, "layout.transfer"),
+            {"cell_id": "c4", "plane_id": "p2", "rows": [strip(["c4"], ["d1"])]},
         )
-        await _until(lambda: view() == [[["c3", "c1"], ["c2"]]] and view("p2") == ["d1"])
-        assert session.toasts() == []
+        await _until(lambda: view("p2") == [[["c4"], ["d1"]]] and "c4" not in view())
+        assert view() == [[["c1", "c5"], ["c3"]]]
         # No layout write ever reshipped the head.
         assert len(session.pane("p1", "set_head")) == heads
 
         # Refusals toast, the arm keeps listening.
+        toasts = len(session.toasts())
         refused = [
-            ("layout.move", {"item_id": "zzzzzz"}, "Missing"),
-            ("layout.move", {"item_id": c1, "before": "a", "after": "b"}, "ValueError"),
-            ("layout.set", {"item_id": c1, "item": strip(["c1"])}, "Refused"),
-            ("layout.set", {"item_id": c1}, "ValueError"),
-            ("layout.place", {"cell_id": "d1"}, "Refused"),
-            ("layout.place", {"cell_id": "c1", "into": c1, "column": -1}, "ValueError"),
-            ("layout.place", {"cell_id": "c1", "into": c1}, "ValueError"),
-            ("layout.place", {"cell_id": "c1", "into": c1, "before": "x"}, "ValueError"),
-            ("layout.transfer", {"cell_id": "c1", "plane_id": "nope"}, "Missing"),
+            ("layout.set", {"rows": [{"kind": "x"}]}, "Refused"),
+            ("layout.set", {}, "ValueError"),
+            ("layout.transfer", {"cell_id": "c1", "plane_id": "nope", "rows": []}, "Missing"),
+            ("layout.transfer", {"cell_id": "c1", "plane_id": "p2"}, "ValueError"),
+            ("cell.create", {"cell_id": "c6", "name": ""}, "ValueError"),
         ]
-        for n, (op, payload, kind) in enumerate(refused, start=1):
+        for n, (op, payload, kind) in enumerate(refused, start=toasts + 1):
             session.notify((*P1, op), payload)
             await _until(lambda n=n: len(session.toasts()) == n)
             assert session.toasts()[-1]["type"] == kind, (op, session.toasts()[-1])
-        session.notify((*P1, "layout.place"), {"cell_id": "c2"})
-        await _until(lambda: view() == [[["c3", "c1"]], "c2"])
+        # The malformed create and transfer wrote nothing.
+        assert not await store.read(Space.cells.contains("c6"))
+        assert await store.read(Space.cells["c1"].plane) == "p1"
+        session.notify((*P1, "layout.set"), {"rows": [cell("c3")]})
+        await _until(lambda: view() == ["c3", "c1", "c5"])
     finally:
         task.cancel()
         await asyncio.gather(task, return_exceptions=True)
-
-
-def test_plan_is_pure_the_same_reads_give_the_same_writes():
-    """A plan runs as a query: no random ids, and its inputs are left as they were."""
-    plane = {"id": "p", "known": True, "removed": False, "on_web": True}
-    entries = {
-        "aaaaaa": {
-            "kind": "strip",
-            "columns": [{"cells": ["a"], "share": 0.5}, {"cells": ["b"], "share": 0.5}],
-        }
-    }
-    cells = ["a", "b", "c"]
-    frozen = repr(entries), repr(cells)
-    for op, args in (
-        ("place", {"cell": "a", "on": "p"}),
-        ("add", {"item": {"kind": "cell", "cell": "b"}}),
-    ):
-        first = plan(op, plane, entries, cells, args)
-        assert plan(op, plane, entries, cells, args) == first
-    assert (repr(entries), repr(cells)) == frozen

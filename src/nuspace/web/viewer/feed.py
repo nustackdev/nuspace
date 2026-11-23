@@ -35,13 +35,15 @@ Two families per pane:
   head.
 
 **The layout ships with the cells.** One ``set_cells`` holds the cells and
-the layout drawing them (:mod:`nuspace.web.layout`), fixed up against those
-cells, read in one snapshot: the browser never holds a layout naming a cell
-it lacks, nor a cell no item draws. A layout drag reships the cells with it,
-which is cheap and keeps the two in step. Four layout events, what a drag
-and a resize send: ``layout.move``, ``layout.set``, ``layout.place``, each
-one commit, and ``layout.transfer``, two
-(:func:`~nuspace.web.layout.transfer_cell`).
+the layout drawing them, read in one commit: the layout through
+:func:`nuspace.web.layout.get`, which reconciles it with those cells and
+heals the stored slot when it differs. The pane is the only caller of
+``get``, on open and on every reship (the plane's ``version`` or a layout
+write), so a change is reconciled once per open plane. A heal is itself a
+layout write, so it reships once more, and that ``get`` finds nothing to
+change and writes nothing. Two layout events, ``layout.set`` (rows, one
+commit) and ``layout.transfer`` (two, :func:`nuspace.web.layout.transfer`);
+``cell.create`` carries the rows with its new cell in place.
 
 **A pane with nothing to draw is told why.** A plane not in the space, or
 removed, ships ``set_absent`` ``missing``; one with no web row
@@ -92,14 +94,8 @@ from nuspace.specs import registered_name
 from nuspace.utils import keys_of
 from nuspace.web import layout
 from nuspace.web import ops as web
-from nuspace.web.interactions import EventField
 from nuspace.web.shapes import Conn, Web
-from nuspace.web.utils import (
-    Arms,
-    field_dict,
-    field_str,
-    placed,
-)
+from nuspace.web.utils import Arms, field_dict, field_dicts, field_str, placed
 from nuspace.web.viewer import interactions
 from nuspace.web.viewer.interactions import (
     ABSENT_HEADLESS,
@@ -334,23 +330,26 @@ def _head(arms: Arms, pane: Ref, plane: nu.Str) -> nu.Nu:
 
 
 def _cells(arms: Arms, pane: Ref, plane: nu.Str, specs: Sequence[CellSpec]) -> nu.Nu:
-    """The pane's cells and their layout, one snapshot, shipped again on every cell write or layout write.
+    """The pane's cells and their layout, one commit, shipped again on every cell write or layout write.
 
     A cell write moves the plane's ``version``; a layout write is the
-    layout's own. Nothing else is watched.
+    layout's own. The layout is :func:`nuspace.web.layout.get`'s, which may
+    heal the slot: its write wakes this once more, and that pass writes
+    nothing.
     """
 
-    def send(held: nu.ObjectRef) -> nu.Nu:
-        got = nu.Dict(held)
-        return interactions.set_cells(pane, nu.List(got["cells"]), nu.List(got["layout"]))
+    def ship(rows: nu.ObjectRef) -> nu.Nu:
+        def send(cells: nu.ObjectRef) -> nu.Nu:
+            read = layout.get(plane, into=rows) >> cells.set(plane_cells(plane, specs))
+            return atomic(read) >> interactions.set_cells(pane, nu.List(cells), nu.List(rows))
 
-    read = nu.Dict.of(cells=plane_cells(plane, specs), layout=layout.get_layout(plane))
-    ship = nu.let(atomic(read), send)
+        return nu.let([], send)
+
     changes = [
         atomic(Space.planes.on_descendants_change(plane, "version")),
         atomic(Web.planes[plane].layout.on_change()),
     ]
-    return arms.states("cells", changes, ship)
+    return arms.states("cells", changes, nu.let([], ship))
 
 
 def _trail(arms: Arms, pane: Ref, plane: nu.Str) -> nu.Nu:
@@ -425,37 +424,34 @@ def _rerun(sid: nu.StrArg, plane: nu.StrArg) -> nu.Nu:
 
 
 def _create(specs: Sequence[CellSpec], sid: nu.StrArg, plane: nu.Str, event: nu.Attr) -> nu.Nu:
-    """A cell from the CellSpec ``name`` names, or the starter program for an unknown or empty one.
+    """A cell from the CellSpec ``name`` names, or the starter program for an unknown or empty one, then its rows.
 
-    The fabrics are worked out first, outside the commit. A pane whose run
-    is over runs again (:func:`_rerun`).
+    The fabrics are worked out first, outside the commit. Then the cell is
+    added (one commit, an id taken raises ``Exists``), then the layout set
+    to ``rows``, the cell already in place (another). A pane whose run is
+    over runs again (:func:`_rerun`). ``rows`` is read before anything is
+    written, so a malformed event writes nothing.
     """
     name, cell = field_str(event, "name"), field_str(event, "cell_id")
 
     def from_spec(spec: CellSpec) -> nu.Nu:
         def made(fabrics: nu.ObjectRef) -> nu.Nu:
-            return placed(
-                event,
-                lambda **at: atomic(
-                    spec_ops.add_cell(plane, spec, id=cell, fabrics=nu.Object(fabrics), **at)
-                ),
-            )
+            return atomic(spec_ops.add_cell(plane, spec, id=cell, fabrics=nu.Object(fabrics)))
 
         return nu.let(Fabrics(spec.source, plane, cell), made)
 
     def starter(fabrics: nu.ObjectRef) -> nu.Nu:
-        return placed(
-            event,
-            lambda **at: atomic(
-                nuspace.cell.add(
-                    plane, PROGRAM, id=cell, name=name, fabrics=nu.Object(fabrics), **at
-                )
-            ),
+        return atomic(
+            nuspace.cell.add(plane, PROGRAM, id=cell, name=name, fabrics=nu.Object(fabrics))
         )
 
     known = {registered_name(s): from_spec(s) for s in specs}
     made = nu.SwitchDo(name, known, default=nu.let(Fabrics(PROGRAM, plane, cell), starter))
-    return made >> _rerun(sid, plane)
+
+    def placed_in(rows: nu.ObjectRef) -> nu.Nu:
+        return made >> atomic(layout.set(plane, nu.List(rows))) >> _rerun(sid, plane)
+
+    return nu.let(field_dicts(event, "rows"), placed_in)
 
 
 def _update(sid: nu.StrArg, cell: nu.Str, event: nu.Attr) -> nu.Nu:
@@ -492,69 +488,30 @@ def _web_flags(plane: nu.Str, event: nu.Attr) -> nu.Nu:
     return nu.IfDo(stray, bad, atomic(writes))
 
 
-def _anchors(event: nu.Attr) -> dict[str, nu.Str]:
-    """The event's ``before`` and ``after``, each ``""`` when left out, as terms the op branches on.
-
-    Handed over as terms, so the op is built once, not once per anchor as
-    :func:`~nuspace.web.utils.placed` builds a core op.
-    """
-    return {
-        "before": nu.Str(EventField(event, "before", "anchor")),
-        "after": nu.Str(EventField(event, "after", "anchor")),
-    }
-
-
-def _spot(event: nu.Attr) -> dict[str, nu.Nu]:
-    """The event's spot for one cell, as terms: its anchors, ``into`` (``""`` for none), ``column``, ``index``.
-
-    ``column`` and ``index`` may be left out (None); the op refuses a strip
-    spot without them.
-    """
-    return {
-        **_anchors(event),
-        "into": nu.Str(EventField(event, "into", "anchor")),
-        "column": EventField(event, "column", "index?"),
-        "index": EventField(event, "index", "index?"),
-    }
-
-
 def _layout_events(arms: Arms, pane: Ref, plane: nu.Str) -> list[nu.Nu]:
-    """Browser to store: the pane's four layout events, what a drag and a resize send.
+    """Browser to store: the pane's two layout events, each carrying whole rows.
 
-    ``layout.move`` (a reorder), ``layout.set`` (one item replaced: a strip
-    made, regrouped or resized), ``layout.place`` (one cell of the plane to a
-    spot), ``layout.transfer`` (a cell to another plane, then placed there,
-    two commits). The other layout ops (add, remove, write) have no event:
-    every arm is compiled with the tab's term when web starts, so an arm
-    nobody sends to only makes web slower to come up.
+    ``layout.set`` (every reorder, strip, column and resize on the plane, one
+    commit) and ``layout.transfer`` (a cell to another plane, then that
+    plane's rows, two commits). Each arm's term is a few nodes: every arm is
+    compiled with the tab's term when web starts.
     """
-
-    def on_item(name: str, change: nu.Nu, op: Callable[[nu.Str, nu.Attr], nu.Nu]) -> nu.Nu:
-        return arms.event(name, change, lambda ev: op(field_str(ev, "item_id"), ev))
-
-    def on_cell(name: str, change: nu.Nu, op: Callable[[nu.Str, nu.Attr], nu.Nu]) -> nu.Nu:
-        return arms.event(name, change, lambda ev: op(field_str(ev, "cell_id"), ev))
-
     return [
-        on_item(
-            "layout_move",
-            interactions.on_move_item(pane),
-            lambda i, ev: atomic(layout.move_item(plane, i, **_anchors(ev))),
-        ),
-        on_item(
+        arms.event(
             "layout_set",
-            interactions.on_set_item(pane),
-            lambda i, ev: atomic(layout.set_item(plane, i, field_dict(ev, "item"))),
+            interactions.on_set_layout(pane),
+            lambda ev: atomic(layout.set(plane, field_dicts(ev, "rows"))),
         ),
-        on_cell(
-            "layout_place",
-            interactions.on_place_cell(pane),
-            lambda c, ev: atomic(layout.place_cell(plane, c, **_spot(ev))),
-        ),
-        on_cell(
+        arms.event(
             "layout_transfer",
-            interactions.on_transfer_placed(pane),
-            lambda c, ev: layout.transfer_cell(c, field_str(ev, "plane_id"), **_spot(ev)),
+            interactions.on_transfer_layout(pane),
+            # The rows read first: a malformed event transfers nothing.
+            lambda ev: nu.let(
+                field_dicts(ev, "rows"),
+                lambda rows: layout.transfer(
+                    field_str(ev, "cell_id"), field_str(ev, "plane_id"), nu.List(rows)
+                ),
+            ),
         ),
     ]
 

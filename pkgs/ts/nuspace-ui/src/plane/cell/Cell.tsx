@@ -37,7 +37,7 @@ import {
 	docDropSideHint,
 } from "../../design";
 import { Identity } from "../Identity";
-import { LAYOUT_ITEM, type Mark } from "../layout/drag";
+import { LAYOUT_ROW, type Mark } from "../layout/drag";
 import type { FocusReq } from "../state";
 import type { Cell as CellValue, ExitDir } from "../types";
 import { LeftGutter, RightGutter } from "./Gutter";
@@ -54,7 +54,7 @@ export function Cell({
 	focusReq,
 	dragging,
 	drop,
-	itemId,
+	alone,
 	setEl,
 	onPointerIn,
 	onSetEditing,
@@ -87,8 +87,8 @@ export function Cell({
 	dragging: boolean;
 	/** Where a drag would drop on this cell: above, under, or beside it (../layout/drag.ts). */
 	drop?: Mark | null;
-	/** The layout item it is, when it is alone on its row: what a drag reads it as. */
-	itemId?: string;
+	/** It is alone on its row: the row a drag reads, named by this cell. */
+	alone?: boolean;
 	setEl: (el: HTMLElement | null) => void;
 	/** A plain primary-button press landed inside the cell. */
 	onPointerIn: () => void;
@@ -125,7 +125,7 @@ export function Cell({
 		<div
 			ref={setEl}
 			data-cell={cell.id}
-			{...(itemId ? { [LAYOUT_ITEM]: itemId } : {})}
+			{...(alone ? { [LAYOUT_ROW]: cell.id } : {})}
 			hidden={hidden}
 			data-selected={selected && !selectedStrong ? "" : undefined}
 			className={docCellRow({ dragging })}

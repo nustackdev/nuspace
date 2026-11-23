@@ -18,24 +18,25 @@
 // now and the delete is sent later, or they come back, for a caller whose
 // delete must wait on something else landing first.
 //
-// The plane is laid out (../layout/model.ts): a reorder moves items, never
-// cells (`layout.move`), and the keyboard moves the items holding the
-// selection, a strip as one. A cell made under a cell of a strip is made on
-// its own after the strip (the server's fix-up puts a new cell after its
-// predecessor's item), then placed in the column under that cell once it
-// has landed: two events, the second sent only after the first shows.
+// The plane is laid out (../layout/model.ts): a reorder sends the whole new
+// rows (`layout.set`), never a cell move, and the keyboard moves the rows
+// holding the selection, a strip as one. A create sends its rows too, the
+// new cell already in place: under a cell of a strip it goes into the
+// column under it, at any depth (`withNewCell`). An id taken is tried once
+// more under a fresh one (../create.ts).
 
 import type { MarkdownHandle } from "@nustackdev/ui-kit";
 import { useCallback, useEffect, useRef } from "react";
 import { mintId } from "../../core/ids";
 import type { FocusRequest, FocusTarget, Place, PlaneModel } from "../api";
+import { awaitCreate, createLanded } from "../create";
 import type { Ask } from "../focus/useFocusRouting";
-import { itemsInOrder, spotUnder, stepItems } from "../layout/model";
-import { orderMoves } from "../ops";
+import { rowsInOrder, stepRows, withNewCell } from "../layout/model";
 import type { FocusReq, InputLine } from "../state";
+import type { LayoutRow } from "../types";
 
 export function useStructure(
-	{ cells, layout, top, patch, read, notify, index, rootRef, elRefs }: PlaneModel,
+	{ cells, layout, patch, read, notify, rootRef, elRefs, index }: PlaneModel,
 	{
 		request,
 		drop,
@@ -53,15 +54,10 @@ export function useStructure(
 	 *  waits here rather than in the editor state. */
 	const landing = useRef<{ id: string; open: boolean } | null>(null);
 
-	/** Cells made under a strip's cell, by id: the column spot each goes to once it lands. */
-	const placing = useRef(new Map<string, { into: string; column: number; index: number }>());
+	// A create that landed waits for no `Exists` any more.
 	useEffect(() => {
-		for (const [id, spot] of placing.current) {
-			if (!cells.some((c) => c.id === id)) continue;
-			placing.current.delete(id);
-			notify("layout.place", { cell_id: id, ...spot });
-		}
-	}, [cells, notify]);
+		for (const c of cells) createLanded(c.id);
+	}, [cells]);
 
 	useEffect(() => {
 		const want = landing.current;
@@ -99,13 +95,14 @@ export function useStructure(
 	const create = useCallback(
 		(at: Place, spec: string, want?: FocusRequest, line?: InputLine): string => {
 			const id = mintId("c");
-			const i = at.after === null ? -1 : index(at.after);
-			// The top is before the first cell; an `after` that is gone is the end.
-			const place =
-				at.after === null ? (top ? { before: top } : {}) : i < 0 ? {} : { after: at.after };
-			notify("cell.create", { cell_id: id, name: spec, ...place });
-			const under = at.after && i >= 0 ? spotUnder(layout, at.after) : null;
-			if (under) placing.current.set(id, under);
+			const rowsFor = (cell: string): LayoutRow[] => withNewCell(layout, cell, at.after);
+			notify("cell.create", { cell_id: id, name: spec, rows: rowsFor(id) });
+			// Taken: once more under a fresh id. What waits on this one's id
+			// (its focus, its landing) is not moved over.
+			awaitCreate(id, () => {
+				const again = mintId("c");
+				notify("cell.create", { cell_id: again, name: spec, rows: rowsFor(again) });
+			});
 			if (want) {
 				const { landed, ...carry } = want;
 				request(id, { ...carry, to: "document", fresh: true, line }, landed);
@@ -114,7 +111,7 @@ export function useStructure(
 			}
 			return id;
 		},
-		[index, layout, notify, request, top],
+		[layout, notify, request],
 	);
 
 	/** The cells out of sight: hidden, their sources closed, out of the selection. */
@@ -181,29 +178,21 @@ export function useStructure(
 		[hide, patch, send],
 	);
 
-	/** The items in `next` order: one `layout.move` per item out of place. */
-	const moveItems = useCallback(
-		(next: string[]) => {
-			const now = layout.map((i) => i.id);
-			for (const { id, ...at } of orderMoves(now, next)) {
-				notify("layout.move", { item_id: id, ...at });
-			}
+	const reorder = useCallback(
+		(ids: string[]) => {
+			const rows = rowsInOrder(layout, ids);
+			if (rows) notify("layout.set", { rows });
 		},
 		[layout, notify],
 	);
 
-	const reorder = useCallback(
-		(ids: string[]) => moveItems(itemsInOrder(layout, ids)),
-		[layout, moveItems],
-	);
-
-	/** The items holding the selected cells one item up or down, as a block. */
+	/** The rows holding the selected cells one row up or down, as a block. */
 	const moveSelected = useCallback(
 		(dir: -1 | 1) => {
-			const next = stepItems(layout, read().selected, dir);
-			if (next) moveItems(next);
+			const rows = stepRows(layout, read().selected, dir);
+			if (rows) notify("layout.set", { rows });
 		},
-		[layout, read, moveItems],
+		[layout, read, notify],
 	);
 
 	return { commitSource, create, remove, withdraw, reorder, moveSelected };

@@ -60,7 +60,7 @@ import type { PlaneHandle } from "../plane/api";
 import { Identity } from "../plane/Identity";
 import type { Notify, Ops } from "../plane/ops";
 import { Plane } from "../plane/Plane";
-import type { AbsentReason, ActivePlane, CellSpec, LayoutItem, PaneHead } from "../plane/types";
+import type { AbsentReason, ActivePlane, CellSpec, LayoutRow, PaneHead } from "../plane/types";
 import { takeFresh } from "../sidebar/add";
 import { GoHome, NOT_FOUND_TEXT, NotFoundBody } from "./NotFound";
 import { PaneHeader } from "./PaneHeader";
@@ -340,7 +340,7 @@ function usePlane(
 	planeId: string,
 	head: PaneHead | null,
 	cells: ActivePlane["cells"] | null,
-	layout: LayoutItem[] | null,
+	layout: LayoutRow[] | null,
 ) {
 	return useMemo<ActivePlane | null>(
 		() =>

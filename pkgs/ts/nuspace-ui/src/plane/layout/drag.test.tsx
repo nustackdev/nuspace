@@ -7,15 +7,15 @@ import { act } from "react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { panePath } from "../../pane/state";
 import { cell, host, notify, render, VIEWER } from "../plane.testing";
-import type { LayoutItem } from "../types";
+import type { LayoutRow } from "../types";
 import {
 	ALREADY_HERE,
 	aimAt,
 	CELL_CHIP,
 	gapAt,
 	LAYOUT_COLUMN,
-	LAYOUT_ITEM,
 	LAYOUT_PLANE,
+	LAYOUT_ROW,
 	LAYOUT_TAKES,
 	markOf,
 	NEW_COLUMN,
@@ -44,34 +44,33 @@ function div(attrs: Record<string, string>, box: Box, ...kids: Element[]): HTMLE
 }
 
 /** A cell's row at `top`, `height` tall, across `left`..`left + width`, its box inset by the gutters. */
-function cellRow(id: string, left: number, width: number, top: number, item?: string): HTMLElement {
+function cellRow(id: string, left: number, width: number, top: number, alone = false): HTMLElement {
 	const body = div(
 		{ "data-cell-body": "" },
 		{ left: left + 50, top, width: width - 100, height: 40 },
 	);
 	const attrs: Record<string, string> = { "data-cell": id };
-	if (item) attrs[LAYOUT_ITEM] = item;
+	if (alone) attrs[LAYOUT_ROW] = id;
 	return div(attrs, { left, top, width, height: 40 }, body);
 }
 
-// i1: a, rows 0..40  |  i2: strip [b, c] [d], 50..150  |  i3: e, 160..200
+// a, rows 0..40  |  strip [b, c] [d], 50..150 (named b)  |  e, 160..200
 // Every row 400 wide; the strip's columns 200 each.
-const L: LayoutItem[] = [
-	{ id: "i1", kind: "cell", cell: "a" },
+const L: LayoutRow[] = [
+	{ kind: "cell", cell: "a" },
 	{
-		id: "i2",
 		kind: "strip",
 		columns: [
 			{ cells: ["b", "c"], share: 0.5 },
 			{ cells: ["d"], share: 0.5 },
 		],
 	},
-	{ id: "i3", kind: "cell", cell: "e" },
+	{ kind: "cell", cell: "e" },
 ];
 
 function planeDom(plane: string, takes = true): HTMLElement {
 	const strip = div(
-		{ [LAYOUT_ITEM]: "i2" },
+		{ [LAYOUT_ROW]: "b" },
 		{ left: 0, top: 50, width: 400, height: 100 },
 		div(
 			{ [LAYOUT_COLUMN]: "0" },
@@ -90,9 +89,9 @@ function planeDom(plane: string, takes = true): HTMLElement {
 	return div(
 		attrs,
 		{ left: 0, top: 0, width: 400, height: 220 },
-		cellRow("a", 0, 400, 0, "i1"),
+		cellRow("a", 0, 400, 0, true),
 		strip,
-		cellRow("e", 0, 400, 160, "i3"),
+		cellRow("e", 0, 400, 160, true),
 	);
 }
 
@@ -169,7 +168,7 @@ describe("the spot under the pointer in a pane", () => {
 		const col = (column: number, index: number) => ({
 			kind: "column",
 			plane: "p",
-			item: "i2",
+			row: "b",
 			column,
 			index,
 		});
@@ -199,7 +198,7 @@ describe("the spot under the pointer in a pane", () => {
 describe("the mark a spot draws", () => {
 	it("is a line above the item it lands before, or under the last", () => {
 		expect(markOf({ kind: "gap", plane: "p", index: 0 }, L)).toEqual({ kind: "above", cell: "a" });
-		expect(markOf({ kind: "gap", plane: "p", index: 1 }, L)).toEqual({ kind: "strip", item: "i2" });
+		expect(markOf({ kind: "gap", plane: "p", index: 1 }, L)).toEqual({ kind: "strip", row: "b" });
 		expect(markOf({ kind: "gap", plane: "p", index: 3 }, L)).toEqual({ kind: "end" });
 	});
 
@@ -220,7 +219,7 @@ describe("the mark a spot draws", () => {
 		const col = (column: number, index: number) => ({
 			kind: "column" as const,
 			plane: "p",
-			item: "i2",
+			row: "b",
 			column,
 			index,
 		});
@@ -236,7 +235,7 @@ describe("the mark a spot draws", () => {
 
 // -- Across panes and the sidebar -------------------------------------------
 
-const Q: LayoutItem[] = [{ id: "q1", kind: "cell", cell: "x" }];
+const Q: LayoutRow[] = [{ kind: "cell", cell: "x" }];
 
 function seat(plane: string, props: Record<string, unknown>) {
 	const path = panePath(VIEWER, plane);
@@ -287,11 +286,46 @@ describe("aiming across panes and onto the sidebar", () => {
 		expect(aim?.op?.op).toBe("layout.set");
 	});
 
-	it("onto another pane, transfers at the gap there, with no side offered", () => {
+	it("onto another pane, transfers at the gap there with that plane's rows", () => {
 		under = pane("p2").querySelector('[data-cell="a"]');
-		const aim = aimAt(a, VIEWER, 60, 30);
+		const aim = aimAt(a, VIEWER, 200, 30);
 		expect(aim?.spot).toEqual({ kind: "gap", plane: "p2", index: 1 });
-		expect(aim?.op).toEqual({ op: "layout.transfer", args: { cell_id: "a", plane_id: "p2" } });
+		expect(aim?.op).toEqual({
+			op: "layout.transfer",
+			args: {
+				cell_id: "a",
+				plane_id: "p2",
+				rows: [
+					{ kind: "cell", cell: "x" },
+					{ kind: "cell", cell: "a" },
+				],
+			},
+		});
+	});
+
+	it("onto another pane beside a cell there, makes a strip with it there", () => {
+		// p2 draws one row: x, on the same boxes as p1's a.
+		const root = pane("p2");
+		root.replaceChildren(cellRow("x", 0, 400, 0, true));
+		under = root.querySelector('[data-cell="x"] [data-cell-body]');
+		const aim = aimAt(a, VIEWER, 60, 10);
+		expect(aim?.spot).toEqual({ kind: "side", plane: "p2", cell: "x", side: "left" });
+		expect(aim?.op).toEqual({
+			op: "layout.transfer",
+			args: {
+				cell_id: "a",
+				plane_id: "p2",
+				rows: [
+					{
+						kind: "strip",
+						columns: [
+							{ cells: ["a"], share: 0.5 },
+							{ cells: ["x"], share: 0.5 },
+						],
+					},
+				],
+			},
+		});
 	});
 
 	it("onto a pane whose plane takes no cell (read-only, system), aims at nothing", () => {
@@ -303,7 +337,7 @@ describe("aiming across panes and onto the sidebar", () => {
 		under = sidebarRow("p2");
 		expect(aimAt(a, VIEWER, 10, 10)).toEqual({
 			spot: { kind: "end", plane: "p2" },
-			op: { op: "layout.transfer", args: { cell_id: "a", plane_id: "p2" } },
+			op: { op: "cell.transfer", args: { cell_id: "a", plane_id: "p2" } },
 			refused: null,
 		});
 	});
@@ -338,7 +372,7 @@ describe("a drag off a cell's grip", () => {
 	const at = (type: string, x: number, y: number) =>
 		new MouseEvent(type, { bubbles: true, button: 0, clientX: x, clientY: y });
 
-	function drawn(layout: LayoutItem[]) {
+	function drawn(layout: LayoutRow[]) {
 		seat("p1", { layout });
 		render([cell("a"), cell("b"), cell("c")], { layout });
 		host.dataset.pane = "p1";
@@ -346,9 +380,8 @@ describe("a drag off a cell's grip", () => {
 
 	it("draws a strip's columns, each with its cells", () => {
 		drawn([
-			{ id: "i1", kind: "cell", cell: "a" },
+			{ kind: "cell", cell: "a" },
 			{
-				id: "i2",
 				kind: "strip",
 				columns: [
 					{ cells: ["b"], share: 0.4 },
@@ -356,20 +389,21 @@ describe("a drag off a cell's grip", () => {
 				],
 			},
 		]);
-		const columns = [...host.querySelectorAll(`[${LAYOUT_ITEM}="i2"] [${LAYOUT_COLUMN}]`)];
+		const columns = [...host.querySelectorAll(`[${LAYOUT_ROW}="b"] [${LAYOUT_COLUMN}]`)];
 		expect(
 			columns.map((c) =>
 				[...c.querySelectorAll("[data-cell]")].map((r) => r.getAttribute("data-cell")),
 			),
 		).toEqual([["b"], ["c"]]);
-		expect(host.querySelector(`[data-cell="a"]`)?.getAttribute(LAYOUT_ITEM)).toBe("i1");
+		expect(host.querySelector(`[data-cell="a"]`)?.getAttribute(LAYOUT_ROW)).toBe("a");
+		expect(host.querySelector(`[data-cell="b"]`)?.hasAttribute(LAYOUT_ROW)).toBe(false);
 	});
 
 	it("asks for targets as it starts, marks the drop, and sends the op on release", () => {
-		const layout: LayoutItem[] = [
-			{ id: "i1", kind: "cell", cell: "a" },
-			{ id: "i2", kind: "cell", cell: "b" },
-			{ id: "i3", kind: "cell", cell: "c" },
+		const layout: LayoutRow[] = [
+			{ kind: "cell", cell: "a" },
+			{ kind: "cell", cell: "b" },
+			{ kind: "cell", cell: "c" },
 		];
 		drawn(layout);
 		const row = (id: string) => host.querySelector(`[data-cell="${id}"]`) as HTMLElement;
@@ -402,14 +436,16 @@ describe("a drag off a cell's grip", () => {
 		expect(notify.mock.calls.at(-1)).toEqual([
 			"layout.set",
 			{
-				item_id: "i1",
-				item: {
-					kind: "strip",
-					columns: [
-						{ cells: ["a"], share: 0.5 },
-						{ cells: ["c"], share: 0.5 },
-					],
-				},
+				rows: [
+					{
+						kind: "strip",
+						columns: [
+							{ cells: ["a"], share: 0.5 },
+							{ cells: ["c"], share: 0.5 },
+						],
+					},
+					{ kind: "cell", cell: "b" },
+				],
 			},
 		]);
 		expect(row("a").textContent).not.toContain(SIDE_BY_SIDE);
@@ -418,9 +454,9 @@ describe("a drag off a cell's grip", () => {
 
 	it("a press that never travels opens the cell's menu and sends nothing", () => {
 		drawn([
-			{ id: "i1", kind: "cell", cell: "a" },
-			{ id: "i2", kind: "cell", cell: "b" },
-			{ id: "i3", kind: "cell", cell: "c" },
+			{ kind: "cell", cell: "a" },
+			{ kind: "cell", cell: "b" },
+			{ kind: "cell", cell: "c" },
 		]);
 		notify.mockClear();
 		const grip = host.querySelector('[data-cell="b"] [data-cell-grip]') as HTMLElement;
@@ -434,9 +470,9 @@ describe("a drag off a cell's grip", () => {
 
 	it("Escape drops the drag, sending nothing", () => {
 		drawn([
-			{ id: "i1", kind: "cell", cell: "a" },
-			{ id: "i2", kind: "cell", cell: "b" },
-			{ id: "i3", kind: "cell", cell: "c" },
+			{ kind: "cell", cell: "a" },
+			{ kind: "cell", cell: "b" },
+			{ kind: "cell", cell: "c" },
 		]);
 		const row = (id: string) => host.querySelector(`[data-cell="${id}"]`) as HTMLElement;
 		place(row("a"), { left: 0, top: 0, width: 400, height: 40 });

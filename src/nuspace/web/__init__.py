@@ -23,8 +23,8 @@ The sdk, what a program calls, is the ops (:mod:`.ops`), flat here::
 - :mod:`.desks`: the desks: their ops (``web.desks.add_plane``, ...), the
   browser node and feed, the desk pruner.
 - :mod:`.layout`: how a web plane arranges its cells, rows of cells and
-  strips (``web.layout.move_item``, ...), fixed up when read.
-- :mod:`.items`: what desks and layouts share: item ids, share rules, placing.
+  strips, read and written whole (``web.layout.get``, ``web.layout.set``).
+- :mod:`.items`: desk item ids, placing, and the shape and share rules layouts share.
 - :mod:`.home`: Home and the home indexer; :mod:`.planes`: every plane
   the device ships with, made by :func:`init` (search and settings live there).
 - :mod:`.nav`: the driver running what the panes show.

@@ -4,14 +4,17 @@
 // Write-only: it draws nothing of its own. A `show` write is one failed
 // interaction (a click, an edit, a move the server refused), its error's type
 // as the title and its message under it, shown in the kit's toaster, which
-// the shell mounts once (../shell/Shell.tsx).
+// the shell mounts once (../shell/Shell.tsx). A create whose id was taken
+// is tried again instead of toasted (../plane/create.ts).
 
 import { type NodeEntry, toast } from "@nustackdev/ui-kit";
+import { retriedCreate } from "../plane/create";
 
 /** Show one `show` payload as a toast. Pure apart from the toast, so it is testable. */
 export function applyToastWrite(payload: unknown): void {
 	const p = (payload ?? {}) as Record<string, unknown>;
 	if (String(p.op ?? "") !== "show") return;
+	if (retriedCreate(String(p.type ?? ""), String(p.message ?? ""))) return;
 	toast({ tone: "danger", title: String(p.type ?? "Error"), description: String(p.message ?? "") });
 }
 

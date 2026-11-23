@@ -17,12 +17,15 @@
 //                                     system, not removed). Its own plane,
 //                                     or one not offered, rings refused
 //   a pane (`data-pane`)              a spot in its plane (`spotIn`), read
-//                                     off the items as drawn. Another pane
-//                                     takes a cell only when its plane does
-//                                     (`LAYOUT_TAKES`: editable, not system)
+//                                     off the rows as drawn, beside a cell
+//                                     too. Another pane takes a cell only
+//                                     when its plane does (`LAYOUT_TAKES`:
+//                                     editable, not system)
 //
-// The spot becomes an op through ./model.ts `dropOp`; null draws no mark
-// and sends nothing. One drag is in flight at most, kept here outside React
+// The spot becomes an op through ./model.ts `dropOp`: the whole new rows of
+// the plane it lands on (`layout.set` within one, `layout.transfer` onto
+// another pane), or a plain `cell.transfer` onto a sidebar row. Null draws
+// no mark and sends nothing. One drag is in flight at most, kept here outside React
 // (`useDragMark`, `useSidebarAim`, `useDragged`), so the source pane, the
 // target pane and the sidebar each draw their own part of it. Escape drops
 // the drag.
@@ -34,17 +37,17 @@
 //
 // ## Where in a pane
 //
-// Against the items the plane draws (`LAYOUT_ITEM`), top to bottom:
+// Against the rows the plane draws (`LAYOUT_ROW`), top to bottom:
 //
-//   between items, above or under them    the gap there
+//   between rows, above or under them     the gap there
 //   a cell alone                          its left or right quarter: beside
-//                                         it (own pane only); its top or
-//                                         bottom half: the gap above or under
+//                                         it; its top or bottom half: the
+//                                         gap above or under
 //   a strip's top or bottom edge          the gap above or under it
 //   a cell in a strip                     its left or right quarter: a new
-//                                         column that side (own pane only);
-//                                         its top or bottom half: above or
-//                                         under it in its column
+//                                         column that side; its top or
+//                                         bottom half: above or under it in
+//                                         its column
 //   a strip's column under its cells      the column's end
 
 import type { Path } from "@nustackdev/ui-core";
@@ -54,15 +57,15 @@ import { useMemo, useSyncExternalStore } from "react";
 import { CHIP_GRAB, dragChipOf } from "../../desk/drag";
 import { clearPaneTargets, paneLayout, panePath, paneTargets } from "../../pane/state";
 import { type LayoutOp, type Notify, sendOp } from "../ops";
-import type { LayoutItem } from "../types";
-import { dropOp, type Side, type Source, type Spot, seatOf } from "./model";
+import type { LayoutRow } from "../types";
+import { dropOp, rowKey, type Side, type Source, type Spot, seatOf } from "./model";
 
 /** On a plane's root: its id. Where a pane's layout is read from. */
 export const LAYOUT_PLANE = "data-layout-plane";
 /** On a plane's root when another plane's cells may land on it: editable, not system. */
 export const LAYOUT_TAKES = "data-layout-takes";
-/** On each item the plane draws: its id. A cell item's is its cell's row. */
-export const LAYOUT_ITEM = "data-layout-item";
+/** On each row the plane draws: its key, its first cell. A cell alone carries it on its own row. */
+export const LAYOUT_ROW = "data-layout-row";
 /** On each column of a strip: its index. */
 export const LAYOUT_COLUMN = "data-layout-column";
 /** On each Planes tree row: its plane id. A cell dropped on it goes to that plane's end. */
@@ -111,7 +114,7 @@ function bodyOf(row: Element): Box {
 	return boxOf(row.querySelector("[data-cell-body]") ?? row);
 }
 
-/** The spot in strip `strip` (item `at`) a point picks. */
+/** The spot in strip `strip` (row `at`) a point picks. */
 function stripSpot(
 	plane: string,
 	strip: HTMLElement,
@@ -123,7 +126,7 @@ function stripSpot(
 	const box = boxOf(strip);
 	if (y - box.top < STRIP_EDGE) return { kind: "gap", plane, index: at };
 	if (box.top + box.height - y < STRIP_EDGE) return { kind: "gap", plane, index: at + 1 };
-	const item = strip.getAttribute(LAYOUT_ITEM) ?? "";
+	const row = strip.getAttribute(LAYOUT_ROW) ?? "";
 	const columns = [...strip.querySelectorAll<HTMLElement>(`[${LAYOUT_COLUMN}]`)];
 	// The column under x, else the nearest one.
 	let col = columns[0];
@@ -145,18 +148,18 @@ function stripSpot(
 		if (zone === "left" || zone === "right") {
 			return { kind: "side", plane, cell: rows[hit].dataset.cell ?? "", side: zone };
 		}
-		return { kind: "column", plane, item, column, index: zone === "top" ? hit : hit + 1 };
+		return { kind: "column", plane, row, column, index: zone === "top" ? hit : hit + 1 };
 	}
-	return { kind: "column", plane, item, column, index: gapAt(boxes, y) };
+	return { kind: "column", plane, row, column, index: gapAt(boxes, y) };
 }
 
 /** The spot a point picks in the plane drawn at `root`: `sides` offers the left and right of cells. */
 export function spotIn(root: Element, plane: string, x: number, y: number, sides: boolean): Spot {
-	const items = [...root.querySelectorAll<HTMLElement>(`[${LAYOUT_ITEM}]`)];
-	const boxes = items.map(boxOf);
+	const rows = [...root.querySelectorAll<HTMLElement>(`[${LAYOUT_ROW}]`)];
+	const boxes = rows.map(boxOf);
 	const at = boxes.findIndex((b) => within(b, y));
 	if (at < 0) return { kind: "gap", plane, index: gapAt(boxes, y) };
-	const el = items[at];
+	const el = rows[at];
 	if (el.hasAttribute("data-cell")) {
 		const zone = zoneAt(bodyOf(el), x, y, sides);
 		if (zone === "left" || zone === "right") {
@@ -169,11 +172,11 @@ export function spotIn(root: Element, plane: string, x: number, y: number, sides
 
 // -- What a drag shows (pure) -------------------------------------------------
 
-/** How a target pane marks a drop: a line on a cell, above a strip, or under the last item. */
+/** How a target pane marks a drop: a line on a cell, above a strip (by its key), or under the last row. */
 export type Mark =
 	| { kind: "above" | "below"; cell: string }
 	| { kind: Side; cell: string; hint: string }
-	| { kind: "strip"; item: string }
+	| { kind: "strip"; row: string }
 	| { kind: "end" };
 
 /** What a hint beside a cell says. */
@@ -181,21 +184,21 @@ export const SIDE_BY_SIDE = "Side by side";
 export const NEW_COLUMN = "New column";
 
 /** The mark `spot` draws on the pane whose layout is `layout`. Null for none there (the sidebar's end). */
-export function markOf(spot: Spot, layout: readonly LayoutItem[]): Mark | null {
+export function markOf(spot: Spot, layout: readonly LayoutRow[]): Mark | null {
 	if (spot.kind === "gap") {
-		const item = layout[spot.index];
-		if (!item) return { kind: "end" };
-		return item.kind === "cell"
-			? { kind: "above", cell: item.cell }
-			: { kind: "strip", item: item.id };
+		const row = layout[spot.index];
+		if (!row) return { kind: "end" };
+		return row.kind === "cell"
+			? { kind: "above", cell: row.cell }
+			: { kind: "strip", row: rowKey(row) };
 	}
 	if (spot.kind === "side") {
 		const seat = seatOf(layout, spot.cell);
-		const hint = seat?.item.kind === "strip" ? NEW_COLUMN : SIDE_BY_SIDE;
+		const hint = seat?.row.kind === "strip" ? NEW_COLUMN : SIDE_BY_SIDE;
 		return { kind: spot.side, cell: spot.cell, hint };
 	}
 	if (spot.kind === "column") {
-		const strip = layout.find((i) => i.id === spot.item);
+		const strip = layout.find((r) => rowKey(r) === spot.row);
 		const cells = strip?.kind === "strip" ? (strip.columns[spot.column]?.cells ?? []) : [];
 		if (cells.length === 0) return null;
 		return spot.index < cells.length
@@ -288,9 +291,8 @@ export function aimAt(source: Source, viewerPath: Path, x: number, y: number): A
 	const root = el.closest("[data-pane]")?.querySelector(`[${LAYOUT_PLANE}]`);
 	const plane = root?.getAttribute(LAYOUT_PLANE);
 	if (!root || !plane) return null;
-	const foreign = plane !== source.plane;
-	if (foreign && !root.hasAttribute(LAYOUT_TAKES)) return null;
-	const spot = spotIn(root, plane, x, y, !foreign);
+	if (plane !== source.plane && !root.hasAttribute(LAYOUT_TAKES)) return null;
+	const spot = spotIn(root, plane, x, y, true);
 	const op = dropOp(source, spot, layoutOf(source.plane), layoutOf(plane));
 	return op ? { spot, op, refused: null } : null;
 }

@@ -1,61 +1,43 @@
 """The plane layout: how a web plane arranges its cells, rows of single cells or strips of columns.
 
-``Web.planes[plane].layout`` sits beside ``Plane.cells``, not instead of it:
-``cells`` says which cells are on the plane, the layout how the web draws
-them. Same structure and wording as a desk's items (:mod:`nuspace.web.desks`):
-an ordered dict of item id to item, each a cell item ``{kind: "cell", cell}``
-or a strip ``{kind: "strip", columns: [{cells, share}]}``, its columns side
-by side at their shares, the cells of a column stacked.
+``Plane.cells`` (Space) is membership: the cell belongs to the plane, its
+order means nothing here. ``WebPlane.layout`` (Web) is the arrangement, one
+plain value read and written whole, a list of rows:
 
-**Fixed up when read, never synced.** No reaction keeps the layout in step
-with ``cells``. The read (:func:`~.model.layout_view`) skips a cell no
-longer on the plane (removed or transferred out), and its stored item stays,
-so a restored cell comes back where it was. Then the strip rules, as desks
-prune: an empty column goes, the shares left rescale, a strip left with one
-cell reads as a cell item, an empty strip goes. A cell on the plane in no
-item shows as its own cell item right after the item holding the cell before
-it in ``cells`` order, at the top when nothing is before it. An empty or
-missing layout is one cell item per cell, in ``cells`` order.
+- ``{kind: "cell", cell}``: a cell alone on its row;
+- ``{kind: "strip", columns: [{cells, share}]}``: columns side by side at
+  their shares (summing to 1), the cells of a column stacked.
 
-**Every op fills first.** Each op stores the items the read showed and the
-store lacks, at the read's spots and ids, then makes its own change: an item
-the browser saw is always there to anchor on.
+No item ids: a row or a column is addressed by the cells in it.
 
-``ops``
-    The layout ops a program calls, re-exported here::
+**Eventually consistent with ``cells``, through two ops only.** The raw slot
+is internal; :func:`get` and :func:`set` are the only readers and writers,
+both plain kv terms around one pure host, :data:`~.model.Reconcile`: cells
+no longer on the plane dropped by the strip rules, a cell in two places kept
+by its first holder, a cell in no row appended as its own row. No pruner,
+no reaction.
 
-        import nuspace.web as web
+- :func:`get`: the main read, heals the slot (0 or 1 write). Only the pane
+  calls it, on open and on every reship, so one change is reconciled once
+  per open plane. Code reading a layout calls it too; no op does.
+- :func:`set`: every edit. The browser sends the whole new rows; they are
+  checked on the shape and reconciled on the way in, so a stale view never
+  writes a broken layout.
+- :func:`transfer`: ``cell.transfer``, then :func:`set` on the target. Two
+  commits, transfer first.
 
-        nuspace.atomic(web.layout.move_item(plane, item_id, before=other))
+A cell made or removed with the core ops alone lands in the layout on the
+next :func:`get`: an open pane on its reship, a closed plane when opened. A
+cell that leaves is dropped for good: no old spot is kept. On a web plane
+nothing uses ``cell.move``; it stays for non-web and headless use.
 
 ``model``
-    The layout shape in plain python, the fix-up, and the hosts running them.
-
-The pane ships the fixed-up layout with its cells, and hears one event per
-op (:mod:`nuspace.web.viewer.feed`). On a web plane the browser's reorder
-writes the layout (``move_item``), not ``cell.move``, which stays for
-non-web and headless use.
+    The rows' shape check and the reconcile, plain python and their hosts.
+``ops``
+    :func:`get`, :func:`set`, :func:`transfer`.
 """
 
-from nuspace.web.layout.ops import (
-    add_item,
-    get_layout,
-    move_item,
-    place_cell,
-    remove_item,
-    set_item,
-    transfer_cell,
-    write_items,
-)
+from nuspace.web.layout.ops import get, set, transfer
 
 
-__all__ = [
-    "add_item",
-    "get_layout",
-    "move_item",
-    "place_cell",
-    "remove_item",
-    "set_item",
-    "transfer_cell",
-    "write_items",
-]
+__all__ = ["get", "set", "transfer"]

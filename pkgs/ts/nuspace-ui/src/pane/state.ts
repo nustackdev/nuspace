@@ -48,7 +48,7 @@ import {
 	coerceMeta,
 	coerceStatus,
 	coerceTrail,
-	type LayoutItem,
+	type LayoutRow,
 	type PaneHead,
 } from "../plane/types";
 import { coerceFollow, coerceScroll, type Follow, type ScrollCommand } from "./scroll";
@@ -185,13 +185,13 @@ export function usePaneCells(path: Path): Cell[] | null {
 }
 
 /** How the pane's cells are drawn, as the last `set_cells` shipped it. Null until it lands. */
-export function usePaneLayout(path: Path): LayoutItem[] | null {
-	return usePaneProp<LayoutItem[]>(path, "layout") ?? null;
+export function usePaneLayout(path: Path): LayoutRow[] | null {
+	return usePaneProp<LayoutRow[]>(path, "layout") ?? null;
 }
 
 /** The layout on the pane at `path` as it is now, outside render: a drag reads its target's. */
-export function paneLayout(path: Path): LayoutItem[] | null {
-	return (nodeAt(path)?.props.layout as LayoutItem[] | undefined) ?? null;
+export function paneLayout(path: Path): LayoutRow[] | null {
+	return (nodeAt(path)?.props.layout as LayoutRow[] | undefined) ?? null;
 }
 
 /** The last answer to `cell.targets` on the pane at `path`, outside render. Null while none landed. */

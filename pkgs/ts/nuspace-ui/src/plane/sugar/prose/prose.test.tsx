@@ -12,6 +12,7 @@ import { act, useEffect } from "react";
 import { describe, expect, it, vi } from "vitest";
 import {
 	cell,
+	createdAt,
 	draw,
 	drawReadOnly,
 	endLine,
@@ -63,7 +64,8 @@ function plane(
 
 const leave = (dir: "up" | "down" | "left" | "right", x = 0, extend = false) =>
 	({ kind: "leave", dir, extend, x }) as const;
-const created = () => notify.mock.calls.filter(([op]) => op === "cell.create").map(([, a]) => a);
+const created = () =>
+	notify.mock.calls.filter(([op]) => op === "cell.create").map(([, a]) => createdAt(a));
 const plus = (id: string) =>
 	act(() =>
 		row(id).querySelector<HTMLButtonElement>("button[aria-label='Add a line below']")?.click(),
@@ -418,7 +420,7 @@ describe("C. a blank prose cell", () => {
 		// The delete waits for the new cell: sent together, it can land first
 		// and leave the create anchored on a removed cell.
 		expect(ops().map(([op]) => op)).toEqual(["cell.create"]);
-		const made = notify.mock.calls[0][1] as { cell_id: string };
+		const made = createdAt(notify.mock.calls[0][1]) as { cell_id: string };
 		expect(made).toMatchObject({ after: "a" });
 		plane([cell("a"), cell(made.cell_id), cell("b")]);
 		expect(ops().map(([op]) => op)).toEqual(["cell.create", "cell.delete"]);
@@ -1257,7 +1259,7 @@ describe("M. live writes", () => {
 		vi.mocked(d.doc.blank).mockReturnValue(false);
 		press(lines()[0], "Enter");
 		expect(ops().map(([op]) => op)).toEqual(["cell.create"]);
-		expect(notify.mock.calls[0][1]).toMatchObject({ after: "a" });
+		expect(createdAt(notify.mock.calls[0][1])).toMatchObject({ after: "a" });
 		expect(row("a").hidden).toBe(false);
 	});
 });

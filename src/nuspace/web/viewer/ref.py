@@ -195,7 +195,7 @@ class PaneRef(SpaceRef):
         return interactions.on_restart_plane(self)
 
     def on_create_cell(self) -> Changed:
-        """``{cell_id, name, before?, after?}``."""
+        """``{cell_id, name, rows}``."""
         return interactions.on_create_cell(self)
 
     def on_update_cell(self) -> Changed:
@@ -218,21 +218,13 @@ class PaneRef(SpaceRef):
         """``{cell_id, plane_id, before?, after?}``."""
         return interactions.on_transfer_cell(self)
 
-    def on_set_item(self) -> Changed:
-        """``{item_id, item}``."""
-        return interactions.on_set_item(self)
+    def on_set_layout(self) -> Changed:
+        """``{rows}``."""
+        return interactions.on_set_layout(self)
 
-    def on_move_item(self) -> Changed:
-        """``{item_id, before?, after?}``."""
-        return interactions.on_move_item(self)
-
-    def on_place_cell(self) -> Changed:
-        """``{cell_id, before?, after?}`` or ``{cell_id, into, column, index}``."""
-        return interactions.on_place_cell(self)
-
-    def on_transfer_placed(self) -> Changed:
-        """``{cell_id, plane_id, before?, after?}`` or ``{cell_id, plane_id, into, column, index}``."""
-        return interactions.on_transfer_placed(self)
+    def on_transfer_layout(self) -> Changed:
+        """``{cell_id, plane_id, rows}``."""
+        return interactions.on_transfer_layout(self)
 
     def on_restart_cell(self) -> Changed:
         """``{cell_id}``."""
