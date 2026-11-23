@@ -1,103 +1,119 @@
 <div align="center">
   <img width="112" alt="nuspace" src="https://nustack.dev/brand/logo-square-512@2x.png" />
   <h1>nuspace</h1>
-  <p>Computational space for your data and tools. Human-first. Agent-native.</p>
-  <p><sub>Open-source · Self-hosted · Pure Python</sub></p>
-  
+  <p><b>Your computational space.</b> Human-first. Agent-native.</p>
+
   [![Python](https://img.shields.io/badge/python-%3E%3D%203.10-blue)](https://pypi.org/project/nuspace/)
   [![PyPI](https://img.shields.io/pypi/v/nuspace?color=yellow)](https://pypi.org/project/nuspace/)
   [![Downloads](https://img.shields.io/pypi/dw/nuspace?color=green)](https://pypi.org/project/nuspace/)
   [![License](https://img.shields.io/badge/license-AGPL%20v3-orange.svg)](https://github.com/nustackdev/nuspace/blob/main/LICENSE.md)
-  
   [![Discord](https://img.shields.io/badge/discord-join-5865F2?logo=discord&logoColor=white)](https://discord.gg/tCa8YE7XVr)
-  [![X](https://img.shields.io/twitter/follow/nustackdev?style=social)](https://x.com/nustackdev)
+
+  [Website](https://nustack.dev) · [Docs](https://nustack.dev/docs/nuspace) · [Gallery](https://nustack.dev/#gallery) · [Discord](https://discord.gg/tCa8YE7XVr)
 
 </div>
 
+A society of tiny interconnected programs that hold data, run logic and render UI. Humans get the space as UI, agents get it as code.
 
-In nuspace, your data and tools live in cells: tiny reactive programs that manage data, run logic and render UI. Cells are written in nu, a Python programming model with no glue code between layers, so a cell is a few lines, not a thousand. Humans get the space as UI, agents get it as code.
+## Quick start
 
-**nuspace in action:**
+```bash
+pip install nuspace && nuspace run --with quickstart
+```
+
+Python 3.10 or newer. A browser opens on your space with a quickstart page. To let your agent set it up instead, see [With your agent](#with-your-agent).
 
 https://github.com/user-attachments/assets/c74b7f85-b8c5-4796-8de6-bfc1b7679eb8
 
-**Other demos:**
+<p align="center"><sub>Tour: nustack's own org space, built from an empty page.</sub></p>
+
+## Gallery
+
+Spaces built with nuspace. Each one is a set of small programs talking to each other.
 
 <details>
-<summary><b>Ops</b></summary>
+<summary><b>Ops</b> · Run your ops from one space.</summary>
 
-A real storefront, its jobs, logs, deploys and alert rules, run and watched from one space.
+A release breaks, the incident pages, a rule rolls it back.<br/>
+<sub>Made of: storefront · deploy job · log · incident · rollback rule</sub>
 
 https://github.com/user-attachments/assets/236dbecd-f734-4aa3-965d-2cbc3bea27e7
 
 </details>
 
 <details>
-<summary><b>Dashboards</b></summary>
+<summary><b>Dashboards</b> · A spreadsheet for anything, live.</summary>
 
-A shop's orders, customers and events as dashboards that follow every sale, import and price change.
+Orders stream in, every chart and metric follows.<br/>
+<sub>Made of: orders stream · events table · export job · metric · price button</sub>
 
 https://github.com/user-attachments/assets/0101726c-da30-4a36-9323-9f41a14a6be1
 
 </details>
 
 <details>
-<summary><b>Design system</b></summary>
+<summary><b>Design system</b> · Your design system, one live spec.</summary>
 
-Tokens, the mark, components, mocks and checks drawn from one spec, with releases cut by a job.
+Tokens, mocks and checks that follow every change.<br/>
+<sub>Made of: tokens · proposal · release job · color checker</sub>
 
 https://github.com/user-attachments/assets/9d8cb9ca-2e41-4a12-8caa-412099eec02c
 
 </details>
 
 <details>
-<summary><b>ML training</b></summary>
+<summary><b>ML training</b> · Train models in your own ML lab.</summary>
 
-Launch runs, watch them learn, use their models and build your own tools around them.
+Launch runs, watch them learn, stop them by rule.<br/>
+<sub>Made of: run launcher · metrics · model · compare page · stop rule</sub>
 
 https://github.com/user-attachments/assets/7d6bb201-2ac4-462e-9080-c40067c3c6fc
 
 </details>
 
 <details>
-<summary><b>Research</b></summary>
+<summary><b>Research</b> · Sources, claims and scores, kept live.</summary>
 
-A research desk on LLMs: papers weighed against claims, our own evals on Claude beside them.
+A paper flips a claim everywhere, an eval reruns.<br/>
+<sub>Made of: probe · papers · claims · eval run</sub>
 
 https://github.com/user-attachments/assets/dc573d2e-ab0a-45e6-87ce-8d69a1d9d8f4
 
 </details>
 
 <details>
-<summary><b>Agents</b></summary>
+<summary><b>Agents</b> · A team of agents, run from one space.</summary>
 
-Brief, watch and steer Claude Code sessions, chain them into flows, and build your own tools around them.
+Brief, steer and judge Claude Code sessions.<br/>
+<sub>Made of: agent sessions · briefs · judge · desk</sub>
 
 https://github.com/user-attachments/assets/a3ec5bff-7ca7-41c3-91d0-6f5f927a0108
 
 </details>
 
 <details>
-<summary><b>Memes</b></summary>
+<summary><b>Memes</b> · A blockchain, read live.</summary>
 
-Every launch and trade on the meme market, streamed into pages that redraw as they land.
+Every launch and trade, streamed into pages.<br/>
+<sub>Made of: solana stream · coin pages · ranking · radar</sub>
 
 https://github.com/user-attachments/assets/8979c5b9-6c8c-4675-81e5-3f25c5ec7cdd
 
 </details>
 
 <details>
-<summary><b>Movies</b></summary>
+<summary><b>Movies</b> · Your personal movie tracker.</summary>
 
-A film base you run yourself. Films, people and timelines, all linked.
+Films, people and timelines, all linked, all live.<br/>
+<sub>Made of: film base · log import job · tonight page · ratings</sub>
 
 https://github.com/user-attachments/assets/edbda441-2f65-4f46-8965-dfdd414becba
 
 </details>
 
-## What it can do
+## Program anything
 
-**Program anything.** The data, the logic, the look, even the space itself.
+The data, the logic, the UI, even the space itself.
 
 - **Any data.** A note, a table, a song, a billion-entry log, a genome.
 - **Any logic.** Summarize your inbox, dim the lights at sunset, render a video.
@@ -107,182 +123,109 @@ https://github.com/user-attachments/assets/edbda441-2f65-4f46-8965-dfdd414becba
 - **Data scales.** A counter or a billion rows, same cell. Storage shards underneath.
 - **It's made of itself.** The space has the same shape as its cells, so you and your agents can program it too.
 
-## Who it's for
+## How it works
 
-<details>
-<summary><b>For agents</b></summary>
+A space is made of **nus**: small programs written in [nu](https://github.com/nustackdev/nu), a Python programming model. A nu doesn't wire a database, a backend and a UI together. It names what it touches as Refs (a table row, a chart, an LLM, a file) and says what to do with them as Interactions (read, write, branch, compose).
 
-- **Reach:** any data, any cell, the space itself
-- **Memory:** work that outlives your context window
-- **Tools:** build your own, then use them
-- **Visibility:** everything you build, your human sees too
+- Every cell on a page is a nu: a note, a table, a chart, a job.
+- nuspace runs hundreds of them as one live system. What one nu names, another can watch, steer or build on.
+- The space itself is made of nus, so you and your agents program it the same way.
 
-</details>
+## Usage
 
-<details>
-<summary><b>For individuals</b></summary>
+```bash
+# run the nearest space up from here, else your home space
+nuspace run
 
-- **Knowledge:** notes, reading, a second brain
-- **Tracking:** habits, money, films, health
-- **Research:** sources, claims, evals
-- **Automation:** your scripts and home, with a screen
+# make the current directory a space, data in .nuspace/
+nuspace init
 
-</details>
+# a throwaway space
+nuspace run --tmp
 
-<details>
-<summary><b>For teams</b></summary>
+# no web, just the space and its kernel
+nuspace run --headless
+```
 
-- **Knowledge:** wikis, BI, research
-- **Dashboards:** every data source, live
-- **Ops:** every automation and job in one place
-- **Infra:** ML runs, pipelines, deploys
+Try a full app from the demos:
 
-</details>
+```bash
+pip install nudemos
+nuspace run --with nudemos.movies
+```
 
-## Get started
+## With your agent
 
-Hand it to your agent or install manually:
+Give your agent the nu and nuspace skills, then ask it to install nuspace and build with you.
 
 <details open>
-<summary><b>Manual</b></summary>
-
-Install from PyPI and run a space yourself. Python 3.10 or newer.
-
-1. **Install**
-
-   ```bash
-   pip install nuspace
-   ```
-
-2. **Run**
-
-   ```bash
-   nuspace run
-   ```
-
-   A browser opens on your space: the nearest one up from here, else your home space.
-   `nuspace init` makes the current directory a space of its own, data in `.nuspace/`.
-
-3. **Try a demo**
-
-   ```bash
-   pip install nudemos
-   nuspace run --with nudemos.movies
-   ```
-
-   A full app in your space. Add `--tmp` for a throwaway space instead.
-
-</details>
-
-<details>
 <summary><b>Claude Code</b></summary>
 
-Claude learns nu and nuspace from the skills, installs nuspace and opens your first space.
+```bash
+claude plugin marketplace add nustackdev/nuskills
+claude plugin install nuskills@nustack
+```
 
-1. **Add the marketplace**
+Adds `/nuskills:nu` and `/nuskills:nuspace`. Then ask:
 
-   ```bash
-   claude plugin marketplace add nustackdev/nuskills
-   ```
-
-2. **Install the plugin**
-
-   ```bash
-   claude plugin install nuskills@nustack
-   ```
-
-   Adds `/nuskills:nu` and `/nuskills:nuspace`.
-
-3. **Ask for a space**
-
-   ```text
-   Install nuspace, start a space and build a live monitor of this machine.
-   ```
-
-   Claude loads the nuspace skill on its own when the task matches.
+```text
+Install nuspace and open my space with the quickstart page. Set up whatever's missing.
+```
 
 </details>
 
 <details>
 <summary><b>Codex</b></summary>
 
-Codex learns nu and nuspace from the skills, installs nuspace and opens your first space.
+```bash
+codex plugin marketplace add nustackdev/nuskills
+```
 
-1. **Add the marketplace**
+Run `/plugins` in a session and pick `nuskills`. Then ask:
 
-   ```bash
-   codex plugin marketplace add nustackdev/nuskills
-   ```
-
-2. **Install the plugin**
-
-   ```text
-   /plugins
-   ```
-
-   Run it in a session and pick `nuskills`.
-
-3. **Ask for a space**
-
-   ```text
-   $nuspace Install nuspace, start a space and build a live monitor of this machine.
-   ```
-
-   Or skip `$nuspace`, Codex loads it when the task matches.
+```text
+Install nuspace and open my space with the quickstart page. Set up whatever's missing.
+```
 
 </details>
 
 <details>
 <summary><b>Other agents</b></summary>
 
-Any agent that reads skills learns nu and nuspace from them, installs nuspace and opens your first space.
+```bash
+git clone https://github.com/nustackdev/nuskills
+mkdir -p ~/.agents/skills
+cp -r nuskills/skills/nu nuskills/skills/nuspace ~/.agents/skills/
+```
 
-1. **Get the skills**
+Or into a repo's `.agents/skills` for one project. Then ask:
 
-   ```bash
-   git clone https://github.com/nustackdev/nuskills
-   ```
-
-2. **Copy them in**
-
-   ```bash
-   mkdir -p ~/.agents/skills
-   cp -r nuskills/skills/nu nuskills/skills/nuspace ~/.agents/skills/
-   ```
-
-   Or into a repo's `.agents/skills` for one project.
-
-3. **Ask for a space**
-
-   ```text
-   Install nuspace, start a space and build a live monitor of this machine.
-   ```
+```text
+Install nuspace and open my space with the quickstart page. Set up whatever's missing.
+```
 
 </details>
 
 > [!NOTE]
 > nuspace is early. Things move fast and the store format is not frozen yet.
 
-## How it works
+## The stack
 
-**One primitive, all the way down.** nuspace sits on a small stack, each layer its own repo, from the theory at the base to the ecosystem on top.
+**One primitive, all the way down.** nuspace sits on a small stack, each layer its own repo:
 
-| | Layer | What it is |
-| --- | --- | --- |
-| 01 | <code>the theory</code> <br/> [**interaction-model**](https://github.com/nustackdev/interaction-model) | A programming model where every resource is a Ref and Interactions are first-class, so you compose logic across systems. |
-| 02 | <code>the primitive</code> <br/> [**nu**](https://github.com/nustackdev/nu) | The interaction model, implemented in Python. |
-| 03 | <code>the std library</code> <br/> [**nustd**](https://github.com/nustackdev/nu/tree/main/pkgs/nustd) | Batteries for nu: storage, UI, workers and more, ready to use. |
-| 04 | <code>the space</code> <br/> [**nuspace**](https://github.com/nustackdev/nuspace) | A space that runs nu programs. |
-| 05 | <code>the ecosystem</code> <br/> [**nuverse**](https://github.com/nustackdev/nuverse) | Ready-made packages, one install away. |
-| + | **your space**, on top of it all | Everything below exists so your space can be anything. |
+- [**interaction-model**](https://github.com/nustackdev/interaction-model): the theory, every resource a Ref, Interactions first-class
+- [**nu**](https://github.com/nustackdev/nu): the primitive, the interaction model in Python
+- [**nustd**](https://github.com/nustackdev/nu/tree/main/pkgs/nustd): the standard library, storage, UI, workers and more
+- **nuspace**: the space that runs nu programs (you are here)
+- [**nuverse**](https://github.com/nustackdev/nuverse): the ecosystem, ready-made packages one install away
 
 ## Community
 
-- [Discord](https://discord.gg/tCa8YE7XVr) for questions and what you build
-- [X @nustackdev](https://x.com/nustackdev) for releases and demos
-- [Issues](https://github.com/nustackdev/nuspace/issues) for bugs and feature requests
+- [Discord](https://discord.gg/tCa8YE7XVr): ask questions, show your spaces
+- [X @nustackdev](https://x.com/nustackdev): releases and work in progress
+- [Issues](https://github.com/nustackdev/nuspace/issues): bugs and feature requests
 
-Building on nuspace? Add the badge to your README:
+Building on nuspace? Add the badge:
 
 [![nuspace](https://img.shields.io/badge/built%20with-nuspace-%237A4CE0)](https://github.com/nustackdev/nuspace)
 
