@@ -2,15 +2,16 @@
 
 ## Packages shipped from this repo
 
-- **nuspace** (the runtime, the `nuspace` command) — 0.8.0
-- **nuspace-ui** (the compiled web bundle) — 0.7.5
+- **nuspace** (the runtime, the `nuspace` command) — 0.8.1
+- **nuspace-ui** (the compiled web bundle) — 0.7.6
 
 Below is the changelog for **nuspace** - the full commit stream. Newest first.
 The `nuspace-ui` wheel is the same source tree's vite output and is not tracked
 separately here.
 
-## Unreleased
+## 0.8.1 - 2026-11-23
 
+- Release nuspace 0.8.1
 - Dragging a cell near the edge of a pane or the sidebar scrolls it
 - Web planes arrange cells in rows and strips, rearranged by drag and drop
 - Moving within a plane is split from transferring cells and planes elsewhere
