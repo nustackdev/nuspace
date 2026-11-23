@@ -13,7 +13,9 @@
 // builds the plane's one API (./api.ts) out of the concern folders, renders
 // the cells, and routes intents (./intents.ts):
 //
-//   structure/   create, the one remove, reorder, drag
+//   structure/   create, the one remove, reorder
+//   layout/      how the cells are drawn (rows, strips), and dragging
+//                them within the pane, to another pane or a sidebar row
 //   selection/   the cell-selection keyboard, box and range select
 //   focus/       focus requests, navigation, the cells' documents
 //   input/       the input lines and the `/` menu
@@ -23,14 +25,21 @@
 //
 // The core is kind-blind and works with no sugar at all: the input line
 // opens the menu, cells are created, selected, moved and deleted, and the
-// caret travels as it always has. A cell's markdown editor is found through
+// caret travels as it always has.
+//
+// The cells draw from the plane's layout (./layout/model.ts): a cell alone
+// on its row, or a strip of columns side by side at their shares (./layout/
+// Strip.tsx). A row has no id: React keys it, and a drag reads it, by its
+// first cell. Every row is the same `Cell` either way. The core reads the
+// cells in the layout's reading order, so the caret and the selection walk
+// what is drawn. A cell's markdown editor is found through
 // the kit by the cell's address and talks back only in intents, so
 // nothing here reads an editor's DOM or moves its caret from outside.
 
 import type { Path } from "@nustackdev/ui-core";
 import { markdownAt, pathKey } from "@nustackdev/ui-kit";
 import type * as React from "react";
-import { Fragment, useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
 	docBoxSelect,
 	docColumn,
@@ -54,11 +63,20 @@ import { SlashMenu } from "./input/SlashMenu";
 import { useGhosts } from "./input/useGhosts";
 import { useSlash } from "./input/useSlash";
 import { defaultSpecOf, type InputIntent, inputHint, type Router, router } from "./intents";
+import {
+	LAYOUT_PLANE,
+	LAYOUT_TAKES,
+	type Mark,
+	startDrag,
+	useDragged,
+	useDragMark,
+} from "./layout/drag";
+import { inReadingOrder, plainLayout, resized, rowKey } from "./layout/model";
+import { Strip } from "./layout/Strip";
 import type { Notify } from "./ops";
 import { useBoxSelect } from "./selection/useBoxSelect";
 import { useCellKeys } from "./selection/useCellKeys";
 import { type EditorPatch, type InputLine, patchEditor, readEditor, useEditorState } from "./state";
-import { useCellDrag } from "./structure/useCellDrag";
 import { useStructure } from "./structure/useStructure";
 import { sugars as SUGARS, type Sugar } from "./sugar";
 import { targetsFrom } from "./transfer";
@@ -101,8 +119,10 @@ export function Plane({
 	/** The sugar sets. The registry's (./sugar) unless a test hands its own. */
 	sugars?: readonly Sugar[];
 }) {
-	const cells = plane.cells;
 	const planeId = plane.plane_id;
+	const layout = useMemo(() => plane.layout ?? plainLayout(plane.cells), [plane]);
+	// The layout's reading order: what the caret, the selection and the keys walk.
+	const cells = useMemo(() => inReadingOrder(plane.cells, layout), [plane.cells, layout]);
 	// Per pane: two planes side by side never share a selection or a ghost.
 	const editor = useEditorState(panePath);
 	const viewerKey = pathKey(viewerPath);
@@ -128,6 +148,7 @@ export function Plane({
 	const model: PlaneModel = {
 		planeId,
 		cells,
+		layout,
 		editor,
 		patch,
 		read,
@@ -169,7 +190,16 @@ export function Plane({
 		moveSelected,
 		release,
 	});
-	const startDrag = useCellDrag(model, reorder);
+	// A cell's grip: a drag within the pane, to another, or to
+	// a sidebar row (./layout/drag.ts). A cell dragged is the one selected.
+	const dragCell = (e: React.PointerEvent, id: string, onClick?: () => void) =>
+		startDrag(
+			e,
+			{ kind: "cell", plane: planeId, cell: id },
+			{ viewerPath, notify, onClick, onStart: () => patch({ selected: [id], anchor: id }) },
+		);
+	const mark = useDragMark(planeId);
+	const dragged = useDragged();
 	const { box, startBox, startRange } = useBoxSelect(model);
 	const { slash, pickSlash, slashKey, moveSlash } = useSlash(model, cellSpecs, {
 		create,
@@ -301,8 +331,98 @@ export function Plane({
 	const selectedIds = editor.selected;
 	const multi = selectedIds.length > 1;
 	const editingIds = editor.editing;
-	const drag = editor.drag;
 	const lastId = cells.length ? cells[cells.length - 1].id : null;
+
+	// One cell's row, and the input line under it when one is open there.
+	const byId = new Map(cells.map((c) => [c.id, c]));
+	const renderCell = (id: string, alone?: boolean) => {
+		const cell = byId.get(id);
+		if (!cell) return null;
+		const selected = selectedIds.includes(cell.id);
+		const editing = editingIds.includes(cell.id);
+		const source = editor.requests.find((r) => r.cellId === cell.id && r.to === "source") ?? null;
+		// An input line is showing what this cell is waiting to take, or
+		// another cell still holds the markdown it will be handed (a
+		// split's tail), so the cell stays out of sight until it has it
+		// rather than flash empty. One that died shows its error instead,
+		// and one that will never take it is let go (the exits above).
+		// An editor drawn but not yet open for editing is still waiting:
+		// the cell shows in the render that readies its request, and the
+		// text lands in it before that render paints (./focus/useFocusRouting.ts),
+		// so the line hands over to the cell in place, in one frame. Until
+		// then the text stays in sight where it is, in the line or in the
+		// cell it is cut from, and Escape in the line lets it go.
+		const fed =
+			!cell.status.error &&
+			editor.requests.some((r) => r.cellId === cell.id && (r.line || r.markdown) && !r.ready);
+		return (
+			<>
+				<Cell
+					cell={cell}
+					uiPath={cellUiPath(viewerPath, cell.id)}
+					editable={editable}
+					hidden={fed || editor.ghost?.replace === cell.id || editor.leaving.includes(cell.id)}
+					selected={selected}
+					selectedStrong={selected && multi}
+					editing={editing}
+					focusReq={source}
+					dragging={dragged === cell.id}
+					drop={markOn(mark, cell.id)}
+					alone={alone}
+					setEl={(el) => setEl(cell.id, el)}
+					onPointerIn={() => {
+						if (editor.selected.length > 0) patch({ selected: [], anchor: null });
+					}}
+					onSetEditing={(on) => setEditing(cell.id, on)}
+					onDrag={(e, onClick) => dragCell(e, cell.id, onClick)}
+					onDelete={() => remove([cell.id])}
+					onRestart={() => notify("cell.restart", { cell_id: cell.id })}
+					onTransfer={() => openTransfer(cell.id)}
+					// A text selection dragged out of what a document draws
+					// becomes a cell selection. The grip has its own drag.
+					onPress={
+						editable
+							? (e) => {
+									const inUi = (e.target as Element).closest?.("[data-cell-ui]");
+									if (inUi && editorOf(cell.id)) startRange(e, cell.id);
+								}
+							: undefined
+					}
+					// Make room, do not make a cell. What goes here is
+					// whatever gets picked next.
+					onPlus={() => openInput(cell.id)}
+					onSelect={() => select([cell.id])}
+					// Drawn, and its markdown editor (if it has one) mounted in the same
+					// commit, before this hears it: none, open for editing or
+					// not, means none is coming. One mounted read-only waits.
+					onDrawn={() => {
+						if (markdownAt(cellUiPath(viewerPath, cell.id)) === null) {
+							abandon(cell.id);
+						}
+					}}
+					onFocusConsumed={() => {
+						if (source) drop((r) => r.id === source.id);
+					}}
+					onCommit={(src) => commitSource(cell.id, src)}
+					onKey={
+						editable
+							? (key) =>
+									key === ""
+										? notify("cell.remove_key", { cell_id: cell.id })
+										: notify("cell.key", { cell_id: cell.id, key })
+							: undefined
+					}
+					onExit={(dir, column) => step(cell.id, dir, column)}
+					onCaret={(where, nowhere) => caret(cell, where, nowhere)}
+				/>
+				{editable && editor.ghost?.after === cell.id ? (
+					<div className={docRow}>
+						<Ghost {...ghostProps(cell.id, true)} />
+					</div>
+				) : null}
+			</>
+		);
+	};
 
 	return (
 		// biome-ignore lint/a11y/noStaticElementInteractions: the plane is the keyboard owner in cell-selection mode
@@ -311,106 +431,38 @@ export function Plane({
 			tabIndex={-1}
 			onKeyDown={onCellKeys}
 			className={`${docColumn(width)} outline-none`}
+			{...{ [LAYOUT_PLANE]: planeId }}
+			{...(editable && !plane.system ? { [LAYOUT_TAKES]: "" } : {})}
 		>
 			{editable && editor.ghost?.after === null ? (
 				<div className={docRow}>
 					<Ghost {...ghostProps(null, true)} />
 				</div>
 			) : null}
-			{cells.map((cell, i) => {
-				const selected = selectedIds.includes(cell.id);
-				const editing = editingIds.includes(cell.id);
-				const source =
-					editor.requests.find((r) => r.cellId === cell.id && r.to === "source") ?? null;
-				// An input line is showing what this cell is waiting to take, or
-				// another cell still holds the markdown it will be handed (a
-				// split's tail), so the cell stays out of sight until it has it
-				// rather than flash empty. One that died shows its error instead,
-				// and one that will never take it is let go (the exits above).
-				// An editor drawn but not yet open for editing is still waiting:
-				// the cell shows in the render that readies its request, and the
-				// text lands in it before that render paints (./focus/useFocusRouting.ts),
-				// so the line hands over to the cell in place, in one frame. Until
-				// then the text stays in sight where it is, in the line or in the
-				// cell it is cut from, and Escape in the line lets it go.
-				const fed =
-					!cell.status.error &&
-					editor.requests.some((r) => r.cellId === cell.id && (r.line || r.markdown) && !r.ready);
-				return (
-					<Fragment key={cell.id}>
-						<Cell
-							cell={cell}
-							uiPath={cellUiPath(viewerPath, cell.id)}
-							editable={editable}
-							hidden={fed || editor.ghost?.replace === cell.id || editor.leaving.includes(cell.id)}
-							selected={selected}
-							selectedStrong={selected && multi}
-							editing={editing}
-							focusReq={source}
-							dragging={drag?.id === cell.id}
-							dropAbove={drag != null && drag.at === i}
-							setEl={(el) => setEl(cell.id, el)}
-							onPointerIn={() => {
-								if (editor.selected.length > 0) patch({ selected: [], anchor: null });
-							}}
-							onSetEditing={(on) => setEditing(cell.id, on)}
-							onDrag={(e, onClick) => startDrag(e, cell.id, onClick)}
-							onDelete={() => remove([cell.id])}
-							onRestart={() => notify("cell.restart", { cell_id: cell.id })}
-							onTransfer={() => openTransfer(cell.id)}
-							// A text selection dragged out of what a document draws
-							// becomes a cell selection. The grip has its own drag.
-							onPress={
-								editable
-									? (e) => {
-											const inUi = (e.target as Element).closest?.("[data-cell-ui]");
-											if (inUi && editorOf(cell.id)) startRange(e, cell.id);
-										}
-									: undefined
-							}
-							// Make room, do not make a cell. What goes here is
-							// whatever gets picked next.
-							onPlus={() => openInput(cell.id)}
-							onSelect={() => select([cell.id])}
-							// Drawn, and its markdown editor (if it has one) mounted in the same
-							// commit, before this hears it: none, open for editing or
-							// not, means none is coming. One mounted read-only waits.
-							onDrawn={() => {
-								if (markdownAt(cellUiPath(viewerPath, cell.id)) === null) {
-									abandon(cell.id);
-								}
-							}}
-							onFocusConsumed={() => {
-								if (source) drop((r) => r.id === source.id);
-							}}
-							onCommit={(src) => commitSource(cell.id, src)}
-							onKey={
-								editable
-									? (key) =>
-											key === ""
-												? notify("cell.remove_key", { cell_id: cell.id })
-												: notify("cell.key", { cell_id: cell.id, key })
-									: undefined
-							}
-							onExit={(dir, column) => step(cell.id, dir, column)}
-							onCaret={(where, nowhere) => caret(cell, where, nowhere)}
-						/>
-						{editable && editor.ghost?.after === cell.id ? (
-							<div className={docRow}>
-								<Ghost {...ghostProps(cell.id, true)} />
-							</div>
-						) : null}
-					</Fragment>
-				);
-			})}
-			{drag && drag.at >= cells.length ? (
+			{layout.map((row) =>
+				row.kind === "cell" ? (
+					<Fragment key={row.cell}>{renderCell(row.cell, true)}</Fragment>
+				) : (
+					<Strip
+						key={rowKey(row)}
+						row={row}
+						editable={editable}
+						dropAbove={mark?.kind === "strip" && mark.row === rowKey(row)}
+						renderCell={(id) => renderCell(id)}
+						onResize={(shares) => {
+							const rows = resized(layout, rowKey(row), shares);
+							if (rows) notify("layout.set", { rows });
+						}}
+					/>
+				),
+			)}
+			{mark?.kind === "end" ? (
 				<div className={docRow}>
 					<div className={`${docContentTrack} relative h-0`}>
 						<span className={docDropIndicator} />
 					</div>
 				</div>
 			) : null}
-
 			{/* The permanent ghost is how an empty Plane is written on without
 			    hunting for a control, so it goes with the rest of the authoring
 			    affordances. */}
@@ -463,4 +515,9 @@ export function Plane({
 			/>
 		</div>
 	);
+}
+
+/** The part of a drag's mark that is drawn on cell `id`, null for none. */
+function markOn(mark: Mark | null, id: string): Mark | null {
+	return mark && "cell" in mark && mark.cell === id ? mark : null;
 }

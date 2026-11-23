@@ -128,8 +128,25 @@ export function setDragChip(e: React.DragEvent): void {
 	const icon = from.querySelector("[data-drag-icon]");
 	const text = from.querySelector("[data-drag-title]")?.textContent ?? "";
 	if (!icon && !text) return;
+	const chip = dragChipOf(icon, text);
+	document.body.append(chip);
+	e.dataTransfer.setDragImage(chip, CHIP_GRAB, CHIP_GRAB);
+	setTimeout(() => chip.remove());
+}
+
+/** Where the pointer holds the chip, px from its top left, both ways. */
+export const CHIP_GRAB = 14;
+
+/**
+ * The chip itself (design `dragChip`): a copy of `icon` when given, shown
+ * even when it was carried hidden, then `text`. Not yet in the document.
+ * A native drag takes it as its image (`setDragChip`); a pointer drag
+ * carries it under the pointer itself (../plane/layout/drag.ts).
+ */
+export function dragChipOf(icon: Element | null, text: string): HTMLElement {
 	const chip = document.createElement("div");
 	chip.className = dragChip;
+	chip.dataset.dragChip = "";
 	if (icon) {
 		const shown = icon.cloneNode(true) as Element;
 		shown.removeAttribute("hidden");
@@ -139,9 +156,7 @@ export function setDragChip(e: React.DragEvent): void {
 	title.className = "truncate";
 	title.textContent = text;
 	chip.append(title);
-	document.body.append(chip);
-	e.dataTransfer.setDragImage(chip, 14, 14);
-	setTimeout(() => chip.remove());
+	return chip;
 }
 
 /** A pane header's drag handlers for the pane showing `plane` at `at`: it drags as its row would. */

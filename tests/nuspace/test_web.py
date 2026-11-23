@@ -468,13 +468,16 @@ async def test_tab_live(store):
 
         # Pane events run ops on the pane's own path: a cell from a spec, a
         # starter cell, a move, web flags.
-        session.notify(on("cell.create"), {"cell_id": "c2", "name": TEXT, "before": "c1"})
-        await _until(lambda: cells()[0]["id"] == "c2")
-        assert cells()[0]["source"] == TEXT_SRC and cells()[0]["classes"] == ["prose"]
-        session.notify(on("cell.create"), {"cell_id": "c3", "name": ""})
+        # A create carries the rows with the new cell in place.
+        top = [{"kind": "cell", "cell": "c2"}, {"kind": "cell", "cell": "c1"}]
+        session.notify(on("cell.create"), {"cell_id": "c2", "name": TEXT, "rows": top})
+        await _until(lambda: session.pane("p1", "set_cells")[-1]["layout"] == top)
+        made = next(c for c in cells() if c["id"] == "c2")
+        assert made["source"] == TEXT_SRC and made["classes"] == ["prose"]
+        session.notify(on("cell.create"), {"cell_id": "c3", "name": "", "rows": []})
         await _until(lambda: cells()[-1]["id"] == "c3")
         assert cells()[-1]["source"] == PROGRAM
-        session.notify(on("cell.move"), {"cell_id": "c3", "before": "c2"})
+        session.notify(on("cell.move"), {"cell_id": "c3", "before": "c1"})
         await _until(lambda: cells()[0]["id"] == "c3")
         session.notify(on("cell.update"), {"cell_id": "c1", "source": "y = 2"})
         await _until(lambda: any(c["source"] == "y = 2" for c in cells()))
@@ -767,7 +770,7 @@ async def test_a_cell_made_or_edited_in_a_finished_pane_restarts_it(store):
         session.notify((*PANE, "cell.update"), {"cell_id": "c1", "source": "x = 4"})
         await _until_store(store, pane.restart != "")
         first = await store.read(pane.restart)
-        session.notify((*PANE, "cell.create"), {"cell_id": "c2", "name": ""})
+        session.notify((*PANE, "cell.create"), {"cell_id": "c2", "name": "", "rows": []})
         await _until_store(store, pane.restart != first)
         assert session.toasts() == []
     finally:

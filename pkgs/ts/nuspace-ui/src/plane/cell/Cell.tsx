@@ -25,10 +25,19 @@
 // out of the editor.
 
 import type { Path } from "@nustackdev/ui-core";
+import { Badge } from "@nustackdev/ui-kit";
 import type * as React from "react";
 import { useState } from "react";
-import { docCell, docCellRow, docDropIndicator } from "../../design";
+import {
+	docCell,
+	docCellRow,
+	docDropBelow,
+	docDropIndicator,
+	docDropSide,
+	docDropSideHint,
+} from "../../design";
 import { Identity } from "../Identity";
+import { LAYOUT_ROW, type Mark } from "../layout/drag";
 import type { FocusReq } from "../state";
 import type { Cell as CellValue, ExitDir } from "../types";
 import { LeftGutter, RightGutter } from "./Gutter";
@@ -44,7 +53,8 @@ export function Cell({
 	editing,
 	focusReq,
 	dragging,
-	dropAbove,
+	drop,
+	alone,
 	setEl,
 	onPointerIn,
 	onSetEditing,
@@ -75,8 +85,10 @@ export function Cell({
 	editing: boolean;
 	focusReq: FocusReq | null;
 	dragging: boolean;
-	/** A drag would drop right above this cell. */
-	dropAbove: boolean;
+	/** Where a drag would drop on this cell: above, under, or beside it (../layout/drag.ts). */
+	drop?: Mark | null;
+	/** It is alone on its row: the row a drag reads, named by this cell. */
+	alone?: boolean;
 	setEl: (el: HTMLElement | null) => void;
 	/** A plain primary-button press landed inside the cell. */
 	onPointerIn: () => void;
@@ -113,6 +125,7 @@ export function Cell({
 		<div
 			ref={setEl}
 			data-cell={cell.id}
+			{...(alone ? { [LAYOUT_ROW]: cell.id } : {})}
 			hidden={hidden}
 			data-selected={selected && !selectedStrong ? "" : undefined}
 			className={docCellRow({ dragging })}
@@ -155,7 +168,14 @@ export function Cell({
 				onSetIdentity={setIdentity}
 			/>
 			<div className={docCell({ selected })} data-cell-body="">
-				{dropAbove ? <span className={`${docDropIndicator} top-0`} /> : null}
+				{drop?.kind === "above" ? <span className={`${docDropIndicator} top-0`} /> : null}
+				{drop?.kind === "below" ? <span className={docDropBelow} /> : null}
+				{drop?.kind === "left" || drop?.kind === "right" ? (
+					<>
+						<span className={docDropSide(drop.kind)} />
+						<Badge className={docDropSideHint(drop.kind)}>{drop.hint}</Badge>
+					</>
+				) : null}
 				{identity ? (
 					<Identity
 						kind="cell"

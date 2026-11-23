@@ -354,6 +354,57 @@ export const docDropIndicator = cn(
 	"rounded-full bg-doc-drop-line",
 );
 
+/** The drop line under a cell: the last of a strip's column, dropped under. */
+export const docDropBelow = cn(docDropIndicator, "top-full");
+
+/**
+ * The drop line down one side of a cell's box: a drop there puts the cell
+ * beside it, making a strip or a new column (../plane/layout/drag.ts).
+ * The same 2px accent line as between cells, stood upright.
+ */
+export function docDropSide(side: "left" | "right"): string {
+	return cn(
+		"pointer-events-none absolute inset-y-0 z-10 w-doc-rail -translate-x-1/2",
+		"rounded-full bg-doc-drop-line",
+		side === "left" ? "left-0" : "left-full",
+	);
+}
+
+/** What a side drop says (a kit `Badge`), in the cell's top corner on that side. */
+export function docDropSideHint(side: "left" | "right"): string {
+	return cn("pointer-events-none absolute top-1 z-10", side === "left" ? "left-2" : "right-2");
+}
+
+/* ============================== Layout ==================================== */
+//
+// A web plane draws its cells from its layout (../plane/layout/model.ts):
+// a cell alone is an ordinary row; a strip is one item of the column whose
+// columns sit side by side at their shares, each a stack of ordinary rows.
+// Every cell keeps its own three tracks, so a strip's cells keep their
+// gutters and controls; the strip spans the whole row, gutters included.
+
+/** A strip: one item of the plane's column. */
+export const docStrip = "relative w-full";
+
+/** The kit's resizable group a strip's columns sit in: as tall as its tallest column. */
+export const docStripGroup = "h-auto items-stretch overflow-visible";
+
+/** One column of a strip: its cells stacked, with the column's gap. */
+export const docStripColumn = "flex min-w-0 flex-col gap-doc-cell-gap overflow-visible";
+
+/**
+ * The kit's resize handle between two columns. No hairline at rest: the
+ * gutters already part the columns; the kit's accent line shows on hover
+ * and while it drags.
+ */
+export const docStripHandle = "bg-transparent";
+
+/** The drop line above a strip, across its content (between the outer gutters). */
+export const docStripDrop = cn(
+	"pointer-events-none absolute top-0 left-(--doc-gutter) right-(--doc-gutter) h-doc-rail",
+	"-translate-y-1/2 rounded-full bg-doc-drop-line",
+);
+
 /**
  * The box a press off the cells drags out to select them. The selection's
  * Afterglow wash and line, sharp, over everything in the pane and in the way of

@@ -26,7 +26,7 @@ import type * as React from "react";
 import type { TitleIntent } from "./intents";
 import type { Notify } from "./ops";
 import type { EditorPatch, EditorState } from "./state";
-import type { Cell } from "./types";
+import type { Cell, LayoutRow } from "./types";
 
 /** Where a new cell goes: after that cell, at the top when null. */
 export type Place = { after: string | null };
@@ -98,7 +98,7 @@ export interface PlaneApi {
 	 * back as they were. Either, once.
 	 */
 	withdraw(ids: string[]): Withdrawal;
-	/** The whole new order of the plane's cells. */
+	/** The whole new order of the plane's cells: its rows moved to match, a strip as one (./layout/model.ts). */
 	reorder(ids: string[]): void;
 
 	// -- focus and selection: local state only
@@ -129,7 +129,10 @@ export interface PlaneHandle {
  */
 export type PlaneModel = {
 	planeId: string;
+	/** In the layout's reading order (./layout/model.ts): what the keyboard walks. */
 	cells: Cell[];
+	/** How the cells are drawn. */
+	layout: LayoutRow[];
 	editor: EditorState;
 	/** Patch this pane's editor state. Stable per plane. */
 	patch: (p: EditorPatch) => void;

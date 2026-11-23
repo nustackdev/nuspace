@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Web planes arrange cells in rows and strips, rearranged by drag and drop
 - Moving within a plane is split from transferring cells and planes elsewhere
 - A cell can move to another plane from its menu
 - Picking from the slash menu on an empty text cell no longer fails

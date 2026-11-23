@@ -70,13 +70,6 @@ __all__ = [
 ]
 
 
-def _minted(id: nu.StrArg | None, size: int, write: Callable[[nu.Str], nu.Nu]) -> nu.Nu:
-    """``write(id)``, with a fresh id of ``size`` chars when ``id`` is None."""
-    if id is None:
-        return nu.let(NewId(size), lambda minted: write(nu.Str(minted)))
-    return write(nu.Str(id))
-
-
 def _desk_known(desk_id: nu.StrArg) -> nu.Nu:
     """The desk is there.
 
@@ -105,7 +98,14 @@ def _item_shaped(item: nu.DictArg) -> nu.Nu:
     return refuse(problem != "", Refused, problem)
 
 
-def _anchor_known(
+def minted(id: nu.StrArg | None, size: int, write: Callable[[nu.Str], nu.Nu]) -> nu.Nu:
+    """``write(id)``, with a fresh id of ``size`` chars when ``id`` is None."""
+    if id is None:
+        return nu.let(NewId(size), lambda fresh: write(nu.Str(fresh)))
+    return write(nu.Str(id))
+
+
+def anchor_known(
     rows: nu.Nu, before: nu.StrArg | None, after: nu.StrArg | None, what: str
 ) -> nu.Nu:
     """The anchor named, if any, is in ``rows``.
@@ -124,7 +124,7 @@ def _to_end(rows: nu.Nu, id: nu.StrArg) -> nu.Nu:
     return nu.IfDo(last != id, rows.move(id, after=last))
 
 
-def _move(rows: nu.Nu, id: nu.StrArg, before: nu.StrArg | None, after: nu.StrArg | None) -> nu.Nu:
+def moved(rows: nu.Nu, id: nu.StrArg, before: nu.StrArg | None, after: nu.StrArg | None) -> nu.Nu:
     """Move ``id`` within ordered ``rows``, before or after an anchor, or to the end."""
     if before is not None:
         return rows.move(id, before=before)
@@ -158,12 +158,12 @@ def create_desk(
         return (
             refuse(spelled != "", Refused, spelled)
             >> refuse(Web.desks.contains(desk_id), Exists, "desk ", desk_id, " exists")
-            >> _anchor_known(Web.desks, before, after, "desk")
+            >> anchor_known(Web.desks, before, after, "desk")
             >> place(Web.desks, desk_id, before=before, after=after, value=nu.Dict.of(name=name))
             >> desk.entries.set(nu.Dict.create())
         )
 
-    return _minted(id, 8, write)
+    return minted(id, 8, write)
 
 
 def rename_desk(desk_id: nu.StrArg, name: nu.StrArg) -> nu.Nu:
@@ -195,8 +195,8 @@ def move_desk(
     """
     return (
         _desk_known(desk_id)
-        >> _anchor_known(Web.desks, before, after, "desk")
-        >> _move(Web.desks, desk_id, before, after)
+        >> anchor_known(Web.desks, before, after, "desk")
+        >> moved(Web.desks, desk_id, before, after)
     )
 
 
@@ -261,11 +261,11 @@ def add_item(
             >> refuse(spelled != "", Refused, spelled)
             >> refuse(entries.contains(item_id), Exists, "item ", item_id, " exists")
             >> _item_shaped(item)
-            >> _anchor_known(entries, before, after, "item")
+            >> anchor_known(entries, before, after, "item")
             >> place(entries, item_id, before=before, after=after, value=item)
         )
 
-    return _minted(id, 6, write)
+    return minted(id, 6, write)
 
 
 def add_plane(
@@ -344,7 +344,7 @@ def move_item(
         _item_known(desk_id, item_id)
         >> _desk_known(target)
         >> itself
-        >> _anchor_known(there, before, after, "item")
+        >> anchor_known(there, before, after, "item")
     )
 
     def across(held: nu.Attr) -> nu.Nu:
@@ -354,9 +354,9 @@ def move_item(
             >> place(there, item_id, before=before, after=after, value=nu.Dict(held))
         )
 
-    within = _move(here, item_id, before, after)
-    moved = nu.IfDo(nu.Str(target) == desk_id, within, nu.let(here[item_id].extract(), across))
-    return checks >> moved
+    within = moved(here, item_id, before, after)
+    went = nu.IfDo(nu.Str(target) == desk_id, within, nu.let(here[item_id].extract(), across))
+    return checks >> went
 
 
 def reset_item(desk_id: nu.StrArg, item_id: nu.StrArg) -> nu.Nu:

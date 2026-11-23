@@ -16,12 +16,15 @@ The sdk, what a program calls, is the ops (:mod:`.ops`), flat here::
 - :func:`init`, :func:`driver`: web's init, once per space, and its whole
   life as one term, for an assembly to run (:mod:`.driver`). The driver
   imports the server only when called.
-- :mod:`.shapes`: :class:`Web` (web planes, recents, desks, roles) and :class:`Conn`
+- :mod:`.shapes`: :class:`Web` (web planes and their layouts, recents, desks, roles) and :class:`Conn`
   (browser tabs, their panes and sidebar folds); :mod:`.stores`: their
   init terms and Conn's reset.
 - :mod:`.ops`: the ops over them, all but the desks'.
 - :mod:`.desks`: the desks: their ops (``web.desks.add_plane``, ...), the
   browser node and feed, the desk pruner.
+- :mod:`.layout`: how a web plane arranges its cells, rows of cells and
+  strips, read and written whole (``web.layout.get``, ``web.layout.set``).
+- :mod:`.items`: desk item ids, placing, and the shape and share rules layouts share.
 - :mod:`.home`: Home and the home indexer; :mod:`.planes`: every plane
   the device ships with, made by :func:`init` (search and settings live there).
 - :mod:`.nav`: the driver running what the panes show.
@@ -32,7 +35,7 @@ The sdk, what a program calls, is the ops (:mod:`.ops`), flat here::
 Safe for a worker to import: nothing imported here pulls in a server.
 """
 
-from . import desks
+from . import desks, layout
 from .driver import driver, init
 from .here import pane
 from .interactions import url
@@ -78,6 +81,7 @@ __all__ = [
     "expand",
     "href",
     "init",
+    "layout",
     "link",
     "on_params",
     "open_tab",

@@ -7,7 +7,8 @@
 // others and any order is fine:
 //
 //   set_head    title, icon, key, system, editable, width. Clears an absent
-//   set_cells   the cells in order, statuses folded in from what is kept
+//   set_cells   the cells in order, statuses folded in from what is kept,
+//               and the layout drawing them (../plane/types.ts `coerceLayout`)
 //   set_status  each cell's state, kept by cell id and folded into the cells
 //   set_trail   the planes above, top first
 //   set_targets the answer to a `cell.targets` ask: where a cell can go
@@ -43,9 +44,11 @@ import {
 	coerceAbsent,
 	coerceCells,
 	coerceHead,
+	coerceLayout,
 	coerceMeta,
 	coerceStatus,
 	coerceTrail,
+	type LayoutRow,
 	type PaneHead,
 } from "../plane/types";
 import { coerceFollow, coerceScroll, type Follow, type ScrollCommand } from "./scroll";
@@ -80,6 +83,7 @@ export function applyPaneWrite(props: Props, payload: unknown): void {
 		const statuses = (props.statuses as Record<string, CellStatus> | undefined) ?? {};
 		const cells = withStatuses(coerceCells(p.cells), statuses);
 		props.cells = cells;
+		props.layout = coerceLayout(p.layout, cells);
 		const live = new Set(cells.map((c) => c.id));
 		props[LOCAL] = pruneEditor(localOf<EditorState>(props, EMPTY_EDITOR), live);
 		return;
@@ -178,6 +182,21 @@ export function usePaneHead(path: Path): PaneHead | null {
 /** The pane's cells with their statuses, in order. Null until they land. */
 export function usePaneCells(path: Path): Cell[] | null {
 	return usePaneProp<Cell[]>(path, "cells") ?? null;
+}
+
+/** How the pane's cells are drawn, as the last `set_cells` shipped it. Null until it lands. */
+export function usePaneLayout(path: Path): LayoutRow[] | null {
+	return usePaneProp<LayoutRow[]>(path, "layout") ?? null;
+}
+
+/** The layout on the pane at `path` as it is now, outside render: a drag reads its target's. */
+export function paneLayout(path: Path): LayoutRow[] | null {
+	return (nodeAt(path)?.props.layout as LayoutRow[] | undefined) ?? null;
+}
+
+/** The last answer to `cell.targets` on the pane at `path`, outside render. Null while none landed. */
+export function paneTargets(path: Path): Target[] | null {
+	return (nodeAt(path)?.props.targets as Target[] | undefined) ?? null;
 }
 
 const NO_TRAIL: Crumb[] = [];
