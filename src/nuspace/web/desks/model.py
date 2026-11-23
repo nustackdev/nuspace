@@ -6,9 +6,8 @@
 - Reads: :data:`DeskView`, :data:`DesksView` (a stored desk as it is read,
   ``{name, items}``), :data:`DeskPlanes` (every plane on the desks).
 - Placing: :data:`OrderMoves` (the moves putting items in an order),
-  :data:`Items` (a desk's items list as entries), :data:`NewId`. The ids,
-  the share rules and the placing are shared with the plane layouts
-  (:mod:`nuspace.web.items`), and re-exported here.
+  :data:`Items` (a desk's items list as entries), :data:`NewId`. The share
+  checks and rules are the strips' (:mod:`nuspace.web.strips`).
 - Changing items: :data:`SavedEntries`, :data:`ResetItem`,
   :data:`PrunedEntries`.
 
@@ -17,31 +16,19 @@ Safe for a worker to import: nothing here pulls in a server.
 
 from __future__ import annotations
 
+import math
 import re
+import secrets
 from collections.abc import Mapping
 
 import nu
-from nuspace.web.items import (
-    ITEM_ID,
-    ItemIdProblem,
-    NewId,
-    OrderMoves,
-    fraction,
-    ids,
-    item_id_problem,
-    keys_problem,
-    listed,
-    mint_id,
-    order_moves,
-    px,
-    rescaled,
-    shares_problem,
-)
+from nuspace.web.strips import fraction, ids, keys_problem, listed, rescaled, shares_problem
 
 
 __all__ = [
     "DESK_ID",
     "FAVORITES",
+    "ID_CHARS",
     "ITEM_ID",
     "KIND_PLANE",
     "KIND_STRIP",
@@ -61,6 +48,7 @@ __all__ = [
     "desk_planes",
     "desk_view",
     "desks_view",
+    "item_id_problem",
     "item_problem",
     "items_of",
     "mint_id",
@@ -85,6 +73,12 @@ __all__ = [
 #: A desk id: 8 chars ``[a-z0-9]``, minted by the browser.
 DESK_ID = re.compile(r"[a-z0-9]{8}")
 
+#: An item id: 6 chars ``[a-z0-9]``, unique within its desk.
+ITEM_ID = re.compile(r"[a-z0-9]{6}")
+
+#: The id chars, what :func:`mint_id` draws from.
+ID_CHARS = "abcdefghijklmnopqrstuvwxyz0123456789"
+
 #: The two kinds of item.
 KIND_PLANE = "plane"
 KIND_STRIP = "strip"
@@ -101,6 +95,59 @@ def _desk_id_problem(desk_id: object) -> str:
 
 #: ``DeskIdProblem(id)``: why a desk id is spelled wrong, ``""`` when it is right.
 DeskIdProblem = nu.host(_desk_id_problem, name="DeskIdProblem")
+
+
+def item_id_problem(item_id: object) -> str:
+    """Why an item id is spelled wrong, ``""`` when it is right. Plain python."""
+    if isinstance(item_id, str) and ITEM_ID.fullmatch(item_id):
+        return ""
+    return f"item id {item_id!r} is not 6 chars of a-z and 0-9"
+
+
+#: ``ItemIdProblem(id)``: why an item id is spelled wrong, ``""`` when it is right.
+ItemIdProblem = nu.host(item_id_problem, name="ItemIdProblem")
+
+
+def mint_id(size: int) -> str:
+    """A fresh id of ``size`` chars of a-z and 0-9, as the browser mints desk and item ids."""
+    return "".join(secrets.choice(ID_CHARS) for _ in range(size))
+
+
+#: ``NewId(size)``: :func:`mint_id`, 8 for a desk, 6 for an item. Free checks are the caller's.
+NewId = nu.host(mint_id, name="NewId")
+
+
+def order_moves(current: object, order: object) -> list[list[str]]:
+    """The moves putting ``current`` (item ids, in order) into ``order``: ``[[id, "before" | "after", anchor]]``. Plain python.
+
+    The ids of ``order`` that are in ``current`` come first, in that order;
+    the rest keep their order after them. An id ``order`` names that is not
+    there, or names twice, is skipped. Only the moves that change something
+    are given, each one an ``OrderedDictRef.move``.
+    """
+    now = list(dict.fromkeys(listed(current)))
+    wanted = [i for i in dict.fromkeys(listed(order)) if i in now]
+    moves: list[list[str]] = []
+    for at, item_id in enumerate(wanted):
+        if now.index(item_id) == at:
+            continue
+        now.remove(item_id)
+        if at == 0:
+            moves.append([item_id, "before", now[0]])
+        else:
+            moves.append([item_id, "after", wanted[at - 1]])
+        now.insert(at, item_id)
+    return moves
+
+
+#: ``OrderMoves(current, order)``: :func:`order_moves`.
+OrderMoves = nu.host(order_moves, name="OrderMoves")
+
+
+def _px(value: object) -> bool:
+    """A positive finite number, never a bool."""
+    number = isinstance(value, (int, float)) and not isinstance(value, bool)
+    return number and math.isfinite(value) and value > 0  # type: ignore[operator]
 
 
 #: What a column may hold beside its panes: its width, px.
@@ -151,7 +198,7 @@ def _column_problem(column: object, at: str) -> str:
     if said:
         return said
     panes = column["panes"]  # type: ignore[index]
-    if "width" in column and not px(column["width"]):  # type: ignore[operator, index]
+    if "width" in column and not _px(column["width"]):  # type: ignore[operator, index]
         return f"{at} width is not a positive number of px"
     if not isinstance(panes, list) or not panes:
         return f"{at} has no panes"

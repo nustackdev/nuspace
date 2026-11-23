@@ -16,7 +16,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 
 import nu
-from nuspace.web.items import fraction, ids, keys_problem, listed, rescaled, shares_problem
+from nuspace.web.strips import fraction, ids, keys_problem, listed, rescaled, shares_problem
 
 
 __all__ = [

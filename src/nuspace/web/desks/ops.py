@@ -24,6 +24,8 @@ Safe for a worker to import: it pulls in no server.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import nu
 from nu.lang import NULL
 from nuspace.errors import Exists, Refused
@@ -31,7 +33,6 @@ from nuspace.shapes.space import Space
 from nuspace.utils.checks import refuse, row_known
 from nuspace.utils.placement import anchor_of, place
 
-from ..items import anchor_known, minted, moved
 from ..shapes import Web
 from .model import (
     KIND_PLANE,
@@ -39,11 +40,16 @@ from .model import (
     DeskView,
     ItemIdProblem,
     ItemProblem,
+    NewId,
     OrderMoves,
     ResetItem,
     SavedEntries,
     WriteProblem,
 )
+
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 
 __all__ = [
@@ -90,6 +96,41 @@ def _item_shaped(item: nu.DictArg) -> nu.Nu:
     """
     problem = nu.Str(ItemProblem(item))
     return refuse(problem != "", Refused, problem)
+
+
+def minted(id: nu.StrArg | None, size: int, write: Callable[[nu.Str], nu.Nu]) -> nu.Nu:
+    """``write(id)``, with a fresh id of ``size`` chars when ``id`` is None."""
+    if id is None:
+        return nu.let(NewId(size), lambda fresh: write(nu.Str(fresh)))
+    return write(nu.Str(id))
+
+
+def anchor_known(
+    rows: nu.Nu, before: nu.StrArg | None, after: nu.StrArg | None, what: str
+) -> nu.Nu:
+    """The anchor named, if any, is in ``rows``.
+
+    Raises:
+        Missing: No row with the anchor's id.
+        TypeError: Both ``before`` and ``after``, at build.
+    """
+    anchor = anchor_of(before, after)
+    return nu.Noop() if anchor is None else row_known(rows, anchor, what)  # type: ignore[arg-type]
+
+
+def _to_end(rows: nu.Nu, id: nu.StrArg) -> nu.Nu:
+    """Move ``id`` to the end of ordered ``rows``, nothing when it is last already."""
+    last = nu.Str(rows.last())
+    return nu.IfDo(last != id, rows.move(id, after=last))
+
+
+def moved(rows: nu.Nu, id: nu.StrArg, before: nu.StrArg | None, after: nu.StrArg | None) -> nu.Nu:
+    """Move ``id`` within ordered ``rows``, before or after an anchor, or to the end."""
+    if before is not None:
+        return rows.move(id, before=before)
+    if after is not None:
+        return rows.move(id, after=after)
+    return _to_end(rows, id)
 
 
 # --- Desks ------------------------------------------------------------------------------
