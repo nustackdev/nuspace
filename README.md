@@ -118,7 +118,7 @@ https://github.com/user-attachments/assets/edbda441-2f65-4f46-8965-dfdd414becba
 The data, the logic, the UI, even the space itself.
 
 - **Any data.** A note, a table, a song, a billion-entry log, a genome.
-- **Any logic.** Summarize your inbox, dim the lights at sunset, render a video.
+- **Any logic.** Branches and loops, reactions, parallel runs and races.
 - **Any UI.** A cell draws itself. Text, tables, charts, forms.
 - **It's live.** Change one cell and everything that depends on it follows. UI too.
 - **Work scales.** The same cell runs in a worker, across processes or on a cluster.
