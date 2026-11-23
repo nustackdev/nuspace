@@ -19,11 +19,12 @@
 #     Workflow name: publish-nuspace-ui.yml
 #     Environment name: (leave blank)
 #
-# Release flow:
-#   1. Bump `version` in both `pkgs/ts/nuspace-ui/pyproject.toml`
-#      and `pkgs/ts/nuspace-ui/package.json` (keep them equal).
-#   2. Commit and push to main.
-#   3. `git tag nuspace-ui@X.Y.Z && git push origin nuspace-ui@X.Y.Z`.
+# Versioning: nuspace-ui only ships at a nuspace version. A release that
+# changes the UI bumps both to the same X.Y.Z; a nuspace only release leaves
+# the UI where it was. tests/nuspace/test_versions.py holds the files to it.
+#
+# Release flow: `.venv/bin/python scripts/release.py X.Y.Z` bumps both when
+# the UI changed; tag this one first (see publish-nuspace.yml).
 name: Publish nuspace-ui to PyPI
 
 on:
@@ -64,7 +65,7 @@ jobs:
 
       # Both files carry the version; a tag that matches one and not the other
       # would ship a wheel whose contents disagree with its metadata.
-      - name: verify tag matches pyproject.toml and package.json
+      - name: verify tag matches pyproject.toml, package.json and nuspace
         if: startsWith(github.ref, 'refs/tags/nuspace-ui@')
         working-directory: ${{ env.UI_DIR }}
         run: |
@@ -77,6 +78,11 @@ jobs:
           fi
           if [ "$TAG_VERSION" != "$NPM_VERSION" ]; then
             echo "tag nuspace-ui@$TAG_VERSION does not match package.json version $NPM_VERSION"
+            exit 1
+          fi
+          NUSPACE_VERSION=$(python -c "import tomllib; print(tomllib.load(open('../../../pyproject.toml','rb'))['project']['version'])")
+          if [ "$TAG_VERSION" != "$NUSPACE_VERSION" ]; then
+            echo "nuspace-ui ships only at a nuspace version: tag $TAG_VERSION, nuspace is $NUSPACE_VERSION"
             exit 1
           fi
 

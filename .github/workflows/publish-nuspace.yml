@@ -17,8 +17,10 @@
 #   .                  -> nuspace     (the runtime + the `nuspace` command)
 #   pkgs/ts/nuspace-ui -> nuspace-ui  (the compiled vite bundle)
 #
-# They version independently. `nuspace` hard-depends on `nuspace-ui>=X.Y.Z`, so a python release can require a newer bundle, but a
-# bundle-only fix ships on its own tag without republishing this wheel.
+# They version in step: nuspace-ui only ships at a nuspace version. A release
+# that changes the UI bumps both to the same X.Y.Z, and `nuspace` pins
+# `nuspace-ui>=X.Y.Z`; a nuspace only release leaves the UI and the pin alone.
+# A UI fix is therefore always a nuspace release too.
 #
 # The wheel deliberately ships `src/nuspace` alone, `pkgs/**` stays out (see
 # the hatch config in pyproject.toml). The compiled assets live in the
@@ -29,12 +31,11 @@
 # Ordering on a coordinated release: push the `nuspace-ui@` tag first, so the
 # bundle is on the index before the wheel that requires it.
 #
-# Release flow:
-#   1. Bump `version` in `pyproject.toml`.
-#   2. Rename the CHANGELOG's `Unreleased` heading to the new version + date,
-#      and update the package list at the top.
-#   3. Commit and push to main.
-#   4. `git tag nuspace@X.Y.Z && git push origin nuspace@X.Y.Z`.
+# Release flow: `.venv/bin/python scripts/release.py X.Y.Z` bumps nuspace,
+# bumps nuspace-ui to the same version when anything under pkgs/ts/nuspace-ui
+# changed since its last tag, and moves the CHANGELOG's `Unreleased` section.
+# Then commit, push, tag `nuspace-ui@X.Y.Z` (if bumped) and wait for it to
+# publish, then tag `nuspace@X.Y.Z`.
 name: Publish nuspace to PyPI
 
 on:
@@ -78,6 +79,25 @@ jobs:
           PKG_VERSION=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
           if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
             echo "tag nuspace@$TAG_VERSION does not match pyproject.toml version $PKG_VERSION"
+            exit 1
+          fi
+          UI_VERSION=$(python -c "import tomllib; print(tomllib.load(open('pkgs/ts/nuspace-ui/pyproject.toml','rb'))['project']['version'])")
+          if ! grep -q "\"nuspace-ui>=$UI_VERSION\"" pyproject.toml; then
+            echo "nuspace must pin nuspace-ui>=$UI_VERSION, the UI version in the repo"
+            exit 1
+          fi
+
+      # A UI change ships with the nuspace release that carries it: the
+      # nuspace-ui tag at this version sits on this commit, so nothing under the
+      # UI differs from the last nuspace-ui tag. Anything else is a lagging UI.
+      - name: verify the UI has no unreleased changes
+        if: startsWith(github.ref, 'refs/tags/nuspace@')
+        run: |
+          LAST_UI=$(git tag -l 'nuspace-ui@*' --sort=-v:refname | head -1)
+          CHANGED=$(git diff --name-only "$LAST_UI" HEAD -- pkgs/ts/nuspace-ui)
+          if [ -n "$CHANGED" ]; then
+            echo "the UI changed since $LAST_UI; release nuspace-ui at this version first:"
+            echo "$CHANGED"
             exit 1
           fi
 
