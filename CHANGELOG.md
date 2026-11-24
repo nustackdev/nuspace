@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- README demo videos show the nuspace 0.8 reshoot
 - README names the logic primitives instead of example scenarios
 - README says what the space composes into, with uniform badges and links
 - nuspace-ui releases only at a nuspace version, checked before publishing
