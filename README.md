@@ -84,16 +84,6 @@ https://github.com/user-attachments/assets/f4d9eae4-1c46-4944-b5df-cc330d5eb1a3
 </details>
 
 <details>
-<summary><b>Agents</b> · A team of agents, run from one space.</summary>
-
-Brief, steer and judge Claude Code sessions.<br/>
-<sub>Made of: agent sessions · briefs · judge · desk</sub>
-
-https://github.com/user-attachments/assets/a3ec5bff-7ca7-41c3-91d0-6f5f927a0108
-
-</details>
-
-<details>
 <summary><b>Memes</b> · A blockchain, read live.</summary>
 
 Every launch and trade, streamed into pages.<br/>

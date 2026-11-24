@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- README gallery drops the agents demo, matching the website
 - README demo videos show the nuspace 0.8 reshoot
 - README names the logic primitives instead of example scenarios
 - README says what the space composes into, with uniform badges and links
