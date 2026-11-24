@@ -39,7 +39,7 @@ Spaces built with nuspace. Each one is a set of small programs talking to each o
 A release breaks, the incident pages, a rule rolls it back.<br/>
 <sub>Made of: storefront · deploy job · log · incident · rollback rule</sub>
 
-https://github.com/user-attachments/assets/236dbecd-f734-4aa3-965d-2cbc3bea27e7
+https://github.com/user-attachments/assets/af777956-59ad-4158-8b47-8c26300b3498
 
 </details>
 
@@ -49,7 +49,7 @@ https://github.com/user-attachments/assets/236dbecd-f734-4aa3-965d-2cbc3bea27e7
 Orders stream in, every chart and metric follows.<br/>
 <sub>Made of: orders stream · events table · export job · metric · price button</sub>
 
-https://github.com/user-attachments/assets/0101726c-da30-4a36-9323-9f41a14a6be1
+https://github.com/user-attachments/assets/69b8ca6e-0c22-400f-8bb3-44d681d3c0b5
 
 </details>
 
@@ -59,7 +59,7 @@ https://github.com/user-attachments/assets/0101726c-da30-4a36-9323-9f41a14a6be1
 Tokens, mocks and checks that follow every change.<br/>
 <sub>Made of: tokens · proposal · release job · color checker</sub>
 
-https://github.com/user-attachments/assets/9d8cb9ca-2e41-4a12-8caa-412099eec02c
+https://github.com/user-attachments/assets/b759347c-a44b-4074-bc51-0a4dcd050492
 
 </details>
 
@@ -69,7 +69,7 @@ https://github.com/user-attachments/assets/9d8cb9ca-2e41-4a12-8caa-412099eec02c
 Launch runs, watch them learn, stop them by rule.<br/>
 <sub>Made of: run launcher · metrics · model · compare page · stop rule</sub>
 
-https://github.com/user-attachments/assets/7d6bb201-2ac4-462e-9080-c40067c3c6fc
+https://github.com/user-attachments/assets/653a34e7-4dd5-419a-83e3-3b4c83c5d11b
 
 </details>
 
@@ -79,7 +79,7 @@ https://github.com/user-attachments/assets/7d6bb201-2ac4-462e-9080-c40067c3c6fc
 A paper flips a claim everywhere, an eval reruns.<br/>
 <sub>Made of: probe · papers · claims · eval run</sub>
 
-https://github.com/user-attachments/assets/dc573d2e-ab0a-45e6-87ce-8d69a1d9d8f4
+https://github.com/user-attachments/assets/f4d9eae4-1c46-4944-b5df-cc330d5eb1a3
 
 </details>
 
@@ -99,7 +99,7 @@ https://github.com/user-attachments/assets/a3ec5bff-7ca7-41c3-91d0-6f5f927a0108
 Every launch and trade, streamed into pages.<br/>
 <sub>Made of: solana stream · coin pages · ranking · radar</sub>
 
-https://github.com/user-attachments/assets/8979c5b9-6c8c-4675-81e5-3f25c5ec7cdd
+https://github.com/user-attachments/assets/f128ab39-3453-4124-beb7-994ea8f42f91
 
 </details>
 
@@ -109,7 +109,7 @@ https://github.com/user-attachments/assets/8979c5b9-6c8c-4675-81e5-3f25c5ec7cdd
 Films, people and timelines, all linked, all live.<br/>
 <sub>Made of: film base · log import job · tonight page · ratings</sub>
 
-https://github.com/user-attachments/assets/edbda441-2f65-4f46-8965-dfdd414becba
+https://github.com/user-attachments/assets/af5b4f75-eef9-4bfa-8fb1-42bceeac87ec
 
 </details>
 
