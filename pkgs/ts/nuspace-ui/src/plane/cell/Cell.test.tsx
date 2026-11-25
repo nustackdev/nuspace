@@ -1,9 +1,11 @@
 // A program cell that draws nothing, rendered in jsdom: one quiet "No view"
 // line on an editable plane and a read-only one alike, and an error stands
 // in for it. The gutter's source toggle carries the cell's status. A cell that draws but whose view has
-// not arrived waits quietly, then shows a skeleton, until its run is over.
+// not arrived waits quietly, then shows a skeleton; one that drew and cleared
+// its view shows the chip.
 
-import { TooltipProvider } from "@nustackdev/ui-kit";
+import { OPS } from "@nustackdev/ui-core";
+import { TooltipProvider, tree } from "@nustackdev/ui-kit";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -218,6 +220,18 @@ describe("a cell whose view is on the way", () => {
 		expect(loading()).toBe(false);
 		expect(body()).toContain("boom");
 		expect(body()).not.toContain("No view");
+	});
+
+	it("shows the chip, not the skeleton, once a drawn view is cleared", () => {
+		const out = ["viewer", "cells", "c1", "out"];
+		render(true, "running", "", true);
+		act(() => tree.getState().dispatch({ op: OPS.write, ref: out, payload: { value: "hi" } }));
+		expect(body()).not.toContain("No view");
+		act(() => tree.getState().dispatch({ op: OPS.remove, ref: out, payload: null }));
+		expect(body()).toBe("No view");
+		wait(VIEW_LOADER_DELAY_MS);
+		expect(loading()).toBe(false);
+		expect(body()).toBe("No view");
 	});
 
 	it.each(["idle", "stopped"] as const)("keeps waiting on a %s run", (state) => {

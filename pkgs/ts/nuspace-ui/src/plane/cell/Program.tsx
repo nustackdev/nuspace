@@ -16,7 +16,8 @@
 // (`draws`). One that does not gets the chip at once. One that does (or an
 // older cell that never said) waits: nothing for `VIEW_LOADER_DELAY_MS`, so a
 // quick view never flashes a placeholder, then a skeleton until the view
-// lands. An error stands in for either.
+// lands. The wait happens once: a cell that drew and then cleared its view
+// gets the chip, never the skeleton again. An error stands in for either.
 //
 // The chrome still consumes the fixed status contract:
 //
@@ -105,8 +106,11 @@ export function ProgramCell(props: ProgramProps) {
 	const hasUi = useCellHasUi(uiPath);
 	const state: CellState = status?.state ?? "idle";
 	const token = CELL_STATUS[state];
+	// Once a view has shown, an empty cell cleared it: no waiting again.
+	const drewOnce = useRef(false);
+	if (hasUi) drewOnce.current = true;
 	// No view mounted, nothing else in its place, and one may still come.
-	const waiting = !hasUi && !editing && !status?.error && draws !== false;
+	const waiting = !hasUi && !drewOnce.current && !editing && !status?.error && draws !== false;
 	const loader = useAfter(waiting, VIEW_LOADER_DELAY_MS);
 
 	// Once, when the view arrives: the callback changes every render.
