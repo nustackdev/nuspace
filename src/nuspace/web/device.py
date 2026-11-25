@@ -28,6 +28,10 @@ for a plane new to the list before it asks.
 included, runs under one guard: its error's type and message show on the
 tab (:meth:`~nuspace.web.utils.Arms.event`).
 
+**Undo.** A delete toast's Undo comes back on the tab's toaster
+(:func:`undo_feed`): the plane or the cells restored, in one commit. A
+restored cell lands last on its plane, not where it was.
+
 **The server** (:func:`server`) is what web's driver
 (:func:`~nuspace.web.driver.driver`) runs beside nav. Every place it serves
 at is handed to it; it picks none.
@@ -74,7 +78,7 @@ from .session import served_sessions
 from .shapes import Conn, Web
 from .shell import Shell
 from .sidebar import registered_entries, sidebar_feed
-from .utils import Arms, cell_ui, field_dict, field_ids
+from .utils import Arms, cell_ui, field_dict, field_ids, field_str
 from .viewer import on_open, slash_entries, viewer_feed
 
 
@@ -97,6 +101,7 @@ __all__ = [
     "pane_arm",
     "server",
     "space_loaded",
+    "undo_feed",
 ]
 
 
@@ -197,6 +202,29 @@ def pane_arm(viewer: Ref, sid: nu.StrArg, arms: Arms) -> nu.Nu:
     return arms.event("open", on_open(viewer), route)
 
 
+def undo_feed(toasts: Ref) -> nu.Nu:
+    """The Undos of the browser's delete toasts: a plane, or cells, restored. Never ends.
+
+    The cells come back in one commit, in the order sent: if one cannot
+    (its plane went since, its key was taken) none does, and the tab is
+    told why.
+    """
+    arms = Arms("undo", toasts)
+
+    def cells(ev: nu.Attr) -> nu.Nu:
+        ids = field_ids(ev, "cell_ids")
+        return atomic(nu.ForEachDo(ids, lambda c: nuspace.cell.restore(nu.Str(c))))
+
+    return nu.ParallelAsync(
+        arms.event(
+            "plane.restore",
+            toasts.on_restore_plane(),
+            lambda ev: atomic(nuspace.plane.restore(field_str(ev, "plane_id"))),
+        ),
+        arms.event("cell.restore", toasts.on_restore_cells(), cells),
+    )
+
+
 def connection(sid: nu.StrArg, *, registry: Registry | None = None) -> nu.Nu:
     """What one browser tab runs, with its session bound. Never ends.
 
@@ -214,6 +242,7 @@ def connection(sid: nu.StrArg, *, registry: Registry | None = None) -> nu.Nu:
         sidebar_feed(Shell.sidebar, sid, planes, Shell.toast),
         viewer_feed(Shell.viewer, sid, cells, Shell.toast),
         desks_feed(Shell.desks, Shell.toast),
+        undo_feed(Shell.toast),
     )
     gone = atomic(nu.IfDo(Conn.connections.contains(sid), web.close_tab(sid)))
     return nu.TryCatch(

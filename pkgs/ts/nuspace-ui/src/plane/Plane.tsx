@@ -50,6 +50,7 @@ import {
 	type PlaneWidth,
 } from "../design";
 import { clearPaneTargets, usePaneTargets } from "../pane/state";
+import { deletedCells } from "../refs/toast";
 import type { FocusRequest, PlaneApi, PlaneHandle, PlaneModel } from "./api";
 import { cellUiPath } from "./cell/address";
 import { Cell } from "./cell/Cell";
@@ -375,7 +376,10 @@ export function Plane({
 					}}
 					onSetEditing={(on) => setEditing(cell.id, on)}
 					onDrag={(e, onClick) => dragCell(e, cell.id, onClick)}
-					onDelete={() => remove([cell.id])}
+					onDelete={() => {
+						remove([cell.id]);
+						deletedCells([cell.id]);
+					}}
 					onRestart={() => notify("cell.restart", { cell_id: cell.id })}
 					onTransfer={() => openTransfer(cell.id)}
 					// A text selection dragged out of what a document draws

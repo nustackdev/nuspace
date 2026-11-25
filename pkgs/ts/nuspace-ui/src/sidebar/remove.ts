@@ -1,13 +1,14 @@
 // Deleting a Plane from a sidebar row. A pane's `...` has its own delete,
 // on the pane's own node, off the pane's own head (../pane/Pane.tsx).
 //
-// The server refuses a system Plane's delete, so the row offers none.
+// The server refuses a system Plane's delete, so the row offers none. No
+// confirm: the delete toasts an Undo instead (../refs/toast.ts).
 //
 // Nothing here moves the tab off what went: the tree holds only open
 // branches, so it cannot say what was under the Plane. Each open pane on a
 // Plane that went is told it is missing and leaves by itself.
 
-import { confirm } from "../core/confirm";
+import { deletedPlane } from "../refs/toast";
 import type { Notify } from "./ops";
 import type { PlaneTree } from "./types";
 
@@ -17,13 +18,8 @@ export function canDelete(tree: PlaneTree, id: string): boolean {
 	return !!row && !row.system;
 }
 
-/** Ask, then delete `id` and everything under it. */
-export async function deletePlane(notify: Notify, id: string, title: string): Promise<void> {
-	const yes = await confirm({
-		title: "Delete plane",
-		description: `Delete "${title}" and everything under it?`,
-		action: "Delete",
-	});
-	if (!yes) return;
+/** Delete `id` and everything under it, and toast an Undo. */
+export function deletePlane(notify: Notify, id: string, title: string): void {
 	notify("plane.delete", { plane_id: id });
+	deletedPlane(id, title);
 }

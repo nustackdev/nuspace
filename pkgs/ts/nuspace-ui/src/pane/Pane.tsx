@@ -41,7 +41,6 @@
 import type { Path } from "@nustackdev/ui-core";
 import { Button, pathKey, ScrollArea } from "@nustackdev/ui-kit";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { confirm } from "../core/confirm";
 import { closeItem, closePane, focusPane, leavePlanes } from "../core/router";
 import { notifyOp } from "../core/wire";
 import {
@@ -61,6 +60,7 @@ import { Identity } from "../plane/Identity";
 import type { Notify, Ops } from "../plane/ops";
 import { Plane } from "../plane/Plane";
 import type { AbsentReason, ActivePlane, CellSpec, LayoutRow, PaneHead } from "../plane/types";
+import { deletedPlane } from "../refs/toast";
 import { takeFresh } from "../sidebar/add";
 import { GoHome, NOT_FOUND_TEXT, NotFoundBody } from "./NotFound";
 import { PaneHeader } from "./PaneHeader";
@@ -104,16 +104,13 @@ export function paneTitle(
 }
 
 /**
- * Ask, then delete the pane's plane and everything under it. Nothing else:
- * the panes on what went leave as they turn missing.
+ * Delete the pane's plane and everything under it, and toast an Undo. No
+ * confirm: the Undo is the way back. The panes on what went leave as they
+ * turn missing.
  */
-export async function deleteFromPane(notify: Notify, title: string): Promise<void> {
-	const yes = await confirm({
-		title: "Delete plane",
-		description: `Delete "${title}" and everything under it?`,
-		action: "Delete",
-	});
-	if (yes) notify("plane.delete", {});
+export function deleteFromPane(notify: Notify, planeId: string, title: string): void {
+	notify("plane.delete", {});
+	deletedPlane(planeId, title);
 }
 
 /** What closes the pane showing `planeId` at `at`: undefined on a solo plane. */
@@ -204,7 +201,7 @@ export function Pane({
 	const close = closeOf(at, planeId);
 	const title = paneTitle(planeId, head, absent);
 	const onDelete =
-		head && !head.system ? () => void deleteFromPane(notify, head.title || planeId) : undefined;
+		head && !head.system ? () => deleteFromPane(notify, planeId, head.title || planeId) : undefined;
 	const width = plane?.meta.width ?? "page";
 	// The plane fills this in: the title reports its intents to it, and a
 	// press anywhere in the pane can start a box selection over its cells.

@@ -778,6 +778,47 @@ async def test_a_cell_made_or_edited_in_a_finished_pane_restarts_it(store):
         await asyncio.gather(task, return_exceptions=True)
 
 
+async def test_undo_on_the_toaster_restores_a_plane_and_cells(store):
+    """The Undo of a delete toast rides the toaster: plane or cells back, a refusal toasts."""
+    from nuspace.web.device import connection
+
+    await plane(store, "p1", "One")
+    await plane(store, "p2", "Two")
+    await store.run(
+        nuspace.atomic(
+            nuspace.cell.add("p1", "s", id="a")
+            >> nuspace.cell.add("p1", "s", id="b")
+            >> nuspace.cell.add("p1", "s", id="c")
+        )
+    )
+    session = FakeSession()
+    ctx = store.ctx.bind(Session, session)
+    task = asyncio.create_task(nu.arun(connection(nu.Str("s1"), registry=REGISTRY), ctx))
+    undo = ("toast", "ops")
+    try:
+        await _until(lambda: session.writes("set_tree"), BOOT_TIMEOUT)
+        session.notify(("sidebar", "ops", "plane.delete"), {"plane_id": "p2"})
+        await _until(lambda: "p2" not in _tree(session))
+        session.notify((*undo, "plane.restore"), {"plane_id": "p2"})
+        await _until(lambda: "p2" in _tree(session))
+        assert await store.read(nuspace.plane.exists("p2")) is True
+
+        await store.run(nuspace.atomic(nuspace.cell.remove("a") >> nuspace.cell.remove("b")))
+        session.notify((*undo, "cell.restore"), {"cell_ids": ["b", "a"]})
+        cells = Space.planes["p1"].cells
+        await _until_store(store, nu.list(cells.keys()) == ["c", "b", "a"])
+        assert await store.read(nu.list(cells.keys())) == ["c", "b", "a"]
+        assert session.toasts() == []
+
+        # Not removed: refused, and told.
+        session.notify((*undo, "cell.restore"), {"cell_ids": ["c"]})
+        await _until(lambda: session.toasts())
+        assert session.toasts()[-1]["type"] == "Refused"
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+
+
 async def test_a_failed_event_toasts_its_type_and_message(store):
     from nuspace.web.device import connection
 

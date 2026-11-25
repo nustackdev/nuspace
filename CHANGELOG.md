@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Deleting cells or a plane toasts an Undo; plane delete no longer asks first
 - Worker apps pass field reads and watched events through to the browser
 - Space meta follows nu's form rework, so refs and values can share its methods
 - README gallery drops the agents demo, matching the website

@@ -9,6 +9,7 @@
 
 import type * as React from "react";
 import { useCallback } from "react";
+import { deletedCells } from "../../refs/toast";
 import type { PlaneModel } from "../api";
 import { tabStop } from "../focus/focusable";
 import type { Cell } from "../types";
@@ -103,6 +104,7 @@ export function useCellKeys(
 			if (e.key === "Backspace" || e.key === "Delete") {
 				e.preventDefault();
 				remove(sel);
+				deletedCells(sel);
 				return;
 			}
 			if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "a") {

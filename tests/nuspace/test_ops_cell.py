@@ -405,3 +405,56 @@ async def test_add_and_remove_stamp_the_plane_and_no_bystander(plane):
     await unstamped(store, planes["p"], cells["a"])
     await do(store, nuspace.cell.remove("a"))
     assert await stamped(store, planes["p"], planes["q"]) == [True, False]
+
+
+async def test_restore_takes_back_the_remove_and_lands_last(plane):
+    store = plane
+    await do(
+        store,
+        nuspace.cell.add("p", "s", id="a", key="ka")
+        >> nuspace.cell.add("p", "s", id="b")
+        >> nuspace.cell.add("p", "s", id="c"),
+    )
+    await do(store, nuspace.cell.remove("a"))
+    at = await version(store)
+    born = await store.read(cells["a"].version)
+    await do(store, nuspace.cell.restore("a"))
+    assert await listed(store) == ["b", "c", "a"]
+    assert await store.read(cells["a"].removed_at.exists()) is False
+    assert await store.read(cells["a"].removed_by.exists()) is False
+    assert await store.read(Space.indexes.cell_keys.extract()) == {"ka": "a"}
+    assert await store.read(nu.list(Space.indexes.removed.keys())) == []
+    assert await store.read(nuspace.cell.exists("a")) is True
+    # Its own version moves, so reload runs it again in a live plane run.
+    assert await store.read(cells["a"].version) == born + 1
+    assert await version(store) == at + 1
+
+
+async def test_restore_refuses_what_is_not_removed_by_itself(plane):
+    store = plane
+    await do(store, nuspace.cell.add("p", "s", id="a") >> nuspace.cell.add("q", "s", id="b"))
+    with pytest.raises(Missing):
+        await do(store, nuspace.cell.restore("nope"))
+    with pytest.raises(Refused, match="not removed"):
+        await do(store, nuspace.cell.restore("a"))
+    # Went with its plane: the plane is what comes back.
+    await do(store, nuspace.plane.remove("q"))
+    with pytest.raises(Refused, match="went with q"):
+        await do(store, nuspace.cell.restore("b"))
+
+
+async def test_restore_refuses_a_removed_plane_or_a_taken_key(plane):
+    store = plane
+    await do(
+        store,
+        nuspace.cell.add("p", "s", id="a", key="k") >> nuspace.cell.add("q", "s", id="b"),
+    )
+    await do(store, nuspace.cell.remove("a"))
+    await do(store, nuspace.cell.add("p", "s", id="other", key="k"))
+    with pytest.raises(Exists, match="taken"):
+        await do(store, nuspace.cell.restore("a"))
+    assert await store.read(cells["a"].removed_by) == "a"
+    assert await listed(store) == ["other"]
+    await do(store, nuspace.cell.remove("b") >> nuspace.plane.remove("q"))
+    with pytest.raises(Removed):
+        await do(store, nuspace.cell.restore("b"))

@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { confirm } from "../core/confirm";
+import { deletedPlane } from "../refs/toast";
 import { canDelete, deletePlane } from "./remove";
 import { coerceTree, ROOT_ID } from "./types";
 
-vi.mock("../core/confirm", () => ({ confirm: vi.fn() }));
+vi.mock("../refs/toast", () => ({ deletedPlane: vi.fn() }));
 
 const tree = coerceTree([
 	{ id: ROOT_ID, kind: "space", title: "", parent: ROOT_ID, children: ["home", "a"] },
@@ -23,22 +23,12 @@ describe("deleting a plane", () => {
 		expect(canDelete(tree, "a")).toBe(true);
 	});
 
-	it("sends one op and leaves the tab where it is: its panes leave on their own", async () => {
+	it("sends one op at once, toasts an Undo, and leaves the tab where it is", () => {
 		window.history.replaceState(null, "", "/p/a1");
-		vi.mocked(confirm).mockResolvedValue(true);
 		const notify = vi.fn();
-		await deletePlane(notify, "a", "A");
-		expect(confirm).toHaveBeenCalledWith(expect.objectContaining({ action: "Delete" }));
-		expect(notify).toHaveBeenCalledWith("plane.delete", { plane_id: "a" });
+		deletePlane(notify, "a", "A");
+		expect(notify).toHaveBeenCalledExactlyOnceWith("plane.delete", { plane_id: "a" });
+		expect(deletedPlane).toHaveBeenCalledWith("a", "A");
 		expect(window.location.pathname).toBe("/p/a1");
-	});
-
-	it("does nothing when not confirmed", async () => {
-		window.history.replaceState({}, "", "/p/a");
-		vi.mocked(confirm).mockResolvedValue(false);
-		const notify = vi.fn();
-		await deletePlane(notify, "a", "A");
-		expect(notify).not.toHaveBeenCalled();
-		expect(window.location.pathname).toBe("/p/a");
 	});
 });

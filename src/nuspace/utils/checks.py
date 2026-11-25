@@ -38,6 +38,7 @@ __all__ = [
     "live",
     "not_ended",
     "refuse",
+    "removed_alone",
     "row_known",
     "text",
     "unkey",
@@ -78,6 +79,30 @@ def live(rows: nustd.kv.DictRef, id: nu.StrArg, what: str) -> nu.Nu:
     """
     return row_known(rows, id, what) >> refuse(
         rows[id].removed_at.exists(), Removed, what, " ", id, " is removed"
+    )
+
+
+def removed_alone(rows: nustd.kv.DictRef, id: nu.StrArg, what: str) -> nu.Nu:
+    """``id`` has a row in ``rows``, removed by itself: what a restore takes. Three point reads.
+
+    Raises:
+        Missing: No row with that id.
+        Refused: It is not removed, or it went with a plane removed above it.
+    """
+    row = rows[id]
+    return (
+        row_known(rows, id, what)
+        >> refuse(row.removed_at.exists().not_(), Refused, what, " ", id, " is not removed")
+        >> refuse(
+            row.removed_by.fallback("") != id,
+            Refused,
+            what,
+            " ",
+            id,
+            " went with ",
+            row.removed_by.fallback(""),
+            ": restore that one",
+        )
     )
 
 

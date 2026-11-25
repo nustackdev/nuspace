@@ -12,7 +12,7 @@
 // First match in write order wins; there is one of each.
 
 import type { Path, TreeNode } from "@nustackdev/ui-core";
-import { pathKey, useTree } from "@nustackdev/ui-kit";
+import { pathKey, tree, useTree } from "@nustackdev/ui-kit";
 import { useMemo } from "react";
 
 function findOfType(node: TreeNode, type: string, here: Path): Path | null {
@@ -23,6 +23,11 @@ function findOfType(node: TreeNode, type: string, here: Path): Path | null {
 		if (deeper) return deeper;
 	}
 	return null;
+}
+
+/** Where the one node of `type` lives now, or null. Not a hook: for a handler. */
+export function typePath(type: string): Path | null {
+	return findOfType(tree.getState().root, type, []);
 }
 
 /**

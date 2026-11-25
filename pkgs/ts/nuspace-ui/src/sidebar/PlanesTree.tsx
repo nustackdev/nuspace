@@ -233,7 +233,7 @@ function PlaneRow({
 	const { focusKey, tabKey } = useSidebarNav();
 	const { key, id, depth, title, hasKids, open, pos, size } = row;
 
-	const remove = useCallback(() => void deletePlane(notify, id, title), [id, notify, title]);
+	const remove = useCallback(() => deletePlane(notify, id, title), [id, notify, title]);
 	const openRow = useCallback(() => {
 		if (hasKids) reveal(key);
 		openPlane(id);

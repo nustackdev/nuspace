@@ -430,3 +430,56 @@ async def test_add_and_remove_stamp_the_parent_and_no_bystander(store):
     await unstamped(store, ROOT, "a")
     await do(store, nuspace.plane.remove("x"))
     assert await stamped(store, ROOT, "a", "b") == [False, True, False]
+
+
+async def test_restore_brings_back_the_subtree_and_lands_last(store):
+    await do(
+        store,
+        nuspace.plane.add("a", key="top")
+        >> nuspace.plane.add("b", parent="a", key="mid")
+        >> nuspace.plane.add("z")
+        >> nuspace.cell.add("a", "src", id="ca", key="cell-a")
+        >> nuspace.cell.add("b", "src", id="cb"),
+    )
+    await do(store, nuspace.cell.remove("cb"))
+    await do(store, nuspace.plane.remove("a"))
+    await do(store, nuspace.plane.restore("a"))
+    assert await children(store) == ["z", "a"]
+    for p in ("a", "b"):
+        assert await store.read(nuspace.plane.exists(p)) is True
+    assert await store.read(nuspace.cell.exists("ca")) is True
+    assert await store.read(keys.extract()) == {"top": "a", "mid": "b"}
+    assert await store.read(Space.indexes.cell_keys.extract()) == {"cell-a": "ca"}
+    # Removed by itself before: it stays removed.
+    assert await store.read(Space.cells["cb"].removed_by) == "cb"
+    assert await store.read(nu.list(Space.indexes.removed.keys())) == ["cb"]
+
+
+async def test_restore_refuses_and_writes_nothing(store):
+    await do(
+        store,
+        nuspace.plane.add("a")
+        >> nuspace.plane.add("b", parent="a")
+        >> nuspace.plane.add("c", parent="b")
+        >> nuspace.cell.add("c", "src", id="cc", key="k"),
+    )
+    with pytest.raises(Missing):
+        await do(store, nuspace.plane.restore("nope"))
+    with pytest.raises(Refused, match="not removed"):
+        await do(store, nuspace.plane.restore("a"))
+    await do(store, nuspace.plane.remove("b"))
+    await do(store, nuspace.plane.remove("a"))
+    # Under a removed parent: the parent comes back first.
+    with pytest.raises(Removed):
+        await do(store, nuspace.plane.restore("b"))
+    await do(store, nuspace.plane.restore("a"))
+    # Went with b: b is what comes back.
+    with pytest.raises(Refused, match="went with b"):
+        await do(store, nuspace.plane.restore("c"))
+    # A key taken below: refused whole.
+    await do(store, nuspace.cell.add("a", "src", id="other", key="k"))
+    with pytest.raises(Exists, match="taken"):
+        await do(store, nuspace.plane.restore("b"))
+    assert await store.read(planes["b"].removed_by) == "b"
+    assert await store.read(planes["c"].removed_by) == "b"
+    assert await store.read(nu.list(planes["a"].children.keys())) == []

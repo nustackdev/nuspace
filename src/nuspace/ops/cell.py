@@ -26,6 +26,7 @@ from nuspace.utils.checks import (
     key_spelled,
     live,
     refuse,
+    removed_alone,
     text,
     unkey,
     when,
@@ -41,6 +42,7 @@ __all__ = [
     "remove",
     "remove_key",
     "rename",
+    "restore",
     "set_key",
     "set_meta",
     "set_prog",
@@ -71,6 +73,13 @@ def _removed() -> nu.Nu:
     from nuspace._telemetry.usage import track
 
     return track("cell_removed")
+
+
+def _restored() -> nu.Nu:
+    """Tell telemetry a cell came back."""
+    from nuspace._telemetry.usage import track
+
+    return track("cell_restored")
 
 
 def _edited(id: nu.StrArg) -> nu.Nu:
@@ -215,6 +224,39 @@ def remove(id: nu.StrArg) -> nu.Nu:
         >> Space.indexes.removed.set_item(id, True)
         >> _touched(row.plane)
         >> _removed()
+    )
+
+
+def restore(id: nu.StrArg) -> nu.Nu:
+    """Bring back a cell removed by itself: listed last on its plane again, its key indexed.
+
+    Takes back what :func:`remove` wrote: the stamps erased, the id out of
+    ``Space.indexes.removed``, its key back in ``cell_keys``. Lands at the end
+    of its plane's ``cells``, not where it was. ``Cell.version`` +1, so reload
+    gives it a run in its plane's live runs (its last one was interrupted).
+    The plane's ``modified_at`` stamped, ``Plane.version`` +1. Told to
+    telemetry. Cost: O(1), about 10 keys.
+
+    Raises:
+        Missing: No cell with that id.
+        Refused: It is not removed, or it went with its plane (restore the plane).
+        Removed: Its plane is removed.
+        Exists: Another cell took its key since.
+    """
+    row = Space.cells[id]
+    key = row.key.fallback("")
+    return (
+        removed_alone(Space.cells, id, "cell")
+        >> live(Space.planes, row.plane, "plane")
+        >> key_free(Space.indexes.cell_keys, key, id, "cell")
+        >> when(key, Space.indexes.cell_keys.set_item(key, id))
+        >> place(Space.planes[row.plane].cells, id)
+        >> row.removed_at.erase()
+        >> row.removed_by.erase()
+        >> Space.indexes.removed.del_item(id)
+        >> row.version.set(row.version.fallback(0) + 1)
+        >> _touched(row.plane)
+        >> _restored()
     )
 
 

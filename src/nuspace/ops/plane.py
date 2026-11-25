@@ -15,9 +15,10 @@ Programs write the module in front: ``nuspace.plane.add(...)``.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import nu
+import nustd.kv
 import nustd.time
 from nuspace.errors import Exists, Missing, Refused
 from nuspace.shapes.plane import RESERVED, ROOT, UNTITLED
@@ -30,11 +31,17 @@ from nuspace.utils.checks import (
     key_spelled,
     live,
     refuse,
+    removed_alone,
     text,
     unkey,
     when,
 )
 from nuspace.utils.tree import no_cycle, subtree
+
+
+if TYPE_CHECKING:
+    from nuspace.shapes.cell import Cell
+    from nuspace.shapes.plane import Plane
 
 
 __all__ = [
@@ -47,6 +54,7 @@ __all__ = [
     "remove",
     "remove_key",
     "rename",
+    "restore",
     "set_backend",
     "set_icon",
     "set_key",
@@ -287,6 +295,67 @@ def remove(id: nu.StrArg) -> nu.Nu:
         >> _touched(row.parent)
         >> nu.let(nustd.time.time(), stamped)
         >> keys.removed.set_item(id, True)
+    )
+
+
+def restore(id: nu.StrArg) -> nu.Nu:
+    """Bring back a plane removed by itself, and everything that went with it.
+
+    Takes back what :func:`remove` wrote: the plane goes last in its
+    parent's ``children`` (the parent's ``modified_at`` stamped), and every
+    plane and cell below it stamped by this removal gets its stamps erased
+    and its key indexed again. Rows removed before by themselves stay
+    removed (they are not listed below it). The id leaves
+    ``Space.indexes.removed``. Runs are not touched: the kernel stopped the
+    old ones, an open pane starts a new one. Each plane and cell brought
+    back is told to telemetry.
+
+    Cost: O(subtree), a few keys per plane and cell below.
+
+    Raises:
+        Missing: No plane with that id.
+        Refused: It is not removed, or it went with a plane above it (restore that one).
+        Removed: Its parent is removed.
+        Exists: Another row took one of the subtree's keys since. Nothing is written.
+    """
+    rows = Space.planes
+    row = rows[id]
+    keys = Space.indexes
+
+    def mine(at: Plane | Cell) -> nu.Bool:
+        return at.removed_by.fallback("") == id
+
+    def free(index: nustd.kv.DictRef, at: Plane | Cell, own: nu.Str, what: str) -> nu.Nu:
+        return nu.IfDo(mine(at), key_free(index, at.key.fallback(""), own, what))
+
+    def back(index: nustd.kv.DictRef, at: Plane | Cell, own: nu.Str, event: str) -> nu.Nu:
+        key = at.key.fallback("")
+        return nu.IfDo(
+            mine(at),
+            when(key, index.set_item(key, own))
+            >> at.removed_at.erase()
+            >> at.removed_by.erase()
+            >> _told(event),
+        )
+
+    checked = subtree(
+        id,
+        lambda p: free(keys.plane_keys, rows[p], p, "plane"),
+        lambda c: free(keys.cell_keys, Space.cells[c], c, "cell"),
+    )
+    restored = subtree(
+        id,
+        lambda p: back(keys.plane_keys, rows[p], p, "plane_restored"),
+        lambda c: back(keys.cell_keys, Space.cells[c], c, "cell_restored"),
+    )
+    return (
+        removed_alone(rows, id, "plane")
+        >> live(rows, row.parent, "plane")
+        >> checked
+        >> place(rows[row.parent].children, id)
+        >> _touched(row.parent)
+        >> restored
+        >> keys.removed.del_item(id)
     )
 
 

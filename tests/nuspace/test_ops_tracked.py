@@ -91,3 +91,20 @@ def test_every_told_event_may_be_sent():
         for suffix in ("", "_spec", "_system"):
             assert f"{what}_created{suffix}" in _telemetry.EVENTS
         assert f"{what}_removed" in _telemetry.EVENTS
+
+
+async def test_restoring_tells_each_row_it_brings_back(store, told):
+    await do(
+        store,
+        nuspace.plane.add("a")
+        >> nuspace.plane.add("b", parent="a")
+        >> nuspace.cell.add("a", "src", id="c1")
+        >> nuspace.cell.add("b", "src", id="c2"),
+    )
+    await do(store, nuspace.cell.remove("c1") >> nuspace.plane.remove("a"))
+    told.clear()
+    await do(store, nuspace.plane.restore("a"))
+    assert sorted(told) == ["cell_restored"] + ["plane_restored"] * 2
+    told.clear()
+    await do(store, nuspace.cell.restore("c1"))
+    assert told == ["cell_restored"]
