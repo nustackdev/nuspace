@@ -15,26 +15,38 @@ from typing import TYPE_CHECKING, Any
 import pytest
 
 from nuspace.web.session import PipeSession, SessionPipe, _Pipe
-from nustd.ui.core import OP_NOTIFY, Frame, WsSession
+from nustd.ui.core import OP_NOTIFY, OP_UNWATCH, OP_WATCH, Frame, WsSession
 
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
+    from nustd.ui.core.session import WsSubscription
+
 
 class FakeSession(WsSession):
-    """A session with no socket: frames sent are kept, reads answer from a dict."""
+    """A session with no socket: frames sent and watches are kept, reads answer from a dict."""
 
     def __init__(self, reads: dict[tuple[str, ...], Any] | None = None) -> None:
         super().__init__(ws=None)
         self.frames: list[Frame] = []
+        self.watches: list[Frame] = []
+        self.wire: list[Frame] = []
         self.reads = reads or {}
+        self.subscribed: list[tuple[tuple[str, ...], str | None, WsSubscription]] = []
 
-    async def send(self, frame: Frame) -> None:
-        self.frames.append(frame)
+    async def _write(self, frame: Frame) -> None:
+        # Every outbound frame ends here; watches are kept apart from what the worker sent.
+        self.wire.append(frame)
+        (self.watches if frame.op in (OP_WATCH, OP_UNWATCH) else self.frames).append(frame)
 
-    async def aread(self, path: tuple[str, ...]) -> Any:
-        return self.reads[path]
+    async def aread(self, path: tuple[str, ...], field: str | None = None) -> Any:
+        return self.reads[path] if field is None else self.reads[(*path, f"@{field}")]
+
+    def subscribe(self, path: tuple[str, ...], event: str | None = None) -> WsSubscription:
+        sub = super().subscribe(path, event)
+        self.subscribed.append((path, event, sub))
+        return sub
 
     def notify(self, path: tuple[str, ...], payload: dict) -> None:
         self._dispatch(Frame(OP_NOTIFY, ref=path, payload=payload))
@@ -53,7 +65,7 @@ class FakeBook:
 @pytest.fixture
 async def host():
     """A ``SessionPipe`` on this loop, over a book with one live tab ``s1``."""
-    tab = FakeSession(reads={("form", "name"): "Ada"})
+    tab = FakeSession(reads={("form", "name"): "Ada", ("tree", "@expanded"): ["a"]})
     pipe = SessionPipe("127.0.0.1:0")
     pipe._web = FakeBook(s1=tab)
     pipe._server = await asyncio.start_server(pipe._serve, "127.0.0.1", 0)
@@ -138,6 +150,129 @@ async def test_read_round_trips_and_a_missing_tab_raises(host):
     assert "gone" in error
 
 
+async def test_a_field_read_names_its_field(host):
+    _, _, address = host
+
+    async def work() -> tuple[Any, Any]:
+        pipe = await _Pipe.acquire(address)
+        try:
+            session = PipeSession(pipe, "s1")
+            return await session.aread(("form", "name")), await session.aread(("tree",), "expanded")
+        finally:
+            await pipe.release()
+
+    assert await in_worker(work) == ("Ada", ["a"])
+
+
+async def test_the_host_subscribes_with_the_event_only_once_bound(host):
+    """An unbound subscription costs the host nothing; the first bind brings its event."""
+    _, tab, address = host
+
+    async def work() -> list:
+        pipe = await _Pipe.acquire(address)
+        try:
+            session = PipeSession(pipe, "s1")
+            sub = session.subscribe(("slider",), "input")
+            await pipe.request("open", "s1")
+            before = list(tab.subscribed)
+            sub.bind(lambda payload: None)
+            sub.bind(lambda payload: None)
+            session.subscribe(("tabs",)).bind(lambda payload: None)
+            await pipe.request("open", "s1")
+            return before
+        finally:
+            await pipe.release()
+
+    before = await in_worker(work)
+    assert before == []
+    assert [(path, event) for path, event, _ in tab.subscribed] == [
+        (("slider",), "input"),
+        (("tabs",), None),
+    ]
+    # The worker going away unwatches both after; two binds still made one watch.
+    await _until(lambda: len(tab.watches) == 4)
+    assert [(f.op, f.ref, f.payload) for f in tab.watches[:2]] == [
+        (OP_WATCH, ("slider",), {"event": "input"}),
+        (OP_WATCH, ("tabs",), {"event": "*"}),
+    ]
+
+
+async def test_a_watch_reaches_the_browser_before_what_the_worker_sends_next(host):
+    """An upload read binds on its answer's event, then sends: the browser must hear the watch first."""
+    _, tab, address = host
+
+    async def work() -> None:
+        pipe = await _Pipe.acquire(address)
+        try:
+            session = PipeSession(pipe, "s1")
+            session.subscribe(("upload",), "slice").bind(lambda payload: None)
+            await session.send(Frame("write", ref=("upload",), payload={"read": 0}))
+            await pipe.request("open", "s1")
+        finally:
+            await pipe.release()
+
+    await in_worker(work)
+    assert [f.op for f in tab.wire][:2] == [OP_WATCH, "write"]
+
+
+async def test_the_last_unbind_releases_and_a_rebind_comes_back(host):
+    _, tab, address = host
+    seen: list[object] = []
+    phases: dict[str, threading.Event] = {
+        k: threading.Event() for k in ("bound", "released", "rebound")
+    }
+    go: dict[str, threading.Event] = {k: threading.Event() for k in ("release", "rebind", "done")}
+
+    async def wait(name: str) -> None:
+        while not go[name].is_set():
+            await asyncio.sleep(0.01)
+
+    async def work() -> None:
+        pipe = await _Pipe.acquire(address)
+        try:
+            sub = PipeSession(pipe, "s1").subscribe(("x",), "change")
+            first, second = seen.append, (lambda payload: None)
+            sub.bind(first)
+            sub.bind(second)
+            await pipe.request("open", "s1")
+            phases["bound"].set()
+            await wait("release")
+            sub.unbind(first)
+            sub.unbind(second)
+            await pipe.request("open", "s1")
+            phases["released"].set()
+            await wait("rebind")
+            sub.bind(first)
+            await pipe.request("open", "s1")
+            phases["rebound"].set()
+            await wait("done")
+        finally:
+            await pipe.release()
+
+    worker = asyncio.ensure_future(in_worker(work))
+    await _until(phases["bound"].is_set)
+    ((_, _, held),) = tab.subscribed
+    assert tab._subs.get(("x",)) == {held}
+    go["release"].set()
+    await _until(phases["released"].is_set)
+    assert held._closed
+    assert not tab._subs.get(("x",))
+    await _until(lambda: len(tab.watches) == 2)
+    assert [(f.op, f.ref, f.payload) for f in tab.watches] == [
+        (OP_WATCH, ("x",), {"event": "change"}),
+        (OP_UNWATCH, ("x",), {"event": "change"}),
+    ]
+    go["rebind"].set()
+    await _until(phases["rebound"].is_set)
+    assert [(path, event) for path, event, _ in tab.subscribed] == [(("x",), "change")] * 2
+    await _until(lambda: len(tab.watches) == 3)
+    assert tab.watches[-1].op == OP_WATCH
+    tab.notify(("x",), {"event": "change", "value": 1})
+    await _until(lambda: seen == [{"event": "change", "value": 1}])
+    go["done"].set()
+    await worker
+
+
 async def test_notify_reaches_the_worker_and_its_redraw_lands(host):
     """The hang: a browser edit wakes the worker, which draws in answer.
 
@@ -194,6 +329,8 @@ async def test_a_closed_subscription_stops_forwarding(host):
     await in_worker(work)
     assert closed.is_set()
     assert not tab._subs.get(("x",))
+    ((_, _, held),) = tab.subscribed
+    assert held._closed
 
 
 async def test_a_worker_going_away_drops_its_subscriptions(host):

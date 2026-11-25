@@ -60,10 +60,10 @@ class _Recording:
     async def send(self, frame: object) -> None:
         self.frames.append(frame)
 
-    async def aread(self, path: tuple[str, ...]) -> object:
+    async def aread(self, path: tuple[str, ...], field: str | None = None) -> object:
         return self.values.get(tuple(path), nu.lang.NULL)
 
-    def subscribe(self, path: tuple[str, ...]) -> _Notify:
+    def subscribe(self, path: tuple[str, ...], event: str | None = None) -> _Notify:
         return self.notifies.setdefault(tuple(path), _Notify())
 
     def last(self, ref: tuple) -> object:

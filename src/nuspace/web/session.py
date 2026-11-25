@@ -25,10 +25,19 @@ messages, the worker owns its subscriptions, and a notify is one message.
 Messages, each a msgpack array whose first item is the kind:
 
 - worker -> host: ``open(rid, sid)``, ``send(sid, frame)``,
-  ``read(rid, sid, path)``, ``sub(id, sid, path)``, ``unsub(id)``
+  ``read(rid, sid, path, field)``, ``sub(id, sid, path, event)``, ``unsub(id)``
 - host -> worker: ``reply(rid, ok, value)``, ``notify(id, payload)``
 
-``frame`` is a frame already encoded the way the browser reads it.
+``frame`` is a frame already encoded the way the browser reads it. ``field``
+and ``event`` are a string or nil, as the session ABC takes them.
+
+**Watches.** The browser only sends the events someone listens to, and the
+host's own session counts the listeners and tells the browser. The pipe adds
+no counting of its own: a worker subscription goes to the host as ``sub``
+when its first callback binds and as ``unsub`` when its last one unbinds or it
+closes, and the host binds and closes a real subscription for it with the same
+``event``. So the host session counts worker listeners exactly as it counts
+its own, and a subscription nobody binds costs the browser nothing.
 """
 
 from __future__ import annotations
@@ -199,14 +208,20 @@ class _Pipe:
         finally:
             self._replies.pop(rid, None)
 
-    def subscribe(self, sid: str, path: tuple[str, ...]) -> PipeSubscription:
-        """Ask the host for ``path``'s notifies on ``sid``."""
-        sub = PipeSubscription(self, next(self._ids))
-        self._subs[sub.id] = sub
-        self.post([_SUB, sub.id, sid, list(path)])
-        return sub
+    def subscribe(self, sid: str, path: tuple[str, ...], event: str | None) -> PipeSubscription:
+        """A subscription to ``path``'s notifies on ``sid``, asked of the host on first bind."""
+        if self._closed:
+            msg = "session pipe closed"
+            raise ConnectionError(msg)
+        return PipeSubscription(self, next(self._ids), sid, path, event)
 
-    def unsubscribe(self, sub: PipeSubscription) -> None:
+    def attach(self, sub: PipeSubscription) -> None:
+        """Ask the host to forward ``sub``'s notifies."""
+        self.post([_SUB, sub.id, sub.sid, list(sub.path), sub.event])
+        self._subs[sub.id] = sub
+
+    def detach(self, sub: PipeSubscription) -> None:
+        """Stop the host forwarding ``sub``'s notifies (idempotent)."""
         if self._subs.pop(sub.id, None) is None:
             return
         with suppress(ConnectionError):
@@ -240,26 +255,38 @@ class _Pipe:
 class PipeSubscription:
     """A subscription living in the worker; the host only forwards its notifies.
 
+    The host hears of it while it has a callback: the first ``bind`` sends
+    ``sub`` with its event, the last ``unbind`` or a ``close`` sends ``unsub``.
     Callbacks are held in a list and matched by identity, and one that raises
     is dropped, the same contract as the host's own subscription.
     """
 
-    def __init__(self, pipe: _Pipe, sub_id: int) -> None:
+    def __init__(
+        self, pipe: _Pipe, sub_id: int, sid: str, path: tuple[str, ...], event: str | None
+    ) -> None:
         self.id = sub_id
+        self.sid = sid
+        self.path = path
+        self.event = event
         self._pipe = pipe
         self._callbacks: list[Callable[[object], None]] = []
         self._closed = False
 
     def bind(self, cb: Callable[[object], None]) -> None:
         """Register ``cb`` to fire on every notify for this path."""
-        if self._closed:
+        if self._closed or any(cb is bound for bound in self._callbacks):
             return
-        if not any(cb is bound for bound in self._callbacks):
-            self._callbacks.append(cb)
+        if not self._callbacks:
+            self._pipe.attach(self)
+        self._callbacks.append(cb)
 
     def unbind(self, cb: Callable[[object], None]) -> None:
         """Drop a previously bound callback (idempotent)."""
+        if not any(cb is bound for bound in self._callbacks):
+            return
         self._callbacks = [bound for bound in self._callbacks if bound is not cb]
+        if not self._callbacks:
+            self._pipe.detach(self)
 
     def close(self) -> None:
         """Stop the host forwarding; further ``bind`` calls no-op."""
@@ -267,7 +294,7 @@ class PipeSubscription:
             return
         self._closed = True
         self._callbacks = []
-        self._pipe.unsubscribe(self)
+        self._pipe.detach(self)
 
     def _fire(self, payload: object) -> None:
         dead: list[Callable[[object], None]] = []
@@ -278,6 +305,8 @@ class PipeSubscription:
                 dead.append(cb)
         if dead:
             self._callbacks = [cb for cb in self._callbacks if not any(cb is gone for gone in dead)]
+            if not self._callbacks:
+                self._pipe.detach(self)
 
 
 class PipeSession(Session):
@@ -295,13 +324,13 @@ class PipeSession(Session):
         # fills. Yield once per frame: runs on one worker take turns.
         await asyncio.sleep(0)
 
-    async def aread(self, path: tuple[str, ...]) -> Any:  # noqa: ANN401 -- the browser's blob
-        """Round trip read through the host to the browser."""
-        return await self._pipe.request(_READ, self._sid, list(path))
+    async def aread(self, path: tuple[str, ...], field: str | None = None) -> Any:  # noqa: ANN401 -- the browser's blob
+        """Round trip read through the host to the browser, of ``field`` when named."""
+        return await self._pipe.request(_READ, self._sid, list(path), field)
 
-    def subscribe(self, path: tuple[str, ...]) -> Subscription:
-        """Observe notify frames for ``path``."""
-        return self._pipe.subscribe(self._sid, tuple(path))
+    def subscribe(self, path: tuple[str, ...], event: str | None = None) -> Subscription:
+        """Observe notify frames for ``path``; ``event`` is the one the browser is asked for."""
+        return self._pipe.subscribe(self._sid, tuple(path), event)
 
 
 class ConnectedSession(nu.Bracket):
@@ -387,11 +416,17 @@ class _Worker:
             raise ConnectionError(msg)
         self.writer.write(_pack(message))
 
-    def drop(self) -> None:
-        for sub, cb in self.subs.values():
+    def unsubscribe(self, sub_id: int) -> None:
+        """Release one forwarded subscription: the host session hears the unbind and the close."""
+        entry = self.subs.pop(sub_id, None)
+        if entry is not None:
+            sub, cb = entry
             sub.unbind(cb)
             sub.close()
-        self.subs.clear()
+
+    def drop(self) -> None:
+        for sub_id in tuple(self.subs):
+            self.unsubscribe(sub_id)
 
 
 class SessionPipe(nu.Fabric):
@@ -463,28 +498,27 @@ class SessionPipe(nu.Fabric):
                 with suppress(Exception):  # the tab closed mid write
                     await session.send(decode(message[2]))
         elif kind == _SUB:
-            self._subscribe(worker, message[1], message[2], tuple(message[3]))
+            self._subscribe(worker, message[1], message[2], tuple(message[3]), message[4])
         elif kind == _UNSUB:
-            entry = worker.subs.pop(message[1], None)
-            if entry is not None:
-                sub, cb = entry
-                sub.unbind(cb)
-                sub.close()
+            worker.unsubscribe(message[1])
         elif kind == _READ:
             # Its own task: a read waits on the browser, and the stream does
             # not stop for it.
             asyncio.get_running_loop().create_task(
-                self._read(worker, message[1], message[2], tuple(message[3]))
+                self._read(worker, message[1], message[2], tuple(message[3]), message[4])
             )
         elif kind == _OPEN:
             with suppress(ConnectionError):
                 worker.post([_REPLY, message[1], True, self._session(message[2]) is not None])
 
-    def _subscribe(self, worker: _Worker, sub_id: int, sid: str, path: tuple[str, ...]) -> None:
+    def _subscribe(
+        self, worker: _Worker, sub_id: int, sid: str, path: tuple[str, ...], event: str | None
+    ) -> None:
+        worker.unsubscribe(sub_id)  # a rebind after the last unbind reuses the id
         session = self._session(sid)
         if session is None:
             return  # the tab is gone; nothing will ever notify
-        sub = session.subscribe(path)
+        sub = session.subscribe(path, event)
 
         def forward(payload: object) -> None:
             worker.post([_NOTIFY, sub_id, payload])
@@ -492,13 +526,15 @@ class SessionPipe(nu.Fabric):
         sub.bind(forward)
         worker.subs[sub_id] = (sub, forward)
 
-    async def _read(self, worker: _Worker, rid: int, sid: str, path: tuple[str, ...]) -> None:
+    async def _read(
+        self, worker: _Worker, rid: int, sid: str, path: tuple[str, ...], field: str | None
+    ) -> None:
         session = self._session(sid)
         if session is None:
             reply = [_REPLY, rid, False, f"No live connection for {sid!r}"]
         else:
             try:
-                reply = [_REPLY, rid, True, await session.aread(path)]
+                reply = [_REPLY, rid, True, await session.aread(path, field)]
             except Exception as exc:
                 reply = [_REPLY, rid, False, f"{type(exc).__name__}: {exc}"]
         with suppress(ConnectionError):

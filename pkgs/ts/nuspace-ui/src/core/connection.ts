@@ -107,6 +107,10 @@ export function useNuspaceConnection(admits: (frame: Frame) => boolean = () => t
 			ws.addEventListener("open", () => {
 				attempts = 0;
 				setStatus("connected");
+				// A new socket is a new server session, which runs the program
+				// afresh and watches what it listens to again. Nothing the old
+				// one watched carries over.
+				tree.getState().unwatchAll();
 				flushQueue();
 			});
 			ws.addEventListener("close", (ev) => {

@@ -56,10 +56,10 @@ class _Recording:
     async def send(self, frame: object) -> None:
         self.frames.append(frame)
 
-    async def aread(self, path: tuple[str, ...]) -> object:
+    async def aread(self, path: tuple[str, ...], field: str | None = None) -> object:
         return nu.lang.NULL
 
-    def subscribe(self, path: tuple[str, ...]) -> _Notify:
+    def subscribe(self, path: tuple[str, ...], event: str | None = None) -> _Notify:
         return self.notifies.setdefault(tuple(path), _Notify())
 
     def last(self, ref: tuple) -> object:
@@ -424,7 +424,7 @@ class _Switched(_Recording):
         super().__init__()
         self.on = on
 
-    async def aread(self, path: tuple[str, ...]) -> object:
+    async def aread(self, path: tuple[str, ...], field: str | None = None) -> object:
         return self.on if tuple(path)[-2:] == SWITCH else nu.lang.NULL
 
 
@@ -690,7 +690,7 @@ async def test_runs_flipping_the_switch_walks_again_and_never_flips_it_back(stor
     class Switched(_Recording):
         on = False
 
-        async def aread(self, path: tuple[str, ...]) -> object:
+        async def aread(self, path: tuple[str, ...], field: str | None = None) -> object:
             return self.on if tuple(path)[-2:] == SWITCH else nu.lang.NULL
 
     session = Switched()
@@ -725,7 +725,7 @@ class _Flip(_Recording):
 
     on = False
 
-    async def aread(self, path: tuple[str, ...]) -> object:
+    async def aread(self, path: tuple[str, ...], field: str | None = None) -> object:
         return self.on if tuple(path)[-2:] == SWITCH else nu.lang.NULL
 
     def flip(self, on: bool) -> None:
