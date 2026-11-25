@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Space meta follows nu's form rework, so refs and values can share its methods
 - README gallery drops the agents demo, matching the website
 - README demo videos show the nuspace 0.8 reshoot
 - README names the logic primitives instead of example scenarios

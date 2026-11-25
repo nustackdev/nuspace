@@ -49,6 +49,7 @@ __all__ = [
     "META_FILE",
     "Meta",
     "MetaForm",
+    "MetaSurface",
     "init_done",
     "meta_in",
     "not_other",
@@ -82,7 +83,38 @@ class Meta:
     init: bool = False
 
 
-class MetaForm(nu.Form, nu.TypedNu[Meta]):
+class MetaSurface(nu.Surface):
+    """The methods of a :class:`Meta` in the tree: its fields, its next value.
+
+    Shared by :class:`MetaForm` and any ref that comes to hold a ``Meta``.
+    """
+
+    # --- fields --------------------------------------------------------------
+
+    def assembly(self) -> nu.Str:
+        """The name of the assembly that made the space."""
+        return nu.Str(nu.GetAttr(self, "assembly"))
+
+    def made_at(self) -> nu.Str:
+        """When the space was marked, ISO 8601 in UTC."""
+        return nu.Str(nu.GetAttr(self, "made_at"))
+
+    def init(self) -> nu.Bool:
+        """Whether the assembly's init ran to its end."""
+        return nu.Bool(nu.GetAttr(self, "init"))
+
+    # --- next values ---------------------------------------------------------
+
+    def with_init(self, flag: nu.BoolArg) -> MetaForm:
+        """This meta with ``init`` set to ``flag``."""
+        return MetaForm.of(self.assembly(), self.made_at(), flag)
+
+    def as_dict(self) -> nu.Dict:
+        """What ``meta.json`` holds of this meta: its three fields."""
+        return nu.Dict.of(assembly=self.assembly(), made_at=self.made_at(), init=self.init())
+
+
+class MetaForm(MetaSurface, nu.Form[Meta]):
     """A :class:`Meta` as a Form: its fields read in the tree, its next value made there.
 
     Build one with :meth:`of`, :meth:`made` or :meth:`loads`, or wrap a
@@ -123,30 +155,6 @@ class MetaForm(nu.Form, nu.TypedNu[Meta]):
             return nu.If(nu.Is(data, None), nu.Literal(None), meta)
 
         return MetaForm(nu.let(nustd.json.loads(text), built))
-
-    # --- fields --------------------------------------------------------------
-
-    def assembly(self) -> nu.Str:
-        """The name of the assembly that made the space."""
-        return nu.Str(nu.GetAttr(self, "assembly"))
-
-    def made_at(self) -> nu.Str:
-        """When the space was marked, ISO 8601 in UTC."""
-        return nu.Str(nu.GetAttr(self, "made_at"))
-
-    def init(self) -> nu.Bool:
-        """Whether the assembly's init ran to its end."""
-        return nu.Bool(nu.GetAttr(self, "init"))
-
-    # --- next values ---------------------------------------------------------
-
-    def with_init(self, flag: nu.BoolArg) -> MetaForm:
-        """This meta with ``init`` set to ``flag``."""
-        return MetaForm.of(self.assembly(), self.made_at(), flag)
-
-    def as_dict(self) -> nu.Dict:
-        """What ``meta.json`` holds of this meta: its three fields."""
-        return nu.Dict.of(assembly=self.assembly(), made_at=self.made_at(), init=self.init())
 
 
 def said(template: str, **fields: object) -> nu.Str:
