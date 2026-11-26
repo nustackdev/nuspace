@@ -110,7 +110,7 @@ def _start(plane: nu.Str, mine: nu.Str) -> nu.Nu:
             >> nu.IfDo(atomic(orphan), atomic(ops.plane_run.stop(nu.Str(new))))
         )
 
-    return nu.let("", write)
+    return nu.let(write, new="")
 
 
 def _wait(plane: nu.Str) -> nu.Nu:
@@ -123,7 +123,7 @@ def _wait(plane: nu.Str) -> nu.Nu:
     def wait(given: nu.ObjectRef) -> nu.Nu:
         return nu.IfDo(nu.Float(given) >= 0.0, nu.Delay(given), backoff)
 
-    return nu.let(atomic(fixed.fallback(-1.0)), wait)
+    return nu.let(wait, given=atomic(fixed.fallback(-1.0)))
 
 
 def _pass(plane: nu.Str) -> nu.Nu:
@@ -154,7 +154,7 @@ def _pass(plane: nu.Str) -> nu.Nu:
         )
         return nu.IfDo(atomic(fresh), _start(plane, mine), nu.IfDo(atomic(ended), again))
 
-    return nu.IfDo(atomic(up), nu.let(atomic(row.run.fallback("")), look))
+    return nu.IfDo(atomic(up), nu.let(look, held=atomic(row.run.fallback(""))))
 
 
 def _arm(plane: nu.Str) -> nu.Nu:
@@ -170,7 +170,7 @@ def _arm(plane: nu.Str) -> nu.Nu:
         atomic(Space.planes.on_child_change(plane)),
     )
     held = restarting(nu.Reconcile(changes, _pass(plane), **_RECHECK), KEY, plane)
-    return nu.Frame(_Arm, held, delay=BACKOFF_START)
+    return nu.let(_Arm, held, delay=BACKOFF_START)
 
 
 def driver() -> nu.Nu:

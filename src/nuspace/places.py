@@ -87,7 +87,7 @@ def inside(
 
         nuspace.places.inside(nuspace.atomic(step), plane="p1", cell="c1")
     """
-    return nu.Frame(Here, term, plane=plane, cell=cell, plane_run=plane_run, cell_run=cell_run)
+    return nu.let(Here, term, plane=plane, cell=cell, plane_run=plane_run, cell_run=cell_run)
 
 
 class Place:

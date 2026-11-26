@@ -163,7 +163,7 @@ def walk(
     def one(level: str, scope_id: nu.StrArg) -> nu.Nu:
         scope = (level, scope_id)
         hits = atomic(content.matched(kind, scope, question).to_list())
-        return nu.let(hits, lambda keys: found(scope, keys))
+        return nu.let(lambda keys: found(scope, keys), keys=hits)
 
     def each(level: str, there: Callable[[nu.Str], nu.Bool]) -> nu.Nu:
         held = atomic(
@@ -187,7 +187,7 @@ def _found() -> Search:
 def _hits(kind: type[Content[Any]], scope: tuple[str, nu.StrArg], keys: nu.ObjectRef) -> nu.Nu:
     """One place's hits appended, in one commit, when there are any."""
 
-    def one(item: nu.Attr) -> nu.Nu:
+    def one(item: nu.Nu) -> nu.Nu:
         return _found().hits.append(address(kind, scope, nu.Str(item)))
 
     hits = atomic(nu.ForEachDo(nu.List(keys), one))
@@ -330,10 +330,10 @@ def search(
         return steps if into is None else steps >> atomic(into.set(pid))
 
     return nu.let(
-        MintId("p"),
         lambda pid: nu.let(
-            MintId("c"), lambda cid: nu.let(prog, lambda text: made(pid, cid, text))
+            lambda cid: nu.let(lambda text: made(pid, cid, text), text=prog), cid=MintId("c")
         ),
+        pid=MintId("p"),
     )
 
 
@@ -437,7 +437,7 @@ def draw():
         shown = show(nu.Str(k)) >> kinds
         return shown >> KIND.set_options(options) >> KIND.set(k) >> GO.init()
 
-    return nu.let(kind, picked)
+    return nu.let(picked, k=kind)
 
 
 def pick():
@@ -476,7 +476,7 @@ def asked(kind):
 def go():
     kind = nu.Str(KIND)
     made = asked(kind) >> search.search(Building.request.extract())
-    building = nu.Frame(Building, made, keywords=nu.Dict.of(), request=nu.Dict.of())
+    building = nu.let(Building, made, keywords=nu.Dict.of(), request=nu.Dict.of())
     return nu.IfDo(kind != "", building)
 
 
@@ -544,7 +544,7 @@ def first_of(ids):
 
 
 def draw():
-    return TITLE.init() >> nu.let(nuspace.atomic(newest_first()), draw_ids)
+    return TITLE.init() >> nu.let(draw_ids, ids=nuspace.atomic(newest_first()))
 
 
 def draw_ids(ids):
@@ -565,13 +565,13 @@ def draw_ids(ids):
             >> nuspace.atomic(write)
         )
 
-    return nu.let(nuspace.atomic(nu.If(held, picked, newest)), show)
+    return nu.let(show, shown=nuspace.atomic(nu.If(held, picked, newest)))
 
 
 def pick():
     value = nu.Str(SEARCH)
     newest = nuspace.atomic(first_of(newest_first()))
-    keep = nu.let(newest, lambda n: nuspace.atomic(CHOSEN.picked.set(value) >> CHOSEN.newest.set(nu.Str(n))))
+    keep = nu.let(lambda n: nuspace.atomic(CHOSEN.picked.set(value) >> CHOSEN.newest.set(nu.Str(n))), n=newest)
     return keep >> draw()
 
 
@@ -688,14 +688,14 @@ def hit(i, h):
     drawn = nuspace.atomic(nu.shape.reroot(drawing(kind, level, at, key), item, rooted=rooted))
     note = body[1].to(ui.TextRef.slot(size="sm", tone="danger"))
     failed = lambda err: note.set(nu.Str("Cannot draw this hit: ") + nu.str(err))
-    return nu.let(place, head) >> nu.TryCatch(drawn, catch=failed)
+    return nu.let(head, found=place) >> nu.TryCatch(drawn, catch=failed)
 
 
 def more(sel, drawn, upto):
     # Only what landed since the last look, one point read each: hits only ever append.
     n = nu.Int(drawn)
     one = nuspace.atomic(of(sel).hits[n].extract())
-    draw = nu.let(one, lambda h: hit(n, h)) >> drawn.set(n + 1)
+    draw = nu.let(lambda h: hit(n, h), h=one) >> drawn.set(n + 1)
     return nu.WhileDo(n < upto, draw)
 
 
@@ -736,7 +736,7 @@ def look(sel, drawn):
         upto = nu.If(total > SHOWN, SHOWN, total)
         return more(sel, drawn, upto) >> status(total, done, nu.float(got["at"]))
 
-    return nu.let(nuspace.atomic(read), show)
+    return nu.let(show, got=nuspace.atomic(read))
 
 
 def landed(sel):
@@ -757,7 +757,7 @@ def shown(sel):
         looking = nu.ReconcileWhile(nuspace.atomic(landed(sel)), nu.Not(done), look(sel, drawn))
         return looking >> look(sel, drawn)
 
-    return HITS.erase() >> EMPTY.erase() >> nu.let(0, watch)
+    return HITS.erase() >> EMPTY.erase() >> nu.let(watch, drawn=0)
 
 
 def none():

@@ -120,7 +120,7 @@ def _turn(sid: nu.Str, plane: nu.Str, token: nu.Str) -> nu.Nu:
         stop = nu.IfDo(run != "", atomic(nuspace.plane_run.stop(run)))
         return nu.TryCatch(failed >> moved, finally_=stop)
 
-    return nu.let("", held)
+    return nu.let(held, made="")
 
 
 def pane(sid: nu.StrArg, plane: nu.StrArg) -> nu.Nu:
@@ -130,7 +130,7 @@ def pane(sid: nu.StrArg, plane: nu.StrArg) -> nu.Nu:
     """
     sid, plane = nu.Str(sid), nu.Str(plane)
     asked = _tabs[sid].panes[plane].restart
-    turn = nu.let(atomic(asked.fallback("")), lambda token: _turn(sid, plane, nu.Str(token)))
+    turn = nu.let(lambda token: _turn(sid, plane, nu.Str(token)), token=atomic(asked.fallback("")))
     return nu.ForeverDo(restarting(turn, "nav", plane))
 
 

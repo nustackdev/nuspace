@@ -225,7 +225,7 @@ def add(
             >> spelled
             >> _key_reserved(key, system)
             >> key_free(Space.indexes.plane_keys, key, None, "plane")
-            >> nu.let(nustd.time.time(), made)
+            >> nu.let(made, now=nustd.time.time())
             >> place(siblings, pid, before=before, after=after)
             >> _touched(parent)
             >> when(key, Space.indexes.plane_keys.set_item(key, pid))
@@ -238,7 +238,7 @@ def add(
 
     told = created("plane", system=system, spec=spec)
     if id is None:
-        return nu.let(MintId("p"), lambda pid: write(nu.Str(pid)))
+        return nu.let(lambda pid: write(nu.Str(pid)), pid=MintId("p"))
     return write(id)
 
 
@@ -293,7 +293,7 @@ def remove(id: nu.StrArg) -> nu.Nu:
         >> refuse(row.system.fallback(False), Refused, "plane ", id, " is a system plane")
         >> rows[row.parent].children.del_item(id)
         >> _touched(row.parent)
-        >> nu.let(nustd.time.time(), stamped)
+        >> nu.let(stamped, now=nustd.time.time())
         >> keys.removed.set_item(id, True)
     )
 

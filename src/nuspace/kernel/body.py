@@ -3,7 +3,7 @@
 Everything a cell run is on its worker, as one Nu term with its ids baked
 in as plain strs::
 
-    Frame(Here: plane, cell, plane_run, cell_run)
+    let(Here: plane, cell, plane_run, cell_run)
       With(Captured)                       out, told apart per cell run
         TryCatch(                          raised: exit failed, error, traceback
           envs' wraps, space-wide outermost
@@ -80,7 +80,7 @@ class Rewrites:
 def _flush(cell_run: str) -> nu.Nu:
     """Append waiting output to the record, if there is any. One commit."""
     out = Space.exec.cell_runs[cell_run].out
-    return nu.IfDo(HasOut(), nu.let(TakeOut(), lambda taken: atomic(out.extend(taken))))
+    return nu.IfDo(HasOut(), nu.let(lambda taken: atomic(out.extend(taken)), taken=TakeOut()))
 
 
 def _finish(
@@ -102,7 +102,7 @@ def _finish(
     fields: dict[str, object] = {"out": TakeOut(extra, final=True)}
     if error is not None:
         fields["why"] = error
-    return nu.Frame(_Ending, commit, **fields)
+    return nu.let(_Ending, commit, **fields)
 
 
 def build_body(
@@ -159,4 +159,4 @@ def build_body(
         ),
     )
     body = nu.With(Captured(), body=caught)
-    return nu.Frame(Here, body, plane=plane, cell=cell, plane_run=plane_run, cell_run=cell_run)
+    return nu.let(Here, body, plane=plane, cell=cell, plane_run=plane_run, cell_run=cell_run)

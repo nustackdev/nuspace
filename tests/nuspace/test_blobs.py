@@ -97,7 +97,7 @@ class Tick(nu.Shape):
 
 PUTS = prog(
     "put = nuspace.Blobs.put(b'from a cell', mime='text/plain', name='c.txt')",
-    "return nu.let(put, lambda bid: nuspace.atomic(nuspace.here(Tick).s.set(bid)))",
+    "return nu.let(lambda bid: nuspace.atomic(nuspace.here(Tick).s.set(bid)), bid=put)",
 )
 
 
@@ -142,7 +142,7 @@ class ReadUpload(ScalarQuery):
         (token,) = children
 
         def thunk(rt: Runtime) -> bytes:
-            return rt.ctx.fabrics.get(UploadView).path(token(rt)).read_bytes()
+            return rt.ctx.get(UploadView).path(token(rt)).read_bytes()
 
         return thunk
 
@@ -150,7 +150,7 @@ class ReadUpload(ScalarQuery):
         (token,) = children
 
         async def athunk(rt: Runtime) -> bytes:
-            return rt.ctx.fabrics.get(UploadView).path(await token(rt)).read_bytes()
+            return rt.ctx.get(UploadView).path(await token(rt)).read_bytes()
 
         return athunk
 
@@ -207,7 +207,7 @@ async def _served(root: Path, port: int):
     await nu.arun(local.init(root))
     loop = asyncio.get_running_loop()
     ready, done = loop.create_future(), asyncio.Event()
-    hold = nu.With(MADE_STORE, body=nu.let(_Hold(ready, done), lambda _: nu.Noop()))
+    hold = nu.With(MADE_STORE, body=nu.let(lambda _: nu.Noop(), _=_Hold(ready, done)))
     web = local.web(root, port=port, open_browser=False, static=None, extensions=(), body=hold)
     # Web runs only beside a kernel, the kernel on infra: all here, meeting through the files.
     term = local.infra(root, body=nu.Race(local.kernel(root, spares=0, extensions=()), web))

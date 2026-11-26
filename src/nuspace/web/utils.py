@@ -211,7 +211,7 @@ class Arms:
 
         return nu.TryCatch(term, catch=caught)
 
-    def event(self, name: str, change: nu.Nu, body: Callable[[nu.Attr], nu.Nu]) -> nu.Nu:
+    def event(self, name: str, change: nu.Nu, body: Callable[[nu.Nu], nu.Nu]) -> nu.Nu:
         """One browser subscription, every event, each one toasted when it fails.
 
         The inner guard keeps the arm alive across a failed event and tells
@@ -225,9 +225,7 @@ class Arms:
         """
         return self.guard(nu.ReactEvery(change, lambda ev: self.toasted(body(ev), name)), name)
 
-    def plane_event(
-        self, name: str, change: nu.Nu, op: Callable[[nu.Str, nu.Attr], nu.Nu]
-    ) -> nu.Nu:
+    def plane_event(self, name: str, change: nu.Nu, op: Callable[[nu.Str, nu.Nu], nu.Nu]) -> nu.Nu:
         """:meth:`event` for an op on a plane: ``op(plane_id, event)``. No ``plane_id`` raises."""
         return self.event(name, change, lambda ev: op(field_str(ev, "plane_id"), ev))
 

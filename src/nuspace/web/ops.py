@@ -289,7 +289,7 @@ def set_panes(sid: nu.StrArg, order: nu.ListArg[str]) -> nu.Nu:
     def rewrite(held: nu.ObjectRef) -> nu.Nu:
         before = nu.List(held)
 
-        def opened(at: nu.Attr) -> nu.Nu:
+        def opened(at: nu.Nu) -> nu.Nu:
             plane = nu.Str(at)
             fresh = (
                 refuse(plane == "", Refused, "an empty plane id")
@@ -298,7 +298,7 @@ def set_panes(sid: nu.StrArg, order: nu.ListArg[str]) -> nu.Nu:
             )
             return nu.IfDo(before.contains(plane).not_(), fresh)
 
-        def closed(at: nu.Attr) -> nu.Nu:
+        def closed(at: nu.Nu) -> nu.Nu:
             plane = nu.Str(at)
             return nu.IfDo(
                 wanted.contains(plane).not_(), row.panes.del_item(plane, missing_ok=True)
@@ -312,7 +312,7 @@ def set_panes(sid: nu.StrArg, order: nu.ListArg[str]) -> nu.Nu:
             >> row.order.set(wanted)
         )
 
-    return _tab_known(sid) >> nu.let(nu.list(row.order), rewrite)
+    return _tab_known(sid) >> nu.let(rewrite, held=nu.list(row.order))
 
 
 def set_pane_params(sid: nu.StrArg, plane: nu.StrArg, params: nu.DictArg[str, str]) -> nu.Nu:
@@ -385,7 +385,7 @@ def restart_cell(sid: nu.StrArg, cell: nu.StrArg) -> nu.Nu:
         fallback = nu.IfDo(nu.Bool(done).not_(), atomic(restart_pane(sid, plane)))
         return atomic(in_run) >> fallback
 
-    return nu.let(False, decided)
+    return nu.let(decided, done=False)
 
 
 def expand(sid: nu.StrArg, plane: nu.StrArg) -> nu.Nu:
@@ -419,7 +419,7 @@ def reveal(sid: nu.StrArg, plane: nu.StrArg) -> nu.Nu:
     at, rows = _Up.at, Space.planes
     step = _tabs[sid].expanded.set_item(at, True) >> at.set(rows[at].parent.fallback(""))
     climb = nu.WhileDo((at != "").and_(at != ROOT), step)
-    return _tab_known(sid) >> nu.Frame(_Up, climb, at=rows[plane].parent.fallback(""))
+    return _tab_known(sid) >> nu.let(_Up, climb, at=rows[plane].parent.fallback(""))
 
 
 def collapse(sid: nu.StrArg, plane: nu.StrArg) -> nu.Nu:

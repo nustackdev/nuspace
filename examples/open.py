@@ -46,7 +46,7 @@ if __name__ == "__main__":
     nu.run_in_loop(
         local.open(
             STORE,
-            body=nu.let("", lambda x: made(x) >> nu.print("added plane: ", nu.str(x)))
+            body=nu.let(lambda x: made(x) >> nu.print("added plane: ", nu.str(x)), x="")
             >> nu.print("planes:")
             >> listed,
         )

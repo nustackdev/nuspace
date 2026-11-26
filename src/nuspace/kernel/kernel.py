@@ -105,7 +105,8 @@ def _contained(arm: nu.Nu, fail: Callable[[nu.StrArg], nu.Nu], name: str, id: nu
         catch=lambda err: (
             report(name, id, ErrorText(err))
             >> nu.TryCatch(
-                nu.let(ErrorText(err), fail), catch=lambda again: report(name, id, ErrorText(again))
+                nu.let(lambda why: fail(why), why=ErrorText(err)),
+                catch=lambda again: report(name, id, ErrorText(again)),
             )
         ),
     )
@@ -126,11 +127,11 @@ def _launch(worker: nu.Str, backend: nu.Str) -> nu.Nu:
             msg = nu.Str("Backend failed to launch a worker: ") + nu.Str(why)
             return atomic(end_worker(worker, EXIT_FAILED, why)) >> nu.Raise(msg)
 
-        return nu.let(ErrorText(err), ended)
+        return nu.let(ended, why=ErrorText(err))
 
     up = nu.let(
-        Launch(BackendRef(backend), worker),
         lambda handle: atomic(ops.worker.start(worker, handle=handle)),
+        handle=Launch(BackendRef(backend), worker),
     )
     return nu.TryCatch(up, catch=failed)
 
@@ -197,7 +198,7 @@ def _teardown(
         commit = atomic(ends)
         return commit >> nu.IfDo(atomic(row.ended_at.exists()), let_go(BackendRef(backend), held))
 
-    return nu.let(atomic(workers_of(plane_run)), go)
+    return nu.let(go, held=atomic(workers_of(plane_run)))
 
 
 def _release(plane_run: nu.Str, backend: nu.Str, taken: nu.Ref) -> nu.Nu:
@@ -214,7 +215,7 @@ def _release(plane_run: nu.Str, backend: nu.Str, taken: nu.Ref) -> nu.Nu:
     """
     ref = BackendRef(backend)
     own = nu.Str(taken)
-    held = nu.let(atomic(workers_of(plane_run)), lambda ids: Stop(ref, ids))
+    held = nu.let(lambda ids: Stop(ref, ids), ids=atomic(workers_of(plane_run)))
     return held >> nu.IfDo(own != "", Stop(ref, nu.List.of(own)))
 
 
@@ -268,7 +269,7 @@ def _cell_arm(plane_run: nu.Str, cell_run: nu.Str, backend: nu.Str, placement: n
         go = (
             take
             >> atomic(ops.cell_run.start(cell_run, worker=worker))
-            >> nu.let(Run(ref, worker, cell_run, body), lost)
+            >> nu.let(lost, why=Run(ref, worker, cell_run, body))
             >> unended
         )
         once = nu.IfDo(atomic(row.started_at.exists()), failed(ORPHAN), go)
@@ -277,7 +278,7 @@ def _cell_arm(plane_run: nu.Str, cell_run: nu.Str, backend: nu.Str, placement: n
         # A raise ends the cell run before the release reads whether it ended.
         return nu.TryCatch(_contained(once, failed, "kernel cell run", cell_run), finally_=release)
 
-    return _contained(nu.let("", with_slot), failed, "kernel cell run", cell_run)
+    return _contained(nu.let(with_slot, slot=""), failed, "kernel cell run", cell_run)
 
 
 def _cells(plane_run: nu.Str, backend: nu.Str, placement: nu.Str) -> nu.Nu:
@@ -424,7 +425,7 @@ def _life(plane_run: nu.Str, plane: nu.Str, backend: nu.Str, taken: nu.Ref) -> n
             )
         )
 
-    return nu.let(Placement(BackendRef(backend)), placed)
+    return nu.let(placed, placement=Placement(BackendRef(backend)))
 
 
 def _arm(plane_run: nu.Str) -> nu.Nu:
@@ -448,11 +449,11 @@ def _arm(plane_run: nu.Str) -> nu.Nu:
                 _life(plane_run, p, b, taken), finally_=_release(plane_run, b, taken)
             )
 
-        return _contained(nu.let("", life), failed, "kernel plane run", plane_run)
+        return _contained(nu.let(life, taken=""), failed, "kernel plane run", plane_run)
 
     known = nu.let(
-        atomic(row.plane.fallback("")),
-        lambda plane: nu.let(atomic(row.backend.fallback("")), lambda b: named(plane, b)),
+        lambda plane: nu.let(lambda b: named(plane, b), b=atomic(row.backend.fallback(""))),
+        plane=atomic(row.plane.fallback("")),
     )
     return nu.TryCatch(
         known, catch=lambda err: report("kernel plane run", plane_run, ErrorText(err))

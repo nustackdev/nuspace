@@ -61,7 +61,7 @@ class PoolBackend(Backend):
     async def asetup(self, ctx: Context) -> None:
         """Take the pool."""
         try:
-            self._pool = ctx.fabrics.get(WorkerPool)
+            self._pool = ctx.get(WorkerPool)
         except LookupError:
             msg = f"{type(self).__name__} needs a WorkerPool bound around it"
             raise RuntimeError(msg) from None

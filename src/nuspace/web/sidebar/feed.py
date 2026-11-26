@@ -147,12 +147,12 @@ def rows(sid: nu.StrArg, *, into: nu.Ref) -> nu.Nu:
     def with_open(held: nu.ObjectRef) -> nu.Nu:
         opened = nu.List(held)
 
-        def under(at: nu.Attr) -> nu.List:
+        def under(at: nu.Nu) -> nu.List:
             """A shipped row's children as rows, with their own children when open."""
             got = nu.Dict(at)
             parent = nu.str(got["id"])
 
-            def one(kid: nu.Attr) -> nu.Dict:
+            def one(kid: nu.Nu) -> nu.Dict:
                 plane = nu.Str(kid)
                 return _row(plane, parent, nu.If(opened.contains(plane), _kids(plane), []))
 
@@ -163,9 +163,9 @@ def rows(sid: nu.StrArg, *, into: nu.Ref) -> nu.Nu:
         )
         walk = nu.WhileDo(nu.List(level).len() > 0, down)
         done = into.set(nu.List(walked))
-        return nu.Frame(_Walk, walk >> done, level=nu.List.of(space), walked=nu.List.create())
+        return nu.let(_Walk, walk >> done, level=nu.List.of(space), walked=nu.List.create())
 
-    return nu.let(keys_of(expanded), with_open)
+    return nu.let(with_open, held=keys_of(expanded))
 
 
 def create(
@@ -215,7 +215,7 @@ def _ship(sidebar: Ref, sid: nu.StrArg) -> nu.Nu:
     def ship(tree: nu.ObjectRef) -> nu.Nu:
         return atomic(rows(sid, into=tree)) >> interactions.set_tree(sidebar, nu.List(tree))
 
-    return nu.let([], ship)
+    return nu.let(ship, tree=[])
 
 
 def sidebar_feed(sidebar: Ref, sid: nu.StrArg, planes: Sequence[PlaneSpec], toasts: Ref) -> nu.Nu:
@@ -230,11 +230,11 @@ def sidebar_feed(sidebar: Ref, sid: nu.StrArg, planes: Sequence[PlaneSpec], toas
     """
     arms = Arms("sidebar", toasts)
 
-    def made(plane: nu.Str, event: nu.Attr) -> nu.Nu:
+    def made(plane: nu.Str, event: nu.Nu) -> nu.Nu:
         spec, parent = field_str(event, "spec"), field_str(event, "parent_id")
         return create(planes, spec, plane, parent, field_str(event, "title"))
 
-    def moved(plane: nu.Str, event: nu.Attr) -> nu.Nu:
+    def moved(plane: nu.Str, event: nu.Nu) -> nu.Nu:
         under = node(field_str(event, "parent_id"))
         return placed(event, lambda **at: atomic(_placed(plane, under, **at)))
 

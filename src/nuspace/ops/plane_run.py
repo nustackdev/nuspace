@@ -109,7 +109,7 @@ def add(
     return (
         live(planes, plane, "plane")
         >> refuse(backend == "", Refused, "plane ", plane, " has no backend, so it does not run")
-        >> nu.let(MintId("r"), write)
+        >> nu.let(write, rid=MintId("r"))
     )
 
 
@@ -163,7 +163,9 @@ def kill(plane_run: nu.StrArg) -> nu.Nu:
     Raises:
         Missing: No plane run with that id.
     """
-    return _unless_ended(plane_run, nu.let(nustd.time.time(), lambda now: _kill_by(plane_run, now)))
+    return _unless_ended(
+        plane_run, nu.let(lambda now: _kill_by(plane_run, now), now=nustd.time.time())
+    )
 
 
 def stop(plane_run: nu.StrArg, *, grace: nu.FloatArg = STOP_GRACE) -> nu.Nu:
@@ -180,7 +182,7 @@ def stop(plane_run: nu.StrArg, *, grace: nu.FloatArg = STOP_GRACE) -> nu.Nu:
     def asked(now: nu.ObjectRef) -> nu.Nu:
         return at.set(now) >> _kill_by(plane_run, nu.Float(now) + grace)
 
-    return _unless_ended(plane_run, nu.let(nustd.time.time(), asked))
+    return _unless_ended(plane_run, nu.let(asked, now=nustd.time.time()))
 
 
 def wait(plane_run: nu.StrArg) -> nu.Nu:

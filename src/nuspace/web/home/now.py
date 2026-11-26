@@ -134,7 +134,7 @@ Squares = nu.host(squares, name="HomeSquares")
 # --- The read ------------------------------------------------------------------------------
 
 
-def _row(at: nu.Attr) -> nu.Dict:
+def _row(at: nu.Nu) -> nu.Dict:
     r = nu.Str(at)
     run = Space.exec.plane_runs[r]
     plane = nu.Str(run.plane.fallback(""))
@@ -328,12 +328,12 @@ def system() -> nu.Bool:
 
 def draw() -> nu.Nu:
     """Now: the switch, one read, then its drawing."""
-    return nu.let(system(), lambda on: nu.let(atomic(read(nu.Bool(on))), show))
+    return nu.let(lambda on: nu.let(show, got=atomic(read(nu.Bool(on)))), on=system())
 
 
 def recent() -> nu.Nu:
     """Recent: the switch, then the walk and its drawing (:func:`.runs.draw`)."""
-    return nu.let(system(), lambda on: runs.draw(View.execution.recent, nu.Bool(on)))
+    return nu.let(lambda on: runs.draw(View.execution.recent, nu.Bool(on)), on=system())
 
 
 def first() -> nu.Nu:

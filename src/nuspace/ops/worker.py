@@ -51,7 +51,7 @@ def add(plane_run: nu.StrArg, backend: nu.StrArg, *, into: nu.Ref | None = None)
         )
         return writes if into is None else writes >> into.set(w)
 
-    return not_ended(runs, plane_run, "plane run") >> nu.let(MintId("w"), write)
+    return not_ended(runs, plane_run, "plane run") >> nu.let(write, minted=MintId("w"))
 
 
 def start(worker: nu.StrArg, *, handle: dict[str, object] | nu.Nu) -> nu.Nu:

@@ -61,11 +61,11 @@ def show(bid):
 
 def store(f):
     put = nuspace.Blobs.put_stream(Snap.drop.open(), mime=f["mime"], name=f["name"])
-    return Snap.note.set("Storing...") >> nu.let(put, show)
+    return Snap.note.set("Storing...") >> nu.let(show, bid=put)
 
 
 def picked():
-    return nu.IfDo(nu.IsNull(Snap.drop), nu.Noop(), nu.let(Snap.drop, lambda f: store(nu.Dict(f))))
+    return nu.IfDo(nu.IsNull(Snap.drop), nu.Noop(), nu.let(lambda f: store(nu.Dict(f)), f=Snap.drop))
 
 
 def out():

@@ -407,7 +407,7 @@ async def _locked(root: Path, lock: str, what: str) -> AsyncIterator[None]:
     """The lock file ``lock`` of the space at ``root`` held by this process, on this loop, while inside."""
     loop = asyncio.get_running_loop()
     ready, done = loop.create_future(), asyncio.Event()
-    body = nu.let(_Hold(ready, done), lambda _: nu.Noop())
+    body = nu.let(lambda _: nu.Noop(), _=_Hold(ready, done))
     term = disk.rooted(str(root), disk.mounted(nustd.fs.Lock(DATA / lock, what, body=body)))
     task = asyncio.create_task(nu.arun(term))
     waiting = asyncio.ensure_future(asyncio.shield(ready))
@@ -450,7 +450,7 @@ import nustd.fs
 from nuspace.space.local import disk
 from nuspace.space.local.layout import DATA, KERNEL_LOCK
 said = nu.host(lambda: print("held", flush=True), name="Said")
-lock = nustd.fs.Lock(DATA / KERNEL_LOCK, "kernel", body=nu.let(said(), lambda _: nu.Delay(60)))
+lock = nustd.fs.Lock(DATA / KERNEL_LOCK, "kernel", body=nu.let(lambda _: nu.Delay(60), _=said()))
 nu.run(disk.rooted(sys.argv[1], disk.mounted(lock)))
 """
 
@@ -625,7 +625,7 @@ async def _held(entry, root: Path, **kwargs):
     """
     loop = asyncio.get_running_loop()
     ready, done = loop.create_future(), asyncio.Event()
-    hold = nu.With(MADE_STORE, body=nu.let(_Hold(ready, done), lambda _: nu.Noop()))
+    hold = nu.With(MADE_STORE, body=nu.let(lambda _: nu.Noop(), _=_Hold(ready, done)))
     task = asyncio.create_task(nu.arun(entry(root, body=hold, **kwargs)))
     waiting = asyncio.ensure_future(asyncio.shield(ready))
     finished, _ = await asyncio.wait({waiting, task}, timeout=30, return_when="FIRST_COMPLETED")
@@ -787,7 +787,7 @@ async def test_web_clears_conn_by_a_commit_while_a_worker_holds_its_file(tmp_pat
         made = nuspace.plane.add("p1", backend="async")
         return made >> nuspace.plane_run.add("p1", by="nav", into=run)
 
-    await _awrite(root, stores.SPACE_STORE, nu.let("", asked))
+    await _awrite(root, stores.SPACE_STORE, nu.let(asked, run=""))
     holder = subprocess.Popen(  # noqa: S603
         [sys.executable, "-c", _HOLDER, str(conn)],
         stdin=subprocess.PIPE,
@@ -799,7 +799,7 @@ async def test_web_clears_conn_by_a_commit_while_a_worker_holds_its_file(tmp_pat
         inode = conn.stat().st_ino
         loop = asyncio.get_running_loop()
         ready, done = loop.create_future(), asyncio.Event()
-        hold = nu.With(MADE_STORE, body=nu.let(_Hold(ready, done), lambda _: nu.Noop()))
+        hold = nu.With(MADE_STORE, body=nu.let(lambda _: nu.Noop(), _=_Hold(ready, done)))
         web = local.web(
             root, port=_free_port(), open_browser=False, static=None, extensions=(), body=hold
         )
@@ -863,7 +863,7 @@ async def test_a_plane_made_through_open_lands_its_web_row(tmp_path):
         backend="async",
         web=WebOptions(width="board"),
     )
-    await nu.arun(local.open(root, body=nu.let("", lambda p: plane_of(spec, p))))
+    await nu.arun(local.open(root, body=nu.let(lambda p: plane_of(spec, p), p="")))
     made = Space.indexes.spec_planes[registered_name(spec)].ids
     planes = await _aread(root, nu.list(made.keys()))
     assert len(planes) == 1
@@ -947,7 +947,7 @@ def _asked(root: Path, plane: str) -> str:
         made = nuspace.plane.add(plane, name="Mine", backend="async")
         return made >> nuspace.plane_run.add(plane, into=run)
 
-    _open(root, nuspace.atomic(nu.let("", asked)))
+    _open(root, nuspace.atomic(nu.let(asked, run="")))
     (run,) = _read(root, nu.list(Space.exec.indexes.live.plane_to_plane_runs[plane].ids.keys()))
     return run
 
@@ -1263,7 +1263,7 @@ async def test_web_hears_again_once_a_stopped_kernel_is_back(tmp_path):
             try:
                 made = nuspace.plane.add("p_back", name="Back", backend="async")
                 await nu.arun(nuspace.atomic(made), wctx)
-                asked = nu.let("", lambda r: nuspace.plane_run.add("p_back", into=r) >> nu.Noop())
+                asked = nu.let(lambda r: nuspace.plane_run.add("p_back", into=r) >> nu.Noop(), r="")
                 await nu.arun(nuspace.atomic(asked), wctx)
                 runs = Space.exec.indexes.live.plane_to_plane_runs["p_back"].ids
                 ids = await _until(wctx, nu.list(runs.keys()), lambda rs: len(rs) == 1)

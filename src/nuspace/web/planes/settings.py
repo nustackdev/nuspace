@@ -202,7 +202,7 @@ def show(got: nu.ObjectRef) -> nu.Nu:
 
 def draw() -> nu.Nu:
     """One read, then its drawing."""
-    return nu.let(atomic(read()), show)
+    return nu.let(show, got=atomic(read()))
 
 
 def out() -> nu.Nu:

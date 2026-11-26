@@ -133,9 +133,9 @@ def add(
             steps = steps >> atomic(into.set(reaction))
         # Loaded first and held only for that: source that does not load
         # raises here, before anything is written.
-        return nu.let(nu.prog.LoadNu(src), lambda _: steps)
+        return nu.let(lambda _: steps, _=nu.prog.LoadNu(src))
 
-    return nu.let(MintId("c"), made)
+    return nu.let(made, minted=MintId("c"))
 
 
 def _known(reaction: nu.StrArg) -> nu.Bool:
@@ -178,7 +178,7 @@ def clear(plane: nu.StrArg) -> nu.Nu:
     ids = registry().by_plane[plane].ids
     listed = keys_of(ids)
 
-    def one(at_: nu.Attr) -> nu.Nu:
+    def one(at_: nu.Nu) -> nu.Nu:
         reaction = nu.Str(at_)
         dropped = atomic(ids.del_item(reaction, missing_ok=True))
         return nu.IfDo(atomic(_known(reaction)), remove(reaction), dropped)

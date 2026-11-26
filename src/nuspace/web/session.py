@@ -45,7 +45,7 @@ from __future__ import annotations
 import asyncio
 import itertools
 import struct
-from contextlib import ExitStack, asynccontextmanager, contextmanager, suppress
+from contextlib import asynccontextmanager, contextmanager, suppress
 from typing import TYPE_CHECKING, Any, ClassVar
 
 import msgpack
@@ -363,7 +363,7 @@ class ConnectedSession(nu.Bracket):
         super().__init__(body, address, sid, uploads)
 
     @contextmanager
-    def _open(self, ctx: Context, address: str, sid: str, uploads: str | None) -> Iterator[None]:
+    def _open(self, ctx: Context, address: str, sid: str, uploads: str | None) -> Iterator[Context]:
         msg = "A connected session is async only; use nu.arun"
         raise RuntimeError(msg)
         yield  # pragma: no cover - a generator, for the context manager
@@ -371,18 +371,16 @@ class ConnectedSession(nu.Bracket):
     @asynccontextmanager
     async def _aopen(
         self, ctx: Context, address: str, sid: str, uploads: str | None
-    ) -> AsyncIterator[None]:
+    ) -> AsyncIterator[Context]:
         pipe = await _Pipe.acquire(address)
         try:
             if not await pipe.request(_OPEN, sid):
                 msg = f"No live connection for {sid!r}"
                 raise LookupError(msg)
-            with ExitStack() as bound:
-                bound.enter_context(ctx.fabrics.bind(Session, PipeSession(pipe, sid)))
-                if uploads is not None and not is_null(uploads):
-                    view = UploadView(uploads, sid)
-                    bound.enter_context(ctx.fabrics.bind(UploadView, view))
-                yield
+            bound = ctx.bind(Session, PipeSession(pipe, sid))
+            if uploads is not None and not is_null(uploads):
+                bound = bound.bind(UploadView, UploadView(uploads, sid))
+            yield bound
         finally:
             await pipe.release()
 
@@ -454,7 +452,7 @@ class SessionPipe(nu.Fabric):
         # this is the one that called ``listen``, so it is loaded already.
         from nustd.ws_server import WebServer
 
-        self._web = ctx.fabrics.get(WebServer)
+        self._web = ctx.get(WebServer)
         host, port = _split(self.address)
         self._server = await asyncio.start_server(self._serve, host, port)
 

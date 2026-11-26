@@ -217,7 +217,7 @@ def _add(days: nu.List, field: str) -> nu.Nu:
     """Each distinct day of ``days`` gets its count of entries added to ``calendar[day].<field>``."""
     calendar = index(here=True).calendar
 
-    def one(at_: nu.Attr) -> nu.Nu:
+    def one(at_: nu.Nu) -> nu.Nu:
         slot = getattr(calendar[nu.Str(at_)], field)
         return slot.set(slot.fallback(0) + days.count(nu.Str(at_)))
 
@@ -232,7 +232,7 @@ def _summed(field: str) -> nu.Int:
 
 
 def _set_if_changed(slot: nu.Nu, value: nu.Nu) -> nu.Nu:
-    return nu.let(value, lambda v: nu.IfDo(slot.fallback(-1) != v, slot.set(v)))
+    return nu.let(lambda v: nu.IfDo(slot.fallback(-1) != v, slot.set(v)), v=value)
 
 
 def step(*, specs: int = 0, limit: int = PAGE) -> nu.Nu:
@@ -250,14 +250,16 @@ def step(*, specs: int = 0, limit: int = PAGE) -> nu.Nu:
     cursor = state.cursor
     totals = state.totals
 
-    def counted(ps: nu.Attr, cs: nu.Attr) -> nu.Nu:
+    def counted(ps: nu.Nu, cs: nu.Nu) -> nu.Nu:
         planes, cells = nu.List(ps), nu.List(cs)
         from_specs = planes.iter().filter(lambda p: _from_spec(nu.Str(p))).count()
         add = (
             nu.let(
-                _days(Space.planes, planes, _plane_counted), lambda d: _add(nu.List(d), "planes")
+                lambda d: _add(nu.List(d), "planes"), d=_days(Space.planes, planes, _plane_counted)
             )
-            >> nu.let(_days(Space.cells, cells, _cell_counted), lambda d: _add(nu.List(d), "cells"))
+            >> nu.let(
+                lambda d: _add(nu.List(d), "cells"), d=_days(Space.cells, cells, _cell_counted)
+            )
             >> nu.IfDo(
                 from_specs > 0, totals.from_specs.set(totals.from_specs.fallback(0) + from_specs)
             )
@@ -274,7 +276,7 @@ def step(*, specs: int = 0, limit: int = PAGE) -> nu.Nu:
 
     plane_page = _after(Space.planes, cursor.plane.fallback(""), PLANE_PREFIX, limit)
     cell_page = _after(Space.cells, cursor.cell.fallback(""), CELL_PREFIX, limit)
-    return nu.let(plane_page, lambda ps: nu.let(cell_page, lambda cs: counted(ps, cs)))
+    return nu.let(lambda ps: nu.let(lambda cs: counted(ps, cs), cs=cell_page), ps=plane_page)
 
 
 def _pending() -> nu.Bool:
@@ -310,7 +312,7 @@ def out() -> nu.Nu:
 
 def _mine(body: Callable[[nu.Str], nu.Nu]) -> nu.Nu:
     """``body`` given the indexer's plane id, read by key once, in its own snapshot."""
-    return nu.let(atomic(ops.plane.keyed(KEY)), lambda plane: body(nu.Str(plane)))
+    return nu.let(lambda plane: body(nu.Str(plane)), plane=atomic(ops.plane.keyed(KEY)))
 
 
 def _kept(slot: nu.Nu, change: str, plane: nu.Str) -> nu.Nu:
@@ -343,8 +345,8 @@ def wake() -> nu.Nu:
     """
     kept = atomic(index().reactions.planes.fallback(""))
 
-    def asked(reaction: nu.Attr) -> nu.Nu:
+    def asked(reaction: nu.Nu) -> nu.Nu:
         r = nu.Str(reaction)
         return nu.IfDo(r != "", _mine(lambda p: reactions.up_plane(p, r)))
 
-    return nu.let(kept, asked)
+    return nu.let(asked, reaction=kept)

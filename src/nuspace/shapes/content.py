@@ -325,7 +325,7 @@ class Content(Generic[S]):
             scope = (level, scope_id)
             held = entries(cls, level, scope_id)
 
-            def pair(found: nu.Attr) -> nu.Nu:
+            def pair(found: nu.Nu) -> nu.Nu:
                 key = nu.Str(found)
                 return nu.Tuple.of(address(name, scope, key), held[key].extract())
 

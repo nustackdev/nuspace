@@ -126,9 +126,9 @@ def fresh(path: str | os.PathLike[str] | nu.Nu | None, on: Callable[[nu.Nu], nu.
 
     A throwaway root is a ``nustd.fs.tmp`` dir (``nuspace-`` in the
     system's temp dir), initialized first, the term built on the
-    ``nu.Attr`` its lambda hands over the dir's path, the dir removed once
-    all of it closed. The path is a plain value in the attrs, so a term
-    teleported with them (``carry=True``) reads it in its worker too.
+    ref its lambda hands over the dir's path, the dir removed once all of
+    it closed. The path is a plain value in the lambda's frame; a term
+    teleported to a worker gets it as a Teleport arg (``watch.in_worker``).
     Yields nothing.
     """
     if path is not None:

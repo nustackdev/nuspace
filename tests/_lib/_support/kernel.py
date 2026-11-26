@@ -76,12 +76,12 @@ READS_TAG = prog(
 BLOCKS = prog(
     "from _support.actions import Block",
     "set_n = nuspace.atomic(nuspace.here(Tick).n.set(1))",
-    "return set_n >> nu.let(Block(60), lambda _: nu.Noop())",
+    "return set_n >> nu.let(lambda _: nu.Noop(), _=Block(60))",
 )
 #: Takes its own worker process down, a moment in.
 CRASHES = prog(
     "from _support.actions import Crash",
-    "return nu.Delay(0.3) >> nu.let(Crash(3), lambda _: nu.Noop())",
+    "return nu.Delay(0.3) >> nu.let(lambda _: nu.Noop(), _=Crash(3))",
 )
 
 
@@ -282,7 +282,7 @@ async def opened(
     data = data or tempfile.mkdtemp(prefix="nuspace-kernel-")
     loop = asyncio.get_running_loop()
     ready, done = loop.create_future(), asyncio.Event()
-    hold = nu.With(MADE_STORE, body=nu.let(_Hold(ready, done), lambda _: nu.Noop()))
+    hold = nu.With(MADE_STORE, body=nu.let(lambda _: nu.Noop(), _=_Hold(ready, done)))
     task = asyncio.create_task(nu.arun(kernel_open(hold, data=data, name=name, **kwargs)))
     waiting = asyncio.ensure_future(asyncio.shield(ready))
     finished, _ = await asyncio.wait({waiting, task}, timeout=30, return_when="FIRST_COMPLETED")

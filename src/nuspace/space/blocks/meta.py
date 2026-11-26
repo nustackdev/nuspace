@@ -154,7 +154,7 @@ class MetaForm(MetaSurface, nu.Form[Meta]):
             )
             return nu.If(nu.Is(data, None), nu.Literal(None), meta)
 
-        return MetaForm(nu.let(nustd.json.loads(text), built))
+        return MetaForm(nu.let(built, data=nustd.json.loads(text)))
 
 
 def said(template: str, **fields: object) -> nu.Str:
@@ -221,12 +221,14 @@ def stamp(file: FileRef, root: nu.StrArg, assembly: str) -> nu.Nu:
         Refused: (at run) Another assembly made the space, or its meta does not read.
     """
     return nu.let(
-        meta_in(file),
         lambda meta: nu.IfDo(
             nu.Is(meta, None),
-            nu.let(MetaForm.made(assembly), lambda made: file.write_text(dumped(MetaForm(made)))),
+            nu.let(
+                lambda made: file.write_text(dumped(MetaForm(made))), made=MetaForm.made(assembly)
+            ),
             not_other(meta, root, assembly),
         ),
+        meta=meta_in(file),
     )
 
 
@@ -243,11 +245,11 @@ def set_init(file: FileRef, root: nu.StrArg, init: bool = True) -> nu.Nu:
     """
     none = said("no space at {root} to set init on", root=root)
     return nu.let(
-        meta_in(file),
         lambda meta: (
             refused(nu.Is(meta, None), none)
             >> file.write_text(dumped(MetaForm(meta).with_init(init)))
         ),
+        meta=meta_in(file),
     )
 
 
@@ -260,7 +262,7 @@ def init_done(file: FileRef) -> nu.Bool:
     Raises:
         Refused: (at run) The file is there but does not read as a meta.
     """
-    return nu.Bool(nu.let(meta_in(file), lambda meta: ran(meta)))
+    return nu.Bool(nu.let(lambda meta: ran(meta), meta=meta_in(file)))
 
 
 def resolve_root(path: str | os.PathLike[str] | nu.Nu) -> str | nu.Nu:

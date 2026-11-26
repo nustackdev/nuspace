@@ -177,7 +177,7 @@ def add(
             >> anchored(listed, rows, anchor, cid, "cell", text("plane ", plane))
             >> spelled
             >> key_free(Space.indexes.cell_keys, key, None, "cell")
-            >> nu.let(nustd.time.time(), made)
+            >> nu.let(made, now=nustd.time.time())
             >> place(listed, cid, before=before, after=after)
             >> when(key, Space.indexes.cell_keys.set_item(key, cid))
             >> when(spec, Space.indexes.spec_cells[spec].ids.set_item(cid, True))
@@ -193,10 +193,10 @@ def add(
     def analysed(cid: nu.StrArg) -> nu.Nu:
         if fabrics is not None:
             return write(cid, fabrics)
-        return nu.let(Fabrics(prog, plane, cid), lambda found: write(cid, found))
+        return nu.let(lambda found: write(cid, found), found=Fabrics(prog, plane, cid))
 
     if id is None:
-        return nu.let(MintId("c"), lambda cid: analysed(nu.Str(cid)))
+        return nu.let(lambda cid: analysed(nu.Str(cid)), cid=MintId("c"))
     return analysed(id)
 
 
@@ -429,7 +429,7 @@ def set_prog(id: nu.StrArg, prog: nu.StrArg, *, fabrics: list[str] | nu.Nu | Non
     checked = live(Space.cells, id, "cell")
     if fabrics is not None:
         return checked >> written(fabrics)
-    return checked >> nu.let(Fabrics(prog, row.plane, id), written)
+    return checked >> nu.let(written, used=Fabrics(prog, row.plane, id))
 
 
 def set_meta(id: nu.StrArg, fields: dict[str, Any] | nu.Nu) -> nu.Nu:

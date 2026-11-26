@@ -70,7 +70,7 @@ from nuspace.utils import keys_of
 from nustd.blob.http.serving import serve_blobs
 from nustd.ui.core import WsSession
 from nustd.ui.uploads import uploads
-from nustd.ws_server import SID_ATTR, listen, run_once, session_for, sessions_fold
+from nustd.ws_server import SessionId, listen, run_once, session_for, sessions_fold
 
 from . import ops as web
 from .desks.feed import desks_feed
@@ -162,7 +162,7 @@ def pane_arm(viewer: Ref, sid: nu.StrArg, arms: Arms) -> nu.Nu:
     """
     tab = Conn.connections[sid]
 
-    def route(event: nu.Attr) -> nu.Nu:
+    def route(event: nu.Nu) -> nu.Nu:
         wanted = field_ids(event, "plane_ids")
         given = field_dict(event, "params")
 
@@ -171,13 +171,13 @@ def pane_arm(viewer: Ref, sid: nu.StrArg, arms: Arms) -> nu.Nu:
             fresh = wanted.iter().filter(lambda p: before.contains(p).not_()).to_list()
             gone = before.iter().filter(lambda p: wanted.contains(p).not_()).to_list()
 
-            def params(at: nu.Attr) -> nu.Nu:
+            def params(at: nu.Nu) -> nu.Nu:
                 plane = nu.Str(at)
                 pairs = nu.Dict(given.get_item(plane, nu.Dict.create()))
                 moved = tab.panes[plane].params.fallback({}) != pairs
                 return nu.IfDo(moved, web.set_pane_params(sid, plane, pairs))
 
-            def visited(at: nu.Attr) -> nu.Nu:
+            def visited(at: nu.Nu) -> nu.Nu:
                 # A plane a role names lives in the sidebar's nav section: no visit.
                 plane = nu.Str(at)
                 skip = nu.list(Web.roles.values()).contains(plane)
@@ -197,7 +197,7 @@ def pane_arm(viewer: Ref, sid: nu.StrArg, arms: Arms) -> nu.Nu:
             )
 
         listed = nu.If(tab.order.exists(), nu.list(tab.order), nu.Literal([]))
-        return nu.let(atomic(listed), opened)
+        return nu.let(opened, held=atomic(listed))
 
     return arms.event("open", on_open(viewer), route)
 
@@ -211,7 +211,7 @@ def undo_feed(toasts: Ref) -> nu.Nu:
     """
     arms = Arms("undo", toasts)
 
-    def cells(ev: nu.Attr) -> nu.Nu:
+    def cells(ev: nu.Nu) -> nu.Nu:
         ids = field_ids(ev, "cell_ids")
         return atomic(nu.ForEachDo(ids, lambda c: nuspace.cell.restore(nu.Str(c))))
 
@@ -294,7 +294,7 @@ def server(
         blobs: The backend the blob routes serve, not open yet: the same
             store as the ``Blobs`` spec the assembly binds around the driver.
     """
-    sid = nu.Str(nu.Attr(SID_ATTR))
+    sid = nu.Str(SessionId.sid)
     area, upload_routes = uploads(upload_root)
     held, blob_routes = serve_blobs({blob_mount: blobs})
     return nu.With(
@@ -313,8 +313,8 @@ def server(
         area,
         served_sessions(session_address),
         body=sessions_fold(
-            session_for(
-                SID_ATTR,
+            lambda tab: session_for(
+                tab,
                 # Once per tab: the fold respawns ended arms on every connect
                 # or disconnect anywhere, and a tab rebooted because somebody
                 # else opened one is wiped for no reason.

@@ -78,7 +78,7 @@ def up_plane(plane: nu.StrArg, reaction: nu.StrArg) -> nu.Nu:
             nu.IfDo(nu.Str(new) != "", held.set(nu.Str(new)))
         )
 
-    return nu.let("", write)
+    return nu.let(write, new="")
 
 
 def react(change: nu.Nu, plane: nu.StrArg, reaction: nu.StrArg) -> nu.Nu:

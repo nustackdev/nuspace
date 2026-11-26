@@ -355,7 +355,7 @@ class Served:
 async def test_a_removal_prunes_with_no_browser_and_a_bulk_removal_is_one_run(tmp_path):
     loop = asyncio.get_running_loop()
     ready, done = loop.create_future(), asyncio.Event()
-    hold = nu.let(_Hold(ready, done), lambda _: nu.Noop())
+    hold = nu.let(lambda _: nu.Noop(), _=_Hold(ready, done))
     root = tmp_path / "space"
     await nu.arun(local.init(root))
     web = local.web(

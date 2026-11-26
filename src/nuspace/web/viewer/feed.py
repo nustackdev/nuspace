@@ -164,7 +164,7 @@ def plane_cells(plane: nu.StrArg, specs: Iterable[CellSpec] = ()) -> nu.List:
     """
     classes = {registered_name(s): list(s.classes) for s in specs}
 
-    def cell(at: nu.Attr) -> nu.Dict:
+    def cell(at: nu.Nu) -> nu.Dict:
         cid = nu.Str(at)
         row = Space.cells[cid]
         made = nu.Str(row.spec.fallback(""))
@@ -210,13 +210,13 @@ def transfer_targets() -> nu.List:
     own plane out. Cost: O(web planes), a few reads each.
     """
 
-    def target(at: nu.Attr) -> nu.Bool:
+    def target(at: nu.Nu) -> nu.Bool:
         plane = nu.Str(at)
         editable = nu.Bool(Web.planes[plane].editable.fallback(False))
         system = nu.Bool(Space.planes[plane].system.fallback(False))
         return editable.and_(nuspace.plane.exists(plane)).and_(system.not_())
 
-    def look(at: nu.Attr) -> nu.Dict:
+    def look(at: nu.Nu) -> nu.Dict:
         plane = nu.Str(at)
         row = Space.planes[plane]
         return nu.Dict.of(id=plane, title=row.name.fallback(""), icon=row.icon.fallback(""))
@@ -244,7 +244,7 @@ def trail(plane: nu.StrArg, *, into: nu.Ref) -> nu.Nu:
     step = crumbs.set(nu.List.of(crumb) + nu.List(crumbs)) >> at.set(rows[at].parent.fallback(""))
     climb = nu.WhileDo((at != "").and_(at != ROOT), step)
     start = rows[plane].parent.fallback("")
-    return nu.Frame(_Climb, climb >> into.set(nu.List(crumbs)), at=start, crumbs=nu.List.create())
+    return nu.let(_Climb, climb >> into.set(nu.List(crumbs)), at=start, crumbs=nu.List.create())
 
 
 def _state(run: nu.StrArg, picked: nu.Str) -> nu.Str:
@@ -270,7 +270,7 @@ def statuses(plane: nu.StrArg, run: nu.StrArg) -> nu.List:
     idle. Cost: O(cells), a few reads each.
     """
 
-    def status(at: nu.Attr) -> nu.Nu:
+    def status(at: nu.Nu) -> nu.Nu:
         cell = nu.Str(at)
         node = _history.plane_to_plane_runs[plane].runs[run].cell_to_cell_runs[cell].ids
 
@@ -285,9 +285,9 @@ def statuses(plane: nu.StrArg, run: nu.StrArg) -> nu.List:
             )
 
         # A mem slot holds no NULL: no cell run of the cell reads "".
-        return nu.let(node.last(default=""), entry)
+        return nu.let(entry, held=node.last(default=""))
 
-    def idle(at: nu.Attr) -> nu.Dict:
+    def idle(at: nu.Nu) -> nu.Dict:
         return nu.Dict.of(cell_id=at, state=STATE_IDLE, error="")
 
     cells = nu.List(_cell_ids(plane)).iter()
@@ -319,7 +319,7 @@ def _head(arms: Arms, pane: Ref, plane: nu.Str) -> nu.Nu:
         )
         return nu.IfDo(why == "", shown, interactions.set_absent(pane, why))
 
-    ship = nu.let(atomic(plane_head(plane)), show)
+    ship = nu.let(show, held=atomic(plane_head(plane)))
     rows = Space.planes
     fields = ("name", "icon", "key", "system", "removed_at")
     changes = [atomic(rows.on_descendants_change(plane, f)) for f in fields]
@@ -343,13 +343,13 @@ def _cells(arms: Arms, pane: Ref, plane: nu.Str, specs: Sequence[CellSpec]) -> n
             read = layout.get(plane, into=rows) >> cells.set(plane_cells(plane, specs))
             return atomic(read) >> interactions.set_cells(pane, nu.List(cells), nu.List(rows))
 
-        return nu.let([], send)
+        return nu.let(send, cells=[])
 
     changes = [
         atomic(Space.planes.on_descendants_change(plane, "version")),
         atomic(Web.planes[plane].layout.on_change()),
     ]
-    return arms.states("cells", changes, nu.let([], ship))
+    return arms.states("cells", changes, nu.let(ship, rows=[]))
 
 
 def _trail(arms: Arms, pane: Ref, plane: nu.Str) -> nu.Nu:
@@ -367,7 +367,7 @@ def _trail(arms: Arms, pane: Ref, plane: nu.Str) -> nu.Nu:
         atomic(Space.planes.on_descendants_change("*", "name")),
         atomic(Space.planes.on_descendants_change("*", "parent")),
     ]
-    return arms.states("trail", changes, nu.let([], ship))
+    return arms.states("trail", changes, nu.let(ship, held=[]))
 
 
 def _status(arms: Arms, pane: Ref, sid: nu.StrArg, plane: nu.Str) -> nu.Nu:
@@ -377,16 +377,16 @@ def _status(arms: Arms, pane: Ref, sid: nu.StrArg, plane: nu.Str) -> nu.Nu:
     up is still answered.
     """
 
-    def watch(at: nu.Attr) -> nu.Nu:
+    def watch(at: nu.Nu) -> nu.Nu:
         run = nu.Str(at)
         held_runs = _live.plane_run_to_cell_runs[run].ids
         # Watched from its parent, which always exists: an ended run's set is erased.
         moved = _live.plane_run_to_cell_runs.on_child_change(run)
         read = nu.If(nuspace.plane.exists(plane), statuses(plane, run), [])
-        ship = nu.let(atomic(read), lambda held: interactions.set_status(pane, held))
+        ship = nu.let(lambda held: interactions.set_status(pane, held), held=atomic(read))
         changes = [atomic(Space.planes.on_descendants_change(plane, "version")), atomic(moved)]
 
-        def started(cr: nu.Attr) -> nu.Nu:
+        def started(cr: nu.Nu) -> nu.Nu:
             begun = atomic(Space.exec.cell_runs[nu.Str(cr)].started_at.on_change())
             return arms.state("started", begun, ship)
 
@@ -423,7 +423,7 @@ def _rerun(sid: nu.StrArg, plane: nu.StrArg) -> nu.Nu:
     return atomic(nu.IfDo(over, web.restart_pane(sid, plane)))
 
 
-def _create(specs: Sequence[CellSpec], sid: nu.StrArg, plane: nu.Str, event: nu.Attr) -> nu.Nu:
+def _create(specs: Sequence[CellSpec], sid: nu.StrArg, plane: nu.Str, event: nu.Nu) -> nu.Nu:
     """A cell from the CellSpec ``name`` names, or the starter program for an unknown or empty one, then its rows.
 
     The fabrics are worked out first, outside the commit. Then the cell is
@@ -438,7 +438,7 @@ def _create(specs: Sequence[CellSpec], sid: nu.StrArg, plane: nu.Str, event: nu.
         def made(fabrics: nu.ObjectRef) -> nu.Nu:
             return atomic(spec_ops.add_cell(plane, spec, id=cell, fabrics=nu.Object(fabrics)))
 
-        return nu.let(Fabrics(spec.source, plane, cell), made)
+        return nu.let(made, fabrics=Fabrics(spec.source, plane, cell))
 
     def starter(fabrics: nu.ObjectRef) -> nu.Nu:
         return atomic(
@@ -446,15 +446,15 @@ def _create(specs: Sequence[CellSpec], sid: nu.StrArg, plane: nu.Str, event: nu.
         )
 
     known = {registered_name(s): from_spec(s) for s in specs}
-    made = nu.SwitchDo(name, known, default=nu.let(Fabrics(PROGRAM, plane, cell), starter))
+    made = nu.SwitchDo(name, known, default=nu.let(starter, fabrics=Fabrics(PROGRAM, plane, cell)))
 
     def placed_in(rows: nu.ObjectRef) -> nu.Nu:
         return made >> atomic(layout.set(plane, nu.List(rows))) >> _rerun(sid, plane)
 
-    return nu.let(field_dicts(event, "rows"), placed_in)
+    return nu.let(placed_in, rows=field_dicts(event, "rows"))
 
 
-def _update(sid: nu.StrArg, cell: nu.Str, event: nu.Attr) -> nu.Nu:
+def _update(sid: nu.StrArg, cell: nu.Str, event: nu.Nu) -> nu.Nu:
     """A cell's prog replaced, its fabrics worked out first, outside the commit.
 
     A pane whose run is over runs again (:func:`_rerun`).
@@ -467,12 +467,12 @@ def _update(sid: nu.StrArg, cell: nu.Str, event: nu.Attr) -> nu.Nu:
         def write(fabrics: nu.ObjectRef) -> nu.Nu:
             return atomic(nuspace.cell.set_prog(cell, source, fabrics=nu.Object(fabrics)))
 
-        return nu.let(Fabrics(source, plane, cell), write) >> _rerun(sid, plane)
+        return nu.let(write, fabrics=Fabrics(source, plane, cell)) >> _rerun(sid, plane)
 
-    return nu.let(atomic(Space.cells[cell].plane.fallback("")), on)
+    return nu.let(on, held=atomic(Space.cells[cell].plane.fallback("")))
 
 
-def _web_flags(plane: nu.Str, event: nu.Attr) -> nu.Nu:
+def _web_flags(plane: nu.Str, event: nu.Nu) -> nu.Nu:
     """The plane's web flags the event gives, set in one commit. An unknown flag raises."""
     flags = field_dict(event, "flags")
     unknown = (
@@ -507,10 +507,10 @@ def _layout_events(arms: Arms, pane: Ref, plane: nu.Str) -> list[nu.Nu]:
             interactions.on_transfer_layout(pane),
             # The rows read first: a malformed event transfers nothing.
             lambda ev: nu.let(
-                field_dicts(ev, "rows"),
                 lambda rows: layout.transfer(
                     field_str(ev, "cell_id"), field_str(ev, "plane_id"), nu.List(rows)
                 ),
+                rows=field_dicts(ev, "rows"),
             ),
         ),
     ]
@@ -521,7 +521,7 @@ def _events(
 ) -> list[nu.Nu]:
     """Browser to store: one arm per pane op. A restart is this tab's, not another's."""
 
-    def on_cell(name: str, change: nu.Nu, op: Callable[[nu.Str, nu.Attr], nu.Nu]) -> nu.Nu:
+    def on_cell(name: str, change: nu.Nu, op: Callable[[nu.Str, nu.Nu], nu.Nu]) -> nu.Nu:
         return arms.event(name, change, lambda ev: op(field_str(ev, "cell_id"), ev))
 
     return [
@@ -576,8 +576,8 @@ def _events(
             "targets",
             interactions.on_targets(pane),
             lambda _: nu.let(
-                atomic(transfer_targets()),
                 lambda held: interactions.set_targets(pane, nu.List(held)),
+                held=atomic(transfer_targets()),
             ),
         ),
         on_cell(
@@ -642,11 +642,11 @@ def viewer_feed(viewer: Ref, sid: nu.StrArg, specs: Iterable[CellSpec], toasts: 
     arms = Arms("pane", toasts)
     tab = Conn.connections[sid]
 
-    def opening(at: nu.Attr) -> nu.Str:
+    def opening(at: nu.Nu) -> nu.Str:
         plane = nu.Str(at)
         return plane + _OPEN + nu.Str(tab.panes[plane].opened.fallback(""))
 
-    def arm(at: nu.Attr) -> nu.Nu:
+    def arm(at: nu.Nu) -> nu.Nu:
         plane = nu.Str(nu.Str(at).partition(_OPEN)[0])
         return _pane(arms, viewer, sid, plane, specs)
 

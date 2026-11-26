@@ -84,7 +84,7 @@ async def space():
     ready, done = loop.create_future(), asyncio.Event()
     stores = nu.With(*(nustd.kv.memory_navigator(tags=(s.root,)) for s in (WEB_STORE, CONN_STORE)))
     init = nustd.kv.atomic(WEB_STORE.init()) >> nustd.kv.atomic(CONN_STORE.init())
-    held = nu.let(_Hold(ready, done), lambda _: nu.Noop())
+    held = nu.let(lambda _: nu.Noop(), _=_Hold(ready, done))
     body = nu.With(MADE_STORE, stores, body=init >> nu.Race(nav(), held))
     task = asyncio.create_task(
         nu.arun(kernel_open(body, data=data, name=NAME, spares=0, envs=ENVS))
@@ -344,7 +344,7 @@ class _Up:
         loop_ = asyncio.get_running_loop()
         self.ready, self.done = loop_.create_future(), asyncio.Event()
         pool = nustd.mp.pool(name=name, init=navigators(data), spares=0, grace=2.0)
-        held = nu.let(_Hold(self.ready, self.done), lambda _: nu.Noop())
+        held = nu.let(lambda _: nu.Noop(), _=_Hold(self.ready, self.done))
         body = nu.Race(term, nu.With(MADE_STORE, body=held))
         opened = nu.With(navigators(data), pool, kernel.bound(envs=ENVS), body=body)
         self.task = asyncio.create_task(nu.arun(opened))
@@ -373,7 +373,7 @@ async def _nav_alone(data: str) -> Kernel:
     ready, done = loop_.create_future(), asyncio.Event()
     mem = nu.With(*(nustd.kv.memory_navigator(tags=(s.root,)) for s in (WEB_STORE, CONN_STORE)))
     init = init_stores() >> nustd.kv.atomic(WEB_STORE.init()) >> nustd.kv.atomic(CONN_STORE.init())
-    held = nu.let(_Hold(ready, done), lambda _: nu.Noop())
+    held = nu.let(lambda _: nu.Noop(), _=_Hold(ready, done))
     body = nu.With(MADE_STORE, mem, body=init >> nu.Race(nav(), held))
     task = asyncio.create_task(
         nu.arun(nu.With(_mounted(data), binding.served(), navigators(data), body=body))

@@ -129,20 +129,18 @@ class Captured(Bracket):
     """
 
     @contextmanager
-    def _open(self, ctx: Context) -> Iterator[None]:
+    def _open(self, ctx: Context) -> Iterator[Context]:
         """Sync form: bind the buffer, attribute nothing."""
-        with ctx.fabrics.bind(_out.RunOut, _out.RunOut()):
-            yield
+        yield ctx.bind(_out.RunOut, _out.RunOut())
 
     @asynccontextmanager
-    async def _aopen(self, ctx: Context) -> AsyncIterator[None]:
+    async def _aopen(self, ctx: Context) -> AsyncIterator[Context]:
         """Tee the process, point the contextvar at a fresh buffer, bind it."""
         _out.install()
         held = _out.RunOut()
         token = _out.current.set(held)
         try:
-            with ctx.fabrics.bind(_out.RunOut, held):
-                yield
+            yield ctx.bind(_out.RunOut, held)
         finally:
             with contextlib.suppress(ValueError):
                 _out.current.reset(token)

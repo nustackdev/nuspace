@@ -77,7 +77,7 @@ def read() -> nu.Dict:
     totals = state.totals
     calendar = state.calendar
 
-    def day(at: nu.Attr) -> nu.List:
+    def day(at: nu.Nu) -> nu.List:
         d = nu.Str(at)
         return nu.List.of(d, calendar[d].planes.fallback(0), calendar[d].cells.fallback(0))
 
@@ -200,7 +200,7 @@ VERSIONS = versions()
 
 def draw() -> nu.Nu:
     """One read, then its drawing."""
-    return nu.let(atomic(read()), show)
+    return nu.let(show, got=atomic(read()))
 
 
 def out() -> nu.Nu:

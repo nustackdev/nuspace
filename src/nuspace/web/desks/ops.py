@@ -101,7 +101,7 @@ def _item_shaped(item: nu.DictArg) -> nu.Nu:
 def minted(id: nu.StrArg | None, size: int, write: Callable[[nu.Str], nu.Nu]) -> nu.Nu:
     """``write(id)``, with a fresh id of ``size`` chars when ``id`` is None."""
     if id is None:
-        return nu.let(NewId(size), lambda fresh: write(nu.Str(fresh)))
+        return nu.let(lambda fresh: write(nu.Str(fresh)), fresh=NewId(size))
     return write(nu.Str(id))
 
 
@@ -221,13 +221,13 @@ def save_desk(desk_id: nu.StrArg) -> nu.Nu:
     """
     entries = Web.desks[desk_id].entries
 
-    def write(saved: nu.Attr) -> nu.Nu:
+    def write(saved: nu.Nu) -> nu.Nu:
         held = nu.Dict(saved)
         return nu.ForEachDo(
             nu.list(held.keys()), lambda i: entries.set_item(nu.Str(i), held[nu.Str(i)])
         )
 
-    return _desk_known(desk_id) >> nu.let(SavedEntries(Web.desks[desk_id].extract()), write)
+    return _desk_known(desk_id) >> nu.let(write, saved=SavedEntries(Web.desks[desk_id].extract()))
 
 
 # --- Items ------------------------------------------------------------------------------
@@ -347,7 +347,7 @@ def move_item(
         >> anchor_known(there, before, after, "item")
     )
 
-    def across(held: nu.Attr) -> nu.Nu:
+    def across(held: nu.Nu) -> nu.Nu:
         return (
             refuse(there.contains(item_id), Exists, "item ", item_id, " exists on desk ", target)
             >> here.del_item(item_id)
@@ -355,7 +355,7 @@ def move_item(
         )
 
     within = moved(here, item_id, before, after)
-    went = nu.IfDo(nu.Str(target) == desk_id, within, nu.let(here[item_id].extract(), across))
+    went = nu.IfDo(nu.Str(target) == desk_id, within, nu.let(across, held=here[item_id].extract()))
     return checks >> went
 
 
@@ -407,7 +407,7 @@ def write_items(
     if order is None:
         return steps
 
-    def one(move: nu.Attr) -> nu.Nu:
+    def one(move: nu.Nu) -> nu.Nu:
         m = nu.List(move)
         item, side, anchor = nu.Str(m[0]), nu.Str(m[1]), nu.Str(m[2])
         return nu.IfDo(

@@ -85,7 +85,7 @@ def _root() -> nu.Nu:
             >> root.modified_at.set(now)
         )
 
-    return nu.IfDo(root.exists().not_(), nu.let(nustd.time.time(), made))
+    return nu.IfDo(root.exists().not_(), nu.let(made, now=nustd.time.time()))
 
 
 def init_space() -> nu.Nu:

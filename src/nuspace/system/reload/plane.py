@@ -102,7 +102,7 @@ def _arm(plane_run: nu.Str) -> nu.Nu:
         )
         return nu.Reconcile(changes, _pass(plane_run, plane), **_RECHECK)
 
-    return restarting(nu.let(atomic(row.plane.fallback("")), watching), KEY, plane_run)
+    return restarting(nu.let(watching, held=atomic(row.plane.fallback(""))), KEY, plane_run)
 
 
 def driver() -> nu.Nu:

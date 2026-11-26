@@ -90,7 +90,7 @@ class Boot(Command):
         chains = [_seeded(chain, self.seeds) for chain in boot_chains((), self.shape_cls)]
 
         async def athunk(rt: Runtime) -> None:
-            session = rt.ctx.fabrics.get(Session)
+            session = rt.ctx.get(Session)
             await session.send(Frame(OP_REMOVE))
             for chain in chains:
                 await session.send(Frame(OP_INIT, ref=[seg for seg, _, _ in chain], chain=chain))

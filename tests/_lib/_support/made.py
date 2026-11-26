@@ -21,4 +21,4 @@ class Made(nu.Shape):
 MADE = Made.id
 
 #: A frame for :class:`Made`, a bracket held open for as long as the harness is.
-MADE_STORE = nu.Frame(Made, None)
+MADE_STORE = nu.let(Made, None)

@@ -6,7 +6,7 @@ slot but :func:`get` and :func:`set`. Code reading a layout calls
 
     import nuspace.web as web
 
-    nu.let([], lambda rows: nuspace.atomic(web.layout.get(plane, into=rows)) >> ...)
+    nu.let(lambda rows: nuspace.atomic(web.layout.get(plane, into=rows)) >> ..., rows=[])
     nuspace.atomic(web.layout.set(plane, rows))
     web.layout.transfer(cell, other_plane, rows)   # two commits, brackets itself
 
@@ -58,9 +58,9 @@ def get(plane: nu.StrArg, *, into: nu.Ref) -> nu.Nu:
             changed = Web.planes.contains(plane).and_(nu.List(x) != nu.List(held))
             return nu.IfDo(changed, slot.set(nu.List(x))) >> into.set(nu.List(x))
 
-        return nu.let(LayoutReconcile(held, _cells(plane)), heal)
+        return nu.let(heal, x=LayoutReconcile(held, _cells(plane)))
 
-    return nu.let(slot.fallback([]), reconciled)
+    return nu.let(reconciled, held=slot.fallback([]))
 
 
 def set(plane: nu.StrArg, rows: nu.ListArg[dict]) -> nu.Nu:
@@ -85,7 +85,7 @@ def set(plane: nu.StrArg, rows: nu.ListArg[dict]) -> nu.Nu:
         shaped = refuse(nu.Str(said) != "", Refused, said)
         return shaped >> _slot(plane).set(nu.List(LayoutReconcile(rows, _cells(plane))))
 
-    return checks >> nu.let(RowsProblem(rows), write)
+    return checks >> nu.let(write, said=RowsProblem(rows))
 
 
 def transfer(cell: nu.StrArg, plane: nu.StrArg, rows: nu.ListArg[dict]) -> nu.Nu:

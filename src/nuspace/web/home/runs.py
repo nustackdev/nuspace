@@ -125,7 +125,7 @@ def collect(
     found, before, read_, more = _Walk.planes, _Walk.before, _Walk.read, _Walk.more
     runs = Space.exec.plane_runs
 
-    def visit(at: nu.Attr) -> nu.Nu:
+    def visit(at: nu.Nu) -> nu.Nu:
         plane = nu.Str(runs[nu.Str(at)].plane.fallback(""))
         new = (found.len() < lanes_).and_(plane != "").and_(found.contains(plane).not_())
         lane = nu.If(system, True, Space.planes[plane].system.fallback(False).not_())
@@ -146,7 +146,7 @@ def collect(
         runs.reversed_keys(before=before, limit=size),
     )
     going = more.and_(found.len() < lanes_).and_(read_ < budget)
-    loop = nu.WhileDo(going, nu.let(nu.If(runs.exists(), next_page, []), step))
+    loop = nu.WhileDo(going, nu.let(step, held=nu.If(runs.exists(), next_page, [])))
     result = nu.Dict.of(
         lanes=lanes(nu.list(found)),
         read=read_,
@@ -155,7 +155,7 @@ def collect(
     # ``nu.List.of()``, not ``[]``: a literal list is one object for every run of
     # the built term, and ``append`` would grow it across draws (stale lanes).
     fresh = nu.List.of()
-    return nu.Frame(_Walk, loop >> into.set(result), planes=fresh, before="", read=0, more=True)
+    return nu.let(_Walk, loop >> into.set(result), planes=fresh, before="", read=0, more=True)
 
 
 def lanes(planes: nu.ListArg) -> nu.List:
@@ -166,12 +166,12 @@ def lanes(planes: nu.ListArg) -> nu.List:
     """
     runs = Space.exec.plane_runs
 
-    def run(at: nu.Attr) -> nu.List:
+    def run(at: nu.Nu) -> nu.List:
         row = runs[nu.Str(at)]
         start = row.started_at.fallback(row.created_at.fallback(0.0))
         return nu.List.of(start, row.ended_at.fallback(0.0), row.exit.fallback(""))
 
-    def lane(at: nu.Attr) -> nu.Dict:
+    def lane(at: nu.Nu) -> nu.Dict:
         plane = nu.Str(at)
         log = HISTORY.plane_to_plane_runs[plane].runs
         ids = nu.List(nu.If(log.exists(), log.reversed_keys(limit=PER_LANE), []))
@@ -288,7 +288,7 @@ def show(got: nu.ObjectRef, part: Recent) -> nu.Nu:
             ),
         )
 
-    return nu.let(Shaped(got, Clock()), drawn)
+    return nu.let(drawn, held=Shaped(got, Clock()))
 
 
 def draw(part: Recent, system: nu.BoolArg = False) -> nu.Nu:
@@ -297,7 +297,7 @@ def draw(part: Recent, system: nu.BoolArg = False) -> nu.Nu:
     ``system`` is the walk's predicate (:func:`collect`): the viewer's switch,
     read by the caller.
     """
-    return nu.let(None, lambda got: atomic(collect(got, system=system)) >> show(got, part))
+    return nu.let(lambda got: atomic(collect(got, system=system)) >> show(got, part), got=None)
 
 
 def changes() -> nu.Nu:

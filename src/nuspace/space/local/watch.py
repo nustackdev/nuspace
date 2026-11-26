@@ -10,12 +10,13 @@ all they meet through.
 
 Run is a plain tree: a ``nu.Race`` of two arms inside the pool inside
 infra, each arm teleporting its driver's term to a fresh worker. A driver's
-term is built with the tree, on the root as the caller gave it: a path, or
-the ``nu.Attr`` a ``nustd.fs.tmp`` lambda hands over a throwaway root. The
-teleport carries the caller's attrs (``carry=True``), so a throwaway root,
-known only once its dir is made, reaches both workers as the path it is.
-Building a term opens nothing: whatever a driver holds (the uploads area, a
-server) is opened in its worker, when the term runs there.
+term is built with the tree, a lambda over the root, and the root goes along
+as a Teleport arg: evaluated here (a path, or the ref a ``nustd.fs.tmp``
+lambda hands over a throwaway root), shipped with the term, read in the
+worker from the term's own frame. So a throwaway root, known only once its
+dir is made, reaches both workers as the path it is. Building a term opens
+nothing: whatever a driver holds (the uploads area, a server) is opened in
+its worker, when the term runs there.
 
 - **Start.** Infra's checks, lock and server here, then both arms at once:
   the kernel's worker, and web's once the kernel holds its lock (a kernel
@@ -79,7 +80,7 @@ from .plane import found
 
 if TYPE_CHECKING:
     import os
-    from collections.abc import Mapping
+    from collections.abc import Callable, Mapping
 
     from nu.context.fabric import Provide
     from nuspace.specs import PlaneSpec
@@ -127,15 +128,20 @@ def put(into: nu.Ref | None, code: object) -> nu.Nu:
     return nu.Noop() if into is None else into.set(code)
 
 
-def in_worker(term: nu.Nu) -> nu.Nu:
-    """``term`` run in a fresh worker of the pool, the caller's attrs carried; its value or its error here.
+def in_worker(build: Callable[[nu.Nu], nu.Nu], root: str | nu.Nu) -> nu.Nu:
+    """The term ``build`` makes on ``root``, run in a fresh worker of the pool; its value or its error here.
 
-    The worker is stopped after, however the term ended: one gone already
-    stops at once.
+    ``root`` is a Teleport arg: evaluated here, its path shipped with the
+    term, which ``build`` makes on the ref the worker binds it to. A term
+    built on the caller's ``root`` itself would read a frame the worker
+    does not have (a throwaway root's ``nustd.fs.tmp`` lambda). The worker
+    is stopped after, however the term ended: one gone already stops at once.
     """
     return nu.let(
-        POOL.launch(),
-        lambda w: nu.TryCatch(POOL.teleport(term, w, carry=True), finally_=POOL.stop(w)),
+        lambda w: nu.TryCatch(
+            POOL.teleport(lambda root: build(root), w, root=root), finally_=POOL.stop(w)
+        ),
+        w=POOL.launch(),
     )
 
 
@@ -178,24 +184,31 @@ def ended(err: nu.Nu) -> nu.Tuple:
 
 def stopping(who: str, err: nu.Nu, then: str, into: nu.Ref | None) -> nu.Nu:
     """``who`` ended as ``err`` tells, said with ``then`` after it, its status written to ``into``."""
-    return nu.let(ended(err), lambda e: say(who, nu.Tuple(e)[1], then) >> put(into, nu.Tuple(e)[0]))
+    return nu.let(
+        lambda e: say(who, nu.Tuple(e)[1], then) >> put(into, nu.Tuple(e)[0]), e=ended(err)
+    )
 
 
-def kernel_arm(kernel: nu.Nu, into: nu.Ref | None) -> nu.Nu:
-    """The kernel in its worker; its end said and its status written to ``into``."""
+def kernel_arm(kernel: Callable[[nu.Nu], nu.Nu], root: str | nu.Nu, into: nu.Ref | None) -> nu.Nu:
+    """The kernel, its term built on ``root`` in its worker; its end said and its status written to ``into``."""
     return nu.TryCatch(
-        in_worker(kernel) >> say("the kernel ended, stopping web") >> put(into, 0),
+        in_worker(kernel, root) >> say("the kernel ended, stopping web") >> put(into, 0),
         catch=lambda err: stopping("the kernel ", err, ", stopping web", into),
     )
 
 
-def web_arm(web: nu.Nu, beside: nu.Nu | None, into: nu.Ref | None) -> nu.Nu:
-    """Web in a worker once the kernel is up, started again when it ends, ``beside`` with it; a refusal or a give up written to ``into``.
+def web_arm(
+    web: Callable[[nu.Nu], nu.Nu],
+    root: str | nu.Nu,
+    beside: nu.Nu | None,
+    into: nu.Ref | None,
+) -> nu.Nu:
+    """Web, its term built on ``root``, in a worker once the kernel is up, started again when it ends, ``beside`` with it; a refusal or a give up written to ``into``.
 
     Every end of web is a failure to ``Retry``: one without an error
     raises once its worker is done. A refusal is excluded from what is
-    retried and ends the arm. The hooks bind the error only while they
-    run, so nothing caught is in the attrs a restart carries to its worker.
+    retried and ends the arm. A restart ships only the root to its worker,
+    nothing a hook caught.
     """
     up = required(
         held(DATA / KERNEL_LOCK),
@@ -203,7 +216,7 @@ def web_arm(web: nu.Nu, beside: nu.Nu | None, into: nu.Ref | None) -> nu.Nu:
         wait=KERNEL_UP,
     )
     restarted = nu.Retry(
-        in_worker(web) >> nu.Raise("ended on its own"),
+        in_worker(web, root) >> nu.Raise("ended on its own"),
         max_attempts=RESTARTS + 1,
         delay=DELAY,
         backoff=2.0,
@@ -281,8 +294,8 @@ def run(
 
     Args:
         path: The space's root, initialized (``local.init``), or a term
-            yielding it that reads the same in the workers, eg the
-            ``nu.Attr`` a ``nustd.fs.tmp`` lambda hands. None is a
+            yielding it, eg the ref a ``nustd.fs.tmp`` lambda hands: each
+            worker gets its value as a Teleport arg. None is a
             throwaway one, made and initialized here, removed at the end.
         into: Where run's status is written, eg an ``nu.IntRef`` slot the
             caller binds and reads after: the kernel's, or 2 when web was
@@ -317,9 +330,9 @@ def run(
     )
 
     def on(root: str | nu.Nu) -> nu.Nu:
-        served = drivers.web(root, **{**web, "open_browser": False})
         race = nu.Race(
-            kernel_arm(drivers.kernel(root, **kernel), into), web_arm(served, beside, into)
+            kernel_arm(lambda r: drivers.kernel(r, **kernel), root, into),
+            web_arm(lambda r: drivers.web(r, **{**web, "open_browser": False}), root, beside, into),
         )
         pooled = nustd.mp.pool(name=POOL_NAME, grace=GRACE, tags=(POOL_TAG,), body=race)
         return drivers.infra(root, body=pooled)

@@ -99,7 +99,7 @@ def show(got: nu.ObjectRef) -> nu.Nu:
 
 def draw() -> nu.Nu:
     """One read, then its drawing."""
-    return nu.let(atomic(read()), show)
+    return nu.let(show, got=atomic(read()))
 
 
 def first() -> nu.Nu:
@@ -115,12 +115,12 @@ def shown() -> nu.List:
     return _live(Web.recents, TILES)
 
 
-def tiles(at: nu.Attr) -> nu.Nu:
+def tiles(at: nu.Nu) -> nu.Nu:
     """One tile's arm: redraw it when its plane's name or icon changes. Event: a miss is only stale."""
     plane = nu.Str(at)
     row = Space.planes[plane]
     changes = nu.OnAny(row.name.on_change(), row.icon.on_change())
-    body = nu.let(atomic(page(plane)), lambda got: _tile(plane, got))
+    body = nu.let(lambda got: _tile(plane, got), got=atomic(page(plane)))
     return nu.ReactEvery(atomic(changes), body)
 
 

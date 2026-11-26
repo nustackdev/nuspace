@@ -180,10 +180,10 @@ def checked() -> nu.Nu:
     """
     where = ROOT.where()
     return nu.let(
-        meta_in(META),
         lambda meta: (
             not_other(meta, where, ASSEMBLY) >> refused(nu.Not(ran(meta)), uninitialized(where))
         ),
+        meta=meta_in(META),
     )
 
 

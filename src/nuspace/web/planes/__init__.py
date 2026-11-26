@@ -103,7 +103,7 @@ def _role(role: str, name: str, icon: str, cells: tuple[tuple[str, str], ...]) -
         on_web = web.add(plane, editable=True) >> web.set_role(role, plane)
         return atomic(adds >> _cells(plane, cells, ["ui"])) >> atomic(on_web)
 
-    return nu.IfDo(nu.Bool(atomic(there)).not_(), nu.let(MintId("p"), made))
+    return nu.IfDo(nu.Bool(atomic(there)).not_(), nu.let(made, minted=MintId("p")))
 
 
 def _keyed(
@@ -129,7 +129,7 @@ def _keyed(
             )
         return adds
 
-    return atomic(nu.IfDo(nuspace.plane.keyed(key) == "", nu.let(MintId("p"), made)))
+    return atomic(nu.IfDo(nuspace.plane.keyed(key) == "", nu.let(made, minted=MintId("p"))))
 
 
 def ensure() -> nu.Nu:

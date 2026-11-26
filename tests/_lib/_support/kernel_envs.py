@@ -44,7 +44,7 @@ class Stamp:
 def tagged(value: str) -> Env:
     """An env that holds ``value`` in a :class:`Tag` frame and stamps the program."""
     return Env(
-        wrap=lambda body: nu.Frame(Tag, body, value=value),
+        wrap=lambda body: nu.let(Tag, body, value=value),
         rewrite=Stamp(),
         label=f"tagged:{value}",
     )
@@ -52,9 +52,9 @@ def tagged(value: str) -> Env:
 
 def outer() -> Env:
     """A space-wide env: a :class:`Tag` frame too, so an inner one shadows it."""
-    return Env(wrap=lambda body: nu.Frame(Tag, body, value="outer"), label="outer")
+    return Env(wrap=lambda body: nu.let(Tag, body, value="outer"), label="outer")
 
 
 def session(sid: str) -> Env:
     """What the web device registers, minus the device: the connection held in a frame."""
-    return Env(wrap=lambda body: nu.Frame(Connection, body, sid=sid), label=f"session:{sid}")
+    return Env(wrap=lambda body: nu.let(Connection, body, sid=sid), label=f"session:{sid}")

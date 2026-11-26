@@ -43,7 +43,7 @@ def bracketed(term: nu.Nu) -> nu.Nu:
     Known edges, as ``auto_flow_atomic`` has them: an op is itself a flow
     (its checks and writes in a ``>>``, a minting one inside a ``let``), so
     each of its steps gets its own bracket and its writes land in several
-    commits, not one. A wrapper that is not a flow (``Frame``, ``let``,
+    commits, not one. A wrapper that is not a flow (``let``,
     ``TryCatch``, ``Timeout``) and reads a store outside its flow branches
     gets one bracket around all of it, held for as long as it runs; a subscription keyed by a dynamic read is
     bracketed whole. Code shaped like that brackets by hand with

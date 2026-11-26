@@ -88,7 +88,7 @@ def add(
             plane_run,
             "'s plane",
         )
-        >> nu.let(MintId("cr"), write)
+        >> nu.let(write, minted=MintId("cr"))
     )
 
 

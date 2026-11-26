@@ -353,7 +353,7 @@ async def test_an_open_counts_an_existing_space_with_no_indexer_state(tmp_path):
         return added >> nuspace.atomic(nuspace.cell.add(nu.Str(made), "x = 1", fabrics=[]))
 
     for _ in range(2):
-        await _on_disk(root, nu.let("", plane_and_cell))
+        await _on_disk(root, nu.let(plane_and_cell, made=""))
     assert await _on_disk(root, nuspace.atomic(nuspace.plane.keyed(indexer.KEY))) != ""
     assert not await _on_disk(root, nuspace.atomic(STATE.totals.extract()))
     # Web wakes the indexer, the kernel beside it runs it.

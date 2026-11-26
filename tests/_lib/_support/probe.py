@@ -17,4 +17,4 @@ class Probe(nu.Shape):
 
 
 #: A worker ``init``: a frame for :class:`Probe`, open for the worker's life.
-PROBE_INIT = nu.Frame(Probe, None)
+PROBE_INIT = nu.let(Probe, None)

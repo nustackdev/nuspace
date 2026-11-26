@@ -122,9 +122,9 @@ TMP = nustd.fs.FsRef("nuspace.cli.tmp")
 def throwaway_on(space: ModuleType, on: Callable[[nu.Nu], nu.Nu]) -> nu.Nu:
     """``on(root)`` on a throwaway root, initialized by ``space`` first: a ``nustd.fs.tmp`` dir, gone at close.
 
-    The entry points take the ``nu.Attr`` the tmp lambda hands over the
-    dir's path as their root, so one term makes the root, inits it, runs on
-    it and removes it, and the workers ``run`` teleports to read it too.
+    The entry points take the ref the tmp lambda hands over the dir's path
+    as their root, so one term makes the root, inits it, runs on it and
+    removes it, and the workers ``run`` teleports to get it as a Teleport arg.
     """
     return nustd.fs.tmp(tag=TMP, prefix="nuspace-", body=lambda root: space.init(root) >> on(root))
 

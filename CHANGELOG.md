@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Runs on nu's context frames; throwaway roots reach workers as values shipped with them
 - Fabric brackets follow nu's keyword-only Provide signature
 - A cell that clears its drawn view shows No view instead of a skeleton
 - Deleting cells or a plane toasts an Undo; plane delete no longer asks first

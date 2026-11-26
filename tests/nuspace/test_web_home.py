@@ -509,7 +509,7 @@ async def test_now_redraws_on_a_live_change_and_not_while_idle(store):
 
 async def collected(store, **kwargs) -> dict:
     return await store.made(
-        nu.let(None, lambda s: nuspace.atomic(runs.collect(s, **kwargs)) >> MADE.set(s))
+        nu.let(lambda s: nuspace.atomic(runs.collect(s, **kwargs)) >> MADE.set(s), s=None)
     )
 
 

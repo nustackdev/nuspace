@@ -47,7 +47,7 @@ __all__ = ["desks_feed", "titles"]
 
 def _ship(read: nu.Nu, send: Callable[[nu.Dict], nu.Nu]) -> nu.Nu:
     """``read`` in one snapshot, then ``send(value)`` to the browser."""
-    return nu.let(atomic(read), lambda held: send(nu.Dict(held)))
+    return nu.let(lambda held: send(nu.Dict(held)), held=atomic(read))
 
 
 def titles() -> nu.Dict:
@@ -58,7 +58,7 @@ def titles() -> nu.Dict:
     on them.
     """
 
-    def look(at: nu.Attr) -> nu.List:
+    def look(at: nu.Nu) -> nu.List:
         plane = nu.Str(at)
         row = Space.planes[plane]
         return nu.List.of(
@@ -70,7 +70,7 @@ def titles() -> nu.Dict:
     return nu.dict(shown.map(look).to_list())
 
 
-def _create(ev: nu.Attr) -> nu.Nu:
+def _create(ev: nu.Nu) -> nu.Nu:
     """``desk.create``: the desk, last, then its items in their order."""
     desk_id = field_str(ev, "desk_id")
     desk = field_dict(ev, "desk")
@@ -78,7 +78,7 @@ def _create(ev: nu.Attr) -> nu.Nu:
     return made >> desk_ops.write_items(desk_id, Items(desk["items"]))
 
 
-def _move(ev: nu.Attr) -> nu.Nu:
+def _move(ev: nu.Nu) -> nu.Nu:
     """``desk.move``: in front of ``before``, last for ``""``."""
     desk_id, before = field_str(ev, "desk_id"), field_str(ev, "before")
     return nu.IfDo(
@@ -86,10 +86,10 @@ def _move(ev: nu.Attr) -> nu.Nu:
     )
 
 
-def _write(ev: nu.Attr) -> nu.Nu:
+def _write(ev: nu.Nu) -> nu.Nu:
     """``items.write``: each desk's writes in turn, the caller's one commit around them all."""
 
-    def one(held: nu.Attr) -> nu.Nu:
+    def one(held: nu.Nu) -> nu.Nu:
         w = nu.Dict(held)
         return desk_ops.write_items(nu.Str(w["desk_id"]), w["sets"], w["deletes"], w["order"])
 
@@ -105,7 +105,7 @@ def desks_feed(desks: Ref, toasts: Ref) -> nu.Nu:
     """
     arms = Arms("desks", toasts)
 
-    def op(name: str, change: nu.Nu, run: Callable[[nu.Attr], nu.Nu]) -> nu.Nu:
+    def op(name: str, change: nu.Nu, run: Callable[[nu.Nu], nu.Nu]) -> nu.Nu:
         return arms.event(name, change, lambda ev: atomic(run(ev)))
 
     def send_desks(held: nu.Dict) -> nu.Nu:

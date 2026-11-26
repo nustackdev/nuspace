@@ -59,8 +59,8 @@ def subtree(
             >> stack.extend(nu.list(rows[at].children.keys()))
         )
 
-    walk = nu.WhileDo(stack.len() > 0, nu.let(stack.pop(), visit))
-    return nu.Frame(_Down, walk, stack=nu.List.of(top))
+    walk = nu.WhileDo(stack.len() > 0, nu.let(visit, p=stack.pop()))
+    return nu.let(_Down, walk, stack=nu.List.of(top))
 
 
 def no_cycle(id: nu.StrArg, parent: nu.StrArg) -> nu.Nu:
@@ -75,4 +75,4 @@ def no_cycle(id: nu.StrArg, parent: nu.StrArg) -> nu.Nu:
     at = _Up.at
     climb = nu.WhileDo((at != "").and_(at != id), at.set(Space.planes[at].parent.fallback("")))
     cycle = refuse(at == id, Refused, "plane ", id, " cannot move under itself or a plane below it")
-    return nu.Frame(_Up, climb >> cycle, at=parent)
+    return nu.let(_Up, climb >> cycle, at=parent)

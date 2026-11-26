@@ -139,7 +139,7 @@ Plan = nu.host(plan, name="Plan")
 def _removed(desks: nu.Nu) -> nu.List:
     """The plane ids a desk links to, original or recent, whose plane row is removed."""
 
-    def gone(p: nu.Attr) -> nu.Bool:
+    def gone(p: nu.Nu) -> nu.Bool:
         return Space.planes[nu.Str(p)].removed_at.exists()
 
     return nu.List(DeskPlanes(desks)).iter().filter(gone).to_list()
@@ -158,17 +158,17 @@ def step() -> nu.Nu:
     (:func:`~.ops.write_items`).
     """
 
-    def wrote(held: nu.Attr) -> nu.Nu:
+    def wrote(held: nu.Nu) -> nu.Nu:
         changes = nu.Dict(held)
 
-        def one(desk_id: nu.Attr) -> nu.Nu:
+        def one(desk_id: nu.Nu) -> nu.Nu:
             d = nu.Str(desk_id)
             change = nu.Dict(changes[d])
             return write_items(d, change["sets"], change["deletes"])
 
         return nu.ForEachDo(nu.list(changes.keys()), one)
 
-    return nu.let(_plan(), wrote)
+    return nu.let(wrote, held=_plan())
 
 
 def pending() -> nu.Bool:
@@ -191,7 +191,7 @@ def out() -> nu.Nu:
 
 def _mine(body: Callable[[nu.Str], nu.Nu]) -> nu.Nu:
     """``body`` given the pruner's plane id, read by key once, in its own snapshot."""
-    return nu.let(atomic(ops.plane.keyed(KEY)), lambda plane: body(nu.Str(plane)))
+    return nu.let(lambda plane: body(nu.Str(plane)), plane=atomic(ops.plane.keyed(KEY)))
 
 
 def ensure_reaction() -> nu.Nu:
@@ -217,8 +217,8 @@ def wake() -> nu.Nu:
     """
     kept = atomic(pruner().reaction.fallback(""))
 
-    def asked(reaction: nu.Attr) -> nu.Nu:
+    def asked(reaction: nu.Nu) -> nu.Nu:
         r = nu.Str(reaction)
         return nu.IfDo(r != "", _mine(lambda plane: reactions.up_plane(plane, r)))
 
-    return nu.let(kept, asked)
+    return nu.let(asked, reaction=kept)

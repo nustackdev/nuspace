@@ -564,12 +564,11 @@ _TICKS = nu.TryCatch(
 async def _backend(cls: type[Backend]):
     """A bare backend over a bare pool, no store: bodies here are plain Nu."""
     pool = {"name": "nuspace-test-backend", "init": nu.Literal(PROBE_INIT)}
-    ctx = nu.Context()
-    async with nu.Provide(WorkerPool, kwargs=pool)._aenter(ctx):
+    async with nu.Provide(WorkerPool, kwargs=pool)._aenter(nu.Context()) as ctx:
         backend = cls()
         await backend.asetup(ctx)
         try:
-            yield backend, ctx.fabrics.get(WorkerPool)
+            yield backend, ctx.get(WorkerPool)
         finally:
             await backend.acleanup()
 
@@ -772,7 +771,7 @@ async def test_release_lets_go_of_the_worker_the_arm_took(store, taken, stopped)
     r = await store.made(nuspace.atomic(nuspace.plane_run.add("p", into=MADE)))
     _Counts.stopped.clear()
     bound = nu.Provide(_Counts, kwargs={}, tag="counts", bind_as=Backend)
-    release = nu.let(taken, lambda slot: _release(nu.Str(r), nu.Str("counts"), slot))
+    release = nu.let(lambda slot: _release(nu.Str(r), nu.Str("counts"), slot), slot=taken)
     await store.run(nu.With(bound, body=release))
     assert _Counts.stopped == stopped
 
