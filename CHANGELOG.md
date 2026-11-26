@@ -2,15 +2,16 @@
 
 ## Packages shipped from this repo
 
-- **nuspace** (the runtime, the `nuspace` command) — 0.8.1
-- **nuspace-ui** (the compiled web bundle) — 0.7.6
+- **nuspace** (the runtime, the `nuspace` command) — 0.8.2
+- **nuspace-ui** (the compiled web bundle) — 0.8.2
 
 Below is the changelog for **nuspace** - the full commit stream. Newest first.
 The `nuspace-ui` wheel is the same source tree's vite output and is not tracked
 separately here.
 
-## Unreleased
+## 0.8.2 - 2026-11-27
 
+- Release nuspace 0.8.2, nuspace-ui 0.8.2
 - Imports Provide from nu's flattened context package
 - Runs on nu's context frames; throwaway roots reach workers as values shipped with them
 - Fabric brackets follow nu's keyword-only Provide signature
