@@ -23,7 +23,7 @@ from .resources import Warmed
 
 
 if TYPE_CHECKING:
-    from nu.context.fabric import Provide
+    from nu.context import Provide
 
 
 __all__ = ["DEFAULT_GRACE", "DEFAULT_NAME", "DEFAULT_SPARES", "worker_context", "worker_pool"]

@@ -68,7 +68,7 @@ if TYPE_CHECKING:
     import os
     from collections.abc import Callable, Sequence
 
-    from nu.context.fabric import Provide
+    from nu.context import Provide
 
 
 __all__ = ["ROOTS", "STORES", "TMP", "bracketed", "fresh", "init", "initialized", "path_set"]

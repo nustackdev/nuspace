@@ -82,7 +82,7 @@ if TYPE_CHECKING:
     import os
     from collections.abc import Callable, Mapping
 
-    from nu.context.fabric import Provide
+    from nu.context import Provide
     from nuspace.specs import PlaneSpec
 
 

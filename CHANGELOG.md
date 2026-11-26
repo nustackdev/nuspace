@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Imports Provide from nu's flattened context package
 - Runs on nu's context frames; throwaway roots reach workers as values shipped with them
 - Fabric brackets follow nu's keyword-only Provide signature
 - A cell that clears its drawn view shows No view instead of a skeleton

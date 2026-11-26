@@ -33,7 +33,7 @@ from .layout import BLOBS_DIR, DATA, STORES, VALKEY_DIR
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
-    from nu.context.fabric import Provide
+    from nu.context import Provide
 
 
 __all__ = ["blob_backend", "blobs", "quiet", "served", "stores", "valkey_dir", "valkey_url"]

@@ -116,7 +116,7 @@ if TYPE_CHECKING:
     import os
     from collections.abc import Mapping, Sequence
 
-    from nu.context.fabric import Provide
+    from nu.context import Provide
     from nuspace.kernel import Backend, EnvFactory
     from nuspace.specs import PlaneSpec
     from nustd.blob import BlobBackend

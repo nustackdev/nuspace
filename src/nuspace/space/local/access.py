@@ -34,7 +34,7 @@ from .opening import ROOTS
 if TYPE_CHECKING:
     import os
 
-    from nu.context.fabric import Provide
+    from nu.context import Provide
 
 
 __all__ = ["open"]
