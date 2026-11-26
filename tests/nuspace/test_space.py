@@ -1475,7 +1475,7 @@ nu.eval_in_loop(nu.compile(local.init(sys.argv[1])), nu.Context())
 term = local.run(sys.argv[1], into=Out.code, port=int(sys.argv[2]), static=None,
                  extensions=(), spares=0)
 out = {}
-nu.eval_in_loop(nu.compile(nu.Provide(Seen, {}, term)), nu.Context().bind(dict, out, Out))
+nu.eval_in_loop(nu.compile(nu.Provide(Seen, kwargs={}, body=term)), nu.Context().bind(dict, out, Out))
 print("exited", out.get("code"), flush=True)
 """
 

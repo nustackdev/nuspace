@@ -80,5 +80,5 @@ def provided(backends: Mapping[str, type[Backend]] | None = None) -> nu.With:
             msg = f"Backend {name!r} declares placement {cls.placement!r}, not one of {PLACEMENTS}"
             raise ValueError(msg)
     return nu.With(
-        *(nu.Provide(cls, {}, tag=name, bind_as=Backend) for name, cls in merged.items())
+        *(nu.Provide(cls, kwargs={}, tag=name, bind_as=Backend) for name, cls in merged.items())
     )

@@ -116,7 +116,7 @@ def blobs() -> Provide:
     options = nu.Dict.of(root=DATA.where(BLOBS_DIR))
     return nu.Provide(
         nustd.blob.BlobFabric,
-        {"backend": nustd.blob.FilesBackend, "options": options},
+        kwargs={"backend": nustd.blob.FilesBackend, "options": options},
         tag=Blobs.name,
     )
 

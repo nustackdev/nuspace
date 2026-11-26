@@ -565,7 +565,7 @@ async def _backend(cls: type[Backend]):
     """A bare backend over a bare pool, no store: bodies here are plain Nu."""
     pool = {"name": "nuspace-test-backend", "init": nu.Literal(PROBE_INIT)}
     ctx = nu.Context()
-    async with nu.Provide(WorkerPool, pool)._aenter(ctx):
+    async with nu.Provide(WorkerPool, kwargs=pool)._aenter(ctx):
         backend = cls()
         await backend.asetup(ctx)
         try:
@@ -771,7 +771,7 @@ async def test_release_lets_go_of_the_worker_the_arm_took(store, taken, stopped)
     await store.run(nuspace.atomic(nuspace.plane.add("p", backend="counts")))
     r = await store.made(nuspace.atomic(nuspace.plane_run.add("p", into=MADE)))
     _Counts.stopped.clear()
-    bound = nu.Provide(_Counts, {}, tag="counts", bind_as=Backend)
+    bound = nu.Provide(_Counts, kwargs={}, tag="counts", bind_as=Backend)
     release = nu.let(taken, lambda slot: _release(nu.Str(r), nu.Str("counts"), slot))
     await store.run(nu.With(bound, body=release))
     assert _Counts.stopped == stopped

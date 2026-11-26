@@ -549,4 +549,4 @@ def served_sessions(address: str) -> nu.With:
     Args:
         address: ``host:port`` to listen on.
     """
-    return nu.With(nu.Provide(SessionPipe, {"address": address}))
+    return nu.With(nu.Provide(SessionPipe, kwargs={"address": address}))

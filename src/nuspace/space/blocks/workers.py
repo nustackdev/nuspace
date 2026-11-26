@@ -54,7 +54,7 @@ def worker_context(bindings: nu.Nu, blobs: Provide) -> nu.With:
             assembly opens its own stores with. Must pickle.
         blobs: The blob store's spec (``nuspace.Blobs``).
     """
-    return nu.With(bindings, blobs, nu.Provide(Warmed, {}))
+    return nu.With(bindings, blobs, nu.Provide(Warmed, kwargs={}))
 
 
 def worker_pool(
@@ -79,4 +79,4 @@ def worker_pool(
         grace: Seconds a worker gets to end, polite first, killed past it.
     """
     options = {"init": init, "name": name, "spares": spares, "grace": grace}
-    return nu.Provide(nustd.mp.WorkerPool, options)
+    return nu.Provide(nustd.mp.WorkerPool, kwargs=options)

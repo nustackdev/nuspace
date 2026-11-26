@@ -495,5 +495,5 @@ def bound(
     """
     return nu.With(
         provided_backends(backends),
-        nu.Provide(KernelConfig, {"envs": envs, "space_envs": space_envs}),
+        nu.Provide(KernelConfig, kwargs={"envs": envs, "space_envs": space_envs}),
     )

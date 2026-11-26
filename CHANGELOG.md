@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Fabric brackets follow nu's keyword-only Provide signature
 - A cell that clears its drawn view shows No view instead of a skeleton
 - Deleting cells or a plane toasts an Undo; plane delete no longer asks first
 - Worker apps pass field reads and watched events through to the browser
