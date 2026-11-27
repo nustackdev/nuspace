@@ -8,11 +8,11 @@
 // The socket is opened here and nowhere else. What it is doing is read through
 // `useConnectionStatus` by whoever draws it, so a reconnect never re-renders
 // the shell. A frame for the cell ui of a closed plane is refused at the
-// socket (see ./main/state.ts).
+// socket (see ./core/viewer.ts).
 
 import { TooltipProvider } from "@nustackdev/ui-kit";
 import { useNuspaceConnection } from "./core/connection";
-import { admits } from "./main/state";
+import { admits } from "./core/viewer";
 // The node types this shell draws, before the socket opens (./refs/desktop.ts).
 import "./refs/desktop";
 import { ConfirmDialog } from "./shell/ConfirmDialog";

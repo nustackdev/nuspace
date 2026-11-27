@@ -8,7 +8,7 @@ import { useNuspaceConnection } from "../core/connection";
 // The stored theme, painted before the first frame. Desktop paints it from
 // its sidebar footer; the phone has no footer.
 import "../core/theme";
-import { admits } from "../main/state";
+import { admits } from "../core/viewer";
 import { ConfirmDialog } from "../shell/ConfirmDialog";
 // The node types this shell draws, before the socket opens (./refs.ts).
 import "./refs";

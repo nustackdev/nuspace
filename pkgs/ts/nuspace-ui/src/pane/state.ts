@@ -30,7 +30,7 @@
 //
 // The node comes with the first write and goes with the server's erase when
 // the pane closes. The browser drops it itself first, on the route change
-// (../main/state.ts `settlePanes`): both are safe, and the browser one does
+// (../core/viewer.ts `settlePanes`): both are safe, and the browser one does
 // not wait a round trip.
 
 import type { Path, Props } from "@nustackdev/ui-core";

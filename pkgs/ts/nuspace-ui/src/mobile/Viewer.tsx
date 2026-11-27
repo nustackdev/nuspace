@@ -11,10 +11,10 @@
 import { EmptyState, type NodeProps, pathKey, Spinner } from "@nustackdev/ui-kit";
 import { useCallback, useEffect } from "react";
 import { currentRoutes, paramsOf, type Route, useRoute, useRoutes } from "../core/router";
+import { settlePanes, useCellSpecs } from "../core/viewer";
 import { notifyOp } from "../core/wire";
 import { mobileMissing, mobileScreen } from "../design";
 import type { PaneAt } from "../desk/drag";
-import { settlePanes, useCellSpecs } from "../main/state";
 import { NotFound } from "../pane/NotFound";
 import type { ViewerOps } from "../plane/ops";
 import { MobileDesk } from "./desk/MobileDesk";
