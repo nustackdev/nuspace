@@ -11,6 +11,8 @@ separately here.
 
 ## Unreleased
 
+- Move to nu 0.9.2 and ui-kit 0.5.0
+
 - Phone sidebar's + moves to the dock: one + everywhere, Add plane over the sidebar
 - Narrow desktop windows show the sidebar as a rail that opens over the content
 - Phone plane sheet can rename, change icon and add a plane inside; + adds inside too

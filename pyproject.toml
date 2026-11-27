@@ -14,8 +14,8 @@ dependencies = [
     # The fabrics a space runs on, nothing more: kv for the store, valkey for
     # its change notifications, ui for the browser, mp for the workers,
     # proxy (invisibles) for the worker's session, blob for the media store.
-    "nucore>=0.9.1",
-    "nustd[kv,ui,valkey,mp,proxy,blob]>=0.9.1",
+    "nucore>=0.9.2",
+    "nustd[kv,ui,valkey,mp,proxy,blob]>=0.9.2",
     # The store's change notifications run over virtuals' redis backend.
     "virtuals-py[redis]>=0.2.2",
     # The compiled web bundle. A separate distribution only because PyPI caps
@@ -55,7 +55,7 @@ classifiers = [
 [project.optional-dependencies]
 # Every nustd fabric and kv backend, for cells that reach past the defaults.
 all = [
-    "nustd[all]>=0.9.1",
+    "nustd[all]>=0.9.2",
 ]
 
 [project.urls]
