@@ -103,4 +103,32 @@ describe("a pane node", () => {
 		applyPaneWrite(props, { op: "scroll", to: "cell", cell_id: "c1", smooth: true, seq: "s2" });
 		expect(props.scroll).toEqual({ to: "cell", cellId: "c1", smooth: true, seq: "s2" });
 	});
+
+	it("keeps a cell info answer, times in ms and no run as an empty id", () => {
+		const props: Record<string, unknown> = {};
+		applyPaneWrite(props, {
+			op: "set_cell_info",
+			info: {
+				cell_id: "c1",
+				key: "intro",
+				spec: "testing.text",
+				label: "Text",
+				version: 3,
+				created_at: 10,
+				modified_at: 0,
+				run: { id: "", version: 0 },
+			},
+		});
+		expect(props.cellInfo).toMatchObject({
+			cellId: "c1",
+			key: "intro",
+			label: "Text",
+			version: 3,
+			createdAt: 10_000,
+			modifiedAt: null,
+			run: { id: "", startedAt: null },
+		});
+		applyPaneWrite(props, { op: "set_cell_info", info: { name: "no id" } });
+		expect(props.cellInfo).toBeNull();
+	});
 });

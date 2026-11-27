@@ -13,6 +13,7 @@
 from nuspace.web.viewer.feed import (
     PROGRAM,
     WEB_FLAGS,
+    cell_info,
     plane_cells,
     plane_head,
     statuses,
@@ -102,6 +103,7 @@ __all__ = [
     "on_transfer_cell",
     "on_update_cell",
     "pane_ref",
+    "cell_info",
     "plane_cells",
     "plane_head",
     "scroll",

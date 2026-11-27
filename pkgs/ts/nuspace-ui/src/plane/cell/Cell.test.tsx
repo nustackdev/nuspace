@@ -1,6 +1,6 @@
 // A program cell that draws nothing, rendered in jsdom: one quiet "No view"
 // line on an editable plane and a read-only one alike, and an error stands
-// in for it. The gutter's source toggle carries the cell's status. A cell that draws but whose view has
+// in for it. A cell that draws but whose view has
 // not arrived waits quietly, then shows a skeleton; one that drew and cleared
 // its view shows the chip.
 
@@ -40,6 +40,7 @@ function render(
 						status: { cell_id: "c1", state, error },
 					}}
 					uiPath={["viewer", "cells", "c1"]}
+					panePath={["viewer", "panes", "p1"]}
 					editable={editable}
 					selected={selection.selected ?? false}
 					selectedStrong={(selection.selected ?? false) && (selection.multi ?? false)}
@@ -54,6 +55,7 @@ function render(
 					onDelete={noop}
 					onRestart={noop}
 					onTransfer={noop}
+					onAskInfo={noop}
 					onSelect={noop}
 					onFocusConsumed={noop}
 					onCommit={noop}
@@ -98,66 +100,24 @@ describe("a cell with no view", () => {
 	});
 });
 
-describe("the cell's status, on the source toggle", () => {
-	const toggle = () => host.querySelector("[data-cell-status]");
-
-	it.each([
-		["idle", "text-cell-idle"],
-		["starting", "text-cell-starting"],
-		["running", "text-cell-running"],
-		["stopped", "text-cell-stopped"],
-		["failed", "text-cell-failed"],
-		["invalid", "text-cell-invalid"],
-	] as [CellState, string][])("tints the glyph and names the state, %s", (state, hue) => {
-		render(true, state);
-		expect(toggle()?.getAttribute("aria-label")).toBe(`Show source · ${state}`);
-		expect(toggle()?.querySelector("svg")?.getAttribute("class")).toContain(hue);
-	});
-
-	it("tints it on a read-only plane too", () => {
-		render(false, "running");
-		expect(toggle()?.getAttribute("aria-label")).toBe("Show source · running");
-		expect(toggle()?.querySelector("svg")?.getAttribute("class")).toContain("text-cell-running");
-	});
-});
-
 describe("the controls", () => {
 	const labels = () =>
 		[...host.querySelectorAll("[data-cell-gutter] button")].map((b) =>
 			b.getAttribute("aria-label"),
 		);
 
-	it("puts add and the grip left of the cell, the source and identity toggles right", () => {
+	it("puts add and the grip left of the cell, nothing right", () => {
 		render(true, "running");
-		expect(labels()).toEqual([
-			"Add a line below",
-			"Drag to reorder, click for options",
-			"Show source · running",
-			"Show id and key",
-		]);
-		// The right gutter comes before the body, so the body is last in the tab order.
-		const [left, right, body] = host.querySelectorAll("[data-cell] > *");
-		expect(body.hasAttribute("data-cell-body")).toBe(true);
+		expect(labels()).toEqual(["Add a line below", "Drag to reorder, click for options"]);
+		const [left, body] = host.querySelectorAll("[data-cell] > *");
 		expect(left.hasAttribute("data-cell-gutter")).toBe(true);
-		expect(right.hasAttribute("data-cell-gutter")).toBe(true);
+		expect(body.hasAttribute("data-cell-body")).toBe(true);
 	});
 
-	it("keeps only the menu and the right toggles on a read-only plane", () => {
+	it("keeps only the menu on a read-only plane", () => {
 		render(false, "running");
-		expect(labels()).toEqual(["Cell options", "Show source · running", "Show id and key"]);
+		expect(labels()).toEqual(["Cell options"]);
 		expect(host.querySelector("[data-cell-grip]")?.classList.contains("cursor-grab")).toBe(false);
-	});
-
-	it("toggles the identity block above what the cell draws, and pins the lane", () => {
-		render(true, "idle");
-		const toggle = () => host.querySelector<HTMLButtonElement>("[data-cell-identity]");
-		expect(host.querySelector("[data-identity]")).toBeNull();
-		act(() => toggle()?.click());
-		expect(host.querySelector("[data-cell-body] > [data-identity]")).not.toBeNull();
-		expect(host.querySelector("[data-identity-id]")?.textContent).toBe("c1");
-		expect(toggle()?.closest("[data-cell-gutter]")?.hasAttribute("data-pinned")).toBe(true);
-		act(() => toggle()?.click());
-		expect(host.querySelector("[data-identity]")).toBeNull();
 	});
 
 	it("marks the one selected cell, not a cell in a wider selection", () => {
@@ -167,21 +127,6 @@ describe("the controls", () => {
 		render(true, "idle", "", false, { selected: true, multi: true });
 		expect(marked()).toBe(false);
 	});
-
-	it.each([
-		["failed", false, true],
-		["invalid", false, true],
-		["running", true, true],
-		["running", false, false],
-		["idle", false, false],
-	] as [CellState, boolean, boolean][])(
-		"pins the source toggle out, %s editing=%s",
-		(state, editing, pinned) => {
-			render(true, state, "", false, {}, editing);
-			const lane = host.querySelector("[data-cell-status]")?.closest("[data-cell-gutter]");
-			expect(lane?.hasAttribute("data-pinned")).toBe(pinned);
-		},
-	);
 });
 
 describe("a cell whose view is on the way", () => {

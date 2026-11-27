@@ -73,6 +73,11 @@ once with :func:`transfer_targets` on that pane: every web plane that is
 editable, not removed and not a system plane. The core op does not read
 ``editable``; this list is where the web keeps to it.
 
+**A cell's info is asked for, never watched.** A pane's ``cell.info``
+(the cell's menu opening) is answered once with :func:`cell_info` on that
+pane: the cell's own row, and its newest cell run in the pane's plane run,
+the same one its status reads. Nothing about it ships for a closed menu.
+
 **A cell's classes are read off its spec, here.** Each shipped cell carries
 the classes of the installed CellSpec it was made from, and not the spec
 itself, so the browser binds behaviour to a class and never to who made a
@@ -119,6 +124,7 @@ if TYPE_CHECKING:
 __all__ = [
     "PROGRAM",
     "WEB_FLAGS",
+    "cell_info",
     "plane_cells",
     "plane_head",
     "statuses",
@@ -177,6 +183,62 @@ def plane_cells(plane: nu.StrArg, specs: Iterable[CellSpec] = ()) -> nu.List:
         )
 
     return nu.List(_cell_ids(plane)).iter().map(cell).to_list()
+
+
+def cell_info(
+    sid: nu.StrArg, plane: nu.StrArg, cell: nu.StrArg, specs: Iterable[CellSpec] = ()
+) -> nu.Nu:
+    """What one cell is and how it last ran, as a ``cell.info`` is answered. Bare read.
+
+    ``{cell_id, name, key, spec, label, icon, version, created_at,
+    modified_at, run}``. ``spec`` is the name of the spec it was made from,
+    ``label`` and ``icon`` that spec's as installed, ``""`` for none or one
+    not installed. Times are epoch seconds, ``0`` for never.
+
+    ``run`` is its newest cell run in the plane run the tab's pane on
+    ``plane`` follows, the one its status is read off: ``{id, version, by,
+    backend, created_at, started_at, ended_at, exit, error}``, ``id`` of
+    ``""`` when it has none there. ``backend`` is its worker's.
+    Cost: O(1), a few reads.
+    """
+    installed = list(specs)
+    labels = {registered_name(s): s.label for s in installed}
+    icons = {registered_name(s): s.icon or "" for s in installed}
+    row = Space.cells[cell]
+    made = nu.Str(row.spec.fallback(""))
+    run = nu.Str(Conn.connections[sid].panes[plane].plane_run.fallback(""))
+    ids = _history.plane_to_plane_runs[plane].runs[run].cell_to_cell_runs[cell].ids
+
+    def info(held: nu.ObjectRef) -> nu.Dict:
+        picked = nu.Str(held)
+        cr = Space.exec.cell_runs[picked]
+        worker = Space.exec.workers[nu.Str(cr.worker.fallback(""))]
+        last = nu.Dict.of(
+            id=picked,
+            version=cr.version.fallback(0),
+            by=cr.by.fallback(""),
+            backend=worker.backend.fallback(""),
+            created_at=cr.created_at.fallback(0.0),
+            started_at=cr.started_at.fallback(0.0),
+            ended_at=cr.ended_at.fallback(0.0),
+            exit=cr.exit.fallback(""),
+            error=cr.error.fallback(""),
+        )
+        return nu.Dict.of(
+            cell_id=cell,
+            name=row.name.fallback(""),
+            key=row.key.fallback(""),
+            spec=made,
+            label=nu.Switch(made, labels, default=""),
+            icon=nu.Switch(made, icons, default=""),
+            version=row.version.fallback(0),
+            created_at=row.created_at.fallback(0.0),
+            modified_at=row.modified_at.fallback(0.0),
+            run=last,
+        )
+
+    # A mem slot holds no NULL: no cell run of the cell there reads "".
+    return nu.let(info, held=nu.If(run == "", "", ids.last(default="")))
 
 
 def plane_head(plane: nu.StrArg) -> nu.Dict:
@@ -578,6 +640,14 @@ def _events(
             lambda _: nu.let(
                 lambda held: interactions.set_targets(pane, nu.List(held)),
                 held=atomic(transfer_targets()),
+            ),
+        ),
+        on_cell(
+            "cell_info",
+            interactions.on_cell_info(pane),
+            lambda c, _: nu.let(
+                lambda held: interactions.set_cell_info(pane, nu.Dict(held)),
+                held=atomic(cell_info(sid, plane, c, specs)),
             ),
         ),
         on_cell(

@@ -69,7 +69,11 @@ describe("Move to plane", () => {
 	it("asks as it opens, loads, lists the answer, and sends one transfer to the plane picked", () => {
 		render([cell("c1"), cell("c2")]);
 		openPicker("c2");
-		expect(notify.mock.calls).toEqual([["cell.targets", {}]]);
+		// The menu asked for the cell's info as it opened, then the picker for targets.
+		expect(notify.mock.calls).toEqual([
+			["cell.info", { cell_id: "c2" }],
+			["cell.targets", {}],
+		]);
 		expect(loading()).not.toBeNull();
 		expect(rows()).toEqual([]);
 		answer([T("p1", "Here"), T("p3", "Three"), T("p2", "Two")]);
@@ -114,7 +118,7 @@ describe("Move to plane", () => {
 		answer([T("p1"), T("p2")]);
 		press(document.querySelector("[cmdk-input]") as HTMLElement, "Escape");
 		expect(rows()).toEqual([]);
-		expect(notify.mock.calls.map(([op]) => op)).toEqual(["cell.targets"]);
+		expect(notify.mock.calls.map(([op]) => op)).toEqual(["cell.info", "cell.targets"]);
 		expect(selected()).toEqual(["c1"]);
 	});
 

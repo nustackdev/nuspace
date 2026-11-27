@@ -1,6 +1,6 @@
-// What a cell is called by code and agents: its id and its key, in one small
-// block the cell's identity toggle opens, the way the code toggle opens its
-// source (./cell/Gutter.tsx).
+// What a plane is called by code and agents: its id and its key, in one small
+// block its title's identity toggle opens (../pane/TitleIdentity.tsx). A
+// cell's key lives in its menu instead (./cell/KeySub.tsx).
 //
 // The id never changes: shown and copied, nothing else. The key is optional
 // and changes here: Enter or Save sets it, an empty one removes it. Only its
@@ -8,8 +8,7 @@
 // refuse, and that refusal toasts. Escape in the field closes the block.
 //
 // Without `onSave` (a read-only plane) the key shows and copies, and nothing
-// saves. Kind-blind on purpose: a plane's title opens the same block
-// (../pane/TitleIdentity.tsx). Each label carries the glyph its menu row
+// saves. Kind-blind, though only a plane's title opens it now. Each label carries the glyph its menu row
 // copies with, `#` for an id and `@` for a key.
 
 import {

@@ -49,7 +49,7 @@ import {
 	docTail,
 	type PlaneWidth,
 } from "../design";
-import { clearPaneTargets, usePaneTargets } from "../pane/state";
+import { clearPaneCellInfo, clearPaneTargets, usePaneTargets } from "../pane/state";
 import { deletedCells } from "../refs/toast";
 import type { FocusRequest, PlaneApi, PlaneHandle, PlaneModel } from "./api";
 import { cellUiPath } from "./cell/address";
@@ -361,6 +361,7 @@ export function Plane({
 				<Cell
 					cell={cell}
 					uiPath={cellUiPath(viewerPath, cell.id)}
+					panePath={panePath}
 					editable={editable}
 					hidden={fed || editor.ghost?.replace === cell.id || editor.leaving.includes(cell.id)}
 					selected={selected}
@@ -382,6 +383,10 @@ export function Plane({
 					}}
 					onRestart={() => notify("cell.restart", { cell_id: cell.id })}
 					onTransfer={() => openTransfer(cell.id)}
+					onAskInfo={() => {
+						clearPaneCellInfo(panePath);
+						notify("cell.info", { cell_id: cell.id });
+					}}
 					// A text selection dragged out of what a document draws
 					// becomes a cell selection. The grip has its own drag.
 					onPress={

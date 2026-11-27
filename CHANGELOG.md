@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Cell menu shows the cell's facts and last run, and edits its key
 - Code cells run only on shift+enter, never on blur or escape
 
 ## 0.8.2 - 2026-11-27

@@ -16,8 +16,6 @@
 
 import { cn, commandSurfaceClasses } from "@nustackdev/ui-kit";
 
-import { CELL_STATUS, type CellStatus } from "./cell-status";
-
 /* ============================== Plane + column ============================ */
 
 /**
@@ -212,9 +210,9 @@ export function docTitle(): string {
 }
 
 /**
- * The title row's right gutter, where a cell's identity toggle sits on its
- * row. Hidden like a cell's controls: out while the head is hovered or the
- * toggle has the keyboard, and pinned (`data-pinned`) while the block is open.
+ * The title row's right gutter, where the plane's identity toggle sits.
+ * Hidden like a cell's controls: out while the head is hovered or the toggle
+ * has the keyboard, and pinned (`data-pinned`) while the block is open.
  * `pt-2.5` centres the 24px toggle on the title's first line (its 2 of pad
  * plus half its 38 line).
  */
@@ -304,9 +302,9 @@ export function docCell(state: CellStateFlags = {}): string {
  * A document at rest shows text, not controls, so they show only when this
  * row is the one in question: hovered, one of its controls reached by
  * keyboard, it is the one selected cell, or its menu is open. `data-pinned`
- * on the lane keeps it out regardless (the source toggle of a broken cell, or
- * of one whose source is open). All of it is read off the row in CSS, so no
- * row knows about any other and the plane does not arbitrate.
+ * on the lane keeps it out regardless (while the key editor is open on the
+ * grip). All of it is read off the row in CSS, so no row knows about any
+ * other and the plane does not arbitrate.
  *
  * The top pad (`--spacing-doc-gutter-top`) centres the 24px controls on a
  * text cell's first line. Each sits against the content edge, 4px off it.
@@ -422,9 +420,9 @@ export const docBoxSelect = cn(
 // panel is the outside - the gutter, the measure, the cell padding - and that
 // is `docCellRow` and `docCell`'s job.
 //
-// The cell has no control row of its own. Status, the id and the code toggle
-// all live in the gutter now, on the same three rows every cell gets, so what
-// is left inside the cell is only what the program produced.
+// The cell has no control row of its own. Its status, id, key and source
+// live in its menu, off the grip in the gutter, so what is left inside the
+// cell is only what the program produced.
 
 /** The cell's own stack: alert, editor, fields. All output, no chrome. */
 export const docProgram = "flex flex-col gap-1";
@@ -482,19 +480,6 @@ export const docSkeletonCell = cn(docContentTrack, "flex flex-col gap-2 p-doc-ce
 /* ============================== Status ================================== */
 
 /**
- * The cell's status, on the source toggle's glyph: the code icon takes the
- * cell's hue. It is the cell's one state indicator, so every state paints
- * one, idle included (muted gray). The glyph carries its own colour class,
- * which beats the colour the kit `Toggle` sets on itself, so the hue holds
- * on hover and while pressed. Colour is never the only cue: the toggle's
- * label and tooltip name the state. It shows when its gutter does, and stays
- * out on a broken cell (`docGutterLane`).
- */
-export function docGutterStatus(status: CellStatus): string {
-	return CELL_STATUS[status].fg;
-}
-
-/**
  * The traceback / diagnostic body inside a cell's status panel. The panel
  * itself is the kit's `Alert` (it already owns the wash, the line, the tone
  * icon and `role="alert"`); all that is left for the document layer is the
@@ -526,10 +511,8 @@ export const docSlashList = "min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-
 /* ============================= Identity block ============================= */
 
 /**
- * A cell's id and key, two small lines the identity toggle opens above what
- * the cell draws, the way the code toggle opens its source. A plane's opens
- * the same block under its title (`docTitleIdentity`). Muted and dense: an
- * address, not content.
+ * A plane's id and key, two small lines its identity toggle opens under its
+ * title (`docTitleIdentity`). Muted and dense: an address, not content.
  */
 export const docIdentity = cn(
 	"mb-2 flex flex-col gap-1 rounded-md border border-border-default px-2 py-1.5",

@@ -13,6 +13,8 @@
 //   set_trail   the planes above, top first
 //   set_targets the answer to a `cell.targets` ask: where a cell can go
 //               (../plane/transfer.ts). Null while asked and not answered
+//   set_cell_info the answer to a `cell.info` ask: what one cell is and how
+//               it last ran (../plane/cell/info.ts). Null while asked
 //   set_absent  why there is nothing to draw. Stands in for the head
 //   set_follow  whether the body follows its end (./scroll.ts)
 //   scroll      one shot: the body to its top, end or a cell. A command
@@ -34,6 +36,7 @@ import type { Path, Props } from "@nustackdev/ui-core";
 import { getNode } from "@nustackdev/ui-core";
 import { nodeAt, tree, useTree } from "@nustackdev/ui-kit";
 import { LOCAL, localOf } from "../core/local";
+import { type CellInfo, coerceCellInfo } from "../plane/cell/info";
 import { type EditorState, EMPTY_EDITOR, pruneEditor } from "../plane/state";
 import { coerceTargets, type Target } from "../plane/transfer";
 import {
@@ -120,6 +123,11 @@ export function applyPaneWrite(props: Props, payload: unknown): void {
 		return;
 	}
 
+	if (op === "set_cell_info") {
+		props.cellInfo = coerceCellInfo(p.info);
+		return;
+	}
+
 	if (op === "set_follow") {
 		props.follow = coerceFollow(p.follow);
 		return;
@@ -163,6 +171,11 @@ export function patchPaneTitle(path: Path, title: string): void {
 /** Forget the last answer to `cell.targets`, locally, as a new ask goes out: loading until it lands. */
 export function clearPaneTargets(path: Path): void {
 	if (nodeAt(path)) tree.getState().setProps(path, { targets: null });
+}
+
+/** Forget the last answer to `cell.info`, locally, as a new ask goes out: loading until it lands. */
+export function clearPaneCellInfo(path: Path): void {
+	if (nodeAt(path)) tree.getState().setProps(path, { cellInfo: null });
 }
 
 // -- Reads -------------------------------------------------------------------
@@ -209,6 +222,18 @@ export function usePaneTrail(path: Path): Crumb[] {
 /** The answer to the last `cell.targets` ask. Null while none has landed since. */
 export function usePaneTargets(path: Path): Target[] | null {
 	return usePaneProp<Target[]>(path, "targets") ?? null;
+}
+
+/**
+ * The answer to the last `cell.info` ask, when it is about `cellId`. Null
+ * while none has landed since, and for an answer about another cell: a late
+ * one for a menu closed since never shows under the next.
+ */
+export function useCellInfo(path: Path, cellId: string): CellInfo | null {
+	return useTree((s) => {
+		const info = getNode(s.root, path)?.props.cellInfo as CellInfo | null | undefined;
+		return info?.cellId === cellId ? info : null;
+	});
 }
 
 /** Whether the pane's body follows its end. "none" until told. */

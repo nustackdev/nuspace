@@ -39,6 +39,7 @@ from nuspace.web.sidebar import registered_entries, rows
 from nuspace.web.utils import CellRoot
 from nuspace.web.viewer import (
     PROGRAM,
+    cell_info,
     plane_cells,
     plane_head,
     slash_entries,
@@ -348,6 +349,33 @@ async def test_viewer_statuses(store):
     assert got["c2"]["state"] == "stopped" and got["c1"]["state"] == "idle"
 
 
+async def test_viewer_cell_info_reads_the_row_and_its_run_in_the_pane(store):
+    await plane(store, "p1")
+    await do(store, nuspace.specs.add_cell("p1", TEXT, id="c1", fabrics=["ui"]))
+    await do(store, nuspace.cell.set_key("c1", "intro"))
+    pane = web.Conn.connections["s1"].panes["p1"]
+
+    # No pane on the plane in the tab: the row, and no run.
+    got = await store.read(cell_info("s1", "p1", "c1", CELLS))
+    assert got["cell_id"] == "c1" and got["key"] == "intro"
+    assert got["spec"] == TEXT and got["label"] == "Text"
+    assert got["version"] >= 1
+    assert got["created_at"] > 0 and got["run"]["id"] == ""
+
+    run = await store.made(nuspace.atomic(nuspace.plane_run.add("p1", into=MADE)))
+    await do(store, pane.plane_run.set(run))
+    made = await store.made(nuspace.atomic(nuspace.cell_run.add(run, "c1", by="nav", into=MADE)))
+    await do(store, nuspace.cell_run.start(made, worker="w"))
+    await do(store, nuspace.cell_run.end(made, EXIT_FAILED, "boom"))
+    last = (await store.read(cell_info("s1", "p1", "c1", CELLS)))["run"]
+    assert last["id"] == made and last["by"] == "nav"
+    assert last["exit"] == EXIT_FAILED and last["error"] == "boom"
+    assert last["started_at"] > 0 and last["ended_at"] >= last["started_at"]
+
+    # A spec not installed: no label.
+    assert (await store.read(cell_info("s1", "p1", "c1")))["label"] == ""
+
+
 # --- A tab, live, over a fake session ----------------------------------------
 
 
@@ -629,6 +657,12 @@ async def test_a_cell_transferred_from_a_pane_leaves_it(store):
         session.notify((*PANE, "cell.targets"), {})
         await _until(lambda: session.pane("p1", "set_targets"))
         assert [t["id"] for t in session.pane("p1", "set_targets")[-1]["planes"]] == ["p1", "p2"]
+        # A cell's info the same: asked, answered once on that pane, naming the cell.
+        assert session.writes("set_cell_info") == []
+        session.notify((*PANE, "cell.info"), {"cell_id": "c2"})
+        await _until(lambda: session.pane("p1", "set_cell_info"))
+        info = session.pane("p1", "set_cell_info")[-1]["info"]
+        assert info["cell_id"] == "c2" and info["spec"] == ""
 
         # No anchor: the end of the target. An anchor there: before it.
         session.notify((*PANE, "cell.transfer"), {"cell_id": "c1", "plane_id": "p2"})

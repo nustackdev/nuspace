@@ -62,8 +62,8 @@
 	 *   | gutter-l 56 | content, up to 592  | gutter-r 56 |
 	 *
 	 * The left gutter holds the plane's icon on the title row, and a cell's
-	 * place controls (add, grip) on its row. The right one holds what the
-	 * cell is (its source toggle). The gutters are fixed
+	 * place controls (add, grip) on its row. The right one holds the
+	 * plane's identity toggle on the title row. The gutters are fixed
 	 * and the content track takes the rest (`minmax(0, 1fr)`), so one template
 	 * serves every width: the plane caps its own width at `--doc-grid-width`
 	 * and the content stops at the measure, full width drops the cap and it

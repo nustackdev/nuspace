@@ -17,6 +17,8 @@
 - **Targets**, one ask and one answer on a pane's path: ``cell.targets``
   asks for the planes a cell can be transferred to, ``set_targets``
   answers once. Nothing watches them after.
+- **Cell info**, the same: ``cell.info`` asks for what one cell is and how
+  it last ran in the pane's run, ``set_cell_info`` answers once with it.
 - **Scroll**, host or cell to browser, on the same path: ``set_follow`` is
   state the node keeps (pin the body to its end as it grows), ``scroll`` a
   one shot command, applied once per new ``seq``. Whether the user is at
@@ -34,7 +36,7 @@ from nuspace.web.utils import event, write
 
 
 if TYPE_CHECKING:
-    from nu.lang import BoolArg, ListArg, Nu, StrArg
+    from nu.lang import BoolArg, DictArg, ListArg, Nu, StrArg
     from nustd.ui.core import Changed, Ref
 
 
@@ -53,6 +55,7 @@ __all__ = [
     "STATE_RUNNING",
     "STATE_STARTING",
     "STATE_STOPPED",
+    "on_cell_info",
     "on_create_cell",
     "on_delete_cell",
     "on_delete_plane",
@@ -74,6 +77,7 @@ __all__ = [
     "on_update_cell",
     "scroll",
     "set_absent",
+    "set_cell_info",
     "set_cells",
     "set_follow",
     "set_head",
@@ -194,6 +198,14 @@ def set_targets(pane: Ref, planes: ListArg[dict]) -> Nu:
     return write(pane, "set_targets", planes=planes)
 
 
+def set_cell_info(pane: Ref, info: DictArg) -> Nu:
+    """Answer a ``cell.info``: one cell's info, its ``cell_id`` among it, so a late answer is told apart.
+
+    See :func:`nuspace.web.viewer.feed.cell_info` for its fields. Sent once per ask.
+    """
+    return write(pane, "set_cell_info", info=info)
+
+
 def set_follow(pane: Ref, follow: StrArg) -> Nu:
     """Say whether the pane's body follows its end: :data:`FOLLOW_NONE` or :data:`FOLLOW_BOTTOM`.
 
@@ -296,6 +308,11 @@ def on_move_cell(pane: Ref) -> Changed:
 def on_targets(pane: Ref) -> Changed:
     """``{}``. Asks for the planes a cell can be transferred to, answered with :func:`set_targets`."""
     return event(pane, "cell.targets")
+
+
+def on_cell_info(pane: Ref) -> Changed:
+    """``{cell_id}``. Asks for what the cell is and how it last ran, answered with :func:`set_cell_info`."""
+    return event(pane, "cell.info")
 
 
 def on_transfer_cell(pane: Ref) -> Changed:

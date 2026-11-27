@@ -36,7 +36,7 @@ from nuspace.web.viewer import interactions
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping, Sequence
 
-    from nu.lang import BoolArg, ListArg, Nu, StrArg
+    from nu.lang import BoolArg, DictArg, ListArg, Nu, StrArg
     from nuspace.specs import CellSpec
     from nustd.ui.core import Changed, Ref
 
@@ -126,6 +126,10 @@ class PaneRef(SpaceRef):
     def set_targets(self, planes: ListArg[dict]) -> Nu:
         """Answer a ``cell.targets`` ask with the planes a cell can be transferred to."""
         return interactions.set_targets(self, planes)
+
+    def set_cell_info(self, info: DictArg) -> Nu:
+        """Answer a ``cell.info`` ask with one cell's info."""
+        return interactions.set_cell_info(self, info)
 
     def set_trail(self, trail: ListArg[dict]) -> Nu:
         """Say which planes sit above the pane's, top first."""

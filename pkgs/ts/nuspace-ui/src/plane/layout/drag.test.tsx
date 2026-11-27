@@ -453,7 +453,7 @@ describe("a drag off a cell's grip", () => {
 		expect(chip()).toBeNull();
 	});
 
-	it("a press that never travels opens the cell's menu and sends nothing", () => {
+	it("a press that never travels opens the cell's menu and moves nothing", () => {
 		drawn([
 			{ kind: "cell", cell: "a" },
 			{ kind: "cell", cell: "b" },
@@ -465,7 +465,8 @@ describe("a drag off a cell's grip", () => {
 			grip.dispatchEvent(at("pointerdown", 0, 0));
 			window.dispatchEvent(at("pointerup", 1, 1));
 		});
-		expect(notify).not.toHaveBeenCalled();
+		// Only the menu's ask for the cell's info: no layout write, no transfer.
+		expect(notify.mock.calls).toEqual([["cell.info", { cell_id: "b" }]]);
 		expect(grip.getAttribute("data-menu")).toBe("open");
 	});
 

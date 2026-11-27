@@ -87,6 +87,9 @@ export type Ops = {
 	/** Ask for the planes a cell can be transferred to: answered once with
 	 *  `set_targets` on this pane's node (./transfer.ts). */
 	"cell.targets": Record<string, never>;
+	/** Ask what the cell is and how it last ran in this pane's run: answered
+	 *  once with `set_cell_info` on this pane's node (./cell/info.ts). */
+	"cell.info": { cell_id: string };
 	/** One cell to another plane, editable and not this one (./transfer.ts):
 	 *  before or after a cell there, neither for its end. It leaves this pane
 	 *  when the cells ship again. */
