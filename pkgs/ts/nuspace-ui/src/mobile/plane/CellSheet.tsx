@@ -1,5 +1,5 @@
-// What a long-press on a cell opens: one bottom sheet, two steps, and the
-// source screen.
+// A cell's options, what a tap on it opens while its plane's cells are
+// edited (./editing.ts): one bottom sheet, two steps, and the source screen.
 //
 //   actions   the cell's facts and its last run, desktop's cell menu head
 //             (../../plane/cell/InfoBlock.tsx), read-only, then Restart,
@@ -10,8 +10,8 @@
 // View source closes the sheet and opens the source full screen, read-only:
 // a kit side sheet, which takes the whole screen on a phone. Copy id closes
 // the sheet and says so in a toast. The ops are desktop's, on the pane's own
-// node (../../plane/ops.ts); the facts are asked for by the long-press that
-// opens it (./MobilePlane.tsx), as desktop's menu asks as it opens.
+// node (../../plane/ops.ts); the facts are asked for by the tap that opens
+// it (./MobilePlane.tsx), as desktop's menu asks as it opens.
 
 import type { Path } from "@nustackdev/ui-core";
 import {

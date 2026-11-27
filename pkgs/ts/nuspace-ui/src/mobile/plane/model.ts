@@ -1,4 +1,4 @@
-// The plane screen's decisions, as plain functions: what a long-press offers,
+// The plane screen's decisions, as plain functions: what a cell's options offer,
 // where an added cell goes, what the + sheet lists, and how an id reaches the
 // clipboard. The screen (./MobilePlane.tsx) and its sheets only draw them.
 
@@ -9,7 +9,7 @@ import { slashPackages } from "../../plane/input/slash";
 import type { Notify } from "../../plane/ops";
 import type { CellSpec, LayoutRow } from "../../plane/types";
 
-/** What a long-press on a cell offers, in sheet order. */
+/** What a cell's options sheet offers, in sheet order. */
 export type CellAction = "restart" | "copy" | "source" | "delete";
 
 /**

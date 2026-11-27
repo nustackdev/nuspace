@@ -1,5 +1,5 @@
 // Whether the sidebar screen is open: a fact about the history entry, not a
-// flag of its own.
+// flag of its own (../entry.ts).
 //
 // Opening pushes a copy of the entry the tab is on, the same url with
 // `SIDEBAR_STATE` set in its state. Open is "the entry carries it". So the
@@ -16,27 +16,19 @@
 // in this page; the shell drops the mark in place on mount (`settleSidebar`).
 
 import { type Entry, History, TRAVERSE_WINDOW_MS, useEntry } from "@nustackdev/ui-kit";
+import { markOf, withMark } from "../entry";
 
 /** The key the sidebar's entry carries in its history state. */
 export const SIDEBAR_STATE = "nuSidebar";
 
 /** Whether `entry` is the sidebar's: open. */
 export function isSidebarEntry(entry: Pick<Entry, "state">): boolean {
-	const state = entry.state;
-	return (
-		!!state &&
-		typeof state === "object" &&
-		(state as Record<string, unknown>)[SIDEBAR_STATE] === true
-	);
+	return markOf(entry, SIDEBAR_STATE) === true;
 }
 
 /** `state` with the sidebar mark, kept as it was otherwise; or without it. */
 export function markState(state: unknown, on: boolean): unknown {
-	const base = state && typeof state === "object" && !Array.isArray(state) ? { ...state } : {};
-	const out = base as Record<string, unknown>;
-	if (on) out[SIDEBAR_STATE] = true;
-	else delete out[SIDEBAR_STATE];
-	return Object.keys(out).length ? out : null;
+	return withMark(state, SIDEBAR_STATE, on ? true : null);
 }
 
 /** Whether the sidebar is open, re-rendering as it opens and closes. */

@@ -1,14 +1,16 @@
 // One cell on the phone: what its program draws, and nothing else. No
 // gutter, no grip, no source editor: the source opens read-only from the
-// long-press sheet (./CellSheet.tsx).
+// cell's options sheet (./CellSheet.tsx).
 //
 // The inside follows desktop's (../../plane/cell/Program.tsx) minus the
 // editor: the error in place of the view, the view once it lands, a skeleton
 // if it is slow, a "No view" chip for a cell that draws nothing. No tooltip on
 // the chip: a phone has no hover.
 //
-// A long-press anywhere on it opens its sheet, except in a field being typed
-// in, where a long-press is the phone's own text selection.
+// Browsing, a cell takes no gesture of its own: a touch is its content's, and
+// a long-press is the phone's (select, copy, look up). Editing cells
+// (./editing.ts), its content is inert and the whole cell is one button that
+// opens its options, its outline saying so.
 
 import type { Path } from "@nustackdev/ui-core";
 import {
@@ -38,44 +40,49 @@ import {
 import { useCellHasUi } from "../../plane/cell/address";
 import { VIEW_LOADER_DELAY_MS } from "../../plane/cell/Program";
 import type { Cell } from "../../plane/types";
-import { useLongPress } from "../gestures";
-
-/** Whether `target` sits in a field that has the keyboard: its long-press selects text. */
-export function inActiveField(target: EventTarget | null): boolean {
-	const active = document.activeElement;
-	if (!(target instanceof Node) || !(active instanceof HTMLElement)) return false;
-	const typing =
-		active instanceof HTMLInputElement ||
-		active instanceof HTMLTextAreaElement ||
-		active.isContentEditable === true;
-	return typing && active.contains(target);
-}
 
 export function MobileCell({
 	cell,
 	uiPath,
 	pressed,
-	onLongPress,
+	editing,
+	onOptions,
 }: {
 	cell: Cell;
 	/** Where this cell's own refs live in the tree. */
 	uiPath: Path;
-	/** Its sheet is open. */
+	/** Its options sheet is open. */
 	pressed: boolean;
-	onLongPress: () => void;
+	/** The plane's cells are being edited: a tap opens its options. */
+	editing: boolean;
+	onOptions: () => void;
 }) {
-	const press = useLongPress(onLongPress);
-	const onPointerDown = (e: React.PointerEvent<HTMLElement>) => {
-		if (!inActiveField(e.target)) press.onPointerDown?.(e);
-	};
+	// One shape either way, so going in and out of editing never remounts
+	// what the cell draws: only the outer props and the inner inert change.
+	const button = editing
+		? ({
+				role: "button",
+				tabIndex: 0,
+				"aria-label": cell.key ? `Options for @${cell.key}` : "Cell options",
+				"aria-haspopup": "dialog",
+				onClick: onOptions,
+				onKeyDown: (e: React.KeyboardEvent<HTMLDivElement>) => {
+					if (e.key !== "Enter" && e.key !== " ") return;
+					e.preventDefault();
+					onOptions();
+				},
+			} as const)
+		: {};
 	return (
 		<div
 			data-cell={cell.id}
-			className={mobileCell(pressed)}
-			{...press}
-			onPointerDown={onPointerDown}
+			data-editing={editing ? "" : undefined}
+			className={mobileCell(pressed, editing)}
+			{...button}
 		>
-			<CellOutput cell={cell} uiPath={uiPath} />
+			<div inert={editing}>
+				<CellOutput cell={cell} uiPath={uiPath} />
+			</div>
 		</div>
 	);
 }

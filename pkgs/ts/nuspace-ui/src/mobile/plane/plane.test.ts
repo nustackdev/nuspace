@@ -1,11 +1,10 @@
-// The plane screen's logic: what a cell's long-press offers, where + adds a
-// cell, what the + sheet lists, and when a long-press is the phone's own.
+// The plane screen's logic: what a cell's options offer, where Add cell adds
+// a cell, and what the add sheet lists.
 
-import { afterEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { retriedCreate } from "../../plane/create";
 import { inReadingOrder } from "../../plane/layout/model";
 import type { CellSpec, LayoutRow } from "../../plane/types";
-import { inActiveField } from "./MobileCell";
 import { addCellGroups, appendCell, appendRows, cellActions } from "./model";
 
 const spec = (name: string, label = name): CellSpec => ({ name, label });
@@ -80,21 +79,5 @@ describe("addCellGroups", () => {
 		expect(groups.flatMap((g) => g.sections.flatMap((s) => s.items.map((i) => i.label)))).toEqual([
 			"Empty",
 		]);
-	});
-});
-
-describe("inActiveField", () => {
-	afterEach(() => {
-		document.body.innerHTML = "";
-	});
-
-	it("is true only inside a field that has the keyboard", () => {
-		document.body.innerHTML = '<div id="cell"><input id="in" /><span id="out">x</span></div>';
-		const input = document.getElementById("in") as HTMLInputElement;
-		const out = document.getElementById("out");
-		expect(inActiveField(input)).toBe(false);
-		input.focus();
-		expect(inActiveField(input)).toBe(true);
-		expect(inActiveField(out)).toBe(false);
 	});
 });

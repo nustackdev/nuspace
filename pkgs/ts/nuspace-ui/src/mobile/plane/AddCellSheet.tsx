@@ -1,6 +1,6 @@
 // The + sheet: the same cell types as desktop's `/` menu, from the same
 // source (./model.ts `addCellGroups`). A tap adds that cell at the end of the
-// plane and closes the sheet. The floating + opens it (../addCell.ts).
+// plane and closes the sheet. The dock's Add cell opens it (../addCell.ts).
 
 import { BottomSheet, BottomSheetContent, BottomSheetItem } from "@nustackdev/ui-kit";
 import { Fragment } from "react";

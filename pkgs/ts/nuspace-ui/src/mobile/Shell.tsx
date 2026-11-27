@@ -1,7 +1,7 @@
 // The mobile shell's frame: one screen, the full visible height, and over it
-// the sidebar screen (./sidebar/MobileSidebar.tsx), the two floating buttons
-// (./Fabs.tsx), the disconnect banner and the toaster. The screen is the plane
-// the route shows (./Viewer.tsx).
+// the sidebar screen (./sidebar/MobileSidebar.tsx), the dock at the bottom
+// (./dock/Dock.tsx), the disconnect banner and the toaster. The screen is the
+// plane the route shows (./Viewer.tsx).
 //
 // Like desktop, it draws before the tree lands: the viewer skeleton until the
 // ViewerRef node arrives, a note once a boot runs long, a note for a real
@@ -16,7 +16,8 @@ import { useBooted, useTypePath } from "../core/surfaces";
 import { mobileMain, mobileMissing, mobileRoot, mobileScreen, mobileToaster } from "../design";
 import { ViewerSkeleton } from "../pane/ViewerSkeleton";
 import { DisconnectBanner } from "./Banner";
-import { Fabs } from "./Fabs";
+import { Dock } from "./dock/Dock";
+import { settleEditing } from "./plane/editing";
 import { MobileSidebar } from "./sidebar/MobileSidebar";
 import { settleSidebar } from "./sidebar/open";
 
@@ -26,8 +27,12 @@ export function MobileShell() {
 	const booted = useBooted();
 	const slow = useAfter(!booted, BOOTING_DELAY_MS);
 	useAnchorCatcher(rootRef, paneRule);
-	// A reload while the sidebar was open lands on its entry with nothing under it.
-	useEffect(settleSidebar, []);
+	// A reload while the sidebar was open, or cells edited, lands on that
+	// entry with nothing under it: the marks dropped in place.
+	useEffect(() => {
+		settleSidebar();
+		settleEditing();
+	}, []);
 
 	return (
 		<div ref={rootRef} className={mobileRoot} data-shell="mobile">
@@ -52,7 +57,7 @@ export function MobileShell() {
 				)}
 			</main>
 			<MobileSidebar />
-			<Fabs />
+			<Dock />
 			<Toaster className={mobileToaster} />
 		</div>
 	);

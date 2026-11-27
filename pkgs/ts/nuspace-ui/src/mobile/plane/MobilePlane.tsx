@@ -7,10 +7,11 @@
 //
 // It reads the same PaneRef node desktop's pane does (../../pane/state.ts)
 // and sends the same ops on it, so nothing about the server changes. A cell
-// shows what it draws (./MobileCell.tsx). A long-press opens its sheet
-// (./CellSheet.tsx) with its facts; the floating + opens the add sheet
-// (./AddCellSheet.tsx), which adds at the end. The ⋯ on the header opens the
-// plane's facts (./PlaneInfoSheet.tsx).
+// shows what it draws (./MobileCell.tsx), and its touches are its own.
+// Editing cells (./editing.ts, from the dock's +), a tap on a cell opens its
+// options sheet (./CellSheet.tsx) with its facts. The dock's Add cell opens
+// the add sheet (./AddCellSheet.tsx), which adds at the end. The ⋯ on the
+// header opens the plane's facts and actions (./PlaneInfoSheet.tsx).
 //
 // The server's scroll commands and its follow-the-end apply here as on
 // desktop (../../pane/scroll.ts). `data-pane` is the plane shown, so a link
@@ -54,6 +55,7 @@ import { deletedCells } from "../../refs/toast";
 import { HeaderButton, MobileHeader } from "../Header";
 import { AddCellSheet } from "./AddCellSheet";
 import { type CellPressed, CellSheet, SourceScreen } from "./CellSheet";
+import { useEditing } from "./editing";
 import { MobileCell } from "./MobileCell";
 import { appendCell } from "./model";
 import { PlaneInfoSheet } from "./PlaneInfoSheet";
@@ -142,6 +144,8 @@ export function MobilePlane({
 		}
 	}, [shipped]);
 
+	// Only the plane on screen is edited: a desk's other pages stay as they are.
+	const editing = useEditing() === planeId && active;
 	const [pressed, setPressed] = useState<CellPressed>(null);
 	const [info, setInfo] = useState(false);
 	const [source, setSource] = useState<string | null>(null);
@@ -183,7 +187,8 @@ export function MobilePlane({
 									cell={cell}
 									uiPath={cellUiPath(viewerPath, cell.id)}
 									pressed={pressed?.id === cell.id}
-									onLongPress={() => {
+									editing={editing}
+									onOptions={() => {
 										setPressed({ id: cell.id, step: "actions" });
 										clearPaneCellInfo(path);
 										notify("cell.info", { cell_id: cell.id });

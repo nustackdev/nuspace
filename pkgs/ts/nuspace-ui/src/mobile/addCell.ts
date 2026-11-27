@@ -1,6 +1,7 @@
-// Where the floating + sends its tap: a request to add a cell to the plane on
-// screen. A module store like ../sidebar/add.ts, since the button sits in the
-// frame and the sheet that answers it sits with the plane.
+// Where the dock's Add cell sends its tap (./dock/ControlSheet.tsx): a
+// request to add a cell to the plane on screen. A module store like
+// ../sidebar/add.ts, since the dock sits in the frame and the sheet that
+// answers it sits with the plane.
 
 import { useSyncExternalStore } from "react";
 

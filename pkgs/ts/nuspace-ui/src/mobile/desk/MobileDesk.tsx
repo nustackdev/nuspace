@@ -15,9 +15,10 @@
 //
 // The page on screen is the item's focused pane, as a click on a pane is on
 // desktop: a swipe that settles focuses its pane through the router, so the
-// + and the tab title follow it, and a focus that moves from elsewhere (a link
-// followed inside a pane, a pane asked for again) brings its page on screen.
-// Only the page on screen answers the +.
+// dock and the tab title follow it, and a focus that moves from elsewhere (a
+// link followed inside a pane, a pane asked for again) brings its page on
+// screen. Only the page on screen answers the dock. While its cells are
+// edited (../plane/editing.ts) the pager holds on its page: no swipe, no ‹ ›.
 
 import type { Path } from "@nustackdev/ui-core";
 import { ChevronLeft, ChevronRight } from "lucide-react";
@@ -36,6 +37,7 @@ import {
 import { panePath, usePaneHead } from "../../pane/state";
 import type { CellSpec } from "../../plane/types";
 import { HeaderButton, HeaderCount, MobileHeader } from "../Header";
+import { useEditing } from "../plane/editing";
 import { InfoButton, MobilePlane } from "../plane/MobilePlane";
 import { PlaneInfoSheet } from "../plane/PlaneInfoSheet";
 import { pageAt, pageCount, pageOf, pagesOf, stepPage } from "./model";
@@ -128,6 +130,8 @@ export function MobileDesk({
 	}, [pages, focus, scrollTo]);
 
 	const shown = Math.min(index, pages.length - 1);
+	// The page whose cells are edited holds the pager.
+	const locked = useEditing() === focus;
 	// The pane whose facts are open, held through the sheet's close.
 	const [info, setInfo] = useState<string | null>(null);
 	const [infoPlane, setInfoPlane] = useState("");
@@ -145,10 +149,10 @@ export function MobileDesk({
 				count={count}
 				onStep={(by) => scrollTo(stepPage(shown, by, pages.length), true)}
 				onInfo={() => setInfo(planes[shown] ?? null)}
-				first={shown <= 0}
-				last={shown >= pages.length - 1}
+				first={locked || shown <= 0}
+				last={locked || shown >= pages.length - 1}
 			/>
-			<div ref={pager} className={mobileDeskPager} data-desk-pager="">
+			<div ref={pager} className={mobileDeskPager(locked)} data-desk-pager="">
 				{pages.map((page, i) => (
 					<div key={page.plane} className={mobileDeskPage} data-desk-page={i}>
 						<MobilePlane

@@ -11,6 +11,8 @@ separately here.
 
 ## Unreleased
 
+- Phone + opens one sheet to add cells, add planes or edit cells
+- Phone cells keep native long-press, and the plane sheet can restart the plane
 - iOS no longer zooms in when tapping into an input
 - Flat nu favicons and app icons, no glow or shadow
 - Phone plane and cell sheets show their facts and last run, read only

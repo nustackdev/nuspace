@@ -9,6 +9,7 @@ import { TooltipProvider, TouchProvider, tree } from "@nustackdev/ui-kit";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { notifyOp } from "../../core/wire";
 import { applyPaneWrite, panePath } from "../../pane/state";
 import type { Cell } from "../../plane/types";
 import { CellSheet } from "./CellSheet";
@@ -35,6 +36,11 @@ vi.mock("@nustackdev/ui-kit", async (kit) => ({
 			{children}
 		</div>
 	),
+}));
+
+vi.mock("../../core/wire", async (wire) => ({
+	...(await wire<typeof import("../../core/wire")>()),
+	notifyOp: vi.fn(),
 }));
 
 const VIEWER = ["viewer"];
@@ -104,7 +110,7 @@ describe("the plane's facts", () => {
 	const open = () =>
 		draw(<PlaneInfoSheet viewerPath={VIEWER} planeId={PLANE} open onClose={() => {}} />);
 
-	it("shows desktop's facts, the id and the key, read-only, then Delete", () => {
+	it("shows desktop's facts, the id and the key, read-only, then Restart and Delete", () => {
 		land(HEAD);
 		open();
 		// Asked for as it opened: the answer lands after.
@@ -130,15 +136,27 @@ describe("the plane's facts", () => {
 		expect(details(sheet)).toContain(`ID: ${PLANE}`);
 		expect(details(sheet)).toContain("Key: @jobs");
 		expect(document.querySelector(sheet)?.textContent).toContain("Not running in this pane");
-		expect(actions(sheet)).toEqual(["Delete plane"]);
+		expect(actions(sheet)).toEqual(["Restart plane", "Delete plane"]);
 		expect(document.querySelector(`${sheet} input`)).toBeNull();
 	});
 
 	it("offers no delete on a system plane", () => {
 		land({ ...HEAD, system: true, key: "" });
 		open();
-		expect(actions(sheet)).toEqual([]);
+		expect(actions(sheet)).toEqual(["Restart plane"]);
 		expect(details(sheet).map((d) => d.split(":")[0])).toEqual(["ID"]);
+	});
+
+	it("restarts the plane on its own node and closes", () => {
+		land(HEAD);
+		const onClose = vi.fn();
+		draw(<PlaneInfoSheet viewerPath={VIEWER} planeId={PLANE} open onClose={onClose} />);
+		vi.mocked(notifyOp).mockClear();
+		act(() => {
+			(document.querySelector(`${sheet} [data-action=restart]`) as HTMLElement).click();
+		});
+		expect(notifyOp).toHaveBeenCalledWith(panePath(VIEWER, PLANE), "plane.restart", {});
+		expect(onClose).toHaveBeenCalledOnce();
 	});
 });
 

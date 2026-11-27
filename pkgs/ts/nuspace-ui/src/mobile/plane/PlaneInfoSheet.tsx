@@ -1,16 +1,17 @@
 // What the ⋯ on a plane's header opens (and on a desk's, for the pane on
 // screen): one bottom sheet with the plane's facts, desktop's pane menu head
-// (../../pane/PlaneInfoBlock.tsx), read-only, then the one plane action the
-// pane menu has that the phone does: Delete, with a confirm, not on a system
-// plane. Key editing stays on desktop.
+// (../../pane/PlaneInfoBlock.tsx), read-only, then the plane actions the
+// pane menu has that the phone does: Restart, and Delete with a confirm, not
+// on a system plane. Key editing stays on desktop.
 //
-//   info     the facts and the run, the id and the key, then Delete
+//   info     the facts and the run, the id and the key, then Restart, Delete
 //   delete   the confirm: what goes with it, Delete or Cancel
 //
 // The facts are asked for as it opens, on the pane's own node, the way the
-// pane menu asks (../../plane/info.ts); each open asks again. Delete is the
-// pane's own op, and the screen then leaves for home as it does for any
-// plane that goes.
+// pane menu asks (../../plane/info.ts); each open asks again. Restart and
+// Delete are the pane's own ops. A restart closes the sheet and the cells
+// run again in place; a delete leaves the screen for home, as it does for
+// any plane that goes.
 
 import type { Path } from "@nustackdev/ui-core";
 import {
@@ -25,7 +26,7 @@ import {
 	DropdownMenuSeparator,
 	pathKey,
 } from "@nustackdev/ui-kit";
-import { Trash2 } from "lucide-react";
+import { RotateCcw, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { notifyOp } from "../../core/wire";
 import { PlaneInfoBlock } from "../../pane/PlaneInfoBlock";
@@ -83,22 +84,31 @@ export function PlaneInfoSheet({
 								</DropdownMenuDetail>
 							) : null}
 						</DropdownMenuDetails>
-						{head.system ? null : (
-							<>
-								<DropdownMenuSeparator />
-								<div role="menu">
-									<BottomSheetItem
-										role="menuitem"
-										variant="danger"
-										data-action="delete"
-										onClick={() => setStep("delete")}
-									>
-										<Trash2 aria-hidden="true" />
-										Delete plane
-									</BottomSheetItem>
-								</div>
-							</>
-						)}
+						<DropdownMenuSeparator />
+						<div role="menu">
+							<BottomSheetItem
+								role="menuitem"
+								data-action="restart"
+								onClick={() => {
+									onClose();
+									notifyOp<Ops, "plane.restart">(path, "plane.restart", {});
+								}}
+							>
+								<RotateCcw aria-hidden="true" />
+								Restart plane
+							</BottomSheetItem>
+							{head.system ? null : (
+								<BottomSheetItem
+									role="menuitem"
+									variant="danger"
+									data-action="delete"
+									onClick={() => setStep("delete")}
+								>
+									<Trash2 aria-hidden="true" />
+									Delete plane
+								</BottomSheetItem>
+							)}
+						</div>
 					</>
 				) : (
 					<>

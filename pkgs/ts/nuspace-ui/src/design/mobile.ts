@@ -33,12 +33,19 @@ export const mobileBanner = cn(
 	"top-[calc(env(safe-area-inset-top)+8px)]",
 );
 
-/* ============================== Floating buttons ========================== */
+/* ============================== The dock ================================== */
+
+/*
+ * The phone's controls (../mobile/dock/Dock.tsx), all on one line at the
+ * bottom, 16px off the edges and clear of the home indicator. Browsing, two
+ * floating rounds: the sidebar's left, the + right. Editing cells, one bar
+ * across the same line.
+ */
 
 /**
  * A floating button: 48px round, over everything but the sheets, clear of
- * the home indicator. The sidebar's bottom left, the plane's + bottom right,
- * both under the thumb.
+ * the home indicator. The sidebar's bottom left, the + bottom right, both
+ * under the thumb.
  */
 export function mobileFab(side: "left" | "right"): string {
 	return cn(
@@ -50,6 +57,24 @@ export function mobileFab(side: "left" | "right"): string {
 		"[&_svg]:size-5",
 	);
 }
+
+/**
+ * The dock's bar while editing cells: the floating buttons' line and height,
+ * stretched from one gutter to the other, a pill on the same raised ground
+ * as the sidebar button.
+ */
+export const mobileDockBar = cn(
+	"fixed z-40 flex h-12 items-center gap-3 rounded-full pr-1 pl-5",
+	"bottom-[calc(env(safe-area-inset-bottom)+16px)]",
+	"left-[calc(env(safe-area-inset-left)+16px)] right-[calc(env(safe-area-inset-right)+16px)]",
+	"border border-border-default bg-bg-elevated shadow-floating",
+);
+
+/** What a tap does while the bar is up: one muted line, truncating. */
+export const mobileDockHint = "min-w-0 flex-1 truncate text-sm text-text-muted select-none";
+
+/** The bar's Done: a pill inside the pill, 40px, the bar's right end under the thumb. */
+export const mobileDockDone = "shrink-0 rounded-full px-5";
 
 /**
  * The room a scrolled list leaves at its end for the floating buttons: the
@@ -281,20 +306,22 @@ export const mobilePlaneBody = cn(
 export const mobilePlaneEmpty = "px-doc-cell py-6 text-sm text-text-muted";
 
 /**
- * One cell, the full width, its desktop pad. A long-press opens its sheet, so
- * no callout and no selection on its output; what you type in (an input, a
- * text area, a document) still selects. The one pressed carries the same
- * wash as a selected cell on desktop while its sheet is open.
+ * One cell, the full width, its desktop pad. Browsing, it is only its
+ * content: the phone's own long-press (select, copy) stays on it. Editing
+ * cells, the whole cell is one tap target: an outline says so, no callout
+ * and no selection, the wash while pressed. The one whose sheet is open
+ * carries the same wash as a selected cell on desktop.
  */
-export function mobileCell(pressed: boolean): string {
+export function mobileCell(pressed: boolean, editing: boolean): string {
 	return cn(
 		"relative min-w-0 rounded-md p-doc-cell",
-		"select-none [-webkit-touch-callout:none]",
-		"[&_:is(input,textarea,[contenteditable=true])]:select-text",
-		"transition-colors duration-fast ease-out",
+		"transition-[background-color,box-shadow] duration-fast ease-out",
+		editing &&
+			"select-none [-webkit-touch-callout:none] ring-1 ring-border-default ring-inset active:bg-doc-hover",
 		pressed && "bg-doc-hover",
 	);
 }
+
 
 /** The source screen's code: the rest of the screen under its title, scrolled inside. */
 export const mobileSourceBody = "min-h-0 flex-1 overflow-y-auto overscroll-contain";
@@ -310,12 +337,16 @@ export const mobileDesk = "relative flex min-h-0 min-w-0 flex-1 flex-col";
 /**
  * The pager: the browser's own sideways scroll, one page a snap. Each page
  * scrolls up and down inside itself, so the two axes never fight: the
- * browser locks a drag to the axis it starts on.
+ * browser locks a drag to the axis it starts on. Locked on its page while
+ * the page's cells are edited.
  */
-export const mobileDeskPager = cn(
-	"flex min-h-0 min-w-0 flex-1 snap-x snap-mandatory overflow-x-auto overflow-y-hidden",
-	"overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
-);
+export function mobileDeskPager(locked: boolean): string {
+	return cn(
+		"flex min-h-0 min-w-0 flex-1 snap-x snap-mandatory overflow-y-hidden",
+		"overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+		locked ? "overflow-x-hidden" : "overflow-x-auto",
+	);
+}
 
 /** One page: the full width, held at its snap. */
 export const mobileDeskPage = "flex h-full w-full min-w-0 shrink-0 snap-start snap-always";
