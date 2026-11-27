@@ -5,11 +5,10 @@
 import { History } from "@nustackdev/ui-kit";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Desk, Item } from "../../desk/model";
-import { columnKey, itemKey } from "../../sidebar/folders";
 import type { PlaneTree, TreeRow } from "../../sidebar/types";
-import { pagesOf } from "../desk/model";
+import { pageOf, pagesOf } from "../desk/model";
 import { addGroups } from "./AddPlaneSheet";
-import { deskPlanes, deskRows, planeActions } from "./model";
+import { deskPlanes, deskRows, planeActions, stackOf, stripLabel } from "./model";
 import {
 	isSidebarEntry,
 	leaveThen,
@@ -43,37 +42,37 @@ describe("deskRows", () => {
 		],
 	};
 	const strip = desk.items[1] as Extract<Item, { kind: "strip" }>;
-	const pick = (rows: ReturnType<typeof deskRows>) =>
-		rows.map(({ row, depth, pane, page }) => ({ kind: row.kind, depth, pane, page }));
 
-	it("draws desktop's rows a lane in: item, Strip, Column of 2+, panes", () => {
-		expect(pick(deskRows("desk0001", desk, new Set()))).toEqual([
-			{ kind: "plane", depth: 1, pane: "", page: 0 },
-			{ kind: "strip", depth: 1, pane: "logs", page: 0 },
-			{ kind: "column", depth: 2, pane: "logs", page: 0 },
-			{ kind: "pane", depth: 3, pane: "logs", page: 0 },
-			{ kind: "pane", depth: 3, pane: "errors", page: 1 },
-			{ kind: "pane", depth: 2, pane: "alerts", page: 2 },
+	it("draws one row per item, a strip as one row", () => {
+		expect(deskRows(desk).map((r) => [r.item.id, r.item.kind])).toEqual([
+			["item01", "plane"],
+			["item02", "strip"],
 		]);
 	});
 
-	it("maps each pane to the page the pager shows it on", () => {
-		const pages = pagesOf(strip);
-		for (const r of deskRows("desk0001", desk, new Set())) {
-			if (r.row.kind === "pane") expect(pages[r.page].plane).toBe(r.row.plane);
-		}
+	it("names a strip's planes in the pager's order, column by column", () => {
+		const [plane, row] = deskRows(desk);
+		expect(plane.planes).toEqual(["deploys"]);
+		expect(row.planes).toEqual(["logs", "errors", "alerts"]);
+		expect(row.planes).toEqual(pagesOf(strip).map((p) => p.plane));
 	});
 
-	it("folds a strip and a column as desktop does", () => {
-		const col = columnKey("desk0001", "item02", 0);
-		expect(pick(deskRows("desk0001", desk, new Set([col]))).map((r) => r.kind)).toEqual([
-			"plane",
-			"strip",
-			"column",
-			"pane",
-		]);
-		const folded = new Set([itemKey("desk0001", "item02")]);
-		expect(pick(deskRows("desk0001", desk, folded)).map((r) => r.kind)).toEqual(["plane", "strip"]);
+	it("opens a strip on the pager's first page, a plane item as itself", () => {
+		const [plane, row] = deskRows(desk);
+		expect(plane.pane).toBe("");
+		expect(row.pane).toBe("logs");
+		expect(pageOf(pagesOf(strip), row.pane)).toBe(0);
+	});
+
+	it("stacks up to three icons, then counts the rest", () => {
+		expect(stackOf(["a", "b"])).toEqual({ shown: ["a", "b"], more: 0 });
+		expect(stackOf(["a", "b", "c"])).toEqual({ shown: ["a", "b", "c"], more: 0 });
+		expect(stackOf(["a", "b", "c", "d", "e"])).toEqual({ shown: ["a", "b", "c"], more: 2 });
+	});
+
+	it("labels a strip by its count", () => {
+		expect(stripLabel(3)).toBe("3 planes");
+		expect(stripLabel(1)).toBe("1 plane");
 	});
 
 	it("names every plane the rows can show, for their looks", () => {

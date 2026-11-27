@@ -138,8 +138,37 @@ export function mobileIndent(depth: number): { paddingLeft: string } {
  */
 export const mobileRowLead = cn(
 	"flex w-8 shrink-0 items-center text-text-muted",
-	"[&_svg]:size-5 [&>span]:size-5 [&>span]:text-[1.125rem]",
+	"[&>svg]:size-5 [&>span:not([data-stack])]:size-5 [&>span:not([data-stack])]:text-[1.125rem]",
 );
+
+/**
+ * A strip row's lead: its planes' icons stacked left to right, each on a
+ * 16px tile that overlaps the next by 3px, the first on top, so every
+ * glyph still reads. Three tiles come to 42px: the stack starts 14px left of
+ * the lane, just clear of the folder's icon above, and stops 4px short of
+ * the label, so the label keeps the edge every row has. More than three: a
+ * +N chip under the last tile.
+ */
+export const mobileStack = "relative -ml-3.5 flex shrink-0 items-center";
+
+/** One tile of a strip row's stack, its icon 12px. */
+export const mobileStackTile = cn(
+	"relative flex size-4 shrink-0 items-center justify-center rounded-[4px]",
+	"border border-border-default bg-bg-surface text-text-secondary ring-2 ring-bg-sunken",
+	"not-first:-ml-[3px]",
+	"[&_svg]:size-3 [&>span]:size-3 [&>span]:text-[0.6875rem]",
+);
+
+/** The +N chip over a stack's last tile. */
+export const mobileStackMore = cn(
+	"absolute right-0 -bottom-2.5 z-10 rounded-full bg-bg-elevated px-1",
+	"text-[9px] leading-3 font-medium text-text-secondary ring-2 ring-bg-sunken",
+);
+
+/** A strip row's two lines: the count, then its planes' titles, muted and truncating. */
+export const mobileRowTwoLine = "min-h-14";
+export const mobileRowLine = "block truncate";
+export const mobileRowSubline = "block truncate text-sm text-text-muted";
 
 /** A row's label, truncating. */
 export const mobileRowLabel = "min-w-0 flex-1 truncate";

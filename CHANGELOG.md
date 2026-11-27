@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Phone desk folders show one row per item, strips as stacked icons and titles
 - Phone shell can no longer pull in desktop only code, checked by a test
 - Phone desk folders show strips, columns and panes like desktop, each opening its page
 - Phone sidebar lines every row on one grid: one icon size, one chevron column

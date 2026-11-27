@@ -12,10 +12,10 @@
 // (../../sidebar/ops.ts). Only the touch presentation is the phone's own.
 //
 //   nav       a row per role, a link to its plane
-//   desks     a folder per desk, tap the title to fold; its rows as
-//             desktop's (./model.ts): a plane item opens as itself; a
-//             Strip, a Column (2+ panes) and a pane open the desk pager on
-//             their pane, the strip and column folding by their chevron
+//   desks     a folder per desk, tap the title to fold; one row per item
+//             (./model.ts): a plane item opens as itself; a strip, its
+//             planes' icons stacked, "N planes" over their titles, opens
+//             the desk pager on its first pane
 //   planes    the tree, lazy like desktop's: the chevron at the row's end
 //             opens a branch, the rest of the row opens the plane. Long-press a row
 //             for Rename, Add plane inside, Delete (./PlaneSheet.tsx)
@@ -26,7 +26,7 @@
 
 import type { Path } from "@nustackdev/ui-core";
 import { type AnchorRule, pathKey, Skeleton, useAnchorCatcher } from "@nustackdev/ui-kit";
-import { Columns3, Folder, Package, Plus, Rows3 } from "lucide-react";
+import { Folder, Package, Plus } from "lucide-react";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { useDeskOrder, useDesks, useRoles } from "../../core/desks";
 import { lookOf, type PlaneLook, usePlaneLooks } from "../../core/looks";
@@ -43,26 +43,23 @@ import {
 import { useTypePath } from "../../core/surfaces";
 import { notifyOp } from "../../core/wire";
 import {
+	mobileRowLine,
+	mobileRowSubline,
+	mobileRowTwoLine,
 	mobileSection,
 	mobileSidebar,
 	mobileSidebarBody,
 	mobileSidebarHead,
+	mobileStack,
+	mobileStackMore,
+	mobileStackTile,
 	sidebarWordmark,
 	sidebarWordmarkNu,
 } from "../../design";
-import { shown } from "../../desk/model";
 import { PlaneIcon } from "../../icon/PlaneIcon";
 import { planeIcon } from "../../icon/parse";
 import { createPlane, openAddPlane } from "../../sidebar/add";
-import {
-	COLUMN_TITLE,
-	deskLabel,
-	folderKey,
-	STRIP_TITLE,
-	selectedKey,
-	setFolded,
-	useFolds,
-} from "../../sidebar/folders";
+import { deskLabel, folderKey, setFolded, useFolds } from "../../sidebar/folders";
 import { NAV_ITEMS, rolePlanes } from "../../sidebar/nav";
 import type { Notify, Ops } from "../../sidebar/ops";
 import { patchSidebar, useExpanded, useSidebarValue } from "../../sidebar/state";
@@ -70,12 +67,12 @@ import { showsNoPlanes, visibleRows } from "../../sidebar/tree";
 import { childrenOf, type Registered, ROOT_ID, rootId } from "../../sidebar/types";
 import { useLongPress, useSwipeClose } from "../gestures";
 import { AddPlaneSheet, addGroups } from "./AddPlaneSheet";
-import { type DeskRow, deskPlanes, deskRows } from "./model";
+import { type DeskRow, deskPlanes, deskRows, stackOf, stripLabel } from "./model";
 import { closeSidebar, leaveThen, useSidebarOpen } from "./open";
 import { PlaneSheet, type Pressed } from "./PlaneSheet";
 import { MobileRow, RowAdd, RowChevron, RowFold } from "./Row";
 
-/** The attribute a desk folder's strip, column or pane row carries: the plane a tap focuses. */
+/** The attribute a desk folder's strip row carries: the plane a tap focuses. */
 export const PANE_ATTR = "data-pane";
 
 /**
@@ -86,7 +83,7 @@ export const PANE_ATTR = "data-pane";
 export const mobileSidebarRule: AnchorRule = (href, gesture, anchor, event) => {
 	const hit = shapeOfHref(href);
 	if (!hit) return false;
-	// A strip, column or pane row: the pager on its pane, as desktop's pane row opens it.
+	// A strip row: the pager on its pane, as desktop's pane row opens it.
 	const pane = anchor.closest(`[${PANE_ATTR}]`)?.getAttribute(PANE_ATTR);
 	if (pane && hit.shape.kind === "item" && gesture === "plain") {
 		const { desk, item } = hit.shape;
@@ -272,12 +269,9 @@ function DeskFolders({ route }: { route: Route }) {
 			<MobileRow kind="head" label="Desks" />
 			{list.map(({ id, desk }) => {
 				const folded = folds.has(folderKey(id));
-				const rows = deskRows(id, desk, folds);
-				// The row of what the screen shows, as desktop picks it.
-				const on =
-					route.kind === "item" && route.desk === id
-						? selectedKey(id, route.item, route.focus, folds)
-						: "";
+				const rows = deskRows(desk);
+				// The item the screen shows.
+				const on = route.kind === "item" && route.desk === id ? route.item.id : "";
 				return (
 					<div key={id}>
 						<MobileRow
@@ -291,7 +285,13 @@ function DeskFolders({ route }: { route: Route }) {
 						/>
 						{folded ? null : rows.length ? (
 							rows.map((r) => (
-								<DeskFolderRow key={r.row.key} deskId={id} at={r} looks={looks} on={on} />
+								<DeskFolderRow
+									key={r.item.id}
+									deskId={id}
+									at={r}
+									looks={looks}
+									selected={r.item.id === on}
+								/>
 							))
 						) : (
 							<MobileRow kind="note" depth={1} label="Empty desk" />
@@ -304,59 +304,61 @@ function DeskFolders({ route }: { route: Route }) {
 }
 
 /**
- * One row of a desk folder, by kind, as desktop's folder draws them
- * (../../sidebar/DeskRows.tsx). A plane item opens as itself; a strip, a
- * column and a pane open the desk pager on their pane (`PANE_ATTR`, which
- * `mobileSidebarRule` reads). A strip or column folds by its chevron.
+ * One row of a desk folder: a desk item. A plane item opens as itself; a
+ * strip opens the desk pager on its first pane (`PANE_ATTR`, which
+ * `mobileSidebarRule` reads): its planes' icons stacked in the lead, then
+ * two lines, "3 planes" and their titles, muted and truncating.
  */
 function DeskFolderRow({
 	deskId,
 	at,
 	looks,
-	on,
+	selected,
 }: {
 	deskId: string;
 	at: DeskRow;
 	looks: Record<string, PlaneLook>;
-	on: string;
+	selected: boolean;
 }) {
-	const { row, depth, pane } = at;
-	const selected = row.key === on;
-	const href = itemHref(deskId, row.item);
+	const { item, planes, pane } = at;
 	const common = {
-		depth,
+		as: "a" as const,
+		href: itemHref(deskId, item.id),
+		"aria-current": selected ? ("page" as const) : undefined,
+		depth: 1,
 		selected,
-		"data-item": row.item,
-		[PANE_ATTR]: pane || undefined,
-		"data-page": row.kind === "plane" ? undefined : at.page,
+		"data-item": item.id,
 	};
-	if (row.kind === "plane" || row.kind === "pane") {
-		const look = lookOf(looks, shown(row.links).plane);
+	if (item.kind === "plane") {
+		const look = lookOf(looks, planes[0] ?? "");
 		return (
-			<MobileRow
-				{...common}
-				as="a"
-				href={href}
-				aria-current={selected ? "page" : undefined}
-				icon={<PlaneIcon icon={planeIcon(look.icon)} />}
-				label={look.title}
-			/>
+			<MobileRow {...common} icon={<PlaneIcon icon={planeIcon(look.icon)} />} label={look.title} />
 		);
 	}
-	const strip = row.kind === "strip";
-	const name = strip ? "strip" : "column";
+	const { shown, more } = stackOf(planes);
+	const count = stripLabel(planes.length);
+	const titles = planes.map((p) => lookOf(looks, p).title).join(", ");
 	return (
 		<MobileRow
 			{...common}
-			main={{ href, current: selected }}
-			icon={strip ? <Columns3 /> : <Rows3 />}
-			label={strip ? STRIP_TITLE : COLUMN_TITLE}
-			trail={
-				<RowFold
-					open={row.open}
-					label={row.open ? `Collapse ${name}` : `Expand ${name}`}
-					onClick={() => setFolded(row.key, row.open)}
-				/>
+			{...{ [PANE_ATTR]: pane || undefined }}
+			aria-label={`${count}: ${titles}`}
+			className={mobileRowTwoLine}
+			icon={
+				<span data-stack="" className={mobileStack}>
+					{shown.map((p, i) => (
+						<span key={p} className={mobileStackTile} style={{ zIndex: shown.length - i }}>
+							<PlaneIcon icon={planeIcon(lookOf(looks, p).icon)} />
+						</span>
+					))}
+					{more ? <span className={mobileStackMore}>+{more}</span> : null}
+				</span>
+			}
+			label={
+				<>
+					<span className={mobileRowLine}>{count}</span>
+					<span className={mobileRowSubline}>{titles}</span>
+				</>
 			}
 		/>
 	);
