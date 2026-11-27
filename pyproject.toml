@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "nuspace"
-version = "0.8.2"
+version = "0.8.3"
 description = "Computational space for your data and tools."
 readme = "README.md"
 license = "AGPL-3.0-or-later"
@@ -21,7 +21,7 @@ dependencies = [
     # The compiled web bundle. A separate distribution only because PyPI caps
     # project size and a SPA rebuilt on every UI tweak would eat the quota --
     # not optional. `pip install nuspace` gives you the browser.
-    "nuspace-ui>=0.8.2",
+    "nuspace-ui>=0.8.3",
     # The everyday Planes and Cells. A plugin like any other, found through
     # its entry point, but every space ships with it.
     "nuverse>=0.3.14",

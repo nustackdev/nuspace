@@ -2,15 +2,16 @@
 
 ## Packages shipped from this repo
 
-- **nuspace** (the runtime, the `nuspace` command) — 0.8.2
-- **nuspace-ui** (the compiled web bundle) — 0.8.2
+- **nuspace** (the runtime, the `nuspace` command) — 0.8.3
+- **nuspace-ui** (the compiled web bundle) — 0.8.3
 
 Below is the changelog for **nuspace** - the full commit stream. Newest first.
 The `nuspace-ui` wheel is the same source tree's vite output and is not tracked
 separately here.
 
-## Unreleased
+## 0.8.3 - 2026-11-28
 
+- Release nuspace 0.8.3, nuspace-ui 0.8.3
 - Move to nu 0.9.2 and ui-kit 0.5.0
 
 - Phone sidebar's + moves to the dock: one + everywhere, Add plane over the sidebar
