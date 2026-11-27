@@ -11,6 +11,18 @@ separately here.
 
 ## Unreleased
 
+- Phone plane and cell sheets show their facts and last run, read only
+- Phone screens share one fixed header, desks page with arrow buttons instead of dots
+- Phone planes and desk pages scroll their last cell clear of the floating buttons
+- Phone sidebar groups desks into titled sections, each strip one line with composite icons
+- Phone desk folders show one row per item, strips as stacked icons and titles
+- Phone shell can no longer pull in desktop only code, checked by a test
+- Phone desk folders show strips, columns and panes like desktop, each opening its page
+- Phone sidebar lines every row on one grid: one icon size, one chevron column
+- Phone desks page through their panes with a swipe, with dots and a counter
+- Phone planes read as one stacked column, with long-press cell actions and adding cells
+- Phone sidebar slides in full screen, with floating buttons and long-press plane actions
+- Touch devices load a separate mobile shell, with a banner while the connection drops
 - Pane menu shows the plane's facts and run, and edits its key; title @ toggle removed
 - Cell menu shows the cell's facts and last run, and edits its key
 - Code cells run only on shift+enter, never on blur or escape

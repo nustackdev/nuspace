@@ -67,6 +67,7 @@ import {
 	useRoute,
 	useRoutes,
 } from "../core/router";
+import { settlePanes, useCellSpecs } from "../core/viewer";
 import { notifyOp } from "../core/wire";
 import {
 	deskArea,
@@ -90,7 +91,6 @@ import { Column } from "./Column";
 import { DeskHeader } from "./DeskHeader";
 import { DropRegion } from "./DropRegion";
 import { useCanvasDrop } from "./drop";
-import { settlePanes, useCellSpecs } from "./state";
 
 /** What an empty desk says, and the hint under it. */
 export const EMPTY_DESK = "This desk is empty";
