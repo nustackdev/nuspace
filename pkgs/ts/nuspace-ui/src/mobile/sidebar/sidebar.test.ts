@@ -1,5 +1,5 @@
 // The sidebar screen's logic: open as a history entry, a desk's rows on the
-// phone and the pages they open, what a plane's long-press offers, the add
+// phone and the pages they open, a strip row's composite icon and +N, what a plane's long-press offers, the add
 // sheet's groups.
 
 import { History } from "@nustackdev/ui-kit";
@@ -8,7 +8,7 @@ import type { Desk, Item } from "../../desk/model";
 import type { PlaneTree, TreeRow } from "../../sidebar/types";
 import { pageOf, pagesOf } from "../desk/model";
 import { addGroups } from "./AddPlaneSheet";
-import { deskPlanes, deskRows, planeActions, stackOf, stripLabel } from "./model";
+import { compositeOf, deskPlanes, deskRows, hiddenTitles, ICON_BOX, planeActions } from "./model";
 import {
 	isSidebarEntry,
 	leaveThen,
@@ -64,19 +64,94 @@ describe("deskRows", () => {
 		expect(pageOf(pagesOf(strip), row.pane)).toBe(0);
 	});
 
-	it("stacks up to three icons, then counts the rest", () => {
-		expect(stackOf(["a", "b"])).toEqual({ shown: ["a", "b"], more: 0 });
-		expect(stackOf(["a", "b", "c"])).toEqual({ shown: ["a", "b", "c"], more: 0 });
-		expect(stackOf(["a", "b", "c", "d", "e"])).toEqual({ shown: ["a", "b", "c"], more: 2 });
-	});
-
-	it("labels a strip by its count", () => {
-		expect(stripLabel(3)).toBe("3 planes");
-		expect(stripLabel(1)).toBe("1 plane");
-	});
-
 	it("names every plane the rows can show, for their looks", () => {
 		expect(deskPlanes([desk])).toEqual(["deploys", "logs", "errors", "alerts"]);
+	});
+});
+
+describe("compositeOf", () => {
+	const inBox = (c: { x: number; y: number; w: number; h: number }) =>
+		c.x >= 0 && c.y >= 0 && c.x + c.w <= ICON_BOX && c.y + c.h <= ICON_BOX;
+	const whole = (c: { x: number; y: number; w: number; h: number }) =>
+		[c.x, c.y, c.w, c.h].every(Number.isInteger);
+
+	it("splits two planes into halves side by side", () => {
+		expect(compositeOf(2)).toEqual({
+			cells: [
+				{ x: 0, y: 0, w: 10, h: 20 },
+				{ x: 10, y: 0, w: 10, h: 20 },
+			],
+			shown: 2,
+			more: 0,
+		});
+	});
+
+	it("sets three as a triad, one top centre and two under", () => {
+		expect(compositeOf(3).cells).toEqual([
+			{ x: 5, y: 0, w: 10, h: 10 },
+			{ x: 0, y: 10, w: 10, h: 10 },
+			{ x: 10, y: 10, w: 10, h: 10 },
+		]);
+	});
+
+	it("grids four two by two", () => {
+		const { cells, shown, more } = compositeOf(4);
+		expect(cells.map((c) => [c.x, c.y])).toEqual([
+			[0, 0],
+			[10, 0],
+			[0, 10],
+			[10, 10],
+		]);
+		expect([shown, more]).toEqual([4, 0]);
+	});
+
+	it("grids five and more, the last cell counting the planes past three", () => {
+		expect(compositeOf(5)).toMatchObject({ shown: 3, more: 2 });
+		expect(compositeOf(8)).toMatchObject({ shown: 3, more: 5 });
+		expect(compositeOf(8).cells).toEqual(compositeOf(4).cells);
+	});
+
+	it("stays inside the row's icon box, on whole pixels", () => {
+		for (let n = 1; n <= 9; n++) {
+			const { cells, shown, more } = compositeOf(n);
+			expect(cells.every(inBox)).toBe(true);
+			expect(cells.every(whole)).toBe(true);
+			expect(shown + more).toBe(n);
+			expect(cells.length).toBe(shown + (more ? 1 : 0));
+		}
+	});
+});
+
+describe("hiddenTitles", () => {
+	// Titles 50px wide, ", " 10px: a title ends every 60px, the last at 290.
+	const ends = [50, 110, 170, 230, 290];
+	const more = (n: number) => 4 + 8 * String(n).length + 6;
+
+	it("counts nothing when every title fits", () => {
+		expect(hiddenTitles(ends, 290, 8, more)).toBe(0);
+		expect(hiddenTitles(ends, 400, 8, more)).toBe(0);
+		expect(hiddenTitles([], 10, 8, more)).toBe(0);
+	});
+
+	it("counts the titles not fully shown before the ellipsis and the +N", () => {
+		// 200 less "+3" (18) and the ellipsis (8): 174, so three titles end in it.
+		expect(hiddenTitles(ends, 200, 8, more)).toBe(2);
+		// 289: the last ends a pixel past it.
+		expect(hiddenTitles(ends, 289, 8, more)).toBe(1);
+		// 120 less 18 and 8: 94, one title.
+		expect(hiddenTitles(ends, 120, 8, more)).toBe(4);
+	});
+
+	it("counts every title when none fits in full", () => {
+		expect(hiddenTitles(ends, 40, 8, more)).toBe(5);
+	});
+
+	it("leaves room for a wider +N", () => {
+		const wide = (n: number) => (n > 1 ? 60 : 20);
+		// +1 fits after four titles (230 + 20 + 8 <= 260); no squeeze needed.
+		expect(hiddenTitles(ends, 260, 8, wide)).toBe(1);
+		// At 250, +1 does not fit after four; +2 (60) leaves 182: three titles.
+		expect(hiddenTitles(ends, 250, 8, wide)).toBe(2);
 	});
 });
 

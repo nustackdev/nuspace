@@ -51,6 +51,15 @@ export function mobileFab(side: "left" | "right"): string {
 	);
 }
 
+/**
+ * The room a scrolled list leaves at its end for the floating buttons: the
+ * home indicator, the buttons' 16px offset, their 48px, and 16px more, so
+ * the last row scrolls fully clear of them. Padded on the content, not on
+ * the scroller: a scroller's own end padding is dropped by some engines
+ * (WebKit, a flex scroller), the content's never is.
+ */
+export const mobileFabClear = "pb-[calc(env(safe-area-inset-bottom)+80px)]";
+
 /* ============================== The sidebar screen ======================== */
 
 /**
@@ -75,18 +84,21 @@ export function mobileSidebar(open: boolean): string {
 export const mobileSidebarHead = "flex h-14 shrink-0 items-center px-2";
 
 /**
- * The rows under the bar, scrolled, clear of the floating button at the
- * bottom. `pan-y` again here: a scroller starts its own touch-action, so the
- * panel's does not reach the rows, and the browser would take the sideways
- * drag.
+ * The rows under the bar, scrolled. `pan-y` again here: a scroller starts
+ * its own touch-action, so the panel's does not reach the rows, and the
+ * browser would take the sideways drag.
  */
-export const mobileSidebarBody = cn(
-	"flex min-h-0 flex-1 touch-pan-y flex-col gap-4 overflow-y-auto overscroll-contain px-2",
-	"pb-[calc(env(safe-area-inset-bottom)+88px)]",
-);
+export const mobileSidebarBody =
+	"min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain px-2";
+
+/** The sections, 16px apart, the last one clear of the floating button. */
+export const mobileSidebarList = cn("flex flex-col gap-4", mobileFabClear);
 
 /** A section: its title, then its rows. */
 export const mobileSection = "flex flex-col";
+
+/** A section title that folds: the rows' radius and their pressed wash. */
+export const mobileSectionFold = "rounded-lg active:bg-bg-press";
 
 /*
  * The row anatomy, one for every line on the sidebar screen:
@@ -134,41 +146,39 @@ export function mobileIndent(depth: number): { paddingLeft: string } {
 /**
  * The lead lane: 32px, its icon 20px at the lane's start, whatever the icon
  * is. The lane sets the size, not the call site: a lucide glyph, a plane's
- * emoji (its box and its type) and a skeleton all come out 20px.
+ * emoji (its box and its type), a strip's composite and a skeleton all come
+ * out 20px.
  */
 export const mobileRowLead = cn(
 	"flex w-8 shrink-0 items-center text-text-muted",
-	"[&>svg]:size-5 [&>span:not([data-stack])]:size-5 [&>span:not([data-stack])]:text-[1.125rem]",
+	"[&>svg]:size-5 [&>span]:size-5 [&>span]:text-[1.125rem]",
 );
 
 /**
- * A strip row's lead: its planes' icons stacked left to right, each on a
- * 16px tile that overlaps the next by 3px, the first on top, so every
- * glyph still reads. Three tiles come to 42px: the stack starts 14px left of
- * the lane, just clear of the folder's icon above, and stops 4px short of
- * the label, so the label keeps the edge every row has. More than three: a
- * +N chip under the last tile.
+ * A strip row's lead: its planes' icons in the 20px box every row's icon
+ * takes, never bigger. Each cell is placed by ../mobile/sidebar/model.ts
+ * `compositeOf` (inline left, top, width, height), on whole pixels so the
+ * glyphs stay crisp at 2x and 3x.
  */
-export const mobileStack = "relative -ml-3.5 flex shrink-0 items-center";
+export const mobileComposite = "relative block";
 
-/** One tile of a strip row's stack, its icon 12px. */
-export const mobileStackTile = cn(
-	"relative flex size-4 shrink-0 items-center justify-center rounded-[4px]",
-	"border border-border-default bg-bg-surface text-text-secondary ring-2 ring-bg-sunken",
-	"not-first:-ml-[3px]",
-	"[&_svg]:size-3 [&>span]:size-3 [&>span]:text-[0.6875rem]",
+/** One cell of a composite, its icon 10px: a lucide glyph or an emoji. */
+export const mobileCompositeCell = cn(
+	"absolute flex items-center justify-center",
+	"[&>svg]:size-2.5 [&>span]:size-2.5 [&>span]:text-[9px]",
 );
 
-/** The +N chip over a stack's last tile. */
-export const mobileStackMore = cn(
-	"absolute right-0 -bottom-2.5 z-10 rounded-full bg-bg-elevated px-1",
-	"text-[9px] leading-3 font-medium text-text-secondary ring-2 ring-bg-sunken",
-);
+/** The +N in a composite's last cell: the planes past the first three. */
+export const mobileCompositeMore =
+	"text-[8px] leading-none font-semibold tracking-tighter text-text-secondary tabular-nums";
 
-/** A strip row's two lines: the count, then its planes' titles, muted and truncating. */
-export const mobileRowTwoLine = "min-h-14";
-export const mobileRowLine = "block truncate";
-export const mobileRowSubline = "block truncate text-sm text-text-muted";
+/**
+ * A strip row's label: its planes' titles on one line, truncating, and the
+ * +N of the titles the line cannot show in full after them, never cut.
+ */
+export const mobileStripLabel = "flex w-full min-w-0 items-baseline";
+export const mobileStripTitles = "min-w-0 truncate";
+export const mobileStripMore = "shrink-0 pl-1 text-text-muted tabular-nums";
 
 /** A row's label, truncating. */
 export const mobileRowLabel = "min-w-0 flex-1 truncate";

@@ -4,29 +4,33 @@
 // opens.
 //
 // Top to bottom, as on desktop minus the footer: the bar (the wordmark, + for
-// a new plane), Home, Search and Settings, a folder per desk, the Planes
-// tree, the Specs. Every line is one row (./Row.tsx): 44px, one icon size,
-// one label edge a depth, every chevron and + in one column. The data and the ops are desktop's: the
-// SidebarRef node's tree and fold state (../../sidebar/state.ts), the desks
-// feed and the roles (../../core/desks.ts), the sidebar ops
-// (../../sidebar/ops.ts). Only the touch presentation is the phone's own.
+// a new plane), then the sections, desktop's: the nav, a section per desk,
+// Planes, Specs. Every group is one section (./Section.tsx), every line one
+// row (./Row.tsx): 44px, one icon size, one label edge a depth, every
+// chevron and + in one column, titles and rows alike. The data and the ops
+// are desktop's: the SidebarRef node's tree and fold state
+// (../../sidebar/state.ts), the desks feed and the roles
+// (../../core/desks.ts), the desk folds (../../sidebar/folders.ts), the
+// sidebar ops (../../sidebar/ops.ts). Only the touch presentation is the
+// phone's own.
 //
-//   nav       a row per role, a link to its plane
-//   desks     a folder per desk, tap the title to fold; one row per item
-//             (./model.ts): a plane item opens as itself; a strip, its
-//             planes' icons stacked, "N planes" over their titles, opens
-//             the desk pager on its first pane
-//   planes    the tree, lazy like desktop's: the chevron at the row's end
-//             opens a branch, the rest of the row opens the plane. Long-press a row
-//             for Rename, Add plane inside, Delete (./PlaneSheet.tsx)
-//   specs     a group per package, tap to open; tap an entry to make a plane
+//   nav       no title: a row per role, a link to its plane
+//   a desk    titled with the desk's name, tap the title to fold; a row per
+//             item (./model.ts) at depth 0: a plane item opens as itself; a
+//             strip, its planes' icons as one composite and their titles on
+//             one line (./Strip.tsx), opens the desk pager on its first pane
+//   Planes    + in the title's trail; the tree, lazy like desktop's: the
+//             chevron at the row's end opens a branch, the rest of the row
+//             opens the plane. Long-press a row for Rename, Add plane
+//             inside, Delete (./PlaneSheet.tsx)
+//   Specs     a group per package, tap to open; tap an entry to make a plane
 //
 // No drag, no keyboard walk, no hover actions: the long-press sheet holds
 // what desktop's row menus do, within v1.
 
 import type { Path } from "@nustackdev/ui-core";
 import { type AnchorRule, pathKey, Skeleton, useAnchorCatcher } from "@nustackdev/ui-kit";
-import { Folder, Package, Plus } from "lucide-react";
+import { Package, Plus } from "lucide-react";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { useDeskOrder, useDesks, useRoles } from "../../core/desks";
 import { lookOf, type PlaneLook, usePlaneLooks } from "../../core/looks";
@@ -43,16 +47,10 @@ import {
 import { useTypePath } from "../../core/surfaces";
 import { notifyOp } from "../../core/wire";
 import {
-	mobileRowLine,
-	mobileRowSubline,
-	mobileRowTwoLine,
-	mobileSection,
 	mobileSidebar,
 	mobileSidebarBody,
 	mobileSidebarHead,
-	mobileStack,
-	mobileStackMore,
-	mobileStackTile,
+	mobileSidebarList,
 	sidebarWordmark,
 	sidebarWordmarkNu,
 } from "../../design";
@@ -67,17 +65,19 @@ import { showsNoPlanes, visibleRows } from "../../sidebar/tree";
 import { childrenOf, type Registered, ROOT_ID, rootId } from "../../sidebar/types";
 import { useLongPress, useSwipeClose } from "../gestures";
 import { AddPlaneSheet, addGroups } from "./AddPlaneSheet";
-import { type DeskRow, deskPlanes, deskRows, stackOf, stripLabel } from "./model";
+import { type DeskRow, deskPlanes, deskRows } from "./model";
 import { closeSidebar, leaveThen, useSidebarOpen } from "./open";
 import { PlaneSheet, type Pressed } from "./PlaneSheet";
 import { MobileRow, RowAdd, RowChevron, RowFold } from "./Row";
+import { MobileSection } from "./Section";
+import { StripIcon, StripLabel } from "./Strip";
 
-/** The attribute a desk folder's strip row carries: the plane a tap focuses. */
+/** The attribute a desk's strip row carries: the plane a tap focuses. */
 export const PANE_ATTR = "data-pane";
 
 /**
  * A link tapped in the sidebar: closed first, then followed the way the shell
- * follows it (../../core/router.ts `paneRule`), a desk folder's pane rows
+ * follows it (../../core/router.ts `paneRule`), a desk's strip rows
  * through `openPane`. Anything not the app's stays the browser's.
  */
 export const mobileSidebarRule: AnchorRule = (href, gesture, anchor, event) => {
@@ -130,15 +130,17 @@ export function MobileSidebar() {
 function SidebarBooting() {
 	return (
 		<nav aria-label="Planes" className={mobileSidebarBody}>
-			<NavRows route={useRoute()} />
-			<div aria-busy="true" className={mobileSection}>
-				{[0, 1, 2].map((i) => (
-					<MobileRow
-						key={i}
-						icon={<Skeleton className="size-5 rounded-md" />}
-						label={<Skeleton className="h-4 w-32" />}
-					/>
-				))}
+			<div className={mobileSidebarList}>
+				<NavRows route={useRoute()} />
+				<div aria-busy="true">
+					{[0, 1, 2].map((i) => (
+						<MobileRow
+							key={i}
+							icon={<Skeleton className="size-5 rounded-md" />}
+							label={<Skeleton className="h-4 w-32" />}
+						/>
+					))}
+				</div>
 			</div>
 		</nav>
 	);
@@ -186,17 +188,16 @@ function SidebarBody({ path }: { path: Path }) {
 
 	return (
 		<nav aria-label="Planes" className={mobileSidebarBody}>
-			<NavRows route={route} />
-			{loading ? null : (
-				<>
-					<DeskFolders route={route} />
-					<section aria-label="Planes" className={mobileSection}>
-						<MobileRow
-							kind="head"
+			<div className={mobileSidebarList}>
+				<NavRows route={route} />
+				{loading ? null : (
+					<>
+						<DeskSections route={route} />
+						<MobileSection
 							label="Planes"
+							title="Planes"
 							trail={<RowAdd label="New plane" onClick={() => openAddPlane({ parent: ROOT_ID })} />}
-						/>
-						<div>
+						>
 							{rows.length ? null : (
 								<MobileRow
 									as="button"
@@ -214,11 +215,11 @@ function SidebarBody({ path }: { path: Path }) {
 									onPress={() => setPressed({ id: row.id, step: "actions" })}
 								/>
 							))}
-						</div>
-					</section>
-					<Specs registered={registered} expanded={expanded} toggle={toggle} notify={notify} />
-				</>
-			)}
+						</MobileSection>
+						<Specs registered={registered} expanded={expanded} toggle={toggle} notify={notify} />
+					</>
+				)}
+			</div>
 			<PlaneSheet tree={tree} pressed={pressed} onPressed={setPressed} notify={notify} />
 			<AddPlaneSheet registered={registered} notify={notify} expand={expand} />
 		</nav>
@@ -231,7 +232,7 @@ function NavRows({ route }: { route: Route }) {
 	const roles = useRoles();
 	const selected = route.kind === "solo" ? route.plane : "";
 	return (
-		<section aria-label="Navigation" className={mobileSection}>
+		<MobileSection label="Navigation">
 			{NAV_ITEMS.map(({ role, label, icon: Icon }) => {
 				const plane = roles?.[role] ?? "";
 				return (
@@ -247,13 +248,14 @@ function NavRows({ route }: { route: Route }) {
 					/>
 				);
 			})}
-		</section>
+		</MobileSection>
 	);
 }
 
 // -- Desks ----------------------------------------------------------------------
 
-function DeskFolders({ route }: { route: Route }) {
+/** A section per desk, in the desks' order: titled with its name, folding, its items. */
+function DeskSections({ route }: { route: Route }) {
 	const desks = useDesks();
 	const order = useDeskOrder();
 	const folds = useFolds();
@@ -262,54 +264,46 @@ function DeskFolders({ route }: { route: Route }) {
 		[desks, order],
 	);
 	const looks = usePlaneLooks(useMemo(() => deskPlanes(list.map((d) => d.desk)), [list]));
-	if (!list.length) return null;
 
-	return (
-		<section aria-label="Desks" className={mobileSection}>
-			<MobileRow kind="head" label="Desks" />
-			{list.map(({ id, desk }) => {
-				const folded = folds.has(folderKey(id));
-				const rows = deskRows(desk);
-				// The item the screen shows.
-				const on = route.kind === "item" && route.desk === id ? route.item.id : "";
-				return (
-					<div key={id}>
-						<MobileRow
-							as="button"
-							aria-expanded={!folded}
-							data-desk={id}
-							onClick={() => setFolded(folderKey(id), !folded)}
-							icon={<Folder />}
-							label={deskLabel(desk.name)}
-							trail={<RowChevron open={!folded} />}
+	return list.map(({ id, desk }) => {
+		const name = deskLabel(desk.name);
+		const rows = deskRows(desk);
+		// The item the screen shows.
+		const on = route.kind === "item" && route.desk === id ? route.item.id : "";
+		return (
+			<MobileSection
+				key={id}
+				label={name}
+				title={name}
+				head={{ "data-desk": id }}
+				folded={folds.has(folderKey(id))}
+				onFold={(folded) => setFolded(folderKey(id), folded)}
+			>
+				{rows.length ? (
+					rows.map((r) => (
+						<DeskItemRow
+							key={r.item.id}
+							deskId={id}
+							at={r}
+							looks={looks}
+							selected={r.item.id === on}
 						/>
-						{folded ? null : rows.length ? (
-							rows.map((r) => (
-								<DeskFolderRow
-									key={r.item.id}
-									deskId={id}
-									at={r}
-									looks={looks}
-									selected={r.item.id === on}
-								/>
-							))
-						) : (
-							<MobileRow kind="note" depth={1} label="Empty desk" />
-						)}
-					</div>
-				);
-			})}
-		</section>
-	);
+					))
+				) : (
+					<MobileRow kind="note" label="Empty desk" />
+				)}
+			</MobileSection>
+		);
+	});
 }
 
 /**
- * One row of a desk folder: a desk item. A plane item opens as itself; a
- * strip opens the desk pager on its first pane (`PANE_ATTR`, which
- * `mobileSidebarRule` reads): its planes' icons stacked in the lead, then
- * two lines, "3 planes" and their titles, muted and truncating.
+ * One row of a desk section: a desk item, one line like any row. A plane
+ * item opens as itself. A strip opens the desk pager on its first pane
+ * (`PANE_ATTR`, which `mobileSidebarRule` reads): its planes' icons as one
+ * composite in the lead, their titles on the line.
  */
-function DeskFolderRow({
+function DeskItemRow({
 	deskId,
 	at,
 	looks,
@@ -325,7 +319,6 @@ function DeskFolderRow({
 		as: "a" as const,
 		href: itemHref(deskId, item.id),
 		"aria-current": selected ? ("page" as const) : undefined,
-		depth: 1,
 		selected,
 		"data-item": item.id,
 	};
@@ -335,31 +328,15 @@ function DeskFolderRow({
 			<MobileRow {...common} icon={<PlaneIcon icon={planeIcon(look.icon)} />} label={look.title} />
 		);
 	}
-	const { shown, more } = stackOf(planes);
-	const count = stripLabel(planes.length);
-	const titles = planes.map((p) => lookOf(looks, p).title).join(", ");
+	const shown = planes.map((p) => lookOf(looks, p));
+	const titles = shown.map((l) => l.title);
 	return (
 		<MobileRow
 			{...common}
 			{...{ [PANE_ATTR]: pane || undefined }}
-			aria-label={`${count}: ${titles}`}
-			className={mobileRowTwoLine}
-			icon={
-				<span data-stack="" className={mobileStack}>
-					{shown.map((p, i) => (
-						<span key={p} className={mobileStackTile} style={{ zIndex: shown.length - i }}>
-							<PlaneIcon icon={planeIcon(lookOf(looks, p).icon)} />
-						</span>
-					))}
-					{more ? <span className={mobileStackMore}>+{more}</span> : null}
-				</span>
-			}
-			label={
-				<>
-					<span className={mobileRowLine}>{count}</span>
-					<span className={mobileRowSubline}>{titles}</span>
-				</>
-			}
+			aria-label={titles.join(", ")}
+			icon={<StripIcon icons={shown.map((l) => l.icon)} />}
+			label={<StripLabel titles={titles} />}
 		/>
 	);
 }
@@ -426,8 +403,7 @@ function Specs({
 		leaveThen(() => openPlane(planeId));
 	};
 	return (
-		<section aria-label="Specs" className={mobileSection}>
-			<MobileRow kind="head" label="Specs" />
+		<MobileSection label="Specs" title="Specs">
 			{groups.map(({ pkg, entries }) => {
 				const key = groupKey(pkg);
 				const open = expanded.has(key);
@@ -456,6 +432,6 @@ function Specs({
 					</div>
 				);
 			})}
-		</section>
+		</MobileSection>
 	);
 }
