@@ -14,7 +14,7 @@ const REACT_DOM = path.resolve(__dirname, "node_modules/react-dom");
 // release. Radix is pinned to this package's copy as well: the kit's source
 // would otherwise resolve its own, and two copies of a Radix context never
 // meet (a menu trigger from one cannot open content from the other). cmdk is
-// inlined for the reason zustand is below: it imports react.
+// inlined for the reason zustand is below: it imports react. So is vaul.
 const KIT =
 	process.env.NU_KIT === "local"
 		? path.resolve(
@@ -51,7 +51,7 @@ export default defineConfig({
 				// that bites: the kit's store is a zustand store, zustand imports
 				// react, and the copy it resolves is the WRONG react. Inlining
 				// puts it back through vite, alias and all.
-				inline: [/zustand/, /prosemirror-/, /radix-ui/, ...(KIT ? [/cmdk/] : [])],
+				inline: [/zustand/, /prosemirror-/, /radix-ui/, ...(KIT ? [/cmdk/, /vaul/] : [])],
 			},
 		},
 		// jsdom, because the cell-boundary keyboard is a DOM ordering claim

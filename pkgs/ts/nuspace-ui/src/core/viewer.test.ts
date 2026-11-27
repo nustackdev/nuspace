@@ -8,7 +8,7 @@ import { nodeAt, tree } from "@nustackdev/ui-kit";
 import { describe, expect, it } from "vitest";
 import { panePath } from "../pane/state";
 import { cellUiPath } from "../plane/cell/address";
-import { admits, settlePanes } from "./state";
+import { admits, settlePanes } from "./viewer";
 
 describe("a closed pane", () => {
 	const viewer = ["closed-ui", "viewer"];
