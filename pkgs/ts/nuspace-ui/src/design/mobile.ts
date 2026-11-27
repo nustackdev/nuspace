@@ -228,16 +228,19 @@ export const mobileToaster = "top-[env(safe-area-inset-top)] bottom-auto max-w-n
 
 /**
  * The plane's scroller: the whole screen under the banner, native scroll.
- * Its bottom pads clear of the floating buttons, so the last cell can be
- * scrolled above them.
+ * The body inside it leaves the room for the floating buttons.
  */
-export const mobilePlaneScroll = cn(
-	"min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-y-contain",
-	"pb-[calc(env(safe-area-inset-bottom)+88px)]",
-);
+export const mobilePlaneScroll =
+	"min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-y-contain";
 
-/** The plane: no gutters, its cells one under another at the full width. */
-export const mobilePlaneBody = "flex min-w-0 flex-col gap-doc-cell-gap px-2 pt-4";
+/**
+ * The plane: no gutters, its cells one under another at the full width, the
+ * last one clear of the floating buttons.
+ */
+export const mobilePlaneBody = cn(
+	"flex min-w-0 flex-col gap-doc-cell-gap px-2 pt-4",
+	mobileFabClear,
+);
 
 /** The title band: the plane above (when there is one), then the icon and the title. */
 export const mobilePlaneHead = "flex min-w-0 flex-col gap-0.5 px-doc-cell pb-3";

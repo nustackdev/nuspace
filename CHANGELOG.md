@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Phone planes and desk pages scroll their last cell clear of the floating buttons
 - Phone sidebar groups desks into titled sections, each strip one line with a composite icon
 - Phone desk folders show one row per item, strips as stacked icons and titles
 - Phone shell can no longer pull in desktop only code, checked by a test
