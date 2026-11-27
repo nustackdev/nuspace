@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- iOS no longer zooms in when tapping into an input
 - Flat nu favicons and app icons, no glow or shadow
 - Phone plane and cell sheets show their facts and last run, read only
 - Phone screens share one fixed header, desks page with arrow buttons instead of dots
