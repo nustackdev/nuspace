@@ -1,15 +1,19 @@
 // What a long-press on a cell opens: one bottom sheet, two steps, and the
 // source screen.
 //
-//   actions   Restart, Copy id, View source, Delete (no delete where the
-//             plane cannot be written)
+//   actions   the cell's facts and its last run, desktop's cell menu head
+//             (../../plane/cell/InfoBlock.tsx), read-only, then Restart,
+//             Copy id, View source, Delete (no delete where the plane
+//             cannot be written). Key editing stays on desktop
 //   delete    the confirm: Delete or Cancel, then desktop's Undo toast
 //
 // View source closes the sheet and opens the source full screen, read-only:
 // a kit side sheet, which takes the whole screen on a phone. Copy id closes
 // the sheet and says so in a toast. The ops are desktop's, on the pane's own
-// node (../../plane/ops.ts).
+// node (../../plane/ops.ts); the facts are asked for by the long-press that
+// opens it (./MobilePlane.tsx), as desktop's menu asks as it opens.
 
+import type { Path } from "@nustackdev/ui-core";
 import {
 	BottomSheet,
 	BottomSheetContent,
@@ -18,6 +22,7 @@ import {
 	BottomSheetItem,
 	Button,
 	Code,
+	DropdownMenuSeparator,
 	Sheet,
 	SheetContent,
 	SheetDescription,
@@ -29,6 +34,7 @@ import { Code as CodeIcon, Copy, RotateCw, Trash2 } from "lucide-react";
 import type * as React from "react";
 import { useEffect, useState } from "react";
 import { mobileSourceBody, mobileSourceTitle } from "../../design";
+import { CellInfoBlock } from "../../plane/cell/InfoBlock";
 import type { Cell } from "../../plane/types";
 import { type CellAction, cellActions, copyToClipboard } from "./model";
 
@@ -36,6 +42,7 @@ import { type CellAction, cellActions, copyToClipboard } from "./model";
 export type CellPressed = { id: string; step: "actions" | "delete" } | null;
 
 export function CellSheet({
+	panePath,
 	cell,
 	pressed,
 	editable,
@@ -44,6 +51,8 @@ export function CellSheet({
 	onSource,
 	onDelete,
 }: {
+	/** The pane node the cell's facts land on. */
+	panePath: Path;
 	/** The cell pressed, as it is now; undefined once it is gone. */
 	cell: Cell | undefined;
 	pressed: CellPressed;
@@ -85,11 +94,24 @@ export function CellSheet({
 				data-cell-sheet={shown?.step ?? ""}
 			>
 				{!shown ? null : shown.step === "actions" ? (
-					<div role="menu">
-						{cellActions(editable).map((action) => (
-							<ActionRow key={action} action={action} onClick={() => act(action)} />
-						))}
-					</div>
+					<>
+						{cell ? (
+							<>
+								<CellInfoBlock
+									panePath={panePath}
+									cellId={cell.id}
+									state={cell.status.state}
+									error={cell.status.error ?? null}
+								/>
+								<DropdownMenuSeparator />
+							</>
+						) : null}
+						<div role="menu">
+							{cellActions(editable).map((action) => (
+								<ActionRow key={action} action={action} onClick={() => act(action)} />
+							))}
+						</div>
+					</>
 				) : (
 					<>
 						<BottomSheetDescription>

@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Phone plane and cell sheets show their facts and last run, read only
 - Phone screens share one fixed header, desks page with arrow buttons instead of dots
 - Phone planes and desk pages scroll their last cell clear of the floating buttons
 - Phone sidebar groups desks into titled sections, each strip one line with composite icons

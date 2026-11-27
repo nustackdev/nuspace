@@ -5,7 +5,8 @@
 // On top the header every screen wears (../Header.tsx) names the desk,
 // dimmed, and the pane on screen, with the pager's ‹ n/m › at its end: the
 // buttons turn the page as a swipe does, and the counter follows a swipe as
-// it moves. A plane item is one page: no pager.
+// it moves. A plane item is one page: no pager. Last the ⋯, the facts of the
+// pane on screen (../plane/PlaneInfoSheet.tsx).
 //
 // The pager is the browser's own sideways scroll with snapping, and each page
 // is a plane screen (../plane/MobilePlane.tsx) scrolling up and down inside
@@ -35,7 +36,8 @@ import {
 import { panePath, usePaneHead } from "../../pane/state";
 import type { CellSpec } from "../../plane/types";
 import { HeaderButton, HeaderCount, MobileHeader } from "../Header";
-import { MobilePlane } from "../plane/MobilePlane";
+import { InfoButton, MobilePlane } from "../plane/MobilePlane";
+import { PlaneInfoSheet } from "../plane/PlaneInfoSheet";
 import { pageAt, pageCount, pageOf, pagesOf, stepPage } from "./model";
 
 /** How long a scroll stays still before its page counts as settled, where `scrollend` is missing. */
@@ -126,6 +128,12 @@ export function MobileDesk({
 	}, [pages, focus, scrollTo]);
 
 	const shown = Math.min(index, pages.length - 1);
+	// The pane whose facts are open, held through the sheet's close.
+	const [info, setInfo] = useState<string | null>(null);
+	const [infoPlane, setInfoPlane] = useState("");
+	useEffect(() => {
+		if (info) setInfoPlane(info);
+	}, [info]);
 	const count = pageCount(shown, pages.length);
 
 	return (
@@ -136,6 +144,7 @@ export function MobileDesk({
 				plane={planes[shown] ?? ""}
 				count={count}
 				onStep={(by) => scrollTo(stepPage(shown, by, pages.length), true)}
+				onInfo={() => setInfo(planes[shown] ?? null)}
 				first={shown <= 0}
 				last={shown >= pages.length - 1}
 			/>
@@ -152,6 +161,14 @@ export function MobileDesk({
 					</div>
 				))}
 			</div>
+			{infoPlane ? (
+				<PlaneInfoSheet
+					viewerPath={viewerPath}
+					planeId={infoPlane}
+					open={info !== null}
+					onClose={() => setInfo(null)}
+				/>
+			) : null}
 		</section>
 	);
 }
@@ -160,7 +177,8 @@ const NO_PATH: string[] = [];
 
 /**
  * The header: the desk's name, dimmed, then the title of the pane on screen,
- * and the pager, ‹ n/m ›, its buttons dimmed at the ends.
+ * the pager, ‹ n/m ›, its buttons dimmed at the ends, and the ⋯ of the
+ * pane on screen.
  */
 function DeskHeader({
 	viewerPath,
@@ -168,6 +186,7 @@ function DeskHeader({
 	plane,
 	count,
 	onStep,
+	onInfo,
 	first,
 	last,
 }: {
@@ -176,6 +195,7 @@ function DeskHeader({
 	plane: string;
 	count: string | null;
 	onStep: (by: -1 | 1) => void;
+	onInfo: () => void;
 	first: boolean;
 	last: boolean;
 }) {
@@ -201,29 +221,32 @@ function DeskHeader({
 				</span>
 			}
 			actions={
-				count ? (
-					<>
-						<HeaderButton
-							label="Previous pane"
-							data-desk-step="prev"
-							disabled={first}
-							onClick={() => onStep(-1)}
-						>
-							<ChevronLeft />
-						</HeaderButton>
-						<HeaderCount>
-							<span data-desk-count="">{count}</span>
-						</HeaderCount>
-						<HeaderButton
-							label="Next pane"
-							data-desk-step="next"
-							disabled={last}
-							onClick={() => onStep(1)}
-						>
-							<ChevronRight />
-						</HeaderButton>
-					</>
-				) : null
+				<>
+					{count ? (
+						<>
+							<HeaderButton
+								label="Previous pane"
+								data-desk-step="prev"
+								disabled={first}
+								onClick={() => onStep(-1)}
+							>
+								<ChevronLeft />
+							</HeaderButton>
+							<HeaderCount>
+								<span data-desk-count="">{count}</span>
+							</HeaderCount>
+							<HeaderButton
+								label="Next pane"
+								data-desk-step="next"
+								disabled={last}
+								onClick={() => onStep(1)}
+							>
+								<ChevronRight />
+							</HeaderButton>
+						</>
+					) : null}
+					{head ? <InfoButton onClick={onInfo} /> : null}
+				</>
 			}
 		/>
 	);

@@ -8,8 +8,9 @@
 // It reads the same PaneRef node desktop's pane does (../../pane/state.ts)
 // and sends the same ops on it, so nothing about the server changes. A cell
 // shows what it draws (./MobileCell.tsx). A long-press opens its sheet
-// (./CellSheet.tsx); the floating + opens the add sheet (./AddCellSheet.tsx),
-// which adds at the end.
+// (./CellSheet.tsx) with its facts; the floating + opens the add sheet
+// (./AddCellSheet.tsx), which adds at the end. The ⋯ on the header opens the
+// plane's facts (./PlaneInfoSheet.tsx).
 //
 // The server's scroll commands and its follow-the-end apply here as on
 // desktop (../../pane/scroll.ts). `data-pane` is the plane shown, so a link
@@ -20,6 +21,7 @@
 
 import type { Path } from "@nustackdev/ui-core";
 import { pathKey } from "@nustackdev/ui-kit";
+import { Ellipsis } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePlaneLooks } from "../../core/looks";
 import { leavePlanes } from "../../core/router";
@@ -30,6 +32,7 @@ import { planeIcon } from "../../icon/parse";
 import { GoHome, NotFoundBody } from "../../pane/NotFound";
 import { useScroller } from "../../pane/scroll";
 import {
+	clearPaneCellInfo,
 	markScrolled,
 	panePath,
 	usePaneAbsent,
@@ -48,11 +51,12 @@ import { inReadingOrder, plainLayout } from "../../plane/layout/model";
 import type { Notify, Ops } from "../../plane/ops";
 import type { CellSpec } from "../../plane/types";
 import { deletedCells } from "../../refs/toast";
-import { MobileHeader } from "../Header";
+import { HeaderButton, MobileHeader } from "../Header";
 import { AddCellSheet } from "./AddCellSheet";
 import { type CellPressed, CellSheet, SourceScreen } from "./CellSheet";
 import { MobileCell } from "./MobileCell";
 import { appendCell } from "./model";
+import { PlaneInfoSheet } from "./PlaneInfoSheet";
 
 export function MobilePlane({
 	viewerPath,
@@ -139,6 +143,7 @@ export function MobilePlane({
 	}, [shipped]);
 
 	const [pressed, setPressed] = useState<CellPressed>(null);
+	const [info, setInfo] = useState(false);
 	const [source, setSource] = useState<string | null>(null);
 	const byId = useMemo(() => new Map((shipped ?? []).map((c) => [c.id, c])), [shipped]);
 
@@ -161,7 +166,9 @@ export function MobilePlane({
 			data-focused={active ? "" : undefined}
 			data-plane-screen=""
 		>
-			{titled ? <PlaneHeader planeId={planeId} head={head} absent={!!absent} /> : null}
+			{titled ? (
+				<PlaneHeader planeId={planeId} head={head} absent={!!absent} onInfo={() => setInfo(true)} />
+			) : null}
 			<div ref={viewport} className={mobilePlaneScroll}>
 				<div ref={content} className={mobilePlaneBody}>
 					{absent ? (
@@ -176,7 +183,11 @@ export function MobilePlane({
 									cell={cell}
 									uiPath={cellUiPath(viewerPath, cell.id)}
 									pressed={pressed?.id === cell.id}
-									onLongPress={() => setPressed({ id: cell.id, step: "actions" })}
+									onLongPress={() => {
+										setPressed({ id: cell.id, step: "actions" });
+										clearPaneCellInfo(path);
+										notify("cell.info", { cell_id: cell.id });
+									}}
 								/>
 							))}
 							{cells.length === 0 ? (
@@ -189,6 +200,7 @@ export function MobilePlane({
 				</div>
 			</div>
 			<CellSheet
+				panePath={path}
 				cell={pressed ? byId.get(pressed.id) : undefined}
 				pressed={pressed}
 				editable={editable}
@@ -202,6 +214,14 @@ export function MobilePlane({
 				open={source !== null}
 				onClose={() => setSource(null)}
 			/>
+			{titled ? (
+				<PlaneInfoSheet
+					viewerPath={viewerPath}
+					planeId={planeId}
+					open={info}
+					onClose={() => setInfo(false)}
+				/>
+			) : null}
 			{editable && active ? <AddCellSheet cellSpecs={cellSpecs} onPick={onAdd} /> : null}
 		</section>
 	);
@@ -215,10 +235,12 @@ function PlaneHeader({
 	planeId,
 	head,
 	absent,
+	onInfo,
 }: {
 	planeId: string;
 	head: ReturnType<typeof usePaneHead>;
 	absent: boolean;
+	onInfo: () => void;
 }) {
 	const look = usePlaneLooks(useMemo(() => [planeId], [planeId]))[planeId];
 	const icon = head ? head.meta.icon : look?.icon;
@@ -227,6 +249,16 @@ function PlaneHeader({
 		<MobileHeader
 			icon={icon ? <PlaneIcon icon={planeIcon(String(icon))} /> : undefined}
 			title={title}
+			actions={head && !absent ? <InfoButton onClick={onInfo} /> : null}
 		/>
+	);
+}
+
+/** The ⋯ that opens a plane's facts (./PlaneInfoSheet.tsx). */
+export function InfoButton({ onClick }: { onClick: () => void }) {
+	return (
+		<HeaderButton label="Plane info" data-plane-info="" onClick={onClick}>
+			<Ellipsis />
+		</HeaderButton>
 	);
 }
