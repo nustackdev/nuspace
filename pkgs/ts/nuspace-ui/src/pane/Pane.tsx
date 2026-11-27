@@ -59,7 +59,7 @@ import { Plane } from "../plane/Plane";
 import type { AbsentReason, ActivePlane, CellSpec, LayoutRow, PaneHead } from "../plane/types";
 import { deletedPlane } from "../refs/toast";
 import { takeFresh } from "../sidebar/add";
-import { GoHome, NOT_FOUND_TEXT, NotFoundBody } from "./NotFound";
+import { GoHome, NotFoundBody } from "./NotFound";
 import { PaneHeader } from "./PaneHeader";
 import { useScroller } from "./scroll";
 import {
@@ -80,17 +80,10 @@ import {
 import { focusTitle, Title } from "./Title";
 import { TitleIcon } from "./TitleIcon";
 import { KeyHandle } from "./TitleKey";
+import { ABSENT_TEXT, TITLE_FALLBACK } from "./titles";
 import { ViewerSkeleton } from "./ViewerSkeleton";
 
-// The Plane the server inits with no name shows this instead. A placeholder,
-// muted, so it cannot be mistaken for a title that is really there.
-export const TITLE_FALLBACK = "Untitled";
-
-/** What an absent pane says, per reason. */
-export const ABSENT_TEXT: Record<AbsentReason, string> = {
-	missing: NOT_FOUND_TEXT.plane,
-	headless: "This plane runs without a view",
-};
+export { ABSENT_TEXT, TITLE_FALLBACK };
 
 /** A pane's title: the plane's, the id for an absent one, else the fallback. */
 export function paneTitle(

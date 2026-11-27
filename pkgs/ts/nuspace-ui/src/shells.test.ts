@@ -14,7 +14,8 @@ describe("shellFor", () => {
 });
 
 describe("loadShell", () => {
-	it("loads each shell's own root", async () => {
+	// Each import transforms a whole shell, cold: slow beside other test files.
+	it("loads each shell's own root", { timeout: 30_000 }, async () => {
 		const mobile = await loadShell("mobile");
 		const desktop = await loadShell("desktop");
 		expect(mobile.name).toBe("MobileApp");

@@ -1,8 +1,8 @@
 // The mobile ViewerRef component: the one plane the route shows, full width.
 //
-// A first frame: a solo plane shows as itself, a desk item as its focused
-// plane. The desk pager and the flattened plane come later; until then the
-// pane is desktop's own, read-only in what the phone cannot do.
+// A solo plane shows as itself, flattened for the phone (./plane/MobilePlane.tsx).
+// A desk item shows its focused plane the same way until the desk pager
+// comes.
 //
 // Like desktop's desk (../main/Desk.tsx) it ships `planes.open` with every
 // plane the route shows and their params, whenever either changes and once
@@ -16,8 +16,8 @@ import { mobileMissing, mobileScreen } from "../design";
 import type { PaneAt } from "../desk/drag";
 import { settlePanes, useCellSpecs } from "../main/state";
 import { NotFound } from "../pane/NotFound";
-import { Pane } from "../pane/Pane";
 import type { ViewerOps } from "../plane/ops";
+import { MobilePlane } from "./plane/MobilePlane";
 
 /** The plane the screen shows for a route, and where it sits; null for none. */
 export function shownPlane(route: Route): { plane: string; at: PaneAt } | null {
@@ -69,13 +69,11 @@ export function MobileViewer({ path }: NodeProps) {
 	}
 	return (
 		<div className={mobileScreen}>
-			<Pane
+			<MobilePlane
 				key={shown.plane}
 				viewerPath={path}
-				at={shown.at}
 				planeId={shown.plane}
 				cellSpecs={cellSpecs}
-				focused
 			/>
 		</div>
 	);

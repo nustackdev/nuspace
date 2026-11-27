@@ -157,3 +157,58 @@ export const mobileSheetLabel = "min-w-0 flex-1 truncate";
 
 /** The toasts: on top, clear of the notch, the keyboard and the floating buttons. */
 export const mobileToaster = "top-[env(safe-area-inset-top)] bottom-auto max-w-none";
+
+/* ============================== The plane screen ========================== */
+
+/**
+ * The plane's scroller: the whole screen under the banner, native scroll.
+ * Its bottom pads clear of the floating buttons, so the last cell can be
+ * scrolled above them.
+ */
+export const mobilePlaneScroll = cn(
+	"min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain",
+	"pb-[calc(env(safe-area-inset-bottom)+88px)]",
+);
+
+/** The plane: no gutters, its cells one under another at the full width. */
+export const mobilePlaneBody = "flex min-w-0 flex-col gap-doc-cell-gap px-2 pt-4";
+
+/** The title band: the plane above (when there is one), then the icon and the title. */
+export const mobilePlaneHead = "flex min-w-0 flex-col gap-0.5 px-doc-cell pb-3";
+
+/** The plane above the title, small and muted. */
+export const mobilePlaneTrail = "truncate text-sm text-text-muted";
+
+/** The icon and the title side by side; a long title wraps under itself. */
+export const mobilePlaneTitleLine = "flex min-w-0 items-start gap-2";
+
+/** The title, read-only: rename lives on the sidebar's long-press. */
+export const mobilePlaneTitle = `${cn("min-w-0 flex-1 break-words font-bold text-text-primary")} text-2xl`;
+
+/** The plane's icon, on the title's first line. */
+export const mobilePlaneIcon = "mt-1.5 shrink-0 text-text-muted";
+
+/** A plane with no cells yet: a muted note pointing at the +. */
+export const mobilePlaneEmpty = "px-doc-cell py-6 text-sm text-text-muted";
+
+/**
+ * One cell, the full width, its desktop pad. A long-press opens its sheet, so
+ * no callout and no selection on its output; what you type in (an input, a
+ * text area, a document) still selects. The one pressed carries the same
+ * wash as a selected cell on desktop while its sheet is open.
+ */
+export function mobileCell(pressed: boolean): string {
+	return cn(
+		"relative min-w-0 rounded-md p-doc-cell",
+		"select-none [-webkit-touch-callout:none]",
+		"[&_:is(input,textarea,[contenteditable=true])]:select-text",
+		"transition-colors duration-fast ease-out",
+		pressed && "bg-doc-hover",
+	);
+}
+
+/** The source screen's code: the rest of the screen under its title, scrolled inside. */
+export const mobileSourceBody = "min-h-0 flex-1 overflow-y-auto overscroll-contain";
+
+/** The source screen's title: the cell's id, set in mono. */
+export const mobileSourceTitle = "truncate pr-10 font-mono text-base font-medium";

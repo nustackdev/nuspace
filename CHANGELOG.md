@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Phone planes read as one stacked column, with long-press cell actions and adding cells
 - Phone sidebar slides in full screen, with floating buttons and long-press plane actions
 - Touch devices load a separate mobile shell, with a banner while the connection drops
 - Pane menu shows the plane's facts and run, and edits its key; title @ toggle removed
