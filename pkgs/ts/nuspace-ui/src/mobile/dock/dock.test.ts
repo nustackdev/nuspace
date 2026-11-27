@@ -29,6 +29,10 @@ describe("controlsFor", () => {
 		expect(controlsFor({ plane: "home", editable: true, cells: null })).toEqual(none);
 	});
 
+	it("offers only Add plane over the sidebar, whatever plane is under it", () => {
+		expect(controlsFor({ plane: "home", editable: true, cells: 3 }, true)).toEqual(["plane"]);
+	});
+
 	it("offers only Add plane with no plane on screen, nothing to put one inside", () => {
 		expect(controlsFor(null)).toEqual(["plane"]);
 	});

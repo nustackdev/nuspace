@@ -4,8 +4,9 @@
 //
 //   browsing   the sidebar button bottom left, the + bottom right. The +
 //              opens the control sheet (./ControlSheet.tsx): add a cell, add
-//              a plane, edit cells. Over the sidebar screen only the sidebar
-//              button stays, to close it; the sidebar has its own +
+//              a plane, edit cells. Over the sidebar screen the same two,
+//              the sidebar button closing it, the + offering Add plane: the
+//              one + of the app, wherever you are
 //   editing    one bar across the bottom: what a tap does now, and Done
 //              (../plane/editing.ts). The sidebar and the + wait until it
 //              is done
@@ -44,7 +45,7 @@ export function Dock() {
 			>
 				{sidebar ? <PanelLeftClose /> : <PanelLeft />}
 			</IconButton>
-			{booted && !sidebar ? (
+			{booted ? (
 				<IconButton
 					ring="inset"
 					aria-label="Add or edit"
@@ -57,7 +58,12 @@ export function Dock() {
 					<Plus />
 				</IconButton>
 			) : null}
-			<ControlSheet screen={screen} open={controls} onClose={() => setControls(false)} />
+			<ControlSheet
+				screen={screen}
+				sidebar={sidebar}
+				open={controls}
+				onClose={() => setControls(false)}
+			/>
 		</>
 	);
 }

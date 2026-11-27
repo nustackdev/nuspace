@@ -1,6 +1,6 @@
 // What the dock's + opens: one short sheet of what can be done from here
 // (./model.ts `controlsFor`), each row handing off to the sheet or mode that
-// does it.
+// does it. Over the sidebar screen it holds Add plane alone.
 //
 //   Add cell           the plane's add sheet (../plane/AddCellSheet.tsx)
 //   Add plane          the sidebar's add sheet (../sidebar/AddPlaneSheet.tsx), at the top
@@ -33,10 +33,13 @@ const ROWS: Record<Control, { label: string; icon: React.ReactNode }> = {
 
 export function ControlSheet({
 	screen,
+	sidebar,
 	open,
 	onClose,
 }: {
 	screen: Screen;
+	/** Over the sidebar screen: its rows, not the plane's under it. */
+	sidebar: boolean;
 	open: boolean;
 	onClose: () => void;
 }) {
@@ -80,7 +83,7 @@ export function ControlSheet({
 		>
 			<BottomSheetContent label="Add or edit" data-control-sheet="">
 				<div role="menu">
-					{controlsFor(screen).map((control) => (
+					{controlsFor(screen, sidebar).map((control) => (
 						<BottomSheetItem
 							key={control}
 							role="menuitem"

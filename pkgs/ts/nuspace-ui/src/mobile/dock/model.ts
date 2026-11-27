@@ -15,13 +15,15 @@ export type Screen = {
 export type Control = "cell" | "plane" | "inside" | "edit";
 
 /**
- * The + sheet's rows, in order: Add cell where the plane on screen can be
- * written, Add plane (at the top) always, Add plane inside the one on screen
- * where there is one, Edit cells where the plane on screen has cells to edit
- * (a plane that cannot be written still has options per cell: restart, copy,
- * source).
+ * The + sheet's rows, in order. Over the sidebar screen, Add plane alone:
+ * the sidebar is about planes, not the plane under it. Over a plane: Add
+ * cell where it can be written, Add plane (at the top) always, Add plane
+ * inside it, Edit cells where it has cells to edit (a plane that cannot be
+ * written still has options per cell: restart, copy, source). With no plane
+ * on screen, Add plane alone.
  */
-export function controlsFor(screen: Screen): Control[] {
+export function controlsFor(screen: Screen, sidebar = false): Control[] {
+	if (sidebar) return ["plane"];
 	const out: Control[] = [];
 	if (screen?.editable) out.push("cell");
 	out.push("plane");

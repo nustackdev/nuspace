@@ -100,11 +100,11 @@ function desk(focus = "a") {
 }
 
 describe("one header a screen", () => {
-	it("the sidebar wears one, the wordmark and a +", () => {
+	it("the sidebar wears one, the wordmark alone: a new plane is the dock's +", () => {
 		draw(<MobileSidebar />);
 		expect(headers()).toHaveLength(1);
 		expect(headers()[0].textContent).toContain("space");
-		expect(headers()[0].querySelector('[aria-label="New plane"]')).not.toBeNull();
+		expect(headers()[0].querySelector("button")).toBeNull();
 	});
 
 	it("a plane wears one, its title in it", () => {

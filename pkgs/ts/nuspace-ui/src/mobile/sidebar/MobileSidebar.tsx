@@ -4,7 +4,7 @@
 // opens.
 //
 // Top to bottom, as on desktop minus the footer: the header every screen
-// wears (../Header.tsx: the wordmark, + for a new plane), then the sections,
+// wears (../Header.tsx: the wordmark; a new plane is the dock's +), then the sections,
 // desktop's: the nav, a section per desk, Planes, Specs. Every group is one
 // section (./Section.tsx), every line one row (./Row.tsx): 44px, one icon
 // size, one label edge a depth, every chevron and + in one column, titles
@@ -64,7 +64,7 @@ import { patchSidebar, useExpanded, useSidebarValue } from "../../sidebar/state"
 import { showsNoPlanes, visibleRows } from "../../sidebar/tree";
 import { childrenOf, type Registered, ROOT_ID, rootId } from "../../sidebar/types";
 import { useLongPress, useSwipeClose } from "../gestures";
-import { HeaderButton, MobileHeader } from "../Header";
+import { MobileHeader } from "../Header";
 import { AddPlaneSheet, addGroups } from "./AddPlaneSheet";
 import { type DeskRow, deskPlanes, deskRows } from "./model";
 import { closeSidebar, leaveThen, useSidebarOpen } from "./open";
@@ -117,11 +117,6 @@ export function MobileSidebar() {
 					<span className={sidebarWordmark}>
 						<span className={sidebarWordmarkNu}>nu</span>space
 					</span>
-				}
-				actions={
-					<HeaderButton label="New plane" onClick={() => openAddPlane({ parent: ROOT_ID })}>
-						<Plus />
-					</HeaderButton>
 				}
 			/>
 			{path ? <SidebarBody path={path} /> : <SidebarBooting />}
