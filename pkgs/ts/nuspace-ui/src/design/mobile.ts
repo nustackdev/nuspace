@@ -67,8 +67,12 @@ export function mobileSidebar(open: boolean): string {
 	);
 }
 
-/** Its top bar: the wordmark, and the + for a new plane. */
-export const mobileSidebarHead = "flex h-14 shrink-0 items-center gap-2 pr-2 pl-5";
+/**
+ * Its top bar: drawn as a row (../mobile/sidebar/Row.tsx), the wordmark at
+ * the icons' edge and the + in the trail lane. The body's gutter, so the bar's
+ * + lines up with every row's.
+ */
+export const mobileSidebarHead = "flex h-14 shrink-0 items-center px-2";
 
 /**
  * The rows under the bar, scrolled, clear of the floating button at the
@@ -84,55 +88,78 @@ export const mobileSidebarBody = cn(
 /** A section: its title, then its rows. */
 export const mobileSection = "flex flex-col";
 
-/** A section title: small and muted, an action at its end. */
-export const mobileSectionHead =
-	"flex h-10 items-center gap-2 pr-0.5 pl-3 text-sm font-medium text-text-muted select-none";
+/*
+ * The row anatomy, one for every line on the sidebar screen:
+ *
+ *   | pad 12 | indent 32 a level | lead 32 | label | trail 44 |
+ *
+ * The lead is a 20px icon and the 12px gap to the label, so a child's icon
+ * sits under its parent's label. The trail is a 44px tap lane at the right
+ * edge holding every chevron and every +, one column down the screen.
+ */
+
+/** The row's lanes, as the row's kind draws them. */
+const ROW_KIND = {
+	row: "min-h-11 rounded-lg text-base text-text-secondary",
+	note: "min-h-11 text-sm text-text-muted",
+	head: "min-h-11 text-sm font-medium text-text-muted",
+	bar: "h-14 text-base",
+} as const;
 
 /**
- * One row, 44px: the sidebar is a kit-owned kind of surface, sized for the
- * thumb for real. The same washes as desktop's rows, pressed rather than
- * hovered. No callout or text selection on a long-press.
+ * One row, 44px: sized for the thumb for real. The same washes as desktop's
+ * rows, pressed rather than hovered. No callout or text selection on a
+ * long-press. Only rows (not notes or titles) take the wash.
  */
-export function mobileRow(selected: boolean): string {
+export function mobileRow(
+	kind: keyof typeof ROW_KIND,
+	selected: boolean,
+	className?: string,
+): string {
 	return cn(
-		"relative flex min-h-11 w-full items-center gap-3 rounded-lg pr-3 text-left text-base select-none",
+		"relative flex w-full min-w-0 items-center text-left select-none",
 		"[-webkit-touch-callout:none]",
-		selected
-			? "bg-bg-press text-text-primary active:bg-bg-press-strong"
-			: "text-text-secondary active:bg-bg-press",
+		ROW_KIND[kind],
+		kind === "row" &&
+			(selected ? "bg-bg-press text-text-primary active:bg-bg-press-strong" : "active:bg-bg-press"),
+		className,
 	);
 }
 
-/** Left pad for a row at `depth`, as an inline style: 12px, then 20px a level. */
+/** Left pad for a row at `depth`, as an inline style: 12px, then one lead (32px) a level. */
 export function mobileIndent(depth: number): { paddingLeft: string } {
-	return { paddingLeft: `calc(0.75rem + ${depth} * 1.25rem)` };
+	return { paddingLeft: `calc(0.75rem + ${depth} * 2rem)` };
 }
 
-/** A tree row's link: the whole row but its expand button. */
-export const mobileRowMain = "flex min-h-11 min-w-0 flex-1 items-center gap-3 outline-hidden";
-
-/** A row's icon. */
-export const mobileRowIcon = "size-4.5 shrink-0 text-text-muted";
+/**
+ * The lead lane: 32px, its icon 20px at the lane's start, whatever the icon
+ * is. The lane sets the size, not the call site: a lucide glyph, a plane's
+ * emoji (its box and its type) and a skeleton all come out 20px.
+ */
+export const mobileRowLead = cn(
+	"flex w-8 shrink-0 items-center text-text-muted",
+	"[&_svg]:size-5 [&>span]:size-5 [&>span]:text-[1.125rem]",
+);
 
 /** A row's label, truncating. */
 export const mobileRowLabel = "min-w-0 flex-1 truncate";
 
-/** A row's trailing note (a strip's pane count). */
-export const mobileRowNote = "shrink-0 text-sm text-text-muted tabular-nums";
+/** The lead and label as one link, inside a row with its own trail button. */
+export const mobileRowMain = "flex min-h-11 min-w-0 flex-1 items-center outline-hidden";
 
-/** A muted line in place of rows ("No planes inside", an empty desk). */
-export const mobileRowEmpty = "flex min-h-11 items-center text-sm text-text-muted select-none";
+/** The trail lane: 44px at the row's right edge, the glyph centred. */
+export const mobileRowTrail = "flex w-11 shrink-0 items-center justify-center self-stretch";
 
-/** A tree row's expand button: 44px, at the row's end. */
-export const mobileTwisty = cn(
-	"-mr-3 flex size-11 shrink-0 items-center justify-center rounded-lg",
-	"text-text-muted active:bg-bg-press-strong",
+/** A tap target filling the trail lane (a + or a chevron button), its glyph 20px. */
+export const mobileTrailButton = cn(
+	"flex size-11 shrink-0 items-center justify-center rounded-lg",
+	"text-text-muted active:bg-bg-press-strong [&_svg]:size-5",
 );
 
-/** The chevron of an expanding row, at its end, turned down when open. */
+/** The chevron of a folding row, turned down when open: one glyph and one turn for all. */
 export function mobileChevron(open: boolean): string {
 	return cn(
-		"size-4 shrink-0 text-text-muted transition-transform duration-fast",
+		"size-5 shrink-0 text-text-muted transition-transform duration-fast",
 		open && "rotate-90",
 	);
 }

@@ -5,15 +5,17 @@
 //
 // Top to bottom, as on desktop minus the footer: the bar (the wordmark, + for
 // a new plane), Home, Search and Settings, a folder per desk, the Planes
-// tree, the Specs. Rows are 44px. The data and the ops are desktop's: the
+// tree, the Specs. Every line is one row (./Row.tsx): 44px, one icon size,
+// one label edge a depth, every chevron and + in one column. The data and the ops are desktop's: the
 // SidebarRef node's tree and fold state (../../sidebar/state.ts), the desks
 // feed and the roles (../../core/desks.ts), the sidebar ops
 // (../../sidebar/ops.ts). Only the touch presentation is the phone's own.
 //
 //   nav       a row per role, a link to its plane
-//   desks     a folder per desk, tap the title to fold; a row per item
-//             (./model.ts), tap to open it. A strip is one row, its panes
-//             paged through on the desk screen
+//   desks     a folder per desk, tap the title to fold; its rows as
+//             desktop's (./model.ts): a plane item opens as itself; a
+//             Strip, a Column (2+ panes) and a pane open the desk pager on
+//             their pane, the strip and column folding by their chevron
 //   planes    the tree, lazy like desktop's: the chevron at the row's end
 //             opens a branch, the rest of the row opens the plane. Long-press a row
 //             for Rename, Add plane inside, Delete (./PlaneSheet.tsx)
@@ -23,20 +25,15 @@
 // what desktop's row menus do, within v1.
 
 import type { Path } from "@nustackdev/ui-core";
-import {
-	type AnchorRule,
-	IconButton,
-	pathKey,
-	Skeleton,
-	useAnchorCatcher,
-} from "@nustackdev/ui-kit";
-import { ChevronRight, Folder, Package, Plus } from "lucide-react";
+import { type AnchorRule, pathKey, Skeleton, useAnchorCatcher } from "@nustackdev/ui-kit";
+import { Columns3, Folder, Package, Plus, Rows3 } from "lucide-react";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { useDeskOrder, useDesks, useRoles } from "../../core/desks";
-import { lookOf, usePlaneLooks } from "../../core/looks";
+import { lookOf, type PlaneLook, usePlaneLooks } from "../../core/looks";
 import {
 	hrefFor,
 	itemHref,
+	openPane,
 	openPlane,
 	paneRule,
 	type Route,
@@ -46,27 +43,26 @@ import {
 import { useTypePath } from "../../core/surfaces";
 import { notifyOp } from "../../core/wire";
 import {
-	mobileChevron,
-	mobileIndent,
-	mobileRow,
-	mobileRowEmpty,
-	mobileRowIcon,
-	mobileRowLabel,
-	mobileRowMain,
-	mobileRowNote,
 	mobileSection,
-	mobileSectionHead,
 	mobileSidebar,
 	mobileSidebarBody,
 	mobileSidebarHead,
-	mobileTwisty,
 	sidebarWordmark,
 	sidebarWordmarkNu,
 } from "../../design";
+import { shown } from "../../desk/model";
 import { PlaneIcon } from "../../icon/PlaneIcon";
 import { planeIcon } from "../../icon/parse";
 import { createPlane, openAddPlane } from "../../sidebar/add";
-import { deskLabel, folderKey, setFolded, useFolds } from "../../sidebar/folders";
+import {
+	COLUMN_TITLE,
+	deskLabel,
+	folderKey,
+	STRIP_TITLE,
+	selectedKey,
+	setFolded,
+	useFolds,
+} from "../../sidebar/folders";
 import { NAV_ITEMS, rolePlanes } from "../../sidebar/nav";
 import type { Notify, Ops } from "../../sidebar/ops";
 import { patchSidebar, useExpanded, useSidebarValue } from "../../sidebar/state";
@@ -74,17 +70,29 @@ import { showsNoPlanes, visibleRows } from "../../sidebar/tree";
 import { childrenOf, type Registered, ROOT_ID, rootId } from "../../sidebar/types";
 import { useLongPress, useSwipeClose } from "../gestures";
 import { AddPlaneSheet, addGroups } from "./AddPlaneSheet";
-import { deskPlanes, deskRows, paneCount } from "./model";
+import { type DeskRow, deskPlanes, deskRows } from "./model";
 import { closeSidebar, leaveThen, useSidebarOpen } from "./open";
 import { PlaneSheet, type Pressed } from "./PlaneSheet";
+import { MobileRow, RowAdd, RowChevron, RowFold } from "./Row";
+
+/** The attribute a desk folder's strip, column or pane row carries: the plane a tap focuses. */
+export const PANE_ATTR = "data-pane";
 
 /**
  * A link tapped in the sidebar: closed first, then followed the way the shell
- * follows it (../../core/router.ts `paneRule`). Anything not the app's stays
- * the browser's.
+ * follows it (../../core/router.ts `paneRule`), a desk folder's pane rows
+ * through `openPane`. Anything not the app's stays the browser's.
  */
 export const mobileSidebarRule: AnchorRule = (href, gesture, anchor, event) => {
-	if (!shapeOfHref(href)) return false;
+	const hit = shapeOfHref(href);
+	if (!hit) return false;
+	// A strip, column or pane row: the pager on its pane, as desktop's pane row opens it.
+	const pane = anchor.closest(`[${PANE_ATTR}]`)?.getAttribute(PANE_ATTR);
+	if (pane && hit.shape.kind === "item" && gesture === "plain") {
+		const { desk, item } = hit.shape;
+		leaveThen(() => openPane(desk, item, pane));
+		return true;
+	}
 	leaveThen(() => paneRule(href, gesture, anchor, event));
 	return true;
 };
@@ -106,18 +114,15 @@ export function MobileSidebar() {
 			className={mobileSidebar(open)}
 		>
 			<div className={mobileSidebarHead}>
-				<span className={sidebarWordmark}>
-					<span className={sidebarWordmarkNu}>nu</span>space
-				</span>
-				<IconButton
-					variant="ghost"
-					ring="inset"
-					aria-label="New plane"
-					onClick={() => openAddPlane({ parent: ROOT_ID })}
-					className="ml-auto size-11 [&_svg]:size-5"
-				>
-					<Plus />
-				</IconButton>
+				<MobileRow
+					kind="bar"
+					label={
+						<span className={sidebarWordmark}>
+							<span className={sidebarWordmarkNu}>nu</span>space
+						</span>
+					}
+					trail={<RowAdd label="New plane" onClick={() => openAddPlane({ parent: ROOT_ID })} />}
+				/>
 			</div>
 			{path ? <SidebarBody path={path} /> : <SidebarBooting />}
 		</aside>
@@ -131,9 +136,11 @@ function SidebarBooting() {
 			<NavRows route={useRoute()} />
 			<div aria-busy="true" className={mobileSection}>
 				{[0, 1, 2].map((i) => (
-					<div key={i} className={mobileRow(false)} style={mobileIndent(0)}>
-						<Skeleton className="h-4 w-32" />
-					</div>
+					<MobileRow
+						key={i}
+						icon={<Skeleton className="size-5 rounded-md" />}
+						label={<Skeleton className="h-4 w-32" />}
+					/>
 				))}
 			</div>
 		</nav>
@@ -187,30 +194,19 @@ function SidebarBody({ path }: { path: Path }) {
 				<>
 					<DeskFolders route={route} />
 					<section aria-label="Planes" className={mobileSection}>
-						<div className={mobileSectionHead}>
-							<span>Planes</span>
-							<IconButton
-								variant="ghost"
-								size="sm"
-								ring="inset"
-								aria-label="New plane"
-								onClick={() => openAddPlane({ parent: ROOT_ID })}
-								className="ml-auto"
-							>
-								<Plus />
-							</IconButton>
-						</div>
+						<MobileRow
+							kind="head"
+							label="Planes"
+							trail={<RowAdd label="New plane" onClick={() => openAddPlane({ parent: ROOT_ID })} />}
+						/>
 						<div>
 							{rows.length ? null : (
-								<button
-									type="button"
-									className={mobileRow(false)}
-									style={mobileIndent(0)}
+								<MobileRow
+									as="button"
+									icon={<Plus />}
+									label="Add a plane"
 									onClick={() => openAddPlane({ parent: ROOT_ID })}
-								>
-									<Plus aria-hidden="true" className={mobileRowIcon} />
-									<span className={mobileRowLabel}>Add a plane</span>
-								</button>
+								/>
 							)}
 							{rows.map((row) => (
 								<PlaneRow
@@ -242,17 +238,16 @@ function NavRows({ route }: { route: Route }) {
 			{NAV_ITEMS.map(({ role, label, icon: Icon }) => {
 				const plane = roles?.[role] ?? "";
 				return (
-					<a
+					<MobileRow
 						key={role}
+						as="a"
 						href={plane ? hrefFor(plane) : undefined}
 						aria-current={plane && plane === selected ? "page" : undefined}
 						data-nav={role}
-						className={mobileRow(!!plane && plane === selected)}
-						style={mobileIndent(0)}
-					>
-						<Icon aria-hidden="true" className={mobileRowIcon} />
-						<span className={mobileRowLabel}>{label}</span>
-					</a>
+						selected={!!plane && plane === selected}
+						icon={<Icon />}
+						label={label}
+					/>
 				);
 			})}
 		</section>
@@ -271,57 +266,99 @@ function DeskFolders({ route }: { route: Route }) {
 	);
 	const looks = usePlaneLooks(useMemo(() => deskPlanes(list.map((d) => d.desk)), [list]));
 	if (!list.length) return null;
-	const on = route.kind === "item" ? route.item.id : "";
 
 	return (
 		<section aria-label="Desks" className={mobileSection}>
-			<div className={mobileSectionHead}>Desks</div>
+			<MobileRow kind="head" label="Desks" />
 			{list.map(({ id, desk }) => {
 				const folded = folds.has(folderKey(id));
-				const rows = deskRows(desk);
+				const rows = deskRows(id, desk, folds);
+				// The row of what the screen shows, as desktop picks it.
+				const on =
+					route.kind === "item" && route.desk === id
+						? selectedKey(id, route.item, route.focus, folds)
+						: "";
 				return (
 					<div key={id}>
-						<button
-							type="button"
+						<MobileRow
+							as="button"
 							aria-expanded={!folded}
 							data-desk={id}
-							className={mobileRow(false)}
-							style={mobileIndent(0)}
 							onClick={() => setFolded(folderKey(id), !folded)}
-						>
-							<Folder aria-hidden="true" className={mobileRowIcon} />
-							<span className={mobileRowLabel}>{deskLabel(desk.name)}</span>
-							<ChevronRight aria-hidden="true" className={mobileChevron(!folded)} />
-						</button>
+							icon={<Folder />}
+							label={deskLabel(desk.name)}
+							trail={<RowChevron open={!folded} />}
+						/>
 						{folded ? null : rows.length ? (
-							rows.map((row) => {
-								const look = lookOf(looks, row.plane);
-								return (
-									<a
-										key={row.item}
-										href={itemHref(id, row.item)}
-										aria-current={row.item === on ? "page" : undefined}
-										data-item={row.item}
-										className={mobileRow(row.item === on)}
-										style={mobileIndent(1)}
-									>
-										<PlaneIcon icon={planeIcon(look.icon)} className={mobileRowIcon} />
-										<span className={mobileRowLabel}>{look.title}</span>
-										{row.strip ? (
-											<span className={mobileRowNote}>{paneCount(row.panes)}</span>
-										) : null}
-									</a>
-								);
-							})
+							rows.map((r) => (
+								<DeskFolderRow key={r.row.key} deskId={id} at={r} looks={looks} on={on} />
+							))
 						) : (
-							<div className={mobileRowEmpty} style={mobileIndent(1)}>
-								Empty desk
-							</div>
+							<MobileRow kind="note" depth={1} label="Empty desk" />
 						)}
 					</div>
 				);
 			})}
 		</section>
+	);
+}
+
+/**
+ * One row of a desk folder, by kind, as desktop's folder draws them
+ * (../../sidebar/DeskRows.tsx). A plane item opens as itself; a strip, a
+ * column and a pane open the desk pager on their pane (`PANE_ATTR`, which
+ * `mobileSidebarRule` reads). A strip or column folds by its chevron.
+ */
+function DeskFolderRow({
+	deskId,
+	at,
+	looks,
+	on,
+}: {
+	deskId: string;
+	at: DeskRow;
+	looks: Record<string, PlaneLook>;
+	on: string;
+}) {
+	const { row, depth, pane } = at;
+	const selected = row.key === on;
+	const href = itemHref(deskId, row.item);
+	const common = {
+		depth,
+		selected,
+		"data-item": row.item,
+		[PANE_ATTR]: pane || undefined,
+		"data-page": row.kind === "plane" ? undefined : at.page,
+	};
+	if (row.kind === "plane" || row.kind === "pane") {
+		const look = lookOf(looks, shown(row.links).plane);
+		return (
+			<MobileRow
+				{...common}
+				as="a"
+				href={href}
+				aria-current={selected ? "page" : undefined}
+				icon={<PlaneIcon icon={planeIcon(look.icon)} />}
+				label={look.title}
+			/>
+		);
+	}
+	const strip = row.kind === "strip";
+	const name = strip ? "strip" : "column";
+	return (
+		<MobileRow
+			{...common}
+			main={{ href, current: selected }}
+			icon={strip ? <Columns3 /> : <Rows3 />}
+			label={strip ? STRIP_TITLE : COLUMN_TITLE}
+			trail={
+				<RowFold
+					open={row.open}
+					label={row.open ? `Collapse ${name}` : `Expand ${name}`}
+					onClick={() => setFolded(row.key, row.open)}
+				/>
+			}
+		/>
 	);
 }
 
@@ -341,33 +378,24 @@ function PlaneRow({
 	const press = useLongPress(onPress);
 	return (
 		<>
-			<div
+			<MobileRow
 				data-plane-row={row.id}
-				className={mobileRow(selected)}
-				style={mobileIndent(row.depth)}
+				selected={selected}
+				depth={row.depth}
+				main={{ href: hrefFor(row.id), current: selected }}
+				icon={<PlaneIcon icon={planeIcon(row.icon)} />}
+				label={row.title}
+				trail={
+					<RowFold
+						open={row.open}
+						label={row.open ? `Close ${row.title}` : `Open ${row.title}`}
+						onClick={onToggle}
+					/>
+				}
 				{...press}
-			>
-				<a
-					href={hrefFor(row.id)}
-					aria-current={selected ? "page" : undefined}
-					className={mobileRowMain}
-				>
-					<PlaneIcon icon={planeIcon(row.icon)} className={mobileRowIcon} />
-					<span className={mobileRowLabel}>{row.title}</span>
-				</a>
-				<button
-					type="button"
-					aria-label={row.open ? `Close ${row.title}` : `Open ${row.title}`}
-					className={mobileTwisty}
-					onClick={onToggle}
-				>
-					<ChevronRight aria-hidden="true" className={mobileChevron(row.open)} />
-				</button>
-			</div>
+			/>
 			{showsNoPlanes(row) ? (
-				<div className={mobileRowEmpty} style={mobileIndent(row.depth + 1)}>
-					No planes inside
-				</div>
+				<MobileRow kind="note" depth={row.depth + 1} label="No planes inside" />
 			) : null}
 		</>
 	);
@@ -397,35 +425,30 @@ function Specs({
 	};
 	return (
 		<section aria-label="Specs" className={mobileSection}>
-			<div className={mobileSectionHead}>Specs</div>
+			<MobileRow kind="head" label="Specs" />
 			{groups.map(({ pkg, entries }) => {
 				const key = groupKey(pkg);
 				const open = expanded.has(key);
 				return (
 					<div key={pkg}>
-						<button
-							type="button"
+						<MobileRow
+							as="button"
 							aria-expanded={open}
-							className={mobileRow(false)}
-							style={mobileIndent(0)}
 							onClick={() => toggle(key)}
-						>
-							<Package aria-hidden="true" className={mobileRowIcon} />
-							<span className={mobileRowLabel}>{pkg}</span>
-							<ChevronRight aria-hidden="true" className={mobileChevron(open)} />
-						</button>
+							icon={<Package />}
+							label={pkg}
+							trail={<RowChevron open={open} />}
+						/>
 						{open
 							? entries.map((entry) => (
-									<button
+									<MobileRow
 										key={entry.name}
-										type="button"
-										className={mobileRow(false)}
-										style={mobileIndent(1)}
+										as="button"
+										depth={1}
 										onClick={() => make(entry)}
-									>
-										<PlaneIcon icon={planeIcon(entry.icon)} className={mobileRowIcon} />
-										<span className={mobileRowLabel}>{entry.label}</span>
-									</button>
+										icon={<PlaneIcon icon={planeIcon(entry.icon)} />}
+										label={entry.label}
+									/>
 								))
 							: null}
 					</div>

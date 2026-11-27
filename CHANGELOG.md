@@ -11,6 +11,8 @@ separately here.
 
 ## Unreleased
 
+- Phone desk folders show strips, columns and panes like desktop, each opening its page
+- Phone sidebar lines every row on one grid: one icon size, one chevron column
 - Phone desks page through their panes with a swipe, with dots and a counter
 - Phone planes read as one stacked column, with long-press cell actions and adding cells
 - Phone sidebar slides in full screen, with floating buttons and long-press plane actions

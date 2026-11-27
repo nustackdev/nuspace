@@ -1,12 +1,15 @@
 // The sidebar screen's logic: open as a history entry, a desk's rows on the
-// phone, what a plane's long-press offers, the add sheet's groups.
+// phone and the pages they open, what a plane's long-press offers, the add
+// sheet's groups.
 
 import { History } from "@nustackdev/ui-kit";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { Desk } from "../../desk/model";
+import type { Desk, Item } from "../../desk/model";
+import { columnKey, itemKey } from "../../sidebar/folders";
 import type { PlaneTree, TreeRow } from "../../sidebar/types";
+import { pagesOf } from "../desk/model";
 import { addGroups } from "./AddPlaneSheet";
-import { deskPlanes, deskRows, paneCount, planeActions } from "./model";
+import { deskPlanes, deskRows, planeActions } from "./model";
 import {
 	isSidebarEntry,
 	leaveThen,
@@ -19,51 +22,62 @@ import {
 const link = (plane: string) => ({ original: { plane, params: {} } });
 
 describe("deskRows", () => {
-	it("draws one row per item, a strip named by its first pane in reading order", () => {
-		const desk: Desk = {
-			name: "Ops",
-			items: [
-				{ id: "item01", kind: "plane", ...link("deploys") },
-				{
-					id: "item02",
-					kind: "strip",
-					columns: [
-						{
-							panes: [
-								{ share: 1, ...link("logs") },
-								{ share: 1, ...link("errors") },
-							],
-						},
-						{ panes: [{ share: 1, ...link("alerts") }] },
-					],
-				},
-			],
-		};
-		expect(deskRows(desk)).toEqual([
-			{ item: "item01", plane: "deploys", panes: 1, strip: false },
-			{ item: "item02", plane: "logs", panes: 3, strip: true },
+	// Two columns: logs over errors, then alerts. Pages in reading order: logs, errors, alerts.
+	const desk: Desk = {
+		name: "Ops",
+		items: [
+			{ id: "item01", kind: "plane", ...link("deploys") },
+			{
+				id: "item02",
+				kind: "strip",
+				columns: [
+					{
+						panes: [
+							{ share: 1, ...link("logs") },
+							{ share: 1, ...link("errors") },
+						],
+					},
+					{ panes: [{ share: 1, ...link("alerts") }] },
+				],
+			},
+		],
+	};
+	const strip = desk.items[1] as Extract<Item, { kind: "strip" }>;
+	const pick = (rows: ReturnType<typeof deskRows>) =>
+		rows.map(({ row, depth, pane, page }) => ({ kind: row.kind, depth, pane, page }));
+
+	it("draws desktop's rows a lane in: item, Strip, Column of 2+, panes", () => {
+		expect(pick(deskRows("desk0001", desk, new Set()))).toEqual([
+			{ kind: "plane", depth: 1, pane: "", page: 0 },
+			{ kind: "strip", depth: 1, pane: "logs", page: 0 },
+			{ kind: "column", depth: 2, pane: "logs", page: 0 },
+			{ kind: "pane", depth: 3, pane: "logs", page: 0 },
+			{ kind: "pane", depth: 3, pane: "errors", page: 1 },
+			{ kind: "pane", depth: 2, pane: "alerts", page: 2 },
 		]);
-		expect(deskPlanes([desk])).toEqual(["deploys", "logs"]);
 	});
 
-	it("names a plane item by where it was navigated to", () => {
-		const desk: Desk = {
-			name: "",
-			items: [
-				{
-					id: "item01",
-					kind: "plane",
-					original: { plane: "a", params: {} },
-					recent: { plane: "b", params: {} },
-				},
-			],
-		};
-		expect(deskRows(desk)[0].plane).toBe("b");
+	it("maps each pane to the page the pager shows it on", () => {
+		const pages = pagesOf(strip);
+		for (const r of deskRows("desk0001", desk, new Set())) {
+			if (r.row.kind === "pane") expect(pages[r.page].plane).toBe(r.row.plane);
+		}
 	});
 
-	it("counts panes", () => {
-		expect(paneCount(1)).toBe("1 pane");
-		expect(paneCount(3)).toBe("3 panes");
+	it("folds a strip and a column as desktop does", () => {
+		const col = columnKey("desk0001", "item02", 0);
+		expect(pick(deskRows("desk0001", desk, new Set([col]))).map((r) => r.kind)).toEqual([
+			"plane",
+			"strip",
+			"column",
+			"pane",
+		]);
+		const folded = new Set([itemKey("desk0001", "item02")]);
+		expect(pick(deskRows("desk0001", desk, folded)).map((r) => r.kind)).toEqual(["plane", "strip"]);
+	});
+
+	it("names every plane the rows can show, for their looks", () => {
+		expect(deskPlanes([desk])).toEqual(["deploys", "logs", "errors", "alerts"]);
 	});
 });
 
