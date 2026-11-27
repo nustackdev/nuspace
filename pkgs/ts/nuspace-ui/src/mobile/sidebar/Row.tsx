@@ -1,5 +1,6 @@
-// The sidebar screen's one row: every line on the screen is drawn by it, the
-// top bar and the section titles included, so every edge lines up.
+// The sidebar screen's one row: every line under the header is drawn by it,
+// the section titles included, so every edge lines up. The header
+// (../Header.tsx) is drawn on the same lanes.
 //
 //   | pad | indent | lead | label ................... | trail |
 //
@@ -29,7 +30,7 @@ import {
 	mobileTrailButton,
 } from "../../design";
 
-type Kind = "row" | "note" | "head" | "bar";
+type Kind = "row" | "note" | "head";
 
 type RowProps = {
 	/** The element the row is: a link, a button, or a plain line. */
@@ -63,7 +64,7 @@ export function MobileRow({
 	...rest
 }: RowProps) {
 	const Tag = as as React.ElementType;
-	// Titles and the bar start at the icons' edge; rows and notes keep the lane.
+	// Titles start at the icons' edge; rows and notes keep the lane.
 	const lane = kind === "row" || kind === "note";
 	const head = (
 		<>

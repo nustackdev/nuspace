@@ -2,8 +2,10 @@
 // reading order (column by column, top to bottom). The layout stays as saved:
 // the phone only reads it. Switching item goes through the sidebar.
 //
-// On top a bar names the desk and the pane on screen, with n/m at its end,
-// and under it one dot per pane. A plane item is one page: no dots, no n/m.
+// On top the header every screen wears (../Header.tsx) names the desk,
+// dimmed, and the pane on screen, with the pager's ‹ n/m › at its end: the
+// buttons turn the page as a swipe does, and the counter follows a swipe as
+// it moves. A plane item is one page: no pager.
 //
 // The pager is the browser's own sideways scroll with snapping, and each page
 // is a plane screen (../plane/MobilePlane.tsx) scrolling up and down inside
@@ -17,24 +19,24 @@
 // Only the page on screen answers the +.
 
 import type { Path } from "@nustackdev/ui-core";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { usePlaneLooks } from "../../core/looks";
 import { focusPane, onReveal, type Route } from "../../core/router";
 import {
 	mobileDesk,
-	mobileDeskBar,
-	mobileDeskCount,
-	mobileDeskDot,
-	mobileDeskDots,
-	mobileDeskName,
 	mobileDeskPage,
 	mobileDeskPager,
-	mobileDeskPane,
+	mobileDeskTitle,
+	mobileDeskTitleDesk,
+	mobileDeskTitleDot,
+	mobileDeskTitlePane,
 } from "../../design";
 import { panePath, usePaneHead } from "../../pane/state";
 import type { CellSpec } from "../../plane/types";
+import { HeaderButton, HeaderCount, MobileHeader } from "../Header";
 import { MobilePlane } from "../plane/MobilePlane";
-import { pageAt, pageCount, pageOf, pagesOf } from "./model";
+import { pageAt, pageCount, pageOf, pagesOf, stepPage } from "./model";
 
 /** How long a scroll stays still before its page counts as settled, where `scrollend` is missing. */
 const SETTLE_MS = 120;
@@ -128,19 +130,15 @@ export function MobileDesk({
 
 	return (
 		<section className={mobileDesk} aria-label={route.name} data-desk-screen="">
-			<DeskBar
+			<DeskHeader
 				viewerPath={viewerPath}
 				name={route.name}
 				plane={planes[shown] ?? ""}
 				count={count}
+				onStep={(by) => scrollTo(stepPage(shown, by, pages.length), true)}
+				first={shown <= 0}
+				last={shown >= pages.length - 1}
 			/>
-			{count ? (
-				<div className={mobileDeskDots} aria-hidden="true">
-					{planes.map((plane, i) => (
-						<span key={plane} className={mobileDeskDot(i === shown)} />
-					))}
-				</div>
-			) : null}
 			<div ref={pager} className={mobileDeskPager} data-desk-pager="">
 				{pages.map((page, i) => (
 					<div key={page.plane} className={mobileDeskPage} data-desk-page={i}>
@@ -160,32 +158,73 @@ export function MobileDesk({
 
 const NO_PATH: string[] = [];
 
-/** The bar: the desk's name, the title of the pane on screen, n/m. */
-function DeskBar({
+/**
+ * The header: the desk's name, dimmed, then the title of the pane on screen,
+ * and the pager, ‹ n/m ›, its buttons dimmed at the ends.
+ */
+function DeskHeader({
 	viewerPath,
 	name,
 	plane,
 	count,
+	onStep,
+	first,
+	last,
 }: {
 	viewerPath: Path;
 	name: string;
 	plane: string;
 	count: string | null;
+	onStep: (by: -1 | 1) => void;
+	first: boolean;
+	last: boolean;
 }) {
 	const head = usePaneHead(plane ? panePath(viewerPath, plane) : NO_PATH);
 	const looks = usePlaneLooks(useMemo(() => (plane ? [plane] : []), [plane]));
 	const title = head?.title || looks[plane]?.title || "";
 	return (
-		<header className={mobileDeskBar}>
-			<h1 className={mobileDeskName}>{name}</h1>
-			<span className={mobileDeskPane} data-desk-title="">
-				{title ? `· ${title}` : null}
-			</span>
-			{count ? (
-				<span className={mobileDeskCount} data-desk-count="">
-					{count}
+		<MobileHeader
+			label={title ? `${name} · ${title}` : name}
+			title={
+				<span className={mobileDeskTitle}>
+					<span className={mobileDeskTitleDesk}>{name}</span>
+					{title ? (
+						<>
+							<span aria-hidden="true" className={mobileDeskTitleDot}>
+								·
+							</span>
+							<span className={mobileDeskTitlePane} data-desk-title="">
+								{title}
+							</span>
+						</>
+					) : null}
 				</span>
-			) : null}
-		</header>
+			}
+			actions={
+				count ? (
+					<>
+						<HeaderButton
+							label="Previous pane"
+							data-desk-step="prev"
+							disabled={first}
+							onClick={() => onStep(-1)}
+						>
+							<ChevronLeft />
+						</HeaderButton>
+						<HeaderCount>
+							<span data-desk-count="">{count}</span>
+						</HeaderCount>
+						<HeaderButton
+							label="Next pane"
+							data-desk-step="next"
+							disabled={last}
+							onClick={() => onStep(1)}
+						>
+							<ChevronRight />
+						</HeaderButton>
+					</>
+				) : null
+			}
+		/>
 	);
 }

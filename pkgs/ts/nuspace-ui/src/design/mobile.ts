@@ -60,6 +60,46 @@ export function mobileFab(side: "left" | "right"): string {
  */
 export const mobileFabClear = "pb-[calc(env(safe-area-inset-bottom)+80px)]";
 
+/* ============================== The header ================================ */
+
+/*
+ * One header for every screen (../mobile/Header.tsx), drawn on the sidebar
+ * rows' grid, so its icon and its buttons sit in the rows' columns:
+ *
+ *   | gutter 8 | pad 12 | lead 32 | title ............ | action 44 ... | gutter 8 |
+ *
+ * 56px tall under the top safe area (the screen's own padding), out of the
+ * scroller: what scrolls goes under its bottom edge and the header stays.
+ */
+
+/** The header: 56px, the rows' left edge and right gutter. */
+export const mobileHeader = "flex h-14 w-full min-w-0 shrink-0 items-center pr-2 pl-5 select-none";
+
+/** Its title: 18px, one line, truncating. */
+export const mobileHeaderTitle =
+	"min-w-0 flex-1 truncate text-[1.125rem] leading-tight font-semibold text-text-primary";
+
+/** Its actions, at the right edge, each one trail lane wide. */
+export const mobileHeaderActions = "flex shrink-0 items-center";
+
+/** An action: a 44px tap target, its glyph 20px, dimmed when it cannot act. */
+export const mobileHeaderButton = cn(
+	"flex size-11 shrink-0 items-center justify-center rounded-lg",
+	"text-text-muted active:bg-bg-press-strong [&_svg]:size-5",
+);
+
+/** A figure between actions, eg the pager's n/m. */
+export const mobileHeaderCount = "shrink-0 px-0.5 text-sm text-text-muted tabular-nums";
+
+/**
+ * The desk's title: its name, dimmed, then the pane's title. The name takes
+ * at most 40%, so the pane's title, the one that changes, always has room.
+ */
+export const mobileDeskTitle = "flex min-w-0 flex-1 items-baseline";
+export const mobileDeskTitleDesk = "max-w-[40%] shrink-0 truncate text-text-muted";
+export const mobileDeskTitleDot = "shrink-0 px-1.5 text-text-muted";
+export const mobileDeskTitlePane = "min-w-0 truncate";
+
 /* ============================== The sidebar screen ======================== */
 
 /**
@@ -75,13 +115,6 @@ export function mobileSidebar(open: boolean): string {
 		open ? "visible translate-x-0 ease-out" : "invisible -translate-x-full ease-in",
 	);
 }
-
-/**
- * Its top bar: drawn as a row (../mobile/sidebar/Row.tsx), the wordmark at
- * the icons' edge and the + in the trail lane. The body's gutter, so the bar's
- * + lines up with every row's.
- */
-export const mobileSidebarHead = "flex h-14 shrink-0 items-center px-2";
 
 /**
  * The rows under the bar, scrolled. `pan-y` again here: a scroller starts
@@ -115,7 +148,6 @@ const ROW_KIND = {
 	row: "min-h-11 rounded-lg text-base text-text-secondary",
 	note: "min-h-11 text-sm text-text-muted",
 	head: "min-h-11 text-sm font-medium text-text-muted",
-	bar: "h-14 text-base",
 } as const;
 
 /**
@@ -153,6 +185,9 @@ export const mobileRowLead = cn(
 	"flex w-8 shrink-0 items-center text-text-muted",
 	"[&>svg]:size-5 [&>span]:size-5 [&>span]:text-[1.125rem]",
 );
+
+/** The header's lead lane (../mobile/Header.tsx): the rows' own, so the icons line up. */
+export const mobileHeaderLead = mobileRowLead;
 
 /**
  * A strip row's lead: its planes' icons in the 20px box every row's icon
@@ -242,21 +277,6 @@ export const mobilePlaneBody = cn(
 	mobileFabClear,
 );
 
-/** The title band: the plane above (when there is one), then the icon and the title. */
-export const mobilePlaneHead = "flex min-w-0 flex-col gap-0.5 px-doc-cell pb-3";
-
-/** The plane above the title, small and muted. */
-export const mobilePlaneTrail = "truncate text-sm text-text-muted";
-
-/** The icon and the title side by side; a long title wraps under itself. */
-export const mobilePlaneTitleLine = "flex min-w-0 items-start gap-2";
-
-/** The title, read-only: rename lives on the sidebar's long-press. */
-export const mobilePlaneTitle = `${cn("min-w-0 flex-1 break-words font-bold text-text-primary")} text-2xl`;
-
-/** The plane's icon, on the title's first line. */
-export const mobilePlaneIcon = "mt-1.5 shrink-0 text-text-muted";
-
 /** A plane with no cells yet: a muted note pointing at the +. */
 export const mobilePlaneEmpty = "px-doc-cell py-6 text-sm text-text-muted";
 
@@ -284,32 +304,8 @@ export const mobileSourceTitle = "truncate pr-10 font-mono text-base font-medium
 
 /* ============================== The desk screen =========================== */
 
-/** The desk screen: its bar, its dots, then the pages. */
+/** The desk screen: the header, then the pages. */
 export const mobileDesk = "relative flex min-h-0 min-w-0 flex-1 flex-col";
-
-/** The desk's top bar: the desk's name, the pane's title, and n/m at its end. */
-export const mobileDeskBar = "flex h-12 shrink-0 items-center gap-1.5 px-3 select-none";
-
-/** The desk's name in the bar. */
-export const mobileDeskName =
-	"shrink-0 max-w-[45%] truncate text-base font-semibold text-text-primary";
-
-/** The pane's title after the desk's name, muted. */
-export const mobileDeskPane = "min-w-0 flex-1 truncate text-sm text-text-muted";
-
-/** Where the pager stands: n/m. */
-export const mobileDeskCount = "shrink-0 text-sm text-text-muted tabular-nums";
-
-/** The dots under the bar, one per pane: where you are, not a control. */
-export const mobileDeskDots = "flex shrink-0 items-center justify-center gap-1.5 pb-1.5";
-
-/** One dot; the one on screen is a short bar. */
-export function mobileDeskDot(on: boolean): string {
-	return cn(
-		"h-1.5 rounded-full transition-[width,background-color] duration-fast ease-out",
-		on ? "w-4 bg-text-primary" : "w-1.5 bg-border-strong",
-	);
-}
 
 /**
  * The pager: the browser's own sideways scroll, one page a snap. Each page

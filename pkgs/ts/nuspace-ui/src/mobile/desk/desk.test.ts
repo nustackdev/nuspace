@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from "vitest";
 import type { Item } from "../../desk/model";
-import { pageAt, pageCount, pageOf, pagesOf } from "./model";
+import { pageAt, pageCount, pageOf, pagesOf, stepPage } from "./model";
 
 const link = (plane: string) => ({ original: { plane, params: {} } });
 
@@ -80,5 +80,15 @@ describe("pageCount", () => {
 	});
 	it("says nothing for a single page", () => {
 		expect(pageCount(0, 1)).toBeNull();
+	});
+});
+
+describe("stepPage", () => {
+	it("turns one page either way, held at the ends", () => {
+		expect(stepPage(0, 1, 3)).toBe(1);
+		expect(stepPage(1, -1, 3)).toBe(0);
+		expect(stepPage(0, -1, 3)).toBe(0);
+		expect(stepPage(2, 1, 3)).toBe(2);
+		expect(stepPage(0, 1, 0)).toBe(0);
 	});
 });

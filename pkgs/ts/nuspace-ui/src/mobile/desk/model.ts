@@ -1,5 +1,5 @@
 // The desk screen's pure parts: the pages a desk item shows, which one a
-// scroll stands on, and the counter.
+// scroll stands on, the pager's step, and the counter.
 //
 // A desk item's pages are its panes in reading order: column by column, top
 // to bottom, the order the router's routes and the sidebar's strip row use.
@@ -28,4 +28,10 @@ export function pageAt(left: number, width: number, count: number): number {
 /** Where the pager stands, "2/3"; null for a single page, which has no pager. */
 export function pageCount(index: number, count: number): string | null {
 	return count > 1 ? `${index + 1}/${count}` : null;
+}
+
+/** The page a pager button turns to from `index`: one over, held at the ends. */
+export function stepPage(index: number, by: -1 | 1, count: number): number {
+	if (count <= 0) return 0;
+	return Math.min(count - 1, Math.max(0, index + by));
 }

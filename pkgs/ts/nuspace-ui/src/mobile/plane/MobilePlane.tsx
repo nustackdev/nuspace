@@ -1,5 +1,6 @@
-// The plane screen: one plane, flattened for a phone. Its title on top, then
-// its cells one under another at the full width, in the layout's reading
+// The plane screen: one plane, flattened for a phone. The header every
+// screen wears on top (../Header.tsx: its icon, its title), then its cells
+// one under another at the full width, in the layout's reading
 // order (a strip column by column), the order desktop's keyboard walks. No
 // gutters, no grips, no strips, no `/` menu, no box select: the phone reads
 // and uses a plane, it does not lay one out.
@@ -20,19 +21,10 @@
 import type { Path } from "@nustackdev/ui-core";
 import { pathKey } from "@nustackdev/ui-kit";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { usePlaneLooks } from "../../core/looks";
 import { leavePlanes } from "../../core/router";
 import { notifyOp } from "../../core/wire";
-import {
-	mobilePlaneBody,
-	mobilePlaneEmpty,
-	mobilePlaneHead,
-	mobilePlaneIcon,
-	mobilePlaneScroll,
-	mobilePlaneTitle,
-	mobilePlaneTitleLine,
-	mobilePlaneTrail,
-	mobileScreen,
-} from "../../design";
+import { mobilePlaneBody, mobilePlaneEmpty, mobilePlaneScroll, mobileScreen } from "../../design";
 import { PlaneIcon } from "../../icon/PlaneIcon";
 import { planeIcon } from "../../icon/parse";
 import { GoHome, NotFoundBody } from "../../pane/NotFound";
@@ -47,7 +39,6 @@ import {
 	usePaneLayout,
 	usePaneScroll,
 	usePaneScrolled,
-	usePaneTrail,
 } from "../../pane/state";
 import { ABSENT_TEXT, TITLE_FALLBACK } from "../../pane/titles";
 import { ViewerSkeleton } from "../../pane/ViewerSkeleton";
@@ -57,6 +48,7 @@ import { inReadingOrder, plainLayout } from "../../plane/layout/model";
 import type { Notify, Ops } from "../../plane/ops";
 import type { CellSpec } from "../../plane/types";
 import { deletedCells } from "../../refs/toast";
+import { MobileHeader } from "../Header";
 import { AddCellSheet } from "./AddCellSheet";
 import { type CellPressed, CellSheet, SourceScreen } from "./CellSheet";
 import { MobileCell } from "./MobileCell";
@@ -76,7 +68,7 @@ export function MobilePlane({
 	cellSpecs: CellSpec[];
 	/** Whether it is the plane on screen, the one the + adds to: a desk's other pages are not. */
 	active?: boolean;
-	/** Whether it draws its own title: a desk's bar names its pages instead. */
+	/** Whether it wears its own header: a desk's header names its pages instead. */
 	titled?: boolean;
 }) {
 	const viewerKey = pathKey(viewerPath);
@@ -85,7 +77,6 @@ export function MobilePlane({
 	const head = usePaneHead(path);
 	const shipped = usePaneCells(path);
 	const shippedLayout = usePaneLayout(path);
-	const trail = usePaneTrail(path);
 	const absent = usePaneAbsent(path);
 	const editable = head?.meta.editable ?? false;
 
@@ -161,7 +152,6 @@ export function MobilePlane({
 	};
 
 	const title = head?.title || TITLE_FALLBACK;
-	const above = trail.length ? trail[trail.length - 1] : null;
 
 	return (
 		<section
@@ -171,6 +161,7 @@ export function MobilePlane({
 			data-focused={active ? "" : undefined}
 			data-plane-screen=""
 		>
+			{titled ? <PlaneHeader planeId={planeId} head={head} absent={!!absent} /> : null}
 			<div ref={viewport} className={mobilePlaneScroll}>
 				<div ref={content} className={mobilePlaneBody}>
 					{absent ? (
@@ -179,19 +170,6 @@ export function MobilePlane({
 						<ViewerSkeleton />
 					) : (
 						<>
-							{titled ? (
-								<header className={mobilePlaneHead}>
-									{above ? (
-										<div className={mobilePlaneTrail}>{above.title || TITLE_FALLBACK}</div>
-									) : null}
-									<div className={mobilePlaneTitleLine}>
-										{head.meta.icon ? (
-											<PlaneIcon icon={planeIcon(head.meta.icon)} className={mobilePlaneIcon} />
-										) : null}
-										<h1 className={mobilePlaneTitle}>{title}</h1>
-									</div>
-								</header>
-							) : null}
 							{cells.map((cell) => (
 								<MobileCell
 									key={cell.id}
@@ -226,5 +204,29 @@ export function MobilePlane({
 			/>
 			{editable && active ? <AddCellSheet cellSpecs={cellSpecs} onPick={onAdd} /> : null}
 		</section>
+	);
+}
+
+/**
+ * The plane's header: its icon and its title, from its head once it lands,
+ * from the desks' looks before. An absent plane is named by its id.
+ */
+function PlaneHeader({
+	planeId,
+	head,
+	absent,
+}: {
+	planeId: string;
+	head: ReturnType<typeof usePaneHead>;
+	absent: boolean;
+}) {
+	const look = usePlaneLooks(useMemo(() => [planeId], [planeId]))[planeId];
+	const icon = head ? head.meta.icon : look?.icon;
+	const title = absent ? planeId : head?.title || look?.title || TITLE_FALLBACK;
+	return (
+		<MobileHeader
+			icon={icon ? <PlaneIcon icon={planeIcon(String(icon))} /> : undefined}
+			title={title}
+		/>
 	);
 }

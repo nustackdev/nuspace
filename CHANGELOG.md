@@ -11,8 +11,9 @@ separately here.
 
 ## Unreleased
 
+- Phone screens share one fixed header, desks page with arrow buttons instead of dots
 - Phone planes and desk pages scroll their last cell clear of the floating buttons
-- Phone sidebar groups desks into titled sections, each strip one line with a composite icon
+- Phone sidebar groups desks into titled sections, each strip one line with composite icons
 - Phone desk folders show one row per item, strips as stacked icons and titles
 - Phone shell can no longer pull in desktop only code, checked by a test
 - Phone desk folders show strips, columns and panes like desktop, each opening its page

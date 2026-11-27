@@ -3,11 +3,12 @@
 // back to close it (./open.ts); tap a row and it closes onto what the row
 // opens.
 //
-// Top to bottom, as on desktop minus the footer: the bar (the wordmark, + for
-// a new plane), then the sections, desktop's: the nav, a section per desk,
-// Planes, Specs. Every group is one section (./Section.tsx), every line one
-// row (./Row.tsx): 44px, one icon size, one label edge a depth, every
-// chevron and + in one column, titles and rows alike. The data and the ops
+// Top to bottom, as on desktop minus the footer: the header every screen
+// wears (../Header.tsx: the wordmark, + for a new plane), then the sections,
+// desktop's: the nav, a section per desk, Planes, Specs. Every group is one
+// section (./Section.tsx), every line one row (./Row.tsx): 44px, one icon
+// size, one label edge a depth, every chevron and + in one column, titles
+// and rows alike. The data and the ops
 // are desktop's: the SidebarRef node's tree and fold state
 // (../../sidebar/state.ts), the desks feed and the roles
 // (../../core/desks.ts), the desk folds (../../sidebar/folders.ts), the
@@ -49,7 +50,6 @@ import { notifyOp } from "../../core/wire";
 import {
 	mobileSidebar,
 	mobileSidebarBody,
-	mobileSidebarHead,
 	mobileSidebarList,
 	sidebarWordmark,
 	sidebarWordmarkNu,
@@ -64,6 +64,7 @@ import { patchSidebar, useExpanded, useSidebarValue } from "../../sidebar/state"
 import { showsNoPlanes, visibleRows } from "../../sidebar/tree";
 import { childrenOf, type Registered, ROOT_ID, rootId } from "../../sidebar/types";
 import { useLongPress, useSwipeClose } from "../gestures";
+import { HeaderButton, MobileHeader } from "../Header";
 import { AddPlaneSheet, addGroups } from "./AddPlaneSheet";
 import { type DeskRow, deskPlanes, deskRows } from "./model";
 import { closeSidebar, leaveThen, useSidebarOpen } from "./open";
@@ -110,17 +111,19 @@ export function MobileSidebar() {
 			data-sidebar-screen={open ? "open" : "closed"}
 			className={mobileSidebar(open)}
 		>
-			<div className={mobileSidebarHead}>
-				<MobileRow
-					kind="bar"
-					label={
-						<span className={sidebarWordmark}>
-							<span className={sidebarWordmarkNu}>nu</span>space
-						</span>
-					}
-					trail={<RowAdd label="New plane" onClick={() => openAddPlane({ parent: ROOT_ID })} />}
-				/>
-			</div>
+			<MobileHeader
+				label="nuspace"
+				title={
+					<span className={sidebarWordmark}>
+						<span className={sidebarWordmarkNu}>nu</span>space
+					</span>
+				}
+				actions={
+					<HeaderButton label="New plane" onClick={() => openAddPlane({ parent: ROOT_ID })}>
+						<Plus />
+					</HeaderButton>
+				}
+			/>
 			{path ? <SidebarBody path={path} /> : <SidebarBooting />}
 		</aside>
 	);
