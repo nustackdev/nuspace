@@ -308,16 +308,17 @@ export const mobilePlaneEmpty = "px-doc-cell py-6 text-sm text-text-muted";
 /**
  * One cell, the full width, its desktop pad. Browsing, it is only its
  * content: the phone's own long-press (select, copy) stays on it. Editing
- * cells, the whole cell is one tap target: an outline says so, no callout
- * and no selection, the wash while pressed. The one whose sheet is open
- * carries the same wash as a selected cell on desktop.
+ * cells, the whole cell is one tap target: a flat level line says so, no
+ * callout and no selection, the document's press step under the finger. The
+ * one whose sheet is open carries the same wash as a selected cell on
+ * desktop (doc-hover, which a selected cell shares).
  */
 export function mobileCell(pressed: boolean, editing: boolean): string {
 	return cn(
 		"relative min-w-0 rounded-md p-doc-cell",
 		"transition-[background-color,box-shadow] duration-fast ease-out",
 		editing &&
-			"select-none [-webkit-touch-callout:none] ring-1 ring-border-default ring-inset active:bg-doc-hover",
+			"select-none [-webkit-touch-callout:none] ring-1 ring-border-default ring-inset active:bg-doc-active",
 		pressed && "bg-doc-hover",
 	);
 }

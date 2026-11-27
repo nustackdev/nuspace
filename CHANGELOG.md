@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Phone cells being edited show a distinct wash under the finger
 - Phone + opens one sheet to add cells, add planes or edit cells
 - Phone cells keep native long-press, and the plane sheet can restart the plane
 - iOS no longer zooms in when tapping into an input
