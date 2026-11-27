@@ -2,7 +2,7 @@
 // its bottom. The row element itself is the menu's (a cmdk item in the Add
 // plane popup, a button in the slash menu); it wears `menuItem`.
 
-import { Shortcut } from "@nustackdev/ui-kit";
+import { IconMark, type IconValue, Shortcut } from "@nustackdev/ui-kit";
 import { ChevronRight } from "lucide-react";
 import {
 	menuDescription,
@@ -16,8 +16,6 @@ import {
 	menuText,
 	menuTile,
 } from "../design";
-import { PlaneIcon } from "../icon/PlaneIcon";
-import { type Icon, parseIcon } from "../icon/parse";
 import { menuMatch } from "./rank";
 
 /** One row's inside: its icon in a tile, the label lit where `query` hit, the description under it, wrapped whole. */
@@ -31,7 +29,7 @@ export function MenuEntry({
 	/** As the registry spells it (../icon/parse.ts). */
 	icon?: string;
 	/** What shows when `icon` names nothing drawable. */
-	fallback: Icon;
+	fallback: IconValue;
 	label: string;
 	description?: string;
 	query: string;
@@ -39,7 +37,7 @@ export function MenuEntry({
 	return (
 		<>
 			<span className={menuTile}>
-				<PlaneIcon icon={parseIcon(icon) ?? fallback} />
+				<IconMark icon={icon} fallback={fallback} />
 			</span>
 			<span className={menuText}>
 				<Label label={label} query={query} className={menuLabel} />

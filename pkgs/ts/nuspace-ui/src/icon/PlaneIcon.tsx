@@ -1,14 +1,11 @@
-// One plane icon, drawn: a lucide glyph (by the kit) or an emoji, in the same box.
+// One plane icon, drawn: the kit's `IconMark`, with the plane default behind it.
 //
-// Decorative everywhere it is used (the title or the row beside it names the
-// plane), so it is hidden from a screen reader. The ref reaches the element,
-// so a popover can anchor on it.
+// Kept for the mobile shell, which still draws through it. Everything else
+// uses `IconMark` directly.
 
-import { iconFor } from "@nustackdev/ui-kit";
+import { IconMark, type IconMarkSize, type IconValue } from "@nustackdev/ui-kit";
 import type * as React from "react";
-import { type IconSize, iconEmoji, iconGlyph } from "../design";
-import { DEFAULT_ICON_NAME } from "./pack";
-import type { Icon } from "./parse";
+import { DEFAULT_ICON } from "./parse";
 
 export function PlaneIcon({
 	icon,
@@ -16,19 +13,12 @@ export function PlaneIcon({
 	className,
 	ref,
 }: {
-	icon: Icon;
-	size?: IconSize;
+	icon: IconValue;
+	size?: IconMarkSize;
 	className?: string;
 	ref?: React.Ref<HTMLElement & SVGSVGElement>;
 }) {
-	if (icon.kind === "emoji") {
-		return (
-			<span ref={ref} aria-hidden="true" className={iconEmoji(size, className)}>
-				{icon.char}
-			</span>
-		);
-	}
-	const Glyph = iconFor(icon.name) ?? iconFor(DEFAULT_ICON_NAME);
-	if (!Glyph) return null;
-	return <Glyph ref={ref} aria-hidden="true" className={iconGlyph(size, className)} />;
+	return (
+		<IconMark icon={icon} fallback={DEFAULT_ICON} size={size} className={className} ref={ref} />
+	);
 }

@@ -16,7 +16,7 @@
 // An item row drags its item, a pane row its pane. Selection is the
 // Sidebar's (./folders.ts `selectedKey`).
 
-import { IconButton } from "@nustackdev/ui-kit";
+import { IconButton, IconMark } from "@nustackdev/ui-kit";
 import { ChevronRight, Columns3, RotateCcw, Rows3, Save, X } from "lucide-react";
 import type * as React from "react";
 import { lookOf, type PlaneLook } from "../core/looks";
@@ -39,7 +39,6 @@ import {
 import { writeItem, writePane } from "../desk/dnd";
 import type { Links } from "../desk/model";
 import { shown } from "../desk/model";
-import { PlaneIcon } from "../icon/PlaneIcon";
 import { planeIcon } from "../icon/parse";
 import { useSidebarNav } from "./focus";
 import {
@@ -297,11 +296,11 @@ function LinkRow({
 							draggable={false}
 							onMouseDown={(e) => e.preventDefault()}
 						>
-							<PlaneIcon icon={planeIcon(original.icon)} className={sidebarIcon(false)} />
+							<IconMark icon={planeIcon(original.icon)} className={sidebarIcon(false)} />
 						</a>
 					</IconButton>
 				) : (
-					<PlaneIcon icon={planeIcon(look.icon)} className={sidebarIcon(false)} />
+					<IconMark icon={planeIcon(look.icon)} className={sidebarIcon(false)} />
 				)
 			}
 			trailing={{

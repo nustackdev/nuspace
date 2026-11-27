@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Plane icon picker now comes from the shared Nu kit, recent picks kept
 - Phone cells being edited show a distinct wash under the finger
 - Phone + opens one sheet to add cells, add planes or edit cells
 - Phone cells keep native long-press, and the plane sheet can restart the plane

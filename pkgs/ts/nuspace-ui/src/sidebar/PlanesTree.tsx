@@ -42,6 +42,8 @@ import {
 	DropdownMenuTrigger,
 	EmptyState,
 	IconButton,
+	IconMark,
+	IconPickerContent,
 	Popover,
 	PopoverAnchor,
 	Shortcut,
@@ -70,9 +72,7 @@ import {
 	sidebarTooltipHint,
 	sidebarTwisty,
 } from "../design";
-import { IconPickerContent } from "../icon/IconPicker";
-import { PlaneIcon } from "../icon/PlaneIcon";
-import { planeIcon } from "../icon/parse";
+import { planeIcon, RECENT_ICONS } from "../icon/parse";
 import { PlaneMenuItems } from "../menu/PlaneMenuItems";
 import { contextParts, dropdownParts } from "../menu/parts";
 import { PLANE_ROW, useSidebarAim } from "../plane/layout/drag";
@@ -309,12 +309,13 @@ function PlaneRow({
 				<>
 					<Popover open={picking} onOpenChange={setPicking}>
 						<PopoverAnchor asChild>
-							<PlaneIcon icon={planeIcon(row.icon)} className={sidebarIcon(!dragging)} />
+							<IconMark icon={planeIcon(row.icon)} className={sidebarIcon(!dragging)} />
 						</PopoverAnchor>
 						<IconPickerContent
 							value={row.icon}
 							onPick={setIcon}
 							onRemove={() => setIcon("")}
+							recentKey={RECENT_ICONS}
 							side="bottom"
 							align="start"
 							// Back to the row, so the keyboard carries on from where it was.

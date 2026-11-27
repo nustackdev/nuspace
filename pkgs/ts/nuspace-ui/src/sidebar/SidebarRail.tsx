@@ -25,7 +25,7 @@
 // node rather than inside it, so it reads that node's tree by its path.
 
 import type { Path } from "@nustackdev/ui-core";
-import { cn, IconButton, ScrollArea, Shortcut } from "@nustackdev/ui-kit";
+import { cn, IconButton, IconMark, ScrollArea, Shortcut } from "@nustackdev/ui-kit";
 import type * as React from "react";
 import { useMemo } from "react";
 import { type Roles, useDeskOrder, useDesks, useRoles } from "../core/desks";
@@ -42,7 +42,6 @@ import {
 	sidebarScrollViewport,
 	sidebarTooltipHint,
 } from "../design";
-import { PlaneIcon } from "../icon/PlaneIcon";
 import { planeIcon } from "../icon/parse";
 import { focusSidebarToggle, setSidebarCollapsed } from "./collapse";
 import { deskLabel } from "./folders";
@@ -116,7 +115,7 @@ export function SidebarRail({ sidebar }: { sidebar: Path | null }) {
 							label={row.title || "Untitled"}
 							selected={top === row.id}
 						>
-							<PlaneIcon icon={planeIcon(row.icon)} />
+							<IconMark icon={planeIcon(row.icon)} />
 						</RailLink>
 					))}
 				</nav>

@@ -9,16 +9,6 @@ import { TitleIcon } from "./TitleIcon";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-vi.mock("unicode-emoji-json/data-by-group.json", () => ({
-	default: [
-		{
-			name: "Animals & Nature",
-			slug: "animals_nature",
-			emojis: [{ emoji: "🐱", name: "cat face", slug: "cat_face", emoji_version: "0.6" }],
-		},
-	],
-}));
-
 let host: HTMLDivElement;
 let root: Root;
 const onChange = vi.fn();
@@ -45,7 +35,7 @@ const drawn = () => {
 	return svg ? (svg.getAttribute("class") ?? "") : (button().textContent ?? "");
 };
 
-/** Radix opens a popover on a click. Let the picker's emoji load inside the act. */
+/** Radix opens a popover on a click. Let the picker settle inside the act. */
 async function open() {
 	await act(async () => {
 		button().click();
@@ -85,11 +75,14 @@ describe("title icon", () => {
 	});
 
 	it("opens the picker on a click, and a pick sends the icon", async () => {
-		render("");
+		// An icon from the pack opens on the Icons tab, which needs no emoji data.
+		render("lucide:cpu");
 		await open();
 		expect(button().getAttribute("aria-expanded")).toBe("true");
-		act(() => inPicker("cat face")?.click());
-		expect(onChange).toHaveBeenCalledWith("emoji:🐱");
+		act(() => inPicker("folder")?.click());
+		expect(onChange).toHaveBeenCalledWith("lucide:folder");
+		// Kept under nuspace's own key, so picks made before the kit picker stay.
+		expect(window.localStorage.getItem("nuspace.icons.recent")).toBe('["lucide:folder"]');
 		expect(button().getAttribute("aria-expanded")).toBe("false");
 	});
 

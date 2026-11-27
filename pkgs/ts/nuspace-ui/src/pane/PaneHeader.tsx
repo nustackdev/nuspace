@@ -24,6 +24,7 @@ import {
 	BreadcrumbPage,
 	BreadcrumbSeparator,
 	IconButton,
+	IconMark,
 	OverflowTooltip,
 } from "@nustackdev/ui-kit";
 import { X } from "lucide-react";
@@ -42,7 +43,6 @@ import {
 	paneHeaderTitle,
 } from "../design";
 import { headerDragProps, type PaneAt } from "../desk/drag";
-import { PlaneIcon } from "../icon/PlaneIcon";
 import { planeIcon } from "../icon/parse";
 import type { Crumb, PlaneMeta } from "../plane/types";
 import { PaneMenu } from "./PaneMenu";
@@ -95,7 +95,7 @@ export function PaneHeader({
 	return (
 		<header className={paneHeader} data-pane-header={planeId} {...headerDragProps(at, planeId)}>
 			<span data-drag-icon hidden>
-				<PlaneIcon icon={planeIcon(meta?.icon)} />
+				<IconMark icon={planeIcon(meta?.icon)} />
 			</span>
 			<Breadcrumb className={paneCrumbs}>
 				<BreadcrumbList className={paneCrumbList}>

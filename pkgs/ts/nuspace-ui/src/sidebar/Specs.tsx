@@ -17,11 +17,10 @@
 // plane with a click anywhere on it, Enter or Space, and its description
 // shows in a tooltip off the sidebar's right edge.
 
-import { Tooltip, TooltipContent, TooltipTrigger } from "@nustackdev/ui-kit";
+import { IconMark, Tooltip, TooltipContent, TooltipTrigger } from "@nustackdev/ui-kit";
 import { ChevronRight, Package } from "lucide-react";
 import { openPlane } from "../core/router";
 import { sidebarIcon, sidebarLaneChevron, sidebarTooltipWide } from "../design";
-import { PlaneIcon } from "../icon/PlaneIcon";
 import { planeIcon } from "../icon/parse";
 import { createPlane } from "./add";
 import { useSidebarNav } from "./focus";
@@ -132,7 +131,7 @@ export function Specs({
 						focusKey(gKey);
 					}
 				}}
-				icon={<PlaneIcon icon={planeIcon(entry.icon)} className={sidebarIcon(false)} />}
+				icon={<IconMark icon={planeIcon(entry.icon)} className={sidebarIcon(false)} />}
 			/>
 		);
 		// Off the sidebar's right edge, anchored on the whole row.

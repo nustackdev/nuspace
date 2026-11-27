@@ -6,6 +6,9 @@
 // this, editable or not: like the title, the icon is not one of its cells.
 
 import {
+	formatIcon,
+	IconMark,
+	IconPickerContent,
 	Popover,
 	PopoverTrigger,
 	Tooltip,
@@ -14,9 +17,7 @@ import {
 } from "@nustackdev/ui-kit";
 import { useState } from "react";
 import { docPlaneIcon } from "../design";
-import { IconPickerContent } from "../icon/IconPicker";
-import { PlaneIcon } from "../icon/PlaneIcon";
-import { DEFAULT_ICON, formatIcon, planeIcon } from "../icon/parse";
+import { DEFAULT_ICON, planeIcon, RECENT_ICONS } from "../icon/parse";
 
 export function TitleIcon({
 	value,
@@ -39,7 +40,7 @@ export function TitleIcon({
 				<TooltipTrigger asChild>
 					<PopoverTrigger asChild>
 						<button type="button" aria-label="Change icon" className={docPlaneIcon}>
-							<PlaneIcon icon={planeIcon(value)} size="lg" />
+							<IconMark icon={planeIcon(value)} size="lg" />
 						</button>
 					</PopoverTrigger>
 				</TooltipTrigger>
@@ -49,6 +50,7 @@ export function TitleIcon({
 				value={typeof value === "string" ? value : ""}
 				onPick={set}
 				onRemove={() => set(formatIcon(DEFAULT_ICON))}
+				recentKey={RECENT_ICONS}
 				side="bottom"
 				align="start"
 			/>

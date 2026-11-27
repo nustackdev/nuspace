@@ -260,14 +260,4 @@
 	                                * top read as cramped under the header.  */
 	--spacing-doc-lead: 1rem; /* 16   the air between the title and the
 	                                * first cell.                            */
-
-	/* --- Plane icons ---------------------------------------------------------
-	 * Beside the title the icon is the title's own 32 (the kit's `display`),
-	 * on the content edge where the title and the cells start. The emoji is
-	 * drawn at the same 32 so the two kinds are one size.
-	 * --------------------------------------------------------------------- */
-	--text-plane-icon: 2rem; /* 32 */
-	--text-plane-icon--line-height: 1;
-	/* Emoji draw in the platform's colour font, never a text face's mono glyph. */
-	--font-emoji: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
 }

@@ -16,7 +16,7 @@
 //   pane.ts            one pane: its header, body and settings menu
 //   document.ts        class recipes for the document surface, title included
 //   sidebar.ts         the sidebar: header, footer, section, row, action row
-//   icon.ts            plane icons: the glyph at each size, and the picker
+//   icon.ts            plane icons: the button beside the title, a tab's icon
 //   menu.ts            a plane's menu, and the registry menus' rows: the / menu, Add plane
 //   cell-status.ts  the six-state vocabulary
 //

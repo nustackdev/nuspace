@@ -12,13 +12,12 @@ import {
 	DropdownMenuLabel,
 	formatAbsolute,
 	formatRelativeTime,
+	IconMark,
 	RelativeTime,
 	Skeleton,
 	StatusDot,
 } from "@nustackdev/ui-kit";
 import { CELL_STATUS } from "../design";
-import { PlaneIcon } from "../icon/PlaneIcon";
-import { parseIcon } from "../icon/parse";
 import type { RunInfo } from "./info";
 import type { CellState } from "./types";
 
@@ -34,11 +33,10 @@ export function InfoHead({
 	/** Null while not known: no dot. */
 	state: CellState | null;
 }) {
-	const glyph = icon ? parseIcon(icon) : null;
 	const token = state ? CELL_STATUS[state] : null;
 	return (
 		<DropdownMenuLabel className="flex items-center gap-2 text-text-primary">
-			{glyph ? <PlaneIcon icon={glyph} size="sm" /> : null}
+			<IconMark icon={icon} size="sm" />
 			<span className="min-w-0 flex-1 truncate">
 				{title ?? <Skeleton shape="text" className="h-3 w-16" />}
 			</span>

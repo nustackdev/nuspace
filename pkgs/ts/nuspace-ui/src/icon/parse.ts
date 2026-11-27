@@ -1,63 +1,30 @@
-// A plane's icon, as the server stores it and as the browser draws it.
+// A plane's icon, and the default it falls back to.
 //
-// The one place a spelling is read. `meta.icon` is a string:
-//
-//   "lucide:<name>"   any lucide glyph, by lucide's own name
-//   "emoji:<char>"    an emoji, drawn as text
-//   "" or absent      the default
-//
-// A bare name, no prefix, is a lucide one: that is how a registered Plane
-// names its icon. A name lucide does not have, or any other prefix, reads as
-// no icon, so the caller falls back to the next one in line.
+// `meta.icon` is a stored icon string, spelled the kit's way ("lucide:<name>",
+// "emoji:<char>", a bare lucide name, "" for none; the kit's `parseIcon`
+// reads it). What nuspace adds is the default: a plane always shows an icon,
+// so a value that reads as none shows the page one.
 // Mirrors `nuspace.ops.plane.plane_icon` on the server.
 
-import { isIconName } from "@nustackdev/ui-kit";
-import { DEFAULT_ICON_NAME } from "./pack";
+import { type IconValue, parseIcon } from "@nustackdev/ui-kit";
 
-export const LUCIDE = "lucide:";
-export const EMOJI = "emoji:";
+// The mobile shell still imports the reader from here.
+export { parseIcon };
 
-export type Icon = { kind: "lucide"; name: string } | { kind: "emoji"; char: string };
+/** The lucide name a plane shows when neither it nor its registered Plane names an icon. */
+export const DEFAULT_ICON_NAME = "file-text";
 
 /** What a plane shows when neither it nor its registered Plane names an icon. */
-export const DEFAULT_ICON: Icon = { kind: "lucide", name: DEFAULT_ICON_NAME };
+export const DEFAULT_ICON: IconValue = { kind: "lucide", name: DEFAULT_ICON_NAME };
 
-/** `FileText`, `fileText` and `file-text` are one name; so are `Gamepad2` and `gamepad-2`. */
-function kebab(name: string): string {
-	return name
-		.trim()
-		.replace(/([a-z0-9])([A-Z])/g, "$1-$2")
-		.replace(/([a-zA-Z])(\d)/g, "$1-$2")
-		.toLowerCase();
-}
-
-/** The icon a stored value names, or null for none (empty, unknown, not a string). */
-export function parseIcon(raw: unknown): Icon | null {
-	if (typeof raw !== "string") return null;
-	const value = raw.trim();
-	if (!value) return null;
-	if (value.startsWith(EMOJI)) {
-		const char = value.slice(EMOJI.length).trim();
-		return char ? { kind: "emoji", char } : null;
-	}
-	let name = value;
-	if (value.startsWith(LUCIDE)) name = value.slice(LUCIDE.length);
-	else if (value.includes(":")) return null;
-	name = kebab(name);
-	return isIconName(name) ? { kind: "lucide", name } : null;
-}
-
-/** The stored spelling of an icon, "" for none. */
-export function formatIcon(icon: Icon | null): string {
-	if (!icon) return "";
-	return icon.kind === "emoji" ? `${EMOJI}${icon.char}` : `${LUCIDE}${icon.name}`;
-}
+/** Where the picker keeps this browser's recent picks: nuspace's own list, the key it always had. */
+export const RECENT_ICONS = "nuspace.icons.recent";
 
 /**
  * What a plane shows: its own `meta.icon`, which every plane is made with.
  * The default only guards a value that does not read as an icon, so a bad
  * one never breaks a row. Never null.
  */
-export function planeIcon(own: unknown): Icon {
+export function planeIcon(own: unknown): IconValue {
 	return parseIcon(own) ?? DEFAULT_ICON;
 }
