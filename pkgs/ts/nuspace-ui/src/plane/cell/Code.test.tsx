@@ -1,7 +1,9 @@
 // The source editor's boundary, against the kit's real code block: which keys
-// leave the cell and which stay in it, and that a read-only source never
-// saves or runs.
+// leave the cell and which stay in it, that a read-only source never saves or
+// runs, and that an editable one saves (and so runs) on the submit alone.
 
+import { EditorView } from "@codemirror/view";
+import { SAVE_DELAY } from "@nustackdev/ui-kit";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -142,7 +144,55 @@ describe("an editable source", () => {
 	it("Escape hands back without a save when nothing changed", async () => {
 		const { content, onCommit, onEscape } = await mount(false);
 		press(content, "Escape");
-		expect(onEscape).toHaveBeenCalledOnce();
+		expect(onEscape).toHaveBeenCalledWith(false);
 		expect(onCommit).not.toHaveBeenCalled();
+	});
+});
+
+/** Type at the end of the source, the way the keyboard would. */
+function typeEnd(content: HTMLElement, text: string) {
+	const view = EditorView.findFromDOM(content) as EditorView;
+	act(() => {
+		view.focus();
+		const end = view.state.doc.length;
+		view.dispatch({
+			changes: { from: end, insert: text },
+			selection: { anchor: end + text.length },
+		});
+	});
+}
+
+const wait = (ms: number) =>
+	act(async () => {
+		await new Promise((r) => setTimeout(r, ms));
+	});
+
+describe("saving is the submit, and only the submit", () => {
+	it("runs on shift+enter with the edited text", async () => {
+		const { content, onCommit } = await mount(false);
+		typeEnd(content, "\nw = 4");
+		press(content, "Enter", false, true);
+		expect(onCommit).toHaveBeenCalledWith(`${SOURCE}\nw = 4`);
+	});
+
+	it("never runs on a quiet moment, a blur or Escape, and Escape keeps the edits open", async () => {
+		const { content, onCommit, onEscape } = await mount(false);
+		typeEnd(content, "\nw = 4");
+		await wait(SAVE_DELAY + 100);
+		const away = document.createElement("button");
+		document.body.append(away);
+		act(() => away.focus());
+		await wait(50);
+		away.remove();
+		press(content, "Escape");
+		expect(onCommit).not.toHaveBeenCalled();
+		expect(onEscape).toHaveBeenCalledWith(true);
+		expect(host.querySelector("[data-source-foot]")?.textContent).toContain("unsaved");
+	});
+
+	it("submits on shift+enter even when nothing changed: a rerun is the intent", async () => {
+		const { content, onCommit } = await mount(false);
+		press(content, "Enter", false, true);
+		expect(onCommit).toHaveBeenCalledWith(SOURCE);
 	});
 });

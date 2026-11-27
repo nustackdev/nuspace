@@ -120,10 +120,14 @@ export function ProgramCell(props: ProgramProps) {
 		if (hasUi) drawn.current?.();
 	}, [hasUi]);
 
-	const leaveEditor = useCallback(() => {
-		onSetEditing(false);
-		onSelectSelf();
-	}, [onSelectSelf, onSetEditing]);
+	// Unsaved edits keep the editor open: closing it would drop them.
+	const leaveEditor = useCallback(
+		(unsaved: boolean) => {
+			if (!unsaved) onSetEditing(false);
+			onSelectSelf();
+		},
+		[onSelectSelf, onSetEditing],
+	);
 
 	return (
 		<div className={docProgram}>

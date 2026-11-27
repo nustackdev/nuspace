@@ -9,6 +9,10 @@ Below is the changelog for **nuspace** - the full commit stream. Newest first.
 The `nuspace-ui` wheel is the same source tree's vite output and is not tracked
 separately here.
 
+## Unreleased
+
+- Code cells run only on shift+enter, never on blur or escape
+
 ## 0.8.2 - 2026-11-27
 
 - Release nuspace 0.8.2, nuspace-ui 0.8.2

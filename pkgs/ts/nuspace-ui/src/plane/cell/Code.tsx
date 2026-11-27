@@ -8,11 +8,16 @@
 //
 // The wrapper's real job is the boundary: ArrowUp on line 1 and ArrowDown on
 // the last line have to leave the editor and land in the neighbouring cell,
-// and Escape has to hand control back to cell selection. Saving is the
-// block's own: shift+enter and blur commit, and an arrow out is a blur. Escape
-// closes the editor before a blur can land, so it commits for itself.
+// and Escape has to hand control back to cell selection.
+//
+// The block says two things (ui-kit lib/save.ts): a change while you type and
+// on blur, and a submit on shift+Enter. A cell's source is its program, so
+// writing it reruns the cell, and the cell listens to the submit only. The
+// changes are bookkeeping it ignores: a blur, an arrow out or Escape never
+// touches the source. Until a submit the buffer is unsaved, the foot says so,
+// and leaving the page asks first.
 
-import { Code, type CodeProps, type FocusAt, Shortcut } from "@nustackdev/ui-kit";
+import { Code, type CodeProps, type FocusAt, Shortcut, useLeaveGuard } from "@nustackdev/ui-kit";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { docSourceDot, docSourceFoot } from "../../design";
 import type { FocusReq } from "../state";
@@ -35,10 +40,11 @@ export type CodeBoxProps = {
 	source: string;
 	focusReq: FocusReq | null;
 	onFocusConsumed: () => void;
-	/** Shift+Enter, Escape, or blur with changes. Restarts this cell only. */
+	/** Shift+Enter, the submit, and nothing else, changed or not. Reruns this cell only. */
 	onCommit: (source: string) => void;
 	onExit: (dir: ExitDir, column: number | undefined) => void;
-	onEscape: () => void;
+	/** Back to cell selection. `unsaved`: the buffer differs from the source, so keep it open. */
+	onEscape: (unsaved: boolean) => void;
 	/** Live read of the buffer, for the parent's unsaved indicator. */
 	onDirty: (dirty: boolean) => void;
 	/**
@@ -56,8 +62,8 @@ export function CodeBox(props: CodeBoxProps) {
 
 	const [view, setView] = useState<CodeView | null>(null);
 	// Callbacks change identity every render; the key listener binds per view.
-	const cb = useRef({ onCommit, onExit, onEscape, source });
-	cb.current = { onCommit, onExit, onEscape, source };
+	const cb = useRef({ onExit, onEscape, source });
+	cb.current = { onExit, onEscape, source };
 
 	useEffect(() => {
 		if (!view) return;
@@ -78,9 +84,7 @@ export function CodeBox(props: CodeBoxProps) {
 
 			if (e.key === "Escape") {
 				take();
-				const text = view.state.doc.toString();
-				if (!readOnly && text !== cb.current.source) cb.current.onCommit(text);
-				cb.current.onEscape();
+				cb.current.onEscape(!readOnly && view.state.doc.toString() !== cb.current.source);
 				return;
 			}
 			if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
@@ -137,7 +141,7 @@ export function CodeBox(props: CodeBoxProps) {
 			copyable
 			minHeight={MIN_HEIGHT}
 			maxHeight={MAX_HEIGHT}
-			onCommit={onCommit}
+			onSubmit={onCommit}
 			onDirty={onDirty}
 			onView={setView}
 		/>
@@ -159,6 +163,7 @@ export function SourceEditor(props: Omit<CodeBoxProps, "onDirty">) {
 	const { onCommit } = props;
 	const [dirty, setDirty] = useState(false);
 	const [saved, setSaved] = useState(false);
+	useLeaveGuard(dirty && !props.readOnly);
 
 	useEffect(() => {
 		if (!saved) return;

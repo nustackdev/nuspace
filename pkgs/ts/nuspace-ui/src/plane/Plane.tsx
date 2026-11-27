@@ -407,7 +407,13 @@ export function Plane({
 					onFocusConsumed={() => {
 						if (source) drop((r) => r.id === source.id);
 					}}
-					onCommit={(src) => commitSource(cell.id, src)}
+					// The submit: a changed source is written (which reruns it), an
+					// unchanged one is run again, since running is what it asked for.
+					onCommit={(src) =>
+						src === cell.source
+							? notify("cell.restart", { cell_id: cell.id })
+							: commitSource(cell.id, src)
+					}
 					onKey={
 						editable
 							? (key) =>
