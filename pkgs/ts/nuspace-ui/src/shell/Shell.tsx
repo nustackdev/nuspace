@@ -38,6 +38,15 @@
 // which keeps the layout across reloads. Home, search and settings have keys
 // from anywhere, mounted here so they work before the sidebar lands.
 //
+// A narrow window (../sidebar/collapse.ts `SIDEBAR_NARROW_PX`) keeps the
+// same split, mounted and untouched, and only draws it differently: the
+// sidebar's panel held at the rail's width whatever the split's share, the
+// border gone, and the sidebar, when opened, over the desk with the scrim
+// behind it and the desk inert. Escape, a click on the scrim or a navigation
+// closes it. Nothing is remounted either way across the line, and nothing
+// narrow lands on the split, so a wide window gets back the width and the
+// fold it had.
+//
 // Before the tree lands neither region is on it. The shell still draws: the
 // sidebar as its chrome with skeleton rows, the desk as the viewer skeleton, so
 // the boot and a plane switch look alike. Once anything has landed, a region
@@ -57,8 +66,10 @@ import {
 	Toaster,
 	useAnchorCatcher,
 } from "@nustackdev/ui-kit";
-import { useLayoutEffect, useRef } from "react";
+import type * as React from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 import { BOOTING_DELAY_MS, useAfter } from "../core/delay";
+import { useRoute } from "../core/router";
 import { useBooted, useTypePath } from "../core/surfaces";
 import {
 	SIDEBAR_RAIL_PX,
@@ -66,23 +77,32 @@ import {
 	shellMissing,
 	shellPanePlane,
 	shellRoot,
+	shellScrim,
+	shellSideNarrowRail,
+	shellSideNarrowStyle,
 	shellSideOpen,
+	shellSideOverlay,
 	shellSideRail,
 	shellSideSlot,
 	shellSlot,
 	shellSplitHandle,
+	shellSplitHandleNarrow,
 } from "../design";
 import { useDragScroll } from "../desk/autoscroll";
 import { linkRule } from "../desk/open";
 import { ViewerSkeleton } from "../pane/ViewerSkeleton";
 import {
 	bindSidebar,
+	focusSidebarToggle,
 	publishSidebar,
 	SIDEBAR_LAYOUT_KEY,
 	SidebarPlaceholder,
 	SidebarRail,
+	setSidebarOverlay,
 	useNavShortcuts,
 	useNewPlaneShortcut,
+	useSidebarNarrow,
+	useSidebarOverlay,
 	useSidebarShortcut,
 } from "../sidebar/api";
 import { useTab } from "./tab";
@@ -96,6 +116,24 @@ export function Shell() {
 	const split = useRef<ResizablePanelGroupHandle | null>(null);
 	// The sidebar's panel: the real sidebar, or its placeholder until the tree lands.
 	const side = sidebar !== null || !booted;
+	const narrow = useSidebarNarrow();
+	const overlay = useSidebarOverlay() && narrow;
+	// A navigation closes the overlay: a row followed, a link, back.
+	const route = useRoute();
+	// biome-ignore lint/correctness/useExhaustiveDependencies: the route is the trigger, not an input.
+	useEffect(() => setSidebarOverlay(false), [route]);
+	const closeOverlay = () => {
+		setSidebarOverlay(false);
+		focusSidebarToggle();
+	};
+	const onOverlayKey = (e: React.KeyboardEvent) => {
+		if (e.key !== "Escape" || !overlay) return;
+		// A menu, popover or field inside takes its Escape first; a tooltip
+		// (the toggle's, shown as focus lands on it) is no reason to stay.
+		if (e.defaultPrevented && !onlyTooltip(e.target)) return;
+		e.preventDefault();
+		closeOverlay();
+	};
 	useSidebarShortcut();
 	useNewPlaneShortcut();
 	useNavShortcuts();
@@ -130,23 +168,31 @@ export function Shell() {
 								collapsible
 								collapsedSize={`${SIDEBAR_RAIL_PX}px`}
 								className={shellSideSlot}
+								style={narrow ? shellSideNarrowStyle(SIDEBAR_RAIL_PX) : undefined}
+								data-narrow={narrow ? "" : undefined}
 							>
-								<div className={shellSideOpen}>
+								{/* biome-ignore lint/a11y/noStaticElementInteractions: Escape for what is inside, not a control of its own. */}
+								<div
+									className={narrow ? shellSideOverlay(overlay) : shellSideOpen}
+									style={narrow ? { width: SIDEBAR_WIDTH.DEFAULT } : undefined}
+									data-sidebar-overlay={narrow ? (overlay ? "open" : "closed") : undefined}
+									onKeyDown={onOverlayKey}
+								>
 									{sidebar ? <NodeView path={sidebar} /> : <SidebarPlaceholder />}
 								</div>
-								<div className={shellSideRail}>
+								<div className={narrow ? shellSideNarrowRail : shellSideRail}>
 									<SidebarRail sidebar={sidebar} />
 								</div>
 							</ResizablePanel>,
 							<ResizableHandle
 								key="sidebar-edge"
 								aria-label="Resize sidebar"
-								className={shellSplitHandle}
+								className={narrow ? shellSplitHandleNarrow : shellSplitHandle}
 							/>,
 						]
 					: null}
 				<ResizablePanel key="main" id="shell-main" className={shellSlot}>
-					<main className={shellMain}>
+					<main className={shellMain} inert={overlay}>
 						{viewer ? (
 							<NodeView path={viewer} />
 						) : booted ? (
@@ -167,7 +213,28 @@ export function Shell() {
 					</main>
 				</ResizablePanel>
 			</ResizablePanelGroup>
+			{overlay ? (
+				<div
+					aria-hidden="true"
+					className={shellScrim}
+					data-sidebar-scrim=""
+					onClick={closeOverlay}
+				/>
+			) : null}
 			<Toaster />
 		</div>
+	);
+}
+
+/**
+ * Whether an Escape already taken was only a tooltip's: one is showing, no
+ * menu, popover or dialog is open, and the key did not come from a field.
+ */
+function onlyTooltip(target: EventTarget | null): boolean {
+	if (target instanceof HTMLElement && target.closest("input, textarea, [contenteditable=true]"))
+		return false;
+	if (!document.querySelector("[role=tooltip]")) return false;
+	return !document.querySelector(
+		"[role=menu], [role=dialog], [role=listbox], [data-slot=popover-content]",
 	);
 }

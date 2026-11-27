@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Narrow desktop windows show the sidebar as a rail that opens over the content
 - Phone plane sheet can rename, change icon and add a plane inside; + adds inside too
 - Plane icon picker now comes from the shared Nu kit, recent picks kept
 - Phone cells being edited show a distinct wash under the finger

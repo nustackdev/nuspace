@@ -323,7 +323,6 @@ export function mobileCell(pressed: boolean, editing: boolean): string {
 	);
 }
 
-
 /** The source screen's code: the rest of the screen under its title, scrolled inside. */
 export const mobileSourceBody = "min-h-0 flex-1 overflow-y-auto overscroll-contain";
 

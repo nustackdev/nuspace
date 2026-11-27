@@ -50,6 +50,52 @@ export const shellSideOpen = "flex min-h-0 min-w-0 flex-1 group-data-[state=coll
 /** The rail in the sidebar's panel: there only while the panel is folded. */
 export const shellSideRail = "hidden min-h-0 flex-1 group-data-[state=collapsed]/side:flex";
 
+/*
+ * A narrow window (../sidebar/collapse.ts `SIDEBAR_NARROW_PX`): no room for
+ * the sidebar beside the desk. The panel is the rail whatever the split
+ * holds, and the sidebar opens over the desk, a modal surface: the scrim
+ * behind it, the modal shadow, `line` on its edge. It keeps the sidebar's
+ * own ground, since it is the sidebar, only lifted. The split's sizes are
+ * left as they are, for a wide window to have back.
+ */
+
+/**
+ * The sidebar's panel in a narrow window, as an inline style over the
+ * split's: the rail's width (`SIDEBAR_RAIL_PX`, passed in: ./sidebar.ts
+ * imports this file, so this one cannot import it back), fixed, whatever
+ * share the split gives it.
+ */
+export function shellSideNarrowStyle(rail: number): {
+	flex: string;
+	minWidth: number;
+	maxWidth: number;
+} {
+	return { flex: `0 0 ${rail}px`, minWidth: rail, maxWidth: rail };
+}
+
+/** The rail in a narrow window: always there. */
+export const shellSideNarrowRail = "flex min-h-0 flex-1";
+
+/**
+ * The open sidebar in a narrow window: over the desk from the window's left
+ * edge, the sidebar's default width (`style`), never wider than the window
+ * leaves beside a rail's width. Closed, gone, still mounted.
+ */
+export function shellSideOverlay(open: boolean): string {
+	return open
+		? cn(
+				"fixed inset-y-0 left-0 z-40 flex min-h-0 max-w-[calc(100vw-3rem)]",
+				"border-r border-border-default bg-bg-sunken shadow-modal",
+			)
+		: "hidden";
+}
+
+/** Behind the open overlay: the kit's scrim over the rail and the desk; a click closes. */
+export const shellScrim = "fixed inset-0 z-30 bg-bg-overlay";
+
+/** The split's border in a narrow window: nothing to drag. */
+export const shellSplitHandleNarrow = "hidden";
+
 /**
  * The kit split handle between the sidebar and the desk area, as the kit
  * draws it: a `line-subtle` hairline, the afterglow line on hover and while
