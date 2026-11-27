@@ -1,5 +1,5 @@
-// What a key is allowed to be, and copying one, for the identity block
-// (./Identity.tsx).
+// What a key is allowed to be, and copying one, for the key editor
+// (./KeySub.tsx).
 //
 // Only the spelling is checked here, with the server's own rule (key chars,
 // `nuspace/utils/interactions.py` `KEY_CHARS`). A key already taken is the

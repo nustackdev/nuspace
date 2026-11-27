@@ -42,6 +42,7 @@ from nuspace.web.viewer import (
     cell_info,
     plane_cells,
     plane_head,
+    plane_info,
     slash_entries,
     statuses,
     trail,
@@ -347,6 +348,28 @@ async def test_viewer_statuses(store):
     await do(store, nuspace.cell_run.end(made["c1"], EXIT_OK))
     got = {s["cell_id"]: s for s in await store.read(statuses("p1", run))}
     assert got["c2"]["state"] == "stopped" and got["c1"]["state"] == "idle"
+
+
+async def test_viewer_plane_info_reads_the_row_and_the_panes_run(store):
+    await plane(store, "p1", spec="testing.plain")
+    await plane(store, "p2", parent="p1")
+    for c in ("c1", "c2"):
+        await do(store, nuspace.cell.add("p1", "x = 1", id=c, fabrics=[]))
+    pane = web.Conn.connections["s1"].panes["p1"]
+
+    got = await store.read(plane_info("s1", "p1", PLANES))
+    assert got["plane_id"] == "p1" and got["spec"] == "testing.plain"
+    assert got["label"] == "Plain" and got["cells"] == 2 and got["children"] == 1
+    assert got["created_at"] > 0 and got["run"]["id"] == ""
+
+    run = await store.made(nuspace.atomic(nuspace.plane_run.add("p1", by="nav", into=MADE)))
+    await do(store, pane.plane_run.set(run))
+    last = (await store.read(plane_info("s1", "p1", PLANES)))["run"]
+    assert last["id"] == run and last["by"] == "nav" and last["backend"] == "async"
+    assert last["ended_at"] == 0 and last["exit"] == ""
+
+    # A spec not installed: no label.
+    assert (await store.read(plane_info("s1", "p1")))["label"] == ""
 
 
 async def test_viewer_cell_info_reads_the_row_and_its_run_in_the_pane(store):
@@ -663,6 +686,10 @@ async def test_a_cell_transferred_from_a_pane_leaves_it(store):
         await _until(lambda: session.pane("p1", "set_cell_info"))
         info = session.pane("p1", "set_cell_info")[-1]["info"]
         assert info["cell_id"] == "c2" and info["spec"] == ""
+        # And the pane's own plane, asked with nothing.
+        session.notify((*PANE, "plane.info"), {})
+        await _until(lambda: session.pane("p1", "set_plane_info"))
+        assert session.pane("p1", "set_plane_info")[-1]["info"]["cells"] == 2
 
         # No anchor: the end of the target. An anchor there: before it.
         session.notify((*PANE, "cell.transfer"), {"cell_id": "c1", "plane_id": "p2"})

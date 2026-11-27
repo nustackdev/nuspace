@@ -14,6 +14,7 @@
 // the plane with its params on a solo plane (../desk/drag.ts). The plane's icon
 // is not shown here, only carried hidden for the drag chip.
 
+import type { Path } from "@nustackdev/ui-core";
 import {
 	Breadcrumb,
 	BreadcrumbEllipsis,
@@ -64,6 +65,9 @@ export function PaneHeader({
 	onRestart,
 	onClose,
 	focused = false,
+	panePath,
+	onAskInfo,
+	onKey,
 }: {
 	/** Where the pane sits: what the header drags as, and whether the menu has the column group. */
 	at?: PaneAt;
@@ -81,6 +85,12 @@ export function PaneHeader({
 	/** Close the pane. Left out on a solo plane: no close then. */
 	onClose?: () => void;
 	focused?: boolean;
+	/** The pane's node, where its plane's info lands: the menu's facts. */
+	panePath?: Path;
+	/** Ask for the plane's info, as the menu opens. */
+	onAskInfo?: () => void;
+	/** Set the plane's key, "" to remove it. Left out on a read-only plane. */
+	onKey?: (key: string) => void;
 }) {
 	return (
 		<header className={paneHeader} data-pane-header={planeId} {...headerDragProps(at, planeId)}>
@@ -127,6 +137,9 @@ export function PaneHeader({
 					onDelete={onDelete}
 					onRestart={onRestart}
 					onClose={onClose}
+					panePath={panePath}
+					onAskInfo={onAskInfo}
+					onKey={onKey}
 				/>
 				{onClose ? (
 					<IconButton

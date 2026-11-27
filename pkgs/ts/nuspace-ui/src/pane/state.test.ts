@@ -3,6 +3,7 @@
 
 import { describe, expect, it } from "vitest";
 import { LOCAL } from "../core/local";
+import { type PlaneInfo, runState } from "../plane/info";
 import { EMPTY_EDITOR } from "../plane/state";
 import type { Cell } from "../plane/types";
 import { applyPaneWrite, panePath } from "./state";
@@ -130,5 +131,24 @@ describe("a pane node", () => {
 		});
 		applyPaneWrite(props, { op: "set_cell_info", info: { name: "no id" } });
 		expect(props.cellInfo).toBeNull();
+	});
+
+	it("keeps a plane info answer, its run read as a state like a cell's", () => {
+		const props: Record<string, unknown> = {};
+		const run = (r: Record<string, unknown>) => {
+			applyPaneWrite(props, {
+				op: "set_plane_info",
+				info: { plane_id: "p1", label: "Jobs", cells: 3, children: 1, run: r },
+			});
+			const info = props.planeInfo as PlaneInfo;
+			return runState(info.run);
+		};
+		expect(run({ id: "" })).toBe("idle");
+		expect(props.planeInfo).toMatchObject({ planeId: "p1", label: "Jobs", cells: 3, children: 1 });
+		expect(run({ id: "r", created_at: 1 })).toBe("starting");
+		expect(run({ id: "r", started_at: 2 })).toBe("running");
+		expect(run({ id: "r", started_at: 2, ended_at: 3, exit: "failed" })).toBe("failed");
+		expect(run({ id: "r", started_at: 2, ended_at: 3, exit: "killed" })).toBe("stopped");
+		expect(run({ id: "r", started_at: 2, ended_at: 3, exit: "ok" })).toBe("idle");
 	});
 });

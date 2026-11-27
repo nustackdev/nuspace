@@ -19,6 +19,7 @@
   answers once. Nothing watches them after.
 - **Cell info**, the same: ``cell.info`` asks for what one cell is and how
   it last ran in the pane's run, ``set_cell_info`` answers once with it.
+  ``plane.info`` and ``set_plane_info`` do it for the pane's own plane.
 - **Scroll**, host or cell to browser, on the same path: ``set_follow`` is
   state the node keeps (pin the body to its end as it grows), ``scroll`` a
   one shot command, applied once per new ``seq``. Whether the user is at
@@ -61,6 +62,7 @@ __all__ = [
     "on_delete_plane",
     "on_move_cell",
     "on_open",
+    "on_plane_info",
     "on_remove_cell_key",
     "on_remove_plane_key",
     "on_rename_plane",
@@ -81,6 +83,7 @@ __all__ = [
     "set_cells",
     "set_follow",
     "set_head",
+    "set_plane_info",
     "set_status",
     "set_targets",
     "set_trail",
@@ -206,6 +209,14 @@ def set_cell_info(pane: Ref, info: DictArg) -> Nu:
     return write(pane, "set_cell_info", info=info)
 
 
+def set_plane_info(pane: Ref, info: DictArg) -> Nu:
+    """Answer a ``plane.info``: the pane's plane's info.
+
+    See :func:`nuspace.web.viewer.feed.plane_info` for its fields. Sent once per ask.
+    """
+    return write(pane, "set_plane_info", info=info)
+
+
 def set_follow(pane: Ref, follow: StrArg) -> Nu:
     """Say whether the pane's body follows its end: :data:`FOLLOW_NONE` or :data:`FOLLOW_BOTTOM`.
 
@@ -308,6 +319,11 @@ def on_move_cell(pane: Ref) -> Changed:
 def on_targets(pane: Ref) -> Changed:
     """``{}``. Asks for the planes a cell can be transferred to, answered with :func:`set_targets`."""
     return event(pane, "cell.targets")
+
+
+def on_plane_info(pane: Ref) -> Changed:
+    """``{}``. Asks for what the pane's plane is and how it runs here, answered with :func:`set_plane_info`."""
+    return event(pane, "plane.info")
 
 
 def on_cell_info(pane: Ref) -> Changed:

@@ -1,9 +1,9 @@
 // A cell's controls, one thin row in the left gutter of its row: add a line
 // below, and the grip, which drags and, clicked, opens the cell's menu. The menu opens
 // on the cell's facts (./InfoBlock.tsx), asked for as it opens, then its
-// id, a row that copies, and its key, a row with a submenu (./KeySub.tsx),
+// id, a row that copies, and its key, a row with a submenu (../KeySub.tsx),
 // then what to do. Editing the key closes the menu and opens a popover on
-// // the grip, once the menu has let go of the focus. It can also move the
+// the grip, once the menu has let go of the focus. It can also move the
 // cell to another plane (../transfer.ts). The source opens from the menu
 // too; a broken cell says so in its body. A read-only plane has no place
 // to change, so its gutter keeps only the menu.
@@ -48,9 +48,9 @@ import type * as React from "react";
 import { useRef, useState } from "react";
 import { useCopyRow } from "../../core/clipboard";
 import { docDragHandle, docGutterControls, docGutterLane } from "../../design";
+import { KeyEditor, KeySub } from "../KeySub";
 import type { CellState } from "../types";
 import { CellInfoBlock } from "./InfoBlock";
-import { KeyEditor, KeySub } from "./KeySub";
 
 /** The left gutter: add, and the grip with the cell's menu. */
 export function LeftGutter({
@@ -190,7 +190,8 @@ export function LeftGutter({
 									<DropdownMenuShortcut>{copy.copied ? "Copied" : "Copy"}</DropdownMenuShortcut>
 								</DropdownMenuItem>
 								<KeySub
-									cellKey={cellKey}
+									owner="cell"
+									value={cellKey}
 									onEdit={
 										onKey
 											? () => {
@@ -253,7 +254,12 @@ export function LeftGutter({
 							onSelect();
 						}}
 					>
-						<KeyEditor value={cellKey} onSave={onKey} onClose={() => setKeying(false)} />
+						<KeyEditor
+							owner="cell"
+							value={cellKey}
+							onSave={onKey}
+							onClose={() => setKeying(false)}
+						/>
 					</PopoverContent>
 				) : null}
 			</Popover>

@@ -1,8 +1,7 @@
-// A plane's id and key next to its title, rendered in jsdom: the `@key` line
-// shows only with a key and copies it, the title row's `#` opens and closes
-// the identity block, a save sends the plane's key ops on the pane's own
-// node, and the plane menu
-// copies its id and key.
+// A plane's key under its title, rendered in jsdom: the `@key` line shows
+// only with a key and copies it, and the title row has no identity toggle:
+// the key is edited from the pane's `...` menu. The plane menu copies its
+// id, and leaves that row out where the menu shows the id itself.
 
 import type { Frame } from "@nustackdev/ui-core";
 import { TooltipProvider, tree } from "@nustackdev/ui-kit";
@@ -31,12 +30,6 @@ const VIEWER = ["viewer"];
 const PANE = panePath(VIEWER, "p1");
 /** What the pane sent, as the socket would have it. */
 let sent: Frame[] = [];
-/** The last op sent and its payload. */
-const last = () => {
-	const frame = sent.at(-1);
-	return frame ? [frame.ref, frame.payload] : null;
-};
-
 function render(key: string, editable = true) {
 	act(() => {
 		tree.getState().write(
@@ -52,19 +45,6 @@ function render(key: string, editable = true) {
 }
 
 const handle = () => host.querySelector<HTMLButtonElement>("[data-plane-key]");
-const toggle = () => host.querySelector<HTMLButtonElement>("[data-plane-identity]");
-const block = () => host.querySelector("[data-identity]");
-const field = () => host.querySelector<HTMLInputElement>('input[aria-label="plane key"]');
-const saveButton = () => [...host.querySelectorAll("button")].find((b) => b.textContent === "Save");
-
-function type(text: string) {
-	const input = field();
-	const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
-	act(() => {
-		set?.call(input, text);
-		input?.dispatchEvent(new Event("input", { bubbles: true }));
-	});
-}
 
 beforeEach(() => {
 	host = document.createElement("div");
@@ -110,50 +90,11 @@ describe("the key line", () => {
 	});
 });
 
-describe("the identity toggle", () => {
-	it("sits in the title row's right gutter, and opens and closes the block", () => {
+describe("the title row", () => {
+	it("has no identity toggle: the key is edited from the menu", () => {
 		render("notes");
-		const lane = toggle()?.parentElement;
-		expect(lane?.className).toContain("col-[gutter-r]");
-		expect(lane?.hasAttribute("data-pinned")).toBe(false);
-		expect(block()).toBeNull();
-		act(() => toggle()?.click());
-		expect(block()?.getAttribute("data-identity")).toBe("plane");
-		expect(host.querySelector("[data-identity-id]")?.textContent).toBe("p1");
-		expect(field()?.value).toBe("notes");
-		expect(toggle()?.parentElement?.hasAttribute("data-pinned")).toBe(true);
-		// The key line stays while the block is open.
-		expect(handle()).not.toBeNull();
-		act(() => toggle()?.click());
-		expect(block()).toBeNull();
-	});
-
-	it("closes on Escape in the key field", () => {
-		render("notes");
-		act(() => toggle()?.click());
-		act(() => {
-			field()?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-		});
-		expect(block()).toBeNull();
-	});
-
-	it("saves the key through the plane's ops, and an empty one removes it", () => {
-		render("notes");
-		act(() => toggle()?.click());
-		type("journal");
-		act(() => saveButton()?.click());
-		// On the pane's own path: no plane id, the path says it.
-		expect(last()).toEqual([[...PANE, "ops", "plane.key"], { key: "journal" }]);
-		type("");
-		act(() => saveButton()?.click());
-		expect(last()).toEqual([[...PANE, "ops", "plane.remove_key"], {}]);
-	});
-
-	it("shows the key read-only on a read-only plane", () => {
-		render("notes", false);
-		act(() => toggle()?.click());
-		expect(field()?.readOnly).toBe(true);
-		expect(saveButton()).toBeUndefined();
+		expect(host.querySelector("[data-plane-identity]")).toBeNull();
+		expect(host.querySelector("[data-identity]")).toBeNull();
 	});
 });
 
@@ -172,9 +113,9 @@ const parts: MenuParts = {
 	Shortcut: () => null,
 };
 
-function renderMenu(planeKey?: string) {
+function renderMenu(copyId?: boolean) {
 	act(() => {
-		root.render(<PlaneMenuItems parts={parts} planeId="p1" planeKey={planeKey} />);
+		root.render(<PlaneMenuItems parts={parts} planeId="p1" copyId={copyId} />);
 	});
 }
 
@@ -182,26 +123,16 @@ const row = (text: string) =>
 	[...host.querySelectorAll("button")].find((b) => b.textContent === text);
 
 describe("the plane menu", () => {
-	it("copies the plane ID and key", async () => {
-		renderMenu("notes");
+	it("copies the plane ID", async () => {
+		renderMenu();
 		await act(async () => {
 			row("Copy plane ID")?.click();
 		});
 		expect(writeText).toHaveBeenLastCalledWith("p1");
-		await act(async () => {
-			row("Copy plane key")?.click();
-		});
-		expect(writeText).toHaveBeenLastCalledWith("notes");
 	});
 
-	it("disables Copy plane key without a key", () => {
-		renderMenu("");
-		expect(row("Copy plane key")?.disabled).toBe(true);
-	});
-
-	it("leaves the key row out where the key is not known", () => {
-		renderMenu();
-		expect(row("Copy plane ID")).toBeDefined();
-		expect(row("Copy plane key")).toBeUndefined();
+	it("leaves Copy plane ID out where the menu shows the id itself", () => {
+		renderMenu(false);
+		expect(row("Copy plane ID")).toBeUndefined();
 	});
 });

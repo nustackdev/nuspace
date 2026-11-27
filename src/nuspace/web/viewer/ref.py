@@ -131,6 +131,10 @@ class PaneRef(SpaceRef):
         """Answer a ``cell.info`` ask with one cell's info."""
         return interactions.set_cell_info(self, info)
 
+    def set_plane_info(self, info: DictArg) -> Nu:
+        """Answer a ``plane.info`` ask with the pane's plane's info."""
+        return interactions.set_plane_info(self, info)
+
     def set_trail(self, trail: ListArg[dict]) -> Nu:
         """Say which planes sit above the pane's, top first."""
         return interactions.set_trail(self, trail)

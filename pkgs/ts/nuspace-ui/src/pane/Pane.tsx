@@ -33,20 +33,18 @@
 // it grows, `scroll` moves it once (./scroll.ts). The server or a cell on the
 // pane sends them.
 //
-// Under the title, the plane's `@key` when it has one, and the identity block
-// its title row's `#` opens (./TitleIdentity.tsx). Like the title, the key is
-// the plane's own, not one of its cells, but unlike the title it changes only
-// on an editable plane.
+// Under the title, the plane's `@key` when it has one, a click copying it
+// (./TitleKey.tsx). The key changes from the `...` menu, and only on an
+// editable plane, where the menu also heads with the plane's facts.
 
 import type { Path } from "@nustackdev/ui-core";
 import { Button, pathKey, ScrollArea } from "@nustackdev/ui-kit";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { closeItem, closePane, focusPane, leavePlanes } from "../core/router";
 import { notifyOp } from "../core/wire";
 import {
 	docRow,
 	docTitleHead,
-	docTitleIdentity,
 	docTitleLine,
 	docTitleRow,
 	paneBody,
@@ -56,7 +54,6 @@ import {
 } from "../design";
 import type { PaneAt } from "../desk/drag";
 import type { PlaneHandle } from "../plane/api";
-import { Identity } from "../plane/Identity";
 import type { Notify, Ops } from "../plane/ops";
 import { Plane } from "../plane/Plane";
 import type { AbsentReason, ActivePlane, CellSpec, LayoutRow, PaneHead } from "../plane/types";
@@ -66,6 +63,7 @@ import { GoHome, NOT_FOUND_TEXT, NotFoundBody } from "./NotFound";
 import { PaneHeader } from "./PaneHeader";
 import { useScroller } from "./scroll";
 import {
+	clearPanePlaneInfo,
 	markScrolled,
 	panePath,
 	patchPaneMeta,
@@ -81,7 +79,7 @@ import {
 } from "./state";
 import { focusTitle, Title } from "./Title";
 import { TitleIcon } from "./TitleIcon";
-import { IdentityToggle, KeyHandle } from "./TitleIdentity";
+import { KeyHandle } from "./TitleKey";
 import { ViewerSkeleton } from "./ViewerSkeleton";
 
 // The Plane the server inits with no name shows this instead. A placeholder,
@@ -220,8 +218,6 @@ export function Pane({
 	useEffect(() => {
 		if (loaded && takeFresh(planeId) && untitled && headRef.current) toTitle("start");
 	}, [loaded, planeId, untitled, toTitle]);
-	// The identity block is this pane's own business, like a cell's is the cell's.
-	const [identity, setIdentity] = useState(false);
 	const key = plane?.meta.key ?? "";
 	const setKey = (next: string) =>
 		next === "" ? notify("plane.remove_key", {}) : notify("plane.key", { key: next });
@@ -245,6 +241,12 @@ export function Pane({
 				onRestart={absent ? undefined : () => notify("plane.restart", {})}
 				onClose={close}
 				focused={focused}
+				panePath={path}
+				onAskInfo={() => {
+					clearPanePlaneInfo(path);
+					notify("plane.info", {});
+				}}
+				onKey={head?.meta.editable ? setKey : undefined}
 			/>
 			<ScrollArea
 				className={paneBodyScroll}
@@ -286,27 +288,10 @@ export function Pane({
 											headRef={headRef}
 										/>
 									</div>
-									<IdentityToggle open={identity} onOpenChange={setIdentity} />
 								</div>
 								{key ? (
 									<div className={docRow}>
 										<KeyHandle value={key} />
-									</div>
-								) : null}
-								{identity ? (
-									<div className={docRow}>
-										<div className={docTitleIdentity}>
-											<Identity
-												kind="plane"
-												id={planeId}
-												value={key}
-												onSave={plane.meta.editable ? setKey : undefined}
-												onClose={() => {
-													setIdentity(false);
-													toTitle("end");
-												}}
-											/>
-										</div>
 									</div>
 								) : null}
 							</header>

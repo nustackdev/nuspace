@@ -76,7 +76,9 @@ editable, not removed and not a system plane. The core op does not read
 **A cell's info is asked for, never watched.** A pane's ``cell.info``
 (the cell's menu opening) is answered once with :func:`cell_info` on that
 pane: the cell's own row, and its newest cell run in the pane's plane run,
-the same one its status reads. Nothing about it ships for a closed menu.
+the same one its status reads. Nothing about it ships for a closed menu. A
+pane's ``plane.info`` (its ``...`` opening) is answered the same way with
+:func:`plane_info`: the plane's row and the plane run the pane follows.
 
 **A cell's classes are read off its spec, here.** Each shipped cell carries
 the classes of the installed CellSpec it was made from, and not the spec
@@ -117,7 +119,7 @@ from nuspace.web.viewer.ref import pane_ref
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable, Sequence
 
-    from nuspace.specs import CellSpec
+    from nuspace.specs import CellSpec, PlaneSpec
     from nustd.ui.core import Ref
 
 
@@ -127,6 +129,7 @@ __all__ = [
     "cell_info",
     "plane_cells",
     "plane_head",
+    "plane_info",
     "statuses",
     "trail",
     "transfer_targets",
@@ -213,17 +216,7 @@ def cell_info(
         picked = nu.Str(held)
         cr = Space.exec.cell_runs[picked]
         worker = Space.exec.workers[nu.Str(cr.worker.fallback(""))]
-        last = nu.Dict.of(
-            id=picked,
-            version=cr.version.fallback(0),
-            by=cr.by.fallback(""),
-            backend=worker.backend.fallback(""),
-            created_at=cr.created_at.fallback(0.0),
-            started_at=cr.started_at.fallback(0.0),
-            ended_at=cr.ended_at.fallback(0.0),
-            exit=cr.exit.fallback(""),
-            error=cr.error.fallback(""),
-        )
+        last = _run_info(picked, cr, worker.backend, version=cr.version.fallback(0))
         return nu.Dict.of(
             cell_id=cell,
             name=row.name.fallback(""),
@@ -239,6 +232,52 @@ def cell_info(
 
     # A mem slot holds no NULL: no cell run of the cell there reads "".
     return nu.let(info, held=nu.If(run == "", "", ids.last(default="")))
+
+
+def _run_info(run: nu.Str, row: nu.Nu, backend: nu.Nu, **more: nu.Nu) -> nu.Dict:
+    """``{id, by, backend, created_at, started_at, ended_at, exit, error}`` of a run row, and ``more``."""
+    return nu.Dict.of(
+        **more,
+        id=run,
+        by=row.by.fallback(""),
+        backend=backend.fallback(""),
+        created_at=row.created_at.fallback(0.0),
+        started_at=row.started_at.fallback(0.0),
+        ended_at=row.ended_at.fallback(0.0),
+        exit=row.exit.fallback(""),
+        error=row.error.fallback(""),
+    )
+
+
+def plane_info(sid: nu.StrArg, plane: nu.StrArg, specs: Iterable[PlaneSpec] = ()) -> nu.Dict:
+    """What the pane's plane is and how it runs in this tab, as a ``plane.info`` is answered. Bare read.
+
+    ``{plane_id, spec, label, cells, children, created_at, modified_at,
+    run}``. ``spec`` is the name of the PlaneSpec it was made from,
+    ``label`` that spec's as installed, ``""`` for none or one not
+    installed. ``cells`` and ``children`` count its cells and the planes
+    inside it. Times are epoch seconds, ``0`` for never.
+
+    ``run`` is the plane run the tab's pane on ``plane`` follows, the one
+    its cells' statuses are read off: ``{id, by, backend, created_at,
+    started_at, ended_at, exit, error}``, ``id`` of ``""`` for none.
+    Cost: O(1), a few reads.
+    """
+    labels = {registered_name(s): s.label for s in specs}
+    row = Space.planes[plane]
+    made = nu.Str(row.spec.fallback(""))
+    run = nu.Str(Conn.connections[sid].panes[plane].plane_run.fallback(""))
+    pr = Space.exec.plane_runs[run]
+    return nu.Dict.of(
+        plane_id=plane,
+        spec=made,
+        label=nu.Switch(made, labels, default=""),
+        cells=nu.List(_cell_ids(plane)).len(),
+        children=nu.List(keys_of(row.children)).len(),
+        created_at=row.created_at.fallback(0.0),
+        modified_at=row.modified_at.fallback(0.0),
+        run=_run_info(run, pr, pr.backend),
+    )
 
 
 def plane_head(plane: nu.StrArg) -> nu.Dict:
@@ -579,7 +618,12 @@ def _layout_events(arms: Arms, pane: Ref, plane: nu.Str) -> list[nu.Nu]:
 
 
 def _events(
-    arms: Arms, pane: Ref, sid: nu.StrArg, plane: nu.Str, specs: Sequence[CellSpec]
+    arms: Arms,
+    pane: Ref,
+    sid: nu.StrArg,
+    plane: nu.Str,
+    specs: Sequence[CellSpec],
+    planes: Sequence[PlaneSpec] = (),
 ) -> list[nu.Nu]:
     """Browser to store: one arm per pane op. A restart is this tab's, not another's."""
 
@@ -635,6 +679,14 @@ def _events(
             lambda c, ev: placed(ev, lambda **at: atomic(nuspace.cell.move(c, **at))),
         ),
         arms.event(
+            "plane_info",
+            interactions.on_plane_info(pane),
+            lambda _: nu.let(
+                lambda held: interactions.set_plane_info(pane, nu.Dict(held)),
+                held=atomic(plane_info(sid, plane, planes)),
+            ),
+        ),
+        arms.event(
             "targets",
             interactions.on_targets(pane),
             lambda _: nu.let(
@@ -677,7 +729,12 @@ def _events(
 
 
 def _pane(
-    arms: Arms, viewer: Ref, sid: nu.StrArg, plane: nu.Str, specs: Sequence[CellSpec]
+    arms: Arms,
+    viewer: Ref,
+    sid: nu.StrArg,
+    plane: nu.Str,
+    specs: Sequence[CellSpec],
+    planes: Sequence[PlaneSpec] = (),
 ) -> nu.Nu:
     """One open pane, live: its watches and its events, on its own node. Never ends.
 
@@ -691,14 +748,20 @@ def _pane(
         _cells(arms, pane, plane, specs),
         _status(arms, pane, sid, plane),
         _trail(arms, pane, plane),
-        *_events(arms, pane, sid, plane, specs),
+        *_events(arms, pane, sid, plane, specs, planes),
         *_layout_events(arms, pane, plane),
     )
     erased = nu.TryCatch(pane.erase(), catch=lambda _: nu.Noop())
     return nu.TryCatch(live, finally_=erased)
 
 
-def viewer_feed(viewer: Ref, sid: nu.StrArg, specs: Iterable[CellSpec], toasts: Ref) -> nu.Nu:
+def viewer_feed(
+    viewer: Ref,
+    sid: nu.StrArg,
+    specs: Iterable[CellSpec],
+    toasts: Ref,
+    planes: Iterable[PlaneSpec] = (),
+) -> nu.Nu:
     """The viewer of one tab, live, as one term. Built per tab, never ends.
 
     Args:
@@ -707,8 +770,9 @@ def viewer_feed(viewer: Ref, sid: nu.StrArg, specs: Iterable[CellSpec], toasts: 
         specs: The registered CellSpecs, what a created cell stores and the
             classes a shipped cell carries.
         toasts: The tab's toast ref, where a failed event shows.
+        planes: The registered PlaneSpecs, what a plane's info names its kind by.
     """
-    specs = list(specs)
+    specs, planes = list(specs), list(planes)
     arms = Arms("pane", toasts)
     tab = Conn.connections[sid]
 
@@ -718,7 +782,7 @@ def viewer_feed(viewer: Ref, sid: nu.StrArg, specs: Iterable[CellSpec], toasts: 
 
     def arm(at: nu.Nu) -> nu.Nu:
         plane = nu.Str(nu.Str(at).partition(_OPEN)[0])
-        return _pane(arms, viewer, sid, plane, specs)
+        return _pane(arms, viewer, sid, plane, specs, planes)
 
     listed = nu.If(
         tab.order.exists(), nu.list(tab.order).iter().map(opening).to_list(), nu.Literal([])

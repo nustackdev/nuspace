@@ -1,16 +1,17 @@
-// A cell's key: a row of its menu with a submenu (./Gutter.tsx), and the
-// popover that edits it.
+// A cell's or a plane's key: a row of its menu with a submenu, and the
+// popover that edits it. A cell's sits in the menu off its grip
+// (./cell/Gutter.tsx), a plane's in its pane's `...` (../pane/PaneMenu.tsx).
 //
 // The row says the key, or that there is none. Its submenu copies it,
 // removes it, and offers "Edit key…", which closes the menu and opens
-// `KeyEditor` on the cell's grip. The field lives in a popover, not in the
+// `KeyEditor` on what opened the menu. The field lives in a popover, not in the
 // menu: a menu holds items only, and a field among them is neither a menu
 // item to a screen reader nor safe from the pointer moving focus to the
 // row under it.
 //
 // In the editor, Enter or Save sets the key and closes it, an empty one
 // removes the key, Escape closes it unchanged. Only the spelling is checked
-// here (../key.ts); a key already taken is the server's to refuse, and that
+// here (./key.ts); a key already taken is the server's to refuse, and that
 // refusal toasts. On a read-only plane the submenu only copies.
 
 import {
@@ -24,17 +25,24 @@ import {
 } from "@nustackdev/ui-kit";
 import { AtSign, Check, Copy, Info, Pen, Trash2 } from "lucide-react";
 import { useId, useState } from "react";
-import { useCopyRow } from "../../core/clipboard";
-import { keyProblem } from "../key";
+import { useCopyRow } from "../core/clipboard";
+import { keyProblem } from "./key";
+
+/** Whose key: what the row and the editor call it. */
+export type KeyOwner = "cell" | "plane";
+
+const OWNER: Record<KeyOwner, string> = { cell: "Cell", plane: "Plane" };
 
 /** The menu row and its submenu. */
 export function KeySub({
-	cellKey,
+	owner,
+	value: cellKey,
 	onEdit,
 	onRemove,
 }: {
-	/** "" for none. */
-	cellKey: string;
+	owner: KeyOwner;
+	/** The key, "" for none. */
+	value: string;
 	/** Open the editor. Left out on a read-only plane. */
 	onEdit?: () => void;
 	/** Drop the key. Left out on a read-only plane. */
@@ -43,7 +51,9 @@ export function KeySub({
 	const copy = useCopyRow(cellKey);
 	return (
 		<DropdownMenuSub>
-			<DropdownMenuSubTrigger aria-label={cellKey ? `Cell key ${cellKey}` : "Cell key, none"}>
+			<DropdownMenuSubTrigger
+				aria-label={cellKey ? `${OWNER[owner]} key ${cellKey}` : `${OWNER[owner]} key, none`}
+			>
 				<AtSign />
 				<span
 					className={
@@ -78,12 +88,14 @@ export function KeySub({
 	);
 }
 
-/** The editor, the body of the popover on the grip. */
+/** The editor, the body of the popover on what opened the menu. */
 export function KeyEditor({
+	owner,
 	value,
 	onSave,
 	onClose,
 }: {
+	owner: KeyOwner;
 	/** The key, "" for none. */
 	value: string;
 	/** Set the key, "" to remove it. */
@@ -109,7 +121,7 @@ export function KeyEditor({
 			}}
 		>
 			<label htmlFor={id} className="text-xs font-medium text-text-secondary">
-				Cell key
+				{OWNER[owner]} key
 			</label>
 			<Input
 				id={id}

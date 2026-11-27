@@ -7,21 +7,21 @@
 //   open      Open, Open to the side, Open in a new desk, Open in new tab
 //   close     Close
 //   plane     Add plane inside, Rename, Change icon,
-//             Copy plane ID, Copy plane key, Restart plane
+//             Copy plane ID, Restart plane
 //   settings  the caller's rows, eg the pane's switches
 //   delete    Delete plane, last and on its own
 //
 // "Open to the side" is with Open, on the Planes tree row's menu only: a pane
-// is beside itself already. A group with nothing in it takes no separator. "Open in new tab" and "Copy
-// plane ID" need only the id, so they are on every menu with a plane. "Copy
-// plane key" needs the key, which only a landed plane's pane knows, so it is
-// on the pane's menu alone, disabled while the plane has no key. The
+// is beside itself already. A group with nothing in it takes no separator.
+// "Open in new tab" and "Copy plane ID" need only the id, so they are on
+// every menu with a plane, but the pane's: it heads its menu with the
+// plane's facts, its id and its key (../pane/PaneMenu.tsx), so it leaves
+// "Copy plane ID" out here (`copyId`). The
 // close group shows when `desk` is set and the tab is on a desk item showing
 // the plane: Close takes the plane item out of its desk, or the pane out of
 // its strip. A solo plane has nothing to close.
 
 import {
-	AtSign,
 	Check,
 	Columns3,
 	ExternalLink,
@@ -55,8 +55,8 @@ export type PlaneActions = {
 	rename?: () => void;
 	/** Left off where there is no picker to anchor. */
 	changeIcon?: () => void;
-	/** The plane's key, "" for none. Left out where it is not known: no row then. */
-	planeKey?: string;
+	/** The "Copy plane ID" row. On unless a menu shows the id elsewhere. */
+	copyId?: boolean;
 	restart?: () => void;
 	/** The close group, while the plane is a desk item or a pane of one. */
 	desk?: boolean;
@@ -69,7 +69,6 @@ export type PlaneActions = {
 export function PlaneMenuItems({ parts, ...a }: PlaneActions & { parts: MenuParts }) {
 	const { Item, Separator, Shortcut } = parts;
 	const copy = useCopyRow(a.planeId);
-	const copyKey = useCopyRow(a.planeKey ?? "");
 	const route = useRoute();
 	const id = a.planeId;
 	const add = a.add ?? (() => openAddPlane({ parent: id }));
@@ -117,14 +116,10 @@ export function PlaneMenuItems({ parts, ...a }: PlaneActions & { parts: MenuPart
 				Change icon
 			</Item>
 		) : null,
-		<Item key="copy" onSelect={copy.onSelect}>
-			{copy.copied ? <Check /> : <Hash />}
-			{copy.copied ? "Copied" : "Copy plane ID"}
-		</Item>,
-		a.planeKey !== undefined ? (
-			<Item key="copy-key" disabled={!a.planeKey} onSelect={copyKey.onSelect}>
-				{copyKey.copied ? <Check /> : <AtSign />}
-				{copyKey.copied ? "Copied" : "Copy plane key"}
+		a.copyId !== false ? (
+			<Item key="copy" onSelect={copy.onSelect}>
+				{copy.copied ? <Check /> : <Hash />}
+				{copy.copied ? "Copied" : "Copy plane ID"}
 			</Item>
 		) : null,
 		a.restart ? (

@@ -240,7 +240,7 @@ def connection(sid: nu.StrArg, *, registry: Registry | None = None) -> nu.Nu:
     boot = Shell.boot(slash_entries(cells), registered_entries(planes))
     feeds = boot >> nu.ParallelAsync(
         sidebar_feed(Shell.sidebar, sid, planes, Shell.toast),
-        viewer_feed(Shell.viewer, sid, cells, Shell.toast),
+        viewer_feed(Shell.viewer, sid, cells, Shell.toast, planes),
         desks_feed(Shell.desks, Shell.toast),
         undo_feed(Shell.toast),
     )
