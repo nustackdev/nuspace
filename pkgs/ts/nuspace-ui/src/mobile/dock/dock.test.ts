@@ -10,20 +10,26 @@ describe("controlsFor", () => {
 		expect(controlsFor({ plane: "home", editable: true, cells: 3 })).toEqual([
 			"cell",
 			"plane",
+			"inside",
 			"edit",
 		]);
 	});
 
 	it("offers no Add cell on a plane that cannot be written, still Edit cells", () => {
-		expect(controlsFor({ plane: "home", editable: false, cells: 3 })).toEqual(["plane", "edit"]);
+		expect(controlsFor({ plane: "home", editable: false, cells: 3 })).toEqual([
+			"plane",
+			"inside",
+			"edit",
+		]);
 	});
 
 	it("offers no Edit cells with no cells, or before they land", () => {
-		expect(controlsFor({ plane: "home", editable: true, cells: 0 })).toEqual(["cell", "plane"]);
-		expect(controlsFor({ plane: "home", editable: true, cells: null })).toEqual(["cell", "plane"]);
+		const none = ["cell", "plane", "inside"];
+		expect(controlsFor({ plane: "home", editable: true, cells: 0 })).toEqual(none);
+		expect(controlsFor({ plane: "home", editable: true, cells: null })).toEqual(none);
 	});
 
-	it("offers only Add plane with no plane on screen", () => {
+	it("offers only Add plane with no plane on screen, nothing to put one inside", () => {
 		expect(controlsFor(null)).toEqual(["plane"]);
 	});
 });

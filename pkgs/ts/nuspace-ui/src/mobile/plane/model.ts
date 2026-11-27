@@ -1,6 +1,7 @@
-// The plane screen's decisions, as plain functions: what a cell's options offer,
-// where an added cell goes, what the + sheet lists, and how an id reaches the
-// clipboard. The screen (./MobilePlane.tsx) and its sheets only draw them.
+// The plane screen's decisions, as plain functions: what a cell's options
+// and the plane's ⋯ sheet offer, where an added cell goes, what the add sheet
+// lists, and how an id reaches the clipboard. The screen (./MobilePlane.tsx)
+// and its sheets only draw them.
 
 import { copyText } from "../../core/clipboard";
 import { mintId } from "../../core/ids";
@@ -18,6 +19,20 @@ export type CellAction = "restart" | "copy" | "source" | "delete";
  */
 export function cellActions(editable: boolean): CellAction[] {
 	return editable ? ["restart", "copy", "source", "delete"] : ["restart", "copy", "source"];
+}
+
+/** What a plane's ⋯ sheet offers, in sheet order. */
+export type PlaneInfoAction = "inside" | "rename" | "icon" | "restart" | "delete";
+
+/**
+ * The actions on the plane on screen, in desktop's pane menu order: every
+ * plane can take a child, a new title and icon, a restart; a system plane
+ * cannot be deleted.
+ */
+export function planeInfoActions(system: boolean): PlaneInfoAction[] {
+	const out: PlaneInfoAction[] = ["inside", "rename", "icon", "restart"];
+	if (!system) out.push("delete");
+	return out;
 }
 
 /**

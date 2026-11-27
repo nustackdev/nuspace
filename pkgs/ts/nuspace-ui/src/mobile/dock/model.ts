@@ -12,18 +12,20 @@ export type Screen = {
 } | null;
 
 /** One row of the + sheet. */
-export type Control = "cell" | "plane" | "edit";
+export type Control = "cell" | "plane" | "inside" | "edit";
 
 /**
  * The + sheet's rows, in order: Add cell where the plane on screen can be
- * written, Add plane always, Edit cells where the plane on screen has cells
- * to edit (a plane that cannot be written still has options per cell:
- * restart, copy, source).
+ * written, Add plane (at the top) always, Add plane inside the one on screen
+ * where there is one, Edit cells where the plane on screen has cells to edit
+ * (a plane that cannot be written still has options per cell: restart, copy,
+ * source).
  */
 export function controlsFor(screen: Screen): Control[] {
 	const out: Control[] = [];
 	if (screen?.editable) out.push("cell");
 	out.push("plane");
+	if (screen) out.push("inside");
 	if (screen && (screen.cells ?? 0) > 0) out.push("edit");
 	return out;
 }

@@ -12,6 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { notifyOp } from "../../core/wire";
 import { applyPaneWrite, panePath } from "../../pane/state";
 import type { Cell } from "../../plane/types";
+import { openAddPlane } from "../../sidebar/add";
 import { CellSheet } from "./CellSheet";
 import { PlaneInfoSheet } from "./PlaneInfoSheet";
 
@@ -41,6 +42,11 @@ vi.mock("@nustackdev/ui-kit", async (kit) => ({
 vi.mock("../../core/wire", async (wire) => ({
 	...(await wire<typeof import("../../core/wire")>()),
 	notifyOp: vi.fn(),
+}));
+
+vi.mock("../../sidebar/add", async (add) => ({
+	...(await add<typeof import("../../sidebar/add")>()),
+	openAddPlane: vi.fn(),
 }));
 
 const VIEWER = ["viewer"];
@@ -110,7 +116,7 @@ describe("the plane's facts", () => {
 	const open = () =>
 		draw(<PlaneInfoSheet viewerPath={VIEWER} planeId={PLANE} open onClose={() => {}} />);
 
-	it("shows desktop's facts, the id and the key, read-only, then Restart and Delete", () => {
+	it("shows desktop's facts, the id and the key, read-only, then the pane menu's actions", () => {
 		land(HEAD);
 		open();
 		// Asked for as it opened: the answer lands after.
@@ -136,14 +142,20 @@ describe("the plane's facts", () => {
 		expect(details(sheet)).toContain(`ID: ${PLANE}`);
 		expect(details(sheet)).toContain("Key: @jobs");
 		expect(document.querySelector(sheet)?.textContent).toContain("Not running in this pane");
-		expect(actions(sheet)).toEqual(["Restart plane", "Delete plane"]);
+		expect(actions(sheet)).toEqual([
+			"Add plane inside",
+			"Rename",
+			"Change icon",
+			"Restart plane",
+			"Delete plane",
+		]);
 		expect(document.querySelector(`${sheet} input`)).toBeNull();
 	});
 
 	it("offers no delete on a system plane", () => {
 		land({ ...HEAD, system: true, key: "" });
 		open();
-		expect(actions(sheet)).toEqual(["Restart plane"]);
+		expect(actions(sheet)).toEqual(["Add plane inside", "Rename", "Change icon", "Restart plane"]);
 		expect(details(sheet).map((d) => d.split(":")[0])).toEqual(["ID"]);
 	});
 
@@ -156,6 +168,60 @@ describe("the plane's facts", () => {
 			(document.querySelector(`${sheet} [data-action=restart]`) as HTMLElement).click();
 		});
 		expect(notifyOp).toHaveBeenCalledWith(panePath(VIEWER, PLANE), "plane.restart", {});
+		expect(onClose).toHaveBeenCalledOnce();
+	});
+
+	const tap = (action: string) =>
+		act(() => {
+			(document.querySelector(`${sheet} [data-action=${action}]`) as HTMLElement).click();
+		});
+
+	it("adds a plane inside this one, opened in this pane", () => {
+		land(HEAD);
+		const onClose = vi.fn();
+		draw(<PlaneInfoSheet viewerPath={VIEWER} planeId={PLANE} open onClose={onClose} />);
+		tap("inside");
+		expect(openAddPlane).toHaveBeenCalledWith({ parent: PLANE, pane: PLANE });
+		expect(onClose).toHaveBeenCalledOnce();
+	});
+
+	it("renames in a step of its own, the pane's title at once", () => {
+		land(HEAD);
+		const onClose = vi.fn();
+		draw(<PlaneInfoSheet viewerPath={VIEWER} planeId={PLANE} open onClose={onClose} />);
+		tap("rename");
+		expect(document.querySelector(sheet)?.getAttribute("data-plane-info-sheet")).toBe("rename");
+		const input = document.querySelector(`${sheet} input`) as HTMLInputElement;
+		expect(input.value).toBe("Jobs");
+		vi.mocked(notifyOp).mockClear();
+		act(() => {
+			const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+			set?.call(input, "  Chores ");
+			input.dispatchEvent(new Event("input", { bubbles: true }));
+		});
+		act(() => {
+			(document.querySelector(`${sheet} form`) as HTMLFormElement).requestSubmit();
+		});
+		expect(notifyOp).toHaveBeenCalledWith(panePath(VIEWER, PLANE), "plane.rename", {
+			title: "Chores",
+		});
+		expect(onClose).toHaveBeenCalledOnce();
+	});
+
+	it("changes the icon in the kit picker, Remove putting the default back", () => {
+		land(HEAD);
+		const onClose = vi.fn();
+		draw(<PlaneInfoSheet viewerPath={VIEWER} planeId={PLANE} open onClose={onClose} />);
+		tap("icon");
+		expect(document.querySelector(sheet)?.getAttribute("data-plane-info-sheet")).toBe("icon");
+		vi.mocked(notifyOp).mockClear();
+		const remove = [...document.querySelectorAll(`${sheet} button`)].find(
+			(b) => b.textContent?.trim() === "Remove",
+		) as HTMLElement;
+		act(() => remove.click());
+		expect(notifyOp).toHaveBeenCalledWith(panePath(VIEWER, PLANE), "plane.icon", {
+			icon: "lucide:file-text",
+		});
 		expect(onClose).toHaveBeenCalledOnce();
 	});
 });

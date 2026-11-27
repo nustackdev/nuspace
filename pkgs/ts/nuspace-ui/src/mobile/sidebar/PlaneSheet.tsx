@@ -1,7 +1,7 @@
 // What a long-press on a plane row opens: one bottom sheet, three steps.
 //
 //   actions   Rename, Add plane inside, Delete (no delete on a system plane)
-//   rename    one input, Save; the title as it is now, selected
+//   rename    one input, Save; the title as it is now, selected (../RenameForm.tsx)
 //   delete    the confirm: what goes with it, Delete or Cancel
 //
 // One sheet whose body changes, so a step never closes one sheet to open the
@@ -17,17 +17,16 @@ import {
 	BottomSheetFooter,
 	BottomSheetItem,
 	Button,
-	Input,
 } from "@nustackdev/ui-kit";
 import { FilePlus, Pencil, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { focusedRoute } from "../../core/router";
-import { mobileSheetForm, mobileSheetInput } from "../../design";
 import { openAddPlane } from "../../sidebar/add";
 import type { Notify } from "../../sidebar/ops";
 import { deletePlane } from "../../sidebar/remove";
 import { subtreeOf } from "../../sidebar/tree";
 import type { PlaneTree } from "../../sidebar/types";
+import { RenameForm } from "../RenameForm";
 import { planeActions } from "./model";
 import { leaveThen } from "./open";
 
@@ -78,7 +77,7 @@ export function PlaneSheet({
 						onDelete={() => onPressed({ id: shown.id, step: "delete" })}
 					/>
 				) : shown.step === "rename" ? (
-					<Rename
+					<RenameForm
 						title={row.title}
 						onSave={(next) => {
 							if (next !== row.title) notify("plane.rename", { plane_id: shown.id, title: next });
@@ -148,35 +147,5 @@ function Actions({
 				),
 			)}
 		</div>
-	);
-}
-
-/** The rename step: one input, Save. An empty title is the plane's "Untitled". */
-function Rename({ title, onSave }: { title: string; onSave: (title: string) => void }) {
-	const [draft, setDraft] = useState(title);
-	return (
-		<form
-			className={mobileSheetForm}
-			onSubmit={(e) => {
-				e.preventDefault();
-				onSave(draft.trim());
-			}}
-		>
-			<Input
-				aria-label="Plane title"
-				placeholder="Untitled"
-				value={draft}
-				onChange={(e) => setDraft(e.target.value)}
-				autoFocus
-				onFocus={(e) => e.currentTarget.select()}
-				enterKeyHint="done"
-				className={mobileSheetInput}
-			/>
-			<BottomSheetFooter>
-				<Button type="submit" size="lg">
-					Save
-				</Button>
-			</BottomSheetFooter>
-		</form>
 	);
 }

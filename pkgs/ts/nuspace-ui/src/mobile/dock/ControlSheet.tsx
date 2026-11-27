@@ -2,15 +2,16 @@
 // (./model.ts `controlsFor`), each row handing off to the sheet or mode that
 // does it.
 //
-//   Add cell     the plane's add sheet (../plane/AddCellSheet.tsx)
-//   Add plane    the sidebar's add sheet (../sidebar/AddPlaneSheet.tsx), at the top
-//   Edit cells   the plane's cells, a tap each for its options (../plane/editing.ts)
+//   Add cell           the plane's add sheet (../plane/AddCellSheet.tsx)
+//   Add plane          the sidebar's add sheet (../sidebar/AddPlaneSheet.tsx), at the top
+//   Add plane inside   the same sheet, a child of the plane on screen
+//   Edit cells         the plane's cells, a tap each for its options (../plane/editing.ts)
 //
 // A pick waits for this sheet to finish sliding away before the next one
 // opens, so two sheets never move at once.
 
 import { BottomSheet, BottomSheetContent, BottomSheetItem } from "@nustackdev/ui-kit";
-import { FilePlusCorner, SquarePen, SquarePlus } from "lucide-react";
+import { FilePlus, FilePlusCorner, SquarePen, SquarePlus } from "lucide-react";
 import type * as React from "react";
 import { useEffect, useRef } from "react";
 import { mobileSheetLabel } from "../../design";
@@ -26,6 +27,7 @@ const HANDOFF_MS = 600;
 const ROWS: Record<Control, { label: string; icon: React.ReactNode }> = {
 	cell: { label: "Add cell", icon: <SquarePlus aria-hidden="true" /> },
 	plane: { label: "Add plane", icon: <FilePlusCorner aria-hidden="true" /> },
+	inside: { label: "Add plane inside", icon: <FilePlus aria-hidden="true" /> },
 	edit: { label: "Edit cells", icon: <SquarePen aria-hidden="true" /> },
 };
 
@@ -60,7 +62,9 @@ export function ControlSheet({
 		pending.current = () => {
 			if (control === "cell") openAddCell();
 			else if (control === "plane") openAddPlane({ parent: ROOT_ID });
-			else if (plane) editCells(plane);
+			else if (!plane) return;
+			else if (control === "inside") openAddPlane({ parent: plane, pane: plane });
+			else editCells(plane);
 		};
 		timer.current = setTimeout(run, HANDOFF_MS);
 		onClose();
