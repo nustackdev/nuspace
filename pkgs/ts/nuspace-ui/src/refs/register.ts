@@ -1,4 +1,4 @@
-// Every node type nuspace ships, registered on import.
+// The node types both shells share, registered on import.
 //
 // Same shape as the kit's own `nodes/index.ts`: one module per type, each
 // exporting a `NodeEntry` -- a component, the handlers for the ops the type
@@ -12,22 +12,23 @@
 // have to match exactly. A write addressed at a type nobody registered is
 // dropped in silence.
 //
+// The two types a shell draws, ViewerRef and SidebarRef, are the shell's own:
+// desktop registers ./viewer.ts and ./sidebar.ts (./desktop.ts), the mobile
+// shell its own (../mobile/refs.ts), so neither bundle carries the other's
+// components. Everything here draws nothing.
+//
 // Importing this module registers them. `main.tsx` does it once, before the
-// socket can dispatch anything.
+// shell loads and the socket can dispatch anything.
 
 import { type NodeEntry, register } from "@nustackdev/ui-kit";
 import { DesksRef } from "./desks";
 import { PaneRef } from "./pane";
-import { SidebarRef } from "./sidebar";
 import { ToastRef } from "./toast";
-import { ViewerRef } from "./viewer";
 
 export const nuspaceEntries: Record<string, NodeEntry> = {
 	DesksRef,
 	PaneRef,
-	SidebarRef,
 	ToastRef,
-	ViewerRef,
 	// Structural and write-only: a cell moving its own pane. Renders nothing.
 };
 

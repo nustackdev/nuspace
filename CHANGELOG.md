@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Touch devices load a separate mobile shell, with a banner while the connection drops
 - Pane menu shows the plane's facts and run, and edits its key; title @ toggle removed
 - Cell menu shows the cell's facts and last run, and edits its key
 - Code cells run only on shift+enter, never on blur or escape

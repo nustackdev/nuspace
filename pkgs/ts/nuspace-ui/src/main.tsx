@@ -2,12 +2,14 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import "@nustackdev/ui-kit/styles";
 import "./index.css";
-import { App } from "./App";
+import { touchDevice } from "@nustackdev/ui-kit";
 import { ensureLanding } from "./core/router";
-// Registers every nuspace node type. Side-effect import, before the socket
-// opens: the store autovivifies a node the moment a write names it, and it
-// resolves the type through the registry the same instant.
+// Registers the node types both shells share; each shell registers the ones it
+// draws when it loads. Both before the socket opens: the store autovivifies a
+// node the moment a write names it, and it resolves the type through the
+// registry the same instant.
 import "./refs/register";
+import { loadShell, shellFor } from "./shells";
 
 ensureLanding();
 
@@ -21,8 +23,12 @@ if (!import.meta.env.DEV) {
 const root = document.getElementById("root");
 if (!root) throw new Error("Root element not found");
 
-createRoot(root).render(
-	<StrictMode>
-		<App />
-	</StrictMode>,
-);
+// The shell for this device, picked once (./shells.ts). Its root opens the
+// socket, so nothing lands before its node types are registered.
+void loadShell(shellFor(touchDevice)).then((Shell) => {
+	createRoot(root).render(
+		<StrictMode>
+			<Shell />
+		</StrictMode>,
+	);
+});

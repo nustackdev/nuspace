@@ -1,5 +1,5 @@
-// The root: open the socket and draw the shell, and beside it the one confirm
-// dialog and the keyboard shortcuts sheet.
+// The desktop root (./shells.ts picks it): open the socket and draw the
+// shell, and beside it the one confirm dialog and the keyboard shortcuts sheet.
 //
 // The shell draws at once, before the tree lands: its sidebar and viewer stand
 // in as skeletons until their nodes arrive (see ./shell/Shell.tsx), so the
@@ -13,6 +13,8 @@
 import { TooltipProvider } from "@nustackdev/ui-kit";
 import { useNuspaceConnection } from "./core/connection";
 import { admits } from "./main/state";
+// The node types this shell draws, before the socket opens (./refs/desktop.ts).
+import "./refs/desktop";
 import { ConfirmDialog } from "./shell/ConfirmDialog";
 import { KeysDialog } from "./shell/KeysDialog";
 import { Shell } from "./shell/Shell";

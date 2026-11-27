@@ -12,6 +12,7 @@
 //
 //   tokens.css         document + cell-status tokens, both themes
 //   shell.ts           the frame: sidebar beside the desk area, the desk row, columns, panes
+//   mobile.ts          the mobile shell's frame: one screen, the banner
 //   pane.ts            one pane: its header, body and settings menu
 //   document.ts        class recipes for the document surface, title included
 //   sidebar.ts         the sidebar: header, footer, section, row, action row
@@ -33,6 +34,7 @@ export * from "./cell-status";
 export * from "./document";
 export * from "./icon";
 export * from "./menu";
+export * from "./mobile";
 export * from "./pane";
 export * from "./shell";
 export * from "./sidebar";
