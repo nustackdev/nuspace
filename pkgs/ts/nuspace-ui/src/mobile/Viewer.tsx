@@ -1,8 +1,8 @@
 // The mobile ViewerRef component: the one plane the route shows, full width.
 //
 // A solo plane shows as itself, flattened for the phone (./plane/MobilePlane.tsx).
-// A desk item shows its focused plane the same way until the desk pager
-// comes.
+// A desk item shows its panes as pages you swipe through (./desk/MobileDesk.tsx),
+// and an empty desk says so.
 //
 // Like desktop's desk (../main/Desk.tsx) it ships `planes.open` with every
 // plane the route shows and their params, whenever either changes and once
@@ -17,6 +17,7 @@ import type { PaneAt } from "../desk/drag";
 import { settlePanes, useCellSpecs } from "../main/state";
 import { NotFound } from "../pane/NotFound";
 import type { ViewerOps } from "../plane/ops";
+import { MobileDesk } from "./desk/MobileDesk";
 import { MobilePlane } from "./plane/MobilePlane";
 
 /** The plane the screen shows for a route, and where it sits; null for none. */
@@ -56,6 +57,22 @@ export function MobileViewer({ path }: NodeProps) {
 		return (
 			<div className={mobileScreen}>
 				<NotFound what={route.what} />
+			</div>
+		);
+	}
+	if (route.kind === "desk") {
+		return (
+			<div className={mobileScreen}>
+				<EmptyState className={mobileMissing} description="Add planes to it on desktop.">
+					{route.name} is empty
+				</EmptyState>
+			</div>
+		);
+	}
+	if (route.kind === "item") {
+		return (
+			<div className={mobileScreen}>
+				<MobileDesk viewerPath={path} route={route} cellSpecs={cellSpecs} />
 			</div>
 		);
 	}

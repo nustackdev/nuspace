@@ -11,6 +11,7 @@ separately here.
 
 ## Unreleased
 
+- Phone desks page through their panes with a swipe, with dots and a counter
 - Phone planes read as one stacked column, with long-press cell actions and adding cells
 - Phone sidebar slides in full screen, with floating buttons and long-press plane actions
 - Touch devices load a separate mobile shell, with a banner while the connection drops

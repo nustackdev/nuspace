@@ -166,7 +166,7 @@ export const mobileToaster = "top-[env(safe-area-inset-top)] bottom-auto max-w-n
  * scrolled above them.
  */
 export const mobilePlaneScroll = cn(
-	"min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain",
+	"min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-y-contain",
 	"pb-[calc(env(safe-area-inset-bottom)+88px)]",
 );
 
@@ -212,3 +212,45 @@ export const mobileSourceBody = "min-h-0 flex-1 overflow-y-auto overscroll-conta
 
 /** The source screen's title: the cell's id, set in mono. */
 export const mobileSourceTitle = "truncate pr-10 font-mono text-base font-medium";
+
+/* ============================== The desk screen =========================== */
+
+/** The desk screen: its bar, its dots, then the pages. */
+export const mobileDesk = "relative flex min-h-0 min-w-0 flex-1 flex-col";
+
+/** The desk's top bar: the desk's name, the pane's title, and n/m at its end. */
+export const mobileDeskBar = "flex h-12 shrink-0 items-center gap-1.5 px-3 select-none";
+
+/** The desk's name in the bar. */
+export const mobileDeskName =
+	"shrink-0 max-w-[45%] truncate text-base font-semibold text-text-primary";
+
+/** The pane's title after the desk's name, muted. */
+export const mobileDeskPane = "min-w-0 flex-1 truncate text-sm text-text-muted";
+
+/** Where the pager stands: n/m. */
+export const mobileDeskCount = "shrink-0 text-sm text-text-muted tabular-nums";
+
+/** The dots under the bar, one per pane: where you are, not a control. */
+export const mobileDeskDots = "flex shrink-0 items-center justify-center gap-1.5 pb-1.5";
+
+/** One dot; the one on screen is a short bar. */
+export function mobileDeskDot(on: boolean): string {
+	return cn(
+		"h-1.5 rounded-full transition-[width,background-color] duration-fast ease-out",
+		on ? "w-4 bg-text-primary" : "w-1.5 bg-border-strong",
+	);
+}
+
+/**
+ * The pager: the browser's own sideways scroll, one page a snap. Each page
+ * scrolls up and down inside itself, so the two axes never fight: the
+ * browser locks a drag to the axis it starts on.
+ */
+export const mobileDeskPager = cn(
+	"flex min-h-0 min-w-0 flex-1 snap-x snap-mandatory overflow-x-auto overflow-y-hidden",
+	"overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+);
+
+/** One page: the full width, held at its snap. */
+export const mobileDeskPage = "flex h-full w-full min-w-0 shrink-0 snap-start snap-always";

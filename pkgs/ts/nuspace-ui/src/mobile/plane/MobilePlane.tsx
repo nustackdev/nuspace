@@ -66,12 +66,18 @@ export function MobilePlane({
 	viewerPath,
 	planeId,
 	cellSpecs,
+	active = true,
+	titled = true,
 }: {
 	/** The ViewerRef node: the panes and every cell's ui hang under it. */
 	viewerPath: Path;
 	planeId: string;
 	/** The registered Cells: what the + sheet lists. */
 	cellSpecs: CellSpec[];
+	/** Whether it is the plane on screen, the one the + adds to: a desk's other pages are not. */
+	active?: boolean;
+	/** Whether it draws its own title: a desk's bar names its pages instead. */
+	titled?: boolean;
 }) {
 	const viewerKey = pathKey(viewerPath);
 	// biome-ignore lint/correctness/useExhaustiveDependencies: path is compared by value.
@@ -162,7 +168,7 @@ export function MobilePlane({
 			className={`${mobileScreen} flex-col`}
 			aria-label={absent ? planeId : title}
 			data-pane={planeId}
-			data-focused=""
+			data-focused={active ? "" : undefined}
 			data-plane-screen=""
 		>
 			<div ref={viewport} className={mobilePlaneScroll}>
@@ -173,17 +179,19 @@ export function MobilePlane({
 						<ViewerSkeleton />
 					) : (
 						<>
-							<header className={mobilePlaneHead}>
-								{above ? (
-									<div className={mobilePlaneTrail}>{above.title || TITLE_FALLBACK}</div>
-								) : null}
-								<div className={mobilePlaneTitleLine}>
-									{head.meta.icon ? (
-										<PlaneIcon icon={planeIcon(head.meta.icon)} className={mobilePlaneIcon} />
+							{titled ? (
+								<header className={mobilePlaneHead}>
+									{above ? (
+										<div className={mobilePlaneTrail}>{above.title || TITLE_FALLBACK}</div>
 									) : null}
-									<h1 className={mobilePlaneTitle}>{title}</h1>
-								</div>
-							</header>
+									<div className={mobilePlaneTitleLine}>
+										{head.meta.icon ? (
+											<PlaneIcon icon={planeIcon(head.meta.icon)} className={mobilePlaneIcon} />
+										) : null}
+										<h1 className={mobilePlaneTitle}>{title}</h1>
+									</div>
+								</header>
+							) : null}
 							{cells.map((cell) => (
 								<MobileCell
 									key={cell.id}
@@ -216,7 +224,7 @@ export function MobilePlane({
 				open={source !== null}
 				onClose={() => setSource(null)}
 			/>
-			{editable ? <AddCellSheet cellSpecs={cellSpecs} onPick={onAdd} /> : null}
+			{editable && active ? <AddCellSheet cellSpecs={cellSpecs} onPick={onAdd} /> : null}
 		</section>
 	);
 }
